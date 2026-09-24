@@ -18,28 +18,94 @@
     </div></div>
   {% endif %}
 
+  {% if totals.mixed_currency %}
+    <div class="card"><div class="card-body">
+      <span class="badge badge-amber">Mixed currencies</span>
+      <span class="text-muted">Amounts are shown per currency at face value. No FX conversion is applied.</span>
+    </div></div>
+  {% endif %}
+
   <div class="stat-grid">
-    <div class="stat-card"><div class="stat-icon green"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ totals.pipeline|floatformat:0 }}</div><div class="stat-label">Open Pipeline</div></div>
-    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="gauge"></i></div><div class="stat-value">{{ totals.weighted|floatformat:0 }}</div><div class="stat-label">Weighted Forecast</div></div>
-    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="trophy"></i></div><div class="stat-value">{{ totals.won|floatformat:0 }}</div><div class="stat-label">Closed Won</div></div>
-    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="target"></i></div><div class="stat-value">{{ totals.target|floatformat:0 }}</div><div class="stat-label">Total Quota</div></div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="trending-up"></i></div>
+      <div class="stat-value">{% if totals.mixed_currency %}—{% else %}{{ totals.pipeline|floatformat:0 }}{% endif %}</div>
+      <div class="stat-label">Open Pipeline{% if not totals.mixed_currency %} · {{ totals.currency_label }}{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="gauge"></i></div>
+      <div class="stat-value">{% if totals.mixed_currency %}—{% else %}{{ totals.weighted|floatformat:0 }}{% endif %}</div>
+      <div class="stat-label">Weighted Forecast{% if not totals.mixed_currency %} · {{ totals.currency_label }}{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="trophy"></i></div>
+      <div class="stat-value">{% if totals.mixed_currency %}—{% else %}{{ totals.won|floatformat:0 }}{% endif %}</div>
+      <div class="stat-label">Closed Won{% if not totals.mixed_currency %} · {{ totals.currency_label }}{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="target"></i></div>
+      <div class="stat-value">{% if totals.mixed_currency %}—{% else %}{{ totals.target|floatformat:0 }}{% endif %}</div>
+      <div class="stat-label">Total Quota{% if not totals.mixed_currency %} · {{ totals.currency_label }}{% endif %}</div>
+    </div>
   </div>
 
   <div class="card">
-    <div class="card-header"><h3>Pipeline by forecast category</h3></div>
-    <div class="card-body"><canvas id="catChart" height="120"></canvas></div>
+    <div class="card-header"><h3>Currency totals</h3>{% if totals.mixed_currency %}<span class="badge badge-amber">Not combined</span>{% endif %}</div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Currency</th><th>Open pipeline</th><th>Weighted</th><th>Closed won</th><th>Quota target</th></tr></thead>
+        <tbody>
+          {% for currency in totals.currency_rows %}
+            <tr>
+              <td class="fw-600">{{ currency.currency_label }}</td>
+              <td>{{ currency.pipeline|floatformat:0 }}</td>
+              <td>{{ currency.weighted|floatformat:0 }}</td>
+              <td>{{ currency.won|floatformat:0 }}</td>
+              <td>{{ currency.target|floatformat:0 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="coins"></i><p>No currency totals available.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Pipeline by forecast category</h3>{% if chart_available %}<span class="badge badge-info">{{ chart_currency_label }}</span>{% endif %}</div>
+    <div class="card-body">
+      {% if chart_available %}
+        <canvas id="catChart" height="120"></canvas>
+      {% else %}
+        <div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>Chart unavailable</h3><p>{{ chart_empty_reason }}</p></div>
+      {% endif %}
+    </div>
   </div>
 
   <div class="card">
     <div class="card-header"><h3>Forecast categories</h3></div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Category</th><th>Deals</th><th>Amount</th><th>Weighted</th></tr></thead>
+        <thead><tr><th>Category</th><th>Deals</th><th>Amount</th><th>Weighted</th><th>Currency detail</th></tr></thead>
         <tbody>
           {% for c in cats %}
-            <tr><td>{{ c.label }}</td><td>{{ c.count }}</td><td>{{ c.total }}</td><td>{{ c.weighted|floatformat:0 }}</td></tr>
+            <tr>
+              <td>{{ c.label }}</td>
+              <td>{{ c.count }}</td>
+              <td>{% if c.comparable %}{{ c.total|floatformat:0 }}{% else %}Not comparable{% endif %}</td>
+              <td>{% if c.comparable %}{{ c.weighted|floatformat:0 }}{% else %}Not comparable{% endif %}</td>
+              <td>
+                {% if c.mixed_currency %}
+                  <span class="badge badge-amber">Mixed currencies</span>
+                  {% for currency in c.currency_rows %}
+                    <div>{{ currency.currency_label }} · {{ currency.total|floatformat:0 }} · {{ currency.count }} deals</div>
+                  {% endfor %}
+                {% else %}
+                  {{ c.currency_label }}
+                {% endif %}
+              </td>
+            </tr>
           {% empty %}
-            <tr><td colspan="4"><div class="empty-state"><i data-lucide="bar-chart-3"></i><p>No opportunities to forecast.</p></div></td></tr>
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="bar-chart-3"></i><p>No opportunities to forecast.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -59,10 +125,25 @@
               <td>{% if row.q.territory %}{{ row.q.territory.name }}{% else %}—{% endif %}</td>
               <td>{{ row.q.get_period_type_display }} {{ row.q.period_year }}</td>
               <td>{{ row.q.target_amount }}</td>
-              <td>{{ row.attained }}</td>
+              <td>
+                {% if row.comparable %}
+                  {{ row.attained|floatformat:0 }} · {{ row.currency_label }}
+                {% else %}
+                  Not comparable
+                  {% if row.mixed_currency %}<span class="badge badge-amber">Mixed currencies</span>{% endif %}
+                  <div class="text-muted">{{ row.reason }}</div>
+                  {% for currency in row.currency_rows %}
+                    <div>{{ currency.currency_label }} · {{ currency.attained|floatformat:0 }}</div>
+                  {% endfor %}
+                {% endif %}
+              </td>
               <td style="min-width:140px;">
-                <div class="progress"><div class="progress-bar" style="width:{% if row.pct > 100 %}100{% else %}{{ row.pct }}{% endif %}%;"></div></div>
-                <span class="muted" style="font-size:.8rem; color:var(--text-muted);">{{ row.pct }}%</span>
+                {% if row.comparable %}
+                  <div class="progress"><div class="progress-bar" style="width:{% if row.pct > 100 %}100{% else %}{{ row.pct }}{% endif %}%;"></div></div>
+                  <span class="muted" style="font-size:.8rem; color:var(--text-muted);">{{ row.pct }}%</span>
+                {% else %}
+                  <span class="muted">Not comparable</span>
+                {% endif %}
               </td>
             </tr>
           {% empty %}
@@ -73,22 +154,26 @@
     </div>
   </div>
 
-  {{ chart_labels|json_script:"cat-labels" }}
-  {{ chart_data|json_script:"cat-data" }}
+  {% if chart_available %}
+    {{ chart_labels|json_script:"cat-labels" }}
+    {{ chart_data|json_script:"cat-data" }}
+  {% endif %}
 {% endblock %}
 
 {% block extra_js %}
-<script>
-  (function () {
-    function J(id) { try { return JSON.parse(document.getElementById(id).textContent); } catch (e) { return []; } }
-    var labels = J("cat-labels"), data = J("cat-data");
-    if (document.getElementById("catChart") && labels.length) {
-      new Chart(document.getElementById("catChart"), {
-        type: "bar",
-        data: { labels: labels, datasets: [{ label: "Amount", data: data, backgroundColor: "#2563eb", borderRadius: 6 }] },
-        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
-      });
-    }
-  })();
-</script>
+  {% if chart_available %}
+    <script>
+      (function () {
+        function J(id) { try { return JSON.parse(document.getElementById(id).textContent); } catch (e) { return []; } }
+        var labels = J("cat-labels"), data = J("cat-data");
+        if (document.getElementById("catChart") && labels.length) {
+          new Chart(document.getElementById("catChart"), {
+            type: "bar",
+            data: { labels: labels, datasets: [{ label: "Amount", data: data, backgroundColor: "#2563eb", borderRadius: 6 }] },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+          });
+        }
+      })();
+    </script>
+  {% endif %}
 {% endblock %}
