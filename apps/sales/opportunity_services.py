@@ -726,6 +726,19 @@ def _opportunity_transition_lock_competitor(competitor_id, tenant_id, opportunit
         raise ValidationError("The competitor link does not belong to this opportunity.") from exc
 
 
+def _opportunity_transition_validate_stage_projection(stage):
+    expected = {
+        "won": ("closed_won", 100, "closed"),
+        "lost": ("closed_lost", 0, "closed"),
+    }.get(stage.stage_kind)
+    if expected is not None and (
+        stage.crm_stage_key,
+        stage.probability,
+        stage.forecast_category,
+    ) != expected:
+        raise ValidationError("Closed stage projection values are invalid.")
+
+
 def sales_transition_opportunity(
     *,
     opportunity,
@@ -789,6 +802,8 @@ def sales_transition_opportunity(
             raise ValidationError("The placement pipeline must be active.")
         if not locked_current.is_active or not locked_target.is_active:
             raise ValidationError("The current and target stages must be active.")
+        _opportunity_transition_validate_stage_projection(locked_current)
+        _opportunity_transition_validate_stage_projection(locked_target)
         if locked_current.pipeline_id != locked_placement.pipeline_id or locked_target.pipeline_id != locked_placement.pipeline_id:
             raise ValidationError("The current and target stages must belong to the placement pipeline.")
         if locked_current.pk == locked_target.pk:
