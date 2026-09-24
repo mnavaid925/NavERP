@@ -135,6 +135,9 @@ def _ixc_save(request, form, obj, action):
 
 @login_required
 def ixc_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
     form = ProjectIntegrationConnectorForm(request.POST or None, tenant=request.tenant)
     if request.method == "POST" and form.is_valid():
         obj = _ixc_save(request, form, None, "create")
