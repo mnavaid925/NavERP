@@ -55,7 +55,9 @@ def prj_create(request):
             obj = form.save(commit=False)
             obj.tenant = request.tenant
             obj.created_by = request.user
-            obj.save()
+            with transaction.atomic():
+                obj.save()
+                form.save_custom_values(obj, updated_by=request.user)
             write_audit_log(request.user, obj, "create")
             messages.success(request, f"Project {obj.number} created.")
             return redirect("projects:prj_detail", pk=obj.pk)
@@ -103,6 +105,7 @@ def prj_edit(request, pk):
         request, model=Project, pk=pk, form_class=ProjectForm,
         template="projects/initiation/project/form.html",
         success_url="projects:prj_list",
+        form_kwargs={"updated_by": request.user},
     )
 
 
