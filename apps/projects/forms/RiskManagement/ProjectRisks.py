@@ -11,10 +11,12 @@ runs on CREATE (without it every create is falsely rejected as cross-tenant).
 """
 from apps.projects.forms._common import *  # noqa: F401,F403
 from apps.projects.forms._common import TenantModelForm, TenantUniqueMixin, _reject_foreign
+from apps.projects.forms.MasterDataConfiguration.CustomFieldMixin import ProjectCustomFieldFormMixin
 from apps.projects.models import ProjectRisk
 
 
-class ProjectRiskForm(TenantUniqueMixin, TenantModelForm):
+class ProjectRiskForm(ProjectCustomFieldFormMixin, TenantUniqueMixin, TenantModelForm):
+    custom_field_target = "risk"
     class Meta:
         model = ProjectRisk
         fields = ["project", "wbs_node", "title", "description", "cause", "effect", "category",
