@@ -5,6 +5,8 @@ tenant-admin gated — a gate is a governance state, and every 7.1 verb that mov
 state (approve charter, convert request) is gated the same way. The stamp itself is written by
 ``save()``; the verb only sets the status.
 """
+from django.db import transaction
+
 from apps.projects.forms import MilestoneForm
 from apps.projects.models import ProjectMilestone
 from apps.projects.views._common import *  # noqa: F401,F403
@@ -39,7 +41,9 @@ def mst_create(request):
         if form.is_valid():
             obj = form.save(commit=False)
             obj.tenant = request.tenant
-            obj.save()
+            with transaction.atomic():
+                obj.save()
+                form.save_custom_values(obj, updated_by=request.user)
             write_audit_log(request.user, obj, "create")
             messages.success(request, f"Milestone {obj.number} created.")
             return redirect("projects:mst_detail", pk=obj.pk)
@@ -62,7 +66,8 @@ def mst_detail(request, pk):
 def mst_edit(request, pk):
     return crud_edit(
         request, model=ProjectMilestone, pk=pk, form_class=MilestoneForm,
-        template="projects/planning/milestone/form.html", success_url="projects:mst_list")
+        template="projects/planning/milestone/form.html", success_url="projects:mst_list",
+        form_kwargs={"updated_by": request.user})
 
 
 @login_required
