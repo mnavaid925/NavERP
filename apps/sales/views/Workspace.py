@@ -368,6 +368,10 @@ def _workspace_placement_form(opportunity, tenant, *, data=None, instance=None):
         instance=form_instance,
         tenant=tenant,
     )
+    form.fields["opportunity"].queryset = Opportunity.objects.filter(
+        tenant=tenant,
+        pk=opportunity.pk,
+    )
     form.fields["opportunity"].widget = forms.HiddenInput()
     form.fields["opportunity"].disabled = True
     form.fields["opportunity"].initial = opportunity.pk
