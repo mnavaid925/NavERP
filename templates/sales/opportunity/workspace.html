@@ -62,25 +62,19 @@
 </div>
 
 <div class="card">
-  <div class="card-header"><h2>Pipeline placement</h2><div class="page-actions">{% if placement %}<form method="post" action="{% url 'sales:opportunity_unplace' opportunity.pk %}" onsubmit="return confirm('Remove this opportunity from its pipeline?');">{% csrf_token %}<button class="btn btn-danger btn-sm" type="submit"><i data-lucide="unlink"></i> Unplace</button></form>{% endif %}</div></div>
+  <div class="card-header"><h2>Pipeline placement</h2><div class="page-actions"><a href="{% url 'sales:opportunity_place' opportunity.pk %}{% if placement %}?pipeline={{ placement.pipeline_id }}{% endif %}" class="btn btn-primary btn-sm"><i data-lucide="git-branch"></i> {% if placement %}Update placement{% else %}Place in pipeline{% endif %}</a>{% if placement %}<form method="post" action="{% url 'sales:opportunity_unplace' opportunity.pk %}" onsubmit="return confirm('Remove this opportunity from its pipeline?');">{% csrf_token %}<button class="btn btn-danger btn-sm" type="submit"><i data-lucide="unlink"></i> Unplace</button></form>{% endif %}</div></div>
   <div class="card-body">
-    <form method="post" action="{% url 'sales:opportunity_place' opportunity.pk %}" novalidate>
-      {% csrf_token %}
-      {% for error in placement_form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
-      <div class="form-grid">
-        {% for field in placement_form %}
-          {% if field.is_hidden %}{{ field }}{% else %}
-          <div class="form-group">
-            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
-            {{ field }}
-            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
-            {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
-          </div>
-          {% endif %}
-        {% endfor %}
-      </div>
-      <div class="form-actions"><button class="btn btn-primary" type="submit"{% if not pipelines %} disabled{% endif %}><i data-lucide="git-branch"></i> {% if placement %}Update placement{% else %}Place in pipeline{% endif %}</button>{% if not pipelines %}<span class="form-help">Create an active pipeline before placing this opportunity.</span>{% endif %}</div>
-    </form>
+    {% if placement %}
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Pipeline</dt><dd>{{ pipeline.name }}</dd></div>
+      <div class="detail-item"><dt>Current stage</dt><dd>{% if current_stage %}<span class="badge {% if current_stage.stage_kind == 'won' %}badge-green{% elif current_stage.stage_kind == 'lost' %}badge-red{% else %}badge-info{% endif %}">{{ current_stage.name }}</span>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Effective probability</dt><dd>{{ placement.effective_probability }}%</dd></div>
+      <div class="detail-item"><dt>Stage entered</dt><dd>{{ placement.stage_entered_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+    <p class="text-muted">Use the focused placement page to change pipeline or stage. The CRM deal remains canonical.</p>
+    {% else %}
+    <div class="empty-state"><i data-lucide="git-branch"></i><p>This opportunity is not placed in a pipeline.</p></div>
+    {% endif %}
     {% if stages %}
     <div class="table-wrap" style="margin-top:1rem;">
       <table class="table">
@@ -91,7 +85,7 @@
       </table>
     </div>
     {% else %}
-    <div class="empty-state"><i data-lucide="git-branch"></i><p>No active pipeline stages are available.</p></div>
+    <div class="empty-state"><i data-lucide="list-ordered"></i><p>No active pipeline stages are available.</p></div>
     {% endif %}
   </div>
 </div>
