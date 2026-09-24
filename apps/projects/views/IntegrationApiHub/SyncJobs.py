@@ -91,7 +91,20 @@ def _syj_save(request, form, action):
 
 @login_required
 def syj_create(request):
-    form = ProjectSyncJobForm(request.POST or None, tenant=request.tenant)
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    initial = None
+    connector_id = request.GET.get("connector", "").strip()
+    if connector_id.isdigit():
+        connector = ProjectIntegrationConnector.objects.filter(
+            tenant=request.tenant, pk=connector_id
+        ).first()
+        if connector is not None:
+            initial = {"connector": connector}
+    form = ProjectSyncJobForm(
+        request.POST or None, tenant=request.tenant, initial=initial
+    )
     if request.method == "POST" and form.is_valid():
         obj = _syj_save(request, form, "create")
         messages.success(request, f"Sync job {obj.number} created.")
