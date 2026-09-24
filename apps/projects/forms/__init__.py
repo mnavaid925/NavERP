@@ -224,6 +224,7 @@ from .MasterDataConfiguration.ProjectCustomFields import ProjectCustomFieldForm 
 from .MasterDataConfiguration.ProjectTeams import (  # noqa: F401
     ProjectTeamForm,
     ProjectTeamMemberForm,
+    ProjectTeamMemberInlineForm,
 )
 from .MasterDataConfiguration.ProjectLocaleSettings import ProjectLocaleSettingForm  # noqa: F401
 
