@@ -153,7 +153,13 @@ class OpportunityPipelinePlacementForm(TenantUniqueMixin, TenantModelForm):
         model = OpportunityPipelinePlacement
         fields = ["opportunity", "pipeline", "current_stage", "probability_override"]
 
-    def __init__(self, *args, tenant=None, **kwargs):
+    def __init__(self, *args, tenant=None, selected_pipeline=None, **kwargs):
+        tenant_id = getattr(tenant, "pk", tenant)
+        if selected_pipeline is not None and (
+            selected_pipeline.tenant_id != tenant_id or not selected_pipeline.is_active
+        ):
+            selected_pipeline = None
+        self.selected_pipeline = selected_pipeline
         super().__init__(*args, tenant=tenant, **kwargs)
         self.fields["opportunity"].queryset = (
             Opportunity.objects.none()
@@ -165,9 +171,25 @@ class OpportunityPipelinePlacementForm(TenantUniqueMixin, TenantModelForm):
             if tenant is None
             else Pipeline.objects.filter(tenant=tenant, is_active=True).order_by("name")
         )
-        pipeline_id = _opportunity_pipeline_positive_id(
-            self.data.get("pipeline") if self.is_bound else self.instance.pipeline_id
+        if self.selected_pipeline is not None:
+            self.initial["pipeline"] = self.selected_pipeline.pk
+            self.fields["pipeline"].initial = self.selected_pipeline.pk
+            self.fields["pipeline"].disabled = True
+            self.fields["pipeline"].required = False
+            if self.instance.pipeline_id != self.selected_pipeline.pk:
+                self.instance.pipeline = self.selected_pipeline
+                self.instance.current_stage = None
+                self.instance.probability_override = None
+                self.initial["current_stage"] = None
+                self.initial["probability_override"] = None
+                self.fields["current_stage"].initial = None
+                self.fields["probability_override"].initial = None
+        pipeline_value = (
+            self.selected_pipeline.pk
+            if self.selected_pipeline is not None
+            else (self.data.get("pipeline") if self.is_bound else self.instance.pipeline_id)
         )
+        pipeline_id = _opportunity_pipeline_positive_id(pipeline_value)
         if not self.is_bound and tenant is not None and pipeline_id is None:
             default_pipeline = (
                 Pipeline.objects.filter(tenant=tenant, is_active=True)
