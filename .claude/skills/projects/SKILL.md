@@ -35,10 +35,10 @@ description: >-
   per-project folder tree with a computed path and document count, the controlled-document register
   with real link FKs to milestones/tasks, the immutable approved-revision chain with a cooperative
   check-out lock and a denormalized search copy, the tenant-wide standards library, the insight
-  and 7.14 Client & External Collaboration: client portal access tokens [CPA-] with fine-grained visibility flags and expiration checks, formal client review cycles & approval requests [CFB-] with sign-off/rejection workflows, contract statements of work [SOW-] and approved amendment chains [SWA-] with dynamic value rollup, external vendor coordination & handoffs [VHD-] with deliverable acceptance and 1–5 scorecard ratings, and project client billing schedules [PCI-] with 1-click accounting AR invoice generation; and 7.15 Financial & Billing Management: rate cards [RTC-] with role/activity rates and markup, automated billing runs [PBR-] with labor/expense/fee calculation, exchange rate, and 1-click accounting.Invoice generation + PDF preview, revenue recognition schedules [PRS-] with milestones/ASC-606 percent-complete recognition and lock/supersede verbs, payment tracking records [PPR-] with DSO calculation, promise-to-pay logging, contact notes, and 4 computed financial boards: project P&L, budget vs actual variance, A/R aging buckets, and 12-month cash flow forecast;   and 7.17 Workflow & Automation: trigger-condition-action workflow rules [PWF-] with child execution logs and test run simulation, multi-level stage-gate approval gates [PAR-] with escalate/delegate/self-approval prevention, recurring task generation schedules [RTS-] with cron/interval cadence and next occurrence computation, outbound webhook endpoints [PWH-] with HMAC-SHA256 signing and delivery attempt logging, plus 4 computed operational boards: automation overview, approval inbox, recurrence calendar, and webhook diagnostics; and 7.18 Integration & API Hub: project-scoped ProjectIntegrationConnector [IXC-] records with encrypted credential rotation, field mappings [IXM-], recorded sync-job intent [SYJ-], an append-only simulated ProjectSyncRun [SYR-] log, and connector/run health boards).
+  and 7.14 Client & External Collaboration: client portal access tokens [CPA-] with fine-grained visibility flags and expiration checks, formal client review cycles & approval requests [CFB-] with sign-off/rejection workflows, contract statements of work [SOW-] and approved amendment chains [SWA-] with dynamic value rollup, external vendor coordination & handoffs [VHD-] with deliverable acceptance and 1–5 scorecard ratings, and project client billing schedules [PCI-] with 1-click accounting AR invoice generation; and 7.15 Financial & Billing Management: rate cards [RTC-] with role/activity rates and markup, automated billing runs [PBR-] with labor/expense/fee calculation, exchange rate, and 1-click accounting.Invoice generation + PDF preview, revenue recognition schedules [PRS-] with milestones/ASC-606 percent-complete recognition and lock/supersede verbs, payment tracking records [PPR-] with DSO calculation, promise-to-pay logging, contact notes, and 4 computed financial boards: project P&L, budget vs actual variance, A/R aging buckets, and 12-month cash flow forecast;   and 7.17 Workflow & Automation: trigger-condition-action workflow rules [PWF-] with child execution logs and test run simulation, multi-level stage-gate approval gates [PAR-] with escalate/delegate/self-approval prevention, recurring task generation schedules [RTS-] with cron/interval cadence and next occurrence computation, outbound webhook endpoints [PWH-] with HMAC-SHA256 signing and delivery attempt logging, plus 4 computed operational boards: automation overview, approval inbox, recurrence calendar, and webhook diagnostics; and 7.18 Integration & API Hub: project-scoped ProjectIntegrationConnector [IXC-] records with encrypted credential rotation, field mappings [IXM-], recorded sync-job intent [SYJ-], an append-only simulated ProjectSyncRun [SYR-] log, and connector/run health boards; and 7.19 Master Data & Configuration: reusable project templates with validated WBS instantiation, a core-synchronized project custom-field catalog used by real project/task/milestone/risk/team forms, named team membership with departure history, locale/calendar profiles, and a configuration hub).
   Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
-  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.18), work on
+   seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.19), work on
   ProjectRequest/Project/ProjectStakeholder/ProjectKickoff/ProjectTask/TaskDependency/
   ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry/
   BudgetRevision/CostControlAccount/ProjectBudgetLine/ProjectExpense/
@@ -56,15 +56,15 @@ description: >-
   ProjectRateCard/ProjectBillingRun/ProjectRevenueSchedule/ProjectPaymentRecord/
    ProjectWorkflowRule/WorkflowExecutionLog/ProjectApprovalGate/RecurringTaskSchedule/
    ProjectWebhookEndpoint/ProjectWebhookDelivery/ProjectIntegrationConnector/ConnectorFieldMapping/
-   ProjectSyncJob/ProjectSyncRun,
+   ProjectSyncJob/ProjectSyncRun/ProjectTemplate/ProjectCustomField/ProjectTeam/
+   ProjectTeamMember/ProjectLocaleSetting,
   or invokes /projects.
 ---
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11 + 7.12 + 7.13 + 7.14 + 7.15 + 7.16 + 7.17 + 7.18.** 7.19 is roadmap (a
-parallel build may be landing it — always check `apps/projects/models/` first). Do not assume a
-model exists because NavERP.md lists the feature — check first.
+**As-built: 7.1–7.19 (all 19 sub-modules; Module 7 complete).** Do not assume a model exists
+because NavERP.md lists the feature — check `apps/projects/models/` first.
 
 App path `apps/projects/`, templates `templates/projects/`, `app_name = "projects"`, mounted at
 `/projects/`. Migrations `0001_initial`, `0002_ordering_indexes_and_nonnegative_estimates`,
@@ -78,7 +78,12 @@ went to the parallel 7.7 build), `0010_alter_scopeitem_status` (7.7 — the `vio
 build had omitted from the choices entirely), `0011_taskblock_taskchecklistitem_projecttask_actual_end_and_more`
 (7.8's execution columns + its two registers), `0012_channel_channelmessage_documentshare_meeting_and_more`
 (7.9's seven tables), `0013_channelmessage_chm_tnt_created_idx_and_more` (7.9 review indexes) and
-`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables), `0020_projecttask_epic_projecttask_release_and_more` (7.13's five tables + ProjectTask agile extensions), `0021_statementofwork_sowamendment_projectclientinvoice_and_more` (7.14's six tables), `0022_projectbillingrun_projectpaymentrecord_and_more` (7.15's four tables), `0023_projectbillingrun_pbr_tnt_status_idx_and_more` (7.15 review indexes), `0024_projectapprovalgate_projectwebhookendpoint_and_more` (7.17's six tables), `0025_projectworkflowrule_pwf_tnt_status_idx_and_more` (7.17 review indexes), `0026_projectintegrationconnector_connectorfieldmapping_and_more` (7.18's four tables), and `0027_projectsyncjob_syj_tnt_active_idx` (7.18 review index).
+`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables), `0020_projecttask_epic_projecttask_release_and_more` (7.13's five tables + ProjectTask agile extensions), `0021_statementofwork_sowamendment_projectclientinvoice_and_more` (7.14's six tables), `0022_projectbillingrun_projectpaymentrecord_and_more` (7.15's four tables), `0023_projectbillingrun_pbr_tnt_status_idx_and_more` (7.15 review indexes), `0024_projectapprovalgate_projectwebhookendpoint_and_more` (7.17's six tables), `0025_projectworkflowrule_pwf_tnt_status_idx_and_more` (7.17 review indexes), `0026_projectintegrationconnector_connectorfieldmapping_and_more` (7.18's four tables), `0027_projectsyncjob_syj_tnt_active_idx` (7.18 review index),
+`0028_projecttemplate_projectcustomfield_projectteam_and_more` (7.19's four master models and
+team-membership child), `0029_alter_projecttemplate_estimated_duration_days_and_more` (7.19
+calendar help text and newest-first configuration indexes), and
+`0030_sync_project_custom_fields` (existing Projects custom-field definitions synchronized into
+`core.CustomFieldDefinition`).
 
 ## ⚠️ Three different models are called "Project"
 
@@ -1924,6 +1929,31 @@ All four models are tenant-scoped. `ProjectSyncRun` is the one exception to the 
 
 #### Sidebar wiring
 `LIVE_LINKS["7.18"]` in `apps/core/navigation.py` maps the five catalog bullets to the category-scoped `ixc_*_list` routes and adds Integration Hub, Sync Monitor, Connector Register, Field Mappings, Sync Jobs, and Sync Runs. Keep the four-register ownership comment intact when editing navigation.
+
+### 7.19 Master Data & Configuration — Reference
+
+Adds the project workspace's reusable configuration layer: methodology templates with validated WBS instantiation, a project-specific custom-field catalog backed by the core value store, named teams with membership history, locale/calendar profiles, and one configuration hub. All five models are tenant-scoped and reuse `core.OrgUnit`, `core.Language`, `core.TimeZone`, `accounting.Currency`, `projects.Project`, and the shared user/org-unit spine rather than duplicating those records.
+
+#### Models (`apps/projects/models/MasterDataConfiguration/`)
+- **`ProjectTemplate`** [`PTM-`] (`ProjectTemplates.py`): methodology/category/complexity, duration and target budget, default roles, bounded `wbs_structure`, and `workflow_config`. Active/default state and safe JSON/WBS validation drive template instantiation.
+- **`ProjectCustomField`** [`PCF-`] (`ProjectCustomFields.py`): unique per `(tenant, target_entity, field_key)`, with supported target/type/section choices, validation metadata, visibility rules, and activation state. Save synchronizes `core.CustomFieldDefinition`; deletion deactivates that definition rather than discarding stored values.
+- **`ProjectTeam`** [`PTE-`] and **`ProjectTeamMember`** (`ProjectTeams.py`): named internal/matrix/pod/external teams, optional project and `core.OrgUnit` scope, lead, and dated user membership. Current-member/allocation counts exclude rows with `left_date` set; a unique `(team, user)` row preserves departure history.
+- **`ProjectLocaleSetting`** [`PLS-`] (`ProjectLocaleSettings.py`): project-or-workspace language, time zone, currency, date/time/number formats, working hours, and working-day pattern. Exactly one default is kept per scope.
+
+#### Views & routes (`apps/projects/views/MasterDataConfiguration/`, `urls/MasterDataConfiguration/`)
+- **Templates**: `ptm_list`, `ptm_create`, `ptm_detail`, `ptm_edit`, `ptm_delete`, `ptm_instantiate`.
+- **Custom fields**: `pcf_list`, `pcf_create`, `pcf_detail`, `pcf_edit`, `pcf_delete`, `pcf_toggle_active`.
+- **Teams**: `pte_list`, `pte_create`, `pte_detail`, `pte_edit`, `pte_delete`, `pte_add_member`, `pte_remove_member`.
+- **Locale**: `pls_list`, `pls_create`, `pls_detail`, `pls_edit`, `pls_delete`, `pls_set_default`.
+- **Hub**: `configuration_hub`.
+
+All configuration mutations require `tenant_admin_required`; authenticated tenant members may read the registers, use the hub, and instantiate templates. Every object lookup and mutation remains tenant-scoped. Locale defaults use a locked serialized writer; team membership records departures rather than deleting history.
+
+#### Templates and custom-field integration
+The 14 pages live under `templates/projects/masterdataconfiguration/{template,customfield,team,localesetting,boards}/`. `CustomFieldMixin` loads applicable active definitions, validates type/range/regex/choice/URL/user constraints, and persists values exclusively in `core.CustomFieldValue`. The mixin is wired into Project, Task, Milestone, Risk, and Team forms; `project_custom_field_values` renders their detail panels through `templates/projects/partials/custom_values_panel.html`.
+
+#### Seeder, tests, and sidebar
+`seed_projects` contains the idempotent 7.19 block for templates, synchronized custom fields, teams/membership, and locale profiles. The four focused test modules contain 44 tests, and the 7.19 smoke/fixer probes passed. `LIVE_LINKS["7.19"]` in `apps/core/navigation.py` maps the four NavERP bullets to `ptm_list`, `pcf_list`, `pte_list`, and `pls_list`, plus the `configuration_hub` leaf.
 
 ## Common tasks
 
