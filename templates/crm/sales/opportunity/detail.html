@@ -7,11 +7,16 @@
       <div class="breadcrumb"><a href="{% url 'crm:opportunity_list' %}">Opportunities</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
     <div class="page-actions">
-      {% if obj.is_open %}
+      {% if obj.is_open and opportunity_quick_advance %}
         <form method="post" action="{% url 'crm:opportunity_advance' obj.pk %}">
           {% csrf_token %}
           <button class="btn btn-primary" type="submit"><i data-lucide="chevrons-right"></i> Advance stage</button>
         </form>
+      {% endif %}
+      {% if sales_workspace_url %}
+        <a href="{{ sales_workspace_url }}" class="btn btn-outline"><i data-lucide="kanban"></i> Sales workspace</a>
+      {% elif opportunity_sales_close_required %}
+        <span class="muted">Use the Sales workspace to close this opportunity.</span>
       {% endif %}
       {% if obj.stage == 'closed_won' %}
         <form method="post" action="{% url 'crm:opportunity_to_project' obj.pk %}" onsubmit="return confirm('Create a delivery project from this won opportunity?');">
@@ -36,6 +41,7 @@
       <div class="detail-item"><dt>Stage</dt><dd><span class="badge badge-{% if obj.stage == 'closed_won' %}green{% elif obj.stage == 'closed_lost' %}red{% elif obj.stage == 'negotiation' %}amber{% elif obj.stage == 'proposal' %}info{% else %}muted{% endif %}">{{ obj.get_stage_display }}</span></dd></div>
       <div class="detail-item"><dt>Forecast category</dt><dd>{{ obj.get_forecast_category_display }}</dd></div>
       <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount }}</dd></div>
+      <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}Unspecified{% endif %}</dd></div>
       <div class="detail-item"><dt>Probability</dt><dd>{{ obj.probability }}%</dd></div>
       <div class="detail-item"><dt>Weighted</dt><dd>{{ obj.weighted_amount|floatformat:2 }}</dd></div>
       <div class="detail-item"><dt>Close date</dt><dd>{% if obj.close_date %}{{ obj.close_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
@@ -46,6 +52,7 @@
       <div class="detail-item"><dt>Campaign</dt><dd>{% if obj.campaign %}<a href="{% url 'crm:campaign_detail' obj.campaign.pk %}">{{ obj.campaign.name }}</a>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Source lead</dt><dd>{% if obj.source_lead %}<a href="{% url 'crm:lead_detail' obj.source_lead.pk %}">{{ obj.source_lead.number }}</a>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Next step</dt><dd>{{ obj.next_step|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Next-step due date</dt><dd>{% if obj.next_step_due_date %}{{ obj.next_step_due_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
     </dl>
     {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
   </div></div>
