@@ -15,12 +15,14 @@
       <span>Configuration Hub</span>
     </div>
   </div>
-  <div class="page-actions flex items-center gap-2">
-    <a href="{% url 'projects:ptm_create' %}" class="btn btn-outline"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Template</a>
-    <a href="{% url 'projects:pcf_create' %}" class="btn btn-outline"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Custom Field</a>
-    <a href="{% url 'projects:pte_create' %}" class="btn btn-outline"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Team</a>
-    <a href="{% url 'projects:pls_create' %}" class="btn btn-primary"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Locale Profile</a>
+  {% if request.user.is_tenant_admin or request.user.is_superuser %}
+  <div class="page-actions flex flex-wrap items-center gap-2">
+    <a href="{% url 'projects:ptm_create' %}" class="btn btn-outline"><i data-lucide="plus" class="w-4 h-4 me-1"></i> New Template</a>
+    <a href="{% url 'projects:pcf_create' %}" class="btn btn-outline"><i data-lucide="plus" class="w-4 h-4 me-1"></i> New Custom Field</a>
+    <a href="{% url 'projects:pte_create' %}" class="btn btn-outline"><i data-lucide="plus" class="w-4 h-4 me-1"></i> New Team</a>
+    <a href="{% url 'projects:pls_create' %}" class="btn btn-primary"><i data-lucide="plus" class="w-4 h-4 me-1"></i> New Locale Profile</a>
   </div>
+  {% endif %}
 </div>
 
 <!-- Key Master Data KPI Cards -->
@@ -28,55 +30,55 @@
   <div class="card p-4">
     <div class="flex items-center justify-between">
       <div class="text-xs text-muted uppercase font-semibold">Templates</div>
-      <i data-lucide="layers" class="w-4 h-4 text-primary"></i>
+      <i data-lucide="layers" class="w-4 h-4 text-brand"></i>
     </div>
-    <div class="text-2xl font-bold text-slate-900 mt-2">{{ stats.templates_count }}</div>
+    <div class="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-2">{{ stats.templates_count }}</div>
     <div class="text-xs text-green-600 mt-1">{{ stats.active_templates }} Active</div>
   </div>
 
   <div class="card p-4">
     <div class="flex items-center justify-between">
       <div class="text-xs text-muted uppercase font-semibold">Custom Fields</div>
-      <i data-lucide="sliders" class="w-4 h-4 text-primary"></i>
+      <i data-lucide="sliders" class="w-4 h-4 text-brand"></i>
     </div>
-    <div class="text-2xl font-bold text-slate-900 mt-2">{{ stats.custom_fields_count }}</div>
+    <div class="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-2">{{ stats.custom_fields_count }}</div>
     <div class="text-xs text-muted mt-1">Across Models</div>
   </div>
 
   <div class="card p-4">
     <div class="flex items-center justify-between">
       <div class="text-xs text-muted uppercase font-semibold">Project Teams</div>
-      <i data-lucide="users" class="w-4 h-4 text-primary"></i>
+      <i data-lucide="users" class="w-4 h-4 text-brand"></i>
     </div>
-    <div class="text-2xl font-bold text-slate-900 mt-2">{{ stats.teams_count }}</div>
+    <div class="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-2">{{ stats.teams_count }}</div>
     <div class="text-xs text-muted mt-1">Matrix &amp; Functional</div>
   </div>
 
   <div class="card p-4">
     <div class="flex items-center justify-between">
       <div class="text-xs text-muted uppercase font-semibold">Staffed Members</div>
-      <i data-lucide="user-check" class="w-4 h-4 text-primary"></i>
+      <i data-lucide="user-check" class="w-4 h-4 text-brand"></i>
     </div>
-    <div class="text-2xl font-bold text-slate-900 mt-2">{{ stats.team_members_count }}</div>
+    <div class="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-2">{{ stats.team_members_count }}</div>
     <div class="text-xs text-muted mt-1">Allocated Resources</div>
   </div>
 
   <div class="card p-4">
     <div class="flex items-center justify-between">
       <div class="text-xs text-muted uppercase font-semibold">Locale Profiles</div>
-      <i data-lucide="globe" class="w-4 h-4 text-primary"></i>
+      <i data-lucide="globe" class="w-4 h-4 text-brand"></i>
     </div>
-    <div class="text-2xl font-bold text-slate-900 mt-2">{{ stats.locale_profiles_count }}</div>
+    <div class="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-2">{{ stats.locale_profiles_count }}</div>
     <div class="text-xs text-muted mt-1">Regional Calendars</div>
   </div>
 
   <div class="card p-4">
     <div class="flex items-center justify-between">
       <div class="text-xs text-muted uppercase font-semibold">Configuration</div>
-      <i data-lucide="settings" class="w-4 h-4 text-primary"></i>
+      <i data-lucide="settings" class="w-4 h-4 text-brand"></i>
     </div>
-    <div class="text-2xl font-bold text-green-600 mt-2">100%</div>
-    <div class="text-xs text-muted mt-1">Standardized</div>
+    <div class="text-2xl font-bold text-green-600 mt-2">{{ stats.standardization_pct }}%</div>
+    <div class="text-xs text-muted mt-1">Active Configuration</div>
   </div>
 </div>
 
@@ -85,102 +87,110 @@
   <div class="card">
     <div class="card-header flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <i data-lucide="folder-kanban" class="w-5 h-5 text-primary"></i>
-        <h3 class="text-sm font-semibold text-slate-900">Project Templates</h3>
+        <i data-lucide="folder-kanban" class="w-5 h-5 text-brand"></i>
+        <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Project Templates</h3>
       </div>
-      <a href="{% url 'projects:ptm_list' %}" class="text-xs text-primary hover:underline">View All</a>
+      <a href="{% url 'projects:ptm_list' %}" class="text-xs text-brand hover:underline">View All</a>
     </div>
     <div class="card-body">
       <p class="text-xs text-muted mb-4">Waterfall, Agile, Scrum, and Hybrid templates with pre-configured WBS hierarchies.</p>
       <div class="space-y-2">
         {% for m in methodologies %}
         <div class="flex items-center justify-between text-xs">
-          <span class="text-slate-700">{{ m.label }}</span>
-          <span class="font-medium text-slate-900">{{ m.count }} ({{ m.percentage }}%)</span>
+          <span class="text-slate-700 dark:text-slate-300">{{ m.label }}</span>
+          <span class="font-medium text-slate-900 dark:text-slate-100">{{ m.count }} ({{ m.percentage }}%)</span>
         </div>
         <div class="w-full bg-slate-100 rounded-full h-1.5">
-          <div class="bg-primary h-1.5 rounded-full" style="width: {{ m.percentage }}%"></div>
+          <div class="bg-blue-600 h-1.5 rounded-full" style="width: {{ m.percentage }}%"></div>
         </div>
         {% endfor %}
       </div>
-      <div class="mt-4 pt-3 border-t border-slate-200">
+      {% if request.user.is_tenant_admin or request.user.is_superuser %}
+      <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700">
         <a href="{% url 'projects:ptm_create' %}" class="btn btn-outline btn-sm w-full text-center">Create Template</a>
       </div>
+      {% endif %}
     </div>
   </div>
 
   <div class="card">
     <div class="card-header flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <i data-lucide="sliders" class="w-5 h-5 text-primary"></i>
-        <h3 class="text-sm font-semibold text-slate-900">Custom Fields</h3>
+        <i data-lucide="sliders" class="w-5 h-5 text-brand"></i>
+        <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Custom Fields</h3>
       </div>
-      <a href="{% url 'projects:pcf_list' %}" class="text-xs text-primary hover:underline">View All</a>
+      <a href="{% url 'projects:pcf_list' %}" class="text-xs text-brand hover:underline">View All</a>
     </div>
     <div class="card-body">
-      <p class="text-xs text-muted mb-4">Enterprise metadata attributes with regex validation and conditional visibility.</p>
+      <p class="text-xs text-muted mb-4">Project-specific metadata definitions with validation and visibility rules; platform-wide value storage remains in core 0.10.</p>
       <div class="space-y-2">
         {% for e in target_entities %}
         <div class="flex items-center justify-between text-xs py-1 border-b border-slate-100">
-          <span class="text-slate-700">{{ e.label }}</span>
+          <span class="text-slate-700 dark:text-slate-300">{{ e.label }}</span>
           <span class="badge badge-info">{{ e.count }}</span>
         </div>
         {% endfor %}
       </div>
-      <div class="mt-4 pt-3 border-t border-slate-200">
+      {% if request.user.is_tenant_admin or request.user.is_superuser %}
+      <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700">
         <a href="{% url 'projects:pcf_create' %}" class="btn btn-outline btn-sm w-full text-center">Add Custom Field</a>
       </div>
+      {% endif %}
     </div>
   </div>
 
   <div class="card">
     <div class="card-header flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <i data-lucide="network" class="w-5 h-5 text-primary"></i>
-        <h3 class="text-sm font-semibold text-slate-900">Organization &amp; Teams</h3>
+        <i data-lucide="network" class="w-5 h-5 text-brand"></i>
+        <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Organization &amp; Teams</h3>
       </div>
-      <a href="{% url 'projects:pte_list' %}" class="text-xs text-primary hover:underline">View All</a>
+      <a href="{% url 'projects:pte_list' %}" class="text-xs text-brand hover:underline">View All</a>
     </div>
     <div class="card-body">
       <p class="text-xs text-muted mb-4">Cross-functional, dedicated, and matrix team delivery structures linked to OrgUnits.</p>
       <div class="space-y-3">
-        <div class="flex items-center justify-between text-xs py-2 bg-slate-50 p-2 rounded">
-          <span class="text-slate-700">Configured Teams</span>
-          <span class="font-bold text-slate-900">{{ stats.teams_count }}</span>
+        <div class="flex items-center justify-between text-xs py-2 bg-slate-50 dark:bg-slate-800 p-2 rounded">
+          <span class="text-slate-700 dark:text-slate-300">Configured Teams</span>
+          <span class="font-bold text-slate-900 dark:text-slate-100">{{ stats.teams_count }}</span>
         </div>
-        <div class="flex items-center justify-between text-xs py-2 bg-slate-50 p-2 rounded">
-          <span class="text-slate-700">Assigned Members</span>
-          <span class="font-bold text-slate-900">{{ stats.team_members_count }}</span>
+        <div class="flex items-center justify-between text-xs py-2 bg-slate-50 dark:bg-slate-800 p-2 rounded">
+          <span class="text-slate-700 dark:text-slate-300">Assigned Members</span>
+          <span class="font-bold text-slate-900 dark:text-slate-100">{{ stats.team_members_count }}</span>
         </div>
       </div>
-      <div class="mt-6 pt-3 border-t border-slate-200">
+      {% if request.user.is_tenant_admin or request.user.is_superuser %}
+      <div class="mt-6 pt-3 border-t border-slate-200 dark:border-slate-700">
         <a href="{% url 'projects:pte_create' %}" class="btn btn-outline btn-sm w-full text-center">Setup New Team</a>
       </div>
+      {% endif %}
     </div>
   </div>
 
   <div class="card">
     <div class="card-header flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <i data-lucide="languages" class="w-5 h-5 text-primary"></i>
-        <h3 class="text-sm font-semibold text-slate-900">Localization &amp; Calendars</h3>
+        <i data-lucide="languages" class="w-5 h-5 text-brand"></i>
+        <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Localization &amp; Calendars</h3>
       </div>
-      <a href="{% url 'projects:pls_list' %}" class="text-xs text-primary hover:underline">View All</a>
+      <a href="{% url 'projects:pls_list' %}" class="text-xs text-brand hover:underline">View All</a>
     </div>
     <div class="card-body">
       <p class="text-xs text-muted mb-4">Multi-language packs, time zones, currency formats, and operational working schedules.</p>
       <div class="space-y-3">
-        <div class="flex items-center justify-between text-xs py-2 bg-slate-50 p-2 rounded">
-          <span class="text-slate-700">Active Profiles</span>
-          <span class="font-bold text-slate-900">{{ stats.locale_profiles_count }}</span>
+        <div class="flex items-center justify-between text-xs py-2 bg-slate-50 dark:bg-slate-800 p-2 rounded">
+          <span class="text-slate-700 dark:text-slate-300">Active Profiles</span>
+          <span class="font-bold text-slate-900 dark:text-slate-100">{{ stats.active_locale_profiles }}</span>
         </div>
         <div class="text-xs text-muted">
           Ensure projects adhere to regional compliance and multi-currency delivery standards.
         </div>
       </div>
-      <div class="mt-6 pt-3 border-t border-slate-200">
+      {% if request.user.is_tenant_admin or request.user.is_superuser %}
+      <div class="mt-6 pt-3 border-t border-slate-200 dark:border-slate-700">
         <a href="{% url 'projects:pls_create' %}" class="btn btn-outline btn-sm w-full text-center">New Locale Profile</a>
       </div>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -190,7 +200,7 @@
   <!-- Recent Templates -->
   <div class="card">
     <div class="card-header flex items-center justify-between">
-      <h3 class="text-sm font-semibold text-slate-900">Recently Updated Templates</h3>
+      <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Recently Updated Templates</h3>
       <a href="{% url 'projects:ptm_list' %}" class="btn btn-outline btn-sm">Manage Templates</a>
     </div>
     <div class="table-wrap">
@@ -200,33 +210,25 @@
             <th>Template</th>
             <th>Methodology</th>
             <th>Est. Duration</th>
-            <th class="text-right">Action</th>
+            <th class="text-end">Action</th>
           </tr>
         </thead>
         <tbody>
           {% for t in recent_templates %}
           <tr>
             <td>
-              <a href="{% url 'projects:ptm_detail' pk=t.pk %}" class="font-medium text-slate-900 hover:text-primary">{{ t.name }}</a>
+              <a href="{% url 'projects:ptm_detail' pk=t.pk %}" class="font-medium text-slate-900 dark:text-slate-100 hover:text-brand">{{ t.name }}</a>
               <span class="block text-xs font-mono text-muted">{{ t.number }}</span>
             </td>
             <td>
-              {% if t.methodology == 'agile' %}
-                <span class="badge badge-green">Agile</span>
-              {% elif t.methodology == 'waterfall' %}
-                <span class="badge badge-info">Waterfall</span>
-              {% elif t.methodology == 'hybrid' %}
-                <span class="badge badge-amber">Hybrid</span>
-              {% else %}
-                <span class="badge badge-slate">{{ t.get_methodology_display }}</span>
-              {% endif %}
+              <span class="badge {{ t.methodology_badge_class }}">{{ t.get_methodology_display }}</span>
             </td>
-            <td class="text-xs text-slate-600">
+            <td class="text-xs text-slate-600 dark:text-slate-400">
               {{ t.estimated_duration_days }} days
             </td>
-            <td class="text-right">
+            <td class="text-end">
               <a href="{% url 'projects:ptm_instantiate' pk=t.pk %}" class="btn btn-outline btn-sm">
-                <i data-lucide="play" class="w-3.5 h-3.5 mr-1"></i> Instantiate
+                <i data-lucide="play" class="w-3.5 h-3.5 me-1"></i> Instantiate
               </a>
             </td>
           </tr>
@@ -243,7 +245,7 @@
   <!-- Recent Matrix Teams -->
   <div class="card">
     <div class="card-header flex items-center justify-between">
-      <h3 class="text-sm font-semibold text-slate-900">Active Delivery Teams</h3>
+      <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Active Delivery Teams</h3>
       <a href="{% url 'projects:pte_list' %}" class="btn btn-outline btn-sm">Manage Teams</a>
     </div>
     <div class="table-wrap">
@@ -253,34 +255,26 @@
             <th>Team Name</th>
             <th>Structure Model</th>
             <th>Lead / Members</th>
-            <th class="text-right">Action</th>
+            <th class="text-end">Action</th>
           </tr>
         </thead>
         <tbody>
           {% for tm in recent_teams %}
           <tr>
             <td>
-              <a href="{% url 'projects:pte_detail' pk=tm.pk %}" class="font-medium text-slate-900 hover:text-primary">{{ tm.name }}</a>
+              <a href="{% url 'projects:pte_detail' pk=tm.pk %}" class="font-medium text-slate-900 dark:text-slate-100 hover:text-brand">{{ tm.name }}</a>
               <span class="block text-xs font-mono text-muted">{{ tm.number }}</span>
             </td>
             <td>
-              {% if tm.team_type == 'matrix' %}
-                <span class="badge badge-amber">Matrix</span>
-              {% elif tm.team_type == 'dedicated' %}
-                <span class="badge badge-green">Dedicated</span>
-              {% elif tm.team_type == 'cross_functional' %}
-                <span class="badge badge-info">Cross-Functional</span>
-              {% else %}
-                <span class="badge badge-slate">{{ tm.get_team_type_display }}</span>
-              {% endif %}
+              <span class="badge {{ tm.team_type_badge_class }}">{{ tm.get_team_type_display }}</span>
             </td>
-            <td class="text-xs text-slate-600">
-              <div>{{ tm.team_lead.get_full_name|default:tm.team_lead.username|default:"Unassigned Lead" }}</div>
+            <td class="text-xs text-slate-600 dark:text-slate-400">
+              <div>{% if tm.team_lead %}{{ tm.team_lead.get_full_name|default:tm.team_lead.username }}{% else %}Unassigned Lead{% endif %}</div>
               <span class="text-muted">{{ tm.member_count }} allocated member{{ tm.member_count|pluralize }}</span>
             </td>
-            <td class="text-right">
+            <td class="text-end">
               <a href="{% url 'projects:pte_detail' pk=tm.pk %}" class="btn btn-outline btn-sm">
-                <i data-lucide="eye" class="w-3.5 h-3.5 mr-1"></i> View
+                <i data-lucide="eye" class="w-3.5 h-3.5 me-1"></i> View
               </a>
             </td>
           </tr>
