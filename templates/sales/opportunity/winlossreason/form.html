@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Win / Loss Reason{% else %}New Win / Loss Reason{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Win / Loss Reason{% else %}New Win / Loss Reason{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:opportunity_win_loss_reason_list' %}">Win / Loss Reasons</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:opportunity_win_loss_reason_detail' obj.pk %}{% else %}{% url 'sales:opportunity_win_loss_reason_list' %}{% endif %}" class="btn btn-outline">Back</a>
+</div>
+
+<div class="card max-w-3xl mx-auto">
+  <div class="card-body">
+    <p class="text-muted">Reasons are tenant-scoped configuration. The code is normalized to lowercase and is used by closure reporting.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save reason</button>
+        <a href="{% if is_edit %}{% url 'sales:opportunity_win_loss_reason_detail' obj.pk %}{% else %}{% url 'sales:opportunity_win_loss_reason_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
