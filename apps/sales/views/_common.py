@@ -27,5 +27,3 @@ def sales_object(request, model, owner_field, pk, queryset=None, select_related=
     if select_related:
         base = base.select_related(*select_related)
     return get_object_or_404(base, pk=pk)
-
-
