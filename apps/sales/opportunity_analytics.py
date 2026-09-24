@@ -83,6 +83,34 @@ def _sales_weighted_expression():
     )
 
 
+def _sales_rollup_stale_counts(queryset, as_of):
+    fields = [
+        "pipeline_id",
+        "current_stage_id",
+        "stage_entered_at",
+        "current_stage__target_days",
+    ]
+    try:
+        Opportunity._meta.get_field("currency")
+    except FieldDoesNotExist:
+        has_currency = False
+    else:
+        has_currency = True
+        fields.append("opportunity__currency_id")
+    counts = {}
+    for row in queryset.values_list(*fields):
+        pipeline_id, stage_id, stage_entered_at, target_days = row[:4]
+        if target_days is None:
+            continue
+        stage_age_days = max(0, (as_of - stage_entered_at).days)
+        if stage_age_days <= target_days:
+            continue
+        currency_id = row[4] if has_currency else None
+        key = (pipeline_id, stage_id, currency_id)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def sales_pipeline_rollups(
     tenant,
     *,
@@ -90,7 +118,9 @@ def sales_pipeline_rollups(
     owner_id=None,
     territory_id=None,
     currency=None,
+    as_of=None,
 ):
+    as_of = as_of or timezone.now()
     currency_id_expression, currency_code_expression = _sales_currency_expressions()
     queryset = _sales_placement_queryset(
         tenant,
@@ -99,6 +129,7 @@ def sales_pipeline_rollups(
         territory_id=territory_id,
         currency=currency,
     )
+    stale_counts = _sales_rollup_stale_counts(queryset, as_of)
     aggregate_rows = (
         queryset.values(
             "pipeline_id",
@@ -124,18 +155,21 @@ def sales_pipeline_rollups(
     result = []
     for row in aggregate_rows:
         code = row["currency_code"] or SALES_UNSPECIFIED_CURRENCY
+        stale_key = (row["pipeline_id"], row["current_stage_id"], row["currency_id"])
         result.append(
             {
                 "pipeline_id": row["pipeline_id"],
                 "pipeline_name": row["pipeline__name"],
                 "stage_id": row["current_stage_id"],
                 "stage_name": row["current_stage__name"],
+                "sequence": row["current_stage__sequence"],
                 "stage_sequence": row["current_stage__sequence"],
                 "stage_kind": row["current_stage__stage_kind"],
                 "currency_id": row["currency_id"],
                 "currency_code": code,
                 "currency_label": code,
                 "count": row["count"] or 0,
+                "stale_count": stale_counts.get(stale_key, 0),
                 "amount": Decimal(row["amount"] or 0),
                 "weighted_amount": Decimal(row["weighted_amount"] or 0),
             }
@@ -166,6 +200,10 @@ def sales_pipeline_currency_totals(
         won_count=Count("id", filter=Q(current_stage__stage_kind="won")),
         lost_count=Count("id", filter=Q(current_stage__stage_kind="lost")),
         amount=Sum("opportunity__amount"),
+        won_amount=Sum(
+            "opportunity__amount",
+            filter=Q(current_stage__stage_kind="won"),
+        ),
         weighted_amount=_sales_weighted_expression(),
     ).order_by("currency_code")
     result = []
@@ -182,6 +220,8 @@ def sales_pipeline_currency_totals(
                 "won_count": row["won_count"] or 0,
                 "lost_count": row["lost_count"] or 0,
                 "amount": Decimal(row["amount"] or 0),
+                "pipeline_amount": Decimal(row["amount"] or 0),
+                "won_amount": Decimal(row["won_amount"] or 0),
                 "weighted_amount": Decimal(row["weighted_amount"] or 0),
             }
         )
@@ -197,9 +237,13 @@ def sales_stage_age_rows(
     currency=None,
     date_from=None,
     date_to=None,
+    health=None,
     as_of=None,
 ):
     as_of = as_of or timezone.now()
+    health = str(health or "").strip().lower()
+    if health and health not in dict(SALES_HEALTH_CHOICES):
+        health = ""
     queryset = _sales_placement_queryset(
         tenant,
         pipeline_id=pipeline_id,
@@ -219,13 +263,25 @@ def sales_stage_age_rows(
         queryset = queryset.filter(stage_entered_at__date__gte=date_from)
     if date_to is not None:
         queryset = queryset.filter(stage_entered_at__date__lte=date_to)
+    placement_list = list(queryset)
+    health_projection = {}
+    if health:
+        health_projection = opportunity_pipeline_health_projection(
+            tenant,
+            [placement.opportunity for placement in placement_list],
+            placement_list,
+            as_of=as_of,
+        )
     rows = []
-    for placement in queryset:
+    for placement in placement_list:
+        health_row = health_projection.get(placement.opportunity_id)
+        if health and (health_row is None or health_row["status"] != health):
+            continue
         age_seconds = max(0, int((as_of - placement.stage_entered_at).total_seconds()))
         stage_age_days = age_seconds // 86400
         target_days = placement.current_stage.target_days
-        currency = getattr(placement.opportunity, "currency", None)
-        currency_code = currency.code if currency is not None else SALES_UNSPECIFIED_CURRENCY
+        opportunity_currency = getattr(placement.opportunity, "currency", None)
+        currency_code = opportunity_currency.code if opportunity_currency is not None else SALES_UNSPECIFIED_CURRENCY
         owner = placement.opportunity.owner
         territory = placement.opportunity.territory
         account = placement.opportunity.account
@@ -319,24 +375,16 @@ def opportunity_pipeline_health(
         status = "on_track"
     else:
         close_date = opportunity.close_date
-        if close_date is None:
+        if close_date is not None and close_date < local_today:
             _sales_add_health_factor(
                 factors,
-                "close_date_missing",
-                "Close date missing",
-                "at_risk",
-                "Set a close date to make the forecast actionable.",
-            )
-        elif close_date < local_today:
-            _sales_add_health_factor(
-                factors,
-                "close_date_overdue",
+                "overdue_close_date",
                 "Close date overdue",
                 "at_risk",
                 "The expected close date has passed.",
                 close_date,
             )
-        elif (close_date - local_today).days <= SALES_HEALTH_CLOSE_SOON_DAYS:
+        elif close_date is not None and (close_date - local_today).days <= SALES_HEALTH_CLOSE_SOON_DAYS:
             _sales_add_health_factor(
                 factors,
                 "close_date_soon",
@@ -345,46 +393,52 @@ def opportunity_pipeline_health(
                 "The expected close date is approaching.",
                 close_date,
             )
-        if not (opportunity.next_step or "").strip():
+        elif close_date is None:
             _sales_add_health_factor(
                 factors,
-                "next_step_missing",
-                "Next step missing",
+                "missing_close_date",
+                "Close date missing",
                 "watch",
-                "Define the next action for this opportunity.",
+                "Set a close date to make the forecast actionable.",
             )
+        next_step = (opportunity.next_step or "").strip()
         next_step_due_date = getattr(opportunity, "next_step_due_date", None)
-        if next_step_due_date is None:
+        if next_step_due_date is not None and next_step_due_date < local_today:
             _sales_add_health_factor(
                 factors,
-                "next_step_due_date_missing",
-                "Next-step date missing",
-                "watch",
-                "Add a due date to the next step.",
-            )
-        elif next_step_due_date < local_today:
-            _sales_add_health_factor(
-                factors,
-                "next_step_overdue",
+                "overdue_next_step",
                 "Next step overdue",
                 "at_risk",
                 "The next-step due date has passed.",
                 next_step_due_date,
             )
-        elif (next_step_due_date - local_today).days <= SALES_HEALTH_NEXT_STEP_SOON_DAYS:
+        elif next_step_due_date is not None and (next_step_due_date - local_today).days <= SALES_HEALTH_NEXT_STEP_SOON_DAYS:
             _sales_add_health_factor(
                 factors,
-                "next_step_soon",
+                "next_step_due_soon",
                 "Next step approaching",
                 "watch",
                 "The next-step due date is approaching.",
                 next_step_due_date,
             )
+        if not next_step or next_step_due_date is None:
+            missing_parts = []
+            if not next_step:
+                missing_parts.append("text")
+            if next_step_due_date is None:
+                missing_parts.append("due date")
+            _sales_add_health_factor(
+                factors,
+                "missing_next_step",
+                "Next step incomplete",
+                "watch",
+                "Add the missing next-step " + " and ".join(missing_parts) + ".",
+            )
         if target_days is not None:
             if stage_age_days > target_days:
                 _sales_add_health_factor(
                     factors,
-                    "stage_age_target",
+                    "stage_overdue",
                     "Stage target exceeded",
                     "at_risk",
                     "The opportunity has remained in this stage beyond its target.",
@@ -392,7 +446,7 @@ def opportunity_pipeline_health(
             elif stage_age_days >= target_days * SALES_HEALTH_STAGE_WATCH_RATIO:
                 _sales_add_health_factor(
                     factors,
-                    "stage_age_watch",
+                    "stage_aging",
                     "Stage age approaching target",
                     "watch",
                     "The opportunity is approaching its stage target.",
@@ -411,33 +465,33 @@ def opportunity_pipeline_health(
         if opportunity.account_id is None:
             _sales_add_health_factor(
                 factors,
-                "account_missing",
+                "missing_account",
                 "Account missing",
-                "at_risk",
+                "watch",
                 "Link the opportunity to an account.",
             )
         if opportunity.primary_contact_id is None:
             _sales_add_health_factor(
                 factors,
-                "primary_contact_missing",
+                "missing_contact",
                 "Primary contact missing",
-                "at_risk",
+                "watch",
                 "Link a primary contact to the opportunity.",
             )
         if opportunity.owner_id is None:
             _sales_add_health_factor(
                 factors,
-                "owner_missing",
+                "missing_owner",
                 "Owner missing",
-                "at_risk",
+                "watch",
                 "Assign one accountable opportunity owner.",
             )
         if Decimal(opportunity.amount or 0) <= 0:
             _sales_add_health_factor(
                 factors,
-                "amount_missing",
+                "missing_amount",
                 "Amount missing",
-                "at_risk",
+                "watch",
                 "Set a positive opportunity amount.",
             )
         severities = {factor["severity"] for factor in factors}
