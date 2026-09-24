@@ -31,6 +31,8 @@ from apps.sales.opportunity_analytics import (
     sales_pipeline_currency_totals,
     sales_pipeline_rollups,
     sales_stage_age_rows,
+    sales_competitor_rows,
+    sales_win_loss_rows,
 )
 from apps.sales.opportunity_services import (
     sales_create_pipeline,
@@ -626,8 +628,24 @@ def opportunity_pipeline_visibility(request):
                 date_from=date_from,
                 date_to=date_to,
             ),
-            "win_loss_rows": [],
-            "competitor_rows": [],
+            "win_loss_rows": sales_win_loss_rows(
+                request.tenant,
+                pipeline_id=context["pipeline_id"],
+                owner_id=context["owner_id"],
+                territory_id=context["territory_id"],
+                currency=context["currency"],
+                date_from=date_from,
+                date_to=date_to,
+            ),
+            "competitor_rows": sales_competitor_rows(
+                request.tenant,
+                pipeline_id=context["pipeline_id"],
+                owner_id=context["owner_id"],
+                territory_id=context["territory_id"],
+                currency=context["currency"],
+                date_from=date_from,
+                date_to=date_to,
+            ),
             "date_from": date_from,
             "date_to": date_to,
         }
