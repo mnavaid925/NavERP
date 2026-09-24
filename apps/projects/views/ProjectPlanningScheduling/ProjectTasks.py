@@ -5,6 +5,7 @@ prefetched once, then every node is decorated IN PYTHON — hierarchical WBS cod
 flag, and the post-order date/effort rollup a deliverable displays. Nothing decorated is stored;
 the register (``tsk_list``) is the flat lens on the same rows.
 """
+from django.db import transaction
 from django.db.models import Prefetch
 
 from apps.core.crud import as_db_int
@@ -159,7 +160,9 @@ def tsk_create(request):
             obj = form.save(commit=False)
             obj.tenant = request.tenant
             obj.created_by = request.user
-            obj.save()
+            with transaction.atomic():
+                obj.save()
+                form.save_custom_values(obj, updated_by=request.user)
             write_audit_log(request.user, obj, "create")
             messages.success(request, f"Task {obj.number} created.")
             return redirect("projects:tsk_detail", pk=obj.pk)
@@ -219,7 +222,8 @@ def tsk_detail(request, pk):
 def tsk_edit(request, pk):
     return crud_edit(
         request, model=ProjectTask, pk=pk, form_class=TaskForm,
-        template="projects/planning/task/form.html", success_url="projects:tsk_list")
+        template="projects/planning/task/form.html", success_url="projects:tsk_list",
+        form_kwargs={"updated_by": request.user})
 
 
 @login_required
