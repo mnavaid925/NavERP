@@ -19,19 +19,38 @@
           <strong>{{ col.label }}</strong>
           <span class="badge badge-muted">{{ col.count }}</span>
         </div>
-        <div class="muted" style="font-size:.8rem; color:var(--text-muted); margin-bottom:.6rem;">{{ col.total }} total</div>
+        <div class="muted" style="font-size:.8rem; color:var(--text-muted); margin-bottom:.6rem;">
+          {% if col.mixed_currency %}
+            <span class="badge badge-amber">Mixed currencies</span>
+            {% for currency in col.currency_rows %}
+              <div>{{ currency.currency_label }} · {{ currency.total }} · {{ currency.count }} deals</div>
+            {% endfor %}
+          {% elif col.currency_rows %}
+            <div>{{ col.currency_label }} · {{ col.total }} total</div>
+          {% else %}
+            <div>No currency totals</div>
+          {% endif %}
+        </div>
         {% for opp in col.opps %}
           <div class="card" style="margin-bottom:.5rem;"><div class="card-body" style="padding:.6rem .7rem;">
             <a href="{% url 'crm:opportunity_detail' opp.pk %}" class="fw-600">{{ opp.name }}</a>
             <div class="muted" style="font-size:.8rem; color:var(--text-muted);">
-              {% if opp.account %}{{ opp.account.name }} · {% endif %}{{ opp.amount }}
+              {% if opp.account %}{{ opp.account.name }} · {% endif %}{{ opp.amount }} · {% if opp.currency_label %}{{ opp.currency_label }}{% elif opp.currency %}{{ opp.currency.code }}{% else %}Unspecified{% endif %}
             </div>
             {% if opp.is_open %}
-              <form method="post" action="{% url 'crm:opportunity_advance' opp.pk %}" style="margin-top:.4rem;">
-                {% csrf_token %}
-                <input type="hidden" name="next" value="board">
-                <button class="btn btn-sm btn-outline" type="submit"><i data-lucide="chevrons-right"></i> Advance</button>
-              </form>
+              {% if opp.sales_close_required %}
+                {% if opp.sales_workspace_url %}
+                  <a href="{{ opp.sales_workspace_url }}" class="btn btn-sm btn-outline" style="margin-top:.4rem;"><i data-lucide="kanban"></i> Sales workspace</a>
+                {% else %}
+                  <span class="muted" style="display:block; margin-top:.4rem; font-size:.8rem;">Sales workspace required to close.</span>
+                {% endif %}
+              {% else %}
+                <form method="post" action="{% url 'crm:opportunity_advance' opp.pk %}" style="margin-top:.4rem;">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="board">
+                  <button class="btn btn-sm btn-outline" type="submit"><i data-lucide="chevrons-right"></i> Advance</button>
+                </form>
+              {% endif %}
             {% endif %}
           </div></div>
         {% empty %}
