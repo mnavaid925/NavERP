@@ -35,10 +35,10 @@ description: >-
   per-project folder tree with a computed path and document count, the controlled-document register
   with real link FKs to milestones/tasks, the immutable approved-revision chain with a cooperative
   check-out lock and a denormalized search copy, the tenant-wide standards library, the insight
-  and 7.14 Client & External Collaboration: client portal access tokens [CPA-] with fine-grained visibility flags and expiration checks, formal client review cycles & approval requests [CFB-] with sign-off/rejection workflows, contract statements of work [SOW-] and approved amendment chains [SWA-] with dynamic value rollup, external vendor coordination & handoffs [VHD-] with deliverable acceptance and 1–5 scorecard ratings, and project client billing schedules [PCI-] with 1-click accounting AR invoice generation; and 7.15 Financial & Billing Management: rate cards [RTC-] with role/activity rates and markup, automated billing runs [PBR-] with labor/expense/fee calculation, exchange rate, and 1-click accounting.Invoice generation + PDF preview, revenue recognition schedules [PRS-] with milestones/ASC-606 percent-complete recognition and lock/supersede verbs, payment tracking records [PPR-] with DSO calculation, promise-to-pay logging, contact notes, and 4 computed financial boards: project P&L, budget vs actual variance, A/R aging buckets, and 12-month cash flow forecast; and 7.17 Workflow & Automation: trigger-condition-action workflow rules [PWF-] with child execution logs and test run simulation, multi-level stage-gate approval gates [PAR-] with escalate/delegate/self-approval prevention, recurring task generation schedules [RTS-] with cron/interval cadence and next occurrence computation, outbound webhook endpoints [PWH-] with HMAC-SHA256 signing and delivery attempt logging, plus 4 computed operational boards: automation overview, approval inbox, recurrence calendar, and webhook diagnostics).
+  and 7.14 Client & External Collaboration: client portal access tokens [CPA-] with fine-grained visibility flags and expiration checks, formal client review cycles & approval requests [CFB-] with sign-off/rejection workflows, contract statements of work [SOW-] and approved amendment chains [SWA-] with dynamic value rollup, external vendor coordination & handoffs [VHD-] with deliverable acceptance and 1–5 scorecard ratings, and project client billing schedules [PCI-] with 1-click accounting AR invoice generation; and 7.15 Financial & Billing Management: rate cards [RTC-] with role/activity rates and markup, automated billing runs [PBR-] with labor/expense/fee calculation, exchange rate, and 1-click accounting.Invoice generation + PDF preview, revenue recognition schedules [PRS-] with milestones/ASC-606 percent-complete recognition and lock/supersede verbs, payment tracking records [PPR-] with DSO calculation, promise-to-pay logging, contact notes, and 4 computed financial boards: project P&L, budget vs actual variance, A/R aging buckets, and 12-month cash flow forecast;   and 7.17 Workflow & Automation: trigger-condition-action workflow rules [PWF-] with child execution logs and test run simulation, multi-level stage-gate approval gates [PAR-] with escalate/delegate/self-approval prevention, recurring task generation schedules [RTS-] with cron/interval cadence and next occurrence computation, outbound webhook endpoints [PWH-] with HMAC-SHA256 signing and delivery attempt logging, plus 4 computed operational boards: automation overview, approval inbox, recurrence calendar, and webhook diagnostics; and 7.18 Integration & API Hub: project-scoped ProjectIntegrationConnector [IXC-] records with encrypted credential rotation, field mappings [IXM-], recorded sync-job intent [SYJ-], an append-only simulated ProjectSyncRun [SYR-] log, and connector/run health boards).
   Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
-  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.15, 7.17), work on
+  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.18), work on
   ProjectRequest/Project/ProjectStakeholder/ProjectKickoff/ProjectTask/TaskDependency/
   ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry/
   BudgetRevision/CostControlAccount/ProjectBudgetLine/ProjectExpense/
@@ -54,15 +54,16 @@ description: >-
   Sprint/ProjectEpic/ProjectRelease/SprintImpediment/SprintRetrospective/
   ClientPortalAccess/ClientApprovalRequest/StatementOfWork/SOWAmendment/VendorHandoff/ProjectClientInvoice/
   ProjectRateCard/ProjectBillingRun/ProjectRevenueSchedule/ProjectPaymentRecord/
-  ProjectWorkflowRule/WorkflowExecutionLog/ProjectApprovalGate/RecurringTaskSchedule/
-  ProjectWebhookEndpoint/ProjectWebhookDelivery,
+   ProjectWorkflowRule/WorkflowExecutionLog/ProjectApprovalGate/RecurringTaskSchedule/
+   ProjectWebhookEndpoint/ProjectWebhookDelivery/ProjectIntegrationConnector/ConnectorFieldMapping/
+   ProjectSyncJob/ProjectSyncRun,
   or invokes /projects.
 ---
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11 + 7.12 + 7.13 + 7.14 + 7.15 + 7.17.** 7.16, 7.18–7.19 are roadmap (a
-parallel build may be landing them — always check `apps/projects/models/` first). Do not assume a
+**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11 + 7.12 + 7.13 + 7.14 + 7.15 + 7.16 + 7.17 + 7.18.** 7.19 is roadmap (a
+parallel build may be landing it — always check `apps/projects/models/` first). Do not assume a
 model exists because NavERP.md lists the feature — check first.
 
 App path `apps/projects/`, templates `templates/projects/`, `app_name = "projects"`, mounted at
@@ -77,7 +78,7 @@ went to the parallel 7.7 build), `0010_alter_scopeitem_status` (7.7 — the `vio
 build had omitted from the choices entirely), `0011_taskblock_taskchecklistitem_projecttask_actual_end_and_more`
 (7.8's execution columns + its two registers), `0012_channel_channelmessage_documentshare_meeting_and_more`
 (7.9's seven tables), `0013_channelmessage_chm_tnt_created_idx_and_more` (7.9 review indexes) and
-`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables), `0020_projecttask_epic_projecttask_release_and_more` (7.13's five tables + ProjectTask agile extensions), `0021_statementofwork_sowamendment_projectclientinvoice_and_more` (7.14's six tables), `0022_projectbillingrun_projectpaymentrecord_and_more` (7.15's four tables), `0023_projectbillingrun_pbr_tnt_status_idx_and_more` (7.15 review indexes), `0024_projectapprovalgate_projectwebhookendpoint_and_more` (7.17's six tables), and `0025_projectworkflowrule_pwf_tnt_status_idx_and_more` (7.17 review indexes).
+`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables), `0020_projecttask_epic_projecttask_release_and_more` (7.13's five tables + ProjectTask agile extensions), `0021_statementofwork_sowamendment_projectclientinvoice_and_more` (7.14's six tables), `0022_projectbillingrun_projectpaymentrecord_and_more` (7.15's four tables), `0023_projectbillingrun_pbr_tnt_status_idx_and_more` (7.15 review indexes), `0024_projectapprovalgate_projectwebhookendpoint_and_more` (7.17's six tables), `0025_projectworkflowrule_pwf_tnt_status_idx_and_more` (7.17 review indexes), `0026_projectintegrationconnector_connectorfieldmapping_and_more` (7.18's four tables), and `0027_projectsyncjob_syj_tnt_active_idx` (7.18 review index).
 
 ## ⚠️ Three different models are called "Project"
 
@@ -1895,6 +1896,34 @@ Covers visual workflow triggers & actions, multi-tier stage gate approvals, recu
   - `approval_inbox` (`workflow/approval-inbox/`): Pending approval gate queue with overdue breach tracking, priority filtering, and direct action dialogs.
   - `recurrence_calendar` (`workflow/recurrence-calendar/`): Recurring schedule timeline, upcoming task generation horizon (next 30 days), and manual trigger queue.
   - `webhook_diagnostics` (`workflow/webhook-diagnostics/`): Endpoint health monitor, real-time HTTP response code distribution, latency metrics, and failure inspection logs.
+
+### 7.18 Integration & API Hub — Reference
+
+Covers project-scoped configuration and evidence for connections to ERP/finance, CRM, HR/talent, DevOps, and file-storage systems. This sub-module **records and configures** connections; it performs no outbound HTTP, schedules no worker, evaluates no `filter_expression`, and writes no accounting row. The `scm` 4.19 `IntegrationEndpoint` [CNX-], `inventory` 5.19 `IntegrationChannel` [INT-], and `accounting` 2.15 `IntegrationConfig` registers remain separate owners; 7.18 is the project-scoped IXC register and points to 7.17's `ProjectWebhookEndpoint` only for failure notification.
+
+#### Models (`apps/projects/models/IntegrationApiHub/`)
+- **`ProjectIntegrationConnector`** [`IXC-`] (`Connectors.py`): `project` is nullable (null = workspace-wide), with `domain` (`erp`, `crm`, `hris`, `devops`, `storage`, `custom`), provider vocabulary covering the named systems, direction/auth/trigger/environment/status choices, `remote_scope_ref`, `notify_webhook`, `owner`, and Fernet-encrypted `credential`. `set_credential()`, `get_credential()`, `credential_masked`, `status_badge`, `domain_badge`, and `health_badge` are the credential/health helpers. `clean()` rejects foreign project/webhook rows and duplicate workspace-wide names; the credential is write-only through the form and never rendered.
+- **`ConnectorFieldMapping`** (`FieldMappings.py`): unnumbered child of a connector; local/remote field, direction, transform, `value_map` JSON object, key/required flags, and notes. Its form uses a raw-text JSON textarea plus `clean_value_map()` so malformed JSON and non-object JSON are rejected before the model JSONField stores a dict.
+- **`ProjectSyncJob`** [`SYJ-`] (`SyncJobs.py`): connector-scoped repeatable sync intent with entity scope, direction, trigger/cadence fields, recorded filter expression, conflict policy, batch size, and system-written run counters/status. The job has no second `project` column; scope is read through its connector.
+- **`ProjectSyncRun`** [`SYR-`] (`SyncRuns.py`): numbered append-only evidence log. `record()` is the sole writer, snapshots job tenant/direction, defaults to `simulated`, records counters/errors/payload excerpt/timing, and applies `SYNC_BACKOFF_SECONDS` on retry. There is no run form or create/edit/delete route; retry only requeues state and never performs HTTP.
+
+All four models are tenant-scoped. `ProjectSyncRun` is the one exception to the numbered-form pattern: it is list/detail/retry-only by design. `ixc_test` and `syj_run` write simulated evidence only; `ixc_test` without a job warns and writes no run. `ixc_rotate_credential` reveals a new secret once through a pop-once session value, never through a flash message or audit payload.
+
+#### Views & routes (`apps/projects/views/IntegrationApiHub/`, `urls/IntegrationApiHub/`)
+- **Connectors**: `ixc_list`, `ixc_create`, `ixc_erp_list`, `ixc_crm_list`, `ixc_hris_list`, `ixc_devops_list`, `ixc_storage_list`, `ixc_detail`, `ixc_edit`, `ixc_delete`, `ixc_rotate_credential`, `ixc_test`, `ixc_toggle_active`, `connector_health`.
+- **Mappings**: `ixm_list`, `ixm_create`, `ixm_detail`, `ixm_edit`, `ixm_delete`.
+- **Jobs**: `syj_list`, `syj_create`, `syj_detail`, `syj_edit`, `syj_delete`, `syj_run`, `syj_toggle_active`.
+- **Runs**: `syr_list`, `syr_detail`, `syr_retry` only.
+- **Boards**: `integration_hub`, `sync_monitor`; all routes are under `integration/`, literal routes precede `<int:pk>`, and every list has tenant-scoped search/filter/pagination context.
+
+#### Templates
+`templates/projects/integrationapihub/` uses `connector/{list,detail,form}.html`, `mapping/{list,detail,form}.html`, `syncjob/{list,detail,form}.html`, `syncrun/{list,detail}.html`, and `boards/{integration_hub,sync_monitor,connector_health}.html`. Run and monitor filters include connector and trigger-source controls; the hub renders `stats.credentials_due`. Pages use colour-named badges, CSRF-protected POST forms, tenant-safe IDs, and no credential ciphertext/plaintext.
+
+#### Seeder and tests
+`seed_projects` adds the idempotent `_integration_hub` block: per tenant, seven connectors, 30 mappings, 10 jobs (including a Jira milestone synchronization job), and 45 runs (including failed/simulated statuses and a folders scope), all runs written through `ProjectSyncRun.record()`. The 7.18 contract is `.claude/tasks/test-contract-projects-7.18.md`; tests are `test_integrationapihub_{models,forms,views,security}.py` with 33 + 99 + 79 + 42 = 253 tests, all `test_integrationapihub_*`, plus the shared `integrationapihub_*` fixtures in `apps/projects/tests/conftest.py`.
+
+#### Sidebar wiring
+`LIVE_LINKS["7.18"]` in `apps/core/navigation.py` maps the five catalog bullets to the category-scoped `ixc_*_list` routes and adds Integration Hub, Sync Monitor, Connector Register, Field Mappings, Sync Jobs, and Sync Runs. Keep the four-register ownership comment intact when editing navigation.
 
 ## Common tasks
 
