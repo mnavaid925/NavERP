@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load project_custom_fields %}
 {% block title %}{{ obj.number }} — {{ obj.name }}{% endblock %}
 {% block content %}
   <div class="page-header">
@@ -83,6 +84,9 @@
       <p class="text-muted">Budget, commitments and actuals are 7.4 Cost &amp; Budget Management's — the charter deliberately carries no money columns.</p>
     </div>
   </div>
+
+  {% project_custom_values obj as custom_values %}
+  {% include "projects/partials/custom_values_panel.html" %}
 
   <div class="card">
     <div class="card-header"><h2>Scope</h2></div>
