@@ -7,8 +7,27 @@ from apps.projects.forms._common import TenantModelForm, TenantUniqueMixin, _rej
 from apps.projects.models.IntegrationApiHub.FieldMappings import ConnectorFieldMapping
 
 
+class _RawJSONCharField(forms.CharField):
+    def prepare_value(self, value):
+        if isinstance(value, dict):
+            return json.dumps(value)
+        return super().prepare_value(value)
+
+    def to_python(self, value):
+        if isinstance(value, dict):
+            return value
+        return super().to_python(value)
+
+
 class ConnectorFieldMappingForm(TenantUniqueMixin, TenantModelForm):
     """Form for creating and updating ConnectorFieldMapping instances."""
+
+    value_map = _RawJSONCharField(
+        required=False,
+        widget=forms.Textarea(
+            attrs={"rows": 3, "class": "form-textarea font-mono text-sm", "placeholder": '{"done": "completed"}'}
+        ),
+    )
 
     class Meta:
         model = ConnectorFieldMapping
