@@ -8,6 +8,8 @@ from django.utils import timezone
 
 from apps.core.models import AuditLog
 from apps.crm.models import CalendarEvent, CommunicationLog, CrmTask, Opportunity
+from apps.sales.models.CompetitiveIntelligence.CompetitiveIntelligence import OpportunityCompetitor
+from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import OpportunityOutcome, WinLossReason
 from apps.sales.models.OpportunityPipeline.Pipelines import OpportunityPipelinePlacement
 
 
@@ -630,3 +632,210 @@ def sales_health_counts(tenant, opportunities=None, placements=None, *, as_of=No
     for health in projection.values():
         counts[health["status"]] += 1
     return counts
+
+
+def _sales_outcome_currency_filter(queryset, currency):
+    if not currency:
+        return queryset
+    try:
+        Opportunity._meta.get_field("currency")
+    except FieldDoesNotExist:
+        if currency in {SALES_UNSPECIFIED_CURRENCY_FILTER, SALES_UNSPECIFIED_CURRENCY}:
+            return queryset
+        return queryset.none()
+    if currency in {SALES_UNSPECIFIED_CURRENCY_FILTER, SALES_UNSPECIFIED_CURRENCY}:
+        return queryset.filter(opportunity__currency__isnull=True)
+    code = getattr(currency, "code", currency)
+    return queryset.filter(opportunity__currency__code=str(code).strip().upper())
+
+
+def _sales_outcome_queryset(
+    tenant,
+    *,
+    pipeline_id=None,
+    owner_id=None,
+    territory_id=None,
+    currency=None,
+    date_from=None,
+    date_to=None,
+):
+    tenant_id = getattr(tenant, "pk", tenant)
+    if tenant_id is None:
+        return OpportunityOutcome.objects.none()
+    queryset = OpportunityOutcome.objects.filter(tenant_id=tenant_id)
+    pipeline_id = _sales_guarded_id(pipeline_id)
+    owner_id = _sales_guarded_id(owner_id)
+    territory_id = _sales_guarded_id(territory_id)
+    if pipeline_id is not None:
+        queryset = queryset.filter(
+            opportunity__sales_pipeline_placement__pipeline_id=pipeline_id,
+        )
+    if owner_id is not None:
+        queryset = queryset.filter(opportunity__owner_id=owner_id)
+    if territory_id is not None:
+        queryset = queryset.filter(opportunity__territory_id=territory_id)
+    if date_from is not None:
+        queryset = queryset.filter(closed_at__date__gte=date_from)
+    if date_to is not None:
+        queryset = queryset.filter(closed_at__date__lte=date_to)
+    return _sales_outcome_currency_filter(queryset, currency)
+
+
+def sales_win_loss_rows(
+    tenant,
+    pipeline_id=None,
+    owner_id=None,
+    territory_id=None,
+    currency=None,
+    date_from=None,
+    date_to=None,
+):
+    currency_id_expression, currency_code_expression = _sales_currency_expressions()
+    queryset = _sales_outcome_queryset(
+        tenant,
+        pipeline_id=pipeline_id,
+        owner_id=owner_id,
+        territory_id=territory_id,
+        currency=currency,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    grouped = queryset.values(
+        "result",
+        "reason_id",
+        "reason__code",
+        "reason__name",
+        "reason__category",
+        "reason__sequence",
+        "opportunity__sales_pipeline_placement__pipeline_id",
+        "opportunity__sales_pipeline_placement__pipeline__name",
+        currency_id=currency_id_expression,
+        currency_code=currency_code_expression,
+    ).annotate(
+        count=Count("id"),
+        amount=Sum("opportunity__amount"),
+        first_closed_at=Min("closed_at"),
+        last_closed_at=Max("closed_at"),
+    ).order_by()
+    result_labels = dict(OpportunityOutcome.RESULT_CHOICES)
+    category_labels = dict(WinLossReason.CATEGORY_CHOICES)
+    rows = []
+    for row in grouped:
+        currency_code = row["currency_code"]
+        category = row["reason__category"]
+        rows.append(
+            {
+                "result": row["result"],
+                "result_label": result_labels.get(row["result"]),
+                "reason_id": row["reason_id"],
+                "reason_code": row["reason__code"],
+                "reason_name": row["reason__name"],
+                "reason_category": category,
+                "category": category,
+                "category_label": category_labels.get(category),
+                "reason_sequence": row["reason__sequence"],
+                "pipeline_id": row["opportunity__sales_pipeline_placement__pipeline_id"],
+                "pipeline_name": row["opportunity__sales_pipeline_placement__pipeline__name"],
+                "currency_id": row["currency_id"],
+                "currency_code": currency_code,
+                "currency_label": currency_code or SALES_UNSPECIFIED_CURRENCY,
+                "currency_filter_value": currency_code if currency_code is not None else SALES_UNSPECIFIED_CURRENCY_FILTER,
+                "count": row["count"] or 0,
+                "outcome_count": row["count"] or 0,
+                "amount": Decimal(row["amount"] or 0),
+                "total_amount": Decimal(row["amount"] or 0),
+                "first_closed_at": row["first_closed_at"],
+                "last_closed_at": row["last_closed_at"],
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            row["result"] or "",
+            row["reason_sequence"] if row["reason_sequence"] is not None else 2147483647,
+            row["reason_code"] or "",
+            row["currency_code"] or "",
+            row["pipeline_name"] or "",
+        )
+    )
+    return rows
+
+
+def sales_competitor_rows(
+    tenant,
+    pipeline_id=None,
+    owner_id=None,
+    territory_id=None,
+    currency=None,
+    date_from=None,
+    date_to=None,
+):
+    currency_id_expression, currency_code_expression = _sales_currency_expressions()
+    queryset = _sales_outcome_queryset(
+        tenant,
+        pipeline_id=pipeline_id,
+        owner_id=owner_id,
+        territory_id=territory_id,
+        currency=currency,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    grouped = queryset.values(
+        "result",
+        "competitor_link_id",
+        "competitor_link__relationship",
+        "competitor_link__competitor_profile_id",
+        "competitor_link__competitor_profile__party_id",
+        "competitor_link__competitor_profile__party__name",
+        "opportunity__sales_pipeline_placement__pipeline_id",
+        "opportunity__sales_pipeline_placement__pipeline__name",
+        currency_id=currency_id_expression,
+        currency_code=currency_code_expression,
+    ).annotate(
+        count=Count("id"),
+        amount=Sum("opportunity__amount"),
+        first_closed_at=Min("closed_at"),
+        last_closed_at=Max("closed_at"),
+    ).order_by()
+    result_labels = dict(OpportunityOutcome.RESULT_CHOICES)
+    relationship_labels = dict(OpportunityCompetitor.RELATIONSHIP_CHOICES)
+    rows = []
+    for row in grouped:
+        currency_code = row["currency_code"]
+        competitor_name = row["competitor_link__competitor_profile__party__name"]
+        relationship = row["competitor_link__relationship"]
+        rows.append(
+            {
+                "result": row["result"],
+                "result_label": result_labels.get(row["result"]),
+                "competitor_link_id": row["competitor_link_id"],
+                "competitor_id": row["competitor_link__competitor_profile_id"],
+                "competitor_profile_id": row["competitor_link__competitor_profile_id"],
+                "competitor_party_id": row["competitor_link__competitor_profile__party_id"],
+                "competitor_name": competitor_name,
+                "competitor": competitor_name,
+                "relationship": relationship,
+                "relationship_label": relationship_labels.get(relationship),
+                "pipeline_id": row["opportunity__sales_pipeline_placement__pipeline_id"],
+                "pipeline_name": row["opportunity__sales_pipeline_placement__pipeline__name"],
+                "currency_id": row["currency_id"],
+                "currency_code": currency_code,
+                "currency_label": currency_code or SALES_UNSPECIFIED_CURRENCY,
+                "currency_filter_value": currency_code if currency_code is not None else SALES_UNSPECIFIED_CURRENCY_FILTER,
+                "count": row["count"] or 0,
+                "outcome_count": row["count"] or 0,
+                "amount": Decimal(row["amount"] or 0),
+                "total_amount": Decimal(row["amount"] or 0),
+                "first_closed_at": row["first_closed_at"],
+                "last_closed_at": row["last_closed_at"],
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            row["competitor_name"] or "",
+            row["relationship"] or "",
+            row["result"] or "",
+            row["currency_code"] or "",
+            row["pipeline_name"] or "",
+        )
+    )
+    return rows
