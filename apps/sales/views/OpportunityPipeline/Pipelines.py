@@ -129,8 +129,12 @@ def opportunity_pipeline_detail(request, pk):
         tenant=request.tenant,
     )
     stages = list(obj.stages.all())
-    placement_count = obj.placements.count()
-    open_placement_count = obj.placements.filter(current_stage__stage_kind="open").count()
+    counts = obj.placements.aggregate(
+        total=Count("id"),
+        open_count=Count("id", filter=Q(current_stage__stage_kind="open")),
+    )
+    placement_count = counts["total"] or 0
+    open_placement_count = counts["open_count"] or 0
     return render(
         request,
         "sales/opportunity/pipeline/detail.html",
