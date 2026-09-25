@@ -52,7 +52,7 @@
           <tbody>
             {% for link in opportunity_links %}
             <tr>
-              <td><a href="{% url 'crm:opportunity_detail' link.opportunity.pk %}" class="fw-600">{{ link.opportunity.number }} · {{ link.opportunity.name }}</a></td>
+              <td><a href="{% url 'sales:opportunity_workspace_detail' link.opportunity.pk %}" class="fw-600">{{ link.opportunity.number }} · {{ link.opportunity.name }}</a></td>
               <td>{% if link.relationship == "preferred" or link.relationship == "incumbent" %}<span class="badge badge-info">{{ link.get_relationship_display }}</span>{% elif link.relationship == "identified" or link.relationship == "evaluating" or link.relationship == "shortlisted" %}<span class="badge badge-muted">{{ link.get_relationship_display }}</span>{% elif link.relationship == "eliminated" or link.relationship == "lost_to" or link.relationship == "beaten" or link.relationship == "withdrew" %}<span class="badge badge-red">{{ link.get_relationship_display }}</span>{% else %}<span class="badge badge-slate">{{ link.get_relationship_display }}</span>{% endif %}</td>
               <td>{% if link.is_primary %}<span class="badge badge-green">Primary</span>{% else %}—{% endif %}</td>
               <td>{{ link.pricing_notes|default:"—"|truncatechars:80 }}</td>
