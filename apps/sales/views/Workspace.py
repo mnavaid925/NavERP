@@ -623,11 +623,6 @@ def opportunity_workspace_detail(request, opportunity_pk):
         .select_related("competitor_profile__party")
         .order_by("-is_primary", "relationship", "id")[:_WORKSPACE_RELATION_LIMIT]
     )
-    competitor_profiles = list(
-        CompetitorProfile.objects.filter(tenant=tenant, is_active=True)
-        .select_related("party")
-        .order_by("party__name")[:_WORKSPACE_RELATION_LIMIT]
-    )
     outcomes = list(
         OpportunityOutcome.objects.filter(
             tenant=tenant,
@@ -635,14 +630,6 @@ def opportunity_workspace_detail(request, opportunity_pk):
         )
         .select_related("reason", "competitor_link__competitor_profile__party", "recorded_by")
         .order_by("-closed_at", "-id")[:_WORKSPACE_RELATION_LIMIT]
-    )
-    win_loss_reasons = list(
-        WinLossReason.objects.filter(tenant=tenant, is_active=True).order_by(
-            "result",
-            "sequence",
-            "name",
-            "pk",
-        )[:_WORKSPACE_RELATION_LIMIT]
     )
     tasks = list(
         CrmTask.objects.filter(tenant=tenant, related_opportunity=opportunity)
@@ -723,10 +710,8 @@ def opportunity_workspace_detail(request, opportunity_pk):
             "team_member_form": team_member_form,
             "competitor_links": competitor_links,
             "competitor_form": competitor_form,
-            "competitor_profiles": competitor_profiles,
             "closure_form": closure_form,
             "outcomes": outcomes,
-            "win_loss_reasons": win_loss_reasons,
             "tasks": tasks,
             "communications": communications,
             "events": events,
