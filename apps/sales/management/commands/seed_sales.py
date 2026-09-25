@@ -44,30 +44,39 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Seed Sales 8.1 and 8.3 data idempotently."
+    help = "Seed Sales 8.1, 8.2, and 8.3 data idempotently."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--backfill",
+            action="store_true",
+            default=False,
+            help="Safely attach existing CRM opportunities to pipelines without overwriting probability overrides or stage timestamps.",
+        )
 
     @transaction.atomic
     def handle(self, *args, **options):
+        backfill = options.get("backfill", False)
         tenants = list(Tenant.objects.all())
         if not tenants:
             self.stdout.write(self.style.WARNING("No tenants found — run seed_core first."))
             return
         for tenant in tenants:
-            self._seed_tenant(tenant)
+            self._seed_tenant(tenant, backfill=backfill)
         self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, and 8.3 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
         self.stdout.write(self.style.WARNING("Sales 8.3 enrichment is local review evidence only; provider, LinkedIn, verification, and sending workers are not seeded."))
 
-    def _seed_tenant(self, tenant):
+    def _seed_tenant(self, tenant, backfill=False):
         owner = User.objects.filter(tenant=tenant, is_tenant_admin=True).first() or User.objects.filter(tenant=tenant, is_active=True).first()
         leads = list(Lead.objects.filter(tenant=tenant).order_by("created_at")[:3])
         if owner is None:
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no active tenant user; skipped Sales 8.1, 8.2, and 8.3 seeding."))
             return
         self._seed_contact_account_management(tenant, owner)
-        self._seed_opportunity_pipeline(tenant, owner)
+        self._seed_opportunity_pipeline(tenant, owner, backfill=backfill)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -400,7 +409,7 @@ class Command(BaseCommand):
             elif event.status == "proposed" and outcome == "rejected":
                 reject_enrichment_event(event, tenant, owner, "Seeded duplicate evidence was not applied.")
 
-    def _seed_opportunity_pipeline(self, tenant, owner):
+    def _seed_opportunity_pipeline(self, tenant, owner, backfill=False):
         pipeline = Pipeline.objects.filter(tenant=tenant, is_default=True).first()
         if pipeline is None:
             pipeline = Pipeline.objects.create(
@@ -474,12 +483,48 @@ class Command(BaseCommand):
             if placement is None:
                 target_stage = stages_by_key.get(opp.stage) or open_stage
                 if target_stage:
+                    prob_override = (
+                        opp.probability
+                        if opp.probability is not None and opp.probability != target_stage.probability
+                        else None
+                    )
+                    if target_stage.stage_kind == "won" and prob_override is not None and prob_override != 100:
+                        prob_override = 100
+                    elif target_stage.stage_kind == "lost" and prob_override is not None and prob_override != 0:
+                        prob_override = 0
+                    stage_entered = opp.stage_changed_at or opp.created_at or timezone.now()
                     placement = OpportunityPipelinePlacement.objects.create(
                         tenant=tenant,
                         opportunity=opp,
                         pipeline=pipeline,
                         current_stage=target_stage,
+                        probability_override=prob_override,
+                        stage_entered_at=stage_entered,
                     )
+            if backfill:
+                if opp.competitor and not OpportunityCompetitor.objects.filter(tenant=tenant, opportunity=opp).exists():
+                    comp_matches = list(CompetitorProfile.objects.filter(tenant=tenant, party__name__iexact=opp.competitor.strip(), is_active=True))
+                    if len(comp_matches) == 1:
+                        OpportunityCompetitor.objects.create(
+                            tenant=tenant,
+                            opportunity=opp,
+                            competitor_profile=comp_matches[0],
+                            relationship="shortlisted",
+                            is_primary=True,
+                            positioning_notes="Backfilled from legacy competitor field.",
+                        )
+                if opp.stage == "closed_lost" and opp.loss_reason and not OpportunityOutcome.objects.filter(tenant=tenant, opportunity=opp).exists():
+                    loss_matches = list(WinLossReason.objects.filter(tenant=tenant, name__iexact=opp.loss_reason.strip(), result__in=("lost", "both"), is_active=True))
+                    if len(loss_matches) == 1:
+                        OpportunityOutcome.objects.create(
+                            tenant=tenant,
+                            opportunity=opp,
+                            result="lost",
+                            reason=loss_matches[0],
+                            notes=opp.loss_reason,
+                            recorded_by=owner,
+                            closed_at=opp.lost_at or opp.stage_changed_at or opp.created_at,
+                        )
             if not OpportunityTeamMember.objects.filter(tenant=tenant, opportunity=opp, user=owner).exists():
                 OpportunityTeamMember.objects.create(
                     tenant=tenant,
