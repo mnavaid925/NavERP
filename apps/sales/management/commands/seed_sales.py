@@ -440,7 +440,7 @@ class Command(BaseCommand):
                 },
             )
 
-        competitor_party = Party.objects.filter(tenant=tenant, kind="organization", is_active=True).exclude(
+        competitor_party = Party.objects.filter(tenant=tenant, kind="organization").exclude(
             pk__in=AccountProfile.objects.filter(tenant=tenant).values_list("party_id", flat=True)
         ).first()
         if competitor_party is None:
@@ -448,9 +448,9 @@ class Command(BaseCommand):
                 tenant=tenant,
                 name="Apex Solutions Corp",
                 kind="organization",
-                defaults={"is_active": True},
             )
         competitor_profile = CompetitorProfile.objects.filter(tenant=tenant, party=competitor_party).first()
+
         if competitor_profile is None:
             competitor_profile = CompetitorProfile.objects.create(
                 tenant=tenant,
