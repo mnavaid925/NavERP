@@ -111,6 +111,10 @@ class OpportunityCompetitor(TenantOwned):
                 fields=["tenant", "opportunity", "is_primary"],
                 name="sales_oc_tno_primary_idx",
             ),
+            models.Index(
+                fields=["tenant", "competitor_profile"],
+                name="sales_oc_tenant_profile_idx",
+            ),
         ]
 
     def _relation_belongs_to_tenant(self, field_name):
