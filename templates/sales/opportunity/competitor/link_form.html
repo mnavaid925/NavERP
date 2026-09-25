@@ -10,7 +10,7 @@
       <span>{% if is_edit %}Edit competitor{% else %}Add competitor{% endif %}</span>
     </div>
   </div>
-  <a href="{% url 'sales:opportunity_workspace_detail' opportunity_pk=opportunity.pk %}" class="btn btn-outline">Back to workspace</a>
+  <a href="{% url 'sales:opportunity_workspace_detail' opportunity_pk=opportunity.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to workspace</a>
 </div>
 
 <div class="card max-w-3xl mx-auto">
