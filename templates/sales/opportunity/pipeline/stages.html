@@ -16,8 +16,8 @@
     <form id="pipeline-stage-reorder-form" method="post" action="{% url 'sales:opportunity_pipeline_stage_reorder' pipeline.pk %}">
       {% csrf_token %}
       {{ reorder_form.ordered_stage_ids }}
-      {% for error in reorder_form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
-      {% for error in reorder_form.ordered_stage_ids.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+      {% for error in reorder_form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      {% for error in reorder_form.ordered_stage_ids.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
       <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="arrow-up-down"></i> Save order</button></div>
     </form>
   </div>
@@ -64,13 +64,13 @@
   <div class="card-body">
     <form method="post" action="{% url 'sales:opportunity_pipeline_stage_create' pipeline.pk %}" novalidate>
       {% csrf_token %}
-      {% for error in stage_form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+      {% for error in stage_form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
       <div class="form-grid">
         {% for field in stage_form %}
         <div class="form-group">
           <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
           {% if field.name == 'entry_criteria' or field.name == 'exit_criteria' %}<div class="badge-group">{{ field }}</div>{% else %}{{ field }}{% endif %}
-          {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
         </div>
         {% endfor %}
       </div>
