@@ -14,7 +14,7 @@
   <div class="card-body">
     <p class="text-muted">Choose an active pipeline to reload its available stages. This selector uses GET and does not change the opportunity.</p>
     <form method="get" action="{% url 'sales:opportunity_place' opportunity.pk %}" class="filter-bar">
-      <div class="form-group" style="flex:1; min-width:240px;"><label class="form-label" for="placement-pipeline">Active pipeline</label><select id="placement-pipeline" name="pipeline" class="form-select"><option value="">Use active default</option>{% for pipeline_option in pipelines %}<option value="{{ pipeline_option.pk|stringformat:'d' }}"{% if form.instance.pipeline_id == pipeline_option.pk %} selected{% endif %}>{{ pipeline_option.name }}</option>{% endfor %}</select></div>
+      <div class="form-group" style="flex:1; min-width:240px;"><label class="form-label" for="placement-pipeline">Active pipeline</label><select id="placement-pipeline" name="pipeline" class="form-select"><option value="">Use active default</option>{% for pipeline_option in pipelines %}<option value="{{ pipeline_option.pk|stringformat:'d' }}"{% if selected_pipeline_id == pipeline_option.pk or form.instance.pipeline_id == pipeline_option.pk %} selected{% endif %}>{{ pipeline_option.name }}</option>{% endfor %}</select></div>
       <button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Load stages</button>
     </form>
   </div>
@@ -24,7 +24,7 @@
   <div class="card-header"><h2>{% if is_edit %}Update placement for {{ opportunity.number }}{% else %}Place {{ opportunity.number }}{% endif %}</h2></div>
   <div class="card-body">
     <p class="text-muted">The opportunity remains the canonical CRM deal. The selected pipeline is locked when this form is submitted, and the service validates the stage again.</p>
-    <form method="post" action="{% url 'sales:opportunity_place' opportunity.pk %}?pipeline={{ form.instance.pipeline_id }}" novalidate>
+    <form method="post" action="{% url 'sales:opportunity_place' opportunity.pk %}{% if selected_pipeline_id %}?pipeline={{ selected_pipeline_id }}{% elif form.instance.pipeline_id %}?pipeline={{ form.instance.pipeline_id }}{% endif %}" novalidate>
       {% csrf_token %}
       {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
       {% for field in form %}
