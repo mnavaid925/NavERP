@@ -13,7 +13,7 @@
 <div class="card">
   <div class="card-header"><h2>Stage order</h2></div>
   <div class="card-body">
-    <form id="pipeline-stage-reorder-form" method="post" action="{% url 'sales:opportunity_pipeline_stages' pipeline.pk %}">
+    <form id="pipeline-stage-reorder-form" method="post" action="{% url 'sales:opportunity_pipeline_stage_reorder' pipeline.pk %}">
       {% csrf_token %}
       {{ reorder_form.ordered_stage_ids }}
       {% for error in reorder_form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
