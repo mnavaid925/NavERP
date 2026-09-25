@@ -279,7 +279,8 @@ def _workspace_activity_row(kind, at, title, detail, url=""):
     }
 
 
-def _workspace_activity_timeline(tasks, communications, events, outcomes, audit_entries):
+def _workspace_activity_timeline(tasks, communications, events, outcomes, audit_entries, user=None):
+    can_view_audit = bool(user and (user.is_superuser or getattr(user, "is_tenant_admin", False)))
     rows = []
     for task in tasks:
         rows.append(
@@ -330,13 +331,18 @@ def _workspace_activity_timeline(tasks, communications, events, outcomes, audit_
     for audit_entry in audit_entries:
         changes = audit_entry.changes if isinstance(audit_entry.changes, dict) else {}
         operation = changes.get("operation") or changes.get("action") or audit_entry.get_action_display()
+        audit_url = (
+            reverse("core:auditlog_detail", kwargs={"pk": audit_entry.pk})
+            if can_view_audit
+            else ""
+        )
         rows.append(
             _workspace_activity_row(
                 "audit",
                 audit_entry.at,
                 audit_entry.target or audit_entry.get_action_display(),
                 str(operation),
-                reverse("core:auditlog_detail", kwargs={"pk": audit_entry.pk}),
+                audit_url,
             )
         )
     rows = [row for row in rows if row["at"] is not None]
@@ -688,6 +694,7 @@ def opportunity_workspace_detail(request, opportunity_pk):
         events,
         outcomes,
         audit_entries,
+        user=request.user,
     )
     currency_label = _workspace_currency_label(opportunity)
     weighted_amount = _workspace_weighted_amount(opportunity, placement)
