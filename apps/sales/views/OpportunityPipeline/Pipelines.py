@@ -8,13 +8,13 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
 from apps.accounts.models import User
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.crm.models import Opportunity, Territory
+from apps.sales.views._common import safe_parse_date
 from apps.sales.forms.OpportunityPipeline.Pipelines import (
     PipelineForm,
     PipelineStageForm,
@@ -639,8 +639,8 @@ def opportunity_pipeline_board(request):
 def opportunity_pipeline_visibility(request):
     context = _opportunity_pipeline_filter_context(request)
     tenant = context["tenant"]
-    date_from = parse_date(request.GET.get("date_from", ""))
-    date_to = parse_date(request.GET.get("date_to", ""))
+    date_from = safe_parse_date(request.GET.get("date_from", ""))
+    date_to = safe_parse_date(request.GET.get("date_to", ""))
     placements = list(
         _opportunity_pipeline_filtered_placements(
             tenant,
