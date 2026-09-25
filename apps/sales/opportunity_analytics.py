@@ -103,6 +103,7 @@ def _sales_weighted_expression():
 
 
 def _sales_rollup_stale_counts(queryset, as_of):
+    target_queryset = queryset.filter(current_stage__target_days__isnull=False)
     fields = [
         "pipeline_id",
         "current_stage_id",
@@ -117,7 +118,7 @@ def _sales_rollup_stale_counts(queryset, as_of):
         has_currency = True
         fields.append("opportunity__currency_id")
     counts = {}
-    for row in queryset.values_list(*fields):
+    for row in target_queryset.values_list(*fields):
         pipeline_id, stage_id, stage_entered_at, target_days = row[:4]
         if target_days is None:
             continue
