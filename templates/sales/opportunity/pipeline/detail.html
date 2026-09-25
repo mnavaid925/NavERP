@@ -63,7 +63,7 @@
               {% endif %}
             </tr>
             {% empty %}
-            <tr><td colspan="10"><div class="empty-state"><i data-lucide="list-ordered"></i><h3>No stages</h3><p>Add a stage to make this pipeline usable.</p></div></td></tr>
+            <tr><td colspan="{% if can_edit or request.user.is_superuser or request.user.is_tenant_admin %}10{% else %}9{% endif %}"><div class="empty-state"><i data-lucide="list-ordered"></i><h3>No stages</h3><p>Add a stage to make this pipeline usable.</p></div></td></tr>
             {% endfor %}
           </tbody>
         </table>
