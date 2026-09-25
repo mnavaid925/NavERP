@@ -17,6 +17,31 @@
 > traced to the finding that produced the rule. Do not "simplify" a fixture away without reading the
 > finding.
 
+## 0. Environment facts that change what a test may assert
+
+**The test database is SQLite, not MariaDB.** `pytest.ini` sets
+`DJANGO_SETTINGS_MODULE = config.settings_test`, whose `DATABASES["default"]["ENGINE"]` is
+`django.db.backends.sqlite3` with `NAME = ":memory:"`. The dev database is MariaDB (`nav_erp`).
+Consequences, all of which bit while writing this suite:
+
+1. **Never assert a server-specific mechanism.** C5's finding is MariaDB's *"NULLs sort LAST under
+   `DESC`"*. Verified empirically, **SQLite does the same** (`ORDER BY x DESC` → `2, 1, NULL`), so the
+   ordering defect does reproduce — but assert the **outcome** (the in-flight job is in the window),
+   never the ordering rule of a particular engine.
+2. **A `ModelForm`-level refusal is not a database-level one.** `DataArchive.location` is
+   `blank=False`, so the form refuses an empty value, but the column accepts it and the seeder writes
+   it. A fixture that builds that row through `full_clean()` cannot exist. The helpers therefore take
+   `_validate=True` and the deliberately-invalid states opt out.
+3. **`created_at` is `auto_now_add`.** `EnvironmentInstance` refuses `expires_at < created_at`, so an
+   environment that is *already past its reaping date* is unbuildable through `full_clean()` — yet it
+   is exactly the un-reaped sandbox the board lists. Same `_validate=False` escape hatch.
+4. **`RecoveryPosture.tenant` is a `OneToOneField`** — a tenant holds **one** posture. Two posture
+   fixtures cannot both claim `tenant_a`; the partial-target fixture uses `tenant_b`, and the property
+   tests build **unsaved** instances because they assert a derivation, not a stored row.
+
+**Figures are exact, not `>=`.** Each test runs inside a rolled-back transaction, so the database
+contains only what that test's fixtures created.
+
 ---
 
 ## 1. Fixtures — helpers (`_bkp_*`, module-private to `conftest.py`)
@@ -31,7 +56,7 @@ return it. Nothing here passes a field the model computes.
 | `_bkp_hold` | `(tenant, **overrides)` | `name="Hold — Acme v. Initech"`, `status="active"`, `released_at=None`, `issued_at=now-30d`, `custodian="Finance team"` |
 | `_bkp_env` | `(tenant, **overrides)` | `name="Sandbox — UAT"`, `kind="sandbox"`, `copy_scope="none"`, `status="active"` |
 | `_bkp_drill` | `(tenant, **overrides)` | `name="Q3 isolated failover"`, `kind="test_failover"`, `outcome="passed"`, `performed_at=now-7d` |
-| `_bkp_restore` | `(tenant, **overrides)` | `name="Restore drill"`, `status="succeeded"`, `scope="full_instance"` |
+| `_bkp_restore` | `(tenant, **overrides)` | `scope="full_instance"`, `status="succeeded"`, `target_time=now-2h`, `backup=<a verified job>`. **`RestoreRecord` has no `name` field** — only `tenant` is required, so a helper that passes `name=` raises `TypeError` |
 | `_bkp_key` | `(tenant, **overrides)` | `tenants.EncryptionKey` — `name="Primary"`, `prefix="acmekey"`, `key_hash="sha256:…"`, `status="active"`. All four are **required** (`null=False`, `blank=False`, no default), so a helper that omits one raises rather than silently creating a blank row. **Never stores plaintext** — the model holds a prefix and a hash only |
 
 **Why `integrity_verified_at=None` is the default.** The unverified state is the one the board exists
@@ -164,6 +189,22 @@ either (**M2**). Pinned so nobody "fixes" it by inventing a key inside `core`.
 - `is_restorable` is False when `location == ""` **or** `status in {"lost", "destroyed"}`; True
   otherwise. Assert the both-disjuncts row (a row that is *both* locationless and lost) is a single
   row, i.e. the property is a boolean, not a count.
+
+### `RecoveryPosture` (**M6**)
+- `has_targets` is True when **either** target is set, False when neither is.
+- **`targets_partial` is a MODEL PROPERTY** — `(rpo is None) != (rto is None)`. It was first shipped as
+  an inline expression in `backup_overview`, which left the model saying "there are targets" and the
+  view saying "but only half of them" — the same derivation split across two layers, which is the
+  drift the codebase's own comments warn about. Promoting it to the model is what makes it assertable
+  in this lane at all, and it is consistent with `has_targets`, `rpo_display`, `rto_display` and
+  `replication_is_configured`, which are all properties on the same class.
+- `targets_partial` is False when both are set **and** when neither is — the two cases a naive
+  `rpo is None or rto is None` would get wrong. This is the control: without it the property could be
+  `True` for a workspace with no targets at all and the badge would be wrong in a new way.
+- Asserted on **unsaved** instances (no `db` needed): it is a derivation, and the singleton constraint
+  makes two saved postures impossible for one tenant anyway.
+- The singleton constraint is asserted directly: a second posture for the same tenant raises
+  `IntegrityError`.
 
 ## 5. Assertion targets — form lane (`test_backup_forms.py`)
 
