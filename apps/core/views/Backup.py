@@ -602,8 +602,7 @@ def backup_overview(request):
         # mean what it says: `targets_partial` names the half-filled case, and the warning below still
         # keys off `targets_set` (no target at all), which is the only state where nothing can be judged.
         "targets_set": bool(posture and posture.has_targets),
-        "targets_partial": bool(posture and (posture.rpo_target_minutes is None)
-                                != (posture.rto_target_minutes is None)),
+        "targets_partial": bool(posture and posture.targets_partial),
         "recent_jobs": (in_flight + settled)[:5],
         "recent_drills": [d for d in drills if d.performed_at is not None][:5],
         "notes": BACKUP_NOTES,
