@@ -102,6 +102,7 @@ class OpportunityOutcome(TenantNumbered):
             models.Index(fields=["tenant", "result", "closed_at"], name="sales_out_result_closed_idx"),
             models.Index(fields=["tenant", "opportunity", "closed_at"], name="sales_out_opp_closed_idx"),
             models.Index(fields=["tenant", "reason"], name="sales_out_reason_idx"),
+            models.Index(fields=["tenant", "closed_at"], name="sales_out_tenant_closed_idx"),
         ]
 
     def _relation_belongs_to_tenant(self, field_name):
