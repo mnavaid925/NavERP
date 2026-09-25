@@ -6,6 +6,21 @@ from .ContactAccountManagement.PartyEnrichment import PartyEnrichmentApplyForm, 
 from .ContactAccountManagement.AccountStakeholders import AccountStakeholderForm
 from .ContactAccountManagement.AccountClassifications import AccountClassificationForm
 from .ContactAccountManagement.AccountPlans import AccountPlanForm
+from .OpportunityPipeline.Pipelines import (
+    OpportunityPipelinePlacementForm,
+    PipelineForm,
+    PipelineStageForm,
+    PipelineStageOrderForm,
+)
+from .OpportunityTeams.OpportunityTeams import OpportunityTeamMemberForm
+from .CompetitiveIntelligence.CompetitiveIntelligence import (
+    CompetitorProfileForm,
+    OpportunityCompetitorForm,
+)
+from .OpportunityOutcomes.OpportunityOutcomes import (
+    OpportunityTransitionForm,
+    WinLossReasonForm,
+)
 
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
@@ -13,4 +28,9 @@ __all__ = [
     "LeadNurtureActivationForm", "LeadNurtureEnrollmentForm", "LeadNurtureExitForm",
     "PartyEnrichmentApplyForm", "PartyEnrichmentProposalForm", "PartyEnrichmentRejectForm",
     "AccountStakeholderForm", "AccountClassificationForm", "AccountPlanForm",
+    "PipelineForm", "PipelineStageForm", "PipelineStageOrderForm", "OpportunityPipelinePlacementForm",
+    "OpportunityTeamMemberForm",
+    "CompetitorProfileForm", "OpportunityCompetitorForm",
+    "WinLossReasonForm", "OpportunityTransitionForm",
 ]
+
