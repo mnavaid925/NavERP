@@ -476,11 +476,42 @@ class Command(BaseCommand):
 
         opportunities = list(Opportunity.objects.filter(tenant=tenant).order_by("created_at"))
         stages_by_key = {s.crm_stage_key: s for s in pipeline.stages.all()}
-        open_stage = stages_by_key.get("qualification") or stages_by_key.get("prospecting") or pipeline.stages.filter(stage_kind="open").first()
+        open_stage = stages_by_key.get("qualification") or stages_by_key.get("prospecting") or next((s for s in stages_by_key.values() if s.stage_kind == "open"), None)
+
+        existing_placement_opp_ids = set(
+            OpportunityPipelinePlacement.objects.filter(tenant=tenant).values_list("opportunity_id", flat=True)
+        )
+        existing_team_opp_ids = set(
+            OpportunityTeamMember.objects.filter(tenant=tenant, user=owner).values_list("opportunity_id", flat=True)
+        )
+        existing_outcome_opp_ids = set(
+            OpportunityOutcome.objects.filter(tenant=tenant).values_list("opportunity_id", flat=True)
+        )
+        existing_competitor_opp_ids = set(
+            OpportunityCompetitor.objects.filter(tenant=tenant).values_list("opportunity_id", flat=True)
+        )
+        existing_comp_profile_opp_ids = set(
+            OpportunityCompetitor.objects.filter(
+                tenant=tenant, competitor_profile=competitor_profile
+            ).values_list("opportunity_id", flat=True)
+        )
+        all_active_competitors = list(
+            CompetitorProfile.objects.filter(tenant=tenant, is_active=True).select_related("party")
+        )
+        competitors_by_name = {
+            c.party.name.strip().lower(): c for c in all_active_competitors if c.party and c.party.name
+        }
+        all_active_reasons = list(WinLossReason.objects.filter(tenant=tenant, is_active=True))
+        won_reasons = [r for r in all_active_reasons if r.result in ("won", "both")]
+        lost_reasons = [r for r in all_active_reasons if r.result in ("lost", "both")]
+        first_won_reason = won_reasons[0] if won_reasons else None
+        first_lost_reason = lost_reasons[0] if lost_reasons else None
+        reasons_by_name_lost = {
+            r.name.strip().lower(): r for r in lost_reasons
+        }
 
         for idx, opp in enumerate(opportunities):
-            placement = OpportunityPipelinePlacement.objects.filter(tenant=tenant, opportunity=opp).first()
-            if placement is None:
+            if opp.pk not in existing_placement_opp_ids:
                 target_stage = stages_by_key.get(opp.stage) or open_stage
                 if target_stage:
                     prob_override = (
@@ -493,7 +524,7 @@ class Command(BaseCommand):
                     elif target_stage.stage_kind == "lost" and prob_override is not None and prob_override != 0:
                         prob_override = 0
                     stage_entered = opp.stage_changed_at or opp.created_at or timezone.now()
-                    placement = OpportunityPipelinePlacement.objects.create(
+                    OpportunityPipelinePlacement.objects.create(
                         tenant=tenant,
                         opportunity=opp,
                         pipeline=pipeline,
@@ -501,31 +532,36 @@ class Command(BaseCommand):
                         probability_override=prob_override,
                         stage_entered_at=stage_entered,
                     )
+                    existing_placement_opp_ids.add(opp.pk)
             if backfill:
-                if opp.competitor and not OpportunityCompetitor.objects.filter(tenant=tenant, opportunity=opp).exists():
-                    comp_matches = list(CompetitorProfile.objects.filter(tenant=tenant, party__name__iexact=opp.competitor.strip(), is_active=True))
-                    if len(comp_matches) == 1:
+                if opp.competitor and opp.pk not in existing_competitor_opp_ids:
+                    comp_match = competitors_by_name.get(opp.competitor.strip().lower())
+                    if comp_match:
                         OpportunityCompetitor.objects.create(
                             tenant=tenant,
                             opportunity=opp,
-                            competitor_profile=comp_matches[0],
+                            competitor_profile=comp_match,
                             relationship="shortlisted",
                             is_primary=True,
                             positioning_notes="Backfilled from legacy competitor field.",
                         )
-                if opp.stage == "closed_lost" and opp.loss_reason and not OpportunityOutcome.objects.filter(tenant=tenant, opportunity=opp).exists():
-                    loss_matches = list(WinLossReason.objects.filter(tenant=tenant, name__iexact=opp.loss_reason.strip(), result__in=("lost", "both"), is_active=True))
-                    if len(loss_matches) == 1:
+                        existing_competitor_opp_ids.add(opp.pk)
+                        if comp_match.pk == competitor_profile.pk:
+                            existing_comp_profile_opp_ids.add(opp.pk)
+                if opp.stage == "closed_lost" and opp.loss_reason and opp.pk not in existing_outcome_opp_ids:
+                    loss_match = reasons_by_name_lost.get(opp.loss_reason.strip().lower())
+                    if loss_match:
                         OpportunityOutcome.objects.create(
                             tenant=tenant,
                             opportunity=opp,
                             result="lost",
-                            reason=loss_matches[0],
+                            reason=loss_match,
                             notes=opp.loss_reason,
                             recorded_by=owner,
                             closed_at=opp.lost_at or opp.stage_changed_at or opp.created_at,
                         )
-            if not OpportunityTeamMember.objects.filter(tenant=tenant, opportunity=opp, user=owner).exists():
+                        existing_outcome_opp_ids.add(opp.pk)
+            if opp.pk not in existing_team_opp_ids:
                 OpportunityTeamMember.objects.create(
                     tenant=tenant,
                     opportunity=opp,
@@ -534,7 +570,8 @@ class Command(BaseCommand):
                     responsibility="Oversee strategic alignment and deal execution.",
                     is_active=True,
                 )
-            if idx == 0 and not OpportunityCompetitor.objects.filter(tenant=tenant, opportunity=opp, competitor_profile=competitor_profile).exists():
+                existing_team_opp_ids.add(opp.pk)
+            if idx == 0 and opp.pk not in existing_comp_profile_opp_ids:
                 OpportunityCompetitor.objects.create(
                     tenant=tenant,
                     opportunity=opp,
@@ -543,9 +580,11 @@ class Command(BaseCommand):
                     is_primary=True,
                     positioning_notes="Client evaluating against Apex legacy suite.",
                 )
-            if opp.stage in ("closed_won", "closed_lost") and not OpportunityOutcome.objects.filter(tenant=tenant, opportunity=opp).exists():
+                existing_comp_profile_opp_ids.add(opp.pk)
+                existing_competitor_opp_ids.add(opp.pk)
+            if opp.stage in ("closed_won", "closed_lost") and opp.pk not in existing_outcome_opp_ids:
                 outcome_res = "won" if opp.stage == "closed_won" else "lost"
-                wlr = WinLossReason.objects.filter(tenant=tenant, result__in=(outcome_res, "both"), is_active=True).first()
+                wlr = first_won_reason if outcome_res == "won" else first_lost_reason
                 if wlr:
                     OpportunityOutcome.objects.create(
                         tenant=tenant,
@@ -555,4 +594,5 @@ class Command(BaseCommand):
                         notes="Seeded outcome closure record.",
                         recorded_by=owner,
                     )
+                    existing_outcome_opp_ids.add(opp.pk)
 
