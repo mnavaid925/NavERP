@@ -326,6 +326,8 @@ class OpportunityPipelinePlacement(TenantOwned):
         indexes = [
             models.Index(fields=["tenant", "opportunity"], name="sales_opp_place_tenant_opp_idx"),
             models.Index(fields=["tenant", "pipeline"], name="sales_opp_place_tnt_pipe_idx"),
+            models.Index(fields=["tenant", "pipeline", "current_stage"], name="sales_opp_place_tp_stage_idx"),
+            models.Index(fields=["tenant", "stage_entered_at"], name="sales_opp_place_stage_at_idx"),
         ]
 
 
