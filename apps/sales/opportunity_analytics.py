@@ -1,3 +1,5 @@
+import datetime
+from datetime import time
 from decimal import Decimal
 
 from django.contrib.contenttypes.models import ContentType
@@ -245,6 +247,18 @@ def sales_pipeline_currency_totals(
     return result
 
 
+def _sales_date_boundary(value, is_end=False):
+    if value is None:
+        return None
+    current_tz = timezone.get_current_timezone()
+    if isinstance(value, datetime.datetime):
+        return value if timezone.is_aware(value) else timezone.make_aware(value, current_tz)
+    if isinstance(value, datetime.date):
+        t = time.max if is_end else time.min
+        return timezone.make_aware(datetime.datetime.combine(value, t), current_tz)
+    return None
+
+
 def sales_stage_age_rows(
     tenant,
     *,
@@ -262,8 +276,14 @@ def sales_stage_age_rows(
     health = str(health or "").strip().lower()
     if health and health not in dict(SALES_HEALTH_CHOICES):
         health = ""
+    dt_from = _sales_date_boundary(date_from, is_end=False)
+    dt_to = _sales_date_boundary(date_to, is_end=True)
     if placements is not None:
         placement_list = list(placements)
+        if dt_from is not None:
+            placement_list = [p for p in placement_list if p.stage_entered_at >= dt_from]
+        if dt_to is not None:
+            placement_list = [p for p in placement_list if p.stage_entered_at <= dt_to]
     else:
         queryset = _sales_placement_queryset(
             tenant,
@@ -280,10 +300,10 @@ def sales_stage_age_rows(
             "opportunity__account",
             "opportunity__currency",
         )
-        if date_from is not None:
-            queryset = queryset.filter(stage_entered_at__date__gte=date_from)
-        if date_to is not None:
-            queryset = queryset.filter(stage_entered_at__date__lte=date_to)
+        if dt_from is not None:
+            queryset = queryset.filter(stage_entered_at__gte=dt_from)
+        if dt_to is not None:
+            queryset = queryset.filter(stage_entered_at__lte=dt_to)
         placement_list = list(queryset)
     health_projection = {}
     if health:
@@ -703,9 +723,13 @@ def _sales_outcome_queryset(
     if territory_id is not None:
         queryset = queryset.filter(opportunity__territory_id=territory_id)
     if date_from is not None:
-        queryset = queryset.filter(closed_at__date__gte=date_from)
+        dt_from = _sales_date_boundary(date_from, is_end=False)
+        if dt_from is not None:
+            queryset = queryset.filter(closed_at__gte=dt_from)
     if date_to is not None:
-        queryset = queryset.filter(closed_at__date__lte=date_to)
+        dt_to = _sales_date_boundary(date_to, is_end=True)
+        if dt_to is not None:
+            queryset = queryset.filter(closed_at__lte=dt_to)
     return _sales_outcome_currency_filter(queryset, currency)
 
 
