@@ -339,6 +339,7 @@ def _opportunity_pipeline_filtered_placements(
         tenant=tenant,
         pipeline=pipeline,
     ).select_related(
+        "pipeline",
         "current_stage",
         "opportunity",
         "opportunity__owner",
@@ -523,6 +524,7 @@ def _opportunity_pipeline_board_context(request):
         territory_id=territory_id,
         currency=currency,
         as_of=as_of,
+        placements=placements,
     )
     stage_age_by_opportunity = {
         row["opportunity_id"]: row for row in stage_age_rows
