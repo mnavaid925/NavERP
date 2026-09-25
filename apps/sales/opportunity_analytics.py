@@ -2,8 +2,20 @@ from decimal import Decimal
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import FieldDoesNotExist
-from django.db.models import CharField, Count, DecimalField, F, IntegerField, Max, Q, Sum, Value
-from django.db.models.functions import Coalesce, ExpressionWrapper
+from django.db.models import (
+    CharField,
+    Count,
+    DecimalField,
+    ExpressionWrapper,
+    F,
+    IntegerField,
+    Max,
+    Q,
+    Sum,
+    Value,
+)
+from django.db.models.functions import Coalesce
+
 from django.utils import timezone
 
 from apps.core.models import AuditLog
