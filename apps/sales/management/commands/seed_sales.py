@@ -9,7 +9,25 @@ from django.utils import timezone
 from apps.accounting.models import Currency
 from apps.core.models import ConsentPurpose, Party, Tenant
 from apps.crm.models import AccountProfile, Campaign, ContactProfile, EmailCampaign, EmailTemplate, Lead, Opportunity, Territory
-from apps.sales.models import AccountClassification, AccountPlan, AccountStakeholder, LeadNurtureEnrollment, LeadQualification, LeadRoutingRule, LeadScoreEvent, PartyEnrichmentEvent
+from apps.sales.models import (
+    AccountClassification,
+    AccountPlan,
+    AccountStakeholder,
+    CompetitorProfile,
+    LeadNurtureEnrollment,
+    LeadQualification,
+    LeadRoutingRule,
+    LeadScoreEvent,
+    OpportunityCompetitor,
+    OpportunityOutcome,
+    OpportunityPipelinePlacement,
+    OpportunityTeamMember,
+    PartyEnrichmentEvent,
+    Pipeline,
+    PipelineStage,
+    WinLossReason,
+)
+from apps.sales.opportunity_services import opportunity_pipeline_baseline_stages
 from apps.sales.services import (
     activate_nurture,
     apply_enrichment_event,
@@ -19,6 +37,7 @@ from apps.sales.services import (
     reject_enrichment_event,
     transition_account_plan,
 )
+
 
 
 User = get_user_model()
@@ -35,7 +54,7 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1 and 8.3 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, and 8.3 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
@@ -45,10 +64,12 @@ class Command(BaseCommand):
         owner = User.objects.filter(tenant=tenant, is_tenant_admin=True).first() or User.objects.filter(tenant=tenant, is_active=True).first()
         leads = list(Lead.objects.filter(tenant=tenant).order_by("created_at")[:3])
         if owner is None:
-            self.stdout.write(self.style.WARNING(f"{tenant.name}: no active tenant user; skipped Sales 8.1 and 8.3 seeding."))
+            self.stdout.write(self.style.WARNING(f"{tenant.name}: no active tenant user; skipped Sales 8.1, 8.2, and 8.3 seeding."))
             return
         self._seed_contact_account_management(tenant, owner)
+        self._seed_opportunity_pipeline(tenant, owner)
         if not leads:
+
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
             return
         currency, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "symbol": "$"})
@@ -378,3 +399,115 @@ class Command(BaseCommand):
                 apply_enrichment_event(event, tenant, owner, tuple(event.changes), "Seeded reviewed contact title.")
             elif event.status == "proposed" and outcome == "rejected":
                 reject_enrichment_event(event, tenant, owner, "Seeded duplicate evidence was not applied.")
+
+    def _seed_opportunity_pipeline(self, tenant, owner):
+        pipeline = Pipeline.objects.filter(tenant=tenant, is_default=True).first()
+        if pipeline is None:
+            pipeline = Pipeline.objects.create(
+                tenant=tenant,
+                name="Standard Sales Pipeline",
+                description="Default pipeline for standard sales opportunities.",
+                is_default=True,
+                is_active=True,
+            )
+        if not pipeline.stages.exists():
+            for stage_data in opportunity_pipeline_baseline_stages():
+                PipelineStage.objects.create(
+                    tenant=tenant,
+                    pipeline=pipeline,
+                    **stage_data,
+                )
+
+        reasons = [
+            ("price_discount", "Price / Discount", "Won or lost due to pricing or discount terms", 10, "both", "price"),
+            ("product_fit", "Product Feature Fit", "Met requirements and feature scope", 20, "both", "product_fit"),
+            ("competitor_feature", "Competitor Superiority", "Competitor had superior features or incumbency", 30, "lost", "competition"),
+            ("relationship", "Strong Executive Relationship", "Executive sponsor alignment and trust", 40, "won", "relationship"),
+            ("budget_freeze", "Budget Cancelled / Frozen", "Project postponed due to capital freeze", 50, "lost", "budget"),
+            ("no_decision", "No Decision / Status Quo", "Prospect decided to stay with current process", 60, "lost", "no_decision"),
+        ]
+        for code, name, desc, seq, res, cat in reasons:
+            WinLossReason.objects.get_or_create(
+                tenant=tenant,
+                code=code,
+                defaults={
+                    "name": name,
+                    "description": desc,
+                    "sequence": seq,
+                    "result": res,
+                    "category": cat,
+                    "is_active": True,
+                },
+            )
+
+        competitor_party = Party.objects.filter(tenant=tenant, kind="organization", is_active=True).exclude(
+            pk__in=AccountProfile.objects.filter(tenant=tenant).values_list("party_id", flat=True)
+        ).first()
+        if competitor_party is None:
+            competitor_party, _ = Party.objects.get_or_create(
+                tenant=tenant,
+                name="Apex Solutions Corp",
+                kind="organization",
+                defaults={"is_active": True},
+            )
+        competitor_profile = CompetitorProfile.objects.filter(tenant=tenant, party=competitor_party).first()
+        if competitor_profile is None:
+            competitor_profile = CompetitorProfile.objects.create(
+                tenant=tenant,
+                party=competitor_party,
+                website_url="https://apex-solutions.example.com",
+                description="Leading incumbent provider in enterprise sales.",
+                market_positioning="Legacy vendor with broad but dated suite.",
+                strengths="Deep brand recognition, installed customer base.",
+                weaknesses="Slow product iterations, expensive maintenance, complex UI.",
+                differentiators="NavERP offers unified core data and real-time ledger accounting.",
+                objection_handling="Emphasize total cost of ownership and rapid time-to-value.",
+                is_active=True,
+            )
+
+        opportunities = list(Opportunity.objects.filter(tenant=tenant).order_by("created_at"))
+        stages_by_key = {s.crm_stage_key: s for s in pipeline.stages.all()}
+        open_stage = stages_by_key.get("qualification") or stages_by_key.get("prospecting") or pipeline.stages.filter(stage_kind="open").first()
+
+        for idx, opp in enumerate(opportunities):
+            placement = OpportunityPipelinePlacement.objects.filter(tenant=tenant, opportunity=opp).first()
+            if placement is None:
+                target_stage = stages_by_key.get(opp.stage) or open_stage
+                if target_stage:
+                    placement = OpportunityPipelinePlacement.objects.create(
+                        tenant=tenant,
+                        opportunity=opp,
+                        pipeline=pipeline,
+                        current_stage=target_stage,
+                    )
+            if not OpportunityTeamMember.objects.filter(tenant=tenant, opportunity=opp, user=owner).exists():
+                OpportunityTeamMember.objects.create(
+                    tenant=tenant,
+                    opportunity=opp,
+                    user=owner,
+                    role="executive_sponsor" if idx == 0 else "collaborator",
+                    responsibility="Oversee strategic alignment and deal execution.",
+                    is_active=True,
+                )
+            if idx == 0 and not OpportunityCompetitor.objects.filter(tenant=tenant, opportunity=opp, competitor_profile=competitor_profile).exists():
+                OpportunityCompetitor.objects.create(
+                    tenant=tenant,
+                    opportunity=opp,
+                    competitor_profile=competitor_profile,
+                    relationship="shortlisted",
+                    is_primary=True,
+                    positioning_notes="Client evaluating against Apex legacy suite.",
+                )
+            if opp.stage in ("closed_won", "closed_lost") and not OpportunityOutcome.objects.filter(tenant=tenant, opportunity=opp).exists():
+                outcome_res = "won" if opp.stage == "closed_won" else "lost"
+                wlr = WinLossReason.objects.filter(tenant=tenant, result__in=(outcome_res, "both"), is_active=True).first()
+                if wlr:
+                    OpportunityOutcome.objects.create(
+                        tenant=tenant,
+                        opportunity=opp,
+                        result=outcome_res,
+                        reason=wlr,
+                        notes="Seeded outcome closure record.",
+                        recorded_by=owner,
+                    )
+
