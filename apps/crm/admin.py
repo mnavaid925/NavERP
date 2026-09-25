@@ -308,6 +308,45 @@ class AccountProfileAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at", "updated_at")
     list_select_related = ("party", "owner", "tenant")
 
+    def get_queryset(self, request):
+        tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
+        queryset = super().get_queryset(request)
+        if tenant is None:
+            return queryset.none()
+        return queryset.filter(
+            tenant=tenant,
+            party__tenant=tenant,
+            party__kind="organization",
+            parent_account__isnull=True,
+        ) | queryset.filter(
+            tenant=tenant,
+            party__tenant=tenant,
+            party__kind="organization",
+            parent_account__tenant=tenant,
+        )
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
+        if tenant is not None and db_field.name in {"party", "parent_account"}:
+            queryset = db_field.remote_field.model._default_manager.filter(
+                tenant=tenant,
+                kind="organization",
+            )
+            if db_field.name == "parent_account":
+                profile_party_ids = AccountProfile.objects.filter(
+                    tenant=tenant,
+                    party__tenant=tenant,
+                    party__kind="organization",
+                ).values("party_id")
+                queryset = queryset.filter(pk__in=profile_party_ids)
+                object_id = request.resolver_match.kwargs.get("object_id") if request.resolver_match else None
+                if object_id and str(object_id).isdecimal():
+                    current = self.model.objects.filter(pk=object_id, tenant=tenant).only("party_id").first()
+                    if current is not None:
+                        queryset = queryset.exclude(pk=current.party_id)
+            kwargs["queryset"] = queryset
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 @admin.register(ContactProfile)
 class ContactProfileAdmin(admin.ModelAdmin):
