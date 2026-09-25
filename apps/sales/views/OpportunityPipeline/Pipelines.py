@@ -198,28 +198,9 @@ def opportunity_pipeline_stages(request, pk):
     pipeline = get_object_or_404(Pipeline, pk=pk, tenant=request.tenant)
     stages = list(pipeline.stages.all())
     reorder_form = PipelineStageOrderForm(
-        request.POST if request.method == "POST" else None,
         tenant=request.tenant,
         pipeline=pipeline,
     )
-    if request.method == "POST":
-        if not _opportunity_pipeline_is_admin(request.user):
-            raise PermissionDenied("Tenant administrator access required.")
-        if reorder_form.is_valid():
-            try:
-                sales_reorder_pipeline_stages(
-                    pipeline,
-                    request.tenant,
-                    request.user,
-                    reorder_form.cleaned_data["ordered_stage_ids"],
-                )
-            except ValidationError as exc:
-                messages.error(request, _opportunity_pipeline_validation_message(exc))
-            else:
-                messages.success(request, "Pipeline stage order updated.")
-                return redirect("sales:opportunity_pipeline_stages", pk=pipeline.pk)
-        else:
-            messages.error(request, "Choose every pipeline stage exactly once.")
     return render(
         request,
         "sales/opportunity/pipeline/stages.html",
