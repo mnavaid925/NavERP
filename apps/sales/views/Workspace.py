@@ -5,7 +5,13 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
-from django.core.exceptions import FieldDoesNotExist, FieldError, ObjectDoesNotExist, ValidationError
+from django.core.exceptions import (
+    FieldDoesNotExist,
+    FieldError,
+    ObjectDoesNotExist,
+    PermissionDenied,
+    ValidationError,
+)
 from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.db.models import Q
@@ -813,6 +819,21 @@ def opportunity_unplace(request, opportunity_pk):
         pk=opportunity_pk,
         tenant=tenant,
     )
+    is_admin = bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))
+    is_owner = opportunity.owner_id == request.user.pk
+    is_authorized_member = (
+        not is_admin
+        and not is_owner
+        and OpportunityTeamMember.objects.filter(
+            tenant=tenant,
+            opportunity=opportunity,
+            user=request.user,
+            is_active=True,
+            role__in=("co_owner", "approver"),
+        ).exists()
+    )
+    if not (is_admin or is_owner or is_authorized_member):
+        raise PermissionDenied("You do not have permission to remove this opportunity from its pipeline.")
     try:
         removed = sales_unplace_opportunity(opportunity, tenant, request.user)
     except ValidationError as exc:
