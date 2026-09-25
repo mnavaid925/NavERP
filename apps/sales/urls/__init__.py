@@ -8,6 +8,11 @@ from .ContactAccountManagement.AccountStakeholders import urlpatterns as _stakeh
 from .ContactAccountManagement.AccountClassifications import urlpatterns as _classifications
 from .ContactAccountManagement.AccountPlans import urlpatterns as _plans
 from .ContactAccountManagement.AccountBoards import urlpatterns as _boards
+from .OpportunityPipeline.Pipelines import urlpatterns as _pipelines
+from .OpportunityTeams.OpportunityTeams import urlpatterns as _teams
+from .CompetitiveIntelligence.CompetitiveIntelligence import urlpatterns as _competitors
+from .OpportunityOutcomes.OpportunityOutcomes import urlpatterns as _outcomes
+from .Workspace.Workspace import urlpatterns as _workspace
 
 app_name = "sales"
 
@@ -22,4 +27,10 @@ urlpatterns = [
     *_classifications,
     *_plans,
     *_boards,
+    *_pipelines,
+    *_teams,
+    *_competitors,
+    *_outcomes,
+    *_workspace,
 ]
+
