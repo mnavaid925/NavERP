@@ -1845,3 +1845,384 @@ def contactaccountmanagement_reports_to_b(
         contactaccountmanagement_contact_b,
         contactaccountmanagement_manager_b,
     )
+
+
+# ============================================================================
+# 8.2 Opportunity & Pipeline Management Test Helpers and Fixtures
+# ============================================================================
+
+OPPORTUNITYPIPELINE_PAGE_SIZE = 15
+
+OPPORTUNITYPIPELINE_MODEL_FIELDS = {
+    "OpportunityPipeline": (
+        "tenant", "created_at", "updated_at", "number", "name", "code",
+        "description", "is_default", "is_active", "currency", "owner",
+    ),
+    "PipelineStage": (
+        "tenant", "created_at", "updated_at", "pipeline", "name", "code",
+        "sequence", "stage_kind", "probability", "target_days",
+        "require_competitor", "is_active",
+    ),
+    "OpportunityPipelinePlacement": (
+        "tenant", "created_at", "updated_at", "opportunity", "pipeline",
+        "current_stage", "stage_entered_at", "probability_override",
+    ),
+    "OpportunityTeamMember": (
+        "tenant", "created_at", "updated_at", "opportunity", "user",
+        "role", "notes", "is_active",
+    ),
+    "CompetitorProfile": (
+        "tenant", "created_at", "updated_at", "party", "website",
+        "tier", "strengths", "weaknesses", "pricing_model", "notes", "is_active",
+    ),
+    "OpportunityCompetitor": (
+        "tenant", "created_at", "updated_at", "opportunity", "competitor_profile",
+        "threat_level", "strategy_notes", "is_primary",
+    ),
+    "WinLossReason": (
+        "tenant", "created_at", "updated_at", "name", "code", "result",
+        "category", "requires_competitor", "notes", "is_active",
+    ),
+    "OpportunityOutcome": (
+        "tenant", "created_at", "updated_at", "opportunity", "result",
+        "reason", "competitor_link", "closed_at", "recorded_by",
+        "decision_maker_feedback", "notes",
+    ),
+}
+
+OPPORTUNITYPIPELINE_CHOICES = {
+    "PipelineStage": {
+        "stage_kind": (
+            ("open", "Open"),
+            ("won", "Won"),
+            ("lost", "Lost"),
+        ),
+    },
+    "OpportunityTeamMember": {
+        "role": (
+            ("owner", "Deal Owner"),
+            ("co_owner", "Co-Owner"),
+            ("sales_rep", "Sales Representative"),
+            ("solutions_engineer", "Solutions Engineer"),
+            ("executive_sponsor", "Executive Sponsor"),
+            ("subject_matter_expert", "Subject Matter Expert"),
+            ("proposal_manager", "Proposal Manager"),
+            ("legal_counsel", "Legal / Contracts Counsel"),
+            ("finance_commercial", "Finance / Commercial"),
+            ("customer_success", "Customer Success / Delivery"),
+            ("channel_manager", "Channel / Partner Manager"),
+            ("approver", "Deal Desk Approver"),
+            ("observer", "Observer"),
+        ),
+    },
+    "CompetitorProfile": {
+        "tier": (
+            ("tier_1", "Tier 1 - Primary"),
+            ("tier_2", "Tier 2 - Secondary"),
+            ("tier_3", "Tier 3 - Emerging"),
+            ("niche", "Niche Specialist"),
+        ),
+    },
+    "OpportunityCompetitor": {
+        "threat_level": (
+            ("low", "Low"),
+            ("medium", "Medium"),
+            ("high", "High"),
+            ("critical", "Critical"),
+        ),
+    },
+    "WinLossReason": {
+        "result": (
+            ("won", "Won Only"),
+            ("lost", "Lost Only"),
+            ("both", "Applicable to Both"),
+        ),
+        "category": (
+            ("product", "Product & Features"),
+            ("price", "Pricing & Commercials"),
+            ("relationship", "Relationship & Service"),
+            ("timing", "Timing & Budget Delay"),
+            ("competition", "Competitor Preference"),
+            ("internal_priority", "Customer Internal Priority Shift"),
+            ("compliance", "Security & Compliance"),
+            ("other", "Other"),
+        ),
+    },
+    "OpportunityOutcome": {
+        "result": (
+            ("won", "Closed Won"),
+            ("lost", "Closed Lost"),
+        ),
+    },
+}
+
+
+def _opportunitypipeline_tenant_id(tenant):
+    return tenant.pk if hasattr(tenant, "pk") else tenant
+
+
+def _opportunitypipeline_user(tenant, email_prefix="user", *, is_admin=False, **overrides):
+    from apps.accounts.models import User
+
+    tid = _opportunitypipeline_tenant_id(tenant)
+    email = overrides.pop("email", f"{email_prefix}_{tid}_{timezone.now().timestamp()}@example.com")
+    username = overrides.pop("username", email.split("@")[0][:30])
+    user = User.objects.create_user(
+        email=email,
+        username=username,
+        password="password",
+        tenant=tenant,
+        is_tenant_admin=is_admin,
+        **overrides,
+    )
+    return user
+
+
+def _opportunitypipeline_party(tenant, name=None, kind="organization", **overrides):
+    from apps.core.models import Party
+
+    tid = _opportunitypipeline_tenant_id(tenant)
+    name = name or f"Party_{tid}_{timezone.now().timestamp()}"
+    return Party.objects.create(
+        tenant=tenant,
+        name=name,
+        party_kind=kind,
+        **overrides,
+    )
+
+
+def _opportunitypipeline_opportunity(tenant, title=None, owner=None, stage="prospecting", amount=Decimal("15000.00"), **overrides):
+    from apps.crm.models import Opportunity
+
+    tid = _opportunitypipeline_tenant_id(tenant)
+    title = title or f"Deal_{tid}_{timezone.now().timestamp()}"
+    account = overrides.pop("account", None)
+    if account is None:
+        from apps.crm.models import AccountProfile
+        party = _opportunitypipeline_party(tenant, name=f"AccountParty_{title}")
+        account, _ = AccountProfile.objects.get_or_create(tenant=tenant, party=party)
+    return Opportunity.objects.create(
+        tenant=tenant,
+        title=title,
+        account=account,
+        owner=owner,
+        stage=stage,
+        amount=amount,
+        **overrides,
+    )
+
+
+def _opportunitypipeline_pipeline(tenant, name="Standard Pipeline", code=None, is_default=False, owner=None, **overrides):
+    from apps.sales.models import OpportunityPipeline
+
+    tid = _opportunitypipeline_tenant_id(tenant)
+    code = code or f"P{str(tid)[-3:]}{int(timezone.now().timestamp() % 1000)}"
+    return OpportunityPipeline.objects.create(
+        tenant=tenant,
+        name=name,
+        code=code,
+        is_default=is_default,
+        owner=owner,
+        **overrides,
+    )
+
+
+def _opportunitypipeline_stage(tenant, pipeline, name="Discovery", sequence=10, stage_kind="open", probability=20, target_days=14, **overrides):
+    from apps.sales.models import PipelineStage
+
+    code = overrides.pop("code", f"STG{sequence}")
+    return PipelineStage.objects.create(
+        tenant=tenant,
+        pipeline=pipeline,
+        name=name,
+        code=code,
+        sequence=sequence,
+        stage_kind=stage_kind,
+        probability=probability,
+        target_days=target_days,
+        **overrides,
+    )
+
+
+def _opportunitypipeline_placement(tenant, opportunity, pipeline, current_stage, **overrides):
+    from apps.sales.models import OpportunityPipelinePlacement
+
+    return OpportunityPipelinePlacement.objects.create(
+        tenant=tenant,
+        opportunity=opportunity,
+        pipeline=pipeline,
+        current_stage=current_stage,
+        stage_entered_at=overrides.pop("stage_entered_at", timezone.now()),
+        **overrides,
+    )
+
+
+def _opportunitypipeline_team_member(tenant, opportunity, user, role="sales_rep", **overrides):
+    from apps.sales.models import OpportunityTeamMember
+
+    return OpportunityTeamMember.objects.create(
+        tenant=tenant,
+        opportunity=opportunity,
+        user=user,
+        role=role,
+        **overrides,
+    )
+
+
+def _opportunitypipeline_competitor_profile(tenant, party=None, website="https://competitor.example.com", tier="tier_1", **overrides):
+    from apps.sales.models import CompetitorProfile
+
+    if party is None:
+        party = _opportunitypipeline_party(tenant, name=f"Competitor_{timezone.now().timestamp()}")
+    return CompetitorProfile.objects.create(
+        tenant=tenant,
+        party=party,
+        website=website,
+        tier=tier,
+        **overrides,
+    )
+
+
+def _opportunitypipeline_opportunity_competitor(tenant, opportunity, competitor_profile, threat_level="high", **overrides):
+    from apps.sales.models import OpportunityCompetitor
+
+    return OpportunityCompetitor.objects.create(
+        tenant=tenant,
+        opportunity=opportunity,
+        competitor_profile=competitor_profile,
+        threat_level=threat_level,
+        **overrides,
+    )
+
+
+def _opportunitypipeline_win_loss_reason(tenant, name="Product Fit", code=None, result="both", category="product", **overrides):
+    from apps.sales.models import WinLossReason
+
+    code = code or f"R{int(timezone.now().timestamp() % 10000)}"
+    return WinLossReason.objects.create(
+        tenant=tenant,
+        name=name,
+        code=code,
+        result=result,
+        category=category,
+        **overrides,
+    )
+
+
+def _opportunitypipeline_outcome(tenant, opportunity, result="won", reason=None, recorded_by=None, **overrides):
+    from apps.sales.models import OpportunityOutcome
+
+    if reason is None:
+        reason = _opportunitypipeline_win_loss_reason(tenant, result=result)
+    return OpportunityOutcome.objects.create(
+        tenant=tenant,
+        opportunity=opportunity,
+        result=result,
+        reason=reason,
+        recorded_by=recorded_by,
+        **overrides,
+    )
+
+
+@pytest.fixture
+def opportunitypipeline_tenant_a(db):
+    from apps.core.models import Tenant
+
+    tenant, _ = Tenant.objects.get_or_create(name="Acme Corp", slug="acme")
+    return tenant
+
+
+@pytest.fixture
+def opportunitypipeline_tenant_b(db):
+    from apps.core.models import Tenant
+
+    tenant, _ = Tenant.objects.get_or_create(name="Globex Corp", slug="globex")
+    return tenant
+
+
+@pytest.fixture
+def opportunitypipeline_admin_a(db, opportunitypipeline_tenant_a):
+    return _opportunitypipeline_user(opportunitypipeline_tenant_a, "admin_a", is_admin=True)
+
+
+@pytest.fixture
+def opportunitypipeline_admin_b(db, opportunitypipeline_tenant_b):
+    return _opportunitypipeline_user(opportunitypipeline_tenant_b, "admin_b", is_admin=True)
+
+
+@pytest.fixture
+def opportunitypipeline_user_a(db, opportunitypipeline_tenant_a):
+    return _opportunitypipeline_user(opportunitypipeline_tenant_a, "user_a", is_admin=False)
+
+
+@pytest.fixture
+def opportunitypipeline_user_b(db, opportunitypipeline_tenant_b):
+    return _opportunitypipeline_user(opportunitypipeline_tenant_b, "user_b", is_admin=False)
+
+
+@pytest.fixture
+def opportunitypipeline_client_a(opportunitypipeline_admin_a):
+    client = Client()
+    client.force_login(opportunitypipeline_admin_a)
+    return client
+
+
+@pytest.fixture
+def opportunitypipeline_client_b(opportunitypipeline_admin_b):
+    client = Client()
+    client.force_login(opportunitypipeline_admin_b)
+    return client
+
+
+@pytest.fixture
+def opportunitypipeline_client_member_a(opportunitypipeline_user_a):
+    client = Client()
+    client.force_login(opportunitypipeline_user_a)
+    return client
+
+
+@pytest.fixture
+def opportunitypipeline_pipeline_a(db, opportunitypipeline_tenant_a, opportunitypipeline_admin_a):
+    pipeline = _opportunitypipeline_pipeline(opportunitypipeline_tenant_a, name="Acme Direct", code="ACME_DIR", is_default=True, owner=opportunitypipeline_admin_a)
+    _opportunitypipeline_stage(opportunitypipeline_tenant_a, pipeline, name="Discovery", sequence=10, stage_kind="open", probability=20)
+    _opportunitypipeline_stage(opportunitypipeline_tenant_a, pipeline, name="Proposal", sequence=20, stage_kind="open", probability=50)
+    _opportunitypipeline_stage(opportunitypipeline_tenant_a, pipeline, name="Negotiation", sequence=30, stage_kind="open", probability=80)
+    _opportunitypipeline_stage(opportunitypipeline_tenant_a, pipeline, name="Closed Won", sequence=90, stage_kind="won", probability=100)
+    _opportunitypipeline_stage(opportunitypipeline_tenant_a, pipeline, name="Closed Lost", sequence=100, stage_kind="lost", probability=0)
+    return pipeline
+
+
+@pytest.fixture
+def opportunitypipeline_pipeline_b(db, opportunitypipeline_tenant_b, opportunitypipeline_admin_b):
+    pipeline = _opportunitypipeline_pipeline(opportunitypipeline_tenant_b, name="Globex Direct", code="GLB_DIR", is_default=True, owner=opportunitypipeline_admin_b)
+    _opportunitypipeline_stage(opportunitypipeline_tenant_b, pipeline, name="Initial", sequence=10, stage_kind="open", probability=10)
+    _opportunitypipeline_stage(opportunitypipeline_tenant_b, pipeline, name="Won", sequence=90, stage_kind="won", probability=100)
+    _opportunitypipeline_stage(opportunitypipeline_tenant_b, pipeline, name="Lost", sequence=100, stage_kind="lost", probability=0)
+    return pipeline
+
+
+@pytest.fixture
+def opportunitypipeline_opportunity_a(db, opportunitypipeline_tenant_a, opportunitypipeline_admin_a):
+    return _opportunitypipeline_opportunity(opportunitypipeline_tenant_a, "Big Enterprise Acme Deal", owner=opportunitypipeline_admin_a)
+
+
+@pytest.fixture
+def opportunitypipeline_opportunity_b(db, opportunitypipeline_tenant_b, opportunitypipeline_admin_b):
+    return _opportunitypipeline_opportunity(opportunitypipeline_tenant_b, "Globex Major Deal", owner=opportunitypipeline_admin_b)
+
+
+@pytest.fixture
+def opportunitypipeline_placement_a(db, opportunitypipeline_tenant_a, opportunitypipeline_opportunity_a, opportunitypipeline_pipeline_a):
+    stage = opportunitypipeline_pipeline_a.stages.filter(stage_kind="open").first()
+    return _opportunitypipeline_placement(opportunitypipeline_tenant_a, opportunitypipeline_opportunity_a, opportunitypipeline_pipeline_a, stage)
+
+
+@pytest.fixture
+def opportunitypipeline_competitor_a(db, opportunitypipeline_tenant_a):
+    return _opportunitypipeline_competitor_profile(opportunitypipeline_tenant_a, website="https://competitor-a.com")
+
+
+@pytest.fixture
+def opportunitypipeline_reason_a(db, opportunitypipeline_tenant_a):
+    return _opportunitypipeline_win_loss_reason(opportunitypipeline_tenant_a, name="Superior Features", code="FEAT_A", result="won")
+
