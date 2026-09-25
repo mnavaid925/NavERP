@@ -86,5 +86,50 @@ from .ContactAccountManagement.AccountBoards import (
     account_workspace,
     account_workspace_export,
 )
+from .OpportunityPipeline.Pipelines import (
+    opportunity_pipeline_board,
+    opportunity_pipeline_create,
+    opportunity_pipeline_delete,
+    opportunity_pipeline_detail,
+    opportunity_pipeline_edit,
+    opportunity_pipeline_list,
+    opportunity_pipeline_set_default,
+    opportunity_pipeline_stage_create,
+    opportunity_pipeline_stage_delete,
+    opportunity_pipeline_stage_edit,
+    opportunity_pipeline_stage_reorder,
+    opportunity_pipeline_stages,
+    opportunity_pipeline_visibility,
+)
+from .OpportunityTeams.OpportunityTeams import (
+    opportunity_team_member_add,
+    opportunity_team_member_edit,
+    opportunity_team_member_remove,
+)
+from .CompetitiveIntelligence.CompetitiveIntelligence import (
+    opportunity_competitor_link_add,
+    opportunity_competitor_link_edit,
+    opportunity_competitor_link_remove,
+    opportunity_competitor_profile_create,
+    opportunity_competitor_profile_delete,
+    opportunity_competitor_profile_detail,
+    opportunity_competitor_profile_edit,
+    opportunity_competitor_profile_list,
+)
+from .OpportunityOutcomes.OpportunityOutcomes import (
+    opportunity_transition,
+    opportunity_win_loss_reason_create,
+    opportunity_win_loss_reason_delete,
+    opportunity_win_loss_reason_detail,
+    opportunity_win_loss_reason_edit,
+    opportunity_win_loss_reason_list,
+)
+from .Workspace import (
+    opportunity_place,
+    opportunity_unplace,
+    opportunity_workspace_detail,
+    opportunity_workspace_list,
+)
 
-__all__ = [name for name in globals() if name.startswith(("lead_", "party_enrichment_", "account_"))]
+__all__ = [name for name in globals() if name.startswith(("lead_", "party_enrichment_", "account_", "opportunity_"))]
+
