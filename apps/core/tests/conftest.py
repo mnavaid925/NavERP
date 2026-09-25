@@ -528,8 +528,13 @@ def bkp_restore_payload():
 
 @pytest.fixture
 def bkp_hold_payload():
-    """Valid `LegalHoldForm` POST fields — an ACTIVE hold, i.e. the coherent state."""
-    from django.utils import timezone
+    """Valid `LegalHoldForm` POST fields — an ACTIVE hold, i.e. the coherent state.
+
+    **No `issued_at`** — it is deliberately not a form field (a preservation order is issued when it is
+    recorded, not when somebody types a date), so posting one is silently ignored and the model default
+    supplies "now". Passing it here would imply it works. `tenant` is absent for the usual reason: it is
+    never a form field.
+    """
     return {
         "name": "New preservation order",
         "custodian": "Legal team",
@@ -539,7 +544,6 @@ def bkp_hold_payload():
         "scope": "All correspondence for the matter.",
         "retention_policy": "",
         "model_label": "",
-        "issued_at": (timezone.now() - timezone.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"),
         "status": "active",
         "released_at": "",
         "release_reason": "",
