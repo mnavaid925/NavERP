@@ -241,7 +241,7 @@
     <table class="table">
       <thead><tr><th>When</th><th>Action</th><th>Target</th><th>Actor</th><th>Operation</th></tr></thead>
       <tbody>
-        {% for entry in audit_entries %}<tr><td>{{ entry.at|date:"M d, Y H:i" }}</td><td>{{ entry.get_action_display }}</td><td><a href="{% url 'core:auditlog_detail' entry.pk %}">{{ entry.target|default:"—" }}</a></td><td>{% if entry.user %}{{ entry.user.get_full_name|default:entry.user.username|default:entry.user.email }}{% else %}—{% endif %}</td><td>{% if entry.changes.operation %}{{ entry.changes.operation }}{% elif entry.changes.action %}{{ entry.changes.action }}{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="5"><div class="empty-state"><i data-lucide="scroll-text"></i><p>No audit entries are linked to this opportunity.</p></div></td></tr>{% endfor %}
+        {% for entry in audit_entries %}<tr><td>{{ entry.at|date:"M d, Y H:i" }}</td><td>{{ entry.get_action_display }}</td><td>{% if request.user.is_superuser or request.user.is_tenant_admin %}<a href="{% url 'core:auditlog_detail' entry.pk %}">{{ entry.target|default:"—" }}</a>{% else %}{{ entry.target|default:"—" }}{% endif %}</td><td>{% if entry.user %}{{ entry.user.get_full_name|default:entry.user.username|default:entry.user.email }}{% else %}—{% endif %}</td><td>{% if entry.changes.operation %}{{ entry.changes.operation }}{% elif entry.changes.action %}{{ entry.changes.action }}{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="5"><div class="empty-state"><i data-lucide="scroll-text"></i><p>No audit entries are linked to this opportunity.</p></div></td></tr>{% endfor %}
       </tbody>
     </table>
   </div>
