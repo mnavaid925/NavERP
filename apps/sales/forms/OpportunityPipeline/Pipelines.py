@@ -206,6 +206,7 @@ class OpportunityPipelinePlacementForm(TenantUniqueMixin, TenantModelForm):
             else PipelineStage.objects.filter(
                 tenant=tenant,
                 pipeline_id=pipeline_id,
+                stage_kind="open",
                 is_active=True,
             ).order_by("sequence", "pk")
         )
@@ -227,6 +228,11 @@ class OpportunityPipelinePlacementForm(TenantUniqueMixin, TenantModelForm):
                 self.add_error("current_stage", "Choose an active stage from this workspace.")
             if pipeline is not None and stage.pipeline_id != pipeline.pk:
                 self.add_error("current_stage", "Choose a stage from the selected pipeline.")
+            if stage.stage_kind != "open":
+                self.add_error(
+                    "current_stage",
+                    "Choose an open stage. Won and lost stages must be transitioned through the workspace with an outcome reason.",
+                )
         probability_override = cleaned.get("probability_override")
         if stage is not None and probability_override is not None:
             if stage.stage_kind == "won" and probability_override != 100:
