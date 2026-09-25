@@ -55,9 +55,9 @@
               <td><span class="badge {% if stage.is_active %}badge-green{% else %}badge-muted{% endif %}">{{ stage.is_active|yesno:"Active,Inactive" }}</span></td>
               {% if can_edit %}
               <td><div class="table-actions">
-                <a href="{% url 'sales:opportunity_pipeline_stage_edit' obj.pk stage.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <a href="{% url 'sales:opportunity_pipeline_stage_edit' obj.pk stage.pk %}" class="btn-icon" title="Edit" aria-label="Edit stage {{ stage.name }}"><i data-lucide="pencil"></i></a>
                 <form method="post" action="{% url 'sales:opportunity_pipeline_stage_delete' obj.pk stage.pk %}" onsubmit="return confirm('Delete this pipeline stage?');">
-                  {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete stage {{ stage.name }}"><i data-lucide="trash-2"></i></button>
                 </form>
               </div></td>
               {% endif %}
