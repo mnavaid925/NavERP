@@ -4,12 +4,21 @@ from .models import (
     AccountClassification,
     AccountPlan,
     AccountStakeholder,
+    CompetitorProfile,
     LeadNurtureEnrollment,
     LeadQualification,
     LeadRoutingRule,
     LeadScoreEvent,
+    OpportunityCompetitor,
+    OpportunityOutcome,
+    OpportunityPipelinePlacement,
+    OpportunityTeamMember,
     PartyEnrichmentEvent,
+    Pipeline,
+    PipelineStage,
+    WinLossReason,
 )
+
 
 
 @admin.register(LeadScoreEvent)
@@ -193,3 +202,77 @@ class AccountPlanAdmin(admin.ModelAdmin):
         if obj is not None and obj.status != "draft":
             return False
         return super().has_delete_permission(request, obj)
+
+
+@admin.register(Pipeline)
+class PipelineAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "is_default", "is_active", "tenant")
+    list_filter = ("is_default", "is_active", "tenant")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+
+
+@admin.register(PipelineStage)
+class PipelineStageAdmin(admin.ModelAdmin):
+    list_display = ("pipeline", "sequence", "name", "stage_kind", "crm_stage_key", "probability", "is_active", "tenant")
+    list_filter = ("stage_kind", "crm_stage_key", "forecast_category", "is_active", "tenant")
+    search_fields = ("name", "code", "pipeline__name")
+    readonly_fields = ("tenant", "created_at", "updated_at")
+
+
+@admin.register(OpportunityPipelinePlacement)
+class OpportunityPipelinePlacementAdmin(admin.ModelAdmin):
+    list_display = ("opportunity", "pipeline", "current_stage", "probability_override", "stage_entered_at", "tenant")
+    list_filter = ("pipeline", "current_stage", "tenant")
+    search_fields = ("opportunity__number", "opportunity__name", "pipeline__name")
+    readonly_fields = ("tenant", "stage_entered_at", "created_at", "updated_at")
+
+
+@admin.register(OpportunityTeamMember)
+class OpportunityTeamMemberAdmin(admin.ModelAdmin):
+    list_display = ("number", "opportunity", "user", "role", "is_active", "tenant")
+    list_filter = ("role", "is_active", "tenant")
+    search_fields = ("number", "opportunity__number", "opportunity__name", "user__username")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+
+
+@admin.register(CompetitorProfile)
+class CompetitorProfileAdmin(admin.ModelAdmin):
+    list_display = ("number", "party", "website_url", "is_active", "tenant")
+    list_filter = ("is_active", "tenant")
+    search_fields = ("number", "party__name", "aliases", "market_positioning")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+
+
+@admin.register(OpportunityCompetitor)
+class OpportunityCompetitorAdmin(admin.ModelAdmin):
+    list_display = ("opportunity", "competitor_profile", "relationship", "is_primary", "tenant")
+    list_filter = ("relationship", "is_primary", "tenant")
+    search_fields = ("opportunity__name", "competitor_profile__party__name")
+    readonly_fields = ("tenant", "created_at", "updated_at")
+
+
+@admin.register(WinLossReason)
+class WinLossReasonAdmin(admin.ModelAdmin):
+    list_display = ("number", "code", "name", "result", "category", "is_active", "tenant")
+    list_filter = ("result", "category", "is_active", "tenant")
+    search_fields = ("number", "code", "name", "description")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+
+
+@admin.register(OpportunityOutcome)
+class OpportunityOutcomeAdmin(admin.ModelAdmin):
+    list_display = ("number", "opportunity", "result", "reason", "closed_at", "recorded_by", "tenant")
+    list_filter = ("result", "reason", "tenant")
+    search_fields = ("number", "opportunity__number", "opportunity__name", "notes")
+    readonly_fields = ("tenant", "number", "opportunity", "result", "reason", "competitor_link", "notes", "closed_at", "recorded_by", "created_at", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
