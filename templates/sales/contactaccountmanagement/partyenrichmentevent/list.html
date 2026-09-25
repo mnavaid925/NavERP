@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Account Enrichment Review{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div><h1 class="page-title">Account Enrichment Review</h1><div class="breadcrumb"><a href="{% url 'sales:lead_overview' %}">Sales</a><span class="sep">›</span><span>Enrichment Review</span></div></div>
+    <div class="page-actions"><a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export</a></div>
+  </div>
+  <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="activity"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.proposed }}</div><div class="stat-label">Proposed</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.applied }}</div><div class="stat-label">Applied</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="x-circle"></i></div><div class="stat-value">{{ stats.rejected }}</div><div class="stat-label">Rejected</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="search-x"></i></div><div class="stat-value">{{ stats.no_match }}</div><div class="stat-label">No match</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.failed }}</div><div class="stat-label">Failed</div></div>
+  </div>
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;"><label class="sr-only" for="enrichment-search">Search enrichment</label><input id="enrichment-search" name="q" value="{{ q }}" class="form-input" placeholder="Search party, source, or error…"></div>
+      <div class="form-group"><label class="sr-only" for="enrichment-party">Party</label><select id="enrichment-party" name="party" class="form-select"><option value="">All parties</option>{% for party in parties %}<option value="{{ party.pk|stringformat:"d" }}" {% if request.GET.party == party.pk|stringformat:"d" %}selected{% endif %}>{{ party.name }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label class="sr-only" for="enrichment-kind">Kind</label><select id="enrichment-kind" name="kind" class="form-select"><option value="">All kinds</option>{% for value,label in kind_choices %}<option value="{{ value }}" {% if request.GET.kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label class="sr-only" for="enrichment-source">Source</label><select id="enrichment-source" name="source_kind" class="form-select"><option value="">All sources</option>{% for value,label in source_kind_choices %}<option value="{{ value }}" {% if request.GET.source_kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label class="sr-only" for="enrichment-status">Status</label><select id="enrichment-status" name="status" class="form-select"><option value="">All statuses</option>{% for value,label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label class="form-label" for="enrichment-from">From</label><input id="enrichment-from" name="date_from" type="date" value="{{ date_from }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="enrichment-to">To</label><input id="enrichment-to" name="date_to" type="date" value="{{ date_to }}" class="form-input"></div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button><a href="{% url 'sales:party_enrichment_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+  <div class="card mb-4"><div class="card-header"><h2 class="card-title">Request enrichment review</h2></div><div class="card-body">
+    <form method="post" action="{% url 'sales:party_enrichment_request' %}" class="form-grid">{% csrf_token %}
+      {{ proposal_form.non_field_errors }}
+      <div class="form-group"><label class="form-label" for="{{ proposal_form.party.id_for_label }}">Party</label>{{ proposal_form.party }}{{ proposal_form.party.errors }}</div>
+      <div class="form-group"><label class="form-label" for="{{ proposal_form.kind.id_for_label }}">Kind</label>{{ proposal_form.kind }}{{ proposal_form.kind.errors }}</div>
+      <div class="form-group"><label class="form-label" for="{{ proposal_form.source_kind.id_for_label }}">Source</label>{{ proposal_form.source_kind }}{{ proposal_form.source_kind.errors }}</div>
+      <div class="form-group"><label class="form-label" for="{{ proposal_form.source_name.id_for_label }}">Source name</label>{{ proposal_form.source_name }}{{ proposal_form.source_name.errors }}</div>
+      <div class="form-group"><label class="form-label" for="{{ proposal_form.source_reference.id_for_label }}">Opaque source reference</label>{{ proposal_form.source_reference }}{{ proposal_form.source_reference.errors }}</div>
+      <div class="form-group"><label class="form-label" for="{{ proposal_form.legal_basis_purpose.id_for_label }}">Lawful basis purpose</label>{{ proposal_form.legal_basis_purpose }}{{ proposal_form.legal_basis_purpose.errors }}</div>
+      <div class="md:col-span-2"><label class="form-label" for="{{ proposal_form.changes.id_for_label }}">Proposed fields (JSON)</label>{{ proposal_form.changes }}{{ proposal_form.changes.errors }}</div>
+      <div class="md:col-span-2"><button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit proposal</button></div>
+    </form>
+  </div></div>
+  <div class="table-wrap"><table class="table"><thead><tr><th>Occurred</th><th>Party</th><th>Kind</th><th>Source</th><th>Status</th><th>Fields</th><th>Actions</th></tr></thead><tbody>
+    {% for obj in object_list %}<tr><td>{{ obj.occurred_at|date:"M d, Y H:i" }}</td><td><a href="{% if obj.party.kind == 'person' %}{% url 'crm:contact_detail' obj.party.pk %}{% else %}{% url 'crm:account_detail' obj.party.pk %}{% endif %}">{{ obj.party.name }}</a></td><td>{{ obj.get_kind_display }}</td><td>{{ obj.source_name|default:obj.get_source_kind_display }}</td><td>{% if obj.status == "applied" %}<span class="badge badge-green">Applied</span>{% elif obj.status == "rejected" %}<span class="badge badge-red">Rejected</span>{% elif obj.status == "proposed" %}<span class="badge badge-amber">Proposed</span>{% elif obj.status == "no_match" %}<span class="badge badge-muted">No match</span>{% elif obj.status == "failed" %}<span class="badge badge-red">Failed</span>{% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}</td><td>{{ obj.changes|length }}</td><td><div class="table-actions"><a href="{% url 'sales:party_enrichment_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td></tr>
+    {% empty %}<tr><td colspan="7"><div class="empty-state"><i data-lucide="scan-search"></i><h3>No enrichment events</h3><p>Local proposals and validation evidence will appear here.</p></div></td></tr>{% endfor %}
+  </tbody></table></div>{% include "partials/pagination.html" %}
+{% endblock %}
