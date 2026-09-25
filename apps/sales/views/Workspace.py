@@ -789,6 +789,8 @@ def opportunity_place(request, opportunity_pk):
             "placement": placement,
             "form": form,
             "pipelines": pipelines,
+            "selected_pipeline": selected_pipeline,
+            "selected_pipeline_id": selected_pipeline.pk if selected_pipeline else None,
             "stages": stages,
             "is_edit": placement is not None,
         },
