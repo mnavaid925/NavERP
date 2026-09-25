@@ -1,6 +1,6 @@
 ---
 name: sales
-description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management scoring, BANT/MEDDIC qualification, deterministic owner routing, and CRM drip nurture enrollment. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
+description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management scoring, BANT/MEDDIC qualification, deterministic owner routing, CRM drip nurture enrollment, and 8.3 Contact & Account Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
 ---
 
 # Sales Management System (Module 8)
@@ -63,6 +63,80 @@ Numbered `LNE-#####` lifecycle state for one lead and one CRM drip campaign. Uni
 - Handoff: `lead_handoff` (`leads/<pk>/handoff/`) is POST-only and tenant-admin/qualified-assessment gated; it calls the CRM conversion service and never duplicates its writes.
 
 All pages use `@login_required` for reads. Configuration/manual score/activation/resume/archive actions are tenant-admin gated. All mutating actions are POST-only and CSRF-protected. Lists use `crud_list` with search, pre-pagination filters, pagination, Actions, and empty states. Lists pass every FK queryset and choice list consumed by their filter bars.
+
+## 8.3 Contact & Account Management
+
+8.3 is an account-workspace and buying-center layer over the canonical CRM/core spine. It adds only four Sales-owned records and four model-free boards. It does not add an account/contact master, health score, opportunity, order, invoice, product, or provider connector.
+
+- Canonical account/contact identity: `core.Party` with `crm.AccountProfile` and `crm.ContactProfile`.
+- Hierarchy pointer: `crm.AccountProfile.parent_account`; the CRM model, form, view, and admin paths enforce same-tenant organization/profile, non-self, bounded, transitive-cycle-safe writes.
+- Health: `crm.HealthScore` and `crm.HealthScoreHistory` are read-only sources.
+- Commercial context: `crm.Opportunity`, `scm.SalesOrder`, and `accounting.Invoice` are read-only; currency buckets remain separate and Opportunity currency is explicitly unspecified.
+- Relationships: `crm.ContactProfile.account` remains the primary affiliation; `core.PartyRelationship(kind='reports_to')` remains the reporting graph; Sales stakeholder rows are account-specific context only.
+- Enrichment: local proposal/review evidence only. No outbound HTTP, LinkedIn/provider sync, verification worker, scheduler, merge, or email send ships here.
+
+### 8.3 models
+
+- `PartyEnrichmentEvent` — `apps/sales/models/ContactAccountManagement/PartyEnrichment.py`; append-only `TenantEventOwned` evidence for `core.Party` enrichment proposals. Choices are `firmographic`, `contact`, `email_validation`, `phone_validation`, `social`, `employment_change`, `duplicate_check`; sources are `manual`, `provider`, `email_signature`, `linkedin`, `import`, `api`; statuses are `proposed`, `applied`, `rejected`, `no_match`, `failed`. `changes` is a bounded allowlisted object for `job_title`, `department`, `linkedin`, `work_email`, `phone`, `mobile`, `website`, `industry`, `employee_count`, and `annual_revenue`. External sources require a same-tenant active consent purpose. Request/apply/reject are service actions, with no ordinary edit/delete.
+- `AccountStakeholder` — `apps/sales/models/ContactAccountManagement/AccountStakeholders.py`; account-specific buying-center row linking a same-tenant organization Party to a different same-tenant person Party. Choices: roles `decision_maker`, `economic_buyer`, `champion`, `influencer`, `blocker`, `technical_evaluator`, `procurement`, `end_user`, `advisor`, `other`; influence `high`/`medium`/`low`/`unknown`; attitude `positive`/`neutral`/`negative`/`unknown`; strength `strong`/`moderate`/`weak`/`unknown`; status `active`/`former`. It stores validity dates and notes, not a primary account or org chart.
+- `AccountClassification` — `apps/sales/models/ContactAccountManagement/AccountClassifications.py`; one current human-governed row per account with `strategic`, `key`, `growth`, `nurture` tiers; `prospect`, `active_customer`, `expansion_candidate`, `dormant`, `former_customer` lifecycle; `high`/`medium`/`low` priority; `very_high`/`high`/`medium`/`low`/`unknown` potential; and `none`/`small`/`medium`/`large`/`full_wallet` wallet categories. Rationale is required; strategic/key rows require a review date. It stores no revenue, health, or rollup facts.
+- `AccountPlan` — `apps/sales/models/ContactAccountManagement/AccountPlans.py`; numbered `ACPL-` plan with `draft`, `active`, `review_due`, `completed`, `archived` lifecycle. It stores narrative strategy/white-space assessment and links existing `crm.Opportunity` rows through `related_opportunities`; period order, active same-tenant owner, and same-account opportunity invariants are enforced on form, service, and M2M writes. Delete is draft-only; non-draft plans archive.
+
+The 8.3 migration is `apps/sales/migrations/0004_accountclassification_accountplan_accountstakeholder_and_more.py`; it creates the four tables and implicit M2M join only. Do not edit an 8.2 or CRM migration while this checkout has concurrent schema drift.
+
+### 8.3 routes and views
+
+`apps/sales/urls/ContactAccountManagement/` is appended after the 8.1 route modules. Literal routes precede every `<int:pk>` route.
+
+- Enrichment: `party_enrichment_list`, `party_enrichment_detail`, `party_enrichment_request`, `party_enrichment_apply`, `party_enrichment_reject`, `party_enrichment_export` under `enrichment-events/`.
+- Stakeholders: `account_stakeholder_list`, `account_stakeholder_create`, `account_stakeholder_detail`, `account_stakeholder_edit`, `account_stakeholder_delete`, `account_stakeholder_export` under `account-stakeholders/`.
+- Classifications: `account_classification_list`, `account_classification_create`, `account_classification_detail`, `account_classification_edit`, `account_classification_delete`, `account_classification_export` under `account-classifications/`.
+- Plans: `account_plan_list`, `account_plan_create`, `account_plan_detail`, `account_plan_edit`, `account_plan_delete`, `account_plan_activate`, `account_plan_review_due`, `account_plan_complete`, `account_plan_archive`, `account_plan_export` under `account-plans/`.
+- Boards: `account_hierarchy`, `account_workspace`, `account_coverage`, `account_white_space`, and `account_workspace_export` under `accounts/`.
+
+List contexts expose the pinned object list, pagination, filter values, choice lists, bounded FK querysets, aggregate stats, and export URLs. Detail contexts expose canonical account/contact, health/activity/document evidence, rollups, and `can_edit` where applicable. Board contexts expose the contract's `account_rows`, `coverage_rows`, `white_space_rows`, `currency_rollups`, `caveats`, and selected-account evidence. Every read is login-required; state-changing actions are POST/CSRF protected. Classification create/edit/delete and enrichment apply require tenant-admin access; plan edit/lifecycle follows owner-or-tenant-admin policy.
+
+### 8.3 templates
+
+Templates live under `templates/sales/contactaccountmanagement/`:
+
+- `partyenrichmentevent/{list,detail}.html`
+- `accountstakeholder/{list,detail,form}.html`
+- `accountclassification/{list,detail,form}.html`
+- `accountplan/{list,detail,form}.html`
+- `account_hierarchy.html`, `account_workspace.html`, `account_coverage.html`, `account_white_space.html`
+
+Use `base.html`, `partials/pagination.html`, the existing theme cards/tables/forms, and only `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, and `badge-slate`. Lists have search, filters, pagination, and Actions; mutable details have edit/POST-delete/back controls. Enrichment has no edit/delete. Nullable health, currency, activity, document, and rollup values render as unavailable rather than fabricated zero. White-space pages state that exact product mapping is not governed yet.
+
+### Seeder, exports, and tests
+
+`venv\Scripts\python.exe manage.py seed_sales` is the single idempotent Sales seeder. It reuses tenant users, canonical Parties, CRM profiles, consent purposes, and existing opportunities; creates a root/child/grandchild plus separate account demo, stakeholder roles, classifications, plan lifecycle rows, and local enrichment proposal/apply/reject examples. It skips missing prerequisites with a message and prints the tenant admin login, tenantless-superuser warning, and the no-provider/no-worker boundary. Run it twice without `--flush` in a shared database.
+
+All 8.3 CSV exports use the active list filters, a 5,000-row cap, `csv_safe` formula neutralization, and sanitized audit metadata. Do not export raw enrichment payloads, credentials, or mixed-currency totals. Run the full Sales suite plus focused CRM/core regressions; the 8.3 test namespace is `contactaccountmanagement`.
+
+### Conventions and common tasks
+
+- Filter every tenant-owned FK/M2M to `request.tenant`; validate model, form, admin, service, and M2M paths against crafted foreign IDs.
+- Use the CRM account/profile pages for identity edits; do not introduce a Sales account/contact writer.
+- Keep enrichment fields allowlisted and person/organization applicability explicit; redact credential-like values and sanitize errors/source references.
+- Keep plan owner/admin authorization and status transitions centralized; use `save(commit=False)` plus `save_m2m()` inside the service transaction.
+- Use `account_rollups` and board helpers for currency-separated, bounded, cycle-safe reads; never sum annual revenue, opportunity amount, order total, and invoice total together.
+- To add a field, update the model/form/serializer equivalent, template context, export columns, seed coverage, and focused tests together.
+- To add a filter, pass the exact choice/queryset key, validate GET values before filtering, and keep export parity.
+- To add a board, use the existing computed-board context conventions and avoid a snapshot/analytics model.
+- To extend the seeder, use `get_or_create` or existing-number checks and prove a second run creates no duplicates.
+- `request.tenant=None` (superuser `admin`) intentionally yields empty tenant-scoped Sales data; use `admin_acme` / `password` for demo data.
+
+## 8.3 sidebar wiring
+
+`apps/core/navigation.py` contains `LIVE_LINKS["8.3"]` with these staff destinations:
+
+- Account Hierarchy & Parent-Child → `sales:account_hierarchy`
+- Contact Profiles & Enrichment → `sales:account_workspace#enrichment`
+- Relationship Mapping → `sales:account_coverage`
+- Account Segmentation & Tiering → `sales:account_classification_list`
+- Account Plans & Growth Strategies → `sales:account_plan_list`
+- Extras: Account Workspace, Enrichment Review Queue, Stakeholder Register, Account Classification, Coverage Matrix, Account Plans, White-Space Board
 
 ## Templates
 
