@@ -236,25 +236,69 @@ the immutable measurement. Collapsing them would let a missed RPO silently rewri
 
 ## Shared files & Integration
 
-- [ ] Re-export blocks in `apps/core/{models,forms,views}/__init__.py` (models before views; views import from `apps.core.models`).
-- [ ] Admin registration in `apps/core/admin.py` for all 8 models.
-- [ ] Extend `apps/core/management/commands/seed_core.py`: `_seed_backup(tenant)` with a **per-entity guard** (never a tenant-wide one), reusing the existing tenant + an existing `EncryptionKey`, and `_seed_recovery_posture(tenant)` for the singleton.
-- [ ] Fill `apps/core/migrations/0013_backup_recovery_data_lifecycle.py` (the Phase-0 placeholder) via `makemigrations core`.
-- [ ] `LIVE_LINKS["0.16"]` in `apps/core/navigation.py` — 5 bullet keys **verified byte-identical to `NavERP.md`** via the real `parse_catalog()`, plus extra leaves.
-- [ ] `templates/core/core_overview.html` / the module landing page: link the new pages.
+- [x] Re-export blocks in `apps/core/{models,forms,views}/__init__.py` (models before views; views import from `apps.core.models`).
+- [x] Admin registration in `apps/core/admin.py` for all 8 models.
+- [x] Extend `apps/core/management/commands/seed_core.py`: `_seed_backup(tenant)` with a **per-entity guard** (never a tenant-wide one), reusing the existing tenant + an existing `EncryptionKey`, and `_seed_recovery_posture(tenant)` for the singleton.
+- [x] Fill `apps/core/migrations/0013_backup_recovery_data_lifecycle.py` (the Phase-0 placeholder) via `makemigrations core`.
+- [x] `LIVE_LINKS["0.16"]` in `apps/core/navigation.py` — 5 bullet keys **verified byte-identical to `NavERP.md`** via the real `parse_catalog()`, plus extra leaves.
+- [x] The module landing page links the new pages — note the plan's filename guess was wrong: there is no `core_overview.html`, the convention is `<submodule>overview.html`, and 0.16's landing page is `templates/core/backupoverview.html`.
 
 ## Verify
 
-- [ ] `makemigrations --check` → "No changes detected"; `migrate`; `seed_core` **twice** (2nd run idempotent); `manage.py check`.
-- [ ] `venv\Scripts\python.exe temp\audit_integrity.py` → **6/6 PASS**.
-- [ ] Smoke as `admin_acme`: every new page 200 with **content** asserted (not just status); junk-param and page-2 lists; cross-tenant IDOR → 404; `backup_job_verify` is 405 on GET.
-- [ ] Phase 4 review → `.claude/tasks/review-core-0.16.md`; Phase 5 `code-fixer`; Phase 6 tests (`test_backup_*`); Phase 7 docs + `README.md` counter → **16 of 21**.
+- [x] `makemigrations --check` → "No changes detected"; `migrate`; `seed_core` **twice** (2nd run idempotent); `manage.py check`.
+- [x] `venv\Scripts\python.exe temp\audit_integrity.py` → **6/6 PASS** (and it independently reports `core: 16 live sub-modules`).
+- [x] Smoke as `admin_acme`: every new page 200 with **content** asserted (not just status); junk-param and page-2 lists; cross-tenant IDOR → 404; `backup_job_verify` is 405 on GET.
+- [x] Phase 4 review → `.claude/tasks/review-core-0.16.md`; Phase 5 `code-fixer`; Phase 6 tests (`test_backup_*`); Phase 7 docs + `README.md` counter → **16 of 21**.
 - [ ] **Final gate:** `apps/core/tests` **without** `--nomigrations` (the only run that catches an unapplied migration).
 
 ## Close-out
 
-- [ ] `### Module 0 0.16 — Backup, Recovery & Data Lifecycle (close-out YYYY-MM-DD)` prose section.
-- [ ] Update `.claude/skills/core/SKILL.md` with the 0.16 section; update `NavERP.md` + `README.md` counters.
+- [x] `### Module 0 0.16 — Backup, Recovery & Data Lifecycle (close-out 2026-09-25)` prose section.
+- [x] Update `.claude/skills/core/SKILL.md` with the 0.16 section; update `NavERP.md` + `README.md` counters.
+
+### Module 0 0.16 — Backup, Recovery & Data Lifecycle (close-out 2026-09-25)
+
+**Status: 0.16 is built, reviewed, fixed, tested and documented.** Seven models in `core`
+(`BackupJob`, `DataArchive`, `RestoreRecord`, `EnvironmentInstance`, `RecoveryPosture`, `RecoveryDrill`
+in `models/Backup.py`; `LegalHold` in its own file because a hold is a **peer of a retention policy**,
+not a backup record — L36), 34 routes, 15 pages and two computed boards. It is a **register, not an
+engine**: nothing in it takes a backup, restores one or provisions an environment.
+
+- `manage.py check` clean; `makemigrations --check --dry-run` → "No changes detected"; migration
+  **`core.0014`** applied (the four list-ordering indexes), and `EXPLAIN` confirms each ordering now
+  reports `Using index` with **no `Using filesort`** — the exact inverse of the pre-fix plan.
+- `temp/audit_integrity.py` passes **6/6**, and independently reports `core: 16 live sub-modules`.
+- **`apps/core/tests`: 470 tests, 0 failures** — 204 pre-existing plus **266 new** across
+  `test_backup_{models,forms,views,security}.py` (contract pinned first at
+  `.claude/tasks/test-contract-core-0.16.md`).
+- 16 scratch probes, **~292 assertions, all green**, each building its own workspaces inside rolled-back
+  savepoints so the shared dev DB is untouched. Every refusal is paired with a control, because a page
+  or rule that refuses *everything* passes a refusal test.
+- Six serial review lanes → **31 findings: 8 Critical, 11 Important, 12 Minor**. All 7 original Criticals
+  closed (C1–C6 fixed and independently re-verified; **C7 escalated, not fixed** — see below). The
+  `code-fixer` pass closed all 11 Important and 12 Minor and **found C8**, a second instance of C5's
+  ordering defect on the hub's five-row preview, which the orchestrator reproduced before accepting.
+- Nothing pushed; `main` carries 26 fix commits and 12 documentation/test commits from this close-out,
+  one file each.
+
+**Two items deliberately NOT closed, recorded so they are decisions rather than oversights:**
+
+1. **C7 is ESCALATED.** `TenantModelForm` leaves a queryset unnarrowed when `tenant=None` so that
+   `_reject_foreign` can return its precise "belongs to another workspace" message. Emptying it was
+   tried, broke **15 committed tests across `inventory`, `procurement` and `projects`**, and was
+   **reverted** (`68ebb8eb`). Measured latent exposure: **859 tenant-scoped fields across 618 forms**.
+   The **one live leak** the probe found (`ProjectIntegrationConnectorForm`, 28 users across 6 tenants,
+   emails, reachable by a superuser through an `@login_required`-only view) **is fixed** (`2cf76bd4`),
+   self-sufficiently. A 4-step plan for the owner is in the review file.
+2. **`L5-M1` was never carried into the consolidated Minor list**, so `backup_job_verify` still re-dates
+   its stamp on a second POST. No test enforces either behaviour; it is recorded in `SKILL.md` because
+   the findings file has no entry for it.
+
+**Not ours.** Four tests fail in this tree and fail **identically at the pre-session baseline
+`44c72ec3`** (verified by checking out that commit in a git worktree): `inventory`'s
+`test_foreign_uom_rejected`, two `scm` `TestMeterReadingForm` cases (a clock-dependent future-dated
+`read_at`), and the `scm` webhook junk-filter test. Reported with provenance rather than "fixed" (L45).
+
 
 ---
 
