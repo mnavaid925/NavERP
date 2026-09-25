@@ -2176,7 +2176,17 @@ LIVE_LINKS = {
         "Routing Rules": "sales:lead_routing_rule_list",
         "Nurture Enrollments": "sales:lead_nurture_enrollment_list",
     },
+    "8.2": {
+        "Opportunity Creation & Staging": "sales:opportunity_pipeline_list",
+        "Pipeline Visibility & Forecasting": "sales:opportunity_pipeline_visibility",
+        "Opportunity Tracking & Updates": "sales:opportunity_workspace_list",
+        "Competitive Intelligence": "sales:opportunity_competitor_profile_list",
+        "Deal Collaboration & Team Selling": "sales:opportunity_workspace_list",
+        "Pipeline Board": "sales:opportunity_pipeline_board",
+        "Win / Loss Reasons": "sales:opportunity_win_loss_reason_list",
+    },
     "8.3": {
+
         "Account Hierarchy & Parent-Child": "sales:account_hierarchy",
         "Contact Profiles & Enrichment": "sales:account_workspace#enrichment",
         "Relationship Mapping": "sales:account_coverage",
