@@ -10,6 +10,7 @@ from django.db.models import (
     F,
     IntegerField,
     Max,
+    Min,
     Q,
     Sum,
     Value,
