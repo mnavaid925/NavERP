@@ -55,16 +55,16 @@ Review scope is limited to the 8.3 Contact & Account Management files and the su
 - I1–I14: enforced service-only enrichment decisions and locked actor/Party/purpose/canonical rows; completed fingerprints and UI controls; verified authentication, duplicate classification recovery, lifecycle locks, currency-separated rollups, bounded cycle-safe hierarchy/coverage/workspace/white-space evidence, shared export filters with lazy 5,000-row caps and safe audit metadata, CSV formula neutralization, atomic writes, bounded selectors, and aggregate/select-related query shapes.
 - M1–M7: verified the URL initializer, permission-aware controls, design-system/status fallbacks, separate document content types, account-scoped coverage, controlled malformed workspace IDs, and lifecycle-oriented idempotent seeding.
 - `venv\\Scripts\\python.exe manage.py check` — passed: `System check identified no issues (0 silenced).`
-- `DJANGO_SETTINGS_MODULE=config.settings_test venv\\Scripts\\python.exe -m pytest -q apps/sales/tests --nomigrations` — passed: 284 tests.
+- `DJANGO_SETTINGS_MODULE=config.settings_test venv\Scripts\python.exe -m pytest -q apps/sales/tests --nomigrations` — passed: 333 tests after adding the 49 focused 8.3 tests.
 - `DJANGO_SETTINGS_MODULE=config.settings_test venv\\Scripts\\python.exe -m pytest -q apps/crm/tests/test_accounts_contacts.py apps/core/tests/test_forms.py --nomigrations` — passed: 130 tests.
 - `DJANGO_SETTINGS_MODULE=config.settings_test venv\\Scripts\\python.exe -m pytest -q apps/core/tests/test_models.py --nomigrations` — passed: 41 tests.
 - `DJANGO_SETTINGS_MODULE=config.settings_test venv\\Scripts\\python.exe -m pytest -q apps/core/tests/test_views.py apps/core/tests/test_security.py --nomigrations` — passed: 36 tests.
-- Temporary isolated 8.3 smoke suite — passed: 4 tests covering hierarchy/reporting invariants, enrichment validation/UI/replay, M2M/account scoping, board/auth/export behavior, and two idempotent seed runs.
+- Focused 8.3 test set — passed: 49 tests covering models, forms, views, and security; the two-run `seed_sales` check and `SALES_83_SMOKE_OK` also passed.
 - `manage.py shell -c` template loader check — passed: all 15 8.3 templates loaded.
-- Targeted `git diff --check` for the fixer files — passed; the full-tree check still reports the pre-existing blank line at `.claude/tasks/todo.md:10159`, outside this scope.
+- `git diff --check` for the committed 8.3 range — passed; unrelated working-tree changes remain in the shared checkout.
 - `venv\\Scripts\\python.exe manage.py makemigrations sales --check --dry-run` — passed: `No changes detected in app 'sales'`.
 - Full `manage.py makemigrations --check --dry-run` remains blocked only by unrelated concurrent CRM drift: missing `Opportunity.currency`, `Opportunity.next_step_due_date`, and their indexes in the migration graph. No CRM migration was created or modified.
-- No files were staged or committed; unrelated Projects/core-0.16 and other concurrent changes were left untouched.
+- 8.3 files are committed one file at a time on `main`; no push was performed. Unrelated Projects/core-0.16 changes remain unstaged.
 
 ## Post-test regression fixes
 
