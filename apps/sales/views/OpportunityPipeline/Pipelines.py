@@ -654,7 +654,7 @@ def opportunity_pipeline_visibility(request):
                 health=context["health"],
                 date_from=date_from,
                 date_to=date_to,
-            ),
+            )[:100],
             "win_loss_rows": sales_win_loss_rows(
                 tenant,
                 pipeline_id=context["pipeline_id"],
