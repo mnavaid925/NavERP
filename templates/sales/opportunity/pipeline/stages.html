@@ -42,10 +42,10 @@
           <td><span class="badge {% if stage.is_active %}badge-green{% else %}badge-muted{% endif %}">{{ stage.is_active|yesno:"Active,Inactive" }}</span></td>
           {% if request.user.is_superuser or request.user.is_tenant_admin %}
           <td><div class="table-actions">
-            {% if request.user.is_superuser or request.user.is_tenant_admin %}<button class="btn-icon" type="button" data-move-pipeline-stage="up" title="Move up"{% if forloop.first %} disabled{% endif %}><i data-lucide="chevron-up"></i></button><button class="btn-icon" type="button" data-move-pipeline-stage="down" title="Move down"{% if forloop.last %} disabled{% endif %}><i data-lucide="chevron-down"></i></button>{% endif %}
-            <a href="{% url 'sales:opportunity_pipeline_stage_edit' pipeline.pk stage.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}<button class="btn-icon" type="button" data-move-pipeline-stage="up" title="Move up" aria-label="Move stage up"{% if forloop.first %} disabled{% endif %}><i data-lucide="chevron-up"></i></button><button class="btn-icon" type="button" data-move-pipeline-stage="down" title="Move down" aria-label="Move stage down"{% if forloop.last %} disabled{% endif %}><i data-lucide="chevron-down"></i></button>{% endif %}
+            <a href="{% url 'sales:opportunity_pipeline_stage_edit' pipeline.pk stage.pk %}" class="btn-icon" title="Edit" aria-label="Edit stage {{ stage.name }}"><i data-lucide="pencil"></i></a>
             <form method="post" action="{% url 'sales:opportunity_pipeline_stage_delete' pipeline.pk stage.pk %}" onsubmit="return confirm('Delete this pipeline stage?');">
-              {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete stage {{ stage.name }}"><i data-lucide="trash-2"></i></button>
             </form>
           </div></td>
           {% endif %}
