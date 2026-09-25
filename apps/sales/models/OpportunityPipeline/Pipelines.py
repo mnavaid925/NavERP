@@ -325,8 +325,9 @@ class OpportunityPipelinePlacement(TenantOwned):
         ]
         indexes = [
             models.Index(fields=["tenant", "opportunity"], name="sales_opp_place_tenant_opp_idx"),
-            models.Index(fields=["tenant", "pipeline"], name="sales_opp_place_tenant_pipe_idx"),
+            models.Index(fields=["tenant", "pipeline"], name="sales_opp_place_tnt_pipe_idx"),
         ]
+
 
     def clean(self):
         super().clean()
