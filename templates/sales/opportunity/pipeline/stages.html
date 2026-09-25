@@ -89,9 +89,16 @@
   if (!form || !body) return;
   const input = form.querySelector("input[name=ordered_stage_ids]");
   const sync = function () {
-    input.value = Array.from(body.querySelectorAll("tr[data-pipeline-stage-id]"))
+    const rows = Array.from(body.querySelectorAll("tr[data-pipeline-stage-id]"));
+    input.value = rows
       .map(function (row) { return row.dataset.pipelineStageId; })
       .join(",");
+    rows.forEach(function (row, idx) {
+      const upBtn = row.querySelector("button[data-move-pipeline-stage='up']");
+      const downBtn = row.querySelector("button[data-move-pipeline-stage='down']");
+      if (upBtn) upBtn.disabled = (idx === 0);
+      if (downBtn) downBtn.disabled = (idx === rows.length - 1);
+    });
   };
   body.addEventListener("click", function (event) {
     const button = event.target.closest("button[data-move-pipeline-stage]");
