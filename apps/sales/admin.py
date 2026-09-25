@@ -218,6 +218,8 @@ class PipelineStageAdmin(admin.ModelAdmin):
     list_filter = ("stage_kind", "crm_stage_key", "forecast_category", "is_active", "tenant")
     search_fields = ("name", "code", "pipeline__name")
     readonly_fields = ("tenant", "created_at", "updated_at")
+    list_select_related = ("pipeline", "tenant")
+    raw_id_fields = ("pipeline",)
 
 
 @admin.register(OpportunityPipelinePlacement)
@@ -226,6 +228,8 @@ class OpportunityPipelinePlacementAdmin(admin.ModelAdmin):
     list_filter = ("pipeline", "current_stage", "tenant")
     search_fields = ("opportunity__number", "opportunity__name", "pipeline__name")
     readonly_fields = ("tenant", "stage_entered_at", "created_at", "updated_at")
+    list_select_related = ("opportunity", "pipeline", "current_stage", "tenant")
+    raw_id_fields = ("opportunity", "pipeline", "current_stage")
 
     def has_add_permission(self, request):
         return False
@@ -240,6 +244,8 @@ class OpportunityTeamMemberAdmin(admin.ModelAdmin):
     list_filter = ("role", "is_active", "tenant")
     search_fields = ("number", "opportunity__number", "opportunity__name", "user__username")
     readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("opportunity", "user", "org_unit", "tenant")
+    raw_id_fields = ("opportunity", "user", "org_unit")
 
 
 @admin.register(CompetitorProfile)
@@ -248,6 +254,8 @@ class CompetitorProfileAdmin(admin.ModelAdmin):
     list_filter = ("is_active", "tenant")
     search_fields = ("number", "party__name", "aliases", "market_positioning")
     readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("party", "tenant")
+    raw_id_fields = ("party",)
 
 
 @admin.register(OpportunityCompetitor)
@@ -256,6 +264,8 @@ class OpportunityCompetitorAdmin(admin.ModelAdmin):
     list_filter = ("relationship", "is_primary", "tenant")
     search_fields = ("opportunity__name", "competitor_profile__party__name")
     readonly_fields = ("tenant", "created_at", "updated_at")
+    list_select_related = ("opportunity", "competitor_profile__party", "tenant")
+    raw_id_fields = ("opportunity", "competitor_profile")
 
 
 @admin.register(WinLossReason)
@@ -272,6 +282,8 @@ class OpportunityOutcomeAdmin(admin.ModelAdmin):
     list_filter = ("result", "reason", "tenant")
     search_fields = ("number", "opportunity__number", "opportunity__name", "notes")
     readonly_fields = ("tenant", "number", "opportunity", "result", "reason", "competitor_link", "notes", "closed_at", "recorded_by", "created_at", "updated_at")
+    list_select_related = ("opportunity", "reason", "competitor_link", "recorded_by", "tenant")
+    raw_id_fields = ("opportunity", "reason", "competitor_link", "recorded_by")
 
     def has_add_permission(self, request):
         return False
