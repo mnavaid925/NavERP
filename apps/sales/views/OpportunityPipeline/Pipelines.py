@@ -28,6 +28,7 @@ from apps.sales.models.OpportunityPipeline.Pipelines import (
 from apps.sales.opportunity_analytics import (
     SALES_HEALTH_CHOICES,
     opportunity_pipeline_health_projection,
+    sales_health_counts,
     sales_pipeline_currency_totals,
     sales_pipeline_rollups,
     sales_stage_age_rows,
@@ -449,7 +450,7 @@ def _opportunity_pipeline_summary_rows(tenant, pipelines, owner_id, territory_id
     return [rows[pipeline_id] for pipeline_id in sorted(rows, key=lambda value: pipeline_map[value].name)]
 
 
-def _opportunity_pipeline_board_context(request):
+def _opportunity_pipeline_filter_context(request):
     tenant = request.tenant
     pipelines = list(
         Pipeline.objects.filter(tenant=tenant, is_active=True).order_by("-is_default", "name")
@@ -464,7 +465,12 @@ def _opportunity_pipeline_board_context(request):
         pipeline_id = selected_pipeline.pk
     owner_id = _opportunity_pipeline_int(request.GET.get("owner"))
     territory_id = _opportunity_pipeline_int(request.GET.get("territory"))
-    owner_ids = Opportunity.objects.filter(tenant=tenant).exclude(owner_id=None).values_list("owner_id", flat=True)
+    owner_ids = (
+        Opportunity.objects.filter(tenant=tenant)
+        .exclude(owner_id=None)
+        .values_list("owner_id", flat=True)
+        .distinct()
+    )
     owner_users = list(
         User.objects.filter(tenant=tenant, is_active=True, pk__in=owner_ids).order_by("email")
     )
@@ -483,6 +489,32 @@ def _opportunity_pipeline_board_context(request):
     health = request.GET.get("health", "").strip().lower()
     if health not in dict(SALES_HEALTH_CHOICES):
         health = ""
+    return {
+        "tenant": tenant,
+        "pipelines": pipelines,
+        "selected_pipeline": selected_pipeline,
+        "pipeline_id": pipeline_id,
+        "owner_id": owner_id,
+        "territory_id": territory_id,
+        "owner_users": owner_users,
+        "territories": territories,
+        "currency_totals": currency_totals,
+        "currency": currency,
+        "health": health,
+        "health_choices": SALES_HEALTH_CHOICES,
+    }
+
+
+def _opportunity_pipeline_board_context(request):
+    ctx = _opportunity_pipeline_filter_context(request)
+    tenant = ctx["tenant"]
+    pipelines = ctx["pipelines"]
+    pipeline_id = ctx["pipeline_id"]
+    selected_pipeline = ctx["selected_pipeline"]
+    owner_id = ctx["owner_id"]
+    territory_id = ctx["territory_id"]
+    currency = ctx["currency"]
+    health = ctx["health"]
     as_of = timezone.now()
     placements = list(
         _opportunity_pipeline_filtered_placements(
@@ -572,34 +604,26 @@ def _opportunity_pipeline_board_context(request):
                     "opportunities": cards,
                 }
             )
-    return {
-        "pipelines": pipelines,
-        "selected_pipeline": selected_pipeline,
-        "columns": columns,
-        "unplaced_opportunities": _opportunity_pipeline_unplaced_opportunities(
-            tenant,
-            owner_id,
-            territory_id,
-            currency,
-        ),
-        "summary_rows": _opportunity_pipeline_summary_rows(
-            tenant,
-            pipelines,
-            owner_id,
-            territory_id,
-            currency,
-        ),
-        "currency_totals": currency_totals,
-        "health_counts": health_counts,
-        "owner_users": owner_users,
-        "territories": territories,
-        "health_choices": SALES_HEALTH_CHOICES,
-        "pipeline_id": pipeline_id,
-        "owner_id": owner_id,
-        "territory_id": territory_id,
-        "health": health,
-        "currency": currency,
-    }
+    ctx.update(
+        {
+            "columns": columns,
+            "unplaced_opportunities": _opportunity_pipeline_unplaced_opportunities(
+                tenant,
+                owner_id,
+                territory_id,
+                currency,
+            ),
+            "summary_rows": _opportunity_pipeline_summary_rows(
+                tenant,
+                pipelines,
+                owner_id,
+                territory_id,
+                currency,
+            ),
+            "health_counts": health_counts,
+        }
+    )
+    return ctx
 
 
 @login_required
@@ -613,13 +637,29 @@ def opportunity_pipeline_board(request):
 
 @login_required
 def opportunity_pipeline_visibility(request):
-    context = _opportunity_pipeline_board_context(request)
+    context = _opportunity_pipeline_filter_context(request)
+    tenant = context["tenant"]
     date_from = parse_date(request.GET.get("date_from", ""))
     date_to = parse_date(request.GET.get("date_to", ""))
+    placements = list(
+        _opportunity_pipeline_filtered_placements(
+            tenant,
+            context["selected_pipeline"],
+            context["owner_id"],
+            context["territory_id"],
+            context["currency"],
+        )
+    )
+    health_counts = sales_health_counts(
+        tenant,
+        [placement.opportunity for placement in placements],
+        placements,
+    )
     context.update(
         {
+            "health_counts": health_counts,
             "stage_age_rows": sales_stage_age_rows(
-                request.tenant,
+                tenant,
                 pipeline_id=context["pipeline_id"],
                 owner_id=context["owner_id"],
                 territory_id=context["territory_id"],
@@ -629,7 +669,7 @@ def opportunity_pipeline_visibility(request):
                 date_to=date_to,
             ),
             "win_loss_rows": sales_win_loss_rows(
-                request.tenant,
+                tenant,
                 pipeline_id=context["pipeline_id"],
                 owner_id=context["owner_id"],
                 territory_id=context["territory_id"],
@@ -638,7 +678,7 @@ def opportunity_pipeline_visibility(request):
                 date_to=date_to,
             ),
             "competitor_rows": sales_competitor_rows(
-                request.tenant,
+                tenant,
                 pipeline_id=context["pipeline_id"],
                 owner_id=context["owner_id"],
                 territory_id=context["territory_id"],
