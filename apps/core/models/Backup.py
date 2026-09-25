@@ -693,6 +693,21 @@ class RecoveryPosture(TenantConsistentMixin, models.Model):
     def has_targets(self):
         return self.rpo_target_minutes is not None or self.rto_target_minutes is not None
 
+    @property
+    def targets_partial(self):
+        """Exactly ONE of RPO/RTO is set — the state a green "Set" badge must not be earned by (M6).
+
+        A property rather than a view-local expression because `has_targets` is one too, and the two are
+        the same kind of derivation over the same two columns. The first version of M6's fix computed
+        this inline in `backup_overview`, which left the model saying "there are targets" and the view
+        saying "but only half of them" — the second copy of a rule that the codebase's own comments warn
+        will drift. Keeping both on the model means a page cannot disagree about what "Set" means.
+
+        Written as `!=` between the two null-ness tests so it is true for RPO-only AND RTO-only without
+        naming either, and false when both are set or neither is.
+        """
+        return (self.rpo_target_minutes is None) != (self.rto_target_minutes is None)
+
     @staticmethod
     def _minutes_display(value):
         if value is None:
