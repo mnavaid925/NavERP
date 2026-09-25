@@ -50,7 +50,7 @@
     <table class="table">
       <thead><tr><th>Order</th><th>Stage</th><th>Kind</th><th>Probability</th><th>Target days</th><th>Entry guidance</th></tr></thead>
       <tbody>
-        {% for stage in stages %}<tr><td>{{ stage.sequence }}</td><td class="fw-600">{{ stage.name }}</td><td>{{ stage.get_stage_kind_display }}</td><td>{{ stage.probability }}%</td><td>{% if stage.target_days is None %}—{% else %}{{ stage.target_days }}{% endif %}</td><td>{{ stage.entry_guidance|default:"—" }}</td></tr>{% endfor %}
+        {% for stage in stages %}<tr><td>{{ stage.sequence }}</td><td class="fw-600">{{ stage.name }}</td><td>{{ stage.get_stage_kind_display }}</td><td>{{ stage.probability }}%</td><td>{% if stage.target_days is None %}—{% else %}{{ stage.target_days }} days{% endif %}</td><td>{{ stage.entry_guidance|default:"—" }}</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>
