@@ -1135,3 +1135,713 @@ def test_leadmanagement_contract_contexts():
     for view_name, expected_keys in LEADMANAGEMENT_VIEW_CONTEXT_KEYS.items():
         view = getattr(sales_views, view_name)
         assert _leadmanagement_view_context_keys(view) == expected_keys, view_name
+
+
+def _contactaccountmanagement_tenant_id(tenant):
+    return getattr(tenant, "pk", tenant)
+
+
+def _contactaccountmanagement_assert_same_tenant(tenant, **relations):
+    tenant_id = _contactaccountmanagement_tenant_id(tenant)
+    for name, record in relations.items():
+        if record is not None:
+            assert record.tenant_id == tenant_id, f"{name} must belong to the requested tenant"
+
+
+def _contactaccountmanagement_user(tenant, key, *, is_tenant_admin=False, **overrides):
+    from apps.accounts.models import User
+
+    fields = {
+        "email": f"{key}@{tenant.slug}.example",
+        "username": f"{key}_{tenant.slug}",
+        "password": "TestPass123!",
+        "tenant": tenant,
+        "is_tenant_admin": is_tenant_admin,
+    }
+    fields.update(overrides)
+    fields["tenant"] = tenant
+    return User.objects.create_user(**fields)
+
+
+def _contactaccountmanagement_party(tenant, kind, name, **overrides):
+    from apps.core.models import Party
+
+    fields = {
+        "tenant": tenant,
+        "kind": kind,
+        "name": name,
+    }
+    fields.update(overrides)
+    fields["tenant"] = tenant
+    fields["kind"] = kind
+    party = Party(**fields)
+    party.full_clean()
+    party.save()
+    return party
+
+
+def _contactaccountmanagement_organization_party(tenant, *, name=None, **overrides):
+    return _contactaccountmanagement_party(
+        tenant,
+        "organization",
+        name or f"{tenant.name} Canonical Organization",
+        **overrides,
+    )
+
+
+def _contactaccountmanagement_person_party(tenant, *, name=None, **overrides):
+    return _contactaccountmanagement_party(
+        tenant,
+        "person",
+        name or f"{tenant.name} Canonical Person",
+        **overrides,
+    )
+
+
+def _contactaccountmanagement_account_profile(tenant, party, *, parent=None, owner=None, **overrides):
+    from apps.crm.models import AccountProfile
+
+    parent_value = parent if parent is not None else overrides.get("parent_account")
+    owner_value = owner if owner is not None else overrides.get("owner")
+    _contactaccountmanagement_assert_same_tenant(
+        tenant,
+        party=party,
+        parent_account=parent_value,
+        owner=owner_value,
+    )
+    assert party.kind == "organization"
+    if parent_value is not None:
+        assert parent_value.kind == "organization"
+    fields = {
+        "tenant": tenant,
+        "party": party,
+        "industry": "technology",
+        "website": f"https://{tenant.slug}.example",
+        "annual_revenue": Decimal("5000000.00"),
+        "employee_count": 125,
+        "owner": owner_value,
+        "description": f"Deterministic CRM account profile for {tenant.name}.",
+    }
+    fields.update(overrides)
+    fields.update({
+        "tenant": tenant,
+        "party": party,
+        "parent_account": parent_value,
+        "owner": owner_value,
+    })
+    profile = AccountProfile(**fields)
+    profile.full_clean()
+    profile.save()
+    return profile
+
+
+def _contactaccountmanagement_contact_profile(tenant, party, *, account=None, owner=None, **overrides):
+    from apps.crm.models import ContactProfile
+
+    account_value = account if account is not None else overrides.get("account")
+    owner_value = owner if owner is not None else overrides.get("owner")
+    _contactaccountmanagement_assert_same_tenant(
+        tenant,
+        party=party,
+        account=account_value,
+        owner=owner_value,
+    )
+    assert party.kind == "person"
+    if account_value is not None:
+        assert account_value.kind == "organization"
+    fields = {
+        "tenant": tenant,
+        "party": party,
+        "job_title": "Operations Director",
+        "department": "Operations",
+        "email": f"contact@{tenant.slug}.example",
+        "phone": "+1-555-0100",
+        "mobile": "+1-555-0101",
+        "account": account_value,
+        "linkedin": f"https://www.linkedin.com/in/{tenant.slug}-contact",
+        "owner": owner_value,
+        "description": f"Deterministic CRM contact profile for {tenant.name}.",
+        "source": "web",
+    }
+    fields.update(overrides)
+    fields.update({
+        "tenant": tenant,
+        "party": party,
+        "account": account_value,
+        "owner": owner_value,
+    })
+    profile = ContactProfile(**fields)
+    profile.full_clean()
+    profile.save()
+    return profile
+
+
+def _contactaccountmanagement_consent_purpose(tenant, *, code="contact-enrichment", name=None, **overrides):
+    from apps.core.models import ConsentPurpose
+
+    fields = {
+        "tenant": tenant,
+        "name": name or f"{tenant.name} contact enrichment",
+        "code": code,
+        "lawful_basis": "consent",
+        "is_optional": True,
+        "description": "Deterministic lawful-basis purpose for contact enrichment tests.",
+        "is_active": True,
+    }
+    fields.update(overrides)
+    fields["tenant"] = tenant
+    purpose = ConsentPurpose(**fields)
+    purpose.full_clean()
+    purpose.save()
+    return purpose
+
+
+def _contactaccountmanagement_reports_to(tenant, contact, manager, **overrides):
+    from apps.core.models import PartyRelationship
+
+    _contactaccountmanagement_assert_same_tenant(tenant, contact=contact, manager=manager)
+    assert contact.kind == "person"
+    assert manager.kind == "person"
+    assert contact.pk != manager.pk
+    fields = {
+        "tenant": tenant,
+        "from_party": contact,
+        "to_party": manager,
+        "kind": "reports_to",
+    }
+    fields.update(overrides)
+    fields.update({
+        "tenant": tenant,
+        "from_party": contact,
+        "to_party": manager,
+        "kind": "reports_to",
+    })
+    relationship = PartyRelationship(**fields)
+    relationship.full_clean()
+    relationship.save()
+    return relationship
+
+
+def _contactaccountmanagement_stakeholder(tenant, account, contact, *, role="decision_maker", **overrides):
+    from datetime import timedelta
+
+    from apps.sales.models import AccountStakeholder
+
+    _contactaccountmanagement_assert_same_tenant(tenant, account=account, contact=contact)
+    assert account.kind == "organization"
+    assert contact.kind == "person"
+    assert account.pk != contact.pk
+    fields = {
+        "tenant": tenant,
+        "account": account,
+        "contact": contact,
+        "role": role,
+        "influence": "high",
+        "attitude": "positive",
+        "relationship_strength": "strong",
+        "status": "active",
+        "valid_from": timezone.localdate() - timedelta(days=30),
+        "valid_to": None,
+        "notes": "Deterministic buying-center stakeholder for Contact & Account Management tests.",
+    }
+    fields.update(overrides)
+    fields.update({
+        "tenant": tenant,
+        "account": account,
+        "contact": contact,
+    })
+    stakeholder = AccountStakeholder(**fields)
+    stakeholder.full_clean()
+    stakeholder.save()
+    return stakeholder
+
+
+def _contactaccountmanagement_classification(tenant, account, classified_by=None, **overrides):
+    from datetime import timedelta
+
+    from apps.sales.models import AccountClassification
+
+    classified_by_value = classified_by if classified_by is not None else overrides.get("classified_by")
+    _contactaccountmanagement_assert_same_tenant(tenant, account=account, classified_by=classified_by_value)
+    assert account.kind == "organization"
+    today = timezone.localdate()
+    fields = {
+        "tenant": tenant,
+        "account": account,
+        "tier": "strategic",
+        "lifecycle_stage": "prospect",
+        "strategic_priority": "high",
+        "revenue_potential": "high",
+        "wallet_category": "large",
+        "rationale": "Deterministic strategic account classification for coverage tests.",
+        "effective_on": today,
+        "review_due_on": today + timedelta(days=90),
+        "classified_by": classified_by_value,
+    }
+    fields.update(overrides)
+    fields.update({
+        "tenant": tenant,
+        "account": account,
+        "classified_by": classified_by_value,
+    })
+    classification = AccountClassification(**fields)
+    classification.full_clean()
+    classification.save()
+    return classification
+
+
+def _contactaccountmanagement_plan(tenant, account, owner, *, opportunities=(), **overrides):
+    from datetime import timedelta
+
+    from apps.sales.models import AccountPlan
+
+    _contactaccountmanagement_assert_same_tenant(tenant, account=account, owner=owner)
+    assert account.kind == "organization"
+    opportunity_values = tuple(opportunities or ())
+    for opportunity in opportunity_values:
+        _contactaccountmanagement_assert_same_tenant(tenant, opportunity=opportunity)
+        assert opportunity.account_id == account.pk
+    today = timezone.localdate()
+    fields = {
+        "tenant": tenant,
+        "account": account,
+        "title": f"{tenant.name} Account Growth Plan",
+        "period_start": today,
+        "period_end": today + timedelta(days=90),
+        "status": "draft",
+        "owner": owner,
+        "business_drivers": "Deterministic account business drivers.",
+        "objectives": "Deterministic measurable account objectives.",
+        "strategy": "Deterministic account strategy.",
+        "strengths": "Deterministic account strengths.",
+        "weaknesses": "Deterministic account weaknesses.",
+        "opportunities": "Deterministic account opportunities.",
+        "threats": "Deterministic account threats.",
+        "white_space_assessment": "Product mapping is intentionally unavailable in this fixture.",
+        "growth_initiatives": "Deterministic growth initiatives.",
+        "risk_summary": "Deterministic account risk summary.",
+        "next_review_on": today + timedelta(days=30),
+    }
+    fields.update(overrides)
+    fields.update({
+        "tenant": tenant,
+        "account": account,
+        "owner": owner,
+    })
+    plan = AccountPlan(**fields)
+    plan.save()
+    if opportunity_values:
+        plan.related_opportunities.set(opportunity_values)
+    return plan
+
+
+def _contactaccountmanagement_enrichment_event(
+    tenant,
+    party,
+    requested_by,
+    *,
+    legal_basis_purpose=None,
+    **overrides,
+):
+    from decimal import Decimal
+
+    from apps.sales.models import PartyEnrichmentEvent
+
+    purpose_value = legal_basis_purpose if legal_basis_purpose is not None else overrides.get("legal_basis_purpose")
+    _contactaccountmanagement_assert_same_tenant(
+        tenant,
+        party=party,
+        requested_by=requested_by,
+        legal_basis_purpose=purpose_value,
+    )
+    if party.kind == "organization":
+        default_changes = {"industry": {"value": "energy", "confidence": 0.95}}
+        default_kind = "firmographic"
+    else:
+        default_changes = {"job_title": {"value": "VP Operations", "confidence": 0.95}}
+        default_kind = "contact"
+    fields = {
+        "tenant": tenant,
+        "party": party,
+        "kind": default_kind,
+        "source_kind": "manual",
+        "source_name": "Manual review",
+        "source_reference": "contactaccountmanagement:manual",
+        "status": "proposed",
+        "match_confidence": Decimal("0.9500"),
+        "changes": default_changes,
+        "legal_basis_purpose": purpose_value,
+        "requested_by": requested_by,
+        "occurred_at": timezone.now(),
+    }
+    fields.update(overrides)
+    fields.update({
+        "tenant": tenant,
+        "party": party,
+        "requested_by": requested_by,
+        "legal_basis_purpose": purpose_value,
+    })
+    event = PartyEnrichmentEvent(**fields)
+    event.full_clean()
+    event.save()
+    return event
+
+
+@pytest.fixture
+def contactaccountmanagement_tenant_a(tenant_a):
+    return tenant_a
+
+
+@pytest.fixture
+def contactaccountmanagement_tenant_b(tenant_b):
+    return tenant_b
+
+
+@pytest.fixture
+def contactaccountmanagement_admin_a(admin_user):
+    return admin_user
+
+
+@pytest.fixture
+def contactaccountmanagement_admin_b(admin_b):
+    return admin_b
+
+
+@pytest.fixture
+def contactaccountmanagement_member_a(member_user):
+    return member_user
+
+
+@pytest.fixture
+def contactaccountmanagement_member_b(db, contactaccountmanagement_tenant_b):
+    return _contactaccountmanagement_user(contactaccountmanagement_tenant_b, "member")
+
+
+@pytest.fixture
+def contactaccountmanagement_admin_client_a(client_a):
+    return client_a
+
+
+@pytest.fixture
+def contactaccountmanagement_admin_client_b(client_b):
+    return client_b
+
+
+@pytest.fixture
+def contactaccountmanagement_member_client_a(member_client):
+    return member_client
+
+
+@pytest.fixture
+def contactaccountmanagement_member_client_b(db, contactaccountmanagement_member_b):
+    client = Client()
+    client.force_login(contactaccountmanagement_member_b)
+    return client
+
+
+@pytest.fixture
+def contactaccountmanagement_account_a(db, contactaccountmanagement_tenant_a):
+    return _contactaccountmanagement_organization_party(
+        contactaccountmanagement_tenant_a,
+        name="Acme Canonical Organization",
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_account_b(db, contactaccountmanagement_tenant_b):
+    return _contactaccountmanagement_organization_party(
+        contactaccountmanagement_tenant_b,
+        name="Globex Canonical Organization",
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_account_child_a(db, contactaccountmanagement_tenant_a):
+    return _contactaccountmanagement_organization_party(
+        contactaccountmanagement_tenant_a,
+        name="Acme Child Organization",
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_account_child_b(db, contactaccountmanagement_tenant_b):
+    return _contactaccountmanagement_organization_party(
+        contactaccountmanagement_tenant_b,
+        name="Globex Child Organization",
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_contact_a(db, contactaccountmanagement_tenant_a):
+    return _contactaccountmanagement_person_party(
+        contactaccountmanagement_tenant_a,
+        name="Acme Primary Contact",
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_contact_b(db, contactaccountmanagement_tenant_b):
+    return _contactaccountmanagement_person_party(
+        contactaccountmanagement_tenant_b,
+        name="Globex Primary Contact",
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_manager_a(db, contactaccountmanagement_tenant_a):
+    return _contactaccountmanagement_person_party(
+        contactaccountmanagement_tenant_a,
+        name="Acme Contact Manager",
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_manager_b(db, contactaccountmanagement_tenant_b):
+    return _contactaccountmanagement_person_party(
+        contactaccountmanagement_tenant_b,
+        name="Globex Contact Manager",
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_account_profile_a(
+    db,
+    contactaccountmanagement_tenant_a,
+    contactaccountmanagement_account_a,
+    contactaccountmanagement_admin_a,
+):
+    return _contactaccountmanagement_account_profile(
+        contactaccountmanagement_tenant_a,
+        contactaccountmanagement_account_a,
+        owner=contactaccountmanagement_admin_a,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_account_profile_b(
+    db,
+    contactaccountmanagement_tenant_b,
+    contactaccountmanagement_account_b,
+    contactaccountmanagement_admin_b,
+):
+    return _contactaccountmanagement_account_profile(
+        contactaccountmanagement_tenant_b,
+        contactaccountmanagement_account_b,
+        owner=contactaccountmanagement_admin_b,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_account_child_profile_a(
+    db,
+    contactaccountmanagement_tenant_a,
+    contactaccountmanagement_account_child_a,
+    contactaccountmanagement_account_profile_a,
+    contactaccountmanagement_admin_a,
+):
+    return _contactaccountmanagement_account_profile(
+        contactaccountmanagement_tenant_a,
+        contactaccountmanagement_account_child_a,
+        parent=contactaccountmanagement_account_profile_a.party,
+        owner=contactaccountmanagement_admin_a,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_account_child_profile_b(
+    db,
+    contactaccountmanagement_tenant_b,
+    contactaccountmanagement_account_child_b,
+    contactaccountmanagement_account_profile_b,
+    contactaccountmanagement_admin_b,
+):
+    return _contactaccountmanagement_account_profile(
+        contactaccountmanagement_tenant_b,
+        contactaccountmanagement_account_child_b,
+        parent=contactaccountmanagement_account_profile_b.party,
+        owner=contactaccountmanagement_admin_b,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_contact_profile_a(
+    db,
+    contactaccountmanagement_tenant_a,
+    contactaccountmanagement_contact_a,
+    contactaccountmanagement_account_a,
+    contactaccountmanagement_admin_a,
+):
+    return _contactaccountmanagement_contact_profile(
+        contactaccountmanagement_tenant_a,
+        contactaccountmanagement_contact_a,
+        account=contactaccountmanagement_account_a,
+        owner=contactaccountmanagement_admin_a,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_contact_profile_b(
+    db,
+    contactaccountmanagement_tenant_b,
+    contactaccountmanagement_contact_b,
+    contactaccountmanagement_account_b,
+    contactaccountmanagement_admin_b,
+):
+    return _contactaccountmanagement_contact_profile(
+        contactaccountmanagement_tenant_b,
+        contactaccountmanagement_contact_b,
+        account=contactaccountmanagement_account_b,
+        owner=contactaccountmanagement_admin_b,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_consent_purpose_a(db, contactaccountmanagement_tenant_a):
+    return _contactaccountmanagement_consent_purpose(contactaccountmanagement_tenant_a)
+
+
+@pytest.fixture
+def contactaccountmanagement_consent_purpose_b(db, contactaccountmanagement_tenant_b):
+    return _contactaccountmanagement_consent_purpose(contactaccountmanagement_tenant_b)
+
+
+@pytest.fixture
+def contactaccountmanagement_stakeholder_a(
+    db,
+    contactaccountmanagement_tenant_a,
+    contactaccountmanagement_account_a,
+    contactaccountmanagement_contact_a,
+):
+    return _contactaccountmanagement_stakeholder(
+        contactaccountmanagement_tenant_a,
+        contactaccountmanagement_account_a,
+        contactaccountmanagement_contact_a,
+        role="decision_maker",
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_stakeholder_b(
+    db,
+    contactaccountmanagement_tenant_b,
+    contactaccountmanagement_account_b,
+    contactaccountmanagement_contact_b,
+):
+    return _contactaccountmanagement_stakeholder(
+        contactaccountmanagement_tenant_b,
+        contactaccountmanagement_account_b,
+        contactaccountmanagement_contact_b,
+        role="champion",
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_classification_a(
+    db,
+    contactaccountmanagement_tenant_a,
+    contactaccountmanagement_account_a,
+    contactaccountmanagement_admin_a,
+):
+    return _contactaccountmanagement_classification(
+        contactaccountmanagement_tenant_a,
+        contactaccountmanagement_account_a,
+        classified_by=contactaccountmanagement_admin_a,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_classification_b(
+    db,
+    contactaccountmanagement_tenant_b,
+    contactaccountmanagement_account_b,
+    contactaccountmanagement_admin_b,
+):
+    return _contactaccountmanagement_classification(
+        contactaccountmanagement_tenant_b,
+        contactaccountmanagement_account_b,
+        classified_by=contactaccountmanagement_admin_b,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_plan_a(
+    db,
+    contactaccountmanagement_tenant_a,
+    contactaccountmanagement_account_a,
+    contactaccountmanagement_admin_a,
+):
+    return _contactaccountmanagement_plan(
+        contactaccountmanagement_tenant_a,
+        contactaccountmanagement_account_a,
+        contactaccountmanagement_admin_a,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_plan_b(
+    db,
+    contactaccountmanagement_tenant_b,
+    contactaccountmanagement_account_b,
+    contactaccountmanagement_admin_b,
+):
+    return _contactaccountmanagement_plan(
+        contactaccountmanagement_tenant_b,
+        contactaccountmanagement_account_b,
+        contactaccountmanagement_admin_b,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_enrichment_event_a(
+    db,
+    contactaccountmanagement_tenant_a,
+    contactaccountmanagement_account_a,
+    contactaccountmanagement_admin_a,
+):
+    return _contactaccountmanagement_enrichment_event(
+        contactaccountmanagement_tenant_a,
+        contactaccountmanagement_account_a,
+        contactaccountmanagement_admin_a,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_enrichment_event_b(
+    db,
+    contactaccountmanagement_tenant_b,
+    contactaccountmanagement_account_b,
+    contactaccountmanagement_admin_b,
+):
+    return _contactaccountmanagement_enrichment_event(
+        contactaccountmanagement_tenant_b,
+        contactaccountmanagement_account_b,
+        contactaccountmanagement_admin_b,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_reports_to_a(
+    db,
+    contactaccountmanagement_tenant_a,
+    contactaccountmanagement_contact_a,
+    contactaccountmanagement_manager_a,
+):
+    return _contactaccountmanagement_reports_to(
+        contactaccountmanagement_tenant_a,
+        contactaccountmanagement_contact_a,
+        contactaccountmanagement_manager_a,
+    )
+
+
+@pytest.fixture
+def contactaccountmanagement_reports_to_b(
+    db,
+    contactaccountmanagement_tenant_b,
+    contactaccountmanagement_contact_b,
+    contactaccountmanagement_manager_b,
+):
+    return _contactaccountmanagement_reports_to(
+        contactaccountmanagement_tenant_b,
+        contactaccountmanagement_contact_b,
+        contactaccountmanagement_manager_b,
+    )
