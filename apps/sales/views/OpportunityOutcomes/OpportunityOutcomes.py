@@ -232,8 +232,8 @@ def opportunity_win_loss_reason_delete(request, pk):
 def _opportunity_transition_form_error(form):
     errors = list(form.non_field_errors())
     if not errors:
-        for field in form.fields.values():
-            errors.extend(field.errors)
+        for error_list in form.errors.values():
+            errors.extend(error_list)
     if not errors:
         return "Choose a valid pipeline transition."
     return " ".join(str(error) for error in errors)[:300]
