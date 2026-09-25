@@ -51,7 +51,7 @@
           {% endif %}
         </tr>
         {% empty %}
-        <tr><td colspan="9"><div class="empty-state"><i data-lucide="list-ordered"></i><h3>No stages</h3><p>Add the first stage to configure this pipeline.</p></div></td></tr>
+        <tr><td colspan="{% if request.user.is_superuser or request.user.is_tenant_admin %}9{% else %}8{% endif %}"><div class="empty-state"><i data-lucide="list-ordered"></i><h3>No stages</h3><p>Add the first stage to configure this pipeline.</p></div></td></tr>
         {% endfor %}
       </tbody>
     </table>
