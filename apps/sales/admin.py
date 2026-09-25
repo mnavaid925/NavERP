@@ -1,12 +1,15 @@
 from django.contrib import admin
 
 from .models import (
+    AccountClassification,
+    AccountPlan,
+    AccountStakeholder,
     LeadNurtureEnrollment,
     LeadQualification,
     LeadRoutingRule,
     LeadScoreEvent,
+    PartyEnrichmentEvent,
 )
-
 
 
 @admin.register(LeadScoreEvent)
@@ -89,3 +92,104 @@ class LeadNurtureEnrollmentAdmin(admin.ModelAdmin):
         if obj is not None and obj.status != "pending":
             fields.extend(self.identity_fields)
         return tuple(dict.fromkeys(fields))
+
+
+@admin.register(PartyEnrichmentEvent)
+class PartyEnrichmentEventAdmin(admin.ModelAdmin):
+    list_display = ("party", "kind", "source_kind", "status", "occurred_at", "requested_by", "tenant")
+    list_filter = ("kind", "source_kind", "status", "tenant")
+    search_fields = ("party__name", "source_name", "source_reference", "error_code", "error_summary")
+    readonly_fields = ("tenant", "party", "kind", "source_kind", "source_name", "source_reference", "status", "match_confidence", "changes", "legal_basis_purpose", "requested_by", "reviewed_by", "occurred_at", "applied_at", "idempotency_key", "error_code", "error_summary", "created_at")
+    list_select_related = ("party", "legal_basis_purpose", "requested_by", "reviewed_by")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(AccountStakeholder)
+class AccountStakeholderAdmin(admin.ModelAdmin):
+    list_display = ("account", "contact", "role", "influence", "attitude", "status", "tenant")
+    list_filter = ("role", "influence", "attitude", "relationship_strength", "status", "tenant")
+    search_fields = ("account__name", "contact__name", "notes")
+    list_select_related = ("account", "contact")
+    raw_id_fields = ("account", "contact")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if request.tenant is not None and db_field.name in {"account", "contact"}:
+            kind = "organization" if db_field.name == "account" else "person"
+            ids = list(db_field.remote_field.model._default_manager.filter(
+                tenant=request.tenant, kind=kind
+            ).order_by("name").values_list("pk", flat=True)[:500])
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(pk__in=ids)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(AccountClassification)
+class AccountClassificationAdmin(admin.ModelAdmin):
+    list_display = ("account", "tier", "lifecycle_stage", "strategic_priority", "review_due_on", "classified_by", "tenant")
+    list_filter = ("tier", "lifecycle_stage", "strategic_priority", "revenue_potential", "wallet_category", "tenant")
+    search_fields = ("account__name", "rationale")
+    readonly_fields = ("tenant", "classified_by", "created_at", "updated_at")
+    list_select_related = ("account", "classified_by")
+    raw_id_fields = ("account",)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if request.tenant is not None and db_field.name == "account":
+            ids = list(db_field.remote_field.model._default_manager.filter(
+                tenant=request.tenant, kind="organization"
+            ).order_by("name").values_list("pk", flat=True)[:500])
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(pk__in=ids)
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(AccountPlan)
+class AccountPlanAdmin(admin.ModelAdmin):
+    list_display = ("number", "account", "title", "status", "owner", "period_end", "next_review_on", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "account__name", "title", "objectives", "strategy")
+    readonly_fields = ("tenant", "number", "status", "created_at", "updated_at")
+    list_select_related = ("account", "owner")
+    raw_id_fields = ("account",)
+    filter_horizontal = ("related_opportunities",)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if request.tenant is not None and db_field.name == "account":
+            ids = list(db_field.remote_field.model._default_manager.filter(
+                tenant=request.tenant, kind="organization"
+            ).order_by("name").values_list("pk", flat=True)[:500])
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(pk__in=ids)
+
+        if request.tenant is not None and db_field.name == "owner":
+            ids = list(db_field.remote_field.model._default_manager.filter(
+                tenant=request.tenant, is_active=True
+            ).order_by("username").values_list("pk", flat=True)[:500])
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(pk__in=ids)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
+        if tenant is not None and db_field.name == "related_opportunities":
+            queryset = db_field.remote_field.model._default_manager.filter(tenant=tenant)
+            account_id = request.POST.get("account", "")
+            if not account_id and request.resolver_match:
+                object_id = request.resolver_match.kwargs.get("object_id")
+                if object_id and str(object_id).isdecimal():
+                    current = self.model.objects.filter(pk=object_id, tenant=tenant).only("account_id").first()
+                    account_id = str(current.account_id) if current is not None else ""
+            if account_id and account_id.isdecimal():
+                queryset = queryset.filter(account_id=account_id)
+            ids = list(queryset.order_by("-created_at").values_list("pk", flat=True)[:500])
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(pk__in=ids)
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.status != "draft":
+            return False
+        return super().has_delete_permission(request, obj)
