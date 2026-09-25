@@ -9932,11 +9932,11 @@ convention (`_`-prefixed inside the folder that includes them — cf.
 **Review result:** 7.19 closes Module 7 with reusable templates, real project-entity custom fields, auditable team membership, and locale profiles. Configuration writes are tenant-admin-only, core-owned custom-field values remain authoritative, and all reads/mutations stay tenant-scoped. The migration-enabled full-suite blocker is unrelated concurrent CRM schema drift (`crm_opportunity.currency_id`); the Projects suite is green without migrations.
 
 
-## Build Plan ??? Module 8 8.3 Contact & Account Management
+## Build Plan — Module 8 8.3 Contact & Account Management
 
 Source of truth: `.claude/tasks/research-sales-8.3.md`.
 Planned: 2026-09-24. This is the Phase 2 build plan only: it does not edit application code, shared configuration, navigation, README, research, or any other task file, and it is intentionally uncommitted.
-Scope lock: exactly the five NavERP.md ??8.3 bullets ??? Account Hierarchy & Parent-Child, Contact Profiles & Enrichment, Relationship Mapping, Account Segmentation & Tiering, and Account Plans & Growth Strategies.
+Scope lock: exactly the five NavERP.md §8.3 bullets — Account Hierarchy & Parent-Child, Contact Profiles & Enrichment, Relationship Mapping, Account Segmentation & Tiering, and Account Plans & Growth Strategies.
 App: existing `apps/sales`; extend it, do not scaffold a new app and do not change `INSTALLED_APPS` or the root `config/urls.py`.
 Package: `ContactAccountManagement/` in `apps/sales/{models,forms,views,urls}/`.
 Template root: `templates/sales/contactaccountmanagement/`.
@@ -9944,7 +9944,7 @@ Migration: the next free `sales` migration after the current `0003` leaf, assign
 Test subslug: `contactaccountmanagement`; test modules are `test_contactaccountmanagement_{models,forms,views,security}.py`.
 BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout is not a safe review range and no pre-existing file is ours to commit.
 
-### Scope and ownership ??? the 8.3 contract
+### Scope and ownership — the 8.3 contract
 
 - [ ] Build exactly four new tenant-scoped models: `PartyEnrichmentEvent`, `AccountStakeholder`, `AccountClassification`, and `AccountPlan`. Do not create a fifth model, a through-table, or a model-free feature disguised as a table.
 - [ ] Treat `core.Party` as the one canonical account/contact identity. Reuse `crm.AccountProfile` and `crm.ContactProfile` for firmographics and contact details; Sales pages link to `crm:account_detail` and `crm:contact_detail` for identity/profile edits and never offer parallel account/contact CRUD.
@@ -9961,9 +9961,9 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 - [ ] Hierarchy visibility is not authorization. Every Sales and CRM query remains tenant-scoped, and a parent-child tree must never grant access to a child, sibling, or descendant outside the actor's normal data scope.
 - [ ] Keep non-hierarchical affiliate/JV/supplier relations, dynamic segment-rule automation, exact product white-space, account merges, AI-generated plans, QBRs, onboarding, renewal, advocacy, and cross-account predictive analytics out of 8.3.
 
-### Model contract ??? exactly four new models
+### Model contract — exactly four new models
 
-#### 1. `PartyEnrichmentEvent` ??? append-only enrichment evidence
+#### 1. `PartyEnrichmentEvent` — append-only enrichment evidence
 
 - [ ] File: `apps/sales/models/ContactAccountManagement/PartyEnrichment.py`; inherit `TenantEventOwned`, not `TenantNumbered` and not a mutable document base. It has an immutable `created_at`, no ordinary `updated_at`, no number, no edit form, no delete form, and no direct admin write path.
 - [ ] Fields: `tenant -> core.Tenant`; `party -> core.Party`; `kind`; `source_kind`; `source_name`; `source_reference`; `status`; nullable `match_confidence` (`DecimalField(max_digits=5, decimal_places=4)`, validated `0..1`); `changes` (`JSONField`, default `dict`); nullable `legal_basis_purpose -> core.ConsentPurpose`; nullable `requested_by` and `reviewed_by -> AUTH_USER_MODEL`; `occurred_at`; nullable `applied_at`; nullable `idempotency_key`; `error_code`; sanitized `error_summary`; inherited `created_at`.
@@ -9976,7 +9976,7 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 - [ ] Lifecycle is a single audited service: request creates `proposed`; apply accepts selected allowlisted fields, updates `core.ContactMethod` and the appropriate CRM profile projection in one `transaction.atomic()` block, writes `core.AuditLog`, and stamps `applied`/`applied_at`; reject writes `rejected` and a required sanitized reason; no HTTP call, email send, automatic employment move, or silent profile overwrite is allowed.
 - [ ] Employment-change evidence is a review event only. It must not silently change `crm.ContactProfile.account`; a human follows the existing CRM identity workflow.
 
-#### 2. `AccountStakeholder` ??? account-specific buying-center relationship
+#### 2. `AccountStakeholder` — account-specific buying-center relationship
 
 - [ ] File: `apps/sales/models/ContactAccountManagement/AccountStakeholders.py`; inherit `TenantOwned`, with `created_at`/`updated_at`. It is an unnumbered relationship row, not a contact master.
 - [ ] Fields: `tenant`; `account -> core.Party` (required); `contact -> core.Party` (required); `role`; `influence`; `attitude`; `relationship_strength`; `status`; nullable `valid_from` and `valid_to`; `notes`.
@@ -9986,7 +9986,7 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 - [ ] Enforce unique `(tenant, account, contact, role)` and indexes on `(tenant, account, status)`, `(tenant, contact, status)`, and `(tenant, role, attitude)`. A contact may hold several roles at one account and different roles at different accounts.
 - [ ] `crm.ContactProfile.account` remains the primary affiliation. `core.PartyRelationship(kind='reports_to')` remains the reporting graph. Do not project stakeholder rows into either table, add a `primary` flag, or make relationship strength an automatically calculated number.
 
-#### 3. `AccountClassification` ??? one current human-governed segmentation row
+#### 3. `AccountClassification` — one current human-governed segmentation row
 
 - [ ] File: `apps/sales/models/ContactAccountManagement/AccountClassifications.py`; inherit `TenantOwned`, with no auto-number. `account` is a tenant-scoped `OneToOneField('core.Party')` to a same-tenant organization, so there is one current classification per account.
 - [ ] Fields: `tenant`; `account`; `tier`; `lifecycle_stage`; `strategic_priority`; `revenue_potential`; `wallet_category`; `rationale`; `effective_on`; nullable `review_due_on`; nullable `classified_by -> AUTH_USER_MODEL`; inherited timestamps.
@@ -9997,7 +9997,7 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 - [ ] Enforce indexes on `(tenant, tier, lifecycle_stage)` and `(tenant, strategic_priority, review_due_on)`, plus a unique account constraint. Add no `annual_revenue`, invoice total, opportunity amount, pipeline weight, health score, or hierarchy-rollup column; all such facts are read from their canonical owners.
 - [ ] Classification is human intent, not a dynamic rule engine. Hierarchy segmentation is a derived view and never overwrites a child row automatically.
 
-#### 4. `AccountPlan` [ACPL-] ??? time-bounded strategic growth plan
+#### 4. `AccountPlan` [ACPL-] — time-bounded strategic growth plan
 
 - [ ] File: `apps/sales/models/ContactAccountManagement/AccountPlans.py`; inherit `TenantNumbered`, set `NUMBER_PREFIX = 'ACPL'`, and use the existing Sales numbering service. `account` is a required same-tenant organization; `owner` is a required same-tenant active user and is distinct from `crm.AccountProfile.owner`.
 - [ ] Fields: `tenant`; inherited `number`; `account -> core.Party`; `title`; `period_start`; `period_end`; `status`; `owner -> AUTH_USER_MODEL`; `business_drivers`; `objectives`; `strategy`; `strengths`; `weaknesses`; `opportunities`; `threats`; `white_space_assessment`; `growth_initiatives`; `risk_summary`; nullable `next_review_on`; inherited timestamps; `related_opportunities -> ManyToManyField('crm.Opportunity')`.
@@ -10063,7 +10063,7 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 
 - [ ] `account_classification_list`, `_create`, `_detail`, `_edit`, and `_delete` use the tenant-scoped one-current-row model. Create is an upsert/redirect when the account already has a classification; edit and delete are POST/tenant-admin audited as appropriate. No historical classification model is introduced.
 - [ ] Filters: `q` over Party name and `rationale`; `account`; `tier`; `lifecycle_stage`; `strategic_priority`; `revenue_potential`; `wallet_category`; and `review_due` (`overdue`, `due_soon`, `scheduled`). List context is exactly `object_list`, `page_obj`, `q`, `accounts`, `tier_choices`, `lifecycle_stage_choices`, `strategic_priority_choices`, `revenue_potential_choices`, `wallet_category_choices`, `account_id`, `tier`, `lifecycle_stage`, `strategic_priority`, `revenue_potential`, `wallet_category`, `review_due`, `stats`, and `export_url`.
-- [ ] Detail context is exactly `obj`, `account`, `health`, `health_history`, `hierarchy_position`, `opportunity_rollups`, `invoice_rollups`, `order_rollups`, and `can_edit`. `health` is a read-only CRM object or `None`; missing health is ???Not available,??? never a fabricated zero. Form context is `form`, `is_edit`, `obj` on edit, and `accounts`.
+- [ ] Detail context is exactly `obj`, `account`, `health`, `health_history`, `hierarchy_position`, `opportunity_rollups`, `invoice_rollups`, `order_rollups`, and `can_edit`. `health` is a read-only CRM object or `None`; missing health is “Not available,” never a fabricated zero. Form context is `form`, `is_edit`, `obj` on edit, and `accounts`.
 - [ ] List exports use the exact active filters, a bounded row count, `csv_safe`, and a readable review/rationale column; they do not export `annual_revenue` as realized revenue or expose cross-tenant rows.
 
 #### `AccountPlans.py`
@@ -10074,7 +10074,7 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 - [ ] POST-only verbs are `account_plan_activate`, `account_plan_review_due`, `account_plan_complete`, and `account_plan_archive`; each re-checks tenant, owner/actor policy, current state, and audit evidence, and returns a friendly redirect on a disallowed transition. No verb writes accounting, CRM health, inventory, or task counters.
 - [ ] `account_plan_export` is tenant-scoped CSV, uses the active list filters, caps rows, escapes spreadsheet-formula prefixes, and exports plan status/period/owner plus linked opportunity references without copying commercial totals into the plan.
 
-#### `AccountBoards.py` ??? model-free computed pages
+#### `AccountBoards.py` — model-free computed pages
 
 - [ ] `account_hierarchy` (`GET accounts/hierarchy/`) accepts `q`, `view_mode` (`tree`, `roots`, `leaves`, `parent`, `descendants`), `root`, and `parent`; integer IDs are validated. Context is exactly `accounts`, `account_rows`, `roots`, `selected_account`, `view_mode`, `view_mode_choices`, `q`, `root_id`, `parent_id`, `rollup_rows`, `stats`, `currency_rollups`, and `caveats`. It must show the cycle/unavailable state and never infer permissions from the tree.
 - [ ] `account_workspace` (`GET accounts/workspace/`) accepts a validated `account` query parameter. Context is exactly `account`, `profile`, `classification`, `stakeholders`, `primary_contacts`, `plans`, `opportunities`, `orders`, `invoices`, `health`, `health_history`, `activities`, `tasks`, `documents`, `coverage`, `interaction_recency`, `currency_rollups`, `opportunity_rollups`, `realized_rollups`, `enrichment_events`, `white_space_note`, and `caveats`. It links to CRM identity/profile pages and exposes anchors for the enrichment and stakeholder sections.
@@ -10111,7 +10111,7 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 - [ ] Harden the existing CRM `AccountProfile` admin/model/form/view write paths for parent cycle, tenant, and organization-kind validation. The 8.3 admin must never bypass that guard by editing a Party directly.
 - [ ] Implement the five list/workspace CSV export endpoints named above. Every export resolves from the same tenant-scoped queryset as its page, validates GET parameters before filtering, applies the existing bounded export convention, uses `csv_safe` for formula-injection defense, and records an audit event without sensitive payload data.
 - [ ] Add one `LIVE_LINKS['8.3']` block in `apps/core/navigation.py` at Integrate, with keys exactly matching the five NavERP.md bullet labels: `Account Hierarchy & Parent-Child` -> `sales:account_hierarchy`; `Contact Profiles & Enrichment` -> `sales:account_workspace#enrichment`; `Relationship Mapping` -> `sales:account_coverage`; `Account Segmentation & Tiering` -> `sales:account_classification_list`; `Account Plans & Growth Strategies` -> `sales:account_plan_list`. Add staff extras for `Account Workspace`, `Enrichment Review Queue`, `Stakeholder Register`, `Account Classification`, `Coverage Matrix`, `Account Plans`, and `White-Space Board`, all reversing successfully.
-- [ ] Keep the sidebar destinations staff-reachable: no login-gated customer/partner portal, no unregistered 8.2 route, no bare ???Soon??? destination for a shipped bullet, and no duplicate bare URL where a meaningful anchor or board is available. Perform a human sidebar pass after wiring.
+- [ ] Keep the sidebar destinations staff-reachable: no login-gated customer/partner portal, no unregistered 8.2 route, no bare “Soon” destination for a shipped bullet, and no duplicate bare URL where a meaningful anchor or board is available. Perform a human sidebar pass after wiring.
 - [ ] Extend the existing `apps/sales/management/commands/seed_sales.py`; do not create a second Sales seed command. Add a per-tenant/per-model guard, existence checks before numbered/unique rows, `get_or_create` only where the constraint is verified, and a second-run no-op guarantee.
 - [ ] Reuse seeded `core.Party` organizations/persons, `crm.AccountProfile`/`ContactProfile`, `crm.HealthScore`/history, `crm.Opportunity`, existing `crm.CrmTask`, `scm.SalesOrder`, `accounting.Invoice`, `accounting.Currency`, users, and `core.ConsentPurpose`. Skip gracefully with a message when a prerequisite is absent; never fabricate a health score, order, invoice, product mapping, or provider response.
 - [ ] Seed a small representative hierarchy (root, child, grandchild) and one separate root; stakeholder rows covering every role and influence/attitude/strength value, including a contact affiliated with two accounts; classifications covering all tier/lifecycle combinations; plans covering every status and a real same-account opportunity link; and enrichment events covering proposed/applied/rejected/no_match/failed plus a lawful-basis-approved local/manual proposal. The second `seed_sales` run must create no duplicates and must not use `--flush` against a shared database.
@@ -10132,7 +10132,7 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 - [ ] Sweep cross-tenant IDOR with `admin_globex` IDs on all `<int:pk>` routes, action routes, exports, and board account selection. Verify tenantless `admin` sees empty lists and cannot use a crafted foreign Party ID.
 - [ ] Performance: `select_related` Party/profile/owner/opportunity/currency fields used in rows; `prefetch_related` bounded stakeholder/plan/activity/document collections; no per-row health/contact/opportunity queries; recursive hierarchy traversal is iterative, cycle-guarded, and bounded; currency rollups aggregate in bounded queries; pagination happens before expensive workspace decoration; export queries reuse the list filter service and cap rows. Use `assertNumQueries`/`CaptureQueriesContext` for list, workspace, coverage, and export pages.
 - [ ] Run `venv\Scripts\python.exe temp\audit_integrity.py` after migrate/seed and record the result. Run the relevant CRM, core, accounting, and SCM regression lanes because 8.3 crosses all four ownership boundaries.
-- [ ] Final tests run on the project???s isolated SQLite test settings with migrations enabled. A configured MariaDB check is required where parent traversal, JSON, constraints, or aggregation behavior differs. Use `--nomigrations` only for fast iteration, never as the final proof.
+- [ ] Final tests run on the project’s isolated SQLite test settings with migrations enabled. A configured MariaDB check is required where parent traversal, JSON, constraints, or aggregation behavior differs. Use `--nomigrations` only for fast iteration, never as the final proof.
 
 ### Review, tests, and close-out
 
@@ -10142,31 +10142,31 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 - [ ] Phase 6 writes the test contract and shared `apps/sales/tests/__init__.py`/`conftest.py` helpers first, then one file at a time: `test_contactaccountmanagement_models.py`, `test_contactaccountmanagement_forms.py`, `test_contactaccountmanagement_views.py`, and `test_contactaccountmanagement_security.py`. Every test and module-level helper uses the `contactaccountmanagement`/`test_contactaccountmanagement_` namespace; do not shadow 8.1 or 8.2 helpers.
 - [ ] Test models for all exact choices, tenant/kind/cycle/period/unique/M2M invariants, idempotency, and state transitions; forms for field exclusions, JSON/allowlist/consent validation, cross-tenant choices, and owner/plan rules; views for every route, content/context contract, filters, pagination, exports, and state verbs; security for login, role gates, CSRF, GET rejection, cross-tenant IDOR, hierarchy non-authorization, spreadsheet injection, raw-payload suppression, and no-network guarantees.
 - [ ] Run the full unfiltered `apps/sales/tests` suite plus the relevant CRM/core/accounting/SCM regression lanes. Never use `-k` as the final gate; a filtered run can hide shared-file breakage.
-- [ ] Update `.claude/skills/sales/SKILL.md` (create it if 8.1???s new-app skill is not yet present, otherwise extend it) with the as-built 8.3 models, exact routes/context names, template map, `seed_sales` behavior, CRM parent-hierarchy hardening, canonical ownership table, consent/overwrite rules, currency-safe rollups, and the no-provider/no-8.2-dependency boundary.
+- [ ] Update `.claude/skills/sales/SKILL.md` (create it if 8.1’s new-app skill is not yet present, otherwise extend it) with the as-built 8.3 models, exact routes/context names, template map, `seed_sales` behavior, CRM parent-hierarchy hardening, canonical ownership table, consent/overwrite rules, currency-safe rollups, and the no-provider/no-8.2-dependency boundary.
 - [ ] Update `README.md` to mark Module 8.3 built without claiming deferred provider integrations, dynamic segments, QBRs, or exact product white-space. Reconcile the stale `NavERP-ERD.md` ownership rows for both CRM and Sales: CRM retains Party-linked AccountProfile/ContactProfile, Opportunity, and health; Sales 8.3 adds only the four records above and reads the rest by FK.
 - [ ] Add a close-out section in this file after the build, with migration name, route/template counts, seed/idempotency results, smoke/query/IDOR/security results, review finding totals, test totals, and any deliberately skipped items. A human sidebar pass must confirm all five bullets land on meaningful staff pages and no deferred bullet is accidentally presented as shipped.
-- [ ] Do not commit this Phase 2 append. Later build/review/fix/test/documentation phases follow the project???s one-file-per-commit rule and stop without `git push`.
+- [ ] Do not commit this Phase 2 append. Later build/review/fix/test/documentation phases follow the project’s one-file-per-commit rule and stop without `git push`.
 
 ### Known build gates and deferred scope
 
 - [ ] **Build gate:** the existing CRM parent write path must be cycle/tenant/kind hardened before hierarchy rollups or root/descendant claims are accepted. This is the only correctness blocker identified by the research for the model-free hierarchy surface.
-- [ ] **Dependency gate:** the 8.2 physical Sales source is not a runtime entity today. 8.3 proceeds against `crm.Opportunity`; do not add an FK or import until 8.2???s re-export, migration, URL, admin, and navigation integration is verified.
+- [ ] **Dependency gate:** the 8.2 physical Sales source is not a runtime entity today. 8.3 proceeds against `crm.Opportunity`; do not add an FK or import until 8.2’s re-export, migration, URL, admin, and navigation integration is verified.
 - [ ] **Data gate:** exact product white-space remains incomplete until `crm.Product` and `scm.Item` have a governed mapping. The page must show the gap and never turn it into a false zero.
 - [ ] **Integration gate:** provider enrichment, LinkedIn/Microsoft/email sync, scheduled or bulk refresh, dedup/merge, dynamic segments, affiliate/JV relation types, AI plan generation, QBRs, onboarding, renewal/advocacy, and hierarchy-derived authorization remain deferred to their owning modules or a governed later pass.
 - [ ] **No Phase 2 blocker for the plan itself:** the research, current `sales` app structure, `core.Party`/CRM profiles/health/opportunity, `scm.SalesOrder`, `accounting.Invoice`, and consent spine were verified. Application code, shared config, navigation, README, and other task files remain untouched in this turn; no commit was made.
 
-### 8.3 close-out ??? 2026-09-25
+### 8.3 close-out — 2026-09-25
 
 **Status: 8.3 Contact & Account Management is built and wired over the canonical CRM/core spine.** It adds exactly `PartyEnrichmentEvent`, `AccountStakeholder`, `AccountClassification`, and `AccountPlan`; CRM continues to own account/contact identity, hierarchy parent pointers, health, opportunities, and product context.
 
 - Migration: `apps/sales/migrations/0004_accountclassification_accountplan_accountstakeholder_and_more.py`; it creates the four 8.3 tables and the implicit plan-opportunity join only.
 - Backend: five URL/entity modules across `models`, `forms`, `views`, and `urls`, plus admin registrations, services, package re-exports, and `seed_sales` integration.
-- Frontend: 15 templates ??? enrichment list/detail, stakeholder/classification/plan CRUD triples, and hierarchy/workspace/coverage/white-space boards.
-- Review: six serial passes (code, exploration, frontend, performance, QA smoke, security); all C1???C5, I1???I14, and M1???M7 findings are marked fixed in `.claude/tasks/review-sales-8.3.md`.
+- Frontend: 15 templates — enrichment list/detail, stakeholder/classification/plan CRUD triples, and hierarchy/workspace/coverage/white-space boards.
+- Review: six serial passes (code, exploration, frontend, performance, QA smoke, security); all C1–C5, I1–I14, and M1–M7 findings are marked fixed in `.claude/tasks/review-sales-8.3.md`.
 - Verification: `manage.py check`, `makemigrations sales --check --dry-run`, 15-template loader check, two idempotent `seed_sales` runs, `SALES_83_SMOKE_OK`, 49 focused 8.3 tests, the full 333-test Sales suite, and focused CRM/core suites passed with isolated SQLite `--nomigrations`. Migration-enabled pytest could not complete in the shared checkout because concurrent CRM migration/model drift leaves long-running workers; no CRM migration was changed.
 - Security checks covered authentication, tenant-scoped IDOR, hierarchy cycles/kinds, owner/admin plan authorization, CSRF/POST-only actions, enrichment allowlist/redaction/replay, M2M scoping, and CSV formula neutralization.
 - Full-project migration checking remains blocked by unrelated concurrent CRM Opportunity schema drift; no CRM migration was changed.
-- Deliberately deferred: provider connectors/transport, LinkedIn or verification workers, dynamic segments, account merges, exact Product???Item white-space, AI plans, QBRs, onboarding, renewal, advocacy, and hierarchy-derived authorization.
+- Deliberately deferred: provider connectors/transport, LinkedIn or verification workers, dynamic segments, account merges, exact Product↔Item white-space, AI plans, QBRs, onboarding, renewal, advocacy, and hierarchy-derived authorization.
 
 ### 8.3 deferred scope
 
