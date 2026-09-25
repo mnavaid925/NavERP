@@ -107,6 +107,24 @@ class ContactMethodAdmin(admin.ModelAdmin):
 class PartyRelationshipAdmin(admin.ModelAdmin):
     list_display = ["from_party", "kind", "to_party", "tenant"]
     list_filter = ["kind", "tenant"]
+    list_select_related = ("from_party", "to_party", "tenant")
+
+    def get_queryset(self, request):
+        tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
+        queryset = super().get_queryset(request)
+        if tenant is None:
+            return queryset.none()
+        return queryset.filter(
+            tenant=tenant,
+            from_party__tenant=tenant,
+            to_party__tenant=tenant,
+        )
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
+        if tenant is not None and db_field.name in {"from_party", "to_party"}:
+            kwargs["queryset"] = Party.objects.filter(tenant=tenant)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(Employment)
