@@ -256,31 +256,35 @@ def sales_stage_age_rows(
     date_to=None,
     health=None,
     as_of=None,
+    placements=None,
 ):
     as_of = as_of or timezone.now()
     health = str(health or "").strip().lower()
     if health and health not in dict(SALES_HEALTH_CHOICES):
         health = ""
-    queryset = _sales_placement_queryset(
-        tenant,
-        pipeline_id=pipeline_id,
-        owner_id=owner_id,
-        territory_id=territory_id,
-        currency=currency,
-    ).select_related(
-        "pipeline",
-        "current_stage",
-        "opportunity",
-        "opportunity__owner",
-        "opportunity__territory",
-        "opportunity__account",
-        "opportunity__currency",
-    )
-    if date_from is not None:
-        queryset = queryset.filter(stage_entered_at__date__gte=date_from)
-    if date_to is not None:
-        queryset = queryset.filter(stage_entered_at__date__lte=date_to)
-    placement_list = list(queryset)
+    if placements is not None:
+        placement_list = list(placements)
+    else:
+        queryset = _sales_placement_queryset(
+            tenant,
+            pipeline_id=pipeline_id,
+            owner_id=owner_id,
+            territory_id=territory_id,
+            currency=currency,
+        ).select_related(
+            "pipeline",
+            "current_stage",
+            "opportunity",
+            "opportunity__owner",
+            "opportunity__territory",
+            "opportunity__account",
+            "opportunity__currency",
+        )
+        if date_from is not None:
+            queryset = queryset.filter(stage_entered_at__date__gte=date_from)
+        if date_to is not None:
+            queryset = queryset.filter(stage_entered_at__date__lte=date_to)
+        placement_list = list(queryset)
     health_projection = {}
     if health:
         health_projection = opportunity_pipeline_health_projection(
@@ -588,13 +592,22 @@ def opportunity_pipeline_health_projection(
     as_of = as_of or timezone.now()
     if opportunities is None:
         opportunity_queryset = Opportunity.objects.filter(tenant=tenant)
+        opportunity_list = list(opportunity_queryset)
+    elif isinstance(opportunities, (list, tuple, set)):
+        sample = next(iter(opportunities), None)
+        if isinstance(sample, int):
+            opportunity_list = list(
+                Opportunity.objects.filter(
+                    tenant=tenant,
+                    pk__in=opportunities,
+                )
+            )
+        else:
+            opportunity_list = [opp for opp in opportunities if opp is not None]
+    elif hasattr(opportunities, "filter"):
+        opportunity_list = list(opportunities)
     else:
-        opportunity_ids = [opportunity.pk for opportunity in opportunities]
-        opportunity_queryset = Opportunity.objects.filter(
-            tenant=tenant,
-            pk__in=opportunity_ids,
-        )
-    opportunity_list = list(opportunity_queryset)
+        opportunity_list = list(opportunities)
     opportunity_ids = [opportunity.pk for opportunity in opportunity_list]
     if not opportunity_ids:
         return {}
