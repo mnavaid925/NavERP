@@ -28,8 +28,16 @@ class AccountForm(TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.tenant is not None and self.instance.tenant_id is None:
+            self.instance.tenant = self.tenant
+        if not self.instance.party_id:
+            self.instance._allow_unbound_party = True
         if self.tenant is not None:
-            qs = Party.objects.filter(tenant=self.tenant, kind="organization")
+            qs = Party.objects.filter(
+                tenant=self.tenant,
+                kind="organization",
+                pk__in=AccountProfile.objects.filter(tenant=self.tenant).values("party_id"),
+            ).distinct()
             if self.instance and self.instance.party_id:
-                qs = qs.exclude(pk=self.instance.party_id)  # an account can't be its own parent
+                qs = qs.exclude(pk=self.instance.party_id)
             self.fields["parent_account"].queryset = qs.order_by("name")
