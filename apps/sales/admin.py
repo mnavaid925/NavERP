@@ -227,6 +227,12 @@ class OpportunityPipelinePlacementAdmin(admin.ModelAdmin):
     search_fields = ("opportunity__number", "opportunity__name", "pipeline__name")
     readonly_fields = ("tenant", "stage_entered_at", "created_at", "updated_at")
 
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(OpportunityTeamMember)
 class OpportunityTeamMemberAdmin(admin.ModelAdmin):
