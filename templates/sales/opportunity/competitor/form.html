@@ -6,7 +6,7 @@
     <h1 class="page-title">{% if is_edit %}Edit Competitor Profile{% else %}New Competitor Profile{% endif %}</h1>
     <div class="breadcrumb"><a href="{% url 'sales:opportunity_competitor_profile_list' %}">Competitor Profiles</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
   </div>
-  <a href="{% url 'sales:opportunity_competitor_profile_list' %}" class="btn btn-outline">Back to profiles</a>
+  <a href="{% url 'sales:opportunity_competitor_profile_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to profiles</a>
 </div>
 
 <div class="card max-w-4xl mx-auto">
