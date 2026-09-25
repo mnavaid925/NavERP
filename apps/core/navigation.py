@@ -2176,6 +2176,20 @@ LIVE_LINKS = {
         "Routing Rules": "sales:lead_routing_rule_list",
         "Nurture Enrollments": "sales:lead_nurture_enrollment_list",
     },
+    "8.3": {
+        "Account Hierarchy & Parent-Child": "sales:account_hierarchy",
+        "Contact Profiles & Enrichment": "sales:account_workspace#enrichment",
+        "Relationship Mapping": "sales:account_coverage",
+        "Account Segmentation & Tiering": "sales:account_classification_list",
+        "Account Plans & Growth Strategies": "sales:account_plan_list",
+        "Account Workspace": "sales:account_workspace",
+        "Enrichment Review Queue": "sales:party_enrichment_list",
+        "Stakeholder Register": "sales:account_stakeholder_list",
+        "Account Classification": "sales:account_classification_list",
+        "Coverage Matrix": "sales:account_coverage",
+        "Account Plans": "sales:account_plan_list",
+        "White-Space Board": "sales:account_white_space",
+    },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
