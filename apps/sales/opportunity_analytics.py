@@ -92,9 +92,11 @@ def _sales_placement_queryset(
 
 def _sales_weighted_expression():
     probability = Coalesce(F("probability_override"), F("current_stage__probability"))
-    return ExpressionWrapper(
-        F("opportunity__amount") * probability / 100,
-        output_field=DecimalField(max_digits=20, decimal_places=2),
+    return Sum(
+        ExpressionWrapper(
+            F("opportunity__amount") * probability / 100,
+            output_field=DecimalField(max_digits=20, decimal_places=2),
+        )
     )
 
 
