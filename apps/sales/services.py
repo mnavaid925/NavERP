@@ -630,3 +630,747 @@ def handoff_lead(lead, tenant, user):
         if not already_converted:
             write_audit_log(user, locked_lead, "update", {"action": "sales_handoff", "opportunity": opportunity.number}, tenant=tenant)
     return opportunity
+
+
+def _enrichment_event_payload(event):
+    from apps.sales.models.ContactAccountManagement.PartyEnrichment import (
+        sanitize_enrichment_text,
+        validate_enrichment_changes,
+    )
+
+    confidence = event.match_confidence
+    try:
+        normalized_confidence = Decimal(str(confidence)) if confidence is not None else None
+    except (InvalidOperation, TypeError, ValueError):
+        normalized_confidence = None
+    return {
+        "party_id": event.party_id,
+        "kind": event.kind,
+        "source_kind": event.source_kind,
+        "source_name": sanitize_enrichment_text(event.source_name, field_name="source_name", max_length=120, allow_url=False),
+        "source_reference": sanitize_enrichment_text(event.source_reference, field_name="source_reference", max_length=255, allow_url=False),
+        "changes": validate_enrichment_changes(event.changes or {}),
+        "legal_basis_purpose_id": event.legal_basis_purpose_id,
+        "requested_by_id": event.requested_by_id,
+        "match_confidence": normalized_confidence,
+        "error_code": event.error_code,
+        "error_summary": sanitize_enrichment_text(event.error_summary, field_name="error_summary", max_length=255),
+    }
+
+
+def _enrichment_request_matches(existing, request_payload):
+    existing_payload = _enrichment_event_payload(existing)
+    comparable_request = dict(request_payload)
+    if existing.status != "proposed":
+        existing_payload.pop("error_summary", None)
+        comparable_request.pop("error_summary", None)
+    return existing_payload == comparable_request
+
+
+def _enrichment_request_payload(party, kind, source_kind, source_name, source_reference, changes, legal_basis_purpose, user, match_confidence, error_code, error_summary):
+    from apps.sales.models.ContactAccountManagement.PartyEnrichment import sanitize_enrichment_text
+
+    confidence = None
+    if match_confidence is not None:
+        try:
+            confidence = Decimal(str(match_confidence))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValidationError("Match confidence must be a finite value between 0 and 1.") from exc
+        if not confidence.is_finite() or not 0 <= confidence <= 1:
+            raise ValidationError("Match confidence must be a finite value between 0 and 1.")
+    return {
+        "party_id": party.pk,
+        "kind": kind,
+        "source_kind": source_kind,
+        "source_name": sanitize_enrichment_text(source_name, field_name="source_name", max_length=120, allow_url=False),
+        "source_reference": sanitize_enrichment_text(source_reference, field_name="source_reference", max_length=255, allow_url=False),
+        "changes": changes,
+        "legal_basis_purpose_id": getattr(legal_basis_purpose, "pk", None),
+        "requested_by_id": getattr(user, "pk", None),
+        "match_confidence": confidence,
+        "error_code": (error_code or "").strip(),
+        "error_summary": sanitize_enrichment_text(error_summary, field_name="error_summary", max_length=255),
+    }
+
+
+def create_enrichment_event(tenant, user, *, party, kind, source_kind, source_name="", source_reference="", changes=None, legal_basis_purpose=None, status="proposed", match_confidence=None, idempotency_key=None, error_code="", error_summary=""):
+    from apps.core.models import Party
+    from apps.sales.models.ContactAccountManagement.PartyEnrichment import (
+        EXTERNAL_SOURCE_KINDS,
+        PartyEnrichmentEvent,
+        validate_enrichment_changes,
+        validate_enrichment_fields_for_party,
+    )
+
+    if status != "proposed":
+        raise ValidationError("Enrichment requests must start as proposed.")
+    if not _active_tenant_user(user, tenant):
+        raise ValidationError("An active workspace user is required.")
+    if not _same_tenant(party, tenant):
+        raise ValidationError("The enrichment Party must belong to this workspace.")
+    if legal_basis_purpose is not None and not _same_tenant(legal_basis_purpose, tenant):
+        raise ValidationError("The lawful basis purpose must belong to this workspace.")
+    if kind not in dict(PartyEnrichmentEvent.KIND_CHOICES):
+        raise ValidationError("Unsupported enrichment kind.")
+    if source_kind not in dict(PartyEnrichmentEvent.SOURCE_KIND_CHOICES):
+        raise ValidationError("Unsupported enrichment source.")
+    normalized_changes = validate_enrichment_changes(changes or {})
+    if idempotency_key is not None and not isinstance(idempotency_key, str):
+        raise ValidationError("The enrichment idempotency key must be text.")
+    key = (idempotency_key or "").strip() or None
+    if key and len(key) > 120:
+        raise ValidationError("The enrichment idempotency key cannot exceed 120 characters.")
+    with transaction.atomic():
+        from apps.accounts.models import User
+
+        try:
+            locked_user = User.objects.select_for_update().get(
+                pk=user.pk,
+                tenant=tenant,
+                is_active=True,
+            )
+        except ObjectDoesNotExist as exc:
+            raise ValidationError("An active workspace user is required.") from exc
+        try:
+            locked_party = Party.objects.select_for_update().get(pk=party.pk, tenant=tenant)
+        except ObjectDoesNotExist as exc:
+            raise ValidationError("The enrichment Party must belong to this workspace.") from exc
+        validate_enrichment_fields_for_party(locked_party, normalized_changes)
+        locked_purpose = None
+        purpose_id = getattr(legal_basis_purpose, "pk", None)
+        if purpose_id:
+            from apps.core.models import ConsentPurpose
+            try:
+                locked_purpose = ConsentPurpose.objects.select_for_update().get(
+                    pk=purpose_id,
+                    tenant=tenant,
+                    is_active=True,
+                )
+            except ObjectDoesNotExist as exc:
+                raise ValidationError("Choose an active purpose from this workspace.") from exc
+
+        if source_kind in EXTERNAL_SOURCE_KINDS and locked_purpose is None:
+            raise ValidationError("External enrichment requires an active lawful basis purpose.")
+        request_payload = _enrichment_request_payload(
+            locked_party,
+            kind,
+            source_kind,
+            source_name,
+            source_reference,
+            normalized_changes,
+            locked_purpose,
+            locked_user,
+            match_confidence,
+            error_code,
+            error_summary,
+        )
+        if key:
+            existing = PartyEnrichmentEvent.objects.select_for_update().filter(
+                tenant=tenant,
+                idempotency_key=key,
+            ).first()
+            if existing is not None:
+                if not _enrichment_request_matches(existing, request_payload):
+                    raise ValidationError("That idempotency key was already used for different enrichment evidence.")
+                return existing
+        event = PartyEnrichmentEvent(
+            tenant=tenant,
+            party=locked_party,
+            kind=kind,
+            source_kind=source_kind,
+            source_name=request_payload["source_name"],
+            source_reference=request_payload["source_reference"],
+            status="proposed",
+            match_confidence=request_payload["match_confidence"],
+            changes=normalized_changes,
+            legal_basis_purpose=locked_purpose,
+            requested_by=locked_user,
+            idempotency_key=key,
+            error_code=request_payload["error_code"],
+            error_summary=request_payload["error_summary"],
+        )
+        try:
+            with transaction.atomic():
+                event.full_clean(validate_unique=False)
+                event.save(force_insert=True)
+        except IntegrityError:
+            if not key:
+                raise
+            existing = PartyEnrichmentEvent.objects.select_for_update().get(
+                tenant=tenant,
+                idempotency_key=key,
+            )
+            if _enrichment_event_payload(existing) != request_payload:
+                raise ValidationError("That idempotency key was already used for different enrichment evidence.")
+            return existing
+        write_audit_log(
+            locked_user,
+            event,
+            "create",
+            {
+                "action": "enrichment_proposal",
+                "kind": kind,
+                "source_kind": source_kind,
+                "status": "proposed",
+                "fields": sorted(normalized_changes),
+            },
+            tenant=tenant,
+        )
+    return event
+
+
+def _enrichment_canonical_values(party, *, lock=False):
+    from apps.core.models import ContactMethod
+    from apps.crm.models import AccountProfile, ContactProfile
+
+    values = {}
+    contact_queryset = ContactProfile.objects.filter(tenant=party.tenant, party=party)
+    account_queryset = AccountProfile.objects.filter(tenant=party.tenant, party=party)
+    method_queryset = ContactMethod.objects.filter(tenant=party.tenant, party=party)
+    if lock:
+        contact_queryset = contact_queryset.select_for_update()
+        account_queryset = account_queryset.select_for_update()
+        method_queryset = method_queryset.select_for_update()
+    contact_profile = contact_queryset.order_by("pk").first()
+    account_profile = account_queryset.order_by("pk").first()
+    if contact_profile:
+        values.update(
+            job_title=contact_profile.job_title,
+            department=contact_profile.department,
+            linkedin=contact_profile.linkedin,
+            work_email=contact_profile.email,
+            phone=contact_profile.phone,
+            mobile=contact_profile.mobile,
+        )
+    if account_profile:
+        values.update(
+            website=account_profile.website,
+            industry=account_profile.industry,
+            employee_count=account_profile.employee_count,
+            annual_revenue=account_profile.annual_revenue,
+        )
+    for method in method_queryset.order_by("pk"):
+        field_name = {"email": "work_email", "phone": "phone", "mobile": "mobile"}.get(method.kind)
+        if field_name:
+            values[field_name] = method.value
+    return values
+
+
+def _apply_enrichment_value(party, field_name, value):
+    from apps.core.models import ContactMethod
+    from apps.crm.models import AccountProfile, ContactProfile
+    from apps.sales.models.ContactAccountManagement.PartyEnrichment import validate_enrichment_changes
+
+    value = validate_enrichment_changes({field_name: {"value": value}})[field_name]["value"]
+    if field_name in {"work_email", "phone", "mobile"}:
+        if party.kind != "person":
+            raise ValidationError(f"{field_name} can only be applied to a person Party.")
+        kind = {"work_email": "email", "phone": "phone", "mobile": "mobile"}[field_name]
+        method = ContactMethod.objects.select_for_update().filter(
+            tenant=party.tenant,
+            party=party,
+            kind=kind,
+        ).order_by("pk").first()
+        if method is None:
+            method = ContactMethod(tenant=party.tenant, party=party, kind=kind, value=str(value))
+            method.save()
+        else:
+            method.value = str(value)
+            method.save(update_fields=["value"])
+        profile = ContactProfile.objects.select_for_update().filter(
+            tenant=party.tenant,
+            party=party,
+        ).order_by("pk").first()
+        if profile is None:
+            profile = ContactProfile(tenant=party.tenant, party=party)
+        setattr(profile, "email" if field_name == "work_email" else field_name, str(value))
+        profile.save()
+        return
+    if field_name in {"job_title", "department", "linkedin"}:
+        if party.kind != "person":
+            raise ValidationError(f"{field_name} can only be applied to a person Party.")
+        profile = ContactProfile.objects.select_for_update().filter(
+            tenant=party.tenant,
+            party=party,
+        ).order_by("pk").first()
+        if profile is None:
+            profile = ContactProfile(tenant=party.tenant, party=party)
+        setattr(profile, field_name, str(value))
+        profile.save()
+        return
+    if field_name in {"website", "industry", "employee_count", "annual_revenue"}:
+        if party.kind != "organization":
+            raise ValidationError(f"{field_name} can only be applied to an organization Party.")
+        profile = AccountProfile.objects.select_for_update().filter(
+            tenant=party.tenant,
+            party=party,
+        ).order_by("pk").first()
+        if profile is None:
+            profile = AccountProfile(tenant=party.tenant, party=party)
+        if field_name == "annual_revenue":
+            try:
+                value = Decimal(str(value))
+            except (InvalidOperation, TypeError, ValueError) as exc:
+                raise ValidationError("Annual revenue must be a finite decimal value.") from exc
+            if not value.is_finite() or value < 0 or value > Decimal("999999999999.99"):
+                raise ValidationError("Annual revenue is outside the supported range.")
+        setattr(profile, field_name, value)
+        profile.save()
+        return
+    raise ValidationError(f"Unsupported enrichment field: {field_name}.")
+
+
+def apply_enrichment_event(event, tenant, user, selected_fields, review_note=""):
+    from apps.core.models import ConsentPurpose, Party
+    from apps.sales.models.ContactAccountManagement.PartyEnrichment import (
+        PartyEnrichmentEvent,
+        validate_enrichment_changes,
+        validate_enrichment_fields_for_party,
+    )
+
+    if not _is_admin(user) or not _active_tenant_user(user, tenant):
+        raise ValidationError("Tenant administrator access is required to apply enrichment.")
+    if not _same_tenant(event, tenant):
+        raise ValidationError("The enrichment event must belong to this workspace.")
+    try:
+        fields = tuple(dict.fromkeys(selected_fields or ()))
+    except TypeError as exc:
+        raise ValidationError("Choose at least one valid proposed field.") from exc
+    if not fields or any(not isinstance(field, str) for field in fields):
+        raise ValidationError("Choose at least one valid proposed field.")
+    with transaction.atomic():
+        from apps.accounts.models import User
+
+        try:
+            locked_user = User.objects.select_for_update().get(
+                pk=user.pk,
+                tenant=tenant,
+                is_active=True,
+            )
+        except ObjectDoesNotExist as exc:
+            raise ValidationError("An active workspace user is required.") from exc
+        if not (locked_user.is_superuser or locked_user.is_tenant_admin):
+            raise ValidationError("Tenant administrator access is required to apply enrichment.")
+        try:
+            locked = PartyEnrichmentEvent.objects.select_for_update().get(pk=event.pk, tenant=tenant)
+        except ObjectDoesNotExist as exc:
+            raise ValidationError("The enrichment event does not exist in this workspace.") from exc
+        if locked.status != "proposed":
+            raise ValidationError("Only proposed enrichment events can be applied.")
+        try:
+            locked_party = Party.objects.select_for_update().get(pk=locked.party_id, tenant=tenant)
+        except ObjectDoesNotExist as exc:
+            raise ValidationError("The enrichment Party no longer exists in this workspace.") from exc
+        if locked.legal_basis_purpose_id:
+            purpose = ConsentPurpose.objects.select_for_update().filter(
+                pk=locked.legal_basis_purpose_id,
+                tenant=tenant,
+                is_active=True,
+            ).first()
+            if purpose is None:
+                raise ValidationError("The lawful basis purpose is no longer active.")
+        changes = validate_enrichment_changes(locked.changes)
+        validate_enrichment_fields_for_party(locked_party, changes)
+        if any(field not in changes for field in fields):
+            raise ValidationError("Choose at least one valid proposed field.")
+        canonical = _enrichment_canonical_values(locked_party, lock=True)
+        for field_name in fields:
+            proposed = changes[field_name]["value"]
+            current = canonical.get(field_name)
+            if current not in (None, "") and str(current) != str(proposed):
+                raise ValidationError(f"{field_name} already has a protected canonical value.")
+        for field_name in fields:
+            _apply_enrichment_value(locked_party, field_name, changes[field_name]["value"])
+        locked.party = locked_party
+        locked.status = "applied"
+        locked.reviewed_by = locked_user
+        locked.applied_at = timezone.now()
+        locked._allow_status_transition = True
+        try:
+            locked.full_clean(validate_unique=False)
+            locked.save(update_fields=["status", "reviewed_by", "applied_at"])
+        finally:
+            locked._allow_status_transition = False
+        write_audit_log(
+            locked_user,
+            locked,
+            "update",
+            {"action": "enrichment_apply", "fields": sorted(fields), "review_note_present": bool((review_note or "").strip())},
+            tenant=tenant,
+        )
+    return locked
+
+
+def reject_enrichment_event(event, tenant, user, review_note):
+    from apps.core.models import Party
+    from apps.sales.models.ContactAccountManagement.PartyEnrichment import (
+        PartyEnrichmentEvent,
+        sanitize_enrichment_text,
+    )
+
+    if not _active_tenant_user(user, tenant):
+        raise ValidationError("An active workspace user is required.")
+    if not _same_tenant(event, tenant):
+        raise ValidationError("The enrichment event must belong to this workspace.")
+    if not (review_note or "").strip():
+        raise ValidationError("A rejection reason is required.")
+    with transaction.atomic():
+        from apps.accounts.models import User
+
+        try:
+            locked_user = User.objects.select_for_update().get(
+                pk=user.pk,
+                tenant=tenant,
+                is_active=True,
+            )
+            locked = PartyEnrichmentEvent.objects.select_for_update().get(pk=event.pk, tenant=tenant)
+        except ObjectDoesNotExist as exc:
+            raise ValidationError("The enrichment event or reviewer is unavailable in this workspace.") from exc
+        try:
+            Party.objects.select_for_update().get(pk=locked.party_id, tenant=tenant)
+        except ObjectDoesNotExist as exc:
+            raise ValidationError("The enrichment Party no longer exists in this workspace.") from exc
+        if locked.status != "proposed":
+            raise ValidationError("Only proposed enrichment events can be rejected.")
+        locked.status = "rejected"
+        locked.reviewed_by = locked_user
+        locked.error_summary = sanitize_enrichment_text(
+            review_note,
+            field_name="review_note",
+            max_length=255,
+        )
+        locked._allow_status_transition = True
+        try:
+            locked.full_clean(validate_unique=False)
+            locked.save(update_fields=["status", "reviewed_by", "error_summary"])
+        finally:
+            locked._allow_status_transition = False
+        write_audit_log(
+            locked_user,
+            locked,
+            "update",
+            {"action": "enrichment_reject", "reason_present": True},
+            tenant=tenant,
+        )
+    return locked
+
+
+def _currency_bucket(rollup, code):
+    return rollup["currencies"].setdefault(
+        code or "unspecified",
+        {
+            "opportunity": Decimal("0"),
+            "weighted": Decimal("0"),
+            "orders": Decimal("0"),
+            "invoices": Decimal("0"),
+        },
+    )
+
+
+def account_rollups(tenant, account_ids):
+    from apps.accounting.models import Invoice
+    from apps.crm.models import Opportunity
+    from apps.scm.models import SalesOrder
+
+    ids = list(dict.fromkeys(account_ids))
+    result = {pk: {"currencies": {}} for pk in ids}
+    if not ids:
+        return result
+    weighted = ExpressionWrapper(
+        F("amount") * F("probability") / Value(Decimal("100")),
+        output_field=DecimalField(max_digits=20, decimal_places=4),
+    )
+    opportunity_rows = (
+        Opportunity.objects.filter(tenant=tenant, account_id__in=ids)
+        .values("account_id")
+        .annotate(
+            opportunity=Sum("amount", filter=Q(stage__in=Opportunity.OPEN_STAGES)),
+            weighted=Sum(weighted, filter=Q(stage__in=Opportunity.OPEN_STAGES)),
+        )
+    )
+    for row in opportunity_rows:
+        bucket = _currency_bucket(result[row["account_id"]], None)
+        bucket["opportunity"] += row["opportunity"] or Decimal("0")
+        bucket["weighted"] += row["weighted"] or Decimal("0")
+    order_rows = (
+        SalesOrder.objects.filter(tenant=tenant, customer_id__in=ids)
+        .exclude(status="cancelled")
+        .values("customer_id", "currency__code")
+        .annotate(orders=Sum("total"))
+    )
+    for row in order_rows:
+        _currency_bucket(result[row["customer_id"]], row["currency__code"])["orders"] += row["orders"] or Decimal("0")
+    invoice_rows = (
+        Invoice.objects.filter(tenant=tenant, party_id__in=ids)
+        .exclude(status="void")
+        .values("party_id", "currency__code")
+        .annotate(invoices=Sum("total"))
+    )
+    for row in invoice_rows:
+        _currency_bucket(result[row["party_id"]], row["currency__code"])["invoices"] += row["invoices"] or Decimal("0")
+    return result
+
+
+MAX_HIERARCHY_ROWS = 500
+
+
+def account_hierarchy_rows(tenant):
+    from apps.crm.models import AccountProfile
+
+    profiles = list(
+        AccountProfile.objects.filter(tenant=tenant, party__tenant=tenant, party__kind="organization")
+        .select_related("party", "parent_account")
+        .order_by("party__name", "pk")[:MAX_HIERARCHY_ROWS]
+    )
+    by_party = {profile.party_id: profile for profile in profiles}
+    children = {pk: [] for pk in by_party}
+    for profile in profiles:
+        if profile.parent_account_id in by_party:
+            children[profile.parent_account_id].append(profile)
+    depth_cache = {}
+    invalid_ids = set()
+    cycle_ids = set()
+
+    def resolve_depth(start_id):
+        if start_id in depth_cache:
+            return depth_cache[start_id]
+        path = []
+        positions = {}
+        current_id = start_id
+        base_depth = None
+        while current_id is not None:
+            if current_id in depth_cache:
+                base_depth = depth_cache[current_id] + len(path)
+                break
+            if current_id in positions:
+                cycle_ids.update(path[positions[current_id]:])
+                invalid_ids.update(path)
+                return None
+            if len(path) >= AccountProfile.MAX_HIERARCHY_DEPTH:
+                invalid_ids.update(path)
+                return None
+            positions[current_id] = len(path)
+            path.append(current_id)
+            profile = by_party.get(current_id)
+            if profile is None:
+                invalid_ids.update(path)
+                return None
+            current_id = profile.parent_account_id
+            if current_id is None:
+                base_depth = 0
+                break
+            if current_id not in by_party:
+                invalid_ids.update(path)
+                return None
+        for party_id in reversed(path):
+            depth_cache[party_id] = base_depth
+            base_depth += 1
+        return depth_cache[start_id]
+
+    for party_id in by_party:
+        resolve_depth(party_id)
+    rows_by_id = {}
+    for profile in profiles:
+        valid = profile.party_id not in invalid_ids
+        rows_by_id[profile.party_id] = {
+            "party": profile.party,
+            "profile": profile,
+            "parent": by_party[profile.parent_account_id].party if profile.parent_account_id in by_party else None,
+            "depth": depth_cache.get(profile.party_id) if valid else None,
+            "is_root": profile.parent_account_id is None,
+            "is_leaf": not children[profile.party_id],
+            "child_count": len(children[profile.party_id]),
+            "cycle_detected": profile.party_id in cycle_ids,
+            "rollup_available": valid,
+            "descendant_count": 0,
+            "rollup": {},
+        }
+    valid_rows = [row for row in rows_by_id.values() if row["rollup_available"]]
+    for row in sorted(valid_rows, key=lambda value: value["depth"], reverse=True):
+        row["descendant_count"] = sum(
+            rows_by_id[child.party_id]["descendant_count"] + 1
+            for child in children[row["party"].pk]
+            if child.party_id in rows_by_id and rows_by_id[child.party_id]["rollup_available"]
+        )
+    base_rollups = account_rollups(tenant, list(by_party))
+    for row in valid_rows:
+        own = base_rollups.get(row["party"].pk, {"currencies": {}})
+        row["rollup"] = {
+            "currencies": {
+                code: dict(values)
+                for code, values in own.get("currencies", {}).items()
+            }
+        }
+    for row in sorted(valid_rows, key=lambda value: value["depth"], reverse=True):
+        parent_id = row["profile"].parent_account_id
+        parent = rows_by_id.get(parent_id)
+        if parent is None or not parent["rollup_available"]:
+            continue
+        for code, values in row["rollup"]["currencies"].items():
+            target = _currency_bucket(parent["rollup"], code)
+            for field_name, amount in values.items():
+                target[field_name] += amount
+    return list(rows_by_id.values())
+
+
+def account_coverage_data(tenant, account=None):
+    from apps.crm.models import ContactProfile
+    from apps.sales.models.ContactAccountManagement.AccountStakeholders import AccountStakeholder
+
+    if account is not None:
+        if getattr(account, "tenant_id", None) != _tenant_id(tenant) or getattr(account, "kind", None) != "organization":
+            raise ValidationError("Coverage requires a same-tenant organization account.")
+    stakeholders = AccountStakeholder.objects.filter(
+        tenant=tenant,
+        status="active",
+        account__tenant=tenant,
+        account__kind="organization",
+        contact__tenant=tenant,
+        contact__kind="person",
+    )
+    contacts = ContactProfile.objects.filter(
+        tenant=tenant,
+        party__tenant=tenant,
+        party__kind="person",
+    ).filter(account__tenant=tenant, account__kind="organization")
+    if account is not None:
+        stakeholders = stakeholders.filter(account=account)
+        contacts = contacts.filter(account=account)
+    roles = {}
+    for row in stakeholders.values_list("contact_id", "role"):
+        roles.setdefault(row[0], set()).add(row[1])
+    primary_ids = set(contacts.values_list("party_id", flat=True))
+    coverage = {}
+    for party_id in set(roles) | primary_ids:
+        coverage[party_id] = {
+            "party_id": party_id,
+            "primary": party_id in primary_ids,
+            "roles": sorted(roles.get(party_id, set())),
+        }
+    return coverage
+
+
+def can_manage_account_plan(plan, user):
+    return bool(
+        _same_tenant(plan, getattr(user, "tenant", None))
+        and _active_tenant_user(user, plan.tenant_id)
+        and (_is_admin(user) or plan.owner_id == getattr(user, "pk", None))
+    )
+
+
+def save_account_plan(form, tenant, user, *, instance=None):
+    from apps.accounts.models import User
+    from apps.core.models import Party
+    from apps.crm.models import Opportunity
+    from apps.sales.models.ContactAccountManagement.AccountPlans import (
+        AccountPlan,
+        validate_account_plan_opportunities,
+    )
+
+    if not _active_tenant_user(user, tenant):
+        raise ValidationError("An active workspace user is required.")
+    with transaction.atomic():
+        try:
+            locked_user = User.objects.select_for_update().get(
+                pk=user.pk,
+                tenant=tenant,
+                is_active=True,
+            )
+        except ObjectDoesNotExist as exc:
+            raise ValidationError("An active workspace user is required.") from exc
+        if instance is None:
+            locked = None
+        else:
+            try:
+                locked = AccountPlan.objects.select_for_update().get(pk=instance.pk, tenant=tenant)
+            except ObjectDoesNotExist as exc:
+                raise ValidationError("The account plan no longer exists in this workspace.") from exc
+            if not (
+                _same_tenant(locked, getattr(locked_user, "tenant", None))
+                and (_is_admin(locked_user) or locked.owner_id == locked_user.pk)
+            ):
+                raise ValidationError("Only the plan owner or a tenant administrator can edit this plan.")
+            if locked.status == "archived":
+                raise ValidationError("Archived account plans are read-only.")
+            form.instance = locked
+            for field_name in form._meta.fields:
+                model_field = form.instance._meta.get_field(field_name)
+                if model_field.concrete and not model_field.many_to_many and field_name in form.cleaned_data:
+                    setattr(form.instance, field_name, form.cleaned_data[field_name])
+        obj = form.save(commit=False)
+        obj.tenant = tenant
+        if locked is None:
+            obj.status = "draft"
+        if not _is_admin(locked_user):
+            obj.owner = locked_user
+        try:
+            account = Party.objects.select_for_update().get(
+                pk=obj.account_id,
+                tenant=tenant,
+                kind="organization",
+            )
+        except ObjectDoesNotExist as exc:
+            raise ValidationError("Choose a same-tenant organization account.") from exc
+        obj.account = account
+        opportunity_ids = {
+            opportunity.pk
+            for opportunity in (form.cleaned_data.get("related_opportunities") or ())
+        }
+        opportunities = Opportunity.objects.select_for_update().filter(
+            tenant=tenant,
+            pk__in=opportunity_ids,
+        )
+        validate_account_plan_opportunities(tenant, account, opportunities)
+        obj.save()
+        form.save_m2m()
+        action = "create" if locked is None else "update"
+        write_audit_log(locked_user, obj, action, {"action": "account_plan"}, tenant=tenant)
+    return obj
+
+
+def account_plan_allowed_actions(plan, user=None):
+    if user is not None and not can_manage_account_plan(plan, user):
+        return {action: False for action in ("activate", "review_due", "complete", "archive")}
+    return {
+        "activate": plan.status == "draft",
+        "review_due": plan.status == "active",
+        "complete": plan.status in {"active", "review_due"},
+        "archive": plan.status in {"draft", "active", "review_due", "completed"},
+    }
+
+
+def transition_account_plan(plan, tenant, user, target_status):
+    from apps.accounts.models import User
+    from apps.sales.models.ContactAccountManagement.AccountPlans import AccountPlan
+
+    if not _same_tenant(plan, tenant):
+        raise ValidationError("The account plan must belong to this workspace.")
+    if not can_manage_account_plan(plan, user):
+        raise ValidationError("Only the plan owner or a tenant administrator can change this plan.")
+    with transaction.atomic():
+        try:
+            locked_user = User.objects.select_for_update().get(
+                pk=user.pk,
+                tenant=tenant,
+                is_active=True,
+            )
+            locked = AccountPlan.objects.select_for_update().get(pk=plan.pk, tenant=tenant)
+        except ObjectDoesNotExist as exc:
+            raise ValidationError("The account plan or user is unavailable in this workspace.") from exc
+        if not (
+            _same_tenant(locked, getattr(locked_user, "tenant", None))
+            and (_is_admin(locked_user) or locked.owner_id == locked_user.pk)
+        ):
+            raise ValidationError("Only the plan owner or a tenant administrator can change this plan.")
+        allowed = {
+            "active": {"draft"},
+            "review_due": {"active"},
+            "completed": {"active", "review_due"},
+            "archived": {"draft", "active", "review_due", "completed"},
+        }
+        if target_status not in allowed or locked.status not in allowed[target_status]:
+            raise ValidationError("That account-plan transition is not available.")
+        locked.status = target_status
+        locked.save(update_fields=["status", "updated_at"])
+        write_audit_log(locked_user, locked, "update", {"action": "account_plan_transition", "status": target_status}, tenant=tenant)
+    return locked
