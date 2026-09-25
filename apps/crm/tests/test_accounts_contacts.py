@@ -123,7 +123,9 @@ class TestAccountProfileModel:
     def test_parent_account_accepts_org_party(self, tenant_a, org_party_a, account_profile_a):
         """parent_account FK accepts another organization Party."""
         from apps.core.models import Party
+        from apps.crm.models import AccountProfile
         parent = Party.objects.create(tenant=tenant_a, kind="organization", name="ParentCo")
+        AccountProfile.objects.create(tenant=tenant_a, party=parent)
         account_profile_a.parent_account = parent
         account_profile_a.save()
         account_profile_a.refresh_from_db()
@@ -316,7 +318,9 @@ class TestAccountFormValid:
         from apps.crm.forms import AccountForm
         # Need a different party to use as parent (can't use org_party_a as its own parent)
         from apps.core.models import Party
+        from apps.crm.models import AccountProfile
         parent = Party.objects.create(tenant=tenant_a, kind="organization", name="ParentCo")
+        AccountProfile.objects.create(tenant=tenant_a, party=parent)
         form = AccountForm({
             "name": "Child Org",
             "parent_account": parent.pk,
