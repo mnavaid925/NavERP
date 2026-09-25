@@ -7,10 +7,30 @@ from .ContactAccountManagement.PartyEnrichment import PartyEnrichmentEvent, vali
 from .ContactAccountManagement.AccountStakeholders import AccountStakeholder
 from .ContactAccountManagement.AccountClassifications import AccountClassification
 from .ContactAccountManagement.AccountPlans import AccountPlan
+from .OpportunityPipeline.Pipelines import (
+    OpportunityPipelinePlacement,
+    Pipeline,
+    PipelineStage,
+    _validate_pipeline_criteria,
+)
+from .OpportunityTeams.OpportunityTeams import OpportunityTeamMember
+from .CompetitiveIntelligence.CompetitiveIntelligence import (
+    CompetitorProfile,
+    OpportunityCompetitor,
+)
+from .OpportunityOutcomes.OpportunityOutcomes import (
+    OpportunityOutcome,
+    WinLossReason,
+)
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
     "LeadQualification", "LeadRoutingRule", "LeadNurtureEnrollment", "validate_routing_conditions",
     "PartyEnrichmentEvent", "validate_enrichment_changes", "AccountStakeholder",
     "AccountClassification", "AccountPlan",
+    "Pipeline", "PipelineStage", "OpportunityPipelinePlacement", "_validate_pipeline_criteria",
+    "OpportunityTeamMember",
+    "CompetitorProfile", "OpportunityCompetitor",
+    "WinLossReason", "OpportunityOutcome",
 ]
+
