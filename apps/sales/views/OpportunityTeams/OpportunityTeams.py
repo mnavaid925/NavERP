@@ -87,16 +87,15 @@ def opportunity_team_member_add(request, opportunity_pk):
                         opportunity_pk=opportunity.pk,
                     )
     else:
-        with transaction.atomic():
-            opportunity = get_object_or_404(
-                Opportunity.objects.select_for_update(),
-                pk=opportunity_pk,
-                tenant=request.tenant,
-            )
-            form = OpportunityTeamMemberForm(
-                tenant=request.tenant,
-                opportunity=opportunity,
-            )
+        opportunity = get_object_or_404(
+            Opportunity,
+            pk=opportunity_pk,
+            tenant=request.tenant,
+        )
+        form = OpportunityTeamMemberForm(
+            tenant=request.tenant,
+            opportunity=opportunity,
+        )
     return render(
         request,
         "sales/opportunity/team_member/form.html",
@@ -157,23 +156,22 @@ def opportunity_team_member_edit(request, opportunity_pk, member_pk):
                         opportunity_pk=opportunity.pk,
                     )
     else:
-        with transaction.atomic():
-            opportunity = get_object_or_404(
-                Opportunity.objects.select_for_update(),
-                pk=opportunity_pk,
-                tenant=request.tenant,
-            )
-            member = get_object_or_404(
-                OpportunityTeamMember.objects.select_for_update(),
-                pk=member_pk,
-                opportunity=opportunity,
-                tenant=request.tenant,
-            )
-            form = OpportunityTeamMemberForm(
-                instance=member,
-                tenant=request.tenant,
-                opportunity=opportunity,
-            )
+        opportunity = get_object_or_404(
+            Opportunity,
+            pk=opportunity_pk,
+            tenant=request.tenant,
+        )
+        member = get_object_or_404(
+            OpportunityTeamMember,
+            pk=member_pk,
+            opportunity=opportunity,
+            tenant=request.tenant,
+        )
+        form = OpportunityTeamMemberForm(
+            instance=member,
+            tenant=request.tenant,
+            opportunity=opportunity,
+        )
     return render(
         request,
         "sales/opportunity/team_member/form.html",
