@@ -451,6 +451,61 @@ def opportunity_workspace_list(request):
     if pipeline_id is not None:
         queryset = queryset.filter(sales_pipeline_placement__pipeline_id=pipeline_id)
 
+    if not health:
+        page_obj = Paginator(queryset.order_by("-updated_at", "-id"), _WORKSPACE_PAGE_SIZE).get_page(
+            request.GET.get("page")
+        )
+        page_opportunities = list(page_obj.object_list)
+        placements = []
+        for opportunity in page_opportunities:
+            placement = _workspace_cached_placement(opportunity)
+            if placement is not None:
+                placements.append(placement)
+        as_of = timezone.now()
+        health_projection = opportunity_pipeline_health_projection(
+            tenant,
+            page_opportunities,
+            placements,
+            as_of=as_of,
+        )
+        for opportunity in page_opportunities:
+            health_row = _workspace_health_row(health_projection, opportunity.pk)
+            _workspace_attach_row_data(
+                opportunity,
+                _workspace_cached_placement(opportunity),
+                health_row,
+            )
+
+        health_counts = {"on_track": 0, "watch": 0, "at_risk": 0}
+        for opportunity in page_opportunities:
+            status = opportunity.workspace_health.get("status")
+            if status in health_counts:
+                health_counts[status] += 1
+        stats = _workspace_stats(page_opportunities)
+        stats["total"] = page_obj.paginator.count
+        stats["placed"] = queryset.filter(sales_pipeline_placement__isnull=False).count()
+        stats["unplaced"] = stats["total"] - stats["placed"]
+        stats["scope_total"] = page_obj.paginator.count
+        return render(
+            request,
+            "sales/opportunity/workspace.html",
+            {
+                "opportunities": page_opportunities,
+                "page_obj": page_obj,
+                "q": q,
+                "health": health,
+                "owner_id": owner_id,
+                "territory_id": territory_id,
+                "pipeline_id": pipeline_id,
+                "pipelines": pipelines,
+                "owners": owners,
+                "territories": territories,
+                "health_choices": SALES_HEALTH_CHOICES,
+                "health_counts": health_counts,
+                "stats": stats,
+            },
+        )
+
     scope_opportunities = list(queryset.order_by("-updated_at", "-id"))
     placements = []
     for opportunity in scope_opportunities:
