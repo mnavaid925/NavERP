@@ -9852,74 +9852,75 @@ convention (`_`-prefixed inside the folder that includes them — cf.
 # Sub-module 7.19 — Master Data & Configuration (Module 7: Project Management, projects) — plan from research-projects-7.19.md (2026-09-24)
 
 ## Models (from research — 4 models + 1 child membership)
-- [ ] `ProjectTemplate` [PTM-] — `name`, `code`, `methodology` (choices: waterfall, agile, hybrid), `category` (choices: software, infrastructure, consulting, r_and_d, marketing, operational, internal), `complexity` (choices: small, medium, large, enterprise), `description`, `estimated_duration_days`, `target_budget`, `default_roles` (JSON list), `wbs_structure` (JSON list of phases/tasks/milestones), `workflow_config` (JSON dict), `is_active`, `is_default`, `created_by` (FK user). Form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`.
-- [ ] `ProjectCustomField` [PCF-] — `name`, `field_key` (slug), `label`, `target_entity` (choices: project, task, milestone, risk, team), `field_type` (choices: text, textarea, integer, decimal, date, boolean, select, multiselect, url, user_ref), `form_section` (choices: general, governance, technical, financial, risk, custom), `description`, `placeholder`, `default_value`, `is_required`, `min_value`, `max_value`, `regex_pattern`, `choices_list` (JSON list), `visibility_rule` (JSON dict), `display_order`, `is_active`. Unique together: `("tenant", "target_entity", "field_key")`. Form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`.
-- [ ] `ProjectTeam` [PTE-] — `name`, `code`, `team_type` (choices: dedicated, matrix, cross_functional, agile_pod, vendor_external), `org_unit` (FK core.OrgUnit), `project` (FK projects.Project null/blank), `team_lead` (FK user), `description`, `location`, `is_active`. Form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`.
-- [ ] `ProjectTeamMember` (unnumbered join row) — `team` (FK ProjectTeam), `user` (FK user), `role` (choices: project_manager, scrum_master, tech_lead, developer, designer, qa_engineer, business_analyst, consultant, stakeholder), `allocation_percentage` (1..100), `is_primary_contact`, `joined_date`, `left_date`. Unique together: `("team", "user")`.
-- [ ] `ProjectLocaleSetting` [PLS-] — `name`, `code`, `project` (FK projects.Project null/blank), `language` (FK core.Language), `time_zone` (FK core.TimeZone), `currency` (FK accounting.Currency), `date_format` (choices: YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, YYYY/MM/DD), `time_format` (choices: 12h, 24h), `first_day_of_week` (choices: 1=Mon, 6=Sat, 7=Sun), `number_format` (choices: #,##0.00, #.##0,00, # ##0,00), `working_hours_per_day` (decimal), `working_days_pattern` (JSON list of days), `is_default`, `is_active`. Form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`.
+- [x] `ProjectTemplate` [PTM-] — `name`, `code`, `methodology` (choices: waterfall, agile, hybrid), `category` (choices: software, infrastructure, consulting, r_and_d, marketing, operational, internal), `complexity` (choices: small, medium, large, enterprise), `description`, `estimated_duration_days`, `target_budget`, `default_roles` (JSON list), `wbs_structure` (JSON list of phases/tasks/milestones), `workflow_config` (JSON dict), `is_active`, `is_default`, `created_by` (FK user). Form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`.
+- [x] `ProjectCustomField` [PCF-] — `name`, `field_key` (slug), `label`, `target_entity` (choices: project, task, milestone, risk, team), `field_type` (choices: text, textarea, integer, decimal, date, boolean, select, multiselect, url, user_ref), `form_section` (choices: general, governance, technical, financial, risk, custom), `description`, `placeholder`, `default_value`, `is_required`, `min_value`, `max_value`, `regex_pattern`, `choices_list` (JSON list), `visibility_rule` (JSON dict), `display_order`, `is_active`. Unique together: `("tenant", "target_entity", "field_key")`. Form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`.
+- [x] `ProjectTeam` [PTE-] — `name`, `code`, `team_type` (choices: dedicated, matrix, cross_functional, agile_pod, vendor_external), `org_unit` (FK core.OrgUnit), `project` (FK projects.Project null/blank), `team_lead` (FK user), `description`, `location`, `is_active`. Form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`.
+- [x] `ProjectTeamMember` (unnumbered join row) — `team` (FK ProjectTeam), `user` (FK user), `role` (choices: project_manager, scrum_master, tech_lead, developer, designer, qa_engineer, business_analyst, consultant, stakeholder), `allocation_percentage` (1..100), `is_primary_contact`, `joined_date`, `left_date`. Unique together: `("team", "user")`.
+- [x] `ProjectLocaleSetting` [PLS-] — `name`, `code`, `project` (FK projects.Project null/blank), `language` (FK core.Language), `time_zone` (FK core.TimeZone), `currency` (FK accounting.Currency), `date_format` (choices: YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, YYYY/MM/DD), `time_format` (choices: 12h, 24h), `first_day_of_week` (choices: 1=Mon, 6=Sat, 7=Sun), `number_format` (choices: #,##0.00, #.##0,00, # ##0,00), `working_hours_per_day` (decimal), `working_days_pattern` (JSON list of days), `is_default`, `is_active`. Form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`.
 
 ## Backend (`apps/projects/{models,forms,views,urls}/MasterDataConfiguration/`)
-- [ ] `models/MasterDataConfiguration/ProjectTemplates.py`
-- [ ] `models/MasterDataConfiguration/ProjectCustomFields.py`
-- [ ] `models/MasterDataConfiguration/ProjectTeams.py`
-- [ ] `models/MasterDataConfiguration/ProjectLocaleSettings.py`
-- [ ] `models/MasterDataConfiguration/__init__.py`
-- [ ] `forms/MasterDataConfiguration/ProjectTemplates.py` (ProjectTemplateForm, ProjectTemplateInstantiateForm)
-- [ ] `forms/MasterDataConfiguration/ProjectCustomFields.py` (ProjectCustomFieldForm)
-- [ ] `forms/MasterDataConfiguration/ProjectTeams.py` (ProjectTeamForm, ProjectTeamMemberForm)
-- [ ] `forms/MasterDataConfiguration/ProjectLocaleSettings.py` (ProjectLocaleSettingForm)
-- [ ] `forms/MasterDataConfiguration/__init__.py`
-- [ ] `views/MasterDataConfiguration/ProjectTemplates.py` (`ptm_list`, `ptm_create`, `ptm_detail`, `ptm_edit`, `ptm_delete`, `ptm_instantiate`)
-- [ ] `views/MasterDataConfiguration/ProjectCustomFields.py` (`pcf_list`, `pcf_create`, `pcf_detail`, `pcf_edit`, `pcf_delete`, `pcf_toggle_active`)
-- [ ] `views/MasterDataConfiguration/ProjectTeams.py` (`pte_list`, `pte_create`, `pte_detail`, `pte_edit`, `pte_delete`, `pte_add_member`, `pte_remove_member`)
-- [ ] `views/MasterDataConfiguration/ProjectLocaleSettings.py` (`pls_list`, `pls_create`, `pls_detail`, `pls_edit`, `pls_delete`, `pls_set_default`)
-- [ ] `views/MasterDataConfiguration/ConfigurationHub.py` (`configuration_hub`)
-- [ ] `views/MasterDataConfiguration/__init__.py`
-- [ ] `urls/MasterDataConfiguration/ProjectTemplates.py`
-- [ ] `urls/MasterDataConfiguration/ProjectCustomFields.py`
-- [ ] `urls/MasterDataConfiguration/ProjectTeams.py`
-- [ ] `urls/MasterDataConfiguration/ProjectLocaleSettings.py`
-- [ ] `urls/MasterDataConfiguration/ConfigurationHub.py`
-- [ ] `urls/MasterDataConfiguration/__init__.py`
+- [x] `models/MasterDataConfiguration/ProjectTemplates.py`
+- [x] `models/MasterDataConfiguration/ProjectCustomFields.py`
+- [x] `models/MasterDataConfiguration/ProjectTeams.py`
+- [x] `models/MasterDataConfiguration/ProjectLocaleSettings.py`
+- [x] `models/MasterDataConfiguration/__init__.py`
+- [x] `forms/MasterDataConfiguration/ProjectTemplates.py` (ProjectTemplateForm, ProjectTemplateInstantiateForm)
+- [x] `forms/MasterDataConfiguration/ProjectCustomFields.py` (ProjectCustomFieldForm)
+- [x] `forms/MasterDataConfiguration/ProjectTeams.py` (ProjectTeamForm, ProjectTeamMemberForm)
+- [x] `forms/MasterDataConfiguration/ProjectLocaleSettings.py` (ProjectLocaleSettingForm)
+- [x] `forms/MasterDataConfiguration/__init__.py`
+- [x] `views/MasterDataConfiguration/ProjectTemplates.py` (`ptm_list`, `ptm_create`, `ptm_detail`, `ptm_edit`, `ptm_delete`, `ptm_instantiate`)
+- [x] `views/MasterDataConfiguration/ProjectCustomFields.py` (`pcf_list`, `pcf_create`, `pcf_detail`, `pcf_edit`, `pcf_delete`, `pcf_toggle_active`)
+- [x] `views/MasterDataConfiguration/ProjectTeams.py` (`pte_list`, `pte_create`, `pte_detail`, `pte_edit`, `pte_delete`, `pte_add_member`, `pte_remove_member`)
+- [x] `views/MasterDataConfiguration/ProjectLocaleSettings.py` (`pls_list`, `pls_create`, `pls_detail`, `pls_edit`, `pls_delete`, `pls_set_default`)
+- [x] `views/MasterDataConfiguration/ConfigurationHub.py` (`configuration_hub`)
+- [x] `views/MasterDataConfiguration/__init__.py`
+- [x] `urls/MasterDataConfiguration/ProjectTemplates.py`
+- [x] `urls/MasterDataConfiguration/ProjectCustomFields.py`
+- [x] `urls/MasterDataConfiguration/ProjectTeams.py`
+- [x] `urls/MasterDataConfiguration/ProjectLocaleSettings.py`
+- [x] `urls/MasterDataConfiguration/ConfigurationHub.py`
+- [x] `urls/MasterDataConfiguration/__init__.py`
 
 ## Integration & Wire-up
-- [ ] Append re-exports to `apps/projects/models/__init__.py`
-- [ ] Append re-exports to `apps/projects/forms/__init__.py`
-- [ ] Append re-exports to `apps/projects/views/__init__.py`
-- [ ] Append urlpatterns to `apps/projects/urls/__init__.py`
-- [ ] Register 7.19 models in `apps/projects/admin.py`
-- [ ] Extend `seed_projects.py` with `_master_data_configuration(tenant, now)` and `--flush`
-- [ ] Add `LIVE_LINKS["7.19"]` in `apps/core/navigation.py`
-- [ ] Generate migration `makemigrations projects` (expect `0028_...`) and run `migrate`
+- [x] Append re-exports to `apps/projects/models/__init__.py`
+- [x] Append re-exports to `apps/projects/forms/__init__.py`
+- [x] Append re-exports to `apps/projects/views/__init__.py`
+- [x] Append urlpatterns to `apps/projects/urls/__init__.py`
+- [x] Register 7.19 models in `apps/projects/admin.py`
+- [x] Extend `seed_projects.py` with `_master_data_configuration(tenant, now)` and `--flush`
+- [x] Add `LIVE_LINKS["7.19"]` in `apps/core/navigation.py`
+- [x] Generate migration `makemigrations projects` (expect `0028_...`) and run `migrate`
 
 ## Templates (`templates/projects/masterdataconfiguration/`)
-- [ ] `templates/projects/masterdataconfiguration/template/list.html`
-- [ ] `templates/projects/masterdataconfiguration/template/detail.html`
-- [ ] `templates/projects/masterdataconfiguration/template/form.html`
-- [ ] `templates/projects/masterdataconfiguration/template/instantiate.html`
-- [ ] `templates/projects/masterdataconfiguration/customfield/list.html`
-- [ ] `templates/projects/masterdataconfiguration/customfield/detail.html`
-- [ ] `templates/projects/masterdataconfiguration/customfield/form.html`
-- [ ] `templates/projects/masterdataconfiguration/team/list.html`
-- [ ] `templates/projects/masterdataconfiguration/team/detail.html`
-- [ ] `templates/projects/masterdataconfiguration/team/form.html`
-- [ ] `templates/projects/masterdataconfiguration/localesetting/list.html`
-- [ ] `templates/projects/masterdataconfiguration/localesetting/detail.html`
-- [ ] `templates/projects/masterdataconfiguration/localesetting/form.html`
-- [ ] `templates/projects/masterdataconfiguration/boards/hub.html`
+- [x] `templates/projects/masterdataconfiguration/template/list.html`
+- [x] `templates/projects/masterdataconfiguration/template/detail.html`
+- [x] `templates/projects/masterdataconfiguration/template/form.html`
+- [x] `templates/projects/masterdataconfiguration/template/instantiate.html`
+- [x] `templates/projects/masterdataconfiguration/customfield/list.html`
+- [x] `templates/projects/masterdataconfiguration/customfield/detail.html`
+- [x] `templates/projects/masterdataconfiguration/customfield/form.html`
+- [x] `templates/projects/masterdataconfiguration/team/list.html`
+- [x] `templates/projects/masterdataconfiguration/team/detail.html`
+- [x] `templates/projects/masterdataconfiguration/team/form.html`
+- [x] `templates/projects/masterdataconfiguration/localesetting/list.html`
+- [x] `templates/projects/masterdataconfiguration/localesetting/detail.html`
+- [x] `templates/projects/masterdataconfiguration/localesetting/form.html`
+- [x] `templates/projects/masterdataconfiguration/boards/hub.html`
 
 ## Verify & Smoke
-- [ ] `makemigrations projects`
-- [ ] `migrate`
-- [ ] `seed_projects` twice (idempotent)
-- [ ] `manage.py check` clean
-- [ ] Smoke test via script in `temp/` as `admin_acme`: all 200/302, IDOR 404, instantiate action works
+- [x] `makemigrations projects`
+- [x] `migrate`
+- [x] `seed_projects` twice (idempotent)
+- [x] `manage.py check` clean
+- [x] Smoke test via script in `temp/` as `admin_acme`: all 200/302, IDOR 404, instantiate action works
 
 ## Review & Tests & Skill
-- [ ] Phase 4 Review: 6 reviewers strictly serial -> `.claude/tasks/review-projects-7.19.md`
-- [ ] Phase 5 Fixer: burn down findings
-- [ ] Phase 6 Tests: test contract, conftest, 4 test files (`test_masterdataconfiguration_*`), full app suite
-- [ ] Phase 7: Update `projects` SKILL.md and README.md
+- [x] Phase 4 Review: 6 reviewers strictly serial -> `.claude/tasks/review-projects-7.19.md`
+- [x] Phase 5 Fixer: burn down findings
+- [x] Phase 6 Tests: test contract, conftest, 4 test files (`test_masterdataconfiguration_*`), full app suite
+- [x] Phase 7: Update `projects` SKILL.md and README.md
+
 
 ### Projects 7.19 Master Data & Configuration (close-out 2026-09-25)
 
