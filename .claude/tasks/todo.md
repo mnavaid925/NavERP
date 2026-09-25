@@ -162,6 +162,8 @@ Test subslug: `leadmanagement`.
 - [ ] Nurture: enrollment/lifecycle/consent evidence links to an existing CRM drip campaign; no ESP, delivery worker, sequence-step/branch renderer, dynamic personalization, scheduler, per-recipient open/click tracking, or simulated “sent” claim is added.
 - [ ] Conversion/analytics: CRM remains the sole conversion writer; duplicate-aware existing-account/contact matching, real notification dispatch, response SLA, attribution, and funnel analytics remain CRM hardening/8.12/8.13. No unauthenticated Sales endpoint is introduced.
 
+---
+
 # Build Plan — Module 0 0.16 Backup, Recovery & Data Lifecycle
 
 Source of truth: `.claude/tasks/research-core-0.16.md`.
@@ -10173,3 +10175,126 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 - [ ] Provider enrichment, scheduled refresh, outbound HTTP, and external verification remain a governed integration pass.
 - [ ] Exact product white-space remains unavailable until CRM Product and SCM Item have a governed mapping.
 - [ ] Dynamic segments, account merges, affiliate/JV relation types, AI-generated plans, QBRs, onboarding, renewal, and advocacy remain outside 8.3.
+
+---
+# Sub-module 8.2 — Opportunity & Pipeline Management (Module 8: Sales Management System, sales) — plan from research-sales-8.2.md (2026-09-25)
+
+## Models (from research — 1–4)
+- [ ] `Pipeline` [PIPE-] — `name`, `description` (blank), `is_default` (bool, default False), `is_active` (bool, default True); ordering `["-is_default", "name", "-created_at"]`; unique `("tenant", "number")`, indexes `(tenant, is_active)`, `(tenant, is_default)` (drivers: Multiple named pipelines, Closed-stage integrity, At most one active default per tenant) — FKs: `core.Tenant` — form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`
+- [ ] `PipelineStage` (child of Pipeline in `Pipelines.py`, unnumbered) — `pipeline` (FK `sales.Pipeline`, CASCADE), `name` (max 120), `code` (SlugField 40), `sequence` (PositiveIntegerField, default 1), `stage_kind` (choices: `open`, `won`, `lost`), `crm_stage_key` (choices: `prospecting`, `qualification`, `proposal`, `negotiation`, `closed_won`, `closed_lost`), `probability` (0..100, won=100, lost=0, open=1..99), `forecast_category` (choices: `omitted`, `pipeline`, `best_case`, `commit`, `closed`), `entry_guidance` (blank text), `exit_guidance` (blank text), `entry_criteria` (JSON list of allowlisted `{key, label}`), `exit_criteria` (JSON list of allowlisted `{key, label}`), `target_days` (nullable PositiveSmallIntegerField, 1..3650), `is_active` (bool, default True); unique `("tenant", "pipeline", "code")`, indexes `(tenant, pipeline, sequence)`, `(tenant, stage_kind, is_active)` (drivers: Tenant-custom stage definitions, Stage probability & category defaults, Structured entry/exit criteria with allowlist, Closed-stage integrity, Time-in-stage and rotting) — FKs: `sales.Pipeline`, `core.Tenant` — form excludes: `tenant`, `created_at`, `updated_at`
+- [ ] `OpportunityPipelinePlacement` (one-to-one deal link in `Pipelines.py`, unnumbered) — `opportunity` (OneToOneField `crm.Opportunity`, CASCADE, related_name `sales_pipeline_placement`), `pipeline` (FK `sales.Pipeline`, PROTECT, related_name `placements`), `current_stage` (FK `sales.PipelineStage`, PROTECT, related_name `current_placements`), `probability_override` (nullable 0..100 integer), `stage_entered_at` (DateTimeField default timezone.now, editable=False); unique `("tenant", "opportunity")`, indexes `(tenant, opportunity)`, `(tenant, pipeline)` (drivers: Filterable multi-pipeline board/list, Manual probability override, Canonical-state invariant projecting to existing `crm.Opportunity.stage`, `probability`, `forecast_category`, `stage_changed_at`) — FKs: `crm.Opportunity`, `sales.Pipeline`, `sales.PipelineStage`, `core.Tenant` — form excludes: `tenant`, `stage_entered_at`, `created_at`, `updated_at`
+- [ ] `OpportunityTeamMember` [OTM-] — `opportunity` (FK `crm.Opportunity`, CASCADE, related_name `sales_team_members`), `user` (FK `settings.AUTH_USER_MODEL`, CASCADE), `org_unit` (nullable FK `core.OrgUnit`, SET_NULL), `role` (choices: `co_owner`, `collaborator`, `sales_support`, `solution_consultant`, `executive_sponsor`, `approver`, `observer`), `responsibility` (blank text), `is_active` (bool, default True); unique `("tenant", "opportunity", "user", "role")`, indexes `(tenant, opportunity, is_active)`, `(tenant, user)` (drivers: Functional opportunity team with roles, Co-owner/collaborator/sponsor distinction, Follower/coordinator concept; note: single accountable deal owner remains `crm.Opportunity.owner`, commercial splits remain `crm.OpportunitySplit`) — FKs: `crm.Opportunity`, `settings.AUTH_USER_MODEL` (`accounts.User`), `core.OrgUnit`, `core.Tenant` — form excludes: `tenant`, auto-`number`, `opportunity` (supplied by view context), `created_at`, `updated_at`
+- [ ] `CompetitorProfile` [CMP-] — `party` (OneToOneField `core.Party`, CASCADE, related_name `sales_competitor_profile`), `aliases` (blank text), `website_url` (URLField 500, blank), `description` (blank text), `market_positioning` (blank text), `strengths` (blank text), `weaknesses` (blank text), `differentiators` (blank text), `objection_handling` (blank text), `last_reviewed_on` (nullable DateField), `is_active` (bool, default True); unique `("tenant", "number")`, unique `("party",)`, index `(tenant, is_active)`; ordering by `party__name` (drivers: Reusable battle-card summary, Structured competitor anchored on `core.Party` spine) — FKs: `core.Party`, `core.Tenant` — form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`
+- [ ] `OpportunityCompetitor` (deal competitor link in `CompetitiveIntelligence.py`, unnumbered) — `opportunity` (FK `crm.Opportunity`, CASCADE, related_name `sales_competitors`), `competitor_profile` (FK `sales.CompetitorProfile`, PROTECT), `relationship` (choices: `identified`, `evaluating`, `shortlisted`, `preferred`, `incumbent`, `eliminated`, `lost_to`, `beaten`, `withdrew`), `is_primary` (bool, default False), `pricing_notes` (blank text), `deal_notes` (blank text), `positioning_notes` (blank text); unique `("tenant", "opportunity", "competitor_profile")`, indexes `(tenant, opportunity, relationship)`, `(tenant, opportunity, is_primary)` (drivers: Structured competitor per opportunity, Deal-level competitive notes, One primary competitor per deal under lock) — FKs: `crm.Opportunity`, `sales.CompetitorProfile`, `core.Tenant` — form excludes: `tenant`, `opportunity` (supplied by view context), `created_at`, `updated_at`
+- [ ] `WinLossReason` [WLR-] — `code` (SlugField 40), `name` (CharField 120), `description` (blank text), `sequence` (PositiveIntegerField, default 1), `result` (choices: `won`, `lost`, `both`), `category` (choices: `price`, `product_fit`, `timing`, `competition`, `relationship`, `authority`, `budget`, `no_decision`, `other`), `is_active` (bool, default True); unique `("tenant", "number")`, unique `("tenant", "code")`, indexes `(tenant, result, is_active)`, `(tenant, category, is_active)`; ordering `["sequence", "name"]` (drivers: Configurable win/loss reason taxonomy for structured closure reporting) — FKs: `core.Tenant` — form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`
+- [ ] `OpportunityOutcome` [OUT-] (append-only closure record in `OpportunityOutcomes.py`) — `opportunity` (FK `crm.Opportunity`, CASCADE, related_name `sales_outcomes`), `result` (choices: `won`, `lost`), `reason` (FK `sales.WinLossReason`, PROTECT), `competitor_link` (nullable FK `sales.OpportunityCompetitor`, SET_NULL), `notes` (blank text), `closed_at` (DateTimeField default timezone.now, editable=False), `recorded_by` (nullable FK `settings.AUTH_USER_MODEL`, SET_NULL, editable=False); unique `("tenant", "number")`, indexes `(tenant, result, closed_at)`, `(tenant, opportunity, closed_at)`, `(tenant, reason)` (drivers: Structured win/loss closure evidence, Closed-stage integrity, Stage history & audit trail; immutable, written only by transition service, preserved on reopen) — FKs: `crm.Opportunity`, `sales.WinLossReason`, `sales.OpportunityCompetitor`, `settings.AUTH_USER_MODEL`, `core.Tenant` — form: No direct add/edit/delete form or route; written append-only via transition service
+- [ ] Additive CRM Opportunity Spine Fields (verified in `apps/crm/models/SalesForceAutomation/Opportunities.py`) — `next_step_due_date` (DateField, null/blank) for timely next-step alerts, nullable `currency` (FK `accounting.Currency`, SET_NULL) for currency-safe multi-currency pipelines, plus synchronized compatibility projections for `stage`, `probability`, `forecast_category`, `stage_changed_at`, and `lost_at`
+
+## Backend (apps/sales/{models,forms,views,urls}/OpportunityPipeline/)
+- [ ] `models/OpportunityPipeline/Pipelines.py` (`Pipeline`, `PipelineStage`, `OpportunityPipelinePlacement`)
+- [ ] `models/OpportunityTeams/OpportunityTeams.py` (`OpportunityTeamMember`)
+- [ ] `models/CompetitiveIntelligence/CompetitiveIntelligence.py` (`CompetitorProfile`, `OpportunityCompetitor`)
+- [ ] `models/OpportunityOutcomes/OpportunityOutcomes.py` (`WinLossReason`, `OpportunityOutcome`)
+- [ ] `models/OpportunityPipeline/__init__.py`, `models/OpportunityTeams/__init__.py`, `models/CompetitiveIntelligence/__init__.py`, `models/OpportunityOutcomes/__init__.py`
+- [ ] Domain service `apps/sales/opportunity_services.py` (`sales_place_opportunity`, `sales_transition_opportunity`, `sales_unplace_opportunity`, `sales_compute_health` with deterministic status `on_track`/`watch`/`at_risk` and exact factor keys)
+- [ ] Domain analytics `apps/sales/opportunity_analytics.py` (`sales_pipeline_rollups`, `sales_pipeline_currency_totals`, `sales_stage_age_rows`, `sales_win_loss_rows`, `sales_competitor_rows`, `sales_health_counts`)
+- [ ] `forms/OpportunityPipeline/Pipelines.py` (`PipelineForm`, `PipelineStageForm`, `PipelineStageOrderForm`, `OpportunityPipelinePlacementForm`, `OpportunityTransitionForm`)
+- [ ] `forms/OpportunityTeams/OpportunityTeams.py` (`OpportunityTeamMemberForm`)
+- [ ] `forms/CompetitiveIntelligence/CompetitiveIntelligence.py` (`CompetitorProfileForm`, `OpportunityCompetitorForm`)
+- [ ] `forms/OpportunityOutcomes/OpportunityOutcomes.py` (`WinLossReasonForm`)
+- [ ] `forms/OpportunityPipeline/__init__.py`, `forms/OpportunityTeams/__init__.py`, `forms/CompetitiveIntelligence/__init__.py`, `forms/OpportunityOutcomes/__init__.py`
+- [ ] `views/OpportunityPipeline/Pipelines.py` (`pipeline_list`, `pipeline_create`, `pipeline_detail`, `pipeline_edit`, `pipeline_delete`, `pipeline_stages`, `pipeline_stage_create`, `pipeline_stage_reorder`, `pipeline_stage_edit`, `pipeline_stage_delete`, `pipeline_set_default`, `pipeline_board`, `pipeline_visibility`)
+- [ ] `views/Workspace.py` (`workspace_list`, `workspace_detail`, `workspace_place`, `workspace_unplace`, `workspace_transition`)
+- [ ] `views/OpportunityTeams/OpportunityTeams.py` (`team_member_add`, `team_member_edit`, `team_member_remove`)
+- [ ] `views/CompetitiveIntelligence/CompetitiveIntelligence.py` (`competitor_profile_list`, `competitor_profile_create`, `competitor_profile_detail`, `competitor_profile_edit`, `competitor_profile_delete`, `competitor_link_add`, `competitor_link_edit`, `competitor_link_remove`)
+- [ ] `views/OpportunityOutcomes/OpportunityOutcomes.py` (`win_loss_reason_list`, `win_loss_reason_create`, `win_loss_reason_detail`, `win_loss_reason_edit`, `win_loss_reason_delete`)
+- [ ] `views/OpportunityPipeline/__init__.py`, `views/OpportunityTeams/__init__.py`, `views/CompetitiveIntelligence/__init__.py`, `views/OpportunityOutcomes/__init__.py`
+- [ ] `urls/OpportunityPipeline/Pipelines.py` (literal routes before `<int:pk>`: `pipelines/`, `pipelines/add/`, `<int:pk>/`, `<int:pk>/edit/`, `<int:pk>/delete/`, `<int:pk>/stages/`, `<int:pk>/stages/add/`, `<int:pk>/stages/reorder/`, `<int:pk>/stages/<int:stage_pk>/edit/`, `<int:pk>/stages/<int:stage_pk>/delete/`, `<int:pk>/set-default/`, `board/`, `visibility/`)
+- [ ] `urls/Workspace/Workspace.py` (literal routes before `<int:pk>`: `opportunity/`, `opportunity/workspace/<int:opportunity_pk>/`, `<int:opportunity_pk>/place/`, `<int:opportunity_pk>/unplace/`, `<int:opportunity_pk>/transition/`)
+- [ ] `urls/OpportunityTeams/OpportunityTeams.py` (`opportunity/workspace/<int:opportunity_pk>/team/add/`, `.../team/<int:member_pk>/edit/`, `.../team/<int:member_pk>/remove/`)
+- [ ] `urls/CompetitiveIntelligence/CompetitiveIntelligence.py` (literal routes before `<int:pk>`: `competitors/`, `competitors/add/`, `<int:pk>/`, `<int:pk>/edit/`, `<int:pk>/delete/`, `.../competitors/add/`, `.../competitors/<int:competitor_pk>/edit/`, `.../competitors/<int:competitor_pk>/remove/`)
+- [ ] `urls/OpportunityOutcomes/OpportunityOutcomes.py` (literal routes before `<int:pk>`: `win-loss-reasons/`, `win-loss-reasons/add/`, `<int:pk>/`, `<int:pk>/edit/`, `<int:pk>/delete/`)
+- [ ] `urls/OpportunityPipeline/__init__.py`, `urls/OpportunityTeams/__init__.py`, `urls/CompetitiveIntelligence/__init__.py`, `urls/OpportunityOutcomes/__init__.py`, `urls/Workspace/__init__.py`
+- [ ] Re-export all 8 models in `apps/sales/models/__init__.py`
+- [ ] Re-export all forms in `apps/sales/forms/__init__.py`
+- [ ] Re-export all views in `apps/sales/views/__init__.py`
+- [ ] Concatenate all 8.2 URL modules in `apps/sales/urls/__init__.py` (literal routes first)
+- [ ] Register all 8 models in `apps/sales/admin.py` with tenant filters, search, readonly number/timestamps, and append-only guard for `OpportunityOutcome`
+- [ ] Generate migration `makemigrations sales` (claim next free migration `0005_...`) and run `migrate`
+- [ ] Extend `apps/sales/management/commands/seed_sales.py` with idempotent 8.2 data (pipelines, baseline stages, reasons, competitor profiles, team members, placements, and `--backfill` for existing CRM deals)
+
+## Wire-up
+- [ ] Add `LIVE_LINKS["8.2"]` entry in `apps/core/navigation.py` mapping exact NavERP.md §8.2 bullet texts:
+  - `Opportunity Creation & Staging` → `sales:opportunity_pipeline_list`
+  - `Pipeline Visibility & Forecasting` → `sales:opportunity_pipeline_visibility`
+  - `Opportunity Tracking & Updates` → `sales:opportunity_workspace_list`
+  - `Competitive Intelligence` → `sales:opportunity_competitor_profile_list`
+  - `Deal Collaboration & Team Selling` → `sales:opportunity_workspace_list`
+  - Staff extra links:
+    - `Pipeline Board` → `sales:opportunity_pipeline_board`
+    - `Win / Loss Reasons` → `sales:opportunity_win_loss_reason_list`
+- [ ] Verify `config/urls.py` mounts `apps.sales.urls` at `sales/` (already wired) and all 8.2 route names reverse cleanly
+
+## Templates (templates/sales/opportunity/)
+- [ ] `templates/sales/opportunity/workspace.html` (workspace register & deal room aggregate: deal header, deterministic health badge & factors, team panel, competitor panel, outcome history, unified timeline of CRM tasks/communications/events/audit, contracts/documents, CRM edit link)
+- [ ] `templates/sales/opportunity/placement.html` (focused opportunity pipeline placement / stage reassignment form)
+- [ ] `templates/sales/opportunity/pipeline/list.html` (pipeline register with search, active filter, stats cards, Actions column)
+- [ ] `templates/sales/opportunity/pipeline/detail.html` (pipeline detail with stage progression summary, placement count, set-default action)
+- [ ] `templates/sales/opportunity/pipeline/form.html` (pipeline create / edit form)
+- [ ] `templates/sales/opportunity/pipeline/stages.html` (stage list with sequence reordering controls and criteria overview)
+- [ ] `templates/sales/opportunity/pipeline/stage_form.html` (stage create / edit form with entry/exit criteria checkboxes from allowlist)
+- [ ] `templates/sales/opportunity/pipeline/board.html` (multi-pipeline Kanban board with currency-safe summaries, stage totals, card drag/transition, health badges)
+- [ ] `templates/sales/opportunity/pipeline/visibility.html` (visibility & forecast dashboard: currency-separated totals, stage aging & rotting alerts, win/loss stats, competitor win-rate rollups)
+- [ ] `templates/sales/opportunity/team_member/form.html` (focused inline modal/page for team member role & responsibility assignment)
+- [ ] `templates/sales/opportunity/competitor/list.html` (competitor profile register with search, active filter, stats, Actions column)
+- [ ] `templates/sales/opportunity/competitor/detail.html` (competitor battle card detail: positioning, strengths, weaknesses, differentiators, objections, active deal links)
+- [ ] `templates/sales/opportunity/competitor/form.html` (competitor profile create / edit form tied to `core.Party`)
+- [ ] `templates/sales/opportunity/competitor/link_form.html` (focused deal competitor link add / edit form with relationship choices and pricing notes)
+- [ ] `templates/sales/opportunity/winlossreason/list.html` (win/loss reasons register with result/category filters, sequence ordering, stats)
+- [ ] `templates/sales/opportunity/winlossreason/detail.html` (win/loss reason detail with historical outcome references)
+- [ ] `templates/sales/opportunity/winlossreason/form.html` (win/loss reason create / edit form)
+
+## Verify
+- [ ] Run `python manage.py makemigrations sales` (claim migration `0005_...`) and `python manage.py migrate`
+- [ ] Run `python manage.py seed_sales` × 2 (verify idempotent no-op on rerun) and `python manage.py seed_sales --backfill` × 2
+- [ ] Run `python manage.py check` (confirm clean system check with zero warnings)
+- [ ] Smoke sweep script in `temp/` as `admin_acme` / `password`:
+  - All 8.2 URLs return HTTP 200 or 302 as expected
+  - Content assertions pass: expected numbers, stage names, competitor profiles, and health indicators present
+  - Cross-tenant IDOR returns 404 for foreign tenant objects
+  - All mutations reject GET (return 405) and require valid CSRF
+  - No template comment leaks (`{#` or `{% comment`)
+  - Pagination has_previous/has_next guards and filter persistence verified
+- [ ] Sidebar verification: confirm all 5 NavERP.md §8.2 bullets navigate to live staff-accessible pages
+
+## Close-out
+- [ ] Serial review passes executed and recorded in `.claude/tasks/review-sales-8.2.md`: `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer` → `code-fixer`
+- [ ] Test suite completed in `apps/sales/tests/`:
+  - `test_opportunity_pipeline_models.py` (model constraints, unique checks, stage sequence, entry/exit criteria validation, outcome immutability)
+  - `test_opportunity_pipeline_forms.py` (form field exclusions, tenant FK scoping, criteria serialization, transition validation)
+  - `test_opportunity_pipeline_views.py` (view routes, context dictionaries, filter parsing, board columns, currency grouping)
+  - `test_opportunity_pipeline_security.py` (tenant isolation, IDOR 404s, POST-only verbs, tenant admin role gates, audit logging)
+  - Full unfiltered sales test suite passes
+- [ ] Update `.claude/skills/sales/SKILL.md` (add 8.2 models, routes, templates, services, tenancy rules, seeder details)
+- [ ] Update `README.md` (Module 8 status: 8.2 Opportunity & Pipeline Management built)
+
+## Later passes / deferred
+- Lead capture, scoring, qualification, and routing (owned by 8.1 Lead Management)
+- Account hierarchy, contact enrichment, influence maps, and account plans (owned by 8.3 Contact & Account Management)
+- Formal forecasting, commit/manager overrides, quota attainment tracking, FX conversion, and predictive ML scoring (owned by 8.4 Sales Forecasting)
+- CPQ, product bundling, pricing approvals, proposal generation, and quote versioning (owned by 8.5 Quote & Proposal Management)
+- Order capture, fulfillment tracking, order amendments, and revenue recognition (owned by 8.6 Order Management)
+- Territory rebalancing, quota planning, and capacity modeling (owned by 8.7 Territory & Quota Management)
+- Universal sales activity engines, calendar synchronization, and automated email parsing (owned by 8.8 Sales Activity & Task Management)
+- Governed enablement battle-card and playbook publishing library (owned by 8.9 Sales Enablement)
+- Incentive compensation plans, commission calculators, and split payout automation (owned by 8.10 Incentive Compensation)
+- Customer success health scoring, account churn prediction, and renewal pipeline (owned by 8.11 Customer Success)
+- Generic skip/back stage workflow rule engine and arbitrary transition approval rules (HubSpot/Dynamics style)
+- Automated activity ingestion, notification delivery, Slack/Teams bot alerts
+- External customer deal rooms, external comments, and guest portal access
+- Row-level opportunity ACLs based on team membership (all views remain tenant-scoped)
+- Automated competitor web monitoring, pricing scraping, and win/loss conversation AI mining
+- Full stage-history snapshot warehouse and opaque AI deal health scoring
+
+## Review notes
+(filled in at the end)
