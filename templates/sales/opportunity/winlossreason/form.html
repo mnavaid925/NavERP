@@ -6,7 +6,7 @@
     <h1 class="page-title">{% if is_edit %}Edit Win / Loss Reason{% else %}New Win / Loss Reason{% endif %}</h1>
     <div class="breadcrumb"><a href="{% url 'sales:opportunity_win_loss_reason_list' %}">Win / Loss Reasons</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
   </div>
-  <a href="{% if is_edit %}{% url 'sales:opportunity_win_loss_reason_detail' obj.pk %}{% else %}{% url 'sales:opportunity_win_loss_reason_list' %}{% endif %}" class="btn btn-outline">Back</a>
+  <a href="{% if is_edit %}{% url 'sales:opportunity_win_loss_reason_detail' obj.pk %}{% else %}{% url 'sales:opportunity_win_loss_reason_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
 </div>
 
 <div class="card max-w-3xl mx-auto">
