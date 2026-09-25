@@ -7,13 +7,17 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounting.models import Currency
-from apps.core.models import ConsentPurpose, Tenant
-from apps.crm.models import Campaign, EmailCampaign, EmailTemplate, Lead, Territory
-from apps.sales.models import LeadNurtureEnrollment, LeadQualification, LeadRoutingRule, LeadScoreEvent
+from apps.core.models import ConsentPurpose, Party, Tenant
+from apps.crm.models import AccountProfile, Campaign, ContactProfile, EmailCampaign, EmailTemplate, Lead, Opportunity, Territory
+from apps.sales.models import AccountClassification, AccountPlan, AccountStakeholder, LeadNurtureEnrollment, LeadQualification, LeadRoutingRule, LeadScoreEvent, PartyEnrichmentEvent
 from apps.sales.services import (
     activate_nurture,
+    apply_enrichment_event,
     apply_qualification_decision,
+    create_enrichment_event,
     record_score_event,
+    reject_enrichment_event,
+    transition_account_plan,
 )
 
 
@@ -21,7 +25,7 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Seed Sales 8.1 data idempotently."
+    help = "Seed Sales 8.1 and 8.3 data idempotently."
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -31,17 +35,19 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1 and 8.3 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
+        self.stdout.write(self.style.WARNING("Sales 8.3 enrichment is local review evidence only; provider, LinkedIn, verification, and sending workers are not seeded."))
 
     def _seed_tenant(self, tenant):
         owner = User.objects.filter(tenant=tenant, is_tenant_admin=True).first() or User.objects.filter(tenant=tenant, is_active=True).first()
         leads = list(Lead.objects.filter(tenant=tenant).order_by("created_at")[:3])
         if owner is None:
-            self.stdout.write(self.style.WARNING(f"{tenant.name}: no active tenant user; skipped Sales 8.1 seeding."))
+            self.stdout.write(self.style.WARNING(f"{tenant.name}: no active tenant user; skipped Sales 8.1 and 8.3 seeding."))
             return
+        self._seed_contact_account_management(tenant, owner)
         if not leads:
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
             return
@@ -197,3 +203,178 @@ class Command(BaseCommand):
                 owner=owner,
                 status="pending",
             )
+
+    def _seed_contact_account_management(self, tenant, owner):
+        today = timezone.localdate()
+        for model, label in (
+            (AccountStakeholder, "account stakeholders"),
+            (AccountClassification, "account classifications"),
+            (AccountPlan, "account plans"),
+            (PartyEnrichmentEvent, "enrichment events"),
+        ):
+            if model.objects.filter(tenant=tenant).exists():
+                self.stdout.write(f"{tenant.name}: {label} already exist; preserving them and filling only missing demo rows.")
+
+        def party_for(name, kind):
+            party = Party.objects.filter(tenant=tenant, kind=kind, name=name).first()
+            if party is None:
+                party = Party.objects.create(tenant=tenant, kind=kind, name=name)
+            return party
+
+        def account_for(name, parent=None):
+            party = party_for(name, "organization")
+            profile, _ = AccountProfile.objects.get_or_create(
+                tenant=tenant,
+                party=party,
+                defaults={"industry": "technology", "employee_count": 100},
+            )
+            if parent is not None and profile.parent_account_id is None:
+                profile.parent_account = parent
+                profile.save(update_fields=["parent_account", "updated_at"])
+            return party
+
+        root = account_for("Sales 8.3 Global Account")
+        child = account_for("Sales 8.3 Operating Company", root)
+        grandchild = account_for("Sales 8.3 Regional Unit", child)
+        separate_root = account_for("Sales 8.3 Independent Account")
+        accounts = [root, child, grandchild, separate_root]
+
+        contact_specs = [
+            ("Sales 8.3 Decision Maker", root),
+            ("Sales 8.3 Champion", root),
+            ("Sales 8.3 Economic Buyer", child),
+            ("Sales 8.3 Technical Evaluator", grandchild),
+            ("Sales 8.3 Procurement Contact", separate_root),
+        ]
+        contacts = []
+        for name, account in contact_specs:
+            party = party_for(name, "person")
+            ContactProfile.objects.get_or_create(
+                tenant=tenant,
+                party=party,
+                defaults={"account": account, "owner": owner, "job_title": "Sales stakeholder"},
+            )
+            contacts.append((party, account))
+
+        role_specs = [
+            (root, contacts[0][0], "decision_maker", "high", "positive", "strong"),
+            (root, contacts[1][0], "champion", "high", "positive", "strong"),
+            (child, contacts[2][0], "economic_buyer", "high", "neutral", "moderate"),
+            (grandchild, contacts[3][0], "technical_evaluator", "medium", "positive", "moderate"),
+            (separate_root, contacts[4][0], "procurement", "medium", "neutral", "moderate"),
+            (root, contacts[2][0], "influencer", "medium", "positive", "moderate"),
+        ]
+        for account, contact, role, influence, attitude, strength in role_specs:
+            AccountStakeholder.objects.get_or_create(
+                tenant=tenant,
+                account=account,
+                contact=contact,
+                role=role,
+                defaults={
+                    "influence": influence,
+                    "attitude": attitude,
+                    "relationship_strength": strength,
+                    "status": "active",
+                    "notes": "Seeded buying-center relationship.",
+                },
+            )
+
+        classification_specs = [
+            (root, "strategic", "active_customer", "high", "very_high", "full_wallet"),
+            (child, "key", "expansion_candidate", "high", "high", "large"),
+            (grandchild, "growth", "prospect", "medium", "medium", "medium"),
+            (separate_root, "nurture", "dormant", "low", "unknown", "small"),
+        ]
+        for account, tier, lifecycle, priority, potential, wallet in classification_specs:
+            AccountClassification.objects.get_or_create(
+                tenant=tenant,
+                account=account,
+                defaults={
+                    "tier": tier,
+                    "lifecycle_stage": lifecycle,
+                    "strategic_priority": priority,
+                    "revenue_potential": potential,
+                    "wallet_category": wallet,
+                    "rationale": "Seeded classification for the Sales 8.3 workspace.",
+                    "effective_on": today,
+                    "review_due_on": today + timedelta(days=90) if tier in {"strategic", "key"} else None,
+                    "classified_by": owner,
+                },
+            )
+
+        opportunity = Opportunity.objects.filter(tenant=tenant, account=root).only("id", "account_id", "created_at").order_by("-created_at").first()
+        if opportunity is None:
+            self.stdout.write(f"{tenant.name}: no existing CRM opportunity for the 8.3 demo; account plans will remain unlinked.")
+
+        plan_specs = [
+            ("draft", "Sales 8.3 Draft Plan"),
+            ("active", "Sales 8.3 Active Plan"),
+            ("review_due", "Sales 8.3 Review Plan"),
+            ("completed", "Sales 8.3 Completed Plan"),
+            ("archived", "Sales 8.3 Archived Plan"),
+        ]
+        plan_sequence = ("draft", "active", "review_due", "completed", "archived")
+        for target_status, title in plan_specs:
+            plan = AccountPlan.objects.filter(tenant=tenant, account=root, title=title).first()
+            if plan is None:
+                plan = AccountPlan.objects.create(
+                    tenant=tenant,
+                    account=root,
+                    title=title,
+                    period_start=today - timedelta(days=30),
+                    period_end=today + timedelta(days=180),
+                    owner=owner,
+                    business_drivers="Seeded strategic account planning context.",
+                    objectives="Build a measurable account growth plan.",
+                    strategy="Align the buying center and expand adoption.",
+                    white_space_assessment="Qualitative assessment; product mapping is not governed yet.",
+                    growth_initiatives="Sponsor an executive alignment workshop.",
+                    risk_summary="Confirm authority and procurement timing.",
+                    next_review_on=today + timedelta(days=30),
+                )
+            if plan.status not in plan_sequence:
+                self.stdout.write(self.style.WARNING(f"{tenant.name}: plan {plan.number} has an unsupported lifecycle state; preserved it."))
+                continue
+            if opportunity is not None and not plan.related_opportunities.filter(pk=opportunity.pk).exists():
+                plan.related_opportunities.add(opportunity)
+            current_index = plan_sequence.index(plan.status)
+            target_index = plan_sequence.index(target_status)
+            for next_status in plan_sequence[current_index + 1:target_index + 1]:
+                plan = transition_account_plan(plan, tenant, owner, next_status)
+
+        enrichment_purpose, _ = ConsentPurpose.objects.get_or_create(
+            tenant=tenant,
+            code="account-research",
+            defaults={
+                "name": "Account research",
+                "lawful_basis": "legitimate_interest",
+                "is_optional": False,
+                "is_active": True,
+            },
+        )
+        if not enrichment_purpose.is_active:
+            enrichment_purpose.is_active = True
+            enrichment_purpose.save(update_fields=["is_active"])
+        event_specs = [
+            (root, "proposed", "firmographic", "manual", None, {"industry": {"value": "technology", "confidence": 0.8}}),
+            (contacts[0][0], "applied", "contact", "manual", None, {"job_title": {"value": "Sales stakeholder", "confidence": 0.9}}),
+            (root, "rejected", "duplicate_check", "manual", None, {"annual_revenue": {"value": "1000000.00", "confidence": 0.4}}),
+            (contacts[0][0], "proposed", "email_validation", "import", enrichment_purpose, {"work_email": {"value": "sales8.3@example.com", "confidence": 0.7}}),
+        ]
+        for party, outcome, kind, source_kind, purpose, changes in event_specs:
+            event = create_enrichment_event(
+                tenant,
+                owner,
+                party=party,
+                kind=kind,
+                source_kind=source_kind,
+                source_name="Sales 8.3 seed",
+                source_reference=f"seed:party-enrichment:{party.pk}:{kind}:{outcome}",
+                changes=changes,
+                legal_basis_purpose=purpose,
+                idempotency_key=f"seed-party-enrichment:{party.pk}:{kind}:{outcome}",
+            )
+            if event.status == "proposed" and outcome == "applied":
+                apply_enrichment_event(event, tenant, owner, tuple(event.changes), "Seeded reviewed contact title.")
+            elif event.status == "proposed" and outcome == "rejected":
+                reject_enrichment_event(event, tenant, owner, "Seeded duplicate evidence was not applied.")
