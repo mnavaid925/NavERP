@@ -1,4 +1,6 @@
 """CRM 1.1 Core Data Management — Accounts views (split from apps/crm/views.py)."""
+from django.core.exceptions import ValidationError
+
 from apps.crm.views._common import *  # noqa: F401,F403
 from apps.crm.models import (
     AccountProfile,
@@ -11,6 +13,15 @@ from apps.crm.models import (
 from apps.crm.forms import (
     AccountForm,
 )
+
+
+def _add_profile_validation_error(form, exc):
+    errors = exc.message_dict if hasattr(exc, "message_dict") else {}
+    if errors:
+        for field, messages in errors.items():
+            form.add_error(None if field == "__all__" else field, messages)
+    else:
+        form.add_error(None, exc.messages)
 
 
 # ===================== Accounts & Contacts — core.Party + CRM profile (1.1) =================
@@ -57,17 +68,21 @@ def account_create(request):
     if request.method == "POST":
         form = AccountForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            with transaction.atomic():
-                party = Party.objects.create(
-                    tenant=request.tenant, kind="organization",
-                    name=form.cleaned_data["name"], tax_id=form.cleaned_data.get("tax_id", ""))
-                profile = form.save(commit=False)
-                profile.tenant = request.tenant
-                profile.party = party
-                profile.save()
-            write_audit_log(request.user, party, "create")
-            messages.success(request, "Account created.")
-            return redirect("crm:account_detail", pk=party.pk)
+            try:
+                with transaction.atomic():
+                    party = Party.objects.create(
+                        tenant=request.tenant, kind="organization",
+                        name=form.cleaned_data["name"], tax_id=form.cleaned_data.get("tax_id", ""))
+                    profile = form.save(commit=False)
+                    profile.tenant = request.tenant
+                    profile.party = party
+                    profile.save()
+                    write_audit_log(request.user, party, "create")
+            except ValidationError as exc:
+                _add_profile_validation_error(form, exc)
+            else:
+                messages.success(request, "Account created.")
+                return redirect("crm:account_detail", pk=party.pk)
     else:
         form = AccountForm(tenant=request.tenant)
     return render(request, "crm/directory/account/form.html", {"form": form, "is_edit": False})
@@ -78,22 +93,30 @@ def account_edit(request, pk):
     party = get_object_or_404(Party, pk=pk, tenant=request.tenant, kind="organization")
     # Bind to the existing profile, or a new (unsaved) one carrying the party — so the form's
     # parent-account self-exclusion works and the profile INSERT happens inside the atomic block.
-    profile = (AccountProfile.objects.filter(party=party).first()
-               or AccountProfile(party=party, tenant=request.tenant))
+    profile = (AccountProfile.objects.filter(
+        tenant=request.tenant,
+        party=party,
+        party__tenant=request.tenant,
+        party__kind="organization",
+    ).first() or AccountProfile(party=party, tenant=request.tenant))
     form = AccountForm(request.POST or None, instance=profile, tenant=request.tenant,
                        initial={"name": party.name, "tax_id": party.tax_id})
     if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            party.name = form.cleaned_data["name"]
-            party.tax_id = form.cleaned_data.get("tax_id", "")
-            party.save(update_fields=["name", "tax_id"])
-            p = form.save(commit=False)
-            p.tenant = request.tenant
-            p.party = party
-            p.save()
-        write_audit_log(request.user, party, "update")
-        messages.success(request, "Account updated.")
-        return redirect("crm:account_detail", pk=party.pk)
+        try:
+            with transaction.atomic():
+                party.name = form.cleaned_data["name"]
+                party.tax_id = form.cleaned_data.get("tax_id", "")
+                party.save(update_fields=["name", "tax_id"])
+                p = form.save(commit=False)
+                p.tenant = request.tenant
+                p.party = party
+                p.save()
+                write_audit_log(request.user, party, "update")
+        except ValidationError as exc:
+            _add_profile_validation_error(form, exc)
+        else:
+            messages.success(request, "Account updated.")
+            return redirect("crm:account_detail", pk=party.pk)
     return render(request, "crm/directory/account/form.html", {"form": form, "is_edit": True, "obj": party})
 
 
@@ -101,7 +124,8 @@ def account_edit(request, pk):
 @require_POST
 def account_delete(request, pk):
     party = get_object_or_404(Party, pk=pk, tenant=request.tenant, kind="organization")
-    write_audit_log(request.user, party, "delete")
-    party.delete()
+    with transaction.atomic():
+        write_audit_log(request.user, party, "delete")
+        party.delete()
     messages.success(request, "Account deleted.")
     return redirect("crm:account_list")
