@@ -23,6 +23,27 @@ from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import (
     WinLossReason,
 )
 from apps.sales.models.OpportunityTeams.OpportunityTeams import OpportunityTeamMember
+from apps.sales.opportunity_analytics import (
+    opportunity_pipeline_health as sales_compute_health,
+)
+
+__all__ = [
+    "opportunity_pipeline_baseline_stages",
+    "sales_create_pipeline",
+    "sales_set_default_pipeline",
+    "sales_save_pipeline",
+    "sales_save_pipeline_stage",
+    "sales_delete_pipeline_stage",
+    "sales_reorder_pipeline_stages",
+    "sales_validate_stage_criteria",
+    "sales_place_opportunity",
+    "sales_unplace_opportunity",
+    "sales_save_opportunity_competitor",
+    "sales_remove_opportunity_competitor",
+    "sales_allowed_transition_stages",
+    "sales_transition_opportunity",
+    "sales_compute_health",
+]
 
 
 def _opportunity_pipeline_tenant_id(tenant):
