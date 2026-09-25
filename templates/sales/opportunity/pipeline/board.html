@@ -135,7 +135,7 @@
   <div class="table-wrap"><table class="table">
     <thead><tr><th>Opportunity</th><th>Owner</th><th>Amount</th><th>Close date</th></tr></thead>
     <tbody>
-      {% for opportunity in unplaced_opportunities %}<tr><td><a href="{% url 'sales:opportunity_workspace_detail' opportunity.pk %}">{{ opportunity.number }} · {{ opportunity.name }}</a></td><td>{% if opportunity.owner %}{{ opportunity.owner.get_full_name|default:opportunity.owner.username }}{% else %}Unassigned{% endif %}</td><td>{{ opportunity.amount }}</td><td>{{ opportunity.close_date|default:"—" }}</td></tr>{% empty %}<tr><td colspan="4"><div class="empty-state"><i data-lucide="circle-check"></i><p>No unplaced open opportunities match this scope.</p></div></td></tr>{% endfor %}
+      {% for opportunity in unplaced_opportunities %}<tr><td><a href="{% url 'sales:opportunity_workspace_detail' opportunity.pk %}">{{ opportunity.number }} · {{ opportunity.name }}</a></td><td>{% if opportunity.owner %}{{ opportunity.owner.get_full_name|default:opportunity.owner.username }}{% else %}Unassigned{% endif %}</td><td>{{ opportunity.currency.code|default:opportunity.currency|default:"" }} {{ opportunity.amount }}</td><td>{{ opportunity.close_date|default:"—" }}</td></tr>{% empty %}<tr><td colspan="4"><div class="empty-state"><i data-lucide="circle-check"></i><p>No unplaced open opportunities match this scope.</p></div></td></tr>{% endfor %}
     </tbody>
   </table></div>
 </div>
