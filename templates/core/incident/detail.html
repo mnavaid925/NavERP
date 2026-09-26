@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title|truncatechars:60 }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title|truncatechars:90 }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:incident_list' %}">Incidents &amp; Notices</a><span class="sep">›</span><span>{{ obj.title|truncatechars:40 }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:incident_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:incident_delete' obj.pk %}" onsubmit="return confirm('Delete this notice record?');">
+        {% csrf_token %}
+        <button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>NavERP published nothing.</strong>
+      There is no status page in this application, no subscriber list and no mailer. The text below is a
+      draft, and the publication stamp records that somebody said they published it somewhere else.</p>
+    {% if obj.notified_at %}
+      <p class="text-muted"><i data-lucide="check"></i> Recorded as published {{ obj.notify_display }} — a
+        claim, not a transmission. Nothing was sent from here.</p>
+    {% else %}
+      <form method="post" action="{% url 'core:incident_notify' obj.pk %}" onsubmit="return confirm('Record that you published this notice elsewhere? NavERP will send nothing.');">
+        {% csrf_token %}
+        <button class="btn btn-outline" type="submit"><i data-lucide="send"></i> Record publication</button>
+      </form>
+    {% endif %}
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The notice</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Status</dt><dd>
+          {% if obj.status == "resolved" or obj.status == "completed" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% elif obj.status == "scheduled" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+          {% elif obj.status == "monitoring" or obj.status == "verifying" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Impact</dt><dd>
+          {% if obj.impact == "none" %}<span class="badge badge-slate">{{ obj.get_impact_display }}</span>
+          {% elif obj.impact == "minor" %}<span class="badge badge-info">{{ obj.get_impact_display }}</span>
+          {% elif obj.impact == "major" %}<span class="badge badge-amber">{{ obj.get_impact_display }}</span>
+          {% elif obj.impact == "critical" %}<span class="badge badge-red">{{ obj.get_impact_display }}</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_impact_display }}</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_incident_type_display }}</dd></div>
+        <div class="detail-item"><dt>Progress</dt><dd>{{ obj.progress_display }}</dd></div>
+        <div class="detail-item"><dt>Primary component</dt><dd>{% if obj.service %}<a href="{% url 'core:service_component_detail' obj.service.pk %}">{{ obj.service.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Also affecting</dt><dd>{% for c in affected %}{{ c.name }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="text-muted">none recorded</span>{% endfor %}</dd></div>
+        <div class="detail-item"><dt>Originating alert</dt><dd>{% if obj.primary_alert %}<a href="{% url 'core:alert_event_detail' obj.primary_alert.pk %}">{{ obj.primary_alert.message|truncatechars:50 }}</a>{% else %}<span class="text-muted">not raised from a recorded firing</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Started</dt><dd>{% if obj.started_at %}{{ obj.started_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Resolved</dt><dd>{% if obj.resolved_at %}{{ obj.resolved_at|date:"M d, Y H:i" }} <span class="text-muted">(stamped from the status, never typed)</span>{% else %}<span class="text-muted">not resolved</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Maintenance window</dt><dd>{% if obj.window_valid %}{{ obj.scheduled_for|date:"M d, Y H:i" }} → {{ obj.scheduled_until|date:"M d, Y H:i" }}{% elif obj.scheduled_for or obj.scheduled_until %}<span class="text-muted">incomplete — the window needs both ends</span>{% else %}<span class="text-muted">not a scheduled window</span>{% endif %}
+          <div class="text-muted">This is the notice, not the change record.</div></dd></div>
+        <div class="detail-item"><dt>Published</dt><dd>{{ obj.notify_display }}</dd></div>
+        <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">In the register</span>{% else %}<span class="badge badge-muted">Archived</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Recorded</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The text</h2></div>
+    <div class="card-body">
+      <div class="detail-item"><dt>Public note (what a status page would show)</dt><dd>{% if obj.public_note %}{{ obj.public_note|linebreaksbr }}{% else %}<span class="text-muted">no public text written</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Internal note (never public)</dt><dd>{% if obj.internal_note %}{{ obj.internal_note|linebreaksbr }}{% else %}<span class="text-muted">no internal note</span>{% endif %}</dd></div>
+      {% if obj.notes %}<div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>{% endif %}
+    </div>
+  </div>
+
+  {% if alert_events %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Recent firings on the affected components</h2></div>
+      <div class="card-body">
+        <ul>{% for e in alert_events %}<li><a href="{% url 'core:alert_event_detail' e.pk %}">{{ e.message|truncatechars:60 }}</a> — {{ e.get_state_display }}, {{ e.fired_at|date:"M d, Y" }}</li>{% endfor %}</ul>
+        <p class="text-muted">Recorded reports, not alerts NavERP raised.</p>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
+
