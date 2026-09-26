@@ -292,6 +292,14 @@ def quote_portal_sign(request, token):
         messages.info(request, "This proposal has already been digitally accepted.")
         return redirect("sales:quote_portal_view", token=token)
 
+    if quote.is_expired:
+        messages.error(request, "This proposal has expired and can no longer be signed. Please contact sales for a refreshed quote.")
+        return redirect("sales:quote_portal_view", token=token)
+
+    if quote.status not in ["presented", "approved"]:
+        messages.error(request, f"This proposal cannot be signed in its current status ({quote.get_status_display()}).")
+        return redirect("sales:quote_portal_view", token=token)
+
     form = CPQPortalSignForm(request.POST)
     if form.is_valid():
         quote.signer_name = form.cleaned_data["signer_name"]
@@ -326,6 +334,14 @@ def quote_portal_toggle_line(request, token, line_id):
 
     if quote.status in ["accepted", "converted"]:
         messages.error(request, "Cannot modify options on a signed proposal.")
+        return redirect("sales:quote_portal_view", token=token)
+
+    if quote.is_expired:
+        messages.error(request, "Cannot modify options on an expired quotation.")
+        return redirect("sales:quote_portal_view", token=token)
+
+    if quote.status not in ["presented", "approved"]:
+        messages.error(request, f"Cannot modify options when quote is in status '{quote.get_status_display()}'.")
         return redirect("sales:quote_portal_view", token=token)
 
     if line.is_optional:
