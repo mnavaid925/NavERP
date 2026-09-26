@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Proposal Document: {{ quote.number }} — CPQ{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">Quotes</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_detail' quote.pk %}" class="text-slate-500 hover:text-slate-700">{{ quote.number }}</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">Proposal Document</span>
+            </nav>
+            <h1 class="page-title">Commercial Proposal Preview</h1>
+            <p class="text-sm text-slate-500 mt-1">Branded customer presentation ready for export or digital customer presentation.</p>
+        </div>
+        <div class="page-actions flex space-x-2">
+            <a href="{% url 'sales:cpq_quote_detail' quote.pk %}" class="btn btn-outline">
+                <i data-lucide="arrow-left" class="w-4 h-4 mr-1.5"></i> Back to Quote Workspace
+            </a>
+            <a href="{% url 'sales:quote_portal_view' quote.signing_token %}" target="_blank" class="btn btn-primary">
+                <i data-lucide="external-link" class="w-4 h-4 mr-1.5"></i> Customer E-Signature Portal
+            </a>
+            <button onclick="window.print()" class="btn btn-outline">
+                <i data-lucide="printer" class="w-4 h-4 mr-1.5"></i> Print / PDF
+            </button>
+        </div>
+    </div>
+
+    <!-- Rendered Proposal Document Frame -->
+    <div class="card p-8 bg-white border border-slate-200 shadow-sm max-w-4xl mx-auto">
+        {{ proposal_html|safe }}
+    </div>
+</div>
+{% endblock %}
