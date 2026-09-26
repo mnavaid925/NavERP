@@ -5,6 +5,10 @@ from .models import (
     AccountPlan,
     AccountStakeholder,
     CompetitorProfile,
+    ForecastAdjustment,
+    ForecastPeriod,
+    ForecastScenario,
+    ForecastSubmission,
     LeadNurtureEnrollment,
     LeadQualification,
     LeadRoutingRule,
@@ -293,4 +297,87 @@ class OpportunityOutcomeAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+# ---------------------------------------------------------------- 8.4 Sales Forecasting
+# Django admin is a SECOND WRITER. Every workflow- and service-controlled field below is
+# readonly, or the append-only / snapshot / isolation rulings are bypassable from /admin/.
+
+
+@admin.register(ForecastPeriod)
+class ForecastPeriodAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "period_type", "period_year", "period_number", "rollup_dimension", "is_active", "is_locked", "tenant")
+    list_filter = ("period_type", "rollup_dimension", "is_active", "is_locked", "tenant")
+    search_fields = ("number", "name")
+    # start_date / end_date are computed in clean()/save() (editable=False) and the number
+    # is minted by TenantNumbered.save(); none of them may be typed in.
+    readonly_fields = ("tenant", "number", "start_date", "end_date", "created_at", "updated_at")
+    list_select_related = ("reporting_currency", "tenant")
+    raw_id_fields = ("reporting_currency",)
+
+    def get_readonly_fields(self, request, obj=None):
+        # A locked period's shape is frozen; only is_active / fx_rate_source_date may move.
+        fields = list(self.readonly_fields)
+        if obj is not None and obj.is_locked:
+            fields.extend(["name", "period_type", "period_year", "period_number", "rollup_dimension", "is_locked"])
+        return tuple(dict.fromkeys(fields))
+
+
+@admin.register(ForecastSubmission)
+class ForecastSubmissionAdmin(admin.ModelAdmin):
+    list_display = ("number", "period", "owner", "org_unit", "territory", "status", "commit_amount", "weighted_amount", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "owner__username", "owner__first_name", "owner__last_name", "review_note", "notes")
+    # status is the workflow, the three *_amount snapshots are service-written, and the whole
+    # ai_* block is storage + explanation only. Readonly here so none of them is editable.
+    readonly_fields = (
+        "tenant", "number", "status",
+        "weighted_amount", "quota_amount", "actual_amount",
+        "submitted_at", "reviewed_at",
+        "ai_predicted_pipeline", "ai_predicted_best_case", "ai_predicted_commit",
+        "ai_confidence_pct", "ai_model_name", "ai_model_version",
+        "ai_generated_at", "ai_explanation",
+        "created_at", "updated_at",
+    )
+    list_select_related = ("period", "owner", "org_unit", "territory", "pipeline", "quota_ref", "tenant")
+    raw_id_fields = ("period", "owner", "org_unit", "territory", "pipeline", "quota_ref", "submitted_by", "reviewed_by")
+
+
+@admin.register(ForecastAdjustment)
+class ForecastAdjustmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "submission", "adjustment_kind", "target_field", "reason_code", "is_reverted", "created_by", "tenant")
+    list_filter = ("adjustment_kind", "target_field", "reason_code", "is_reverted", "tenant")
+    search_fields = ("number", "submission__number", "note", "revert_reason")
+    # original_value / original_category are the system snapshot and is_reverted / reverted_at
+    # are the Reset action's; editing any of them from /admin/ would forge the audit trail.
+    readonly_fields = (
+        "tenant", "number", "adjustment_kind",
+        "original_value", "original_category",
+        "is_reverted", "reverted_at", "revert_reason",
+        "created_at", "updated_at",
+    )
+    list_select_related = ("submission", "opportunity", "placement", "created_by", "tenant")
+    raw_id_fields = ("submission", "opportunity", "placement", "created_by")
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(self.readonly_fields)
+        if obj is not None and obj.is_reverted:
+            fields.extend(["target_field", "adjusted_value", "adjusted_category", "reason_code"])
+        return tuple(dict.fromkeys(fields))
+
+
+@admin.register(ForecastScenario)
+class ForecastScenarioAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "period", "owner", "scenario_type", "is_baseline", "is_selected", "tenant")
+    list_filter = ("scenario_type", "is_baseline", "is_selected", "tenant")
+    search_fields = ("number", "name", "assumption_notes")
+    # is_selected is set by the select action and the projected_* figures by the apply action.
+    readonly_fields = (
+        "tenant", "number", "is_selected",
+        "projected_commit_amount", "projected_total_amount",
+        "created_at", "updated_at",
+    )
+    list_select_related = ("period", "owner", "tenant")
+    raw_id_fields = ("period", "owner")
+
 
