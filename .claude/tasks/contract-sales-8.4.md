@@ -625,6 +625,21 @@ Folder is **`templates/sales/salesforecasting/`** (mechanical lowercase, matchin
 
 New flat module `apps/sales/forecast_services.py` (a single-purpose flat module at the app root is allowed, exactly like `apps/sales/services.py`, `opportunity_services.py`, `opportunity_analytics.py`). It holds `forecast_org_unit_chain`, `forecast_submission_snapshot`, `forecast_rollup_rows`, `forecast_attainment_rows`, `forecast_accuracy_rows`, `forecast_ai_gate`, `forecast_submit`, `forecast_review`, `forecast_revert`, `forecast_lock_period`, `forecast_apply_scenario`.
 
+> **Deviation recorded 2026-09-26 (8.4 code-fixer pass, finding M8).** Only three of the
+> eleven names above were actually built in `forecast_services.py`:
+> `forecast_org_unit_chain`, `forecast_submission_snapshot` and `forecast_ai_gate`. The other
+> eight — `forecast_rollup_rows`, `forecast_attainment_rows`, `forecast_accuracy_rows`,
+> `forecast_submit`, `forecast_review`, `forecast_revert`, `forecast_lock_period` and
+> `forecast_apply_scenario` — are implemented as the view functions
+> `forecast_board`, `forecast_attainment`, `forecast_accuracy`,
+> `forecast_submission_submit`, the approve/reject pair, `forecast_adjustment_revert`,
+> `forecast_period_lock`/`_unlock` and `forecast_scenario_apply` in
+> `apps/sales/views/SalesForecasting/*`. Moving them would have been a large, behaviour-neutral
+> refactor of code the review otherwise found correct, so the deviation is recorded here instead
+> — the frozen spec is amended, not silently ignored. `forecast_services.py`'s module docstring
+> already states honestly which three functions live there and why. No context key, url name or
+> model changed as a result.
+
 **The rollup axis — the single most likely place for a bad FK.** There is **no `User.manager` field** anywhere in the codebase (verified: `accounts.User`, `apps/accounts/models.py:52`, has `tenant`, `party`, `role`, `email`, `username`, `first_name`, `last_name`, `is_tenant_admin`, `status`, `is_active`, `is_staff`, `date_joined` — no manager). Rep→manager→director walks **`core.OrgUnit.parent`** (`apps/core/models/OrgUnit.py:19`, `related_name="children"`). Resolve a user's node through `sales.OpportunityTeamMember.org_unit` (verified: `OpportunityTeams.py:27-32`), falling back to the submission's own `org_unit` / `territory`.
 
 - The walk must be **iterative, bounded and cycle-safe** (a `seen` set, a hard depth cap, children visited not followed blindly). `core.OrgUnit.parent` is a self-FK with **no cycle validation anywhere in the codebase**, so a legacy cycle is reachable — the same hazard `AccountBoards` handles for the CRM account hierarchy, and the same reason 8.3 had to render a `cycle_detected` flag.
