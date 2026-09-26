@@ -85,7 +85,7 @@ def cpq_quote_create(request):
     """Create a new CPQQuote header."""
     tenant = request.tenant
     if request.method == "POST":
-        form = CPQQuoteForm(request.POST, tenant=tenant)
+        form = CPQQuoteForm(request.POST, tenant=tenant, user=request.user)
         if form.is_valid():
             quote = form.save(commit=False)
             quote.tenant = tenant
@@ -110,7 +110,7 @@ def cpq_quote_create(request):
         opp_param = request.GET.get("opportunity", "").strip()
         if opp_param and opp_param.isdigit():
             initial["opportunity"] = opp_param
-        form = CPQQuoteForm(tenant=tenant, initial=initial)
+        form = CPQQuoteForm(tenant=tenant, user=request.user, initial=initial)
 
     return render(request, "sales/quote_proposal_cpq/cpqquote/form.html", {
         "form": form,
@@ -170,7 +170,7 @@ def cpq_quote_edit(request, pk):
         return redirect("sales:cpq_quote_detail", pk=quote.pk)
 
     if request.method == "POST":
-        form = CPQQuoteForm(request.POST, instance=quote, tenant=tenant)
+        form = CPQQuoteForm(request.POST, instance=quote, tenant=tenant, user=request.user)
         if form.is_valid():
             quote = form.save()
             if quote.is_primary:
@@ -185,7 +185,7 @@ def cpq_quote_edit(request, pk):
             messages.success(request, f"Quote {quote.number} updated successfully.")
             return redirect("sales:cpq_quote_detail", pk=quote.pk)
     else:
-        form = CPQQuoteForm(instance=quote, tenant=tenant)
+        form = CPQQuoteForm(instance=quote, tenant=tenant, user=request.user)
 
     return render(request, "sales/quote_proposal_cpq/cpqquote/form.html", {
         "form": form,
