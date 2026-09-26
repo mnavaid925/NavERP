@@ -79,7 +79,7 @@
                                 {% endif %}
                             </td>
                             <td class="font-mono font-bold text-slate-900 text-sm">
-                                ${{ q.total:,.2f }}
+                                ${{ q.total|floatformat:2 }}
                             </td>
                             <td>
                                 {% if q.signed_at %}
