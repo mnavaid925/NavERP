@@ -51,6 +51,7 @@ from apps.sales.models.SalesForecasting.ForecastSubmissions import (
     ForecastSubmission,
 )
 from apps.sales.views._common import *  # noqa: F401,F403
+from apps.sales.views._helpers import is_tenant_admin as _is_tenant_admin
 
 TEMPLATE_LIST = "sales/salesforecasting/forecastsubmission/list.html"
 TEMPLATE_DETAIL = "sales/salesforecasting/forecastsubmission/detail.html"
@@ -60,10 +61,6 @@ TEMPLATE_FORM = "sales/salesforecasting/forecastsubmission/form.html"
 # 40-won AND 40-lost gate) now live in `apps/sales/forecast_services.py`, along with the
 # private period-window/currency/opportunity helpers they share. They are services, not
 # views, so they are not re-exported from `apps.sales.views`.
-
-
-def _is_tenant_admin(user):
-    return bool(getattr(user, "is_superuser", False) or getattr(user, "is_tenant_admin", False))
 
 
 def _submission_queryset(request):
