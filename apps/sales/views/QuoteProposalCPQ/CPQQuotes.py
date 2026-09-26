@@ -135,7 +135,7 @@ def cpq_quote_detail(request, pk):
     cpq_recalc_quote_totals(quote, save=False)
 
     # Group lines by parent / hierarchy
-    all_lines = list(quote.lines.select_related("product", "item", "uom", "tax_code").order_by("sequence", "id"))
+    all_lines = list(quote.lines.select_related("product", "item", "uom", "tax_code", "parent_line").order_by("sequence", "id"))
     
     # Related quotes in same revision group
     revisions = CPQQuote.objects.filter(
