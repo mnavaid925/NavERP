@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit threshold{% else %}Declare a threshold{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit threshold{% else %}Declare a threshold{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:alert_rule_list' %}">Alert Thresholds</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This form writes down a threshold.
+      It does not arm one.</strong> NavERP has no scheduler and no collector, so nothing will ever compare
+      a reading against what you set here.</p>
+    <p class="text-muted"><i data-lucide="info"></i> <strong>Leaving a threshold blank is honest.</strong>
+      A blank means "this tier is unset"; a <code>0</code> would mean the threshold genuinely is zero,
+      which is a much stronger claim. An active rule with no bound at all is refused.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What is being watched</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.service %}
+          {% include "partials/form_field.html" with field=form.module_slug %}
+          {% include "partials/form_field.html" with field=form.category %}
+          {% include "partials/form_field.html" with field=form.severity %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-6">
+      <div class="card-header"><h2 class="card-title">The condition</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.metric_key %}
+          {% include "partials/form_field.html" with field=form.comparator %}
+          {% include "partials/form_field.html" with field=form.warning_threshold %}
+          {% include "partials/form_field.html" with field=form.critical_threshold %}
+          {% include "partials/form_field.html" with field=form.must_persist_seconds %}
+          {% include "partials/form_field.html" with field=form.no_data_action %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-6">
+      <div class="card-header"><h2 class="card-title">If it ever fired</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.frequency %}
+          {% include "partials/form_field.html" with field=form.notification_rule %}
+          {% include "partials/form_field.html" with field=form.is_active %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'core:alert_rule_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted"><i data-lucide="info"></i> <strong>Most of these metrics have no reading stored
+      anywhere in NavERP.</strong> The metric list is threshold vocabulary — a bound somebody can declare
+      for a collector that lives outside this application. Uptime and storage overlap the workspace usage
+      figures, but those measure tenant consumption rather than a platform bound.</p>
+  </div></div>
+{% endblock %}
