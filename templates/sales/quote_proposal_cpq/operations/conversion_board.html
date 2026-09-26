@@ -88,7 +88,7 @@
                                 {% endif %}
                             </td>
                             <td class="font-bold text-slate-900 font-mono">
-                                ${{ q.total:,.2f }}
+                                ${{ q.total|floatformat:2 }}
                             </td>
                             <td class="text-sm font-semibold {% if q.margin_pct < 15 %}text-red-600{% else %}text-emerald-700{% endif %}">
                                 {{ q.margin_pct }}%
@@ -161,7 +161,7 @@
                                 {% endif %}
                             </td>
                             <td>{{ q.account.name|default:"—" }}</td>
-                            <td class="font-mono font-bold text-slate-900">${{ q.total:,.2f }}</td>
+                            <td class="font-mono font-bold text-slate-900">${{ q.total|floatformat:2 }}</td>
                             <td>
                                 <span class="badge badge-green">Converted</span>
                             </td>
