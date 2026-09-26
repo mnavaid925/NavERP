@@ -290,6 +290,11 @@ class SecurityThreat(TenantConsistentMixin, models.Model):
         ("waf", "WAF"),
     ]
 
+    #: Reuse-by-reference, re-exposed on the class exactly as `AlertRule` re-exposes
+    #: `BusinessRule.OPERATORS`. The tests assert `is` identity against 0.17's list, so a
+    #: pasted copy fails loudly instead of forking silently the first time 0.17 adds a value.
+    SEVERITY_CHOICES = SEVERITY_CHOICES
+
     tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE,
                                related_name="security_threats", db_index=True)
     #: The 0.17 seam: a finding that raised an alert points at the firing, so the threat
@@ -428,6 +433,8 @@ class VulnerabilityFinding(TenantConsistentMixin, models.Model):
         ("high", "High"),
         ("critical", "Critical"),
     ]
+    #: Reuse-by-reference — 0.13's schedule vocabulary borrowed as a declared scan cadence.
+    SCAN_FREQUENCY_CHOICES = SCAN_FREQUENCY_CHOICES
 
     tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE,
                                related_name="vulnerability_findings", db_index=True)
@@ -577,6 +584,9 @@ class SecurityIncident(TenantConsistentMixin, models.Model):
         ("subsequent_measures", "Subsequent measures undo the adverse consequences"),
         ("disproportionate_effort", "Disproportionate effort"),
     ]
+
+    #: Reuse-by-reference — the same object as 0.17's list, not a copy. See `SecurityThreat`.
+    SEVERITY_CHOICES = SEVERITY_CHOICES
 
     tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE,
                                related_name="security_incidents", db_index=True)
