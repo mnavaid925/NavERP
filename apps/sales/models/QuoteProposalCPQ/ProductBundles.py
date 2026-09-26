@@ -103,6 +103,7 @@ class ProductBundleOption(TenantNumbered):
 
     class Meta:
         ordering = ["bundle_product", "option_group", "sort_order", "name"]
+        unique_together = ("tenant", "number")
         indexes = [
             models.Index(fields=["tenant", "bundle_product", "is_active"], name="sales_bnd_bundle_act_idx"),
             models.Index(fields=["tenant", "component_product"], name="sales_bnd_comp_prod_idx"),
