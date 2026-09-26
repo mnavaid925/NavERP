@@ -69,9 +69,9 @@
                 <div class="text-muted">{{ row.rule.get_metric_key_display }} · {{ row.rule.service.name|default:"no component" }}
                   {% if not row.rule.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}</div>
               </td>
-              <td>{% if row.bound is not None %}{{ row.bound }}{% else %}<span class="text-muted">— no bound set</span>{% endif %}</td>
+              <td>{% if row.bound is not None %}{{ row.comparator }} {{ row.bound }}{% else %}<span class="text-muted">— no bound set</span>{% endif %}</td>
               <td>{% if row.current is not None %}{{ row.current }}{% else %}<span class="text-muted">— none recorded</span>{% endif %}</td>
-              <td>{% if row.headroom is not None %}{{ row.headroom }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.headroom is not None %}{{ row.headroom }}{% elif row.breached %}<span class="badge badge-red">breached</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td class="text-muted">{{ row.note }}</td>
             </tr>
           {% empty %}
