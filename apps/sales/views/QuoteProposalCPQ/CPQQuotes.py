@@ -130,8 +130,8 @@ def cpq_quote_detail(request, pk):
         tenant=tenant
     )
 
-    # Ensure fresh totals
-    cpq_recalc_quote_totals(quote, save=True)
+    # Ensure fresh totals in memory without write amplification
+    cpq_recalc_quote_totals(quote, save=False)
 
     # Group lines by parent / hierarchy
     all_lines = list(quote.lines.select_related("product", "item", "uom", "tax_code").order_by("sequence", "id"))
