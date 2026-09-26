@@ -77,6 +77,10 @@
             <td>
               {% if obj.status == "resolved" or obj.status == "completed" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
               {% elif obj.status == "scheduled" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {# Every one of the eight STATUS_CHOICES values is named. An outage in progress is the
+                 opposite of resolved, so it must not fall into the same grey the else-branch uses for
+                 an unrecognised value — this ladder is the page an operator triages from. #}
+              {% elif obj.status == "investigating" or obj.status == "identified" or obj.status == "in_progress" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
               {% elif obj.status == "monitoring" or obj.status == "verifying" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
               {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
             </td>
