@@ -57,6 +57,10 @@ from .models import (
     RecoveryPosture,
     RecoveryDrill,
     LegalHold,
+    ServiceComponent,
+    AlertRule,
+    AlertEvent,
+    Incident,
 )
 
 
@@ -580,3 +584,57 @@ class RecoveryDrillAdmin(admin.ModelAdmin):
     search_fields = ["name", "participants", "findings"]
     list_select_related = ["performed_by", "tenant"]
     readonly_fields = ["created_at"]
+
+
+# ============================ 0.17 Monitoring, Logging & Observability
+@admin.register(ServiceComponent)
+class ServiceComponentAdmin(admin.ModelAdmin):
+    list_display = ["name", "kind", "current_status", "is_critical", "is_public", "last_status_at",
+                    "tenant"]
+    list_filter = ["kind", "current_status", "is_critical", "is_public", "is_active", "tenant"]
+    search_fields = ["name", "code", "description"]
+    list_select_related = ["owner_role", "tenant"]
+    # `last_status_at` is stamped by ServiceComponentForm when a person changes the status. The admin
+    # must not let a superuser TYPE it, or the register gains a timestamp nothing can account for and
+    # the "hand-set, never probed" claim becomes unfalsifiable.
+    readonly_fields = ["last_status_at", "created_at", "updated_at"]
+
+
+@admin.register(AlertRule)
+class AlertRuleAdmin(admin.ModelAdmin):
+    list_display = ["name", "service", "metric_key", "comparator", "severity", "category", "is_active",
+                    "tenant"]
+    list_filter = ["category", "severity", "metric_key", "no_data_action", "is_active", "tenant"]
+    search_fields = ["name", "module_slug", "metric_key"]
+    list_select_related = ["service", "notification_rule", "tenant"]
+    readonly_fields = ["created_at", "updated_at"]
+
+
+@admin.register(AlertEvent)
+class AlertEventAdmin(admin.ModelAdmin):
+    # Every lifecycle field here is readonly, and that is the whole point of this class. The actor and
+    # the stamps are written only by the three POST-only actions in views/Monitoring.py, which take the
+    # actor from request.user. An admin who could TYPE `acknowledged_by` would attribute an
+    # acknowledgement to somebody who did not make it, and attribution is the act an audit exists for.
+    # Same reasoning as the 0.16 BackupJobAdmin comment.
+    list_display = ["message", "rule", "service", "state", "severity_at_fire", "fired_at", "tenant"]
+    list_filter = ["state", "severity_at_fire", "tenant"]
+    search_fields = ["message", "detail", "evidence", "service_label"]
+    list_select_related = ["rule", "service", "acknowledged_by", "resolved_by", "tenant"]
+    readonly_fields = ["state", "service_label", "occurrence_count", "first_seen_at", "last_seen_at",
+                        "fired_at", "acknowledged_at", "acknowledged_by", "resolved_at", "resolved_by",
+                        "resolution_note", "created_at"]
+
+
+@admin.register(Incident)
+class IncidentAdmin(admin.ModelAdmin):
+    list_display = ["title", "incident_type", "status", "impact", "service", "created_at", "tenant"]
+    list_filter = ["incident_type", "status", "impact", "is_active", "tenant"]
+    search_fields = ["title", "public_note", "internal_note"]
+    list_select_related = ["service", "primary_alert", "tenant"]
+    filter_horizontal = ["affected_services"]
+    # `resolved_at` is readonly because the MODEL's save() derives it from the status. Letting the
+    # admin type it would create a row whose own stamp contradicts its own status - the inversion 0.16
+    # found with `backup_job_verify` on a failed backup. `notified_at` belongs to the notify action.
+    readonly_fields = ["resolved_at", "notified_at", "created_at", "updated_at"]
+
