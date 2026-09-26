@@ -506,8 +506,10 @@ def cpq_guided_selling(request):
                 qty_val = request.POST.get(qty_name, str(opt.default_quantity))
                 try:
                     qty = Decimal(qty_val)
+                    if not qty.is_finite() or qty <= Decimal("0"):
+                        qty = opt.default_quantity if (opt.default_quantity and opt.default_quantity > Decimal("0")) else Decimal("1.00")
                 except Exception:
-                    qty = opt.default_quantity
+                    qty = opt.default_quantity if (opt.default_quantity and opt.default_quantity > Decimal("0")) else Decimal("1.00")
 
                 comp_price = opt.component_product.unit_price if opt.component_product else Decimal("0.00")
                 unit_price = opt.unit_price_override if opt.unit_price_override is not None else (comp_price or Decimal("0.00"))
