@@ -94,7 +94,10 @@ def _periods(tenant, only_past=False):
     qs = ForecastPeriod.objects.filter(tenant=tenant).select_related("reporting_currency")
     if only_past:
         today = timezone.localdate()
-        qs = qs.filter(end_date__lt=today)
+        # end_date__lte, not __lt: the model treats today == end_date as elapsed
+        # (period_elapsed_pct == 100) and is_current == True, so __lt dropped a
+        # period from the accuracy report on its own final day.
+        qs = qs.filter(end_date__lte=today)
     return list(qs.order_by("-start_date", "-period_year", "-period_number")[:MAX_PERIODS])
 
 
@@ -123,13 +126,20 @@ def _selected_period(tenant, request, periods):
 
 
 def _submissions(tenant, period):
-    """`ForecastSubmission` rows for a period, scoped to the tenant."""
+    """`ForecastSubmission` rows for a period, scoped to the tenant and bounded.
+
+    Truncation is not silent: callers that materialise every row read
+    :func:`_truncation_note` and surface it, so a capped list can never be
+    mistaken for the whole period.
+    """
     if tenant is None or period is None:
         return []
     qs = ForecastSubmission.objects.filter(tenant=tenant, period=period).select_related(
         "owner", "org_unit", "territory", "pipeline"
     )
-    return list(qs.order_by("owner__last_name", "owner__first_name", "pk"))
+    return list(
+        qs.order_by("owner__last_name", "owner__first_name", "pk")[:MAX_ROWS]
+    )
 
 
 def _adjustments(tenant, period, submission_ids=None):
@@ -140,14 +150,63 @@ def _adjustments(tenant, period, submission_ids=None):
     ).select_related("submission", "submission__owner", "created_by", "opportunity")
     if submission_ids is not None:
         qs = qs.filter(submission_id__in=list(submission_ids))
-    return list(qs.order_by("pk"))
+    return list(qs.order_by("pk")[:MAX_ROWS])
 
 
 def _scenarios(tenant, period):
     if tenant is None or period is None:
         return []
     return list(
-        ForecastScenario.objects.filter(tenant=tenant, period=period).select_related("owner")
+        ForecastScenario.objects.filter(tenant=tenant, period=period)
+        .select_related("owner")
+        .order_by("pk")[:MAX_ROWS]
+    )
+
+
+def _owner_label(owner):
+    """One rep, one label, everywhere on a page.
+
+    The main tables render ``get_full_name|default:username|default:"Unassigned"``
+    while the summary lists used to render raw ``User.__str__``, so the same rep
+    appeared under two different names on one page. Computed once in the view and
+    read by every template.
+    """
+    if owner is None:
+        return "Unassigned"
+    return owner.get_full_name() or owner.get_username() or "Unassigned"
+
+
+def _override_move_pct(adjustment):
+    """Signed % an override moved a figure, or ``None`` when it cannot be computed.
+
+    ``(adjusted - original) / original * 100``. A category override, a zero
+    original value, or a missing value all yield ``None`` rather than a division
+    by zero -- ``Decimal`` raises on that, and the page shows an em dash instead.
+    Currency-free by construction, which is why this is safe to average across a
+    workspace whose calls sit in several currencies.
+    """
+    if adjustment.target_field != "amount":
+        return None
+    original = Decimal(adjustment.original_value or 0)
+    if original == 0:
+        return None
+    adjusted = Decimal(adjustment.adjusted_value or 0)
+    return ((adjusted - original) / original) * Decimal(100)
+
+
+def _truncation_note(what, period, shown, cap=MAX_ROWS):
+    """Caveat text when a bounded list actually hit the cap, else ``""``.
+
+    Only speaks when the cap was genuinely reached, so a workspace that fits does
+    not carry a warning it has not earned.
+    """
+    if shown < cap:
+        return ""
+    where = f" for {period.label}" if period is not None else ""
+    return (
+        f"This list is capped at {cap} {what}{where}, so the figures below cover "
+        f"the first {shown} only. Narrow the report with the period filter to see "
+        "the rest."
     )
 
 
@@ -256,6 +315,11 @@ def forecast_board(request):
             "This period has no reporting currency, so the totals below are not "
             "labelled with a currency code. Set one on the period to remove this."
         )
+    for note in (
+        _truncation_note("forecast calls", period, len(submissions)),
+    ):
+        if note:
+            caveats.append(note)
 
     for row in rows:
         bucket = row["submissions"]
@@ -272,15 +336,18 @@ def forecast_board(request):
         row["variance_amount"] = row["total_forecast_amount"] - row["actual_amount"]
         # Prediction figures render only when the AI gate actually passed — a
         # gated-off workspace must show no prediction value at all.
-        row["ai_predicted_commit"] = (
-            _sum(s.ai_predicted_commit or ZERO for s in bucket) if ai_available else None
-        )
-        row["ai_confidence_pct"] = (
-            _safe_pct(_sum(s.ai_confidence_pct or 0 for s in bucket), len(bucket))
-            if ai_available
-            else None
-        )
         row["ai_explanation"] = {}
+        # The prediction keys are OMITTED, not set to None, when the gate is shut.
+        # A template that forgot its {% if ai_available %} guard would then render
+        # nothing at all, so the mistake is visible instead of silently showing
+        # "None". board.html's own guard is the single place the gate is enforced.
+        if ai_available:
+            row["ai_predicted_commit"] = _sum(
+                s.ai_predicted_commit or ZERO for s in bucket
+            )
+            row["ai_confidence_pct"] = _safe_pct(
+                _sum(s.ai_confidence_pct or 0 for s in bucket), len(bucket)
+            )
         if row["quota_amount"] == 0:
             caveats.append("%s has no quota recorded, so attainment is not shown." % row["label"])
 
@@ -299,6 +366,12 @@ def forecast_board(request):
 
     adjustments = _adjustments(tenant, period)
     scenarios = _scenarios(tenant, period)
+    for note in (
+        _truncation_note("overrides", period, len(adjustments)),
+        _truncation_note("scenarios", period, len(scenarios)),
+    ):
+        if note:
+            caveats.append(note)
     explanation = {}
     for submission in submissions:
         if ai_available and submission.ai_explanation:
@@ -344,6 +417,9 @@ def forecast_attainment(request):
     period = _selected_period(tenant, request, periods)
     submissions = _submissions(tenant, period)
     caveats = []
+    note = _truncation_note("forecast calls", period, len(submissions))
+    if note:
+        caveats.append(note)
 
     grouped = OrderedDict()
     for submission in submissions:
@@ -364,6 +440,7 @@ def forecast_attainment(request):
         rows.append(
             {
                 "owner": bucket["owner"],
+                "owner_label": _owner_label(bucket["owner"]),
                 "org_unit": bucket_rows[0].org_unit if bucket_rows else None,
                 "territory": bucket_rows[0].territory if bucket_rows else None,
                 "quota_amount": quota_amount,
@@ -384,7 +461,10 @@ def forecast_attainment(request):
 
     ahead_rows = [r for r in rows if _band(r) == "ahead"]
     behind_rows = [r for r in rows if _band(r) == "behind"]
-    on_pace_rows = [r for r in rows if _band(r) == "no_quota"]
+    # Named for what it holds. This list used to be `on_pace_rows` while counting
+    # exactly the rows `_band()` calls "no_quota", which is how the "No quota" stat
+    # card came to read a key called on_pace.
+    no_quota_rows = [r for r in rows if _band(r) == "no_quota"]
     if any(r["attainment_pct"] is None for r in rows):
         caveats.append(
             "A rep with no quota recorded cannot be banded, so they are listed under "
@@ -404,15 +484,19 @@ def forecast_attainment(request):
             "pace_pct": pace_pct,
             "ahead_rows": ahead_rows,
             "behind_rows": behind_rows,
-            "on_pace_rows": on_pace_rows,
+            "no_quota_rows": no_quota_rows,
             "caveats": caveats,
             "can_edit_all": _is_tenant_admin(request.user),
             "stats": {
+                # `rows` is grouped by submission.owner_id, so this counts owner
+                # buckets -- the None (unassigned) key forms a bucket of its own.
+                # Labelled "Owners" in the template and broken out as `unassigned`
+                # rather than being passed off as a headcount of reps.
                 "total": len(rows),
+                "unassigned": len([r for r in rows if r["owner"] is None]),
                 "ahead": len(ahead_rows),
-                "on_pace": len(on_pace_rows),
                 "behind": len(behind_rows),
-                "no_quota": len([r for r in rows if r["attainment_pct"] is None]),
+                "no_quota": len(no_quota_rows),
             },
         },
     )
@@ -424,19 +508,37 @@ def forecast_accuracy(request):
     """Actual vs. predicted per period, plus per-owner bias and sandbagging."""
     tenant = _tenant(request)
     periods = _periods(tenant, only_past=True)
+    all_periods = periods
     selected_period_id = None
     raw = (request.GET.get("period") or "").strip()
     if raw:
         try:
-            selected_period_id = int(raw)
+            wanted_period_id = int(raw)
         except (TypeError, ValueError):
-            selected_period_id = None
+            wanted_period_id = None
+        if wanted_period_id is not None:
+            # Honour the selection rather than parsing it and ignoring it: a
+            # bookmarked ?period=7 used to return the tenant-wide report while the
+            # URL claimed otherwise. Validated against this tenant's own past
+            # periods, so a foreign pk falls back to the full report rather than
+            # leaking a row.
+            for candidate in periods:
+                if candidate.pk == wanted_period_id:
+                    selected_period_id = wanted_period_id
+                    periods = [candidate]
+                    break
 
     rows = []
     bias_by_owner = OrderedDict()
     sandbagging_by_owner = OrderedDict()
     caveats = []
-    bias_values = []
+    # Two populations, two lists: `period_bias_values` are period-level tenant-wide
+    # biases, `owner_bias_values` are per-rep means. Averaging them together (as a
+    # single list did) double-counted the same submissions and weighted reps against
+    # periods arbitrarily, so the headline "Mean bias" is taken from the period rows
+    # only and the rep mean is reported separately.
+    period_bias_values = []
+    owner_bias_values = []
 
     for period in periods[:MAX_PERIODS]:
         submissions = _submissions(tenant, period)
@@ -451,8 +553,11 @@ def forecast_accuracy(request):
         bias_pct = None
         if submitted_total and actual_amount:
             bias_pct = ((submitted_total - actual_amount) / actual_amount) * Decimal(100)
-            bias_values.append(bias_pct)
+            period_bias_values.append(bias_pct)
         adjustments = _adjustments(tenant, period, [s.pk for s in submissions])
+        capped = _truncation_note("forecast calls", period, len(submissions))
+        if capped:
+            caveats.append(capped)
         rows.append(
             {
                 "period": period,
@@ -465,6 +570,7 @@ def forecast_accuracy(request):
                     _sum(s.weighted_amount for s in submissions), submitted_total
                 ),
                 "adjustment_count": len(adjustments),
+                "truncated": bool(capped),
             }
         )
 
@@ -488,43 +594,97 @@ def forecast_accuracy(request):
                 adjustment.submission.owner_id,
                 {
                     "owner": adjustment.submission.owner,
-                    "net_delta": ZERO,
+                    "pct_total": ZERO,
+                    "pct_count": 0,
                     "adjustment_count": 0,
+                    # The absolute figure is bucketed by the period's reporting
+                    # currency rather than summed raw: ForecastAdjustment carries no
+                    # currency field, so one cross-currency total would be a lie (L29).
+                    "by_currency": OrderedDict(),
                 },
             )
             bucket["adjustment_count"] += 1
-            bucket["net_delta"] += adjustment.net_delta or ZERO
+            # Contract 5.4 pins early_vs_final_pct: the mean signed % move a rep's
+            # overrides made, which is currency-free by construction.
+            move_pct = _override_move_pct(adjustment)
+            if move_pct is not None:
+                bucket["pct_total"] += move_pct
+                bucket["pct_count"] += 1
+            currency_code = _single_currency(period) or "unspecified"
+            money_bucket = bucket["by_currency"].setdefault(
+                currency_code, {"net_delta": ZERO, "count": 0}
+            )
+            money_bucket["count"] += 1
+            money_bucket["net_delta"] += adjustment.net_delta or ZERO
 
     bias_rows = []
     for bucket in bias_by_owner.values():
         if not bucket["count"]:
             continue
         mean_bias = bucket["total"] / Decimal(bucket["count"])
-        bias_values.append(mean_bias)
+        owner_bias_values.append(mean_bias)
         bias_rows.append(
             {
                 "owner": bucket["owner"],
+                "owner_label": _owner_label(bucket["owner"]),
                 "mean_bias_pct": mean_bias,
                 "submissions": bucket["count"],
             }
         )
     bias_rows.sort(key=lambda r: r["mean_bias_pct"])
 
-    sandbagging_rows = sorted(
-        (
+    # `early_vs_final_pct` is the contract-pinned, currency-free figure; the money
+    # view is kept per currency code and never summed across codes.
+    sandbagging_rows = []
+    multi_currency_overrides = False
+    for bucket in sandbagging_by_owner.values():
+        codes = bucket["by_currency"]
+        if len(codes) > 1:
+            multi_currency_overrides = True
+        early_vs_final_pct = (
+            bucket["pct_total"] / Decimal(bucket["pct_count"])
+            if bucket["pct_count"]
+            else None
+        )
+        sandbagging_rows.append(
             {
                 "owner": bucket["owner"],
-                "net_delta": bucket["net_delta"],
+                "owner_label": _owner_label(bucket["owner"]),
+                "early_vs_final_pct": early_vs_final_pct,
                 "adjustment_count": bucket["adjustment_count"],
+                "currency_rows": [
+                    {
+                        "currency_code": code,
+                        "net_delta": values["net_delta"],
+                        "count": values["count"],
+                    }
+                    for code, values in sorted(codes.items())
+                ],
             }
-            for bucket in sandbagging_by_owner.values()
-        ),
-        key=lambda r: r["net_delta"],
+        )
+    sandbagging_rows.sort(
+        key=lambda r: (r["early_vs_final_pct"] is None, r["early_vs_final_pct"] or ZERO)
     )
+
+    if multi_currency_overrides:
+        caveats.append(
+            "Some reps' overrides span more than one currency code, so the override "
+            "table reports the mean percentage move per rep and keeps every money "
+            "figure in its own currency bucket. The amounts are never added together."
+        )
 
     if not rows:
         caveats.append("No past period has a recorded forecast to compare against actuals yet.")
-    mean_bias_pct = (sum(bias_values, ZERO) / Decimal(len(bias_values))) if bias_values else None
+    mean_bias_pct = (
+        (sum(period_bias_values, ZERO) / Decimal(len(period_bias_values)))
+        if period_bias_values
+        else None
+    )
+    mean_owner_bias_pct = (
+        (sum(owner_bias_values, ZERO) / Decimal(len(owner_bias_values)))
+        if owner_bias_values
+        else None
+    )
     worst_biased_owner = bias_rows[0]["owner"] if bias_rows else None
 
     return render(
@@ -532,7 +692,8 @@ def forecast_accuracy(request):
         TEMPLATE_ACCURACY,
         {
             "periods": periods,
-            "period_choices": _period_choices(periods),
+            "period_choices": _period_choices(all_periods),
+            "all_period_choices": _period_choices(all_periods),
             "selected_period_id": selected_period_id,
             "rows": rows,
             "bias_rows": bias_rows,
@@ -541,6 +702,7 @@ def forecast_accuracy(request):
             "stats": {
                 "periods": len(rows),
                 "mean_bias_pct": mean_bias_pct,
+                "mean_owner_bias_pct": mean_owner_bias_pct,
                 "worst_biased_owner": worst_biased_owner,
             },
         },
@@ -579,6 +741,7 @@ def forecast_call(request):
 
     # "Why did my forecast change" — every override, reverted ones included, so
     # the audit trail stays visible rather than disappearing on reset.
+    call_adjustments = _adjustments(tenant, period, [s.pk for s in submissions])
     adjustment_rows = [
         {
             "adjustment": adjustment,
@@ -588,9 +751,15 @@ def forecast_call(request):
             "is_reverted": adjustment.is_reverted,
             "net_delta": adjustment.net_delta,
         }
-        for adjustment in _adjustments(tenant, period, [s.pk for s in submissions])
+        for adjustment in call_adjustments
     ]
 
+    for note in (
+        _truncation_note("forecast calls", period, len(submissions)),
+        _truncation_note("overrides", period, len(call_adjustments)),
+    ):
+        if note:
+            caveats.append(note)
     if period is not None and period.is_locked:
         caveats.append("This period is locked, so submissions are read-only.")
     if not submission_rows:
