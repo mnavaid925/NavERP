@@ -1,13 +1,18 @@
-# Plan 1 — Finish Module 0 (System Admin & Security): **6** unbuilt sub-modules (0.16–0.21)
+# Plan 1 — Finish Module 0 (System Admin & Security): **5** unbuilt sub-modules (0.17–0.21)
 
-**Created:** 2026-09-19 · **HEAD at authoring:** `0ba7f760` · **Status:** 🟨 **8 of the 14 built since authoring; 6 remain**
-**Scope:** `core` + `accounts` + `tenants` + `dashboard` · **Effort:** large — 6 remaining `/next-module` runs
+**Created:** 2026-09-19 · **HEAD at authoring:** `0ba7f760` · **Status:** 🟨 **9 of the 14 built since authoring; 5 remain**
+**Scope:** `core` + `accounts` + `tenants` + `dashboard` · **Effort:** large — 5 remaining `/next-module` runs
 
-> **Re-verified 2026-09-22 against `LIVE_LINKS` (authoritative).** The original header said "14 unbuilt";
-> **eight of those fourteen are now live**: **0.4, 0.6, 0.8, 0.10, 0.11, 0.12, 0.13, 0.15**.
-> Module 0 is now **15 of 21 built (0.1–0.15)** and the remaining work is exactly **0.16–0.21**.
+> **Re-verified 2026-09-26 against `LIVE_LINKS` (authoritative).** The original header said "14
+> unbuilt"; **nine of those fourteen are now live**: **0.4, 0.6, 0.8, 0.10, 0.11, 0.12, 0.13, 0.15,
+> 0.16**. Module 0 is now **16 of 21 built (0.1–0.16)** and the remaining work is exactly
+> **0.17–0.21 — five sub-modules, not six.**
 > Steps 0 and 2 of this plan are also **DONE** (reconcile file committed; `core/SKILL.md` written).
-> The table in Step 1 is kept below with per-row status so the finished ones are not rebuilt.
+> The table in Step 1 carries per-row status so the finished ones are not rebuilt.
+>
+> `README.md:1193` and `NavERP.md:61` were already correct at "16 of 21 … (5 remain: 0.17–0.21)";
+> this file and `plan-remaining-INDEX.md` were the only two documents still saying 0.16–0.21, and both
+> are now corrected. **`temp/audit_integrity.py` passes all six checks** (re-run 2026-09-26).
 
 ---
 
@@ -78,7 +83,7 @@ Numeric order is the default (predictable, matches the skill's lowest-numbered r
 ★ were foundations other sub-modules consume** — both are now built. Do not interleave: finish one
 before starting the next.
 
-| # | sub-module | title | status 2026-09-22 |
+| # | sub-module | title | status 2026-09-26 |
 |---|---|---|---|
 | 1 | 0.4 | Authentication & Single Sign-On (SSO) | ✅ **built** — MFA/TOTP, SAML/OIDC, password policy, session mgmt |
 | 2 | 0.6 | Application Module Administration & Access Scope | ✅ **built** — the 13-bullet one |
@@ -88,27 +93,29 @@ before starting the next.
 | 6 | 0.12 | Notification & Communication Management | ✅ **built** |
 | 7 | 0.13 | Integration & API Management | ✅ **built** — API keys, webhooks/event bus, connectors |
 | 8 | 0.15 | Localization & Regional Settings | ✅ **built** — language packs, RTL, multi-currency |
-| 9 | **0.16** | **Backup, Recovery & Data Lifecycle** | ⬜ **OPEN — next** |
-| 10 | **0.17** | **Monitoring, Logging & Observability** | ⬜ **OPEN** |
+| 9 | 0.16 | Backup, Recovery & Data Lifecycle | ✅ **built** — 7 models, `core/migrations/0013_backup_recovery_data_lifecycle.py` |
+| 10 | **0.17** | **Monitoring, Logging & Observability** | ⬜ **OPEN — next** |
 | 11 | **0.18** | **Threat Protection & Security Operations** | ⬜ **OPEN** |
 | 12 | **0.19** | **License & Subscription Administration** | ⬜ **OPEN** |
 | 13 | **0.20** | **Admin Console & System Operations** | ⬜ **OPEN** |
 | 14 | **0.21** | **Compliance, Governance & Risk** | ⬜ **OPEN** |
 
-### Notes carried forward for the six still open
+### Notes carried forward for the five still open
 
-- **0.16** Backup schedules, restore, lifecycle/archival. `core.DisposalRecord` already exists as evidence
-  of a real disposal — read it before declaring anything about retention.
 - **0.17** Health checks, metrics, log aggregation, alerting. `core.AuditLog` and `core.BusinessRuleLog`
   already exist; this is the *observability* layer over them, not a second log store.
-- **0.18** WAF/rate limiting, threat detection, incident response, vulnerability mgmt.
+- **0.18** WAF/rate limiting, threat detection, incident response, vulnerability mgmt. Note
+  `core.RateLimitPolicy` already exists (claimed by 0.2/0.4) — extend, do not re-declare.
 - **0.19** Entitlements, seat counting, renewals. Overlaps `tenants.Subscription` /
-  `tenants.SubscriptionInvoice` (0.1) — state the boundary, do not re-declare.
+  `tenants.SubscriptionInvoice` (0.1) and `tenants.UsageRecord` — state the boundary, do not re-declare.
 - **0.20** Ops console, jobs, maintenance mode, cache control. **0.6/0.20 are the natural home for console
   surfaces**; if you put models in `dashboard` it becomes a real app and needs a test lane (Plan 5 Item A
   added one, so the lane now exists).
 - **0.21** Control library, risk register, evidence, policy attestation. Overlaps procurement 6.17's
   `ComplianceScreening`/`AuditSeal` and 4.12 — reconcile before building, do not re-declare (L36).
+- **0.16 is closed** — it landed as `core/migrations/0013_backup_recovery_data_lifecycle.py` with
+  BackupJob, DataArchive, RestoreRecord and four more; it reused `core.DisposalRecord` as evidence of a
+  real disposal rather than re-declaring it.
 
 ### Which app does each go in?
 
@@ -169,20 +176,28 @@ failing is the 7.10 failure mode and must be finished before moving on.
 
 - [x] Step 0 reconcile file committed and every unmapped bullet classified —
       `.claude/tasks/plan-1-module0-reconcile.md`; verdict: nothing was built-but-unsurfaced.
-- [ ] All 21 sub-modules have a `LIVE_LINKS["N.M"]` entry — **15 of 21 today; 0.16–0.21 outstanding.**
-- [ ] `temp/audit_integrity.py` passes all 6 checks (module 0 shows 21 built, not 7).
+- [ ] All 21 sub-modules have a `LIVE_LINKS["N.M"]` entry — **16 of 21 today; 0.17–0.21 outstanding.**
+- [ ] `temp/audit_integrity.py` passes all 6 checks — ✅ **verified 2026-09-26: all six PASS** at the
+      current HEAD (3,720 routes, 2,255 template refs, 706 sidebar targets, 0 unexplained unseeded
+      models). It reports "module 0: 5 catalogued but NOT built -> 0.17, 0.18, 0.19, 0.20, 0.21".
 - [x] `.claude/skills/core/SKILL.md` exists with an accurate As-built line — `4ce6b4a2`.
-- [x] `README.md` module-0 row updated — now `🟦 15 of 21 sub-modules built (0.1–0.15)`, landed by
-      Plan 4 (`4b088965`); `NavERP.md` by `1962ae89`.
-- [ ] `.claude/tasks/todo.md` has a close-out note per sub-module — 0.1–0.15 done; 0.16–0.21 outstanding.
+- [x] `README.md` module-0 row updated — now `🟦 16 of 21 sub-modules built (0.1–0.16)` (`README.md:1193`),
+      landed by Plan 4; `NavERP.md:61` likewise.
+- [ ] `.claude/tasks/todo.md` has a close-out note per sub-module — 0.1–0.16 done; 0.17–0.21
+      outstanding. **A stale `core is now 15 of 21` line survives at `todo.md:9313`** — fix it in the
+      same commit that owns `todo.md`, never while another session has that file dirty (L43/L45).
 
 ## Risks
 
-- **Auto-detect will fight you.** Bare `/next-module` picks module 7 (a concurrent session is now on
-  **7.18**, not 7.16). Always pass `0.N`.
-- **Migration collisions** with the concurrent session — agree the number first (L43).
+- **Auto-detect will fight you.** Bare `/next-module` picks the lowest `N.M` in the module in progress —
+  which is now **module 8** (a concurrent session is mid-build on **8.2** in `apps/sales/`). Always
+  pass `0.N`, starting with `/next-module 0.17`.
+- **Migration collisions** with the concurrent session — agree the number first (L43). `core` is at
+  `0013_backup_recovery_data_lifecycle`, so 0.17 will likely be `0014_*`; confirm before generating.
 - **0.19 and 0.21 overlap existing registers.** Procurement 6.17 owns `ComplianceScreening`/`AuditSeal`;
-  `tenants` owns the subscription spine. The house rule is *never re-declare a sibling's spine* (L36) —
+  `tenants` owns the subscription spine (`Subscription`, `SubscriptionInvoice`, `UsageRecord`).
+  `core.RateLimitPolicy` already exists. The house rule is *never re-declare a sibling's spine* (L36) —
   state the boundary in the contract, as 7.6 did with `DeliverableInspection`.
-- **Dirty tree.** Four modified `templates/projects/reporting/*.html` currently belong to the 7.18
-  session. Leave them alone; never commit them (L45).
+- **Dirty tree.** `.claude/tasks/todo.md` and four `templates/projects/reporting/*.html` files were
+  modified in the tree on 2026-09-26 and belong to another session. Leave them alone; never commit
+  them (L45).
