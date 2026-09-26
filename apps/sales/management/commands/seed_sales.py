@@ -832,22 +832,22 @@ class Command(BaseCommand):
         bundle_prod, _ = Product.objects.get_or_create(
             tenant=tenant,
             name="Enterprise Cloud Platform",
-            defaults={"list_price": Decimal("12500.00"), "is_active": True}
+            defaults={"unit_price": Decimal("12500.00"), "is_active": True}
         )
         comp_gateway, _ = Product.objects.get_or_create(
             tenant=tenant,
             name="Dedicated Security Gateway Appliance",
-            defaults={"list_price": Decimal("4500.00"), "is_active": True}
+            defaults={"unit_price": Decimal("4500.00"), "is_active": True}
         )
         comp_licenses, _ = Product.objects.get_or_create(
             tenant=tenant,
             name="Enterprise User Analytics License",
-            defaults={"list_price": Decimal("150.00"), "is_active": True}
+            defaults={"unit_price": Decimal("150.00"), "is_active": True}
         )
         comp_support, _ = Product.objects.get_or_create(
             tenant=tenant,
             name="24/7 Mission-Critical SLA Support",
-            defaults={"list_price": Decimal("2000.00"), "is_active": True}
+            defaults={"unit_price": Decimal("2000.00"), "is_active": True}
         )
 
         item_sku = Item.objects.filter(tenant=tenant).first()
