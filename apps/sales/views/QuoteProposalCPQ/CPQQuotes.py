@@ -201,8 +201,8 @@ def cpq_quote_delete(request, pk):
     tenant = request.tenant
     quote = get_object_or_404(CPQQuote, pk=pk, tenant=tenant)
     
-    if quote.status == "converted":
-        messages.error(request, "Cannot delete a quote that has been converted to a sales order.")
+    if quote.status not in ["draft", "rejected"]:
+        messages.error(request, f"Cannot delete quote {quote.number} in '{quote.get_status_display()}' status. Only draft or rejected quotes can be deleted.")
         return redirect("sales:cpq_quote_detail", pk=quote.pk)
 
     number = quote.number
