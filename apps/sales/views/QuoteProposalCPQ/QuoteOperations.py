@@ -101,8 +101,13 @@ def quote_approval_queue(request):
         )),
     )
 
+    paginator = Paginator(pending_quotes, 15)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
     return render(request, "sales/quote_proposal_cpq/operations/approval_queue.html", {
-        "pending_quotes": pending_quotes,
+        "pending_quotes": page_obj,
+        "page_obj": page_obj,
         "stats": stats,
     })
 
@@ -259,8 +264,13 @@ def quote_proposal_board(request):
         signed=Count("id", filter=Q(signed_at__isnull=False)),
     )
 
+    paginator = Paginator(quotes, 15)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
     return render(request, "sales/quote_proposal_cpq/operations/proposal_board.html", {
-        "quotes": quotes,
+        "quotes": page_obj,
+        "page_obj": page_obj,
         "stats": stats,
     })
 
@@ -403,8 +413,13 @@ def quote_conversion_board(request):
         converted_count=Count("id", filter=Q(status="converted")),
     )
 
+    paginator = Paginator(ready_quotes, 15)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
     return render(request, "sales/quote_proposal_cpq/operations/conversion_board.html", {
-        "ready_quotes": ready_quotes,
+        "ready_quotes": page_obj,
+        "page_obj": page_obj,
         "converted_quotes": converted_quotes,
         "stats": stats,
     })
