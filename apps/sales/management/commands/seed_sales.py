@@ -55,7 +55,7 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Seed Sales 8.1, 8.2, 8.3, and 8.4 data idempotently."
+    help = "Seed Sales 8.1, 8.2, 8.3, 8.4, and 8.5 data idempotently."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -74,7 +74,7 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, backfill=backfill)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, and 8.4 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, and 8.5 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
@@ -89,6 +89,7 @@ class Command(BaseCommand):
         self._seed_contact_account_management(tenant, owner)
         self._seed_opportunity_pipeline(tenant, owner, backfill=backfill)
         self._seed_sales_forecasting(tenant, owner)
+        self._seed_cpq(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -795,11 +796,25 @@ class Command(BaseCommand):
             )
         self.stdout.write(f"{tenant.name}: Sales 8.4 forecasting demo rows ensured.")
 
+    def _seed_cpq(self, tenant, owner):
+        """8.5 Quote & Proposal Management demo rows, idempotent by construction.
+
+        Split out of ``_seed_sales_forecasting`` so each sub-module's demo data is
+        seeded from its own helper. Every guard here is an existence check on a
+        natural key (rule name, bundle product pair, quote name) rather than on the
+        auto-minted number, so a second run creates nothing.
+        """
         # ================================================================
         # 8.5 Quote & Proposal Management (CPQ)
         # ================================================================
         from apps.crm.models import Product, PriceBook
         from apps.scm.models.InventoryManagement.Items import Item, UOM
+
+        opportunities = list(
+            Opportunity.objects.filter(tenant=tenant)
+            .exclude(stage="closed_lost")
+            .order_by("created_at")[:10]
+        )
 
         currency_usd = Currency.objects.filter(code="USD").first()
         primary_opp = opportunities[0] if opportunities else None
