@@ -45,7 +45,7 @@ Reviewers executed serially:
 - [x] **I11**: `apps/sales/cpq_services.py:175-226, 430-438` — Use `bulk_create` / `bulk_update` in `cpq_create_revision` and `cpq_convert_to_sales_order` instead of per-row insert loops. (fixed: replaced per-row loops with bulk_create in revision cloning and order conversion)
 - [x] **I12**: `apps/sales/models/QuoteProposalCPQ/*.py` — Missing composite database indexes for `(tenant, number)`, `(tenant, approval_status)`, and `(tenant, is_active)`. (fixed: added composite indexes to CPQQuote, ProductBundleOption, and QuoteApprovalRule and applied migration 0010)
 - [x] **I13**: `apps/sales/views/QuoteProposalCPQ/QuoteOperations.py:76, 221, 343` — Operational dashboards (`quote_approval_queue`, `quote_proposal_board`, `quote_conversion_board`) lack pagination. (fixed: added 15-item pagination and page navigation controls across all three operational dashboards)
-- [ ] **I14**: `apps/sales/forms/QuoteProposalCPQ/*.py` — Missing `required=False` on optional form fields (`min_margin_pct`, `list_price`, `discount_pct`, `tax_pct`).
+- [x] **I14**: `apps/sales/forms/QuoteProposalCPQ/*.py` — Missing `required=False` on optional form fields (`min_margin_pct`, `list_price`, `discount_pct`, `tax_pct`). (fixed: set required=False and default value fallbacks across CPQ forms)
 - [ ] **I15**: `apps/sales/views/QuoteProposalCPQ/QuoteOperations.py:252-255` — State mutation on HTTP GET in `quote_generate_proposal`: auto-transitions status to `presented`. Keep preview read-only.
 
 ---
