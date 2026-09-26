@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Health Board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">System Health Board</h1>
+      <div class="breadcrumb"><a href="{% url 'core:monitoring_overview' %}">Monitoring</a><span class="sep">›</span><span>Health</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:firing_board' %}" class="btn btn-outline"><i data-lucide="flame"></i> Firing board</a>
+      <a href="{% url 'core:service_component_list' %}" class="btn btn-outline"><i data-lucide="server"></i> Components</a>
+    </div>
+  </div>
+
+  {% comment %}
+    THE ROLL-UP. Derived on the view, never stored: there is no tenant.uptime column and no roll-up field,
+    because a stored roll-up freezes one bad hour on the workspace forever. Worst status wins, and
+    "unknown" sits just above "operational" - the absence of a claim must not mask a real outage, and
+    must not be dressed up as health either. With no components at all the roll-up is "unknown", never
+    "operational": an all-green board over an empty register is the false all-clear 0.8 refuses.
+  {% endcomment %}
+  <div class="card"><div class="card-body">
+    <p>
+      <span class="text-muted">Worst status across {{ component_total }} active component{{ component_total|pluralize }}:</span>
+      {% if rollup_status == "operational" %}<span class="badge badge-green">Operational</span>
+      {% elif rollup_status == "degraded" %}<span class="badge badge-amber">Degraded</span>
+      {% elif rollup_status == "partial_outage" %}<span class="badge badge-red">Partial outage</span>
+      {% elif rollup_status == "major_outage" %}<span class="badge badge-red">Major outage</span>
+      {% else %}<span class="badge badge-slate">Unknown</span>{% endif %}
+    </p>
+    {% if not component_total %}
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>No components are registered, so
+        there is no status to report.</strong> That is not an all-clear — it means nothing is being watched.</p>
+    {% endif %}
+    <p class="text-muted"><i data-lucide="info"></i> This roll-up is the worst <em>hand-set claim</em>
+      across the catalogue. NavERP computed it from what people typed; it did not measure anything.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Status counts</h2></div>
+    <div class="card-body">
+      <div class="badge-group">
+        {% for value, label in status_choices %}
+          <span class="badge {% if value == 'operational' %}badge-green{% elif value == 'degraded' %}badge-amber{% elif value == 'partial_outage' or value == 'major_outage' %}badge-red{% else %}badge-slate{% endif %}">{{ label }}: {{ status_counts|default_if_none:0 }}</span>
+        {% endfor %}
+      </div>
+      {% if component_total %}
+        <p class="text-muted" style="margin-top:.6rem;">{{ critical_count }} marked critical ·
+          {{ public_count }} would appear on a public status page ·
+          {{ unreported_count }} never given a status</p>
+      {% else %}
+        <p class="text-muted" style="margin-top:.6rem;">No components registered, so these counts are not
+          applicable rather than zero.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Component</th><th>Status (hand-set)</th><th>Last set</th><th>Open alerts</th><th>Flags</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for row in components %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:service_component_detail' row.component.pk %}">{{ row.component.name }}</a>
+              <div class="text-muted">{{ row.component.get_kind_display }}{% if row.component.owner_role %} · {{ row.component.owner_role.name }}{% endif %}</div>
+            </td>
+            <td>
+              {% if row.component.current_status == "operational" %}<span class="badge badge-green">{{ row.component.get_current_status_display }}</span>
+              {% elif row.component.current_status == "degraded" %}<span class="badge badge-amber">{{ row.component.get_current_status_display }}</span>
+              {% elif row.component.current_status == "partial_outage" or row.component.current_status == "major_outage" %}<span class="badge badge-red">{{ row.component.get_current_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ row.component.get_current_status_display }}</span>{% endif %}
+              <div class="text-muted">{{ row.note }}</div>
+            </td>
+            <td>{% if row.component.last_status_at %}{{ row.component.last_status_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">never</span>{% endif %}</td>
+            <td>{% if row.open_alerts %}<span class="badge badge-red">{{ row.open_alerts }} open</span>{% else %}<span class="text-muted">none reported</span>{% endif %}</td>
+            <td><div class="badge-group">
+              {% if row.component.is_critical %}<span class="badge badge-red">Critical</span>{% endif %}
+              {% if row.component.is_public %}<span class="badge badge-info">Public</span>{% endif %}
+            </div></td>
+            <td><div class="table-actions">
+              <a href="{% url 'core:service_component_detail' row.component.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+            </div></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6"><div class="empty-state"><i data-lucide="server"></i><h3>No components registered</h3><p class="text-muted">Register the things this workspace depends on so there is something to report on.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if latest_metrics %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Latest workspace health readings</h2></div>
+      <div class="card-body">
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th>Metric</th><th>Value</th><th>Status</th><th>Recorded</th></tr></thead>
+          <tbody>
+            {% for m in latest_metrics %}
+              <tr>
+                <td>{{ m.get_metric_display }}</td>
+                <td>{{ m.value }}</td>
+                <td>
+                  {% if m.status == "ok" %}<span class="badge badge-green">{{ m.get_status_display }}</span>
+                  {% elif m.status == "warning" %}<span class="badge badge-amber">{{ m.get_status_display }}</span>
+                  {% else %}<span class="badge badge-red">{{ m.get_status_display }}</span>{% endif %}
+                </td>
+                <td>{% if m.recorded_at %}{{ m.recorded_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">not timestamped</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table></div>
+        <p class="text-muted"><i data-lucide="info"></i> Read from 0.1 and never copied into 0.17 — a
+          reading that lives in two places is a reading that will eventually disagree with itself. These
+          are figures somebody entered, not ones NavERP sampled.</p>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
+
