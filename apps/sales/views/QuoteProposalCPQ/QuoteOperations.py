@@ -41,6 +41,10 @@ def quote_submit_approval(request, pk):
     tenant = request.tenant
     quote = get_object_or_404(CPQQuote, pk=pk, tenant=tenant)
 
+    if quote.status not in ["draft", "rejected"]:
+        messages.warning(request, f"Quote {quote.number} cannot be submitted for approval in status '{quote.get_status_display()}'.")
+        return redirect("sales:cpq_quote_detail", pk=quote.pk)
+
     if not quote.lines.exists():
         messages.error(request, "Cannot submit an empty quote for approval. Add at least one line item.")
         return redirect("sales:cpq_quote_detail", pk=quote.pk)
@@ -110,6 +114,10 @@ def quote_approval_action(request, pk):
     """Review and approve or reject a pending CPQ quote with audit notes."""
     tenant = request.tenant
     quote = get_object_or_404(CPQQuote, pk=pk, tenant=tenant)
+
+    if quote.approval_status != "pending":
+        messages.warning(request, f"Quote {quote.number} is not pending approval (current status: {quote.get_approval_status_display()}).")
+        return redirect("sales:cpq_quote_detail", pk=quote.pk)
 
     if request.method == "POST":
         form = CPQQuoteApprovalActionForm(request.POST)
