@@ -15,6 +15,14 @@
     <p class="text-muted">Outages and planned windows somebody wrote down. <strong>NavERP publishes
       nothing</strong> — there is no status page here, and no subscriber to send it to. A row is a draft
       and a record that somebody published it elsewhere.</p>
+    {% if open_count %}
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>{{ open_count }} incident{{ open_count|pluralize }} still open.</strong>
+        A zero here means nobody recorded one — it is not a statement that nothing is wrong.</p>
+    {% endif %}
+    {% if active_count != open_count %}
+      <p class="text-muted">{{ active_count }} row{{ active_count|pluralize }} still in the register;
+        archived rows are kept but are not open incidents.</p>
+    {% endif %}
     {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
     <form method="get" class="filter-bar">
       <div class="form-group" style="flex:1; min-width:200px;">
