@@ -16,7 +16,10 @@ from apps.sales.models.QuoteProposalCPQ.QuoteApprovalRules import QuoteApprovalR
 def quote_approval_rule_list(request):
     """List and filter CPQ pricing approval rules."""
     tenant = request.tenant
-    qs = QuoteApprovalRule.objects.filter(tenant=tenant).select_related("currency")
+    # QuoteApprovalRule has no currency FK (its thresholds are plain numerics), so
+    # there is nothing to select_related here -- a `select_related("currency")`
+    # raises FieldError and 500s both rule pages.
+    qs = QuoteApprovalRule.objects.filter(tenant=tenant)
 
     # Search
     q = request.GET.get("q", "").strip()
@@ -87,7 +90,7 @@ def quote_approval_rule_create(request):
 @login_required
 def quote_approval_rule_detail(request, pk):
     """View details of a QuoteApprovalRule."""
-    rule = get_object_or_404(QuoteApprovalRule.objects.select_related("currency"), pk=pk, tenant=request.tenant)
+    rule = get_object_or_404(QuoteApprovalRule, pk=pk, tenant=request.tenant)
     recent_quotes = rule.quotes.filter(tenant=request.tenant).order_by("-created_at")[:10]
     return render(request, "sales/quote_proposal_cpq/quoteapprovalrule/detail.html", {
         "rule": rule,
