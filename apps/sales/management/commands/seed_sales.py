@@ -30,8 +30,14 @@ from apps.sales.models import (
     Pipeline,
     PipelineStage,
     WinLossReason,
+    CPQQuote,
+    CPQQuoteLine,
+    ProductBundleOption,
+    QuoteApprovalRule,
 )
+from apps.sales.cpq_services import cpq_recalc_quote_totals, cpq_render_proposal_html, cpq_convert_to_sales_order
 from apps.sales.forecast_services import forecast_submission_snapshot
+
 from apps.sales.opportunity_services import opportunity_pipeline_baseline_stages
 from apps.sales.services import (
     activate_nurture,
@@ -788,3 +794,273 @@ class Command(BaseCommand):
                 update_fields=["projected_commit_amount", "projected_total_amount", "updated_at"]
             )
         self.stdout.write(f"{tenant.name}: Sales 8.4 forecasting demo rows ensured.")
+
+        # ================================================================
+        # 8.5 Quote & Proposal Management (CPQ)
+        # ================================================================
+        from apps.crm.models import Product, PriceBook
+        from apps.scm.models.InventoryManagement.Items import Item, UOM
+
+        currency_usd = Currency.objects.filter(code="USD").first()
+        primary_opp = opportunities[0] if opportunities else None
+        primary_account = primary_opp.account if primary_opp else Party.objects.filter(tenant=tenant, kind="organization").first()
+        primary_contact = primary_opp.contact if primary_opp and hasattr(primary_opp, "contact") else Party.objects.filter(tenant=tenant, kind="person").first()
+
+        # --- 1. Quote Approval Rules -------------------------------------
+        rule_specs = [
+            ("Executive Discount Floor", "max_discount", Decimal("25.00"), Decimal("15.00"), None, "vp_sales", 10, False, "Quotes with over 25% discount require VP sign-off."),
+            ("Standard Margin Floor", "min_margin", Decimal("20.00"), Decimal("15.00"), None, "sales_manager", 20, False, "Quotes below 15% net margin require manager review."),
+            ("Enterprise Value Ceiling", "max_amount", Decimal("20.00"), Decimal("15.00"), Decimal("50000.00"), "finance_manager", 30, False, "Contracts exceeding $50k require finance approval."),
+        ]
+        for r_name, r_type, r_disc, r_margin, r_amt, r_role, r_prio, r_reject, r_desc in rule_specs:
+            if not QuoteApprovalRule.objects.filter(tenant=tenant, name=r_name).exists():
+                QuoteApprovalRule.objects.create(
+                    tenant=tenant,
+                    name=r_name,
+                    rule_type=r_type,
+                    discount_threshold_pct=r_disc,
+                    min_margin_pct=r_margin,
+                    amount_threshold=r_amt,
+                    approver_role=r_role,
+                    priority=r_prio,
+                    auto_reject=r_reject,
+                    is_active=True,
+                    description=r_desc,
+                )
+
+        # --- 2. Products & Bundle Options --------------------------------
+        bundle_prod, _ = Product.objects.get_or_create(
+            tenant=tenant,
+            name="Enterprise Cloud Platform",
+            defaults={"list_price": Decimal("12500.00"), "is_active": True}
+        )
+        comp_gateway, _ = Product.objects.get_or_create(
+            tenant=tenant,
+            name="Dedicated Security Gateway Appliance",
+            defaults={"list_price": Decimal("4500.00"), "is_active": True}
+        )
+        comp_licenses, _ = Product.objects.get_or_create(
+            tenant=tenant,
+            name="Enterprise User Analytics License",
+            defaults={"list_price": Decimal("150.00"), "is_active": True}
+        )
+        comp_support, _ = Product.objects.get_or_create(
+            tenant=tenant,
+            name="24/7 Mission-Critical SLA Support",
+            defaults={"list_price": Decimal("2000.00"), "is_active": True}
+        )
+
+        item_sku = Item.objects.filter(tenant=tenant).first()
+        uom_unit = UOM.objects.filter(tenant=tenant).first()
+
+        bundle_specs = [
+            ("Security Gateway Appliance", bundle_prod, comp_gateway, "Hardware", True, True, Decimal("1"), Decimal("1"), Decimal("2"), None, None, "none", None, 10),
+            ("User Analytics Licenses (10-Pack)", bundle_prod, comp_licenses, "Software", False, True, Decimal("5"), Decimal("10"), Decimal("50"), Decimal("120.00"), Decimal("10.00"), "none", None, 20),
+            ("24/7 Enterprise SLA Support Tier", bundle_prod, comp_support, "Support", False, False, Decimal("1"), Decimal("1"), Decimal("1"), None, None, "requires", comp_gateway, 30),
+        ]
+        for b_name, b_prod, c_prod, o_grp, req, dflt, min_q, dflt_q, max_q, p_ovr, d_ovr, c_rule, dep_prod, s_ord in bundle_specs:
+            if not ProductBundleOption.objects.filter(tenant=tenant, bundle_product=b_prod, component_product=c_prod).exists():
+                ProductBundleOption.objects.create(
+                    tenant=tenant,
+                    name=b_name,
+                    bundle_product=b_prod,
+                    component_product=c_prod,
+                    component_item=item_sku,
+                    option_group=o_grp,
+                    is_required=req,
+                    is_default=dflt,
+                    min_quantity=min_q,
+                    default_quantity=dflt_q,
+                    max_quantity=max_q,
+                    unit_price_override=p_ovr,
+                    discount_pct_override=d_ovr,
+                    compatibility_rule=c_rule,
+                    depends_on_product=dep_prod,
+                    sort_order=s_ord,
+                    is_active=True,
+                )
+
+        # --- 3. CPQ Quotes Lifecycle Demos -------------------------------
+        if not CPQQuote.objects.filter(tenant=tenant, name="Enterprise Platform Suite — Acme Corp").exists():
+            # Quote 1: Primary quote with bundle hierarchy
+            q1 = CPQQuote.objects.create(
+                tenant=tenant,
+                name="Enterprise Platform Suite — Acme Corp",
+                opportunity=primary_opp,
+                account=primary_account,
+                contact=primary_contact,
+                currency=currency_usd,
+                status="draft",
+                approval_status="not_required",
+                valid_until=timezone.localdate() + timedelta(days=30),
+                is_primary=True,
+                header_discount_pct=Decimal("5.00"),
+                terms_and_conditions="Net 30 payment terms. Includes standard 1-year warranty and platform onboarding.",
+                owner=owner,
+            )
+            # Add package parent line
+            parent_ln = CPQQuoteLine.objects.create(
+                tenant=tenant,
+                quote=q1,
+                parent_line=None,
+                line_type="bundle_parent",
+                product=bundle_prod,
+                item=item_sku,
+                uom=uom_unit,
+                description=f"Package: {bundle_prod.name}",
+                quantity=Decimal("1.00"),
+                list_price=Decimal("12500.00"),
+                unit_price=Decimal("12500.00"),
+                unit_cost=Decimal("7000.00"),
+                sequence=10,
+            )
+            # Component 1
+            CPQQuoteLine.objects.create(
+                tenant=tenant,
+                quote=q1,
+                parent_line=parent_ln,
+                line_type="bundle_component",
+                product=comp_gateway,
+                item=item_sku,
+                uom=uom_unit,
+                description=f"Hardware: {comp_gateway.name}",
+                quantity=Decimal("1.00"),
+                list_price=Decimal("4500.00"),
+                unit_price=Decimal("4500.00"),
+                unit_cost=Decimal("2800.00"),
+                sequence=20,
+            )
+            # Component 2
+            CPQQuoteLine.objects.create(
+                tenant=tenant,
+                quote=q1,
+                parent_line=parent_ln,
+                line_type="bundle_component",
+                product=comp_licenses,
+                item=item_sku,
+                uom=uom_unit,
+                description=f"Software: {comp_licenses.name}",
+                quantity=Decimal("10.00"),
+                list_price=Decimal("150.00"),
+                discount_pct=Decimal("10.00"),
+                unit_price=Decimal("135.00"),
+                unit_cost=Decimal("40.00"),
+                sequence=30,
+            )
+            # Component 3 (Optional Add-on)
+            CPQQuoteLine.objects.create(
+                tenant=tenant,
+                quote=q1,
+                parent_line=parent_ln,
+                line_type="optional_addon",
+                product=comp_support,
+                item=item_sku,
+                uom=uom_unit,
+                description=f"Support: {comp_support.name}",
+                quantity=Decimal("1.00"),
+                list_price=Decimal("2000.00"),
+                unit_price=Decimal("2000.00"),
+                unit_cost=Decimal("800.00"),
+                is_optional=True,
+                is_selected=True,
+                sequence=40,
+            )
+            cpq_recalc_quote_totals(q1, save=True)
+
+        if not CPQQuote.objects.filter(tenant=tenant, name="Global Security & SLA Expansion").exists():
+            # Quote 2: E-Signed & Accepted proposal
+            q2 = CPQQuote.objects.create(
+                tenant=tenant,
+                name="Global Security & SLA Expansion",
+                opportunity=primary_opp,
+                account=primary_account,
+                contact=primary_contact,
+                currency=currency_usd,
+                status="accepted",
+                approval_status="approved",
+                approved_by=owner,
+                approved_at=timezone.now() - timedelta(days=2),
+                valid_until=timezone.localdate() + timedelta(days=20),
+                is_primary=False,
+                header_discount_pct=Decimal("10.00"),
+                terms_and_conditions="Annual prepaid commitment. Full 24/7 SLA response within 15 minutes.",
+                signer_name="Sarah Jenkins",
+                signer_title="VP Information Technology",
+                signer_email="sarah.jenkins@acmecorp.com",
+                signed_at=timezone.now() - timedelta(days=1),
+                signature_data="Sarah Jenkins",
+                owner=owner,
+            )
+            CPQQuoteLine.objects.create(
+                tenant=tenant,
+                quote=q2,
+                line_type="standard",
+                product=comp_gateway,
+                item=item_sku,
+                uom=uom_unit,
+                description=f"{comp_gateway.name} — Redundant Cluster",
+                quantity=Decimal("2.00"),
+                list_price=Decimal("4500.00"),
+                unit_price=Decimal("4500.00"),
+                unit_cost=Decimal("2800.00"),
+                sequence=10,
+            )
+            CPQQuoteLine.objects.create(
+                tenant=tenant,
+                quote=q2,
+                line_type="standard",
+                product=comp_support,
+                item=item_sku,
+                uom=uom_unit,
+                description=f"{comp_support.name} (Multi-Year)",
+                quantity=Decimal("2.00"),
+                list_price=Decimal("2000.00"),
+                unit_price=Decimal("2000.00"),
+                unit_cost=Decimal("800.00"),
+                sequence=20,
+            )
+            cpq_recalc_quote_totals(q2, save=True)
+            cpq_render_proposal_html(q2)
+
+        if not CPQQuote.objects.filter(tenant=tenant, name="Infrastructure Hardware Order Handoff").exists():
+            # Quote 3: Approved & Converted to Sales Order
+            q3 = CPQQuote.objects.create(
+                tenant=tenant,
+                name="Infrastructure Hardware Order Handoff",
+                opportunity=primary_opp,
+                account=primary_account,
+                contact=primary_contact,
+                currency=currency_usd,
+                status="accepted",
+                approval_status="approved",
+                approved_by=owner,
+                approved_at=timezone.now() - timedelta(days=5),
+                valid_until=timezone.localdate() + timedelta(days=15),
+                is_primary=False,
+                header_discount_pct=Decimal("0.00"),
+                terms_and_conditions="Immediate warehouse fulfillment upon signature.",
+                owner=owner,
+            )
+            CPQQuoteLine.objects.create(
+                tenant=tenant,
+                quote=q3,
+                line_type="standard",
+                product=comp_gateway,
+                item=item_sku,
+                uom=uom_unit,
+                description="Production Security Gateway System",
+                quantity=Decimal("1.00"),
+                list_price=Decimal("4500.00"),
+                unit_price=Decimal("4500.00"),
+                unit_cost=Decimal("2800.00"),
+                sequence=10,
+            )
+            cpq_recalc_quote_totals(q3, save=True)
+            # Perform automated order conversion
+            try:
+                cpq_convert_to_sales_order(q3, user=owner)
+            except Exception:
+                pass
+
+        self.stdout.write(f"{tenant.name}: Sales 8.5 CPQ demo rows ensured.")
+
