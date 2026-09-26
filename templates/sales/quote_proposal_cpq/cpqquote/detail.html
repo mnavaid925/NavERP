@@ -175,15 +175,15 @@
                                         </div>
                                     </td>
                                     <td class="text-right font-mono text-sm">{{ line.quantity }}</td>
-                                    <td class="text-right font-mono text-sm text-slate-600">${{ line.list_price:,.2f }}</td>
+                                    <td class="text-right font-mono text-sm text-slate-600">${{ line.list_price|floatformat:2 }}</td>
                                     <td class="text-right font-mono text-sm {% if line.discount_pct > 0 %}text-amber-700 font-semibold{% else %}text-slate-400{% endif %}">
                                         {{ line.discount_pct }}%
                                     </td>
-                                    <td class="text-right font-mono text-sm font-medium text-slate-800">${{ line.unit_price:,.2f }}</td>
+                                    <td class="text-right font-mono text-sm font-medium text-slate-800">${{ line.unit_price|floatformat:2 }}</td>
                                     <td class="text-right font-mono text-sm {% if line.margin_pct < 15 %}text-red-600{% else %}text-emerald-700{% endif %}">
                                         {{ line.margin_pct }}%
                                     </td>
-                                    <td class="text-right font-mono text-sm font-bold text-slate-900">${{ line.line_total:,.2f }}</td>
+                                    <td class="text-right font-mono text-sm font-bold text-slate-900">${{ line.line_total|floatformat:2 }}</td>
                                     {% if can_edit %}
                                         <td class="table-actions text-right">
                                             <a href="{% url 'sales:cpq_quote_line_edit' quote.pk line.pk %}" class="btn-icon" title="Edit Line">
@@ -264,7 +264,7 @@
                                         </a>
                                     </td>
                                     <td><span class="badge badge-slate text-xs">{{ rev.get_status_display }}</span></td>
-                                    <td class="font-mono text-sm">${{ rev.total:,.2f }}</td>
+                                    <td class="font-mono text-sm">${{ rev.total|floatformat:2 }}</td>
                                     <td class="text-sm">{{ rev.margin_pct }}%</td>
                                     <td class="text-xs text-slate-500">{{ rev.created_at|date:"M d, Y H:i" }}</td>
                                     <td class="text-right">
@@ -294,34 +294,34 @@
                 <div class="card-body p-4 space-y-3">
                     <div class="flex justify-between text-sm">
                         <span class="text-slate-500">Gross Subtotal:</span>
-                        <span class="font-medium text-slate-900">${{ quote.subtotal:,.2f }}</span>
+                        <span class="font-medium text-slate-900">${{ quote.subtotal|floatformat:2 }}</span>
                     </div>
 
                     {% if quote.discount_total > 0 %}
                         <div class="flex justify-between text-sm text-amber-700">
                             <span>Header Discount ({{ quote.header_discount_pct }}%):</span>
-                            <span class="font-semibold">-${{ quote.discount_total:,.2f }}</span>
+                            <span class="font-semibold">-${{ quote.discount_total|floatformat:2 }}</span>
                         </div>
                     {% endif %}
 
                     <div class="flex justify-between text-sm">
                         <span class="text-slate-500">Estimated Taxes:</span>
-                        <span class="font-medium text-slate-800">${{ quote.tax_total:,.2f }}</span>
+                        <span class="font-medium text-slate-800">${{ quote.tax_total|floatformat:2 }}</span>
                     </div>
 
                     <div class="pt-3 border-t border-slate-200 flex justify-between items-baseline">
                         <span class="text-base font-bold text-slate-900">Total Investment:</span>
-                        <span class="text-xl font-bold text-blue-700 font-mono">${{ quote.total:,.2f }}</span>
+                        <span class="text-xl font-bold text-blue-700 font-mono">${{ quote.total|floatformat:2 }}</span>
                     </div>
 
                     <div class="pt-3 border-t border-slate-100 space-y-1.5 bg-slate-50 -mx-4 -mb-4 p-4 rounded-b-lg">
                         <div class="flex justify-between text-xs text-slate-500">
                             <span>Total Estimated Cost:</span>
-                            <span class="font-mono">${{ quote.cost_total:,.2f }}</span>
+                            <span class="font-mono">${{ quote.cost_total|floatformat:2 }}</span>
                         </div>
                         <div class="flex justify-between text-xs text-slate-500">
                             <span>Gross Margin Amount:</span>
-                            <span class="font-mono">${{ quote.margin_total:,.2f }}</span>
+                            <span class="font-mono">${{ quote.margin_total|floatformat:2 }}</span>
                         </div>
                         <div class="flex justify-between text-xs font-semibold">
                             <span class="text-slate-700">Net Profit Margin:</span>
