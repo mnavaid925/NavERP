@@ -171,13 +171,19 @@ class ForecastScenario(TenantNumbered):
         settled = queryset.filter(status__in=["approved", "locked", "submitted"]).first()
         return settled if settled is not None else queryset.first()
 
-    def _project(self, delta_field, amount_field):
+    def _project(self, delta_field, amount_field, baseline=None):
         """``amount * (1 + delta/100)``, or ``None`` when there is no call to project.
 
         Decimal-only. A scenario with no baseline submission is not zero, it is *unknown*, so
         it returns ``None`` and the template renders an em dash rather than a fake 0.00.
+
+        ``baseline`` lets a caller that already holds the period's baseline pass it in
+        instead of re-querying. The three ``effective_*`` properties and
+        ``snapshot_projection()`` each need the SAME row, so without it a single
+        scenario cost several identical queries -- seven inside the apply loop, and
+        that loop holds row locks for its whole duration.
         """
-        submission = self.baseline_submission()
+        submission = self.baseline_submission() if baseline is None else baseline
         if submission is None:
             return None
         base = Decimal(getattr(submission, amount_field, 0) or 0)
@@ -199,17 +205,32 @@ class ForecastScenario(TenantNumbered):
         """The commit line after this scenario's delta, or ``None``."""
         return self._project("commit_delta_pct", "commit_amount")
 
-    def snapshot_projection(self):
+    def effective_amounts(self, baseline=None):
+        """``(pipeline, best_case, commit)`` from ONE baseline read.
+
+        The three properties each re-fetch the same ``ForecastSubmission``; this is
+        the single-read form used by the detail page and the apply loop.
+        """
+        submission = self.baseline_submission() if baseline is None else baseline
+        if submission is None:
+            return None, None, None
+        return (
+            self._project("pipeline_delta_pct", "pipeline_amount", submission),
+            self._project("best_case_delta_pct", "best_case_amount", submission),
+            self._project("commit_delta_pct", "commit_amount", submission),
+        )
+
+    def snapshot_projection(self, baseline=None):
         """Write the two ``projected_*`` snapshots from the current deltas. Returns ``self``.
 
         This is the **only** method in the entity that writes an amount, and it writes only to
         this row. It never touches a ``ForecastSubmission`` -- the deltas are read from the
         baseline call and the projection lands here. That asymmetry IS the isolation rule
         expressed in code, and it is what the smoke sweep asserts byte-for-byte.
+
+        ``baseline`` is the caller's already-fetched submission (see :meth:`effective_amounts`).
         """
-        commit = self.effective_commit_amount
-        pipeline = self.effective_pipeline_amount
-        best_case = self.effective_best_case_amount
+        pipeline, best_case, commit = self.effective_amounts(baseline)
         self.projected_commit_amount = max(Decimal("0"), commit or Decimal("0"))
         total = (pipeline or Decimal("0")) + (best_case or Decimal("0")) + (commit or Decimal("0"))
         self.projected_total_amount = max(Decimal("0"), total.quantize(Decimal("0.01")))
