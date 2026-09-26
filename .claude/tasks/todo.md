@@ -10343,3 +10343,220 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 
 ## Review notes
 (filled in at the end)
+---
+
+# Sub-module 8.4 — Sales Forecasting (Module 8: Sales Management System, `sales`) — plan from research-sales-8.4.md (2026-09-26)
+
+> **This plan EXTENDS an existing app.** `apps/sales/` is already live with 8.1 `LeadManagement`,
+> 8.2 `OpportunityPipeline` / `OpportunityOutcomes` / `OpportunityTeams` / `CompetitiveIntelligence`,
+> 8.3 `ContactAccountManagement`.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental** and **8.4 claims `0007`** (leaf today is `0006_opportunitycompetitor_sales_oc_tenant_profile_idx_and_more.py`).
+
+## Repo state re-verified by the todo agent (2026-09-26) — L28, the grep is the truth
+
+Every FK target below was re-grepped across the `models/` **packages** at plan time, not taken from the research prose:
+
+| FK target | Verified location | Verdict |
+|---|---|---|
+| `crm.Opportunity` | `apps/crm/models/SalesForceAutomation/Opportunities.py:5` | EXISTS — `forecast_category` (L32), `amount` (L33), `currency`→`accounting.Currency` (L34), `probability` (L35), `close_date` (L36), `territory` (L41), `owner` (L42), `weighted_amount` property (L82) |
+| `crm.SalesQuota` | `apps/crm/models/SalesForceAutomation/SalesQuotas.py:5` | EXISTS — `PERIOD_CHOICES` month/quarter/year (L11-15), `target_amount`, `owner`, `territory`, `period_year`, `period_number` |
+| `crm.Territory` | `apps/crm/models/SalesForceAutomation/Territories.py:10` | EXISTS — read-only dimension for 8.4 |
+| `accounting.Currency` | `apps/accounting/models/GeneralLedger/Currencies.py:6` | EXISTS — **global, no tenant FK**; the currency spine (L29), never a second ledger |
+| `accounting.ExchangeRate` | `apps/accounting/models/GeneralLedger/ExchangeRates.py:5` | EXISTS — `unique_together ("tenant","currency","rate_date")`, `rate` decimal(18,8). The FX source 8.2 deferred |
+| `core.OrgUnit` | `apps/core/models/OrgUnit.py:5` | EXISTS — **self-parenting `parent` (L19)**, `KIND_CHOICES`. This is the rep→manager→director spine |
+| `sales.Pipeline` | `apps/sales/models/OpportunityPipeline/Pipelines.py:46` | EXISTS — `PIPE-`, `is_default`, `is_active` |
+| `sales.PipelineStage` | same file, `FORECAST_CATEGORY_CHOICES` | EXISTS — same 5-value vocabulary |
+| `sales.OpportunityPipelinePlacement` | same file | EXISTS — `probability_override` + `effective_probability` |
+| `sales.OpportunityOutcome` | `apps/sales/models/OpportunityOutcomes/OpportunityOutcomes.py:66` | EXISTS — **append-only**, `result` won/lost, `closed_at`, `recorded_by`. The actuals source |
+| `sales.WinLossReason` | same file `:11` | EXISTS — `result`, `category` |
+| `sales.OpportunityTeamMember` | `apps/sales/models/OpportunityTeams/OpportunityTeams.py:8` | EXISTS — `user` + `org_unit`→`core.OrgUnit` (already attaches a user to an org unit) |
+
+**Confirmed NOT to be FK'd:** there is no `User.manager` field — the rollup axis walks `core.OrgUnit.parent`.
+`sales.SalesOrder` is **not** ours (`scm.SalesOrder` is SCM's; 8.6 will FK into it) — 8.4 never touches an order.
+`sales.Quota` / `sales.Territory` do not exist — quota *design* is **8.7**, 8.4 only reads + snapshots `crm.SalesQuota`.
+
+**Naming decision (verified against as-built):** backend folder `SalesForecasting/` (PascalCase of the NavERP.md
+`### 8.4` title, matching `ContactAccountManagement/`). Template folder **`templates/sales/salesforecasting/`** —
+8.1 `LeadManagement`→`leadmanagement` and 8.3 `ContactAccountManagement`→`contactaccountmanagement` are both
+mechanical lowercase, so 8.4 follows the same rule. (8.2 is the one exception at `templates/sales/opportunity/`,
+a deliberate short umbrella over 4 sub-folders. The research suggested `forecasting/`; we use the
+convention-consistent `salesforecasting/` and note the deviation so the builder does not "fix" it back.)
+**Free number prefixes `FCP` / `FCS` / `FAD` / `FSC` — checked, none collide with any `apps/sales` or `apps/crm` prefix.**
+
+
+## Models (from research — 4)
+
+Base classes from `apps/sales/models/_base.py`: `TenantNumbered` (adds `NUMBER_PREFIX` + auto `number` via
+`core.utils.next_number`, width 5 → `FCP-00001`) and `TenantOwned`. Every model gets a `tenant` FK via the base.
+
+- [ ] **`ForecastPeriod`** `[FCP-]` — `models/SalesForecasting/ForecastPeriods.py`
+  - Fields: `name`; `period_type` ∈ month/quarter/year (**reuse `crm.SalesQuota.PERIOD_CHOICES` values verbatim** — do not re-spell the vocabulary); `period_year`, `period_number`; `start_date` / `end_date` (**computed from type+year+number in `clean()`, never typed by a user**); `rollup_dimension` ∈ `user` / `org_unit` / `territory` (NavERP's rendering of the three Dynamics rollup templates — product hierarchy is out of scope for 8.4); `reporting_currency` FK→`accounting.Currency` (SET_NULL, null) + `fx_rate_source_date` (the reference date for the rate actually applied — the rate itself is *read* from `accounting.ExchangeRate`, never copied into a sales table); `is_active`, `is_locked`.
+  - Drivers: category rollups need a period to roll *into*; the three rollup templates; 8.2's explicit deferral of reporting-currency roll-ups.
+  - **DERIVED, never stored:** `label`, `period_elapsed_pct` (pace), `is_current`. Properties only.
+  - Meta: unique `(tenant, period_type, period_year, period_number)`; index `["tenant","is_active"]`.
+  - FKs: `core.Tenant` (base), `accounting.Currency` ✅verified.
+  - **Form excludes:** `tenant`, `number`, `created_at`, `updated_at`, `start_date`/`end_date` (computed).
+
+- [ ] **`ForecastSubmission`** `[FCS-]` — `models/SalesForecasting/ForecastSubmissions.py`
+  - FKs: `period`→`ForecastPeriod` (**PROTECT**); `owner`→`AUTH_USER_MODEL` (SET_NULL, null); `org_unit`→`core.OrgUnit` (SET_NULL, null); `territory`→`crm.Territory` (SET_NULL, null); `pipeline`→`sales.Pipeline` (SET_NULL, null).
+  - Workflow: `status` ∈ draft/submitted/approved/rejected/locked; `submitted_at`, `submitted_by`, `reviewed_at`, `reviewed_by`, `review_note`. **The approver right is a role check (`tenant_admin_required`), never a record ACL** — 8.2 already ruled team membership is not a security boundary.
+  - Amounts, all `Decimal(14,2)`, **one per already-existing forecast category** (reuses `omitted|pipeline|best_case|commit|closed` — **no new category table**): `omitted_amount`, `pipeline_amount`, `best_case_amount`, `commit_amount`, `closed_amount`, `weighted_amount` (rolled up from `sales.OpportunityPipelinePlacement.effective_probability`).
+  - Quota **snapshot**: `quota_amount` + `quota_ref` FK→`crm.SalesQuota` (SET_NULL, null) so editing a quota never rewrites history.
+  - Actuals: `actual_amount` — sourced from `sales.OpportunityOutcome` / `crm.Opportunity.stage="closed_won"`. Closed/actual is automatic, never hand-picked (do **not** add a second close-date field).
+  - **AI schema now, model later (bullet 2), all nullable:** `ai_predicted_pipeline`, `ai_predicted_best_case`, `ai_predicted_commit`, `ai_confidence_pct`, `ai_model_name`, `ai_model_version`, `ai_generated_at`, `ai_explanation` (JSONField of named factors + weights). The ML writes into these later **with no migration**.
+  - **DERIVED, NEVER STORED (research is emphatic — this is a core spine rule):** `total_forecast_amount` (= commit + best_case + pipeline), `variance_amount`, `attainment_pct`, `pace_pct`. A stored total is a drift bug waiting to happen.
+  - Uniqueness: a `(tenant, period, owner)` DB unique is **unsafe with NULLs** — enforce it in `clean()` instead. Indexes `["tenant","period","status"]`, `["tenant","owner"]`, `["tenant","period","org_unit"]`.
+  - **Form excludes:** `tenant`, `number`, `status` (workflow-controlled), `created_at`/`updated_at` (system), the whole `ai_*` block (system-written by the model integration, not a human), and every derived property.
+
+
+- [ ] **`ForecastAdjustment`** `[FAD-]` — `models/SalesForecasting/ForecastAdjustments.py` — the manager override + its audit history
+  - FKs: `submission`→`ForecastSubmission` (**PROTECT** — an audit row is never cascaded away); `opportunity`→`crm.Opportunity` (SET_NULL, null); `placement`→`sales.OpportunityPipelinePlacement` (SET_NULL, null); `created_by`→`AUTH_USER_MODEL`.
+  - `adjustment_kind` ∈ **direct / indirect / revert** — Microsoft's taxonomy verbatim; `indirect` rows are system-written when a manager's own total propagates down.
+  - `target_field` ∈ category / amount; `original_value` / `adjusted_value` (Decimal); `original_category` / `adjusted_category` (same 5-value vocabulary).
+  - `reason_code` (**REQUIRED** — an override with no reason is exactly the sandbagging signal bullet 5 hunts), `note`, `is_reverted`, `reverted_at`, `revert_reason` (Dynamics' mandatory-reason **Reset**).
+  - **The calculated/system value is NOT stored here** — it is recomputed from the opportunity, which is what makes "Reset" always possible and needs no extra field.
+  - **Form excludes:** `tenant`, `number`, `original_value`/`original_category` (system snapshot), `reverted_at` (system), `created_at`/`updated_at`.
+
+- [ ] **`ForecastScenario`** `[FSC-]` — `models/SalesForecasting/ForecastScenarios.py` — what-if that never touches the real forecast
+  - FKs: `period`→`ForecastPeriod` (**PROTECT**); `owner`→`AUTH_USER_MODEL` (SET_NULL, null — a scenario is often the manager's own what-if).
+  - `name`, `scenario_type` ∈ upside/base/downside/custom, `probability_pct` (0–100, CheckConstraint), `is_baseline`, `is_selected`.
+  - **Deltas, not absolutes**, so the scenario stays honest as the pipeline moves: `pipeline_delta_pct`, `best_case_delta_pct`, `commit_delta_pct`. `projected_commit_amount` / `projected_total_amount` are stored **snapshots of what the scenario computed**, labelled as such, with `assumption_notes`.
+  - It **must never mutate a `ForecastSubmission`** — assert this in the smoke sweep.
+  - Indexes `["tenant","period"]`, `["tenant","is_selected"]`.
+  - **Form excludes:** `tenant`, `number`, `projected_commit_amount`/`projected_total_amount` (computed by the apply action, never hand-typed), `created_at`/`updated_at`.
+
+## Backend (`apps/sales/{models,forms,views,urls}/SalesForecasting/`)
+
+Build **entity by entity, one at a time** — all four backend files for an entity, then its three templates, then
+move to the next. Do **not** interleave entities, and do **not** touch shared files until "Integrate" below.
+
+- [ ] `models/SalesForecasting/__init__.py` (new empty package `__init__`)
+- [ ] `models/SalesForecasting/ForecastPeriods.py` — `ForecastPeriod`
+- [ ] `models/SalesForecasting/ForecastSubmissions.py` — `ForecastSubmission`
+- [ ] `models/SalesForecasting/ForecastAdjustments.py` — `ForecastAdjustment`
+- [ ] `models/SalesForecasting/ForecastScenarios.py` — `ForecastScenario`
+- [ ] `forms/SalesForecasting/__init__.py` + `ForecastPeriods.py` / `ForecastSubmissions.py` / `ForecastAdjustments.py` / `ForecastScenarios.py` — one form class per entity, inheriting `TenantModelForm` via `from apps.sales.forms._common import *`; absolute imports only
+- [ ] `views/SalesForecasting/__init__.py` + the four entity view modules — function-based, `@login_required` on reads, **`@tenant_admin_required` on every privileged write** (submit / review / adjust / revert / scenario-apply / period lock)
+- [ ] `urls/SalesForecasting/__init__.py` + the four entity url modules
+- [ ] Reports shipped **on top of** the four models, **no new model** (research "Reports / views"): forecast board, attainment board, accuracy & bias report, forecast call view → `apps/sales/views/SalesForecasting/ForecastBoards.py` + `apps/sales/urls/SalesForecasting/ForecastBoards.py`
+- [ ] **Rollup axis (the single most likely place for a bad FK — build it explicitly):** walk `core.OrgUnit.parent` to move rep→manager→director. There is **no `User.manager`**. `sales.OpportunityTeamMember.org_unit` already attaches a user to an org unit and is the read path for resolving a user's node. Never FK a non-existent `User.manager`.
+- [ ] **"You cannot adjust a level above you"** (Microsoft, security-sensitive): the adjust action compares the acting user against the submission's rollup position and refuses downward-only violations. Every queryset stays tenant-scoped.
+- [ ] **Audit:** the standard CRUD views get it free from `crud_*` in `apps/core/crud.py`, but the **hand-rolled save paths — submit, review/approve/reject, override/adjust, revert, scenario-apply, period lock — must call `write_audit_log(...)` from `apps/core/utils.py` themselves.** Do not rely on the CRUD helpers for these.
+- [ ] **AI eligibility gate (buildable now):** count `sales.OpportunityOutcome` rows and enforce **≥40 won AND ≥40 lost**; when the gate fails the board renders the gate message and **no prediction is shown** — an unexplained opaque score is worse than none.
+- [ ] **FX:** read `accounting.ExchangeRate` `(tenant, currency, rate_date)`; never silently default to USD and never sum unlike currencies (8.2's settled rule). No second currency ledger (L29).
+
+
+## CRUD completeness (every model, no exceptions)
+
+- [ ] Every one of the 4 models gets the **full set**: `list` (search + filters + pagination), `create`, `detail` (read-only), `edit` (same template as create, pre-filled), `delete` (**POST-only, confirm, csrf, redirects to list**).
+- [ ] Every **list** view filters `tenant=request.tenant` on every query; no `Model.objects.all()` anywhere in a tenant-scoped view.
+- [ ] Every **list** template has an **Actions column**: View (eye) → detail, Edit (pencil) → edit, Delete (bin) → POST form with `onclick="return confirm('…')"` and `{% csrf_token %}`. Wrap Edit/Delete in `{% if obj.status == 'draft' %}` where status governs it.
+- [ ] Every **detail** template has an **Actions sidebar**: Edit, Delete (POST + confirm, status-conditional), Back to List.
+- [ ] Delete URL pattern present for all four: `…/<int:pk>/delete/`.
+- [ ] `ForecastPeriod` with `is_locked=True` makes its submissions read-only — enforce in the edit/submit actions, not just visually.
+- [ ] Adjustments and scenarios are history/analysis rows: decide explicitly whether they get full CRUD or read-only + create, and say so in the contract. `ForecastAdjustment` at minimum gets list/detail/create/revert. **PROTECT FKs mean a locked period or a submitted submission must not be silently cascade-deleted** — guard the delete paths.
+
+## Filters (mandatory on every list page)
+
+- [ ] Each list view **passes every context the template's filter bar needs** — never assume the template gets something it wasn't given: `status_choices`, `period_type_choices`, `rollup_dimension_choices`, `scenario_type_choices`, `adjustment_kind_choices`, plus the FK querysets (`periods`, `owners`, `org_units`, `territories`, `pipelines`).
+- [ ] Parse GET params and apply them to the queryset **before** pagination: `q` (strip + `Q()` lookups), `status`, `period`, `period_type`, `rollup_dimension`, owner/territory/org_unit.
+- [ ] Template comparison rules: string fields `{% if request.GET.status == value %}selected{% endif %}`; **FK/pk fields use `|stringformat:"d"` — NEVER `|slugify` for pk comparison**.
+- [ ] Badge conditions use the **exact** model choice values (`'best_case'` not `'best_case_amount'`), and every badge has an `{% else %}` fallback `{{ obj.get_field_display }}`.
+- [ ] Badge classes are **colour-named only**: `badge-green` / `badge-red` / `badge-amber` / `badge-info` / `badge-muted` / `badge-slate`. The semantic `-success` / `-danger` names **do not exist** in `static/css/theme.css` (L33).
+- [ ] Pagination uses `has_previous` / `has_next` **guards** — never an unguarded `previous` / `next` (L9).
+
+
+## Integrate (single-writer pass — verify every expected file landed BEFORE wiring anything)
+
+- [ ] Add the **re-export block to all four `__init__.py`** — `models/`, `forms/`, `views/`, `urls/`. Forgetting one is an `ImportError`/`AttributeError` at runtime. In `models/__init__.py` add both the import line **and** the `__all__` entry, or `from apps.sales.models import ForecastPeriod` breaks (and `seed_sales.py` imports from there).
+- [ ] Wire the new url modules into `apps/sales/urls/__init__.py` — **literal routes before `<int:pk>` ones** (first-match-wins is behaviour), and check any new route against the whole concatenated list.
+- [ ] Register all four models in `apps/sales/admin.py`.
+- [ ] **Extend** `apps/sales/management/commands/seed_sales.py` — **do not create a new command**. New rows for the 4 models, **reusing the existing Party / Opportunity / Pipeline / OpportunityOutcome / Territory / Currency rows** it already seeds. Guard with `get_or_create` / existence checks so a **second run is a no-op** (idempotent), update the `help=` string, and keep the existing tenant-admin login instructions and the "Superuser `admin` has no tenant" warning.
+- [ ] **No `config/settings.py` edit. No `config/urls.py` edit** — the app is already wired. Confirm `apps.sales` is in `INSTALLED_APPS` and that its `urls` include already points at `apps/sales/urls/`; change nothing unless a check fails.
+- [ ] `makemigrations sales` → **this claims `0007`** (leaf is `0006_…`). If Django numbers it differently, take the number it gives and record it here; if another session is building in this checkout, agree the number **before** generating (L43).
+- [ ] `migrate` → `seed_sales` **twice** → `python manage.py check`.
+- [ ] `makemigrations --check` must say **"No changes detected"** after the split (models sit deeper than the app root; Django still derives `app_label` from the app config).
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — add **one new `LIVE_LINKS["8.4"]` entry** with the five exact NavERP.md bullet strings as keys, pointing at staff-facing management pages (**never a login-gated portal view** — L32). No `8.4` key exists today; 8.1/8.2/8.3 sit at lines ~2167/2179/2188. Suggested mapping:
+  - `"Forecast Categories & Commitments"` → `sales:forecast_submission_list`
+  - `"AI-Powered Predictive Forecasting"` → `sales:forecast_board`
+  - `"Quota Management & Attainment"` → `sales:forecast_attainment`
+  - `"Forecast Rollups & Adjustments"` → `sales:forecast_adjustment_list`
+  - `"Forecast Accuracy & Variance Analysis"` → `sales:forecast_accuracy`
+
+## Templates (`templates/sales/salesforecasting/`)
+
+- [ ] `salesforecasting/forecastperiod/{list,detail,form}.html`
+- [ ] `salesforecasting/forecastsubmission/{list,detail,form}.html`
+- [ ] `salesforecasting/forecastadjustment/{list,detail,form}.html`
+- [ ] `salesforecasting/forecastscenario/{list,detail,form}.html`
+- [ ] `salesforecasting/forecastboard/{board,attainment,accuracy,call}.html` — the four reports (secondary action pages sit **inside** the entity/sub-module folder as bare filenames; **never** a flat `forecast_board.html` at the app root)
+- [ ] Shape is `templates/<app>/<submodule>/<entity>/<page>.html` with the **bare** page filename — **never** a flat `<entity>_<page>.html`. `{% extends "base.html" %}` and `{% include "partials/…" %}` are unaffected.
+- [ ] Each list = filter bar reflecting `request.GET` + Actions column + pagination + empty-state. Each detail = read-only field table + Actions sidebar + a **derived** totals block (total / variance / attainment) rendered from the **properties**, never from a stored column.
+- [ ] Forecast board shows the entered category amounts **beside** the `ai_*` prediction column, and the `ai_explanation` factors wherever a prediction is rendered — a number is never presented without its reason.
+
+
+## Verify
+
+- [ ] `migrate` clean; `seed_sales` run **twice** with no duplicate/IntegrityError output the second time.
+- [ ] `python manage.py check` clean.
+- [ ] `temp/` smoke sweep as **`admin_acme` / `password`** (the superuser `admin` has `tenant=None` and will see nothing — by design):
+  - Every new `sales:*` URL returns **200/302** as expected.
+  - **Content assertions, not just status** — a mismatched context var returns 200 and renders blank (L8): the page title, a seeded `FCP-`/`FCS-`/`FAD-`/`FSC-` number, the seeded owner name, and the derived total all actually appear in the HTML.
+  - **Junk-param list** (`?status=nonsense&period=abc&q=%20`) does not 500.
+  - **Page 2** of a list paginates correctly.
+  - **Cross-tenant IDOR → 404** for a foreign tenant's period / submission / adjustment / scenario.
+  - All mutations **reject GET** (405) and require valid CSRF.
+  - **No template comment leaks** (`{#` or `{% comment`).
+  - Applying a `ForecastScenario` leaves every `ForecastSubmission` row byte-identical (scenario isolation).
+  - With the 40-won/40-lost gate failing (the seeded data will not meet it), the board shows the gate message and **no prediction value** is rendered.
+- [ ] Sidebar shows **`8.4` Live** and all five bullets navigate to working staff pages.
+
+## Close-out
+
+- [ ] Six review agents, **one at a time**, each appending to `.claude/tasks/review-sales-8.4.md`: `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`. Then **dedupe, sort Critical → Important → Minor, assign IDs (C1, I3, M7) and commit the file**. If one returns nothing usable, re-run **that one**.
+- [ ] `code-fixer` agent burns the findings down in ID order, one commit per file, marking each `[x] fixed` / `[~] skipped — reason`. **The main session does not apply findings itself.**
+- [ ] Tests, serial: contract + `conftest.py` (one owner), then `test_salesforecasting_models.py` → `test_salesforecasting_forms.py` → `test_salesforecasting_views.py` → `test_salesforecasting_security.py`, one file at a time, each committed on its own. Then the **full unfiltered** app suite — never a `-k` filter (L47).
+- [ ] Update **`.claude/skills/sales/SKILL.md`** with 8.4's models / routes / templates / seeder rows / conventions (the file exists from 8.1–8.3; **update, do not create**).
+- [ ] Update `README.md` — mark **8.4 Sales Forecasting** built.
+- [ ] **One file per git commit, PowerShell-safe** (`git add 'path'; git commit -m 'msg'`, `;` not `&&`, explicit paths, **never `git push`**). Each backend file, each template, each shared-file surgical edit, each test file gets its own commit. Empty `__init__.py` files still get their own commit.
+
+### Known carry-forward: 8.2's Phase 6/7 is deliberately incomplete
+
+- [ ] **Note, do not fix, do not block on:** 8.2 skipped Phase 6/7. `apps/sales/tests/test_opportunitypipeline_security.py` is **untracked** (confirmed via `git status` on 2026-09-26) and the 8.2 **SKILL.md / README** sections were never written. So the sales test suite will **not** be fully green at 8.4 close-out, and a failing full-suite run may be 8.2's, not 8.4's. **Distinguish the two before debugging**: run the 8.4 test modules alone first, then the full suite, and report any 8.2 residue as pre-existing rather than regressing into it.
+- [ ] The dirty working tree at plan time (`M templates/projects/reporting/*`, `M .claude/tasks/todo.md`, plus untracked `.commandcode/`, `.gemini/`, `.workbuddy-ai/`, `.zcode/`) is **not 8.4's** — leave those files alone and never commit them (L45).
+
+
+## Later passes / deferred
+
+**Deferred / integration (schema ships now, the engine does not):**
+- Actual **ML training and inference** (Dynamics predictive scoring, Salesforce Einstein, Gong AI Revenue Predictor, Zoho AI) — the data-lake sync, training cadence, Azure ML / external service, and retraining. The `ai_*` storage + `ai_explanation` schema ships in 8.4 so the model lands **with no migration**.
+- **Per-deal predictive scoring table** (`ForecastSignal` / `OpportunityPrediction`) — parked to 8.2 / 8.12; it is a table, not a column on the submission.
+- **Excel quota upload** (Dynamics' "Simple" column type) — an import action page on `ForecastPeriod` seeding `crm.SalesQuota`; a later pass.
+- **Email / Teams / Slack** forecast-call notifications and approval reminders — external integrations.
+- **Live FX spot-rate fetching** — `accounting.ExchangeRate` is the source; auto-fetching is an accounting/integration concern.
+- **Product-hierarchy rollup** (Dynamics' third template) — needs `scm.Item`'s category tree as a reporting axis; 8.4 ships `user` / `org_unit` / `territory` only.
+- **Opportunity-split rollup weighting** — `crm.OpportunitySplit` is verified and usable, but surfacing splits is 8.12 analytics.
+- **True snapshot warehouse / as-of-time rebuild** — 8.2 kept pipeline inspection on `core.AuditLog` rather than a snapshot store; the same trade-off applies here.
+- **Multi-period rolling forecasts** and consolidation across business units — a later pass, once `ForecastPeriod` has history.
+
+**Parked to sibling sub-modules (from the research):**
+- Quota **creation, top-down/bottom-up allocation, stretch goals, new-hire ramp weights, approval workflow** → **8.7**. 8.4 only reads and snapshots `crm.SalesQuota`.
+- Territory design, assignment rules, rebalancing, coverage-gap/heatmap analytics, hunter/farmer splits, overlay specialists → **8.7**.
+- Pipeline board, stage probabilities, entry/exit checklists, per-deal health indicators → **8.2** (already built).
+- Account hierarchy rollups, whitespace analysis, cross-sell/upsell mapping → **8.3** (already built).
+- CPQ, pricing/discount approval, proposals, quote versioning, quote-to-order → **8.5**.
+- Order capture/amendment, fulfillment, ASC 606 recognition, reorder/renewal → **8.6** (which will FK **into** the verified `scm.SalesOrder`, not declare its own).
+- Rep activity logging, tasks, calendar, the forecast-call meeting itself, coaching playbooks → **8.8**.
+- Sales enablement content, battle-card library → **8.9**.
+- Compensation / quota-linked incentive payouts driven by attainment → **8.10**.
+- Consumption / renewal / subscription-recurring forecasting → **8.15**.
+- Dashboards, cross-pipeline conversion rates, pipeline velocity, per-deal predictive scoring, benchmark trend data → **8.12**.
+- Marketing-sourced pipeline contribution and campaign ROI inside the forecast → **8.13**.
+
+## Review notes
+(filled in at the end)
+
