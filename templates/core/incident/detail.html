@@ -38,6 +38,7 @@
         <div class="detail-item"><dt>Status</dt><dd>
           {% if obj.status == "resolved" or obj.status == "completed" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
           {% elif obj.status == "scheduled" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+          {% elif obj.status == "investigating" or obj.status == "identified" or obj.status == "in_progress" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
           {% elif obj.status == "monitoring" or obj.status == "verifying" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
           {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
         </dd></div>
