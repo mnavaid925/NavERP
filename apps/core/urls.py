@@ -218,4 +218,28 @@ urlpatterns = (
     + crud("backup/holds", "legal_hold")
     + crud("backup/environments", "environment_instance")
     + crud("backup/drills", "recovery_drill")
+    # ===================== 0.17 Monitoring, Logging & Observability =====================
+    # Literal segments BEFORE the `crud()` groups below, and the four POST-only action routes AFTER
+    # the group that owns them — the 0.16 ordering, for the same reason (a greedy `<int:pk>` route
+    # declared first would shadow `add/`).
+    + [
+        path("monitoring/", views.monitoring_overview, name="monitoring_overview"),
+        path("monitoring/health/", views.health_board, name="health_board"),
+        path("monitoring/firing/", views.firing_board, name="firing_board"),
+        path("monitoring/capacity/", views.capacity_board, name="capacity_board"),
+    ]
+    + crud("monitoring/components", "service_component")
+    + crud("monitoring/rules", "alert_rule")
+    + crud("monitoring/events", "alert_event")
+    + [
+        # POST-only verbs, declared after the literal `add/` route above so it cannot shadow it.
+        path("monitoring/events/<int:pk>/acknowledge/", views.alertevent_acknowledge,
+             name="alertevent_acknowledge"),
+        path("monitoring/events/<int:pk>/resolve/", views.alertevent_resolve, name="alertevent_resolve"),
+        path("monitoring/events/<int:pk>/recur/", views.alertevent_recur, name="alertevent_recur"),
+    ]
+    + crud("monitoring/incidents", "incident")
+    + [
+        path("monitoring/incidents/<int:pk>/notify/", views.incident_notify, name="incident_notify"),
+    ]
 )
