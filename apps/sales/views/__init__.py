@@ -175,9 +175,15 @@ from .Workspace import (
     opportunity_workspace_detail,
     opportunity_workspace_list,
 )
+from .QuoteProposalCPQ import *
 
-# "forecast_" covers the 31 8.4 view functions. The three service functions
-# (`forecast_org_unit_chain`, `forecast_submission_snapshot`, `forecast_ai_gate`) live in
-# `apps/sales/forecast_services.py` and are deliberately NOT imported here: they are not views.
-__all__ = [name for name in globals() if name.startswith(("lead_", "party_enrichment_", "account_", "opportunity_", "forecast_"))]
+# View functions exported for URLconf routing and external imports
+__all__ = [
+    name for name in globals()
+    if name.startswith((
+        "lead_", "party_enrichment_", "account_", "opportunity_",
+        "forecast_", "cpq_", "quote_", "product_bundle_"
+    ))
+]
+
 
