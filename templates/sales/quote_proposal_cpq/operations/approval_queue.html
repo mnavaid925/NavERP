@@ -109,7 +109,7 @@
                                 {% endif %}
                             </td>
                             <td class="text-xs text-slate-600">
-                                {{ q.owner.get_full_name|default:q.owner.username }}
+                                {% if q.owner %}{{ q.owner.get_full_name|default:q.owner.username }}{% else %}—{% endif %}
                             </td>
                             <td class="table-actions text-right">
                                 <a href="{% url 'sales:quote_approval_action' q.pk %}" class="btn btn-primary py-1 px-3 text-xs">
