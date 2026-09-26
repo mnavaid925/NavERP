@@ -43,8 +43,8 @@ from apps.sales.models.OpportunityTeams.OpportunityTeams import OpportunityTeamM
 from apps.sales.models.SalesForecasting.ForecastPeriods import ForecastPeriod
 from apps.sales.models.SalesForecasting.ForecastScenarios import ForecastScenario
 from apps.sales.models.SalesForecasting.ForecastSubmissions import CATEGORY_AMOUNT_FIELDS
+from apps.sales.forecast_services import forecast_org_unit_chain
 from apps.sales.views._common import *  # noqa: F401,F403
-from apps.sales.views.SalesForecasting.ForecastAdjustments import forecast_org_unit_chain
 
 TEMPLATE_LIST = "sales/salesforecasting/forecastscenario/list.html"
 TEMPLATE_DETAIL = "sales/salesforecasting/forecastscenario/detail.html"
