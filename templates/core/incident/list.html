@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Incidents &amp; Notices{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Incidents &amp; Notices</h1>
+      <div class="breadcrumb"><a href="{% url 'core:monitoring_overview' %}">Monitoring</a><span class="sep">›</span><span>Incidents &amp; Notices</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:incident_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record a notice</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Outages and planned windows somebody wrote down. <strong>NavERP publishes
+      nothing</strong> — there is no status page here, and no subscriber to send it to. A row is a draft
+      and a record that somebody published it elsewhere.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search title, public note, internal note…">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="impact" class="form-select" aria-label="Impact">
+          <option value="">Any impact</option>
+          {% for value, label in impact_choices %}<option value="{{ value }}" {% if request.GET.impact == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        {# The GET param is `type`; the column is `incident_type`. #}
+        <select name="type" class="form-select" aria-label="Type">
+          <option value="">Any type</option>
+          {% for value, label in type_choices %}<option value="{{ value }}" {% if request.GET.type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="service" class="form-select" aria-label="Component">
+          <option value="">Any component</option>
+          {% for s in services %}<option value="{{ s.pk }}" {% if request.GET.service == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="active" class="form-select" aria-label="Active">
+          <option value="">Active and archived</option>
+          <option value="True" {% if request.GET.active == "True" %}selected{% endif %}>Active only</option>
+          <option value="False" {% if request.GET.active == "False" %}selected{% endif %}>Archived only</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:incident_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Title</th><th>Type</th><th>Status</th><th>Impact</th><th>Component</th><th>Published</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:incident_detail' obj.pk %}">{{ obj.title|truncatechars:60 }}</a>
+              {% if obj.public_note %}<div class="text-muted">{{ obj.public_note|truncatechars:60 }}</div>{% endif %}</td>
+            <td>{{ obj.get_incident_type_display }}</td>
+            <td>
+              {% if obj.status == "resolved" or obj.status == "completed" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "scheduled" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "monitoring" or obj.status == "verifying" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>
+              {% if obj.impact == "none" %}<span class="badge badge-slate">{{ obj.get_impact_display }}</span>
+              {% elif obj.impact == "minor" %}<span class="badge badge-info">{{ obj.get_impact_display }}</span>
+              {% elif obj.impact == "major" %}<span class="badge badge-amber">{{ obj.get_impact_display }}</span>
+              {% elif obj.impact == "critical" %}<span class="badge badge-red">{{ obj.get_impact_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_impact_display }}</span>{% endif %}
+            </td>
+            <td>{% if obj.service %}{{ obj.service.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td>{% if obj.notified_at %}{{ obj.notified_at|date:"M d, Y H:i" }}<div class="text-muted">recorded elsewhere</div>{% else %}<span class="text-muted">not published</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:incident_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:incident_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:incident_delete' obj.pk %}" onsubmit="return confirm('Delete this notice record? This removes the record, not any communication that was sent.');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="megaphone"></i><h3>No incidents or notices recorded</h3><p class="text-muted">An empty register here says nothing about whether anything went wrong — NavERP was not watching.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
+
