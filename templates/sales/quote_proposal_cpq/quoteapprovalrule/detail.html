@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}{{ rule.name }} — Quote Approval Rule{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">CPQ</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:quote_approval_rule_list' %}" class="text-slate-500 hover:text-slate-700">Approval Rules</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">{{ rule.number }}</span>
+            </nav>
+            <div class="flex items-center space-x-3">
+                <h1 class="page-title">{{ rule.name }}</h1>
+                {% if rule.is_active %}
+                    <span class="badge badge-green">Active</span>
+                {% else %}
+                    <span class="badge badge-muted">Inactive</span>
+                {% endif %}
+            </div>
+            <p class="text-sm text-slate-500 mt-1 font-mono">{{ rule.number }} · Priority {{ rule.priority }}</p>
+        </div>
+        <div class="page-actions flex items-center space-x-3">
+            <a href="{% url 'sales:quote_approval_rule_list' %}" class="btn btn-outline">
+                <i data-lucide="arrow-left" class="w-4 h-4 mr-1.5"></i> Back to Rules
+            </a>
+            <a href="{% url 'sales:quote_approval_rule_edit' rule.pk %}" class="btn btn-outline">
+                <i data-lucide="pencil" class="w-4 h-4 mr-1.5"></i> Edit Rule
+            </a>
+            <form method="POST" action="{% url 'sales:quote_approval_rule_delete' rule.pk %}" onsubmit="return confirm('Delete this approval rule?');" class="inline-block">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">
+                    <i data-lucide="trash-2" class="w-4 h-4 mr-1.5"></i> Delete
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Rule Configuration & Details -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-6">
+            <div class="card">
+                <div class="card-header border-b border-slate-200 p-4">
+                    <h2 class="text-base font-semibold text-slate-900">Governance Parameters</h2>
+                </div>
+                <div class="card-body p-5">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div>
+                            <span class="text-xs uppercase text-slate-500 font-medium">Rule Type</span>
+                            <div class="mt-1">
+                                <span class="badge badge-info text-sm">{{ rule.get_rule_type_display }}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <span class="text-xs uppercase text-slate-500 font-medium">Approver Role</span>
+                            <div class="mt-1">
+                                <span class="badge badge-slate text-sm">{{ rule.get_approver_role_display }}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <span class="text-xs uppercase text-slate-500 font-medium">Max Discount Allowed</span>
+                            <p class="text-xl font-bold text-amber-700 mt-1">{{ rule.discount_threshold_pct }}%</p>
+                            <p class="text-xs text-slate-400 mt-0.5">Discounts above this require approval</p>
+                        </div>
+                        <div>
+                            <span class="text-xs uppercase text-slate-500 font-medium">Minimum Margin Floor</span>
+                            <p class="text-xl font-bold text-blue-700 mt-1">{{ rule.min_margin_pct }}%</p>
+                            <p class="text-xs text-slate-400 mt-0.5">Quotes below this margin trigger gate</p>
+                        </div>
+                        {% if rule.amount_threshold %}
+                        <div>
+                            <span class="text-xs uppercase text-slate-500 font-medium">Total Amount Ceiling</span>
+                            <p class="text-xl font-bold text-slate-900 mt-1">{{ rule.amount_threshold|default:"0.00" }}</p>
+                        </div>
+                        {% endif %}
+                        <div>
+                            <span class="text-xs uppercase text-slate-500 font-medium">Auto-Reject Behavior</span>
+                            <p class="text-sm font-medium text-slate-800 mt-1">
+                                {% if rule.auto_reject %}
+                                    <span class="text-red-600 font-semibold">Yes — Auto-reject instantly</span>
+                                {% else %}
+                                    <span class="text-slate-600">No — Route to review queue</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+
+                    {% if rule.description %}
+                        <div class="mt-6 pt-5 border-t border-slate-100">
+                            <span class="text-xs uppercase text-slate-500 font-medium">Policy Description</span>
+                            <p class="text-sm text-slate-700 mt-1 whitespace-pre-line">{{ rule.description }}</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Quotes evaluated by this rule -->
+            <div class="card">
+                <div class="card-header border-b border-slate-200 p-4">
+                    <h3 class="text-base font-semibold text-slate-900">Recent Quotes Under This Policy</h3>
+                </div>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Quote</th>
+                                <th>Status</th>
+                                <th>Total</th>
+                                <th>Margin</th>
+                                <th>Discount</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for q in recent_quotes %}
+                                <tr>
+                                    <td>
+                                        <a href="{% url 'sales:cpq_quote_detail' q.pk %}" class="font-medium text-blue-600 hover:text-blue-800">
+                                            {{ q.name }}
+                                        </a>
+                                        <div class="text-xs text-slate-400">{{ q.number }}</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-info">{{ q.get_status_display }}</span>
+                                    </td>
+                                    <td class="font-medium text-slate-900">
+                                        {{ q.currency.code|default:"USD" }} {{ q.total:,.2f }}
+                                    </td>
+                                    <td class="text-sm">
+                                        {{ q.margin_pct }}%
+                                    </td>
+                                    <td class="text-sm">
+                                        {{ q.header_discount_pct }}%
+                                    </td>
+                                    <td class="text-xs text-slate-500">
+                                        {{ q.created_at|date:"M d, Y" }}
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center py-6 text-slate-400 text-sm">
+                                        No quotes have linked to this approval rule yet.
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar Meta -->
+        <div class="space-y-6">
+            <div class="card">
+                <div class="card-header border-b border-slate-200 p-4">
+                    <h3 class="text-sm font-semibold text-slate-900">Audit &amp; System Information</h3>
+                </div>
+                <div class="card-body p-4 space-y-3 text-sm">
+                    <div>
+                        <span class="text-slate-500 text-xs">Rule Priority:</span>
+                        <div class="font-mono text-slate-800">{{ rule.priority }}</div>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 text-xs">Created At:</span>
+                        <div class="text-slate-800">{{ rule.created_at|date:"M d, Y H:i" }}</div>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 text-xs">Last Updated:</span>
+                        <div class="text-slate-800">{{ rule.updated_at|date:"M d, Y H:i" }}</div>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 text-xs">Rule ID:</span>
+                        <div class="font-mono text-slate-800">{{ rule.number }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
