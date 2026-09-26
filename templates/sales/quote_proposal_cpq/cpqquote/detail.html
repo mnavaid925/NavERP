@@ -18,7 +18,7 @@
                 <h1 class="page-title">{{ quote.name }}</h1>
                 <span class="font-mono text-sm text-slate-500 bg-slate-100 px-2 py-0.5 rounded">Rev {{ quote.revision_number }}</span>
                 {% if quote.is_primary %}
-                    <span class="badge badge-purple">Primary Quote</span>
+                    <span class="badge badge-info">Primary Quote</span>
                 {% endif %}
                 {% if quote.status == 'approved' or quote.status == 'accepted' or quote.status == 'converted' %}
                     <span class="badge badge-green">{{ quote.get_status_display }}</span>
@@ -157,7 +157,7 @@
                                                 <div class="font-medium text-slate-900 flex items-center space-x-1.5">
                                                     <span>{{ line.description }}</span>
                                                     {% if line.line_type == 'bundle_parent' %}
-                                                        <span class="badge badge-purple text-xs">Bundle</span>
+                                                        <span class="badge badge-info text-xs">Bundle</span>
                                                     {% elif line.line_type == 'bundle_component' %}
                                                         <span class="badge badge-slate text-xs">Component</span>
                                                     {% elif line.line_type == 'optional_addon' %}
@@ -256,7 +256,7 @@
                                     <td>
                                         Rev {{ rev.revision_number }}
                                         {% if rev.pk == quote.pk %}<span class="badge badge-info ml-1 text-xs">Current</span>{% endif %}
-                                        {% if rev.is_primary %}<span class="badge badge-purple ml-1 text-xs">Primary</span>{% endif %}
+                                        {% if rev.is_primary %}<span class="badge badge-info ml-1 text-xs">Primary</span>{% endif %}
                                     </td>
                                     <td>
                                         <a href="{% url 'sales:cpq_quote_detail' rev.pk %}" class="text-blue-600 hover:underline font-mono text-xs">
