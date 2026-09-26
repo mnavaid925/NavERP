@@ -238,6 +238,29 @@ LIVE_LINKS = {
         "Backup & Recovery Overview": "core:backup_overview",         # extra
         "Recovery Board": "core:backup_board",                        # extra (the zero rule)
     },
+    # 0.17 Monitoring, Logging & Observability. The five bullet keys below are copied
+    # BYTE-IDENTICALLY from `NavERP.md`; `parse_catalog()` matches them by exact string, so a
+    # one-character drift renders a fully built page as a "soon" roadmap pill with no error anywhere.
+    # Bullets 2, 3 and 4 are PARTIAL or shared with another sub-module, and the comments say which:
+    #   b2 "centralized logs" is DEFERRED (no log pipeline exists anywhere in this repo) - what is
+    #      built is the alert threshold vocabulary and the register of hand-reported firings;
+    #   b3 distributed tracing is DEFERRED (no tracing SDK, no OTel) - latency/throughput/slow-query
+    #      exist as THRESHOLD VOCABULARY on AlertRule plus a computed board, not as an APM product;
+    #   b4 quota management is the billing sub-module's; 0.17 keeps only the scaling trigger.
+    "0.17": {
+        "System Health Dashboards": "core:health_board",                 # bullet 1 (the roll-up board)
+        "Application & Error Logging": "core:alert_event_list",           # bullet 2 (thresholds + firings)
+        "Performance Metrics & APM": "core:alert_rule_list",              # bullet 3 (latency/throughput rules)
+        "Capacity & Resource Planning": "core:capacity_board",             # bullet 4 (billing owns the quota)
+        "Status Page & Incident Comms": "core:incident_list",              # bullet 5
+        # Extra built pages that are NOT NavERP.md bullets. `resolve_nav` appends these AFTER the
+        # bullets, so they read as operational leaves rather than as more promised features.
+        "Service Components": "core:service_component_list",               # extra (the entity half)
+        "Alert Thresholds": "core:alert_rule_list",                        # extra
+        "Alert Events": "core:alert_event_list",                           # extra
+        "Firing Board": "core:firing_board",                               # extra (the zero rule)
+        "Monitoring Overview": "core:monitoring_overview",                 # extra (landing page)
+    },
     # ========================= Module 1 — Customer Relationship Management (CRM)
     # 1.1 Core Data Management — Accounts/Contacts are core.Party lenses; Leads are CRM-owned.
     "1.1": {
