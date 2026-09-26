@@ -324,6 +324,37 @@ class AlertRule(TenantConsistentMixin, models.Model):
             raise ValidationError(
                 {"warning_threshold": "An active rule with no bound can never fire. Set a warning or a "
                                       "critical threshold, or mark the rule inactive."})
+        # Tier ORDER, checked against the declared comparator. "Critical" is the stricter of the two
+        # tiers, and which way round that is depends entirely on the operator:
+        #   gte/gt  — a metric that should not EXCEED a number: critical must be the LARGER bound.
+        #   lt/lte  — a metric that should not FALL BELOW a number: critical must be the SMALLER bound.
+        # Getting this backwards is not a cosmetic problem: the capacity board picks `critical` as
+        # "the bound" whenever it is set, so a reversed pair makes the board report against the
+        # looser tier and call a breach healthy.
+        #
+        # A two-tier rule only *means* anything for those four ordered operators. For `eq`, `ne`,
+        # `in`, `not_in`, `contains`, `is_set` and `is_empty` there is no ordering between the tiers,
+        # so a rule carrying both is refused rather than stored as a shape that reads as sensible and
+        # computes as nonsense.
+        if self.warning_threshold is not None and self.critical_threshold is not None:
+            if self.comparator in ("gte", "gt"):
+                if self.critical_threshold <= self.warning_threshold:
+                    raise ValidationError({
+                        "critical_threshold": "With a 'greater than' comparator the critical threshold "
+                                              "must be ABOVE the warning threshold. A lower critical "
+                                              "tier would never be reached first."})
+            elif self.comparator in ("lt", "lte"):
+                if self.critical_threshold >= self.warning_threshold:
+                    raise ValidationError({
+                        "critical_threshold": "With a 'less than' comparator the critical threshold "
+                                              "must be BELOW the warning threshold. A higher critical "
+                                              "tier would never be reached first."})
+            else:
+                raise ValidationError({
+                    "critical_threshold": f'"{self.get_comparator_display()}" does not order two '
+                                          "thresholds, so a warning and a critical tier cannot both be "
+                                          "set. Keep one bound, or use a greater-than / less-than "
+                                          "comparator."})
 
     # ---- derived (never stored) ----
     @property
@@ -351,7 +382,18 @@ class AlertRule(TenantConsistentMixin, models.Model):
         if self.tier_count == 1:
             return ("One tier set. A single bound is a normal shape — this rule warns at one level, not "
                     "at two.")
-        return "Both tiers set."
+        # `clean()` refuses a reversed or non-orderable pair on save, so reaching this branch means the
+        # tiers were valid when written. A row can still become nonsensical if its comparator is edited
+        # directly in the database, so name what the pair MEANS rather than asserting "both tiers set"
+        # and leaving the reader to work out which end is stricter.
+        if self.comparator in ("gte", "gt"):
+            return ("Both tiers set on a 'greater than' comparison: the critical tier is the higher "
+                    "bound, so the warning tier is reached first.")
+        if self.comparator in ("lt", "lte"):
+            return ("Both tiers set on a 'less than' comparison: the critical tier is the lower bound, "
+                    "so the warning tier is reached first.")
+        return (f"Both tiers are set, but \"{self.get_comparator_display()}\" does not order them — this "
+                "row was saved before that was checked, and which tier is stricter is not defined.")
 
 
 
