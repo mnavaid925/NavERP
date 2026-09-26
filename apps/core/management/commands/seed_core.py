@@ -5,6 +5,7 @@ is skipped if any Party already exists for that tenant. Run order: seed_core →
 seed_accounts → seed_tenants.
 """
 import datetime
+from decimal import Decimal
 
 from django.apps import apps as django_apps
 from django.core.files.base import ContentFile
@@ -62,6 +63,8 @@ from apps.core.models import (
     RecoveryDrill,
     RecoveryPosture,
     RestoreRecord,
+    ServiceComponent,
+    AlertRule,
 )
 
 TENANTS = [
@@ -123,6 +126,7 @@ class Command(BaseCommand):
             self._seed_integrations(tenant)
             self._seed_localization(tenant)
             self._seed_backup(tenant)
+            self._seed_monitoring(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
@@ -1037,3 +1041,104 @@ class Command(BaseCommand):
                 self.stdout.write(
                     f"  {tenant.name}: backfilled encryption_key on {stale_jobs} backup job(s) "
                     f"and {stale_archives} archive(s)")
+
+    def _seed_monitoring(self, tenant):
+        """0.17: the service catalogue and the declared alert thresholds.
+
+        **SEEDED:** `ServiceComponent` and `AlertRule`, and only those two. A catalogue is a
+        declaration ("this workspace has a web front end, a database and a payments gateway") and a
+        threshold is a recorded intention - both are true statements about what somebody chose to watch,
+        and seeding either fabricates no event. This is the same basis 0.13 seeds `SyncSchedule` and 0.16
+        seeds `BackupJob.frequency` on.
+
+        **NOT SEEDED - the L52 ruling, and the load-bearing one:** `AlertEvent` and `Incident`. A firing
+        is EVIDENCE that a threshold was crossed; seeding one fabricates an alert that never happened and
+        its `fired_at` / `observed_value` / `evidence` would be a lie told in the register's own voice. An
+        incident records a communication somebody published; seeding one invents an outage NavERP was
+        never told about. Both are exempt in `temp/audit_integrity.py`'s `KNOWN_OK` with that reason
+        printed, because an unexplained exemption is indistinguishable from an oversight.
+
+        **The consequence is intended and must NOT be "fixed":** a fresh seed leaves this workspace with
+        zero events and zero incidents, so the firing board renders its "no firings have been recorded"
+        state and a naive smoke run reads as contract drift. It is not drift. It is the board telling the
+        truth about a system that watches nothing. The smoke script creates the rows it needs via the ORM
+        and deletes them in a `finally`.
+
+        **`ServiceComponent.current_status` IS seeded, and that is the one tension here.** It resolves
+        cleanly: seeding the CLAIM is fine because every seeded row says in its own `notes` that it is a
+        starting position and not a measurement. A claim honestly labelled is honest; what would be
+        dishonest is seeding a FIRING, which asserts that something actually happened.
+
+        PER-ENTITY guards, never a tenant-wide one - the documented defect that left everything added to
+        this command after the fact unreachable in workspaces that already existed.
+        """
+        now = timezone.now()
+        # Defensive `.first()` lookup: `_seed_notifications` has already run, but a future reordering
+        # must not crash the seeder over a nullable FK.
+        notify_rule = NotificationRule.objects.filter(tenant=tenant).first()
+
+        # ---- ServiceComponent: operational, degraded+critical, and never-reported ----
+        if not ServiceComponent.objects.filter(tenant=tenant).exists():
+            components = [
+                dict(name="Web front end", code="web", kind="web_service", display_order=1,
+                     current_status="operational", is_public=True, is_critical=True,
+                     last_status_at=now - datetime.timedelta(hours=6),
+                     description="The customer-facing browser application.",
+                     notes="Seeded starting position. This status is a hand-set claim, not a "
+                           "measurement - nothing in NavERP probes this component."),
+                dict(name="Primary database", code="db", kind="database", display_order=2,
+                     current_status="degraded", is_public=False, is_critical=True,
+                     last_status_at=now - datetime.timedelta(days=2),
+                     description="The transactional store backing every module.",
+                     notes="Seeded starting position, deliberately DEGRADED and critical so the "
+                           "health board's roll-up has something to roll up from. Hand-set claim, not "
+                           "a measurement - nothing in NavERP probes this component."),
+                dict(name="Payments gateway", code="payments", kind="external_dependency",
+                     display_order=3, current_status="unknown", is_public=False, is_critical=False,
+                     last_status_at=None,
+                     description="An external provider NavERP calls but does not control.",
+                     notes="Seeded with NO status ever set, so the board's unreported case is present "
+                           "in real data. Unknown is a true answer; Operational would be a claim "
+                           "somebody else would have to vouch for."),
+            ]
+            for row in components:
+                ServiceComponent.objects.create(tenant=tenant, owner_role=None, **row)
+            self.stdout.write(f"  {tenant.name}: seeded 3 service component(s)")
+
+
+        # ---- AlertRule: two-tier performance, one-tier availability, inactive capacity ----
+        if not AlertRule.objects.filter(tenant=tenant).exists():
+            web = ServiceComponent.objects.filter(tenant=tenant, code="web").first()
+            db = ServiceComponent.objects.filter(tenant=tenant, code="db").first()
+            gateway = ServiceComponent.objects.filter(tenant=tenant, code="payments").first()
+            rules = [
+                dict(name="Payments API latency budget", service=db, module_slug="core",
+                     metric_key="latency_p95_ms", comparator="gte",
+                     warning_threshold=Decimal("800.0000"), critical_threshold=Decimal("1500.0000"),
+                     must_persist_seconds=300, frequency="hourly", severity="warning",
+                     category="performance", no_data_action="ignore", notification_rule=notify_rule,
+                     notes="Seeded two-tier threshold. Nothing in NavERP evaluates this rule and no "
+                           "reading of latency_p95_ms is stored anywhere in this repository."),
+                dict(name="Gateway availability floor", service=gateway, module_slug="core",
+                     metric_key="uptime_pct", comparator="lt",
+                     warning_threshold=None, critical_threshold=Decimal("99.5000"),
+                     must_persist_seconds=0, frequency="daily", severity="critical",
+                     category="availability", no_data_action="fire", notification_rule=notify_rule,
+                     notes="Seeded ONE-TIER rule (critical only) - a single bound is a normal shape, "
+                           "not a half-finished one. 'no data' fires rather than passing silently."),
+                dict(name="Database storage headroom", service=web, module_slug="tenants",
+                     metric_key="storage_mb", comparator="gte",
+                     warning_threshold=Decimal("51200.0000"), critical_threshold=None,
+                     must_persist_seconds=0, frequency="weekly", severity="warning",
+                     category="capacity", no_data_action="ignore", notification_rule=None,
+                     is_active=False,
+                     notes="Seeded INACTIVE so the ?active= filter and the capacity board's inactive "
+                           "row are both provable. A threshold an operator parked is still a "
+                           "declaration, not a firing."),
+            ]
+            for row in rules:
+                AlertRule.objects.create(tenant=tenant, **row)
+            self.stdout.write(f"  {tenant.name}: seeded 3 alert rule(s)")
+        # No line is printed for AlertEvent or Incident. The ABSENCE of them is deliberate, and a count
+        # of zero here would read as an all-clear on exactly the board that must never show one.
+
