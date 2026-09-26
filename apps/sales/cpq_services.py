@@ -114,14 +114,20 @@ def cpq_evaluate_approval(quote):
         (requires_approval: bool, matched_rule: QuoteApprovalRule or None, reason: str)
     """
     from apps.sales.models.QuoteProposalCPQ.QuoteApprovalRules import QuoteApprovalRule
-    
-    rules = QuoteApprovalRule.objects.filter(tenant=quote.tenant, is_active=True).order_by("priority", "id")
+    from django.db.models import Max
     
     # Recalculate first to ensure fresh margins and discounts
     cpq_recalc_quote_totals(quote, save=True)
     
+    rules = list(QuoteApprovalRule.objects.filter(tenant=quote.tenant, is_active=True).order_by("priority", "id"))
+    if not rules:
+        return False, None, "Within standard pricing thresholds"
+
+    agg = quote.lines.filter(is_selected=True).aggregate(m=Max("discount_pct"))
+    max_line_disc = Decimal(str(agg["m"])) if agg["m"] is not None else Decimal("0")
+    
     for rule in rules:
-        triggered, reason = rule.evaluate(quote)
+        triggered, reason = rule.evaluate(quote, max_line_disc=max_line_disc)
         if triggered:
             return True, rule, reason
             
