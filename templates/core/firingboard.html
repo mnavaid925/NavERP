@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Firing Board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Firing Board</h1>
+      <div class="breadcrumb"><a href="{% url 'core:monitoring_overview' %}">Monitoring</a><span class="sep">›</span><span>Firing</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:health_board' %}" class="btn btn-outline"><i data-lucide="activity"></i> Health board</a>
+      <a href="{% url 'core:alert_event_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All events</a>
+    </div>
+  </div>
+
+  {% comment %}
+    THE ZERO RULE, and the reason this page exists in its own right.
+
+    `badge-green` is NOT used anywhere on this board, and that is deliberate rather than an omission.
+    A green "0 firing" would be the exact false all-clear 0.8's retention_board refuses to print: the
+    count is 0 here because NOTHING EVALUATES these rules, not because everything is fine. Two different
+    states, one number - so the number is never dressed up as good news, and `rule_total` is printed as
+    the denominator that tells the two apart.
+  {% endcomment %}
+  <div class="card"><div class="card-body">
+    {% if open_count == 0 and rule_total == 0 %}
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>No alert rules are registered, so
+        nothing can be evaluated. This is not an all-clear.</strong> There is nothing here that could
+        detect a problem, because nothing in NavERP is watching.</p>
+    {% elif open_count == 0 %}
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>No firing has been recorded.</strong>
+        NavERP does not evaluate the {{ rule_total }} rule{{ rule_total|pluralize }} on this workspace — a
+        quiet board is an unmonitored one, not a healthy one.</p>
+    {% else %}
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>{{ open_count }} open firing{{ open_count|pluralize }}
+        recorded by hand.</strong> NavERP did not detect these; somebody reported them, and the act of
+        recording one does not make it true.</p>
+    {% endif %}
+    <p class="text-muted"><i data-lucide="info"></i> Denominator: {{ rule_total }} threshold
+      rule{{ rule_total|pluralize }} registered, none of them evaluated by anything.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Open firings</h2></div>
+    <div class="card-body">
+      <div class="badge-group">
+        <span class="badge badge-slate">Open: {{ open_count }}</span>
+        <span class="badge badge-slate">Acknowledged: {{ acknowledged_count }}</span>
+        <span class="badge badge-slate">Recorded mute in effect: {{ muted_count }}</span>
+        <span class="badge badge-slate">No owning rule: {{ unattributed_count }}</span>
+      </div>
+      <p class="text-muted" style="margin-top:.6rem;">All times: {% for value, label in state_choices %}{{ label }} {{ state_counts|default_if_none:0 }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+      <p class="text-muted">By severity: {% for value, label in severity_choices %}{{ label }} {{ severity_counts|default_if_none:0 }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Firing</th><th>Component</th><th>State</th><th>Severity</th><th>Age</th><th>Mute</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for row in open_events %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:alert_event_detail' row.event.pk %}">{{ row.event.message|truncatechars:60 }}</a>
+              <div class="text-muted">{{ row.note }}</div></td>
+            <td>{{ row.event.service_display|default:"—" }}</td>
+            <td>
+              {% if row.event.state == "firing" %}<span class="badge badge-red">{{ row.event.get_state_display }}</span>
+              {% else %}<span class="badge badge-amber">{{ row.event.get_state_display }}</span>{% endif %}
+            </td>
+            <td>
+              {% if row.event.severity_at_fire == "info" %}<span class="badge badge-info">{{ row.event.get_severity_at_fire_display }}</span>
+              {% elif row.event.severity_at_fire == "warning" %}<span class="badge badge-amber">{{ row.event.get_severity_at_fire_display }}</span>
+              {% elif row.event.severity_at_fire == "critical" %}<span class="badge badge-red">{{ row.event.get_severity_at_fire_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ row.event.get_severity_at_fire_display }}</span>{% endif %}
+            </td>
+            <td>{{ row.age_days }}d</td>
+            <td>{% if row.muted %}<span class="badge badge-amber">muted to {{ row.event.muted_until|date:"M d" }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td><div class="table-actions">
+              <a href="{% url 'core:alert_event_detail' row.event.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+            </div></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="bell-off"></i><h3>No open firings</h3>
+            <p class="text-muted">Nothing has been reported. NavERP evaluates none of the {{ rule_total }} registered rules,
+              so this board cannot tell you whether there is a problem — only that nobody has written one down.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
