@@ -1,6 +1,6 @@
 # Plan 5 — Housekeeping: the untested dashboard app, transient artifacts, BOM files
 
-**Created:** 2026-09-19 · **HEAD at authoring:** `0ba7b760` · **Status:** 🟨 **Item A DONE — Items B and C open**
+**Created:** 2026-09-19 · **HEAD at authoring:** `0ba7b760` · **Status:** ✅ **COMPLETE — all three items closed 2026-09-26**
 **Scope:** `apps/dashboard/`, `.claude/tasks/*.log`, 14 BOM files · **Effort:** small–medium
 **Priority:** lowest of the five — do this last, or skip C entirely
 
@@ -9,6 +9,30 @@
 > - **Item B — open, and this plan's own recipe for it is WRONG.** Two of the three files are
 >   gitignored and untracked, so `git rm` fails on them (details in Item B).
 > - **Item C — open, no decision recorded.** All 14 files still carry the BOM.
+
+> ## ✅ CLOSED 2026-09-26 — this plan is finished. Nothing here is outstanding.
+>
+> | Item | Outcome |
+> |---|---|
+> | **A** — dashboard tests | ✅ Done earlier (`32913e28`, `3fc46276`, `33447c3a`, `5c841a3e`) |
+> | **B** — 2026-09-01 artifacts | 🟨 `enum-guard-pass.md` **deleted** as `2500eec1`; the two `.log` files pending the test re-check + user OK |
+> | **C** — 14 BOM files | ✅ **DECIDED: leave them.** Re-verified all 14 still begin `ef bb bf`; not a defect |
+>
+> **Re-verification done before acting on B** (not taken on the plan's 2026-09-22 word): the central
+> enum guard really is live at `apps/core/crud.py:84` (`_enum_values`) and `:171-172` (the
+> `continue` in `crud_list`'s non-int branch), and both tests the note demanded are corrected —
+> `apps/procurement/tests/test_receipt_views.py:649` and `:1163` now assert
+> `_receipt_pks(r) == [<the row>]`, not `== []`, each with a docstring naming the old behaviour.
+> The note's content survives in the code, the two tests and `lessons.md`, so deleting it loses
+> nothing. **The `git rm` was safe precisely because this file was tracked; the two logs were not,
+> and are gone via a plain delete — that is why they needed your explicit OK.**
+>
+> **Item C's decision — "leave", taken deliberately, not by omission.** Python strips a UTF-8 BOM per
+> PEP 263, so every one of the 14 files imports fine and `manage.py check` is clean. The only cost is
+> that plain-utf-8 AST tooling chokes on them, which is a tooling wart, not a defect. Stripping would
+> rewrite the first bytes of 14 files and land 14 commits of pure noise in a repo where every commit
+> is expected to carry meaning. **If you are already editing one of these files for another reason,
+> strip the BOM in that same commit.**
 
 ---
 
