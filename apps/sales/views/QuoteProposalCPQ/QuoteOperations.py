@@ -467,71 +467,73 @@ def cpq_guided_selling(request):
             if not quote.is_editable and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)):
                 messages.warning(request, f"Quote {quote.number} is locked in status '{quote.get_status_display()}'. Create a revision to add bundle options.")
                 return redirect("sales:cpq_quote_detail", pk=quote.pk)
-        else:
-            # Create a new quote
-            opp = Opportunity.objects.filter(pk=int(opp_id), tenant=tenant).first() if opp_id else None
-            currency = (opp.currency if opp and opp.currency else None) or Currency.objects.filter(code="USD").first() or Currency.objects.filter(is_active=True).first()
-            quote = CPQQuote.objects.create(
+
+        with transaction.atomic():
+            if not quote_id:
+                # Create a new quote
+                opp = Opportunity.objects.filter(pk=int(opp_id), tenant=tenant).first() if opp_id else None
+                currency = (opp.currency if opp and opp.currency else None) or Currency.objects.filter(code="USD").first() or Currency.objects.filter(is_active=True).first()
+                quote = CPQQuote.objects.create(
+                    tenant=tenant,
+                    name=f"{selected_bundle.name} Solution Package",
+                    opportunity=opp,
+                    account=opp.account if opp else None,
+                    currency=currency,
+                    status="draft",
+                    owner=request.user,
+                )
+
+            # 1. Add parent bundle header line
+            bundle_parent_line = CPQQuoteLine.objects.create(
                 tenant=tenant,
-                name=f"{selected_bundle.name} Solution Package",
-                opportunity=opp,
-                account=opp.account if opp else None,
-                currency=currency,
-                status="draft",
-                owner=request.user,
+                quote=quote,
+                parent_line=None,
+                line_type="bundle_parent",
+                product=selected_bundle,
+                description=f"Package: {selected_bundle.name}",
+                quantity=Decimal("1.00"),
+                list_price=selected_bundle.unit_price or Decimal("0.00"),
+                unit_price=selected_bundle.unit_price or Decimal("0.00"),
+                sequence=10,
             )
 
-        # 1. Add parent bundle header line
-        bundle_parent_line = CPQQuoteLine.objects.create(
-            tenant=tenant,
-            quote=quote,
-            parent_line=None,
-            line_type="bundle_parent",
-            product=selected_bundle,
-            description=f"Package: {selected_bundle.name}",
-            quantity=Decimal("1.00"),
-            list_price=selected_bundle.unit_price or Decimal("0.00"),
-            unit_price=selected_bundle.unit_price or Decimal("0.00"),
-            sequence=10,
-        )
-
-        # 2. Add selected components
-        seq = 20
-        for opt in options:
-            input_name = f"opt_{opt.id}"
-            qty_name = f"qty_{opt.id}"
-            
-            # If required or checked
-            if opt.is_required or input_name in request.POST:
-                qty_val = request.POST.get(qty_name, str(opt.default_quantity))
-                try:
-                    qty = Decimal(qty_val)
-                    if not qty.is_finite() or qty <= Decimal("0"):
+            # 2. Add selected components
+            seq = 20
+            for opt in options:
+                input_name = f"opt_{opt.id}"
+                qty_name = f"qty_{opt.id}"
+                
+                # If required or checked
+                if opt.is_required or input_name in request.POST:
+                    qty_val = request.POST.get(qty_name, str(opt.default_quantity))
+                    try:
+                        qty = Decimal(qty_val)
+                        if not qty.is_finite() or qty <= Decimal("0"):
+                            qty = opt.default_quantity if (opt.default_quantity and opt.default_quantity > Decimal("0")) else Decimal("1.00")
+                    except Exception:
                         qty = opt.default_quantity if (opt.default_quantity and opt.default_quantity > Decimal("0")) else Decimal("1.00")
-                except Exception:
-                    qty = opt.default_quantity if (opt.default_quantity and opt.default_quantity > Decimal("0")) else Decimal("1.00")
 
-                comp_price = opt.component_product.unit_price if opt.component_product else Decimal("0.00")
-                unit_price = opt.unit_price_override if opt.unit_price_override is not None else (comp_price or Decimal("0.00"))
-                disc = opt.discount_pct_override or Decimal("0.00")
+                    comp_price = opt.component_product.unit_price if opt.component_product else Decimal("0.00")
+                    unit_price = opt.unit_price_override if opt.unit_price_override is not None else (comp_price or Decimal("0.00"))
+                    disc = opt.discount_pct_override or Decimal("0.00")
 
-                CPQQuoteLine.objects.create(
-                    tenant=tenant,
-                    quote=quote,
-                    parent_line=bundle_parent_line,
-                    line_type="bundle_component",
-                    product=opt.component_product,
-                    item=opt.component_item,
-                    description=f"{opt.option_group}: {opt.component_product.name}" if opt.component_product else (opt.component_item.name if opt.component_item else opt.name),
-                    quantity=qty,
-                    list_price=comp_price or Decimal("0.00"),
-                    discount_pct=disc,
-                    unit_price=unit_price,
-                    sequence=seq,
-                )
-                seq += 10
+                    CPQQuoteLine.objects.create(
+                        tenant=tenant,
+                        quote=quote,
+                        parent_line=bundle_parent_line,
+                        line_type="bundle_component",
+                        product=opt.component_product,
+                        item=opt.component_item,
+                        description=f"{opt.option_group}: {opt.component_product.name}" if opt.component_product else (opt.component_item.name if opt.component_item else opt.name),
+                        quantity=qty,
+                        list_price=comp_price or Decimal("0.00"),
+                        discount_pct=disc,
+                        unit_price=unit_price,
+                        sequence=seq,
+                    )
+                    seq += 10
 
-        cpq_recalc_quote_totals(quote, save=True)
+            cpq_recalc_quote_totals(quote, save=True)
         messages.success(request, f"Bundle '{selected_bundle.name}' added to quote {quote.number}!")
         return redirect("sales:cpq_quote_detail", pk=quote.pk)
 
