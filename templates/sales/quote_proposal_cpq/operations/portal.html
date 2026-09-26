@@ -98,13 +98,13 @@
                                             </div>
                                         </td>
                                         <td class="p-3 text-right font-mono">{{ line.quantity }}</td>
-                                        <td class="p-3 text-right font-mono">${{ line.unit_price:,.2f }}</td>
+                                        <td class="p-3 text-right font-mono">${{ line.unit_price|floatformat:2 }}</td>
                                         <td class="p-3 text-right font-mono text-slate-500">{{ line.discount_pct }}%</td>
                                         <td class="p-3 text-right font-mono font-semibold text-slate-900">
                                             {% if line.is_optional and not line.is_selected %}
-                                                <span class="text-slate-400 line-through">${{ line.line_total:,.2f }}</span>
+                                                <span class="text-slate-400 line-through">${{ line.line_total|floatformat:2 }}</span>
                                             {% else %}
-                                                ${{ line.line_total:,.2f }}
+                                                ${{ line.line_total|floatformat:2 }}
                                             {% endif %}
                                         </td>
                                         {% if quote.status != 'accepted' and quote.status != 'converted' %}
@@ -133,21 +133,21 @@
                     <div class="w-80 bg-slate-50 p-5 rounded-lg border border-slate-200 space-y-2 text-sm">
                         <div class="flex justify-between text-slate-600">
                             <span>Subtotal:</span>
-                            <span class="font-mono">${{ quote.subtotal:,.2f }}</span>
+                            <span class="font-mono">${{ quote.subtotal|floatformat:2 }}</span>
                         </div>
                         {% if quote.discount_total > 0 %}
                             <div class="flex justify-between text-amber-700">
                                 <span>Discount ({{ quote.header_discount_pct }}%):</span>
-                                <span class="font-mono">-${{ quote.discount_total:,.2f }}</span>
+                                <span class="font-mono">-${{ quote.discount_total|floatformat:2 }}</span>
                             </div>
                         {% endif %}
                         <div class="flex justify-between text-slate-600">
                             <span>Estimated Taxes:</span>
-                            <span class="font-mono">${{ quote.tax_total:,.2f }}</span>
+                            <span class="font-mono">${{ quote.tax_total|floatformat:2 }}</span>
                         </div>
                         <div class="pt-3 border-t border-slate-300 flex justify-between text-base font-bold text-slate-900">
                             <span>Total Investment:</span>
-                            <span class="text-xl text-blue-700 font-mono">${{ quote.total:,.2f }}</span>
+                            <span class="text-xl text-blue-700 font-mono">${{ quote.total|floatformat:2 }}</span>
                         </div>
                     </div>
                 </div>
@@ -213,7 +213,7 @@
 
                             <div class="pt-4">
                                 <button type="submit" class="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition text-center text-sm">
-                                    Confirm &amp; Digitally Accept Proposal (${{ quote.total:,.2f }})
+                                    Confirm &amp; Digitally Accept Proposal (${{ quote.total|floatformat:2 }})
                                 </button>
                             </div>
                         </form>
