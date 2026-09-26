@@ -32,7 +32,7 @@ Reviewers executed serially:
 
 ## Important
 
-- [ ] **I1**: `apps/sales/models/QuoteProposalCPQ/*.py` — Missing database-level unique constraints on `(tenant, number)` for `CPQQuote`, `ProductBundleOption`, and `QuoteApprovalRule`.
+- [x] **I1**: `apps/sales/models/QuoteProposalCPQ/*.py` — Missing database-level unique constraints on `(tenant, number)` for `CPQQuote`, `ProductBundleOption`, and `QuoteApprovalRule`. (fixed: added `unique_together = ("tenant", "number")` to all 3 models and created migration 0009)
 - [ ] **I2**: `apps/sales/views/QuoteProposalCPQ/*.py` — Unhandled 500 `ValueError` on non-numeric query parameters (`?opportunity=abc`, `?bundle=xyz`) in list and guided selling views. Guard with `.isdigit()`.
 - [ ] **I3**: `templates/sales/quote_proposal_cpq/**/*.html` — Incomplete query parameter preservation on pagination links in `cpqquote/list.html`, `productbundleoption/list.html`, `quoteapprovalrule/list.html`.
 - [ ] **I4**: `templates/sales/quote_proposal_cpq/**/*.html` — Non-existent theme CSS class `badge-purple` used in `cpqquote/list.html`, `cpqquote/detail.html`, `productbundleoption/list.html`, `version_list.html`. Replace with `badge-info`.
