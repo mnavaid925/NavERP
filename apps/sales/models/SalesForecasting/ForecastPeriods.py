@@ -101,7 +101,7 @@ class ForecastPeriod(TenantNumbered):
                 name="sales_fcp_tpt_ypn_uniq",
             ),
             models.CheckConstraint(
-                Q(period_number__gte=1) & Q(period_number__lte=12),
+                condition=Q(period_number__gte=1) & Q(period_number__lte=12),
                 name="sales_fcp_period_number_valid",
             ),
         ]
