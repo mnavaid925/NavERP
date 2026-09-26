@@ -87,6 +87,23 @@
                 </tbody>
             </table>
         </div>
+
+        {% if families.has_other_pages %}
+            <div class="card-footer border-t border-slate-200 p-4 flex items-center justify-between">
+                <div class="text-sm text-slate-500">
+                    Showing {{ families.start_index }} to {{ families.end_index }} of {{ families.paginator.count }} quote families
+                </div>
+                <div class="pagination flex items-center space-x-2">
+                    {% if families.has_previous %}
+                        <a href="?page={{ families.previous_page_number }}" class="btn btn-outline py-1 px-3 text-sm">Previous</a>
+                    {% endif %}
+                    <span class="text-sm font-medium text-slate-700">Page {{ families.number }} of {{ families.paginator.num_pages }}</span>
+                    {% if families.has_next %}
+                        <a href="?page={{ families.next_page_number }}" class="btn btn-outline py-1 px-3 text-sm">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
