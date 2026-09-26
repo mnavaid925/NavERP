@@ -15,6 +15,8 @@
   <div class="card"><div class="card-body">
     <p class="text-muted">One row per firing <strong>somebody reported</strong>. NavERP detects nothing;
       recording a row here does not make the crossing true.</p>
+    <p class="text-muted">{{ firing_count }} firing{{ firing_count|pluralize }} · {{ open_count }} open · {{ total_count }} recorded in total.
+      A zero here means nobody wrote one down — it is not evidence that nothing crossed.</p>
     {% if unmeasured_count %}
       <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>{{ unmeasured_count }} of these firings record no reading.</strong>
         A firing with no number attached cannot be checked against the threshold it supposedly crossed.</p>
