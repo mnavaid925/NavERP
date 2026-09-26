@@ -48,8 +48,8 @@ class CPQQuoteForm(TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["opportunity"].queryset = Opportunity.objects.filter(tenant=self.tenant)
-            self.fields["account"].queryset = Party.objects.filter(tenant=self.tenant, is_active=True)
-            self.fields["contact"].queryset = Party.objects.filter(tenant=self.tenant, is_active=True)
+            self.fields["account"].queryset = Party.objects.filter(tenant=self.tenant)
+            self.fields["contact"].queryset = Party.objects.filter(tenant=self.tenant)
             self.fields["price_book"].queryset = PriceBook.objects.filter(tenant=self.tenant, is_active=True)
             self.fields["currency"].queryset = Currency.objects.filter(is_active=True)
             self.fields["proposal_template"].queryset = DocTemplate.objects.filter(tenant=self.tenant)
