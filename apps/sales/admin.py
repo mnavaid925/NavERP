@@ -21,7 +21,12 @@ from .models import (
     Pipeline,
     PipelineStage,
     WinLossReason,
+    CPQQuote,
+    CPQQuoteLine,
+    ProductBundleOption,
+    QuoteApprovalRule,
 )
+
 
 
 
@@ -379,5 +384,54 @@ class ForecastScenarioAdmin(admin.ModelAdmin):
     )
     list_select_related = ("period", "owner", "tenant")
     raw_id_fields = ("period", "owner")
+
+
+# ---------------------------------------------------------------- 8.5 Quote & Proposal Management (CPQ)
+
+
+@admin.register(CPQQuote)
+class CPQQuoteAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "revision_number", "account", "opportunity", "status", "approval_status", "total", "margin_pct", "is_primary", "tenant")
+    list_filter = ("status", "approval_status", "is_primary", "tenant")
+    search_fields = ("number", "name", "quote_group_id", "account__name", "opportunity__name")
+    readonly_fields = (
+        "tenant", "number", "quote_group_id", "revision_number",
+        "subtotal", "discount_total", "tax_total", "total",
+        "cost_total", "margin_total", "margin_pct",
+        "proposal_rendered_content", "signing_token",
+        "signer_name", "signer_title", "signer_email", "signed_at", "signature_data",
+        "converted_order", "created_at", "updated_at",
+    )
+    list_select_related = ("account", "contact", "opportunity", "currency", "owner", "approval_rule", "tenant")
+    raw_id_fields = ("account", "contact", "opportunity", "price_book", "proposal_template", "approval_rule", "approved_by", "converted_order", "crm_quote", "owner")
+
+
+@admin.register(CPQQuoteLine)
+class CPQQuoteLineAdmin(admin.ModelAdmin):
+    list_display = ("quote", "sequence", "description", "line_type", "quantity", "unit_price", "discount_pct", "line_total", "margin_pct", "is_optional", "is_selected", "tenant")
+    list_filter = ("line_type", "is_optional", "is_selected", "tenant")
+    search_fields = ("quote__number", "description", "product__name")
+    readonly_fields = ("tenant", "line_subtotal", "line_tax", "line_total", "line_cost", "line_margin", "margin_pct", "created_at", "updated_at")
+    list_select_related = ("quote", "product", "item", "uom", "parent_line", "tenant")
+    raw_id_fields = ("quote", "parent_line", "product", "item")
+
+
+@admin.register(ProductBundleOption)
+class ProductBundleOptionAdmin(admin.ModelAdmin):
+    list_display = ("number", "bundle_product", "component_product", "option_group", "default_quantity", "is_required", "compatibility_rule", "is_active", "tenant")
+    list_filter = ("option_group", "is_required", "is_default", "compatibility_rule", "is_active", "tenant")
+    search_fields = ("number", "name", "bundle_product__name", "component_product__name")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("bundle_product", "component_product", "component_item", "depends_on_product", "tenant")
+    raw_id_fields = ("bundle_product", "component_product", "component_item", "depends_on_product")
+
+
+@admin.register(QuoteApprovalRule)
+class QuoteApprovalRuleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "rule_type", "discount_threshold_pct", "min_margin_pct", "amount_threshold", "approver_role", "priority", "is_active", "tenant")
+    list_filter = ("rule_type", "approver_role", "is_active", "tenant")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+
 
 
