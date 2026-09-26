@@ -110,10 +110,19 @@ class AlertEventForm(TenantModelForm):
         # must not be able to disagree with the service they picked. Written here so the row still reads
         # after the component is deleted — which is the whole reason `AlertEvent.service` is SET_NULL.
         #
+        # It is only written when a service IS chosen. Clearing the service is a legitimate correction
+        # (the firing was logged against the wrong component), and overwriting unconditionally would set
+        # the snapshot to "" and destroy the very evidence that is meant to outlive the component. On an
+        # edit with no service the existing snapshot is preserved instead.
+        #
         # `first_seen_at` is written here too, rather than in the create view, so the admin path gets it:
-        # a report with no first-seen time is a report whose age nobody can compute.
+        # a report with no first-seen time is a report whose age nobody can compute. Only ever
+        # back-filled when empty, so a later edit cannot rewrite the original first sighting.
         obj = super().save(commit=False)
-        obj.service_label = obj.service.name if obj.service_id else ""
+        if obj.service_id:
+            obj.service_label = obj.service.name
+        elif obj.pk is None:
+            obj.service_label = ""
         if obj.fired_at and not obj.first_seen_at:
             obj.first_seen_at = obj.fired_at
         if commit:
