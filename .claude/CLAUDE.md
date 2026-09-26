@@ -226,11 +226,16 @@ Every time you finish a **new module** (a Django app under `apps/<slug>`), you M
 
 ### GIT Commit Rule
 
-* Whenever you create a new file or update a file or delete a file. You should do a git commits.
-* git commit should be in details about new changes, update or add features in detail.
-* eg: 
-git add 'src/file.js'
-git commit -m 'some example changes'.
+* **INSTANT COMMITS MANDATORY — COMMIT IMMEDIATELY (NO BATCHING, NO WAITING FOR WORK COMPLETED):**
+  * Whenever you create a new file, update code, edit code, or delete a file, you MUST do the git commit **instantly** (immediately following that single file operation).
+  * Do NOT wait until an entire task, feature, phase, entity, or module is completed before committing.
+  * Every single file creation, edit, or deletion must be committed to git immediately as it happens.
+  * Work should never accumulate in an uncommitted dirty working tree.
+* **Commit Message Quality**: Every git commit message must be specific and detailed about the new changes, updates, or added/removed features for that exact file.
+* **Example**: 
+  ```powershell
+  git add 'apps/sales/models/OpportunityPipeline/Pipelines.py'; git commit -m 'feat(sales): add Pipeline model with tenant isolation'
+  ```
 
 **STRICT — ONE FILE PER COMMIT (no exceptions):**
 
