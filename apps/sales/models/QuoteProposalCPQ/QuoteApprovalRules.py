@@ -69,6 +69,8 @@ class QuoteApprovalRule(TenantNumbered):
         ordering = ["priority", "name"]
         unique_together = ("tenant", "number")
         indexes = [
+            models.Index(fields=["tenant", "number"], name="sales_qar_tnt_num_idx"),
+            models.Index(fields=["tenant", "is_active"], name="sales_qar_tnt_act_idx"),
             models.Index(fields=["tenant", "is_active", "priority"], name="sales_qar_active_prio_idx"),
         ]
 
