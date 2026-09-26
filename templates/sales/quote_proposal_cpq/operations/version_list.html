@@ -65,7 +65,7 @@
                                 <span class="badge badge-slate">{{ item.latest_quote.get_status_display }}</span>
                             </td>
                             <td class="font-mono text-sm font-bold text-slate-900">
-                                ${{ item.latest_quote.total:,.2f }}
+                                ${{ item.latest_quote.total|floatformat:2 }}
                             </td>
                             <td class="table-actions text-right">
                                 <a href="{% url 'sales:cpq_quote_detail' item.latest_quote.pk %}" class="btn btn-outline py-1 px-2.5 text-xs">
