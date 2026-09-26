@@ -45,8 +45,9 @@ class CPQQuoteForm(TenantModelForm):
             "owner": forms.Select(attrs={"class": "form-select"}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.user = user
         if self.tenant:
             self.fields["opportunity"].queryset = Opportunity.objects.filter(tenant=self.tenant)
             self.fields["account"].queryset = Party.objects.filter(tenant=self.tenant)
@@ -56,6 +57,19 @@ class CPQQuoteForm(TenantModelForm):
             self.fields["proposal_template"].queryset = DocTemplate.objects.filter(tenant=self.tenant)
             self.fields["owner"].queryset = User.objects.filter(tenant=self.tenant, is_active=True)
 
+        # Only a tenant admin may hand a quote to someone else; for anyone else the
+        # owner is pinned to themselves and the field is disabled, matching
+        # AccountPlanForm. Ownership is an assignment right, not a free-text field.
+        if user is not None and not (
+            getattr(user, "is_superuser", False) or getattr(user, "is_tenant_admin", False)
+        ):
+            self.fields["owner"].queryset = User.objects.filter(
+                pk=user.pk, tenant=self.tenant, is_active=True
+            )
+            self.fields["owner"].disabled = True
+            if not self.instance.pk:
+                self.initial["owner"] = user.pk
+
         if "header_discount_pct" in self.fields:
             self.fields["header_discount_pct"].required = False
 
@@ -63,6 +77,12 @@ class CPQQuoteForm(TenantModelForm):
         cleaned_data = super().clean()
         if cleaned_data.get("header_discount_pct") is None:
             cleaned_data["header_discount_pct"] = Decimal("0.00")
+        # Belt and braces: a disabled field still arrives in cleaned_data, so pin it
+        # back to the acting user rather than trusting the posted value.
+        if self.user is not None and not (
+            getattr(self.user, "is_superuser", False) or getattr(self.user, "is_tenant_admin", False)
+        ):
+            cleaned_data["owner"] = self.user
         return cleaned_data
 
 
