@@ -125,3 +125,18 @@ from .Monitoring import (
     AlertEvent,
     Incident,
 )  # noqa: F401
+# 0.18 — Threat Protection & Security Operations. The module constants are re-exported too,
+# because the seeder and the boards need `NOTIFICATION_WINDOW_HOURS` without importing the
+# entity module directly, and the alias re-exports keep the reuse-by-reference identity
+# (`SecurityThreat.SEVERITY_CHOICES is AlertRule.SEVERITY_CHOICES`) reachable from one place.
+from .Security import (
+    IpAccessRule,
+    SecurityThreat,
+    VulnerabilityFinding,
+    SecurityIncident,
+    validate_ip_or_cidr,
+    NOTIFICATION_WINDOW_HOURS,
+    REMEDIATION_SLA_DAYS,
+    SEVERITY_CHOICES,
+    SCAN_FREQUENCY_CHOICES,
+)  # noqa: F401
