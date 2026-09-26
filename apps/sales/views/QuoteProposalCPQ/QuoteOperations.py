@@ -438,6 +438,9 @@ def cpq_guided_selling(request):
 
         if quote_id:
             quote = get_object_or_404(CPQQuote, pk=quote_id, tenant=tenant)
+            if not quote.is_editable and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)):
+                messages.warning(request, f"Quote {quote.number} is locked in status '{quote.get_status_display()}'. Create a revision to add bundle options.")
+                return redirect("sales:cpq_quote_detail", pk=quote.pk)
         else:
             # Create a new quote
             opp = Opportunity.objects.filter(pk=opp_id, tenant=tenant).first() if opp_id else None
