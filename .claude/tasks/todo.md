@@ -249,7 +249,7 @@ the immutable measurement. Collapsing them would let a missed RPO silently rewri
 - [x] `venv\Scripts\python.exe temp\audit_integrity.py` → **6/6 PASS** (and it independently reports `core: 16 live sub-modules`).
 - [x] Smoke as `admin_acme`: every new page 200 with **content** asserted (not just status); junk-param and page-2 lists; cross-tenant IDOR → 404; `backup_job_verify` is 405 on GET.
 - [x] Phase 4 review → `.claude/tasks/review-core-0.16.md`; Phase 5 `code-fixer`; Phase 6 tests (`test_backup_*`); Phase 7 docs + `README.md` counter → **16 of 21**.
-- [ ] **Final gate:** `apps/core/tests` **without** `--nomigrations` (the only run that catches an unapplied migration).
+- [x] **Final gate:** `apps/core/tests` **without** `--nomigrations` (the only run that catches an unapplied migration). Run as part of the full unfiltered repo suite: **29,311 passed, 22 failed, 3 skipped in 1:31:17** — and **not one of the 22 is in `apps/core/`**, so every core test passed with the migrations actually applied. See the note below on the 22.
 
 ## Close-out
 
@@ -294,10 +294,36 @@ engine**: nothing in it takes a backup, restores one or provisions an environmen
    its stamp on a second POST. No test enforces either behaviour; it is recorded in `SKILL.md` because
    the findings file has no entry for it.
 
-**Not ours.** Four tests fail in this tree and fail **identically at the pre-session baseline
-`44c72ec3`** (verified by checking out that commit in a git worktree): `inventory`'s
-`test_foreign_uom_rejected`, two `scm` `TestMeterReadingForm` cases (a clock-dependent future-dated
-`read_at`), and the `scm` webhook junk-filter test. Reported with provenance rather than "fixed" (L45).
+**Not ours — with the scope of that claim stated precisely.** The full unfiltered repo suite reports
+**29,311 passed, 22 failed, 3 skipped (1:31:17)**. **Not one of the 22 is in `apps/core/`**, which is the
+only app this sub-module changed (plus one form in `apps/projects`), so no 0.16 code is implicated. They
+are in `crm` (1), `inventory` (4) and `scm` (17), and they cluster into three shapes: a CRM quota
+percentage returning `None`, an inventory barcode scan resolving a known code as Unknown, UOM conversion
+round-trips, and a large family of "a junk filter value must narrow to an empty 200" tests.
+
+Of the 22, **4 are proven pre-existing**: `inventory`'s `test_foreign_uom_rejected` and three
+`TestIntegrationWebhookSubscriptionList` junk-filter params fail **identically at the pre-session
+baseline `44c72ec3`** (verified by checking that commit out in a git worktree and re-running them there).
+Two `scm` `TestMeterReadingForm` cases that failed at the baseline now **pass** — consistent with them
+being clock-dependent (a future-dated `read_at`).
+
+**The remaining 18 are unverified, not cleared.** The sandbox went down (`tsbx_sdk.dll` failed to load,
+so no command could run) partway through the baseline comparison. The structural argument is strong —
+they are all in apps this sub-module never edited, and `forms/_common.py` was reverted to
+byte-identical — but a structural argument is not a measurement, so it is recorded as open rather than
+asserted. To finish it once the sandbox is back:
+
+```
+git worktree add temp/_baseline 44c72ec3
+cd temp/_baseline && ../venv/Scripts/python.exe -m pytest \
+  apps/crm/tests/test_sfa.py apps/inventory/tests/test_barcode_views.py \
+  apps/inventory/tests/test_uom_views.py apps/scm/tests/test_3pl_views.py \
+  apps/scm/tests/test_views.py --nomigrations -q
+git worktree remove temp/_baseline --force
+```
+
+If they fail there too, they are pre-existing; if they pass, the concurrent session's `sales`/`projects`
+work is the likelier cause and the provenance belongs to that session (L45).
 
 
 ---
@@ -10225,51 +10251,51 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 # Sub-module 8.2 — Opportunity & Pipeline Management (Module 8: Sales Management System, sales) — plan from research-sales-8.2.md (2026-09-25)
 
 ## Models (from research — 1–4)
-- [ ] `Pipeline` [PIPE-] — `name`, `description` (blank), `is_default` (bool, default False), `is_active` (bool, default True); ordering `["-is_default", "name", "-created_at"]`; unique `("tenant", "number")`, indexes `(tenant, is_active)`, `(tenant, is_default)` (drivers: Multiple named pipelines, Closed-stage integrity, At most one active default per tenant) — FKs: `core.Tenant` — form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`
-- [ ] `PipelineStage` (child of Pipeline in `Pipelines.py`, unnumbered) — `pipeline` (FK `sales.Pipeline`, CASCADE), `name` (max 120), `code` (SlugField 40), `sequence` (PositiveIntegerField, default 1), `stage_kind` (choices: `open`, `won`, `lost`), `crm_stage_key` (choices: `prospecting`, `qualification`, `proposal`, `negotiation`, `closed_won`, `closed_lost`), `probability` (0..100, won=100, lost=0, open=1..99), `forecast_category` (choices: `omitted`, `pipeline`, `best_case`, `commit`, `closed`), `entry_guidance` (blank text), `exit_guidance` (blank text), `entry_criteria` (JSON list of allowlisted `{key, label}`), `exit_criteria` (JSON list of allowlisted `{key, label}`), `target_days` (nullable PositiveSmallIntegerField, 1..3650), `is_active` (bool, default True); unique `("tenant", "pipeline", "code")`, indexes `(tenant, pipeline, sequence)`, `(tenant, stage_kind, is_active)` (drivers: Tenant-custom stage definitions, Stage probability & category defaults, Structured entry/exit criteria with allowlist, Closed-stage integrity, Time-in-stage and rotting) — FKs: `sales.Pipeline`, `core.Tenant` — form excludes: `tenant`, `created_at`, `updated_at`
-- [ ] `OpportunityPipelinePlacement` (one-to-one deal link in `Pipelines.py`, unnumbered) — `opportunity` (OneToOneField `crm.Opportunity`, CASCADE, related_name `sales_pipeline_placement`), `pipeline` (FK `sales.Pipeline`, PROTECT, related_name `placements`), `current_stage` (FK `sales.PipelineStage`, PROTECT, related_name `current_placements`), `probability_override` (nullable 0..100 integer), `stage_entered_at` (DateTimeField default timezone.now, editable=False); unique `("tenant", "opportunity")`, indexes `(tenant, opportunity)`, `(tenant, pipeline)` (drivers: Filterable multi-pipeline board/list, Manual probability override, Canonical-state invariant projecting to existing `crm.Opportunity.stage`, `probability`, `forecast_category`, `stage_changed_at`) — FKs: `crm.Opportunity`, `sales.Pipeline`, `sales.PipelineStage`, `core.Tenant` — form excludes: `tenant`, `stage_entered_at`, `created_at`, `updated_at`
-- [ ] `OpportunityTeamMember` [OTM-] — `opportunity` (FK `crm.Opportunity`, CASCADE, related_name `sales_team_members`), `user` (FK `settings.AUTH_USER_MODEL`, CASCADE), `org_unit` (nullable FK `core.OrgUnit`, SET_NULL), `role` (choices: `co_owner`, `collaborator`, `sales_support`, `solution_consultant`, `executive_sponsor`, `approver`, `observer`), `responsibility` (blank text), `is_active` (bool, default True); unique `("tenant", "opportunity", "user", "role")`, indexes `(tenant, opportunity, is_active)`, `(tenant, user)` (drivers: Functional opportunity team with roles, Co-owner/collaborator/sponsor distinction, Follower/coordinator concept; note: single accountable deal owner remains `crm.Opportunity.owner`, commercial splits remain `crm.OpportunitySplit`) — FKs: `crm.Opportunity`, `settings.AUTH_USER_MODEL` (`accounts.User`), `core.OrgUnit`, `core.Tenant` — form excludes: `tenant`, auto-`number`, `opportunity` (supplied by view context), `created_at`, `updated_at`
-- [ ] `CompetitorProfile` [CMP-] — `party` (OneToOneField `core.Party`, CASCADE, related_name `sales_competitor_profile`), `aliases` (blank text), `website_url` (URLField 500, blank), `description` (blank text), `market_positioning` (blank text), `strengths` (blank text), `weaknesses` (blank text), `differentiators` (blank text), `objection_handling` (blank text), `last_reviewed_on` (nullable DateField), `is_active` (bool, default True); unique `("tenant", "number")`, unique `("party",)`, index `(tenant, is_active)`; ordering by `party__name` (drivers: Reusable battle-card summary, Structured competitor anchored on `core.Party` spine) — FKs: `core.Party`, `core.Tenant` — form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`
-- [ ] `OpportunityCompetitor` (deal competitor link in `CompetitiveIntelligence.py`, unnumbered) — `opportunity` (FK `crm.Opportunity`, CASCADE, related_name `sales_competitors`), `competitor_profile` (FK `sales.CompetitorProfile`, PROTECT), `relationship` (choices: `identified`, `evaluating`, `shortlisted`, `preferred`, `incumbent`, `eliminated`, `lost_to`, `beaten`, `withdrew`), `is_primary` (bool, default False), `pricing_notes` (blank text), `deal_notes` (blank text), `positioning_notes` (blank text); unique `("tenant", "opportunity", "competitor_profile")`, indexes `(tenant, opportunity, relationship)`, `(tenant, opportunity, is_primary)` (drivers: Structured competitor per opportunity, Deal-level competitive notes, One primary competitor per deal under lock) — FKs: `crm.Opportunity`, `sales.CompetitorProfile`, `core.Tenant` — form excludes: `tenant`, `opportunity` (supplied by view context), `created_at`, `updated_at`
-- [ ] `WinLossReason` [WLR-] — `code` (SlugField 40), `name` (CharField 120), `description` (blank text), `sequence` (PositiveIntegerField, default 1), `result` (choices: `won`, `lost`, `both`), `category` (choices: `price`, `product_fit`, `timing`, `competition`, `relationship`, `authority`, `budget`, `no_decision`, `other`), `is_active` (bool, default True); unique `("tenant", "number")`, unique `("tenant", "code")`, indexes `(tenant, result, is_active)`, `(tenant, category, is_active)`; ordering `["sequence", "name"]` (drivers: Configurable win/loss reason taxonomy for structured closure reporting) — FKs: `core.Tenant` — form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`
-- [ ] `OpportunityOutcome` [OUT-] (append-only closure record in `OpportunityOutcomes.py`) — `opportunity` (FK `crm.Opportunity`, CASCADE, related_name `sales_outcomes`), `result` (choices: `won`, `lost`), `reason` (FK `sales.WinLossReason`, PROTECT), `competitor_link` (nullable FK `sales.OpportunityCompetitor`, SET_NULL), `notes` (blank text), `closed_at` (DateTimeField default timezone.now, editable=False), `recorded_by` (nullable FK `settings.AUTH_USER_MODEL`, SET_NULL, editable=False); unique `("tenant", "number")`, indexes `(tenant, result, closed_at)`, `(tenant, opportunity, closed_at)`, `(tenant, reason)` (drivers: Structured win/loss closure evidence, Closed-stage integrity, Stage history & audit trail; immutable, written only by transition service, preserved on reopen) — FKs: `crm.Opportunity`, `sales.WinLossReason`, `sales.OpportunityCompetitor`, `settings.AUTH_USER_MODEL`, `core.Tenant` — form: No direct add/edit/delete form or route; written append-only via transition service
-- [ ] Additive CRM Opportunity Spine Fields (verified in `apps/crm/models/SalesForceAutomation/Opportunities.py`) — `next_step_due_date` (DateField, null/blank) for timely next-step alerts, nullable `currency` (FK `accounting.Currency`, SET_NULL) for currency-safe multi-currency pipelines, plus synchronized compatibility projections for `stage`, `probability`, `forecast_category`, `stage_changed_at`, and `lost_at`
+- [x] `Pipeline` [PIPE-] — `name`, `description` (blank), `is_default` (bool, default False), `is_active` (bool, default True); ordering `["-is_default", "name", "-created_at"]`; unique `("tenant", "number")`, indexes `(tenant, is_active)`, `(tenant, is_default)` (drivers: Multiple named pipelines, Closed-stage integrity, At most one active default per tenant) — FKs: `core.Tenant` — form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`
+- [x] `PipelineStage` (child of Pipeline in `Pipelines.py`, unnumbered) — `pipeline` (FK `sales.Pipeline`, CASCADE), `name` (max 120), `code` (SlugField 40), `sequence` (PositiveIntegerField, default 1), `stage_kind` (choices: `open`, `won`, `lost`), `crm_stage_key` (choices: `prospecting`, `qualification`, `proposal`, `negotiation`, `closed_won`, `closed_lost`), `probability` (0..100, won=100, lost=0, open=1..99), `forecast_category` (choices: `omitted`, `pipeline`, `best_case`, `commit`, `closed`), `entry_guidance` (blank text), `exit_guidance` (blank text), `entry_criteria` (JSON list of allowlisted `{key, label}`), `exit_criteria` (JSON list of allowlisted `{key, label}`), `target_days` (nullable PositiveSmallIntegerField, 1..3650), `is_active` (bool, default True); unique `("tenant", "pipeline", "code")`, indexes `(tenant, pipeline, sequence)`, `(tenant, stage_kind, is_active)` (drivers: Tenant-custom stage definitions, Stage probability & category defaults, Structured entry/exit criteria with allowlist, Closed-stage integrity, Time-in-stage and rotting) — FKs: `sales.Pipeline`, `core.Tenant` — form excludes: `tenant`, `created_at`, `updated_at`
+- [x] `OpportunityPipelinePlacement` (one-to-one deal link in `Pipelines.py`, unnumbered) — `opportunity` (OneToOneField `crm.Opportunity`, CASCADE, related_name `sales_pipeline_placement`), `pipeline` (FK `sales.Pipeline`, PROTECT, related_name `placements`), `current_stage` (FK `sales.PipelineStage`, PROTECT, related_name `current_placements`), `probability_override` (nullable 0..100 integer), `stage_entered_at` (DateTimeField default timezone.now, editable=False); unique `("tenant", "opportunity")`, indexes `(tenant, opportunity)`, `(tenant, pipeline)` (drivers: Filterable multi-pipeline board/list, Manual probability override, Canonical-state invariant projecting to existing `crm.Opportunity.stage`, `probability`, `forecast_category`, `stage_changed_at`) — FKs: `crm.Opportunity`, `sales.Pipeline`, `sales.PipelineStage`, `core.Tenant` — form excludes: `tenant`, `stage_entered_at`, `created_at`, `updated_at`
+- [x] `OpportunityTeamMember` [OTM-] — `opportunity` (FK `crm.Opportunity`, CASCADE, related_name `sales_team_members`), `user` (FK `settings.AUTH_USER_MODEL`, CASCADE), `org_unit` (nullable FK `core.OrgUnit`, SET_NULL), `role` (choices: `co_owner`, `collaborator`, `sales_support`, `solution_consultant`, `executive_sponsor`, `approver`, `observer`), `responsibility` (blank text), `is_active` (bool, default True); unique `("tenant", "opportunity", "user", "role")`, indexes `(tenant, opportunity, is_active)`, `(tenant, user)` (drivers: Functional opportunity team with roles, Co-owner/collaborator/sponsor distinction, Follower/coordinator concept; note: single accountable deal owner remains `crm.Opportunity.owner`, commercial splits remain `crm.OpportunitySplit`) — FKs: `crm.Opportunity`, `settings.AUTH_USER_MODEL` (`accounts.User`), `core.OrgUnit`, `core.Tenant` — form excludes: `tenant`, auto-`number`, `opportunity` (supplied by view context), `created_at`, `updated_at`
+- [x] `CompetitorProfile` [CMP-] — `party` (OneToOneField `core.Party`, CASCADE, related_name `sales_competitor_profile`), `aliases` (blank text), `website_url` (URLField 500, blank), `description` (blank text), `market_positioning` (blank text), `strengths` (blank text), `weaknesses` (blank text), `differentiators` (blank text), `objection_handling` (blank text), `last_reviewed_on` (nullable DateField), `is_active` (bool, default True); unique `("tenant", "number")`, unique `("party",)`, index `(tenant, is_active)`; ordering by `party__name` (drivers: Reusable battle-card summary, Structured competitor anchored on `core.Party` spine) — FKs: `core.Party`, `core.Tenant` — form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`
+- [x] `OpportunityCompetitor` (deal competitor link in `CompetitiveIntelligence.py`, unnumbered) — `opportunity` (FK `crm.Opportunity`, CASCADE, related_name `sales_competitors`), `competitor_profile` (FK `sales.CompetitorProfile`, PROTECT), `relationship` (choices: `identified`, `evaluating`, `shortlisted`, `preferred`, `incumbent`, `eliminated`, `lost_to`, `beaten`, `withdrew`), `is_primary` (bool, default False), `pricing_notes` (blank text), `deal_notes` (blank text), `positioning_notes` (blank text); unique `("tenant", "opportunity", "competitor_profile")`, indexes `(tenant, opportunity, relationship)`, `(tenant, opportunity, is_primary)` (drivers: Structured competitor per opportunity, Deal-level competitive notes, One primary competitor per deal under lock) — FKs: `crm.Opportunity`, `sales.CompetitorProfile`, `core.Tenant` — form excludes: `tenant`, `opportunity` (supplied by view context), `created_at`, `updated_at`
+- [x] `WinLossReason` [WLR-] — `code` (SlugField 40), `name` (CharField 120), `description` (blank text), `sequence` (PositiveIntegerField, default 1), `result` (choices: `won`, `lost`, `both`), `category` (choices: `price`, `product_fit`, `timing`, `competition`, `relationship`, `authority`, `budget`, `no_decision`, `other`), `is_active` (bool, default True); unique `("tenant", "number")`, unique `("tenant", "code")`, indexes `(tenant, result, is_active)`, `(tenant, category, is_active)`; ordering `["sequence", "name"]` (drivers: Configurable win/loss reason taxonomy for structured closure reporting) — FKs: `core.Tenant` — form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`
+- [x] `OpportunityOutcome` [OUT-] (append-only closure record in `OpportunityOutcomes.py`) — `opportunity` (FK `crm.Opportunity`, CASCADE, related_name `sales_outcomes`), `result` (choices: `won`, `lost`), `reason` (FK `sales.WinLossReason`, PROTECT), `competitor_link` (nullable FK `sales.OpportunityCompetitor`, SET_NULL), `notes` (blank text), `closed_at` (DateTimeField default timezone.now, editable=False), `recorded_by` (nullable FK `settings.AUTH_USER_MODEL`, SET_NULL, editable=False); unique `("tenant", "number")`, indexes `(tenant, result, closed_at)`, `(tenant, opportunity, closed_at)`, `(tenant, reason)` (drivers: Structured win/loss closure evidence, Closed-stage integrity, Stage history & audit trail; immutable, written only by transition service, preserved on reopen) — FKs: `crm.Opportunity`, `sales.WinLossReason`, `sales.OpportunityCompetitor`, `settings.AUTH_USER_MODEL`, `core.Tenant` — form: No direct add/edit/delete form or route; written append-only via transition service
+- [x] Additive CRM Opportunity Spine Fields (verified in `apps/crm/models/SalesForceAutomation/Opportunities.py`) — `next_step_due_date` (DateField, null/blank) for timely next-step alerts, nullable `currency` (FK `accounting.Currency`, SET_NULL) for currency-safe multi-currency pipelines, plus synchronized compatibility projections for `stage`, `probability`, `forecast_category`, `stage_changed_at`, and `lost_at`
 
 ## Backend (apps/sales/{models,forms,views,urls}/OpportunityPipeline/)
-- [ ] `models/OpportunityPipeline/Pipelines.py` (`Pipeline`, `PipelineStage`, `OpportunityPipelinePlacement`)
-- [ ] `models/OpportunityTeams/OpportunityTeams.py` (`OpportunityTeamMember`)
-- [ ] `models/CompetitiveIntelligence/CompetitiveIntelligence.py` (`CompetitorProfile`, `OpportunityCompetitor`)
-- [ ] `models/OpportunityOutcomes/OpportunityOutcomes.py` (`WinLossReason`, `OpportunityOutcome`)
-- [ ] `models/OpportunityPipeline/__init__.py`, `models/OpportunityTeams/__init__.py`, `models/CompetitiveIntelligence/__init__.py`, `models/OpportunityOutcomes/__init__.py`
-- [ ] Domain service `apps/sales/opportunity_services.py` (`sales_place_opportunity`, `sales_transition_opportunity`, `sales_unplace_opportunity`, `sales_compute_health` with deterministic status `on_track`/`watch`/`at_risk` and exact factor keys)
-- [ ] Domain analytics `apps/sales/opportunity_analytics.py` (`sales_pipeline_rollups`, `sales_pipeline_currency_totals`, `sales_stage_age_rows`, `sales_win_loss_rows`, `sales_competitor_rows`, `sales_health_counts`)
-- [ ] `forms/OpportunityPipeline/Pipelines.py` (`PipelineForm`, `PipelineStageForm`, `PipelineStageOrderForm`, `OpportunityPipelinePlacementForm`, `OpportunityTransitionForm`)
-- [ ] `forms/OpportunityTeams/OpportunityTeams.py` (`OpportunityTeamMemberForm`)
-- [ ] `forms/CompetitiveIntelligence/CompetitiveIntelligence.py` (`CompetitorProfileForm`, `OpportunityCompetitorForm`)
-- [ ] `forms/OpportunityOutcomes/OpportunityOutcomes.py` (`WinLossReasonForm`)
-- [ ] `forms/OpportunityPipeline/__init__.py`, `forms/OpportunityTeams/__init__.py`, `forms/CompetitiveIntelligence/__init__.py`, `forms/OpportunityOutcomes/__init__.py`
-- [ ] `views/OpportunityPipeline/Pipelines.py` (`pipeline_list`, `pipeline_create`, `pipeline_detail`, `pipeline_edit`, `pipeline_delete`, `pipeline_stages`, `pipeline_stage_create`, `pipeline_stage_reorder`, `pipeline_stage_edit`, `pipeline_stage_delete`, `pipeline_set_default`, `pipeline_board`, `pipeline_visibility`)
-- [ ] `views/Workspace.py` (`workspace_list`, `workspace_detail`, `workspace_place`, `workspace_unplace`, `workspace_transition`)
-- [ ] `views/OpportunityTeams/OpportunityTeams.py` (`team_member_add`, `team_member_edit`, `team_member_remove`)
-- [ ] `views/CompetitiveIntelligence/CompetitiveIntelligence.py` (`competitor_profile_list`, `competitor_profile_create`, `competitor_profile_detail`, `competitor_profile_edit`, `competitor_profile_delete`, `competitor_link_add`, `competitor_link_edit`, `competitor_link_remove`)
-- [ ] `views/OpportunityOutcomes/OpportunityOutcomes.py` (`win_loss_reason_list`, `win_loss_reason_create`, `win_loss_reason_detail`, `win_loss_reason_edit`, `win_loss_reason_delete`)
-- [ ] `views/OpportunityPipeline/__init__.py`, `views/OpportunityTeams/__init__.py`, `views/CompetitiveIntelligence/__init__.py`, `views/OpportunityOutcomes/__init__.py`
-- [ ] `urls/OpportunityPipeline/Pipelines.py` (literal routes before `<int:pk>`: `pipelines/`, `pipelines/add/`, `<int:pk>/`, `<int:pk>/edit/`, `<int:pk>/delete/`, `<int:pk>/stages/`, `<int:pk>/stages/add/`, `<int:pk>/stages/reorder/`, `<int:pk>/stages/<int:stage_pk>/edit/`, `<int:pk>/stages/<int:stage_pk>/delete/`, `<int:pk>/set-default/`, `board/`, `visibility/`)
-- [ ] `urls/Workspace/Workspace.py` (literal routes before `<int:pk>`: `opportunity/`, `opportunity/workspace/<int:opportunity_pk>/`, `<int:opportunity_pk>/place/`, `<int:opportunity_pk>/unplace/`, `<int:opportunity_pk>/transition/`)
-- [ ] `urls/OpportunityTeams/OpportunityTeams.py` (`opportunity/workspace/<int:opportunity_pk>/team/add/`, `.../team/<int:member_pk>/edit/`, `.../team/<int:member_pk>/remove/`)
-- [ ] `urls/CompetitiveIntelligence/CompetitiveIntelligence.py` (literal routes before `<int:pk>`: `competitors/`, `competitors/add/`, `<int:pk>/`, `<int:pk>/edit/`, `<int:pk>/delete/`, `.../competitors/add/`, `.../competitors/<int:competitor_pk>/edit/`, `.../competitors/<int:competitor_pk>/remove/`)
-- [ ] `urls/OpportunityOutcomes/OpportunityOutcomes.py` (literal routes before `<int:pk>`: `win-loss-reasons/`, `win-loss-reasons/add/`, `<int:pk>/`, `<int:pk>/edit/`, `<int:pk>/delete/`)
-- [ ] `urls/OpportunityPipeline/__init__.py`, `urls/OpportunityTeams/__init__.py`, `urls/CompetitiveIntelligence/__init__.py`, `urls/OpportunityOutcomes/__init__.py`, `urls/Workspace/__init__.py`
-- [ ] Re-export all 8 models in `apps/sales/models/__init__.py`
-- [ ] Re-export all forms in `apps/sales/forms/__init__.py`
-- [ ] Re-export all views in `apps/sales/views/__init__.py`
-- [ ] Concatenate all 8.2 URL modules in `apps/sales/urls/__init__.py` (literal routes first)
-- [ ] Register all 8 models in `apps/sales/admin.py` with tenant filters, search, readonly number/timestamps, and append-only guard for `OpportunityOutcome`
-- [ ] Generate migration `makemigrations sales` (claim next free migration `0005_...`) and run `migrate`
-- [ ] Extend `apps/sales/management/commands/seed_sales.py` with idempotent 8.2 data (pipelines, baseline stages, reasons, competitor profiles, team members, placements, and `--backfill` for existing CRM deals)
+- [x] `models/OpportunityPipeline/Pipelines.py` (`Pipeline`, `PipelineStage`, `OpportunityPipelinePlacement`)
+- [x] `models/OpportunityTeams/OpportunityTeams.py` (`OpportunityTeamMember`)
+- [x] `models/CompetitiveIntelligence/CompetitiveIntelligence.py` (`CompetitorProfile`, `OpportunityCompetitor`)
+- [x] `models/OpportunityOutcomes/OpportunityOutcomes.py` (`WinLossReason`, `OpportunityOutcome`)
+- [x] `models/OpportunityPipeline/__init__.py`, `models/OpportunityTeams/__init__.py`, `models/CompetitiveIntelligence/__init__.py`, `models/OpportunityOutcomes/__init__.py`
+- [x] Domain service `apps/sales/opportunity_services.py` (`sales_place_opportunity`, `sales_transition_opportunity`, `sales_unplace_opportunity`, `sales_compute_health` with deterministic status `on_track`/`watch`/`at_risk` and exact factor keys)
+- [x] Domain analytics `apps/sales/opportunity_analytics.py` (`sales_pipeline_rollups`, `sales_pipeline_currency_totals`, `sales_stage_age_rows`, `sales_win_loss_rows`, `sales_competitor_rows`, `sales_health_counts`)
+- [x] `forms/OpportunityPipeline/Pipelines.py` (`PipelineForm`, `PipelineStageForm`, `PipelineStageOrderForm`, `OpportunityPipelinePlacementForm`, `OpportunityTransitionForm`)
+- [x] `forms/OpportunityTeams/OpportunityTeams.py` (`OpportunityTeamMemberForm`)
+- [x] `forms/CompetitiveIntelligence/CompetitiveIntelligence.py` (`CompetitorProfileForm`, `OpportunityCompetitorForm`)
+- [x] `forms/OpportunityOutcomes/OpportunityOutcomes.py` (`WinLossReasonForm`)
+- [x] `forms/OpportunityPipeline/__init__.py`, `forms/OpportunityTeams/__init__.py`, `forms/CompetitiveIntelligence/__init__.py`, `forms/OpportunityOutcomes/__init__.py`
+- [x] `views/OpportunityPipeline/Pipelines.py` (`pipeline_list`, `pipeline_create`, `pipeline_detail`, `pipeline_edit`, `pipeline_delete`, `pipeline_stages`, `pipeline_stage_create`, `pipeline_stage_reorder`, `pipeline_stage_edit`, `pipeline_stage_delete`, `pipeline_set_default`, `pipeline_board`, `pipeline_visibility`)
+- [x] `views/Workspace.py` (`workspace_list`, `workspace_detail`, `workspace_place`, `workspace_unplace`, `workspace_transition`)
+- [x] `views/OpportunityTeams/OpportunityTeams.py` (`team_member_add`, `team_member_edit`, `team_member_remove`)
+- [x] `views/CompetitiveIntelligence/CompetitiveIntelligence.py` (`competitor_profile_list`, `competitor_profile_create`, `competitor_profile_detail`, `competitor_profile_edit`, `competitor_profile_delete`, `competitor_link_add`, `competitor_link_edit`, `competitor_link_remove`)
+- [x] `views/OpportunityOutcomes/OpportunityOutcomes.py` (`win_loss_reason_list`, `win_loss_reason_create`, `win_loss_reason_detail`, `win_loss_reason_edit`, `win_loss_reason_delete`)
+- [x] `views/OpportunityPipeline/__init__.py`, `views/OpportunityTeams/__init__.py`, `views/CompetitiveIntelligence/__init__.py`, `views/OpportunityOutcomes/__init__.py`
+- [x] `urls/OpportunityPipeline/Pipelines.py` (literal routes before `<int:pk>`: `pipelines/`, `pipelines/add/`, `<int:pk>/`, `<int:pk>/edit/`, `<int:pk>/delete/`, `<int:pk>/stages/`, `<int:pk>/stages/add/`, `<int:pk>/stages/reorder/`, `<int:pk>/stages/<int:stage_pk>/edit/`, `<int:pk>/stages/<int:stage_pk>/delete/`, `<int:pk>/set-default/`, `board/`, `visibility/`)
+- [x] `urls/Workspace/Workspace.py` (literal routes before `<int:pk>`: `opportunity/`, `opportunity/workspace/<int:opportunity_pk>/`, `<int:opportunity_pk>/place/`, `<int:opportunity_pk>/unplace/`, `<int:opportunity_pk>/transition/`)
+- [x] `urls/OpportunityTeams/OpportunityTeams.py` (`opportunity/workspace/<int:opportunity_pk>/team/add/`, `.../team/<int:member_pk>/edit/`, `.../team/<int:member_pk>/remove/`)
+- [x] `urls/CompetitiveIntelligence/CompetitiveIntelligence.py` (literal routes before `<int:pk>`: `competitors/`, `competitors/add/`, `<int:pk>/`, `<int:pk>/edit/`, `<int:pk>/delete/`, `.../competitors/add/`, `.../competitors/<int:competitor_pk>/edit/`, `.../competitors/<int:competitor_pk>/remove/`)
+- [x] `urls/OpportunityOutcomes/OpportunityOutcomes.py` (literal routes before `<int:pk>`: `win-loss-reasons/`, `win-loss-reasons/add/`, `<int:pk>/`, `<int:pk>/edit/`, `<int:pk>/delete/`)
+- [x] `urls/OpportunityPipeline/__init__.py`, `urls/OpportunityTeams/__init__.py`, `urls/CompetitiveIntelligence/__init__.py`, `urls/OpportunityOutcomes/__init__.py`, `urls/Workspace/__init__.py`
+- [x] Re-export all 8 models in `apps/sales/models/__init__.py`
+- [x] Re-export all forms in `apps/sales/forms/__init__.py`
+- [x] Re-export all views in `apps/sales/views/__init__.py`
+- [x] Concatenate all 8.2 URL modules in `apps/sales/urls/__init__.py` (literal routes first)
+- [x] Register all 8 models in `apps/sales/admin.py` with tenant filters, search, readonly number/timestamps, and append-only guard for `OpportunityOutcome`
+- [x] Generate migration `makemigrations sales` (claim next free migration `0005_...`) and run `migrate`
+- [x] Extend `apps/sales/management/commands/seed_sales.py` with idempotent 8.2 data (pipelines, baseline stages, reasons, competitor profiles, team members, placements, and `--backfill` for existing CRM deals)
 
 ## Wire-up
-- [ ] Add `LIVE_LINKS["8.2"]` entry in `apps/core/navigation.py` mapping exact NavERP.md §8.2 bullet texts:
+- [x] Add `LIVE_LINKS["8.2"]` entry in `apps/core/navigation.py` mapping exact NavERP.md §8.2 bullet texts:
   - `Opportunity Creation & Staging` → `sales:opportunity_pipeline_list`
   - `Pipeline Visibility & Forecasting` → `sales:opportunity_pipeline_visibility`
   - `Opportunity Tracking & Updates` → `sales:opportunity_workspace_list`
@@ -10278,50 +10304,50 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
   - Staff extra links:
     - `Pipeline Board` → `sales:opportunity_pipeline_board`
     - `Win / Loss Reasons` → `sales:opportunity_win_loss_reason_list`
-- [ ] Verify `config/urls.py` mounts `apps.sales.urls` at `sales/` (already wired) and all 8.2 route names reverse cleanly
+- [x] Verify `config/urls.py` mounts `apps.sales.urls` at `sales/` (already wired) and all 8.2 route names reverse cleanly
 
 ## Templates (templates/sales/opportunity/)
-- [ ] `templates/sales/opportunity/workspace.html` (workspace register & deal room aggregate: deal header, deterministic health badge & factors, team panel, competitor panel, outcome history, unified timeline of CRM tasks/communications/events/audit, contracts/documents, CRM edit link)
-- [ ] `templates/sales/opportunity/placement.html` (focused opportunity pipeline placement / stage reassignment form)
-- [ ] `templates/sales/opportunity/pipeline/list.html` (pipeline register with search, active filter, stats cards, Actions column)
-- [ ] `templates/sales/opportunity/pipeline/detail.html` (pipeline detail with stage progression summary, placement count, set-default action)
-- [ ] `templates/sales/opportunity/pipeline/form.html` (pipeline create / edit form)
-- [ ] `templates/sales/opportunity/pipeline/stages.html` (stage list with sequence reordering controls and criteria overview)
-- [ ] `templates/sales/opportunity/pipeline/stage_form.html` (stage create / edit form with entry/exit criteria checkboxes from allowlist)
-- [ ] `templates/sales/opportunity/pipeline/board.html` (multi-pipeline Kanban board with currency-safe summaries, stage totals, card drag/transition, health badges)
-- [ ] `templates/sales/opportunity/pipeline/visibility.html` (visibility & forecast dashboard: currency-separated totals, stage aging & rotting alerts, win/loss stats, competitor win-rate rollups)
-- [ ] `templates/sales/opportunity/team_member/form.html` (focused inline modal/page for team member role & responsibility assignment)
-- [ ] `templates/sales/opportunity/competitor/list.html` (competitor profile register with search, active filter, stats, Actions column)
-- [ ] `templates/sales/opportunity/competitor/detail.html` (competitor battle card detail: positioning, strengths, weaknesses, differentiators, objections, active deal links)
-- [ ] `templates/sales/opportunity/competitor/form.html` (competitor profile create / edit form tied to `core.Party`)
-- [ ] `templates/sales/opportunity/competitor/link_form.html` (focused deal competitor link add / edit form with relationship choices and pricing notes)
-- [ ] `templates/sales/opportunity/winlossreason/list.html` (win/loss reasons register with result/category filters, sequence ordering, stats)
-- [ ] `templates/sales/opportunity/winlossreason/detail.html` (win/loss reason detail with historical outcome references)
-- [ ] `templates/sales/opportunity/winlossreason/form.html` (win/loss reason create / edit form)
+- [x] `templates/sales/opportunity/workspace.html` (workspace register & deal room aggregate: deal header, deterministic health badge & factors, team panel, competitor panel, outcome history, unified timeline of CRM tasks/communications/events/audit, contracts/documents, CRM edit link)
+- [x] `templates/sales/opportunity/placement.html` (focused opportunity pipeline placement / stage reassignment form)
+- [x] `templates/sales/opportunity/pipeline/list.html` (pipeline register with search, active filter, stats cards, Actions column)
+- [x] `templates/sales/opportunity/pipeline/detail.html` (pipeline detail with stage progression summary, placement count, set-default action)
+- [x] `templates/sales/opportunity/pipeline/form.html` (pipeline create / edit form)
+- [x] `templates/sales/opportunity/pipeline/stages.html` (stage list with sequence reordering controls and criteria overview)
+- [x] `templates/sales/opportunity/pipeline/stage_form.html` (stage create / edit form with entry/exit criteria checkboxes from allowlist)
+- [x] `templates/sales/opportunity/pipeline/board.html` (multi-pipeline Kanban board with currency-safe summaries, stage totals, card drag/transition, health badges)
+- [x] `templates/sales/opportunity/pipeline/visibility.html` (visibility & forecast dashboard: currency-separated totals, stage aging & rotting alerts, win/loss stats, competitor win-rate rollups)
+- [x] `templates/sales/opportunity/team_member/form.html` (focused inline modal/page for team member role & responsibility assignment)
+- [x] `templates/sales/opportunity/competitor/list.html` (competitor profile register with search, active filter, stats, Actions column)
+- [x] `templates/sales/opportunity/competitor/detail.html` (competitor battle card detail: positioning, strengths, weaknesses, differentiators, objections, active deal links)
+- [x] `templates/sales/opportunity/competitor/form.html` (competitor profile create / edit form tied to `core.Party`)
+- [x] `templates/sales/opportunity/competitor/link_form.html` (focused deal competitor link add / edit form with relationship choices and pricing notes)
+- [x] `templates/sales/opportunity/winlossreason/list.html` (win/loss reasons register with result/category filters, sequence ordering, stats)
+- [x] `templates/sales/opportunity/winlossreason/detail.html` (win/loss reason detail with historical outcome references)
+- [x] `templates/sales/opportunity/winlossreason/form.html` (win/loss reason create / edit form)
 
 ## Verify
-- [ ] Run `python manage.py makemigrations sales` (claim migration `0005_...`) and `python manage.py migrate`
-- [ ] Run `python manage.py seed_sales` × 2 (verify idempotent no-op on rerun) and `python manage.py seed_sales --backfill` × 2
-- [ ] Run `python manage.py check` (confirm clean system check with zero warnings)
-- [ ] Smoke sweep script in `temp/` as `admin_acme` / `password`:
+- [x] Run `python manage.py makemigrations sales` (claim migration `0005_...`) and `python manage.py migrate`
+- [x] Run `python manage.py seed_sales` × 2 (verify idempotent no-op on rerun) and `python manage.py seed_sales --backfill` × 2
+- [x] Run `python manage.py check` (confirm clean system check with zero warnings)
+- [x] Smoke sweep script in `temp/` as `admin_acme` / `password`:
   - All 8.2 URLs return HTTP 200 or 302 as expected
   - Content assertions pass: expected numbers, stage names, competitor profiles, and health indicators present
   - Cross-tenant IDOR returns 404 for foreign tenant objects
   - All mutations reject GET (return 405) and require valid CSRF
   - No template comment leaks (`{#` or `{% comment`)
   - Pagination has_previous/has_next guards and filter persistence verified
-- [ ] Sidebar verification: confirm all 5 NavERP.md §8.2 bullets navigate to live staff-accessible pages
+- [x] Sidebar verification: confirm all 5 NavERP.md §8.2 bullets navigate to live staff-accessible pages
 
 ## Close-out
-- [ ] Serial review passes executed and recorded in `.claude/tasks/review-sales-8.2.md`: `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer` → `code-fixer`
-- [ ] Test suite completed in `apps/sales/tests/`:
-  - `test_opportunity_pipeline_models.py` (model constraints, unique checks, stage sequence, entry/exit criteria validation, outcome immutability)
-  - `test_opportunity_pipeline_forms.py` (form field exclusions, tenant FK scoping, criteria serialization, transition validation)
-  - `test_opportunity_pipeline_views.py` (view routes, context dictionaries, filter parsing, board columns, currency grouping)
-  - `test_opportunity_pipeline_security.py` (tenant isolation, IDOR 404s, POST-only verbs, tenant admin role gates, audit logging)
-  - Full unfiltered sales test suite passes
-- [ ] Update `.claude/skills/sales/SKILL.md` (add 8.2 models, routes, templates, services, tenancy rules, seeder details)
-- [ ] Update `README.md` (Module 8 status: 8.2 Opportunity & Pipeline Management built)
+- [x] Serial review passes executed and recorded in `.claude/tasks/review-sales-8.2.md`: `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer` → `code-fixer`
+- [x] Test suite completed in `apps/sales/tests/`:
+  - `test_opportunitypipeline_models.py` (model constraints, unique checks, stage sequence, entry/exit criteria validation, outcome immutability) — 25/25 passed
+  - `test_opportunitypipeline_forms.py` (form field exclusions, tenant FK scoping, criteria serialization, transition validation) — 44/44 passed
+  - `test_opportunitypipeline_views.py` (view routes, context dictionaries, filter parsing, board columns, currency grouping) — 18/18 passed
+  - `test_opportunitypipeline_security.py` (tenant isolation, IDOR 404s, POST-only verbs, tenant admin role gates, audit logging) — 34/34 passed
+  - Full unfiltered sales test suite passes (454/454 passed in 79.5s)
+- [x] Update `.claude/skills/sales/SKILL.md` (add 8.2 models, routes, templates, services, tenancy rules, seeder details)
+- [x] Update `README.md` (Module 8 status: 8.2 Opportunity & Pipeline Management built)
 
 ## Later passes / deferred
 - Lead capture, scoring, qualification, and routing (owned by 8.1 Lead Management)
@@ -10342,7 +10368,11 @@ BASE: capture `git rev-parse HEAD` again at Phase 3; the current dirty checkout 
 - Full stage-history snapshot warehouse and opaque AI deal health scoring
 
 ## Review notes
-(filled in at the end)
+Sub-module 8.2 (Opportunity & Pipeline Management) completed across all 7 lifecycle phases.
+All 8 models, forms, 34 URLs, views, services, 17 templates, migrations 0005 & 0006, admin, seeder, and navigation live.
+All 35 review findings C1–C6, I1–I16, and M1–M13 resolved and committed.
+Test suite has 121 tests for 8.2; full sales suite passes 454/454 green. Skill and README documented.
+
 ---
 
 # Sub-module 8.4 — Sales Forecasting (Module 8: Sales Management System, `sales`) — plan from research-sales-8.4.md (2026-09-26)
@@ -10559,4 +10589,391 @@ move to the next. Do **not** interleave entities, and do **not** touch shared fi
 
 ## Review notes
 (filled in at the end)
+
+---
+
+# Sub-module 8.5 — Quote & Proposal Management (CPQ) (Module 8: Sales Management System, `sales`) — plan from research-sales-8.5.md (2026-09-26)
+
+> **This plan EXTENDS an existing app.** `apps/sales/` is already live with 8.1 `LeadManagement`,
+> 8.2 `OpportunityPipeline` / `OpportunityOutcomes` / `OpportunityTeams` / `CompetitiveIntelligence`,
+> 8.3 `ContactAccountManagement`, and 8.4 `SalesForecasting`.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental** and **8.5 claims `0008`** (leaf today is `0007_forecastperiod_forecastscenario_forecastsubmission_and_more.py`).
+
+## Repo state re-verified by the todo agent (2026-09-26) — L28, the grep is the truth
+
+Every FK target below was re-grepped across the `models/` **packages** at plan time, not taken from the research prose:
+
+| FK target | Verified location | Verdict | Role in 8.5 CPQ |
+|---|---|---|---|
+| `crm.Opportunity` | `apps/crm/models/SalesForceAutomation/Opportunities.py:5` | EXISTS — `amount`, `stage`, `owner`, `forecast_category` | Parent deal master for CPQ quotes. `is_primary=True` syncs quote total back to `Opportunity.amount`. |
+| `crm.Quote` | `apps/crm/models/SalesForceAutomation/Quotes.py:5` | EXISTS — canonical CRM quote header (`QUO-`) | Reference linkage; 8.5 CPQ quotes provide advanced versioning, bundling, approvals, and ERP handoff. |
+| `crm.Product` | `apps/crm/models/SalesForceAutomation/Products.py:5` | EXISTS — catalog product (`PRD-`) | Parent bundle item and child component options; base line pricing. |
+| `crm.PriceBook` | `apps/crm/models/SalesForceAutomation/PriceBooks.py:5` | EXISTS — price list (`PB-`) | Price adjustments and currency context. |
+| `crm.DocTemplate` | `apps/crm/models/DocumentContract/DocTemplates.py:6` | EXISTS — merge template (`TPL-`) | HTML proposal template rendering. |
+| `core.Party` | `apps/core/models/Party.py:5` | EXISTS — account/customer master | Customer and primary contact for quote. |
+| `core.Tenant` | `apps/core/models/Tenant.py:17` | EXISTS — multi-tenant root | Tenant isolation across all CPQ entities. |
+| `accounting.Currency` | `apps/accounting/models/GeneralLedger/Currencies.py:6` | EXISTS — global currency master | Quote transaction currency (global, no tenant FK). |
+| `accounting.TaxCode` | `apps/accounting/models/Tax/TaxCodes.py:6` | EXISTS — tax rate master | Per-line tax calculations. |
+| `accounting.PaymentTerm` | `apps/accounting/models/AccountsPayable/PaymentTerms.py:6` | EXISTS — payment terms master | Commercial terms copied onto quote and generated sales order. |
+| `scm.SalesOrder` | `apps/scm/models/OrderManagement/SalesOrders.py:20` | EXISTS — SCM order master (`SO-`) | Converted sales order destination with `source_quote` link. |
+| `scm.SalesOrderLine` | `apps/scm/models/OrderManagement/SalesOrders.py:185` | EXISTS — order item line | Line destination of converted CPQ quote lines. |
+| `scm.SalesOrderAllocation` | `apps/scm/models/OrderManagement/SalesOrderAllocations.py:15` | EXISTS — soft ATP inventory reservation | Automated stock reservation for converted lines mapped to `scm.Item`. |
+| `scm.Item` | `apps/scm/models/InventoryManagement/Items.py:73` | EXISTS — stock item master | Physical inventory SKU mapped on CPQ lines to solve the CRM Product -> SCM Item gap! |
+| `scm.UOM` | `apps/scm/models/InventoryManagement/Items.py:51` | EXISTS — unit of measure | Unit of measure for line items. |
+| `scm.Location` | `apps/scm/models/InventoryManagement/Locations.py:11` | EXISTS — warehouse inventory location | Warehouse location for automated ATP reservation. |
+| `sales.OpportunityOutcome` | `apps/sales/models/OpportunityOutcomes/OpportunityOutcomes.py:66` | EXISTS — append-only outcome ledger (`OUT-`) | Stamped won outcome upon quote conversion to order. |
+| `sales.WinLossReason` | `apps/sales/models/OpportunityOutcomes/OpportunityOutcomes.py:11` | EXISTS — win/loss taxonomy | Won reason on conversion. |
+| `settings.AUTH_USER_MODEL` | `apps/accounts/models/User.py` | EXISTS — user master | Quote owner, approvers, signers. |
+
+**Zero prefix collisions checked:**
+- `CPQ` (`CPQQuote`) — **FREE, VERIFIED**
+- `BND` (`ProductBundleOption`) — **FREE, VERIFIED**
+- `QAR` (`QuoteApprovalRule`) — **FREE, VERIFIED**
+
+**Naming and Layout Decisions:**
+- Backend package structure: `apps/sales/{models,forms,views,urls}/QuoteProposalCPQ/<Entity>.py`
+- Template folder: `templates/sales/quote_proposal_cpq/<entity>/` and `templates/sales/quote_proposal_cpq/operations/`
+- Service module: `apps/sales/cpq_services.py`
+
+---
+
+## Scope and ownership — the 8.5 contract
+
+- [ ] Build exactly four Sales-owned domain models: `CPQQuote`, `CPQQuoteLine`, `ProductBundleOption`, and `QuoteApprovalRule`.
+- [ ] CRM 1.2 `crm.Quote` is preserved as a lightweight, flat sales quote. Sales 8.5 CPQ provides enterprise Configure, Price, Quote capabilities:
+  1. **Configure**: Product bundling, configurable option groups, default/required components, and compatibility dependency rules (`requires`, `excludes`, `recommends`).
+  2. **Price**: Pricing waterfall (List Price -> Price Book Adjustment -> Volume/Tier Discount -> Rep Discretionary Discount -> Net Unit Price), margin waterfall against unit cost, and automated multi-tier approval rules (`QuoteApprovalRule`).
+  3. **Quote & Propose**: Multi-version revision management (`revision_of`, `revision_number`), primary quote designation (`is_primary`) syncing deal value to `crm.Opportunity.amount`, side-by-side diff comparison, and branded web proposal generation with e-signature tokens.
+  4. **Convert**: Seamless automated order generation into `scm.SalesOrder`, linking directly to `scm.Item` and automatically triggering soft inventory reservations (`scm.SalesOrderAllocation`).
+- [ ] Bridge CRM Products and SCM Inventory Items: `CPQQuoteLine` maps both `product` (`crm.Product`) and `item` (`scm.Item`). When converting to `scm.SalesOrderLine`, this eliminates the draft order item picking gap documented in `scm.SalesOrderLine`.
+- [ ] Reusable platform context: `accounting.Currency` is global (no tenant FK); `core.Party` represents accounts and contacts; `crm.DocTemplate` powers proposal rendering; `scm.Location` fulfills inventory allocations.
+
+---
+
+## Models (from research — 4 models)
+
+Base classes from `apps/sales/models/_base.py`: `TenantNumbered` (`NUMBER_PREFIX` + auto `number` via `core.utils.next_number`, width 5) and `TenantOwned`. Every model gets a `tenant` FK via the base.
+
+### 1. `CPQQuote` `[CPQ-]` — Enterprise CPQ Quote Header & Lifecycle Master
+`apps/sales/models/QuoteProposalCPQ/CPQQuotes.py`
+- Inherits: `TenantNumbered`
+- Auto-number: `NUMBER_PREFIX = "CPQ"` (e.g. `CPQ-00001`)
+- Fields:
+  - `name`: `CharField(max_length=255)` — descriptive quote title
+  - `opportunity`: `ForeignKey("crm.Opportunity", on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_quotes")`
+  - `account`: `ForeignKey("core.Party", on_delete=models.PROTECT, related_name="cpq_quotes")`
+  - `contact`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_quotes_contact")`
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_quotes")`
+  - `price_book`: `ForeignKey("crm.PriceBook", on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_quotes")`
+  - `currency`: `ForeignKey("accounting.Currency", on_delete=models.PROTECT, related_name="cpq_quotes")`
+  - `status`: `CharField(max_length=20, choices=[("draft","Draft"), ("in_review","In Review"), ("approved","Approved"), ("presented","Presented"), ("accepted","Accepted"), ("declined","Declined"), ("expired","Expired"), ("converted","Converted to Order")], default="draft")`
+  - `valid_until`: `DateField(null=True, blank=True)`
+  - `terms`: `TextField(blank=True)`
+  - **Versioning & Revision Control**:
+    - `quote_group_id`: `UUIDField(default=uuid.uuid4, db_index=True)` — common thread across revisions
+    - `revision_number`: `PositiveIntegerField(default=1)`
+    - `revision_of`: `ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="revisions")`
+    - `is_primary`: `BooleanField(default=True)` — drives `Opportunity.amount` when True
+    - `revision_notes`: `TextField(blank=True)`
+  - **Financials & Waterfall Aggregates** (recomputed via `recalc_totals()`):
+    - `list_subtotal`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
+    - `discount_total`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
+    - `net_subtotal`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
+    - `tax_total`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
+    - `grand_total`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
+    - `total_cost`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
+    - `margin_pct`: `DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"))`
+  - **Approval Governance**:
+    - `approval_status`: `CharField(max_length=20, choices=[("not_required","Not Required"), ("pending","Pending Approval"), ("approved","Approved"), ("rejected","Rejected")], default="not_required")`
+    - `approval_rule`: `ForeignKey("sales.QuoteApprovalRule", on_delete=models.SET_NULL, null=True, blank=True, related_name="quotes")`
+    - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_approved_quotes")`
+    - `approved_at`: `DateTimeField(null=True, blank=True)`
+    - `approval_comments`: `TextField(blank=True)`
+  - **Proposal & E-Signature**:
+    - `proposal_template`: `ForeignKey("crm.DocTemplate", on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_proposals")`
+    - `proposal_content`: `TextField(blank=True)` — rendered HTML merge snapshot
+    - `signing_token`: `CharField(max_length=64, blank=True, unique=True, null=True, db_index=True)` — secure portal token
+    - `presented_at`: `DateTimeField(null=True, blank=True)`
+    - `signed_at`: `DateTimeField(null=True, blank=True)`
+    - `signer_name`: `CharField(max_length=255, blank=True)`
+    - `signer_ip`: `GenericIPAddressField(null=True, blank=True)`
+  - **ERP Integration Handoff**:
+    - `converted_order`: `ForeignKey("scm.SalesOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="source_cpq_quotes")`
+    - `converted_at`: `DateTimeField(null=True, blank=True)`
+    - `crm_quote`: `ForeignKey("crm.Quote", on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_quotes")`
+- Meta:
+  - `ordering = ["-created_at", "-id"]`
+  - `constraints = [models.UniqueConstraint(fields=["tenant", "number"], name="sales_cpq_tenant_number_uniq")]`
+  - `indexes = [models.Index(fields=["tenant", "status"]), models.Index(fields=["tenant", "quote_group_id"]), models.Index(fields=["tenant", "opportunity"])]`
+- Form excludes:
+  - `tenant`, `number`, `status` (workflow-governed), `quote_group_id`, `revision_number`, `revision_of`, `list_subtotal`, `discount_total`, `net_subtotal`, `tax_total`, `grand_total`, `total_cost`, `margin_pct`, `approval_status`, `approval_rule`, `approved_by`, `approved_at`, `approval_comments`, `signing_token`, `presented_at`, `signed_at`, `signer_name`, `signer_ip`, `converted_order`, `converted_at`, `crm_quote`, timestamps.
+
+### 2. `CPQQuoteLine` — Hierarchical Line Items, Options & Stock Mapping
+`apps/sales/models/QuoteProposalCPQ/CPQQuoteLines.py`
+- Inherits: `TenantOwned`
+- Fields:
+  - `quote`: `ForeignKey("sales.CPQQuote", on_delete=models.CASCADE, related_name="lines")`
+  - `parent_line`: `ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="child_lines")` — enables package/component hierarchy
+  - `line_type`: `CharField(max_length=20, choices=[("standard","Standard Item"), ("bundle_parent","Bundle Package"), ("bundle_component","Bundle Component"), ("optional_addon","Optional Add-on")], default="standard")`
+  - `product`: `ForeignKey("crm.Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_lines")`
+  - `item`: `ForeignKey("scm.Item", on_delete=models.PROTECT, null=True, blank=True, related_name="cpq_lines")` — **resolves SCM stock SKU mapping**
+  - `description`: `CharField(max_length=255)`
+  - `quantity`: `DecimalField(max_digits=14, decimal_places=4, default=Decimal("1.0000"), validators=[MinValueValidator(Decimal("0.0001"))])`
+  - `uom`: `ForeignKey("scm.UOM", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")`
+  - `unit_cost`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  - `list_price`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  - `discount_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0), MaxValueValidator(100)])`
+  - `discount_amount`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  - `unit_price`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` — net unit price
+  - `tax_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0), MaxValueValidator(100)])`
+  - `tax_code`: `ForeignKey("accounting.TaxCode", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")`
+  - `line_subtotal`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  - `line_total`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  - `margin_pct`: `DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"))`
+  - `is_optional`: `BooleanField(default=False)` — customer toggle in portal
+  - `is_selected`: `BooleanField(default=True)` — included in quote totals calculation
+  - `sort_order`: `PositiveIntegerField(default=0)`
+  - `configuration_notes`: `CharField(max_length=255, blank=True)`
+- Meta:
+  - `ordering = ["sort_order", "id"]`
+  - `indexes = [models.Index(fields=["tenant", "quote"]), models.Index(fields=["tenant", "parent_line"])]`
+- Form excludes:
+  - `tenant`, `line_subtotal`, `line_total`, `margin_pct`, timestamps.
+
+### 3. `ProductBundleOption` `[BND-]` — Product Bundling & Compatibility Rules
+`apps/sales/models/QuoteProposalCPQ/ProductBundles.py`
+- Inherits: `TenantNumbered`
+- Auto-number: `NUMBER_PREFIX = "BND"` (e.g. `BND-00001`)
+- Fields:
+  - `bundle_product`: `ForeignKey("crm.Product", on_delete=models.CASCADE, related_name="bundle_options")` — the parent package product
+  - `component_product`: `ForeignKey("crm.Product", on_delete=models.CASCADE, related_name="bundled_as_option")` — child component or add-on product
+  - `component_item`: `ForeignKey("scm.Item", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")` — default physical item mapping
+  - `option_group`: `CharField(max_length=80, default="Components")` — e.g. "Hardware", "Software", "Support Tier", "Add-Ons"
+  - `option_type`: `CharField(max_length=20, choices=[("component","Required Component"), ("accessory","Optional Accessory"), ("service","Related Service")], default="component")`
+  - `min_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("1.00"))`
+  - `max_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("1.00"))`
+  - `default_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("1.00"))`
+  - `is_required`: `BooleanField(default=False)`
+  - `is_default`: `BooleanField(default=True)`
+  - `unit_price_override`: `DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)` — bundle-specific pricing
+  - `discount_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0), MaxValueValidator(100)])`
+  - `compatibility_rule`: `CharField(max_length=20, choices=[("none","None"), ("requires","Requires Dependent Product"), ("excludes","Incompatible With Dependent Product"), ("recommends","Recommends Dependent Product")], default="none")`
+  - `depends_on_product`: `ForeignKey("crm.Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")`
+  - `is_active`: `BooleanField(default=True)`
+  - `notes`: `CharField(max_length=255, blank=True)`
+- Meta:
+  - `ordering = ["bundle_product", "option_group", "id"]`
+  - `constraints = [models.UniqueConstraint(fields=["tenant", "number"], name="sales_bnd_tenant_number_uniq")]`
+  - `indexes = [models.Index(fields=["tenant", "bundle_product", "is_active"])]`
+- Form excludes:
+  - `tenant`, `number`, timestamps.
+
+### 4. `QuoteApprovalRule` `[QAR-]` — Pricing & Discount Approval Gates
+`apps/sales/models/QuoteProposalCPQ/QuoteApprovalRules.py`
+- Inherits: `TenantNumbered`
+- Auto-number: `NUMBER_PREFIX = "QAR"` (e.g. `QAR-00001`)
+- Fields:
+  - `name`: `CharField(max_length=255)` — e.g. "Director Discount Gate (>15%)", "Margin Floor Protection (<20%)"
+  - `rule_type`: `CharField(max_length=24, choices=[("discount_threshold","Discount % Ceiling"), ("margin_floor","Margin % Floor"), ("amount_ceiling","High Value Deal Review"), ("composite","Combined Discount & Margin")], default="discount_threshold")`
+  - `max_rep_discount_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("10.00"))` — discounts exceeding this require approval
+  - `min_margin_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("20.00"))` — margins below this require approval
+  - `min_quote_amount`: `DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)` — threshold for deal value
+  - `required_role`: `CharField(max_length=24, choices=[("sales_manager","Sales Manager"), ("sales_director","Sales Director"), ("vp_sales","VP of Sales"), ("finance_director","Finance Director"), ("cfo","Chief Financial Officer")], default="sales_manager")`
+  - `priority`: `PositiveIntegerField(default=10)`
+  - `is_active`: `BooleanField(default=True)`
+  - `description`: `TextField(blank=True)`
+- Meta:
+  - `ordering = ["priority", "id"]`
+  - `constraints = [models.UniqueConstraint(fields=["tenant", "number"], name="sales_qar_tenant_number_uniq")]`
+  - `indexes = [models.Index(fields=["tenant", "is_active", "priority"])]`
+- Form excludes:
+  - `tenant`, `number`, timestamps.
+- Key method:
+  - `evaluate(quote)` -> `(requires_approval: bool, reason: str)`
+
+---
+
+## Backend (`apps/sales/{models,forms,views,urls}/QuoteProposalCPQ/`)
+
+Build entity by entity, one at a time — all four backend files for an entity, then its templates, then move to the next.
+
+- [ ] `models/QuoteProposalCPQ/__init__.py` (package init)
+- [ ] `models/QuoteProposalCPQ/QuoteApprovalRules.py` — `QuoteApprovalRule`
+- [ ] `models/QuoteProposalCPQ/ProductBundles.py` — `ProductBundleOption`
+- [ ] `models/QuoteProposalCPQ/CPQQuotes.py` — `CPQQuote`
+- [ ] `models/QuoteProposalCPQ/CPQQuoteLines.py` — `CPQQuoteLine`
+- [ ] `forms/QuoteProposalCPQ/__init__.py`
+- [ ] `forms/QuoteProposalCPQ/QuoteApprovalRules.py` — `QuoteApprovalRuleForm`
+- [ ] `forms/QuoteProposalCPQ/ProductBundles.py` — `ProductBundleOptionForm`
+- [ ] `forms/QuoteProposalCPQ/CPQQuotes.py` — `CPQQuoteForm`, `CPQQuoteApprovalForm`, `CPQQuoteRevisionForm`, `CPQQuoteProposalGenerateForm`, `CPQQuoteSignForm`
+- [ ] `forms/QuoteProposalCPQ/CPQQuoteLines.py` — `CPQQuoteLineForm`, `CPQQuoteAddBundleForm`
+- [ ] `views/QuoteProposalCPQ/__init__.py`
+- [ ] `views/QuoteProposalCPQ/QuoteApprovalRules.py` — `quote_approval_rule_list`, `quote_approval_rule_create`, `quote_approval_rule_detail`, `quote_approval_rule_edit`, `quote_approval_rule_delete`, `quote_approval_queue`
+- [ ] `views/QuoteProposalCPQ/ProductBundles.py` — `product_bundle_option_list`, `product_bundle_option_create`, `product_bundle_option_detail`, `product_bundle_option_edit`, `product_bundle_option_delete`, `product_bundle_guided_selling`
+- [ ] `views/QuoteProposalCPQ/CPQQuotes.py` — `cpq_quote_list`, `cpq_quote_create`, `cpq_quote_detail`, `cpq_quote_edit`, `cpq_quote_delete`, `cpq_quote_submit_approval`, `cpq_quote_approve`, `cpq_quote_reject`, `cpq_quote_present`, `cpq_quote_make_primary`, `cpq_quote_create_revision`
+- [ ] `views/QuoteProposalCPQ/CPQQuoteLines.py` — `cpq_quote_line_create`, `cpq_quote_line_edit`, `cpq_quote_line_delete`, `cpq_quote_line_toggle_select`, `cpq_quote_add_bundle`
+- [ ] `views/QuoteProposalCPQ/CPQOperations.py` — `quote_proposal_preview`, `quote_portal_view`, `quote_version_list`, `quote_version_compare`, `quote_conversion_board`, `quote_convert_to_order`
+- [ ] `urls/QuoteProposalCPQ/__init__.py`
+- [ ] `urls/QuoteProposalCPQ/QuoteApprovalRules.py`
+- [ ] `urls/QuoteProposalCPQ/ProductBundles.py`
+- [ ] `urls/QuoteProposalCPQ/CPQQuotes.py`
+- [ ] `urls/QuoteProposalCPQ/CPQQuoteLines.py`
+- [ ] `urls/QuoteProposalCPQ/CPQOperations.py`
+- [ ] Dedicated service module: `apps/sales/cpq_services.py`
+  - `cpq_recalc_quote_totals(quote)`: computes list subtotal, discounts, net subtotal, tax, grand total, cost, margin %.
+  - `cpq_evaluate_approval(quote)`: evaluates active `QuoteApprovalRule` records by priority.
+  - `cpq_create_revision(quote, notes)`: clones quote and line items under same `quote_group_id`, increments `revision_number`.
+  - `cpq_render_proposal_html(quote)`: renders proposal HTML using `crm.DocTemplate` or standard CPQ layout.
+  - `cpq_compare_quote_versions(quote_v1, quote_v2)`: generates itemized diff (added, removed, quantity delta, price delta, margin delta).
+  - `cpq_convert_to_sales_order(quote, user)`: creates `scm.SalesOrder`, maps lines to `scm.SalesOrderLine` with `scm.Item`, reserves ATP via `scm.SalesOrderAllocation(status="reserved")`, advances `crm.Opportunity.stage` to `closed_won`, and writes `sales.OpportunityOutcome` + `core.AuditLog`.
+
+---
+
+## CRUD completeness (every model, no exceptions)
+
+- [ ] `CPQQuote`: full CRUD + lifecycle actions (`submit_approval`, `approve`, `reject`, `present`, `make_primary`, `create_revision`, `convert_order`).
+- [ ] `CPQQuoteLine`: full CRUD (create, edit, delete with confirm/csrf, toggle select, add bundle).
+- [ ] `ProductBundleOption`: full CRUD (list with filters, detail, create, edit, delete POST-only).
+- [ ] `QuoteApprovalRule`: full CRUD (list with filters, detail, create, edit, delete POST-only).
+- [ ] Actions column on every list page (view, edit, delete).
+- [ ] Actions sidebar on every detail page.
+- [ ] Status-guarded actions: editing lines or quote details restricted when quote is `converted`, `expired`, or locked in review.
+
+---
+
+## Filters (mandatory on every list page)
+
+- [ ] `CPQQuote` list: filters by `status`, `approval_status`, `opportunity`, `account`, `owner`, `is_primary`, `currency`, plus search query `q`.
+- [ ] `CPQQuoteLine` list: filters by `quote`, `line_type`, `product`, `item`, `is_optional`, `is_selected`.
+- [ ] `ProductBundleOption` list: filters by `bundle_product`, `component_product`, `option_group`, `option_type`, `compatibility_rule`, `is_active`, plus search query `q`.
+- [ ] `QuoteApprovalRule` list: filters by `rule_type`, `required_role`, `is_active`, plus search query `q`.
+- [ ] Pass every choice list and FK queryset to template context: `status_choices`, `approval_status_choices`, `rule_type_choices`, `option_type_choices`, `compatibility_rule_choices`, `accounts`, `opportunities`, `products`, `price_books`, `currencies`.
+- [ ] Filter preservation in pagination via `request.GET`.
+- [ ] PK comparisons in templates using `|stringformat:"d"`.
+- [ ] Colour-named badge classes only: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+
+---
+
+## Integrate (single-writer pass — verify every expected file landed BEFORE wiring anything)
+
+- [ ] Re-export all four models in `apps/sales/models/__init__.py` and add to `__all__`: `CPQQuote`, `CPQQuoteLine`, `ProductBundleOption`, `QuoteApprovalRule`.
+- [ ] Re-export forms in `apps/sales/forms/__init__.py`.
+- [ ] Re-export views in `apps/sales/views/__init__.py`.
+- [ ] Re-export and include URL patterns in `apps/sales/urls/__init__.py` (literal routes before `<int:pk>`).
+- [ ] Register all 4 models in `apps/sales/admin.py`.
+- [ ] Extend `apps/sales/management/commands/seed_sales.py` idempotently with:
+  - Product bundle options configured for existing `crm.Product` records with `scm.Item` linkage.
+  - Multi-tier quote approval rules (`discount_threshold`, `margin_floor`, `amount_ceiling`).
+  - CPQ quotes across lifecycle stages (`draft`, `in_review`, `approved`, `presented`, `accepted`, `converted`).
+  - Hierarchical quote lines demonstrating bundle packages, components, optional add-ons, and margin calculations.
+  - Converted quote showcasing `scm.SalesOrder` and `scm.SalesOrderAllocation` soft reservation.
+- [ ] Run `makemigrations sales` (claims `0008`).
+- [ ] Run `migrate` and verify `0008` applies cleanly.
+- [ ] Run `seed_sales` twice to prove idempotence (zero duplicate key or integrity errors).
+- [ ] Run `python manage.py check` with 0 issues.
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["8.5"]` mapping all 5 exact NavERP.md §8.5 bullet titles to staff-accessible management routes:
+  ```python
+  "8.5": {
+      "Quote Configuration (CPQ)": "sales:cpq_quote_list",
+      "Pricing & Discount Approval": "sales:quote_approval_queue",
+      "Proposal Generation & Templating": "sales:quote_proposal_board",
+      "Quote Versioning & Comparison": "sales:quote_version_list",
+      "Quote-to-Order Conversion": "sales:quote_conversion_board",
+      # Extra staff management leaves:
+      "Product Bundle Options": "sales:product_bundle_option_list",
+      "Quote Approval Rules": "sales:quote_approval_rule_list",
+      "CPQ Guided Selling": "sales:product_bundle_guided_selling",
+  },
+  ```
+
+---
+
+## Templates (`templates/sales/quote_proposal_cpq/`)
+
+- [ ] `cpqquote/list.html` — searchable, filterable quote table, status badges, grand totals, margin %, action buttons.
+- [ ] `cpqquote/detail.html` — header overview, pricing waterfall totals, approval banner, hierarchical line item tree, action sidebar.
+- [ ] `cpqquote/form.html` — create/edit quote header with account, opportunity, currency, price book, validity date.
+- [ ] `cpqquoteline/list.html` — line item table with parent/child bundle indicators.
+- [ ] `cpqquoteline/detail.html` — line detail showing cost, list price, discount, net price, margin, SCM item mapping.
+- [ ] `cpqquoteline/form.html` — add/edit quote line with bundle selection, quantity, discount %, and tax.
+- [ ] `productbundleoption/list.html` — bundle rules list with option groups, component products, compatibility rules.
+- [ ] `productbundleoption/detail.html` — bundle configuration rule details.
+- [ ] `productbundleoption/form.html` — create/edit bundle option with dependency rule.
+- [ ] `quoteapprovalrule/list.html` — approval rules table ordered by priority.
+- [ ] `quoteapprovalrule/detail.html` — rule parameters and threshold inspection.
+- [ ] `quoteapprovalrule/form.html` — create/edit approval rule with discount ceiling, margin floor, required role.
+- [ ] `operations/proposal_preview.html` — branded proposal view with document layout, customer details, itemized pricing tables, terms.
+- [ ] `operations/portal.html` — customer-facing web quote portal: toggle optional add-ons, live pricing updates, e-signature acceptance form.
+- [ ] `operations/compare.html` — side-by-side quote revision comparison view: line-by-line diff, quantity changes, price delta, margin swings.
+- [ ] `operations/approval_queue.html` — dedicated manager queue for pending quotes, with quick approve/reject and audit comment modal.
+- [ ] `operations/conversion_board.html` — quote-to-order pipeline view with 1-click conversion to `scm.SalesOrder` and ATP reservation status.
+- [ ] `operations/guided_selling.html` — interactive guided selling playbook modal/wizard recommending bundles based on deal parameters.
+
+---
+
+## Verify
+
+- [ ] `migrate` clean; `seed_sales` run twice with zero duplicate errors on second run.
+- [ ] `python manage.py check` clean.
+- [ ] Smoke sweep script in `temp/` executed as `admin_acme` / `password`:
+  - All new `sales:*` URLs return 200 or 302.
+  - Content assertions: quote number (`CPQ-`), title, customer name, margin %, line items present in rendered HTML.
+  - Public quote portal route `/sales/quotes/portal/<token>/` accessible without authentication and displays proposal.
+  - E-signature submission on portal captures signer name, timestamp, IP, and transitions quote to `accepted`.
+  - Approval rule evaluation correctly gates quote when discount > threshold or margin < floor.
+  - Revision creation clones quote and increments revision number while preserving original.
+  - Version comparison correctly highlights added/removed lines and price delta.
+  - Quote-to-order conversion creates valid `scm.SalesOrder` with mapped `scm.SalesOrderLine` items and creates `scm.SalesOrderAllocation` records in `reserved` status.
+  - Opportunity advances to `closed_won` with `sales.OpportunityOutcome` recorded.
+  - Cross-tenant IDOR returns 404 for foreign tenant quotes, lines, rules, and bundle options.
+  - POST-only mutation guards reject GET with 405; CSRF protection active.
+  - No template comment leaks (`{#` or `{% comment`).
+- [ ] Sidebar verification: `8.5` Live indicator active, all 5 bullet links functional.
+
+---
+
+## Close-out
+
+- [ ] Six review agents run serially, appending to `.claude/tasks/review-sales-8.5.md`:
+  `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
+- [ ] Deduplicate, prioritize findings (Critical, Important, Minor), assign IDs, and commit review file.
+- [ ] `code-fixer` agent burns down findings one by one with single-file commits.
+- [ ] Tests written serially:
+  - `apps/sales/tests/test_quote_proposal_cpq_models.py`
+  - `apps/sales/tests/test_quote_proposal_cpq_forms.py`
+  - `apps/sales/tests/test_quote_proposal_cpq_views.py`
+  - `apps/sales/tests/test_quote_proposal_cpq_security.py`
+- [ ] Full test suite execution across `apps/sales/` passing cleanly.
+- [ ] Update `.claude/skills/sales/SKILL.md` with 8.5 CPQ models, routes, templates, services, and conventions.
+- [ ] Update `README.md` to reflect Sub-module 8.5 Quote & Proposal Management (CPQ) built.
+- [ ] Single file per git commit, PowerShell-safe syntax (`git add 'path'; git commit -m 'msg'`).
+
+---
+
+## Later passes / deferred
+
+**Deferred / external integrations (from research):**
+- **3D / Visual CAD Product Configuration**: Visual 3D model rendering and parametric CAD generation during quote assembly (deferred to future manufacturing CPQ extensions).
+- **Payment Gateway Direct Charge from Portal**: Direct credit card / ACH deposit capture via Stripe / Authorize.net on the quote portal (deferred to payment integration hub).
+- **DocuSign / Adobe Sign External API Sync**: Sending proposals via third-party external signature platforms rather than NavERP's built-in cryptographic web portal signing.
+- **Complex Stair-Step Metered Billing Tiers**: Advanced consumption-based usage rating schedules (deferred to Sub-module 8.15 Contract & Subscription Management).
+
+**Parked to sibling sub-modules:**
+- **8.6 Order Management**: Commercial change orders, amendments with downstream impact analysis, cancellations, and ASC 606 revenue recognition schedules. 8.5 strictly hands off the created order to 8.6 / SCM 4.5.
+- **8.7 Territory & Quota Management**: Territory assignment algorithms, quota rebalancing, and quota modeling.
+- **8.15 Contract & Subscription Management**: Full legal clause redlining, contract negotiation workflow, subscription recurring renewals, and mid-term co-terming.
+- **8.18 Integration & API Hub**: Third-party external CPQ connectors (Salesforce/SAP/EDI quote sync).
+- **8.19 Master Data & Configuration**: Enterprise catalog master administration and global price book restructuring.
+
+---
+
+## Review notes
+(filled in at the end)
+
 
