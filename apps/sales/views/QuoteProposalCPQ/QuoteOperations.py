@@ -191,25 +191,41 @@ def quote_version_list(request):
     tenant = request.tenant
     
     # Group by quote_group_id
-    families = (
+    families_qs = (
         CPQQuote.objects.filter(tenant=tenant)
         .values("quote_group_id")
         .annotate(
             version_count=Count("id"),
             latest_revision=Max("revision_number"),
         )
-        .order_by("-latest_revision")
+        .order_by("-latest_revision", "quote_group_id")
     )
 
-    family_records = []
-    for f in families:
-        group_id = f["quote_group_id"]
-        latest_quote = (
-            CPQQuote.objects.filter(tenant=tenant, quote_group_id=group_id)
+    page_num = request.GET.get("page", 1)
+    if isinstance(page_num, str) and not page_num.isdigit():
+        page_num = 1
+    paginator = Paginator(families_qs, 20)
+    page_obj = paginator.get_page(page_num)
+
+    from django.db.models import Q
+    filters = Q()
+    for f in page_obj:
+        filters |= Q(quote_group_id=f["quote_group_id"], revision_number=f["latest_revision"])
+
+    latest_quotes_map = {}
+    if filters:
+        quotes = (
+            CPQQuote.objects.filter(tenant=tenant)
+            .filter(filters)
             .select_related("account", "opportunity", "currency", "owner")
-            .order_by("-revision_number")
-            .first()
         )
+        for q in quotes:
+            latest_quotes_map[q.quote_group_id] = q
+
+    family_records = []
+    for f in page_obj:
+        group_id = f["quote_group_id"]
+        latest_quote = latest_quotes_map.get(group_id)
         if latest_quote:
             family_records.append({
                 "group_id": group_id,
@@ -217,8 +233,11 @@ def quote_version_list(request):
                 "latest_quote": latest_quote,
             })
 
+    page_obj.object_list = family_records
+
     return render(request, "sales/quote_proposal_cpq/operations/version_list.html", {
-        "families": family_records,
+        "families": page_obj,
+        "page_obj": page_obj,
     })
 
 
