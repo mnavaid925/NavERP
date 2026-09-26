@@ -185,19 +185,19 @@ class ServiceComponent(TenantConsistentMixin, models.Model):
             return None
         return (timezone.now() - self.last_status_at).days
 
+    @property
     def status_note(self):
         """The one honest sentence about this row, reused by the board and the detail page.
 
-        Returns `None` — not an empty string — when there is nothing to say, so a template can test it.
+        A `@property`, not a method, so `{% if obj.status_note %}` is a real guard — as a method Django
+        would call it and hand back a bound method, which is always truthy, making the guard a no-op.
+        It returns a sentence in every branch; the docstring's earlier promise to return `None` when
+        there is nothing to say was never true and is not claimed here.
         """
         if self.last_status_at is None:
             return "Never reported — nobody has ever set a status on this component."
         age = self.status_age_days
         return f"Hand-set {age} day{'s' if age != 1 else ''} ago. NavERP has not checked it since."
-
-    @property
-    def owner_role_name(self):
-        return self.owner_role.name if self.owner_role_id else ""
 
 
 class AlertRule(TenantConsistentMixin, models.Model):
@@ -342,6 +342,7 @@ class AlertRule(TenantConsistentMixin, models.Model):
         critical = "—" if self.critical_threshold is None else str(self.critical_threshold)
         return f"warning {warning} / critical {critical}"
 
+    @property
     def bounds_note(self):
         """The sentence the detail page and the capacity board print under a rule's numbers."""
         if not self.is_bounded:
@@ -486,6 +487,7 @@ class AlertEvent(TenantConsistentMixin, models.Model):
         """The snapshot first, so a deleted component still names itself; the live FK second."""
         return self.service_label or (self.service.name if self.service_id else "")
 
+    @property
     def measure_note(self):
         """What the page says above the numbers, so `—` is never mistaken for zero."""
         if self.observed_value is None:
