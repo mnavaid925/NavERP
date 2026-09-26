@@ -579,9 +579,12 @@ def health_board(request):
         status_counts[c.current_status] = status_counts.get(c.current_status, 0) + 1
     # Zipped here, not in the template: a Django template CANNOT index a dict by a loop variable, so
     # `{{ status_counts|default_if_none:0 }}` inside a `{% for value, label in ... %}` printed the whole
-    # dict on every row. `status_rows` is the only shape that renders one count per label. The raw
-    # `status_counts` dict is still passed so a template that needs the mapping still has it.
-    status_rows = [(label, status_counts[value]) for value, label in ServiceComponent.STATUS_CHOICES]
+    # dict on every row. The raw VALUE is carried alongside the label so the badge ladder keys off the
+    # stored value like every other badge in this sub-module — keying it off the display label meant one
+    # STATUS_CHOICES relabel silently greyed this one card out while the other four stayed correct.
+    # The raw `status_counts` dict is still passed so a template that needs the mapping still has it.
+    status_rows = [(label, status_counts[value], value)
+                   for value, label in ServiceComponent.STATUS_CHOICES]
 
     rollup = "operational"
     # A `{status: rank}` lookup, not `list.index()`. `.index()` raises `ValueError` -> HTTP 500 for any
