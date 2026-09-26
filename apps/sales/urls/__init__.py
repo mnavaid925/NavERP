@@ -8,6 +8,7 @@ from .ContactAccountManagement.AccountStakeholders import urlpatterns as _stakeh
 from .ContactAccountManagement.AccountClassifications import urlpatterns as _classifications
 from .ContactAccountManagement.AccountPlans import urlpatterns as _plans
 from .ContactAccountManagement.AccountBoards import urlpatterns as _boards
+from .SalesForecasting.ForecastBoards import urlpatterns as _forecast_boards
 from .SalesForecasting.ForecastPeriods import urlpatterns as _forecast_periods
 from .SalesForecasting.ForecastSubmissions import urlpatterns as _forecast_submissions
 from .SalesForecasting.ForecastAdjustments import urlpatterns as _forecast_adjustments
@@ -34,6 +35,7 @@ urlpatterns = [
     # 8.4 Sales Forecasting. Placed after the 8.3 boards and before the 8.2 pipelines per
     # contract 5.6. Every group starts with the distinct literal segment `forecast/` and no
     # sales route is a `<str:...>` catch-all, so the position cannot shadow anything.
+    *_forecast_boards,
     *_forecast_periods,
     *_forecast_submissions,
     *_forecast_adjustments,
