@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_create %}Create New Quote{% else %}Edit {{ quote.number }}{% endif %} — CPQ{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">Quotes</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">{% if is_create %}New Quote{% else %}Edit Header{% endif %}</span>
+            </nav>
+            <h1 class="page-title">{% if is_create %}Create CPQ Quote{% else %}Edit Quote Header{% endif %}</h1>
+            <p class="text-sm text-slate-500 mt-1">Set deal association, customer details, currency, and global discount terms.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% if is_create %}{% url 'sales:cpq_quote_list' %}{% else %}{% url 'sales:cpq_quote_detail' quote.pk %}{% endif %}" class="btn btn-outline">
+                Cancel
+            </a>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <div class="card">
+        <form method="POST">
+            {% csrf_token %}
+            <div class="card-body p-6 space-y-6">
+                {% if form.non_field_errors %}
+                    <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <!-- Section 1: Quote Identification -->
+                <div class="space-y-4">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">Deal Identification</h3>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.name.id_for_label }}">Quote Title / Deal Name <span class="text-red-500">*</span></label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                            <p class="form-error text-xs text-red-600 mt-1">{{ form.name.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.opportunity.id_for_label }}">Opportunity / Deal</label>
+                            {{ form.opportunity }}
+                            <p class="text-xs text-slate-400 mt-1">Links quote with sales pipeline &amp; forecasting</p>
+                            {% if form.opportunity.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.opportunity.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.account.id_for_label }}">Customer Account</label>
+                            {{ form.account }}
+                            {% if form.account.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.account.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.contact.id_for_label }}">Purchaser Contact</label>
+                            {{ form.contact }}
+                            {% if form.contact.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.contact.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.owner.id_for_label }}">Quote Owner (Sales Rep)</label>
+                            {{ form.owner }}
+                            {% if form.owner.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.owner.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Financial & Pricing Settings -->
+                <div class="space-y-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">Financial &amp; Pricing Setup</h3>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.currency.id_for_label }}">Currency <span class="text-red-500">*</span></label>
+                            {{ form.currency }}
+                            {% if form.currency.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.currency.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.price_book.id_for_label }}">Price Book</label>
+                            {{ form.price_book }}
+                            {% if form.price_book.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.price_book.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.valid_until.id_for_label }}">Proposal Valid Until</label>
+                            {{ form.valid_until }}
+                            {% if form.valid_until.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.valid_until.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.header_discount_pct.id_for_label }}">Header Discount %</label>
+                            {{ form.header_discount_pct }}
+                            <p class="text-xs text-slate-400 mt-1">Additional quote-level discount applied across all items</p>
+                            {% if form.header_discount_pct.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.header_discount_pct.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="flex items-center space-x-2 pt-6">
+                            {{ form.is_primary }}
+                            <div>
+                                <label class="form-label mb-0 cursor-pointer" for="{{ form.is_primary.id_for_label }}">Primary Quote for Opportunity</label>
+                                <p class="text-xs text-slate-400">Syncs total value with Opportunity amount</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Proposal Templating & Terms -->
+                <div class="space-y-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">Proposal Presentation &amp; Legal Terms</h3>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.proposal_template.id_for_label }}">Proposal Document Template</label>
+                        {{ form.proposal_template }}
+                        {% if form.proposal_template.errors %}
+                            <p class="form-error text-xs text-red-600 mt-1">{{ form.proposal_template.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.terms_and_conditions.id_for_label }}">Terms &amp; Conditions / SLA Notes</label>
+                        {{ form.terms_and_conditions }}
+                        {% if form.terms_and_conditions.errors %}
+                            <p class="form-error text-xs text-red-600 mt-1">{{ form.terms_and_conditions.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.notes.id_for_label }}">Internal Notes</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}
+                            <p class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-footer border-t border-slate-200 p-4 flex items-center justify-end space-x-3 bg-slate-50">
+                <a href="{% if is_create %}{% url 'sales:cpq_quote_list' %}{% else %}{% url 'sales:cpq_quote_detail' quote.pk %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if is_create %}Save &amp; Configure Lines &rarr;{% else %}Save Changes{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
