@@ -14,6 +14,10 @@ from apps.sales.models import (
     AccountPlan,
     AccountStakeholder,
     CompetitorProfile,
+    ForecastAdjustment,
+    ForecastPeriod,
+    ForecastScenario,
+    ForecastSubmission,
     LeadNurtureEnrollment,
     LeadQualification,
     LeadRoutingRule,
@@ -27,6 +31,7 @@ from apps.sales.models import (
     PipelineStage,
     WinLossReason,
 )
+from apps.sales.forecast_services import forecast_submission_snapshot
 from apps.sales.opportunity_services import opportunity_pipeline_baseline_stages
 from apps.sales.services import (
     activate_nurture,
@@ -44,7 +49,7 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Seed Sales 8.1, 8.2, and 8.3 data idempotently."
+    help = "Seed Sales 8.1, 8.2, 8.3, and 8.4 data idempotently."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -63,7 +68,7 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, backfill=backfill)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, and 8.3 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, and 8.4 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
@@ -77,6 +82,7 @@ class Command(BaseCommand):
             return
         self._seed_contact_account_management(tenant, owner)
         self._seed_opportunity_pipeline(tenant, owner, backfill=backfill)
+        self._seed_sales_forecasting(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -391,6 +397,15 @@ class Command(BaseCommand):
             (root, "rejected", "duplicate_check", "manual", None, {"annual_revenue": {"value": "1000000.00", "confidence": 0.4}}),
             (contacts[0][0], "proposed", "email_validation", "import", enrichment_purpose, {"work_email": {"value": "sales8.3@example.com", "confidence": 0.7}}),
         ]
+        # Applying/rejecting an enrichment event is a tenant-ADMIN action
+        # (`apply_enrichment_event` re-checks the right server-side). A tenant with no
+        # tenant-admin falls back to its first active user, and calling the admin-only
+        # action with that user raised and aborted the whole command before any later
+        # tenant was seeded. Skip the review action instead of failing the run; the
+        # evidence is still seeded as a pending "proposed" event either way.
+        owner_is_admin = bool(
+            getattr(owner, "is_superuser", False) or getattr(owner, "is_tenant_admin", False)
+        )
         for party, outcome, kind, source_kind, purpose, changes in event_specs:
             event = create_enrichment_event(
                 tenant,
@@ -404,6 +419,8 @@ class Command(BaseCommand):
                 legal_basis_purpose=purpose,
                 idempotency_key=f"seed-party-enrichment:{party.pk}:{kind}:{outcome}",
             )
+            if not owner_is_admin:
+                continue
             if event.status == "proposed" and outcome == "applied":
                 apply_enrichment_event(event, tenant, owner, tuple(event.changes), "Seeded reviewed contact title.")
             elif event.status == "proposed" and outcome == "rejected":
@@ -596,3 +613,178 @@ class Command(BaseCommand):
                     )
                     existing_outcome_opp_ids.add(opp.pk)
 
+
+
+    def _seed_sales_forecasting(self, tenant, owner):
+        """8.4 Sales Forecasting demo rows, idempotent by construction.
+
+        Reuses the Opportunity / Pipeline / Territory / Currency rows seeded above. Every
+        model here is auto-numbered (`FCP-`, `FCS-`, `FAD-`, `FSC-`) and the number is
+        minted by `TenantNumbered.save()`, so the guard is an existence check on a natural
+        key rather than on the number — a second run finds every row and creates nothing.
+
+        The AI gate is deliberately NOT satisfied: 40 won AND 40 lost outcomes are never
+        seeded, so the forecast pages render the "not enough history" message and no
+        prediction value (contract 10).
+        """
+        for model, label in (
+            (ForecastPeriod, "forecast periods"),
+            (ForecastSubmission, "forecast submissions"),
+            (ForecastAdjustment, "forecast adjustments"),
+            (ForecastScenario, "forecast scenarios"),
+        ):
+            if model.objects.filter(tenant=tenant).exists():
+                self.stdout.write(
+                    f"{tenant.name}: {label} already exist; preserving them and filling only "
+                    "missing demo rows."
+                )
+
+        currency, _ = Currency.objects.get_or_create(
+            code="USD", defaults={"name": "US Dollar", "symbol": "$"}
+        )
+        today = timezone.localdate()
+        pipeline = Pipeline.objects.filter(tenant=tenant, is_active=True).order_by("id").first()
+        territory = Territory.objects.filter(tenant=tenant).order_by("id").first()
+        opportunities = list(
+            Opportunity.objects.filter(tenant=tenant)
+            .exclude(stage="closed_lost")
+            .order_by("created_at")[:10]
+        )
+
+        # --- 2 periods: one current, one past -----------------------------------------
+        current_quarter = (today.month - 1) // 3 + 1
+        prior_year = today.year - 1 if current_quarter == 1 else today.year
+        prior_number = 4 if current_quarter == 1 else current_quarter - 1
+        period_specs = [
+            ("Current Forecast Quarter", "quarter", today.year, current_quarter, "user", True),
+            ("Prior Forecast Quarter", "quarter", prior_year, prior_number, "org_unit", False),
+        ]
+        periods = {}
+        for name, period_type, year, number, dimension, active in period_specs:
+            period = ForecastPeriod.objects.filter(
+                tenant=tenant, period_type=period_type, period_year=year, period_number=number
+            ).first()
+            if period is None:
+                period = ForecastPeriod.objects.create(
+                    tenant=tenant,
+                    name=name,
+                    period_type=period_type,
+                    period_year=year,
+                    period_number=number,
+                    rollup_dimension=dimension,
+                    reporting_currency=currency,
+                    is_active=active,
+                    is_locked=False,
+                )
+            periods[name] = period
+        current_period = periods["Current Forecast Quarter"]
+
+        # --- 2-3 submissions across two owners ---------------------------------------
+        owners = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id")[:2]) or [owner]
+        submission_amounts = [Decimal("45000.00"), Decimal("120000.00"), Decimal("78000.00")]
+        submissions = []
+        for index, submission_owner in enumerate(owners):
+            existing = ForecastSubmission.objects.filter(
+                tenant=tenant, period=current_period, owner=submission_owner
+            ).first()
+            if existing is not None:
+                submissions.append(existing)
+                continue
+            base = submission_amounts[index % len(submission_amounts)]
+            submission = ForecastSubmission(
+                tenant=tenant,
+                period=current_period,
+                owner=submission_owner,
+                territory=territory,
+                pipeline=pipeline,
+                status="submitted" if index == 0 else "draft",
+                pipeline_amount=base * Decimal("2.5"),
+                best_case_amount=base * Decimal("1.4"),
+                commit_amount=base,
+                closed_amount=Decimal("0.00"),
+                notes="Seeded 8.4 forecast call.",
+            )
+            if index == 0:
+                submission.submitted_at = timezone.now()
+                submission.submitted_by = submission_owner
+            submission.save()
+            # The three snapshot figures are service-written, never hand-typed.
+            snapshot = forecast_submission_snapshot(submission, tenant=tenant)
+            submission.weighted_amount = snapshot["weighted_amount"]
+            submission.quota_amount = snapshot["quota_amount"]
+            submission.actual_amount = snapshot["actual_amount"]
+            submission.save(
+                update_fields=["weighted_amount", "quota_amount", "actual_amount", "updated_at"]
+            )
+            submissions.append(submission)
+
+        # --- 2-3 adjustments, one of them reverted ------------------------------------
+        if submissions:
+            opportunity = opportunities[0] if opportunities else None
+            adjustment_specs = [
+                (submissions[0], "amount", "deal_advanced", Decimal("15000.00"),
+                 "Seeded manager uplift for an advanced deal.", False),
+                (submissions[-1], "category", "deal_slipped", None,
+                 "Seeded downgrade after a slipped close date.", False),
+                (submissions[0], "amount", "amount_revised", Decimal("2500.00"),
+                 "Seeded correction later reset by the manager.", True),
+            ]
+            for submission, target_field, reason_code, value, note, reverted in adjustment_specs:
+                if ForecastAdjustment.objects.filter(
+                    tenant=tenant, submission=submission, reason_code=reason_code, note=note
+                ).exists():
+                    continue
+                adjustment = ForecastAdjustment(
+                    tenant=tenant,
+                    submission=submission,
+                    opportunity=opportunity,
+                    adjustment_kind="direct",
+                    target_field=target_field,
+                    adjusted_value=value,
+                    reason_code=reason_code,
+                    note=note,
+                    created_by=owner,
+                )
+                if target_field == "category":
+                    adjustment.original_category = "pipeline"
+                    adjustment.adjusted_category = "commit"
+                else:
+                    adjustment.original_value = Decimal("10000.00")
+                adjustment.save()
+                if reverted:
+                    adjustment.mark_reverted(owner, "Seeded Reset with a mandatory reason.")
+                    adjustment.save()
+
+        # --- 2 scenarios: one baseline (and therefore selected) and one what-if --------
+        # `scenario_type` is the model's own upside/base/downside/custom vocabulary; the
+        # separate `is_baseline` flag is what marks the current plan.
+        scenario_specs = [
+            ("Baseline Plan", "base", 100, Decimal("0.00"), Decimal("0.00"), Decimal("0.00"), True),
+            ("Upside Case", "upside", 90, Decimal("15.00"), Decimal("25.00"), Decimal("20.00"), False),
+        ]
+        for name, scenario_type, probability, pipeline_delta, best_case_delta, commit_delta, baseline in scenario_specs:
+            if ForecastScenario.objects.filter(tenant=tenant, period=current_period, name=name).exists():
+                continue
+            scenario = ForecastScenario(
+                tenant=tenant,
+                period=current_period,
+                owner=owner,
+                name=name,
+                scenario_type=scenario_type,
+                probability_pct=probability,
+                is_baseline=baseline,
+                # The CheckConstraint pins baseline => selected, so only the baseline is.
+                is_selected=baseline,
+                pipeline_delta_pct=pipeline_delta,
+                best_case_delta_pct=best_case_delta,
+                commit_delta_pct=commit_delta,
+                assumption_notes="Seeded 8.4 what-if scenario. Applying it never changes a call.",
+            )
+            scenario.save()
+            # projected_* are editable=False: only the apply action may write them.
+            scenario.projected_commit_amount = Decimal("0.00")
+            scenario.projected_total_amount = Decimal("0.00")
+            scenario.save(
+                update_fields=["projected_commit_amount", "projected_total_amount", "updated_at"]
+            )
+        self.stdout.write(f"{tenant.name}: Sales 8.4 forecasting demo rows ensured.")
