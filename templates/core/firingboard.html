@@ -49,8 +49,8 @@
         <span class="badge badge-slate">Recorded mute in effect: {{ muted_count }}</span>
         <span class="badge badge-slate">No owning rule: {{ unattributed_count }}</span>
       </div>
-      <p class="text-muted" style="margin-top:.6rem;">All times: {% for value, label in state_choices %}{{ label }} {{ state_counts|default_if_none:0 }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
-      <p class="text-muted">By severity: {% for value, label in severity_choices %}{{ label }} {{ severity_counts|default_if_none:0 }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+      <p class="text-muted" style="margin-top:.6rem;">All times: {% for label, count in state_rows %}{{ label }} {{ count }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+      <p class="text-muted">By severity: {% for label, count in severity_rows %}{{ label }} {{ count }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
     </div>
   </div>
 
