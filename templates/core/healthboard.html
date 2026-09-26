@@ -50,8 +50,11 @@
     <div class="card-header"><h2 class="card-title">Status counts</h2></div>
     <div class="card-body">
       <div class="badge-group">
-        {% for label, count in status_rows %}
-          <span class="badge {% if label == 'Operational' %}badge-green{% elif label == 'Degraded' %}badge-amber{% elif label == 'Partial outage' or label == 'Major outage' %}badge-red{% else %}badge-slate{% endif %}">{{ label }}: {{ count }}</span>
+        {% for label, count, value in status_rows %}
+          {# Keyed off the raw VALUE, matching every other badge ladder in this sub-module. This card
+             was the odd one out — it compared display labels, so relabelling a STATUS_CHOICES value
+             would grey out this one card and leave the other four correct. #}
+          <span class="badge {% if value == "operational" %}badge-green{% elif value == "degraded" %}badge-amber{% elif value == "partial_outage" or value == "major_outage" %}badge-red{% else %}badge-slate{% endif %}">{{ label }}: {{ count }}</span>
         {% endfor %}
       </div>
       {% if component_total %}
@@ -92,7 +95,7 @@
             </div></td>
           </tr>
         {% empty %}
-          <tr><td colspan="6"><div class="empty-state"><i data-lucide="server"></i><h3>No components registered</h3><p class="text-muted">Register the things this workspace depends on so there is something to report on.</p></div></td></tr>
+          <tr><td colspan="6"><div class="empty-state"><i data-lucide="server"></i><h3>No components registered</h3><p class="text-muted">Register the things this workspace depends on so there is something to report on — until then, nothing here is being watched.</p></div></td></tr>
         {% endfor %}
       </tbody>
     </table>
