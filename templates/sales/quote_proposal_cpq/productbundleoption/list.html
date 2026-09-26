@@ -162,7 +162,7 @@
                             </td>
                             <td>
                                 {% if b.compatibility_rule != 'none' %}
-                                    <span class="badge badge-purple text-xs">
+                                    <span class="badge badge-info text-xs">
                                         {{ b.get_compatibility_rule_display }}
                                         {% if b.depends_on_product %}: {{ b.depends_on_product.name }}{% endif %}
                                     </span>
