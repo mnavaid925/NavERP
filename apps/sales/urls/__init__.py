@@ -18,6 +18,7 @@ from .OpportunityTeams.OpportunityTeams import urlpatterns as _teams
 from .CompetitiveIntelligence.CompetitiveIntelligence import urlpatterns as _competitors
 from .OpportunityOutcomes.OpportunityOutcomes import urlpatterns as _outcomes
 from .Workspace.Workspace import urlpatterns as _workspace
+from .QuoteProposalCPQ import urlpatterns as _quote_cpq
 
 app_name = "sales"
 
@@ -32,18 +33,19 @@ urlpatterns = [
     *_classifications,
     *_plans,
     *_boards,
-    # 8.4 Sales Forecasting. Placed after the 8.3 boards and before the 8.2 pipelines per
-    # contract 5.6. Every group starts with the distinct literal segment `forecast/` and no
-    # sales route is a `<str:...>` catch-all, so the position cannot shadow anything.
+    # 8.4 Sales Forecasting.
     *_forecast_boards,
     *_forecast_periods,
     *_forecast_submissions,
     *_forecast_adjustments,
     *_forecast_scenarios,
+    # 8.5 Quote & Proposal Management (CPQ).
+    *_quote_cpq,
     *_pipelines,
     *_teams,
     *_competitors,
     *_outcomes,
     *_workspace,
 ]
+
 
