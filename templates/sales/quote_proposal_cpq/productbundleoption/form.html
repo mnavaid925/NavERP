@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_create %}New Bundle Option{% else %}Edit {{ bundle.name }}{% endif %} — CPQ{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">CPQ</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:product_bundle_list' %}" class="text-slate-500 hover:text-slate-700">Bundles</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">{% if is_create %}New Option{% else %}Edit{% endif %}</span>
+            </nav>
+            <h1 class="page-title">{% if is_create %}Add Product Bundle Option{% else %}Edit Bundle Option{% endif %}</h1>
+            <p class="text-sm text-slate-500 mt-1">Configure components, quantity limits, overrides, and compatibility rules.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% if is_create %}{% url 'sales:product_bundle_list' %}{% else %}{% url 'sales:product_bundle_detail' bundle.pk %}{% endif %}" class="btn btn-outline">
+                Cancel
+            </a>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <div class="card">
+        <form method="POST">
+            {% csrf_token %}
+            <div class="card-body p-6 space-y-6">
+                {% if form.non_field_errors %}
+                    <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <div class="space-y-4">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">Option Definition</h3>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.name.id_for_label }}">Option Name <span class="text-red-500">*</span></label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                            <p class="form-error text-xs text-red-600 mt-1">{{ form.name.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.bundle_product.id_for_label }}">Parent Bundle Product <span class="text-red-500">*</span></label>
+                            {{ form.bundle_product }}
+                            {% if form.bundle_product.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.bundle_product.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.component_product.id_for_label }}">Component Product Item <span class="text-red-500">*</span></label>
+                            {{ form.component_product }}
+                            {% if form.component_product.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.component_product.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.component_item.id_for_label }}">Physical Stock Item (SCM)</label>
+                            {{ form.component_item }}
+                            <p class="text-xs text-slate-400 mt-1">Links to physical inventory item for reservation upon order creation</p>
+                            {% if form.component_item.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.component_item.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.option_group.id_for_label }}">Option Group</label>
+                            {{ form.option_group }}
+                            {% if form.option_group.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.option_group.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">Quantities &amp; Defaults</h3>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.min_quantity.id_for_label }}">Min Quantity</label>
+                            {{ form.min_quantity }}
+                            {% if form.min_quantity.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.min_quantity.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.default_quantity.id_for_label }}">Default Quantity</label>
+                            {{ form.default_quantity }}
+                            {% if form.default_quantity.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.default_quantity.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.max_quantity.id_for_label }}">Max Quantity</label>
+                            {{ form.max_quantity }}
+                            {% if form.max_quantity.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.max_quantity.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                        <div class="flex items-center space-x-2">
+                            {{ form.is_required }}
+                            <label class="form-label mb-0 cursor-pointer" for="{{ form.is_required.id_for_label }}">Mandatory Component (Required)</label>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            {{ form.is_default }}
+                            <label class="form-label mb-0 cursor-pointer" for="{{ form.is_default.id_for_label }}">Pre-selected by default</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">Bundle Pricing Overrides</h3>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.unit_price_override.id_for_label }}">Special Unit Price Override</label>
+                            {{ form.unit_price_override }}
+                            <p class="text-xs text-slate-400 mt-1">Leaves list price if blank</p>
+                            {% if form.unit_price_override.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.unit_price_override.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.discount_pct_override.id_for_label }}">Special Discount % Override</label>
+                            {{ form.discount_pct_override }}
+                            <p class="text-xs text-slate-400 mt-1">Leaves 0% if blank</p>
+                            {% if form.discount_pct_override.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.discount_pct_override.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">Compatibility Engine</h3>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.compatibility_rule.id_for_label }}">Compatibility Rule</label>
+                            {{ form.compatibility_rule }}
+                            {% if form.compatibility_rule.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.compatibility_rule.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.depends_on_product.id_for_label }}">Target Dependent Product</label>
+                            {{ form.depends_on_product }}
+                            {% if form.depends_on_product.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.depends_on_product.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.sort_order.id_for_label }}">Sort Order</label>
+                            {{ form.sort_order }}
+                            {% if form.sort_order.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.sort_order.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="flex items-center space-x-2 pt-6">
+                            {{ form.is_active }}
+                            <label class="form-label mb-0 cursor-pointer" for="{{ form.is_active.id_for_label }}">Option is Active</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-footer border-t border-slate-200 p-4 flex items-center justify-end space-x-3 bg-slate-50">
+                <a href="{% if is_create %}{% url 'sales:product_bundle_list' %}{% else %}{% url 'sales:product_bundle_detail' bundle.pk %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if is_create %}Create Bundle Option{% else %}Save Changes{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
