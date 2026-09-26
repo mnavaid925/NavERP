@@ -1,4 +1,4 @@
-"""Form definitions for CPQQuoteLine model."""
+from decimal import Decimal
 from django import forms
 from apps.sales.forms._common import TenantModelForm
 from apps.sales.models.QuoteProposalCPQ.CPQQuoteLines import CPQQuoteLine
@@ -66,3 +66,14 @@ class CPQQuoteLineForm(TenantModelForm):
             self.fields["item"].queryset = Item.objects.filter(tenant=self.tenant, is_active=True)
             self.fields["uom"].queryset = UOM.objects.filter(tenant=self.tenant, is_active=True)
             self.fields["tax_code"].queryset = TaxCode.objects.filter(tenant=self.tenant, is_active=True)
+
+        for field_name in ["list_price", "discount_pct", "tax_pct", "unit_cost"]:
+            if field_name in self.fields:
+                self.fields[field_name].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        for field_name in ["list_price", "discount_pct", "tax_pct", "unit_cost"]:
+            if cleaned_data.get(field_name) is None:
+                cleaned_data[field_name] = Decimal("0.00")
+        return cleaned_data
