@@ -92,7 +92,7 @@ def product_bundle_create(request):
             bundle_opt = form.save(commit=False)
             bundle_opt.tenant = request.tenant
             bundle_opt.save()
-            write_audit_log(request.user, "create", "ProductBundleOption", bundle_opt.id, f"Created bundle option {bundle_opt.number}")
+            write_audit_log(request.user, bundle_opt, "create", {"action": "create_bundle_option", "number": bundle_opt.number}, tenant=request.tenant)
             messages.success(request, f"Bundle option {bundle_opt.name} created successfully.")
             return redirect("sales:product_bundle_detail", pk=bundle_opt.pk)
     else:
@@ -137,7 +137,7 @@ def product_bundle_edit(request, pk):
         form = ProductBundleOptionForm(request.POST, instance=bundle_opt, tenant=request.tenant)
         if form.is_valid():
             bundle_opt = form.save()
-            write_audit_log(request.user, "update", "ProductBundleOption", bundle_opt.id, f"Updated bundle option {bundle_opt.number}")
+            write_audit_log(request.user, bundle_opt, "update", {"action": "update_bundle_option", "number": bundle_opt.number}, tenant=request.tenant)
             messages.success(request, f"Bundle option {bundle_opt.name} updated successfully.")
             return redirect("sales:product_bundle_detail", pk=bundle_opt.pk)
     else:
@@ -157,8 +157,7 @@ def product_bundle_delete(request, pk):
     """Delete a ProductBundleOption."""
     bundle_opt = get_object_or_404(ProductBundleOption, pk=pk, tenant=request.tenant)
     name = bundle_opt.name
-    opt_id = bundle_opt.id
+    write_audit_log(request.user, bundle_opt, "delete", {"action": "delete_bundle_option", "name": name}, tenant=request.tenant)
     bundle_opt.delete()
-    write_audit_log(request.user, "delete", "ProductBundleOption", opt_id, f"Deleted bundle option {name}")
     messages.success(request, f"Bundle option {name} deleted successfully.")
     return redirect("sales:product_bundle_list")
