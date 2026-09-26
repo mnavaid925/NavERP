@@ -7,6 +7,523 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 
+# Build Plan — Module 0 0.18 Threat Protection & Security Operations
+
+Source of truth: `.claude/tasks/research-core-0.18.md` (committed `dacf5027`). **Phase 2 is planning only** — this
+edit adds no application code, generates no migration, and pushes nothing.
+App: `core` (Module 0 foundation — **flat, no sub-module level**, backend rule 9).
+`BASE` for the Phase 4 review range: `647806805d0a07dec2921e2d3293dcc342005d64`.
+Migration: **`core.0016_*`** (re-list `apps/core/migrations/` immediately before generating — L43).
+Package: `apps/core/models/Security.py` + `apps/core/forms/Security.py` + `apps/core/views/Security.py`, flat at the
+package root, exactly as `Monitoring.py` sits. Templates `templates/core/<entity>/{list,detail,form}.html` plus the
+standalone pages flat at `templates/core/`. Test subslug: `security`.
+
+**Dirty tree at session start is NOT mine (L45).** Do not stage, edit or commit: the four modified
+`templates/projects/reporting/*.html` files, and the untracked dirs `.commandcode/`, `.gemini/`, `.workbuddy-ai/`,
+`.zcode/`. That is a Projects Reporting (7.x) session's live work.
+
+## 1. Scope and ownership — the 0.18 contract
+
+- [ ] Build **exactly four** models in ONE flat file `apps/core/models/Security.py`: `SecurityThreat`, `IpAccessRule`,
+      `VulnerabilityFinding`, `SecurityIncident`. **No fifth model** — specifically no asset/host inventory, no log
+      store, no evidence/artifact table, no IOC table, no WAF ruleset, no scan run, no notification rule, no
+      vulnerability-exclusion table, no lockout counter.
+- [ ] **L36 ruling 1 — no second rate-limit table.** `core.RateLimitPolicy` (0.13, `apps/core/models/Integration.py:114`)
+      owns the limit. 0.18 **FKs it and does not touch that file**: no column, no migration on it, no re-export edit.
+      The two seams are `SecurityThreat.rate_limit_policy` and `IpAccessRule.rate_limit_policy`, both by **string** FK.
+- [ ] **L36 ruling 2 — the 0.17 seam is one enum value.** `AlertRule.CATEGORY_CHOICES` already carries `("security", "Security")`
+      and the committed test `test_monitoring_security_is_the_018_seam` binds it. **No new column on `AlertRule`,
+      `AlertEvent`, `Incident` or `ServiceComponent`** — no `threat_level`, no `ip_address`, no `cvss_score`, no
+      `mitre_technique`. **No `SecurityAlert` table, no second board, no second incident lifecycle.**
+- [ ] **L36 ruling 3 — no second audit log.** `core.AuditLog` is *who changed which row*; a security finding is *what an
+      adversary did*. Forensics are the `SecurityIncident.forensic_log` **narrative**, never a log pipeline and never a
+      second tamper-evidence mechanism (`procurement.AuditSeal` (6.17) already chains SHA-256 over a range of
+      `core.AuditLog` ids — link to it in prose, never re-implement it).
+- [ ] **L36 ruling 4 — no second incident lifecycle.** `core.Incident` stays the availability/comms artifact;
+      `SecurityIncident.incident` FKs it. The two `status` enums are **deliberately different** and must stay so.
+- [ ] **L36 ruling 5 — reuse by reference, never a copy.** `AlertRule.SEVERITY_CHOICES` on `SecurityThreat` and
+      `SecurityIncident`; `SyncSchedule.FREQUENCY_CHOICES` on `VulnerabilityFinding.scan_frequency`. Assign the object
+      (`SEVERITY_CHOICES = AlertRule.SEVERITY_CHOICES`), never rebuild the tuple, assert `is` identity in the tests.
+- [ ] **L36 ruling 6 — no second compliance spine.** `procurement` 6.17 owns *supplier* compliance; 0.18 owns *platform*
+      security. 0.18 declares nothing in `tenants` (0.19 owns the quota), `0.11` (escalation), `0.12` (notification),
+      `0.13` (connector vocabulary) or `0.20` (scheduler), and writes **no** `accounts` row.
+- [ ] **The thirteen DECLINE items (research §3) must be honoured in the prose ON the pages, not only in the docstrings.**
+      They are: (1) a second log store / log shipping / SIEM index; (2) forensic *logging* as a pipeline; (3) live SIEM/SOC
+      integration; (4) "real-time" alerting; (5) CAPTCHA / bot-challenge integration; (6) WAF integration / managed
+      rulesets; (7) rate-limit *enforcement* / a gateway; (8) patch *execution* and a patch scheduler; (9) vulnerability
+      *scanning* as an executed action; (10) brute-force *lockout* / account throttling; (11) an asset / host /
+      attack-surface inventory; (12) an IOC table with STIX/TAXII export; (13) virtual patching as an automatic
+      compensating control. Plus the attack-path/exposure graph (#26) and escalation/paging — declined too.
+- [ ] **The honest-claim surface is the product.** Three of the four models are registers of things that did not happen
+      automatically. Every page, docstring and success message says **"recorded"**, never "detected", "blocked", "scanned",
+      "enforced" or "notified". `action="block"` on `IpAccessRule` renders as *"would block"* where the page is describing
+      NavERP rather than describing the policy. Success messages follow 0.17's wording: *"Recorded. NavERP did not block
+      anything — this records that somebody wrote this rule."*
+- [ ] **A register of DECLARED findings, never a live pipeline.** There is no IDS/IPS agent, no scanner, no SIEM client,
+      no WAF, no CAPTCHA library, no scheduler and no gateway anywhere in this repository (grep-verified, L28). The
+      module-level constant `SECURITY_NOTES` holds the honest-limit lines and every page prints them verbatim, so a page
+      and its board cannot disagree (the 0.17 `MONITORING_NOTES` pattern). No view invents its own prose.
+- [ ] **Shared-file discipline (L43).** These are single-writer, **surgical `Edit` only, never `Write`**:
+      `apps/core/models/__init__.py`, `apps/core/forms/__init__.py`, `apps/core/views/__init__.py`, `apps/core/admin.py`,
+      `apps/core/management/commands/seed_core.py`, `apps/core/navigation.py`, `apps/core/urls.py`,
+      `temp/audit_integrity.py`, `apps/core/tests/conftest.py`, `NavERP.md`, `NavERP-ERD.md`, `README.md`. Re-read each
+      immediately before editing. Tell every sub-agent the same thing explicitly.
+- [ ] **Never `seed_core --flush`** on this shared checkout — it deletes rows another session may be verifying against.
+      Plain idempotent re-seeding is safe from both sides.
+
+## 2. Models — `apps/core/models/Security.py` (one flat file, four models)
+
+### 2.1 `IpAccessRule` — *an address that is allowed, or is not*
+
+- [ ] Docstring must say, in `RateLimitPolicy`'s own voice: **a row here is a written policy that some other layer would have to enforce. NavERP has no gateway, no proxy and no WAF, so `action="block"` records an intent, not a block.**
+- [ ] Fields, exactly: `tenant` FK `core.Tenant` `CASCADE` `related_name="ip_access_rules"` `db_index=True`; **`cidr`** `CharField(max_length=43, validators=[<a validator accepting one bare IP address *or* one CIDR block>])`; `direction` `CharField(max_length=5, choices=DIRECTION_CHOICES)`; `action` `CharField(max_length=28, choices=ACTION_CHOICES, default="log")`; `service` FK `core.ServiceComponent` `SET_NULL` null blank `related_name="+"`; `credential` FK `core.ApiCredential` `SET_NULL` null blank `related_name="+"`; `rate_limit_policy` FK `core.RateLimitPolicy` `SET_NULL` null blank `related_name="ip_access_rules"`; `scope` `CharField(max_length=10, choices=SCOPE_CHOICES, default="workspace")`; **`reason`** `TextField(blank=True)` (required *by `clean()`*, not by the column - an unexplainable block is the defect); `source` `CharField(max_length=12, choices=SOURCE_CHOICES, default="manual")`; **`expires_at`** `DateTimeField(null=True, blank=True)`; `is_active` `BooleanField(default=True)`; `added_by` FK `AUTH_USER_MODEL` `SET_NULL` null blank `related_name="+"`; `added_by_label` `CharField(max_length=150, blank=True)` (snapshot); `notes` `TextField(blank=True)`; `created_at` (`auto_now_add`); `updated_at` (`auto_now`).
+- [ ] `cidr` is a `CharField`, **not** a `GenericIPAddressField`, because a single-address field cannot hold `203.0.113.0/24` and CIDR is the normal unit of a deny list. The validator accepts a bare IPv4/IPv6 address (treated as a `/32` or `/128`) or one address plus a prefix length, and refuses anything else.
+- [ ] Pin `DIRECTION_CHOICES` exactly: `allow` / `deny`. Pin `ACTION_CHOICES` exactly - Cloudflare IP Access rule actions verbatim: `allow`, `block`, `challenge`, `managed_challenge`, `non_interactive_challenge`, `interactive_challenge`, `log` - with **`log` as the default**, because a rule that claims to block when nothing blocks is the exact defect L52 exists to prevent. Pin `SCOPE_CHOICES` exactly: `workspace` / `service` / `credential` (mirrors `RateLimitPolicy.credential`'s own nullable scoping, so the two read consistently). Pin `SOURCE_CHOICES` exactly: `manual` / `threat` / `rate_limit` / `import`, and the docstring says **nothing in NavERP chooses it automatically**; `source="manual"` is the only value a view or seeder may ever write.
+- [ ] `Meta`: `ordering = ["-created_at", "-id"]`; `unique_together = [("tenant", "cidr", "direction")]` - the same address may legitimately sit on both lists (a `/32` allow inside a `/24` deny is a real configuration) but not twice on the same side. Indexes, short names for MariaDB: `(tenant, -created_at)` -> `iprule_tenant_created_idx`, `(tenant, direction)` -> `iprule_tenant_dir_idx`, `(tenant, expires_at)` -> `iprule_tenant_expires_idx`.
+- [ ] `clean()` refusals: (a) a **blank `reason` is refused** - every entry must say why; (b) `scope="service"` with no `service`, and `scope="credential"` with no `credential`, are refused - an unresolvable scope is a lie about what the rule covers; (c) `direction="allow"` together with `action="block"` is refused - the two lists are Cloudflare's `Allow` / `Block` split and the pair is a contradiction.
+- [ ] Derived (never stored): `is_expired` (now past `expires_at`), `expires_display` (`"permanent"` when `expires_at is None` - **never today's date**; a temporary block is the common case and NULL means permanent), `action_display` (prefixes `"would "` onto `block` so a page describing NavERP cannot read as an enforcement claim). `__str__` = `f"{self.cidr} - {self.get_direction_display()}"`.
+- [ ] **No FK to `SecurityThreat`** - the causal link is recorded on the threat's own `mitigated_by`, so a threat can point at the rule that answered it without the rule having to know it existed.
+### 2.2 `SecurityThreat` — *a threat, as a declared finding* (the sub-module's centre of gravity)
+
+- [ ] Docstring must say, in `RateLimitPolicy`'s voice: **a row here is a report that something was observed. NavERP detected nothing** - there is no IDS/IPS agent, no packet capture and no anomaly engine in this repository. A finding correlated to an `AlertEvent` is one row *pair*, not a second alerting engine.
+- [ ] Fields, exactly: `tenant` FK `core.Tenant` `CASCADE` `related_name="security_threats"` `db_index=True`; **`alert_event`** FK `core.AlertEvent` `SET_NULL` null blank `related_name="+"` (the 0.17 seam); **`rate_limit_policy`** FK `core.RateLimitPolicy` `SET_NULL` null blank `related_name="security_threats"` (the rate-limit seam, section 0.1); `service` FK `core.ServiceComponent` `SET_NULL` null blank `related_name="+"`; `service_label` `CharField(max_length=150, blank=True)` (snapshot, **not** a form field); `target_user` FK `AUTH_USER_MODEL` `SET_NULL` null blank `related_name="+"`; `target_credential` FK `core.ApiCredential` `SET_NULL` null blank `related_name="+"`; `title` `CharField(max_length=200)`; **`threat_type`** `CharField(max_length=30, choices=THREAT_TYPE_CHOICES, default="other")`; `severity` `CharField(max_length=10, choices=SEVERITY_CHOICES, default="warning")`; **`mitre_technique`** `CharField(max_length=20, blank=True)`; `mitre_tactic` `CharField(max_length=50, blank=True)`; `rule_reference` `CharField(max_length=120, blank=True)`; `waf_action` `CharField(max_length=30, choices=WAF_ACTION_CHOICES, blank=True, default="")`; `defense_mode` `CharField(max_length=20, choices=DEFENSE_MODE_CHOICES, blank=True, default="")`; **`source_ip`** `GenericIPAddressField(null=True, blank=True)`; **`detected_at`** `DateTimeField(default=timezone.now)`; `occurrence_count` `PositiveIntegerField(default=1, validators=[MinValueValidator(1)])`; `summary` `TextField(blank=True)`; `detail` `TextField(blank=True)`; **`evidence`** `TextField(blank=True)`; `status` `CharField(max_length=14, choices=STATUS_CHOICES, default="new")`; **`mitigated_by`** FK `IpAccessRule` `SET_NULL` null blank `related_name="mitigated_threats"`; `resolved_at` `DateTimeField(null=True, blank=True)` (action-stamped, **off the form** - L22); `resolved_by` FK `AUTH_USER_MODEL` `SET_NULL` null blank `related_name="+"`; `notes` `TextField(blank=True)`; `created_at` (`auto_now_add`).
+- [ ] **Why `mitre_technique` is free text and not CHOICES:** MITRE publishes the vocabulary and revises it on its own release cycle, so freezing it here goes stale, and a `Technique` model is a second copy of a public standard. The comment must say this, or the next agent will "fix" it into a table. Same reasoning for `mitre_tactic`.
+- [ ] Pin `THREAT_TYPE_CHOICES` exactly, a **union** enum covering bullets 1, 4 and 5: `brute_force`, `credential_stuffing`, `anomalous_login`, `privilege_escalation`, `suspicious_api_activity`, `data_exfiltration`, `malware`, `phishing`, `waf_rule_match`, `rate_limit_exceeded`, `bot_abuse`, `other`.
+- [ ] Pin `STATUS_CHOICES` exactly: `new` / `triaged` / `investigating` / `contained` / `resolved` / `false_positive` / `ignored` (Defender for Cloud Apps' acknowledge/resolve/suppress/dismiss shape, mapped to a lifecycle NavERP can actually hold). Pin `WAF_ACTION_CHOICES` exactly: `none` / `log` / `block` / `challenge` / `managed_challenge` / `interactive_challenge` - **a recorded posture, not an enforcement** (section 3). Pin `DEFENSE_MODE_CHOICES` exactly: `none` / `captcha` / `challenge` / `rate_limit` / `block` / `waf` - the bot/abuse mitigation posture. No `vulnerability_exclusion` or `ioc` table.
+- [ ] **No `updated_at`** - the research field list ends at `created_at`, and a finding is a point-in-time report; its history lives in `core.AuditLog` and in the four lifecycle stamps, not in a column that moves on every edit.
+- [ ] `Meta`: `ordering = ["-detected_at", "-id"]` (`detected_at` is never NULL, so the C5 MariaDB NULL-sorts-last trap cannot apply). Indexes: `(tenant, -detected_at)` -> `secthreat_tenant_detected_idx`, `(tenant, status)` -> `secthreat_tenant_status_idx`, `(tenant, threat_type)` -> `secthreat_tenant_type_idx`, `(tenant, source_ip)` -> `secthreat_tenant_source_idx`.
+- [ ] `clean()` refusals: (a) `threat_type="rate_limit_exceeded"` **requires** `rate_limit_policy` - that pairing is the entire point of the RateLimitPolicy ruling, and a rate-limit finding with no policy is bullet 4's "rate limiting" reduced to a word; (b) `mitigated_by` set while `status` is still `new` is refused - a mitigation cannot precede triage; (c) `mitre_technique`, when non-blank, must match `^T\d{4}(\.\d{3})?$` - a label, but still a label with a shape, and a free-text field is where a typo would otherwise hide.
+- [ ] **No FK to `AuditLog`, `BusinessRule`, `LoginAttempt` or `Incident`** - the first two are a different subject, the last two are *read by the boards* rather than joined, because a join would imply NavERP correlates them and nothing does.
+- [ ] Derived (never stored): `age_days`, `is_open` (`status not in {resolved, false_positive, ignored}`), `source_ip_display` (`"—"` when NULL - **NULL means "not from a single address"**, and `0.0.0.0` is a different and usually false claim). `__str__` = `f"{self.title} - {self.get_threat_type_display()}"`.
+### 2.3 `VulnerabilityFinding` — *a known weakness, and what was done about it*
+
+- [ ] Docstring must say: **a register of findings somebody obtained and recorded. NavERP runs no scanner, no CI, no agent** - there is no `scan_run` model and no `ScanJob`, and a row here is not a scan NavERP performed.
+- [ ] Fields, exactly: `tenant` FK `core.Tenant` `CASCADE` `related_name="vulnerability_findings"` `db_index=True`; `title` `CharField(max_length=200)`; **`advisory_id`** `CharField(max_length=40, db_index=True)`; **`finding_source`** `CharField(max_length=20, choices=FINDING_SOURCE_CHOICES)`; `component` FK `core.ServiceComponent` `SET_NULL` null blank `related_name="+"` (nullable - a vulnerable *dependency* has no service); `package_name` `CharField(max_length=150, blank=True)`; `installed_version` `CharField(max_length=60, blank=True)`; **`severity`** `CharField(max_length=8, choices=SEVERITY_BAND_CHOICES, default="medium")`; **`cvss_score`** `DecimalField(max_digits=4, decimal_places=1, null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(10)])`; `epss_score` `DecimalField(max_digits=6, decimal_places=5, null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(1)])`; **`fix_available`** `CharField(max_length=8, choices=FIX_AVAILABLE_CHOICES, null=True, blank=True, default=None)`; `fixed_in_version` `CharField(max_length=60, blank=True)`; `status` `CharField(max_length=20, choices=STATUS_CHOICES, default="open")`; **`accepted_reason`** `TextField(blank=True)`; `accepted_by` FK `AUTH_USER_MODEL` `SET_NULL` null blank `related_name="+"`; `accepted_at` `DateTimeField(null=True, blank=True)` (form-stamped, see section 3); **`due_on`** `DateField(null=True, blank=True)`; **`first_seen_at`** `DateTimeField(default=timezone.now)`; `last_seen_at` `DateTimeField(null=True, blank=True)`; `remediation_note` `TextField(blank=True)`; `evidence` `TextField(blank=True)`; `notes` `TextField(blank=True)`; `scan_frequency` `CharField(max_length=8, choices=SCAN_FREQUENCY_CHOICES, default="manual")` (reuse by reference); `created_at` (`auto_now_add`); `updated_at` (`auto_now`).
+- [ ] **The severity here is a CVSS band and is deliberately NOT `AlertRule.SEVERITY_CHOICES`.** Pin `SEVERITY_BAND_CHOICES` exactly: `none` / `low` / `medium` / `high` / `critical`. **The file docstring must carry the warning explicitly** - same reason `AlertRule.metric_key` overlaps `HealthMetric.METRIC_CHOICES` by string without meaning the same thing - or the next agent will "fix" the duplication by pointing this at the alert vocabulary. This is the ONE place a different severity list is correct, and it is a different *fact* (a CVSS band vs a firing severity).
+- [ ] Pin `FINDING_SOURCE_CHOICES` exactly: `dependency` / `operating_system` / `application` / `configuration` / `third_party` / `misconfiguration`. Pin `FIX_AVAILABLE_CHOICES` exactly: `yes` / `no` / `partial` (Snyk's `fixAvailable` made explicit - "no fix exists" and "we have not got round to it" must never render as the same word; the NULL third state is "nobody has determined it"). Pin `STATUS_CHOICES` exactly: `open` / `in_progress` / `fixed` / `risk_accepted` / `false_positive` / `not_applicable` - each terminal value is a **decision somebody made**, not an absence of data.
+- [ ] `Meta`: `ordering = ["-first_seen_at", "-id"]`. Indexes exactly: `(tenant, status)` -> `vulfind_tenant_status_idx`, `(tenant, severity)` -> `vulfind_tenant_severity_idx`, `(tenant, advisory_id)` -> `vulfind_tenant_advisory_idx`, `(tenant, -first_seen_at)` -> `vulfind_tenant_firstseen_idx`. Keep every index name short - MariaDB imposes a hard name-length limit.
+- [ ] `clean()` refusals: (a) `status="risk_accepted"` **requires** `accepted_reason` (non-blank after strip) **and** `accepted_by` - an accepted risk with no stated reason is an unowned risk (the Tenable-exception discipline, and it belongs on the finding, not in a separate exclusions table); (b) `status="fixed"` with `fix_available="no"` is refused - **a finding with no fix is not a finding that is fixed**; (c) a non-blank `fixed_in_version` while `fix_available="no"` is refused; (d) `last_seen_at` earlier than `first_seen_at` is refused; (e) `due_on` earlier than the `first_seen_at` date is refused. **`due_on` is never defaulted to today** - NULL means "no remediation deadline has been set", which is a different statement and must render as `"—"`.
+- [ ] Derived (never stored): `sla_days` (from `REMEDIATION_SLA_DAYS[self.severity]`), `is_overdue` (`due_on < today` and status still open), `days_overdue`, `is_fixable` (`fix_available in {yes, partial}`), `cvss_display` (`"—"` when `cvss_score is None` - **never `0`; a 0.0 CVSS is a real score and a different statement**), `epss_display` (same discipline), `fix_display` (`"—"` when NULL). `__str__` = `f"{self.advisory_id} - {self.title}"`.
+- [ ] **No FK to `AlertEvent`** - a CVE is not a firing. If an operator wants one, they create the `AlertRule(category="security")` and the `AlertEvent` themselves, which is the 0.17 seam working as designed.
+### 2.4 `SecurityIncident` — *the response, with a clock on it*
+
+- [ ] Docstring must say: **a record of a response somebody is running, not a detection NavERP made and not a notification NavERP sent.** NavERP files nothing with any authority, tells no data subject anything, and runs no scheduler - the 72-hour clock is *recorded and displayed*, never *acted on*.
+- [ ] Fields, exactly: `tenant` FK `core.Tenant` `CASCADE` `related_name="security_incidents"` `db_index=True`; **`incident`** FK `core.Incident` `SET_NULL` null blank `related_name="security_incidents"` (the 0.17 seam - one incident with two faces, not two incidents); **`primary_threat`** FK `SecurityThreat` `SET_NULL` null blank `related_name="security_incidents"`; `title` `CharField(max_length=200)`; **`incident_class`** `CharField(max_length=20, choices=INCIDENT_CLASS_CHOICES, default="security_incident")`; **`status`** `CharField(max_length=12, choices=STATUS_CHOICES, default="detected")`; `severity` `CharField(max_length=10, choices=SEVERITY_CHOICES, default="warning")`; **`discovered_at`** `DateTimeField(default=timezone.now)` - **a form field**, because "when the organisation became aware" is a fact a person knows, not a stamp a system took; `contained_at` / `eradicated_at` / `recovered_at` / `closed_at` `DateTimeField(null=True, blank=True)` - **action-stamped, off the form** (L22); **`is_notifiable`** `BooleanField(null=True, blank=True)`; `notifiable_reason` `TextField(blank=True)`; `authority_notified_at` `DateTimeField(null=True, blank=True)` (action-stamped, off the form); `authority_reference` `CharField(max_length=150, blank=True)` (a human-typed filing reference -> **form field**); **`subjects_notified`** `BooleanField(null=True, blank=True)`; `subjects_notified_at` `DateTimeField(null=True, blank=True)`; **`subject_exemption`** `CharField(max_length=28, choices=SUBJECT_EXEMPTION_CHOICES, default="none")`; `data_subjects_affected` and `records_affected` `PositiveIntegerField(null=True, blank=True, validators=[MinValueValidator(1)])`; `dpo_contact` `CharField(max_length=200, blank=True)`; `likely_consequences` `TextField(blank=True)`; `measures_taken` / `measures_proposed` `TextField(blank=True)`; **`forensic_log`** `TextField(blank=True)`; `root_cause` `TextField(blank=True)`; `lessons_learned` `TextField(blank=True)`; `owner` FK `AUTH_USER_MODEL` `SET_NULL` null blank `related_name="+"`; `owner_label` `CharField(max_length=150, blank=True)` (snapshot); **`affected_services`** `ManyToManyField("core.ServiceComponent", blank=True, related_name="security_incidents")`; `evidence` `TextField(blank=True)`; `notes` `TextField(blank=True)`; `created_at` (`auto_now_add`); `updated_at` (`auto_now`).
+- [ ] The Art. 33(3) content fields map one-to-one and each says which sub-paragraph it is: `data_subjects_affected` and `records_affected` (Art. 33(3)(a) - approximate numbers, both **nullable**: an unknown count is not a zero count); `dpo_contact` (33(3)(b)); `likely_consequences` (33(3)(c)); `measures_taken` / `measures_proposed` (33(3)(d)).
+- [ ] **`regulatory_deadline` is a `@property`, never a column and never a form field.** Return `self.discovered_at + timedelta(hours=NOTIFICATION_WINDOW_HOURS)` when `discovered_at` is set, else `None`. The research says "derived in `save()`" in one place and "a property rather than a stored column so the anchor and the deadline cannot drift" in another; **the property is the stronger statement and is the one this plan takes** - a stored column can drift from `discovered_at`, a property cannot. Companion read-only properties: `hours_remaining` (`None` when no deadline), `is_overdue` (`hours_remaining is not None and < 0`), `deadline_display` (`"—"` when no `discovered_at`).
+- [ ] Pin `INCIDENT_CLASS_CHOICES` exactly: `security_incident` / `data_breach` / `unauthorized_access` / `malware` / `phishing` / `insider_threat` / `policy_violation` / `denial_of_service` / `other` - `data_breach` is the one value that switches the whole notification block on in the detail template. Pin `STATUS_CHOICES` exactly - the NIST SP 800-61r2 lifecycle: `detected` / `triage` / `investigating` / `contained` / `eradicated` / `recovered` / `closed` / `false_positive` - **deliberately not 0.17's `Incident.status` union**, because a breach does not pass through `scheduled` or `monitoring`. Pin `SUBJECT_EXEMPTION_CHOICES` exactly, Art. 34(3)'s three exemptions as the Article names them: `none` / `technical_measures` / `subsequent_measures` / `disproportionate_effort`.
+- [ ] `Meta`: `ordering = ["-discovered_at", "-id"]`. Indexes: `(tenant, -discovered_at)` -> `secinc_tenant_discovered_idx`, `(tenant, status)` -> `secinc_tenant_status_idx`, `(tenant, incident_class)` -> `secinc_tenant_class_idx`, `(tenant, is_notifiable)` -> `secinc_tenant_notifiable_idx`.
+- [ ] `clean()` refusals: (a) `is_notifiable is None` while `status == "closed"` is refused - **you may not close a breach without having decided whether it is notifiable**; (b) `authority_notified_at` set while `is_notifiable is not True` is refused; (c) `subjects_notified is True` together with a non-`none` `subject_exemption` is refused (the exemption is the reason you did *not* notify), and `subjects_notified is False` with `subject_exemption == "none"` is refused (a recorded "no" needs a stated reason - the exemption is the defensible part of the record and an auditor asks for it first).
+- [ ] **No hash, no chain, no seal column, and no FK to `core.AuditLog`** - `procurement.AuditSeal` (6.17) already chains SHA-256 over a range of `core.AuditLog` ids, and a second tamper-evidence mechanism is a parallel schema for the same concept. `forensic_log` is a **narrative**; the detail page points at procurement's seal register in prose. `__str__` = `f"{self.title} - {self.get_status_display()}"`.
+
+## 3. Forms — `apps/core/forms/Security.py` (flat, one file, four forms)
+
+- [ ] All four inherit `TenantModelForm` (from `apps.core/forms/_common.py`) and import it via `from apps.core.forms._common import *`. Import the models from `apps.core.models` exactly as `forms/Monitoring.py` does.
+- [ ] **L22 is absolute: zero editable `DateTimeField`s** for system-set stamps. Out of every `Meta.fields` list: `SecurityThreat.resolved_at` / `resolved_by` / `service_label` / `created_at`; `IpAccessRule.added_by` / `added_by_label` / `created_at` / `updated_at`; `VulnerabilityFinding.accepted_at` / `created_at` / `updated_at`; `SecurityIncident.contained_at` / `eradicated_at` / `recovered_at` / `closed_at` / `authority_notified_at` / `subjects_notified` / `subjects_notified_at` / `owner_label` / `created_at` / `updated_at`. Also out: `regulatory_deadline` (it is a property and must never be typed).
+- [ ] The **deliberate exceptions**, each argued as 0.17 argued its three: `SecurityThreat.detected_at` and `SecurityIncident.discovered_at` (facts a person is *declaring*, not stamps a system took - a finding that cannot say when is a finding nobody can age); `IpAccessRule.expires_at` (a forward-declared block boundary a human types, the 0.16 `BackupJob.retain_until` precedent); `VulnerabilityFinding.first_seen_at` / `last_seen_at` / `due_on` (the remediation schedule somebody sets). `TenantModelForm.__init__` already installs a `datetime-local` widget with matching `input_formats` for `DateTimeField`s and a `date` widget for `DateField`s - **no widget is re-declared in these forms.**
+- [ ] **`IpAccessRuleForm`** - `Meta.fields = ["cidr", "direction", "action", "scope", "service", "credential", "rate_limit_policy", "reason", "source", "expires_at", "is_active", "notes"]`. `labels`: `cidr` = "IP address or CIDR block"; `reason` = "Why this entry exists (required)"; `action` = "Recorded action (nothing enforces this in NavERP)"; `scope` = "Scope". No `clean_*` method - every refusal lives in the model's `clean()`, so the admin path is covered by the same rule. **No `save()` override**: `added_by` / `added_by_label` are stamped by the create **view** from `request.user` (there is no `request` in a form, and an admin-created rule honestly has no "who asked" - the field is nullable and stays NULL on that path, which is true).
+- [ ] **`SecurityThreatForm`** - `Meta.fields = ["title", "threat_type", "severity", "status", "detected_at", "alert_event", "rate_limit_policy", "service", "target_user", "target_credential", "mitre_technique", "mitre_tactic", "rule_reference", "waf_action", "defense_mode", "source_ip", "occurrence_count", "summary", "detail", "evidence", "mitigated_by", "notes"]`. `labels`: `mitre_technique` = "MITRE ATT&CK technique (e.g. T1110.001 - free text, not a fixed list)"; `defense_mode` = "Bot/abuse mitigation posture (recorded, not enforced)"; `waf_action` = "WAF action (reference only - NavERP runs no WAF)"; `evidence` = "Evidence (a ticket id, a pasted log line, a screenshot path - not a payload)". `__init__` narrows `alert_event` to `select_related("rule").order_by("-fired_at", "-id")[:200]` and `mitigated_by` to `.order_by("-created_at")[:200]` - the `IncidentForm.primary_alert` N+1/cap precedent, applied locally and **not** by changing the shared `TenantModelForm` (that would put committed tests in three other apps at risk). `save()` writes `service_label` from the chosen service, exactly as `AlertEventForm` does, and **only** when a service IS chosen - clearing the service is a legitimate correction and overwriting unconditionally would destroy the snapshot that is meant to outlive the component. No other `save()` override.
+- [ ] **`VulnerabilityFindingForm`** - `Meta.fields = ["title", "advisory_id", "finding_source", "component", "package_name", "installed_version", "severity", "cvss_score", "epss_score", "fix_available", "fixed_in_version", "status", "accepted_reason", "accepted_by", "due_on", "first_seen_at", "last_seen_at", "scan_frequency", "remediation_note", "evidence", "notes"]`. `labels`: `scan_frequency` = "Declared scan cadence (nothing in NavERP runs a scan)"; `due_on` = "Remediation deadline (blank = none set)"; `cvss_score` = "CVSS score (blank = not scored)"; `fix_available` = "Fix available?". `save()` back-fills `accepted_at` **only when `accepted_by` is set and `accepted_at` is empty**, so a later edit cannot rewrite when the risk was accepted (the `AlertEventForm.first_seen_at` back-fill precedent). `accepted_by`'s queryset is narrowed to the tenant's active users in `__init__`.
+- [ ] **`SecurityIncidentForm`** - `Meta.fields = ["title", "incident_class", "status", "severity", "discovered_at", "incident", "primary_threat", "owner", "affected_services", "is_notifiable", "notifiable_reason", "authority_reference", "subject_exemption", "data_subjects_affected", "records_affected", "dpo_contact", "likely_consequences", "measures_taken", "measures_proposed", "forensic_log", "root_cause", "lessons_learned", "evidence", "notes"]`. `labels`: `is_notifiable` = "Notifiable to the supervisory authority? (blank = not yet decided)"; `forensic_log` = "Forensic narrative (what was found, preserved, and still to be collected - a narrative, not a log pipeline)"; `data_subjects_affected` = "Approx. data subjects affected (Art. 33(3)(a))"; `records_affected` = "Approx. personal data records affected (Art. 33(3)(a))"; `dpo_contact` = "DPO contact (Art. 33(3)(b))"; `likely_consequences` = "Likely consequences (Art. 33(3)(c))"; `measures_taken` = "Measures taken (Art. 33(3)(d))"; `measures_proposed` = "Measures proposed (Art. 33(3)(d))".
+- [ ] `SecurityIncidentForm.__init__` **replaces the `is_notifiable` widget with a three-state `forms.NullBooleanField(required=False)`** whose `Select` renders "Not yet decided / Notifiable / Not notifiable" - a plain `CheckboxInput` cannot express the NULL third state, and that third state is exactly the situation the 72-hour clock exists to pressure. The field stays in `Meta.fields`. `__init__` also caps `primary_threat` at `select_related("service").order_by("-detected_at", "-id")[:200]` and `incident` at `.order_by("-created_at", "-id")[:200]`. `save()` writes `owner_label` from the chosen owner (the `service_label` snapshot precedent), and **only** when an owner IS chosen.
+- [ ] No form exposes a field the model refuses, and no form re-implements a `clean()` refusal - the model owns every rule so the admin path cannot bypass it.
+## 4. Views — `apps/core/views/Security.py` (flat, one file). **Every context key is pinned below (L7/L8).**
+
+- [ ] File preamble states the module posture in the 0.17 `views/Monitoring.py` voice, and declares
+      `SECURITY_NOTES` - the honest-limit lines the overview, the five boards and all sixteen register pages print
+      **verbatim**, so a page and its board cannot disagree about what NavERP can and cannot do. No view invents prose.
+- [ ] **Every view is `@tenant_admin_required`; every delete and every action is `@require_POST` ABOVE the role gate**
+      (decorators apply bottom-up, so the outermost runs first - with the role gate outermost a member's GET is answered
+      403 before the method check runs, and the house standard is 405 for a wrong method regardless of role).
+- [ ] **Every queryset is `Model.objects.filter(tenant=request.tenant)`** - never `.all()` - and the four list views use
+      `crud_list`, which supplies `object_list`, `page_obj` and `q`. `crud_create` / `crud_detail` / `crud_edit` /
+      `crud_delete` come from `apps.core.crud` via `from apps.core.views._common import *`.
+- [ ] **Every action's guard lives in the VIEW, not only in a hidden button**, so a hand-made POST cannot reach it and
+      the audit row is not written either. Every mutation calls `write_audit_log` (`from apps.core.utils import
+      write_audit_log`) and every success message says **"recorded"**, never "detected", "blocked", "scanned",
+      "enforced" or "notified".
+
+### 4.1 Standalone boards and landing page (computed, **no models**)
+
+- [ ] `security_overview(request)` -> `render(request, "core/securityoverview.html", {...})`. Context: `threat_count`
+      (all `SecurityThreat`), `open_threat_count` (`is_open`), `new_threat_count` (`status="new"`), `ip_rule_count`,
+      `active_deny_count` (`direction="deny"`, `is_active=True`), `vulnerability_count`, `open_vulnerability_count`,
+      `overdue_vulnerability_count`, `incident_count`, `open_incident_count`, `breach_undecided_count`
+      (`is_notifiable is None`, not closed), `window_hours` (`NOTIFICATION_WINDOW_HOURS`), `notes` (`SECURITY_NOTES`).
+      Tenant guard: `if request.tenant is None: messages.info(...); return redirect("dashboard:home")` (the `firing_board`
+      pattern). **Pass no tautological counts** - a count that is structurally always 0 because `clean()` forbids the
+      state is a key the template reads for nothing (the 0.8 zero-rule-on-a-tautology).
+- [ ] `threat_board(request)` -> `"core/threatboard.html"`. Context: `open_threats` (a bounded list of dicts
+      `{"threat": t, "age_days": t.age_days, "mitigation": t.mitigated_by_id}` from
+      `status not in {resolved, false_positive, ignored}` ordered `-detected_at` capped at 200), `open_count`,
+      `open_total` (the untruncated total, so a truncated list is never mistaken for a quiet one), `state_rows` /
+      `state_counts` (zipped in the view, because a template cannot index a dict by a loop variable), `severity_rows` /
+      `severity_counts`, `type_rows` / `type_counts`, `top_source_ips` (`source_ip__isnull=False`, grouped, capped),
+      `unmitigated_count` (open with `mitigated_by_id=None`), `correlated_alert_count` (open with `alert_event_id` set -
+      the 0.17 seam made visible), `notes`. **The zero rule:** an empty board renders "no threats have been recorded" -
+      **never "0 threats" in `badge-green`**, because a quiet board here means *nobody has written anything down*, not
+      *nothing is happening*. `badge-green` does not appear on this board at all (the `firing_board` precedent).
+- [ ] `vulnerability_board(request)` -> `"core/vulnerabilityboard.html"`. Context: `band_rows` / `band_counts` (over
+      `SEVERITY_BAND_CHOICES`), `status_rows` / `status_counts`, `source_rows` / `source_counts`, `open_total`,
+      `overdue_count`, `no_fix_count` (`fix_available="no"` and not `risk_accepted`), `accepted_count`, `unscored_count`
+      (`cvss_score is None`), `sla_days` (`REMEDIATION_SLA_DAYS`, the whole mapping so the page can print the policy it
+      is judged against), `oldest` (the oldest open finding as a bounded dict), `notes`. Same zero rule: a count of 0
+      prints as "none recorded", and a `NULL` `cvss_score` prints `"—"`, never `0`.
+- [ ] `breach_clock_board(request)` -> `"core/breachclock.html"`. Context: `open_incidents` (a bounded list of dicts
+      `{"incident": i, "hours_remaining": i.hours_remaining, "deadline": i.regulatory_deadline, "overdue": i.is_overdue}`
+      for non-closed incidents ordered `-discovered_at` capped at 200), `undecided` (the `is_notifiable is None`
+      subset - **the board's whole point**), `undecided_count`, `overdue_count`, `notifiable_count`,
+      `not_notifiable_count`, `notified_authority_count`, `subjects_notified_count`, `window_hours`, `open_total`,
+      `notes`. The honest rendering is called out in the template: `is_notifiable is NULL` reads **"decision outstanding
+      - the clock is running"**, never "no" and never "not applicable".
+- [ ] `brute_force_board(request)` -> `"core/bruteforceboard.html"`. **This is a query over `accounts.LoginAttempt`
+      rows, not a 0.18 table** - 0.18 declares nothing for brute force and writes no `accounts` row. Context:
+      `failed_addresses` (a bounded list of dicts `{"ip": ip, "failures": n, "identifiers": n, "max_risk": n,
+      "last_seen": dt}` grouped in the database with `Count`/`Max` on
+      `LoginAttempt.objects.filter(tenant=request.tenant, success=False, ip__isnull=False)`), `failed_total`,
+      `step_up_threshold` (`accounts.security.RISK_STEP_UP_THRESHOLD`, read, never re-declared), `mfa_challenged_total`,
+      `notes`. **The `tenant=None` caveat is stated on the page:** `LoginAttempt.tenant` is nullable, so attempts against
+      an unknown identifier are recorded with no tenant and are **excluded** from these figures - the board counts the
+      attempts it can attribute, and says so. A `0` here is "no attributable failures recorded", not "no attacks".
+### 4.2 List views (all four: search + filters + pagination + the Actions column in the template)
+
+- [ ] `securitythreat_list(request)` -> `crud_list(request, SecurityThreat.objects.filter(tenant=request.tenant).select_related("service", "alert_event", "rate_limit_policy"), "core/securitythreat/list.html", search_fields=["title", "mitre_technique", "mitre_tactic", "source_ip", "summary", "evidence", "notes"], filters=[("status", "status", False), ("type", "threat_type", False), ("severity", "severity", False), ("service", "service_id", True)], extra_context={...})`.
+      `extra_context` keys: `status_choices` (`SecurityThreat.STATUS_CHOICES`), `threat_type_choices`, `severity_choices` (`AlertRule.SEVERITY_CHOICES`), `waf_action_choices`, `defense_mode_choices`, `services` (`ServiceComponent.objects.filter(tenant=request.tenant).order_by("name")`), `notes`. The GET param for the type filter is `type`; the column is `threat_type` - the template and the filter spec must say so, exactly as the `metric` / `metric_key` pair does in 0.17. No `no_data_choices`-style key with no dropdown behind it.
+- [ ] `ipaccessrule_list(request)` -> `crud_list(..., "core/ipaccessrule/list.html", search_fields=["cidr", "reason", "source", "notes"], filters=[("direction", "direction", False), ("action", "action", False), ("active", "is_active", False), ("service", "service_id", True)], extra_context={"direction_choices", "action_choices", "scope_choices", "source_choices", "services", "notes"})`.
+- [ ] `vulnerabilityfinding_list(request)` -> `crud_list(..., "core/vulnerabilityfinding/list.html", search_fields=["title", "advisory_id", "package_name", "installed_version", "remediation_note", "evidence", "notes"], filters=[("status", "status", False), ("severity", "severity", False), ("source", "finding_source", False), ("component", "component_id", True), ("fix", "fix_available", False)], extra_context={"status_choices", "severity_choices" (SEVERITY_BAND_CHOICES), "finding_source_choices", "fix_available_choices", "components", "sla_days", "notes"})`. **The `severity` filter param is a different vocabulary from the threat list's** - the two dropdowns are built from two different CHOICES constants and must never share a context key name by accident.
+- [ ] `securityincident_list(request)` -> `crud_list(..., "core/securityincident/list.html", search_fields=["title", "notifiable_reason", "authority_reference", "root_cause", "lessons_learned", "notes"], filters=[("status", "status", False), ("class", "incident_class", False), ("severity", "severity", False), ("notifiable", "is_notifiable", False)], extra_context={"status_choices", "incident_class_choices", "severity_choices", "subject_exemption_choices", "notes"})`. The `notifiable` filter is a nullable Boolean and the three-state dropdown is built in the template from literal `Not decided` / `Notifiable` / `Not notifiable`; `crud_list`'s `mapped = {"True": True, "False": False}` mapping already handles the two stringified booleans.
+
+### 4.3 Create / detail / edit / delete (four each, sixteen views)
+
+- [ ] `ipaccessrule_create` -> `crud_create(request, form_class=IpAccessRuleForm, template="core/ipaccessrule/form.html", success_url="core:ipaccessrule_list", extra_context={"notes": SECURITY_NOTES})`, **plus a `save()` wrapper that stamps `added_by=request.user` and `added_by_label=request.user.get_username()` on create** - the view is the only layer that has a `request`.
+- [ ] `ipaccessrule_detail` -> `crud_detail(request, model=IpAccessRule, pk=pk, template="core/ipaccessrule/detail.html", select_related=("service", "rate_limit_policy", "added_by"), extra_context={"mitigated_threat_count": SecurityThreat.objects.filter(tenant=request.tenant, mitigated_by_id=pk).count(), "is_expired": obj.is_expired, "expires_display": obj.expires_display, "notes": SECURITY_NOTES})`.
+- [ ] `ipaccessrule_edit` -> `crud_edit(..., success_url=reverse("core:ipaccessrule_detail", args=[pk]), extra_context={"notes": SECURITY_NOTES})`. **`reverse(...)` and not the bare name** - `crud_edit` calls `redirect(success_url)` with no arguments, so a pk-taking route passed as a string raises `NoReverseMatch` AFTER the row is saved and the operator sees a 500 for a write that succeeded.
+- [ ] `ipaccessrule_delete` -> `@require_POST` + `@tenant_admin_required`, `crud_delete(request, model=IpAccessRule, pk=pk, success_url="core:ipaccessrule_list")`. A GET redirects to the list without deleting (`crud_delete` is self-defending too).
+- [ ] `securitythreat_create` / `securitythreat_detail` / `securitythreat_edit` / `securitythreat_delete` - same four
+      shapes. `detail` `select_related=("service", "alert_event__rule", "rate_limit_policy", "mitigated_by",
+      "target_user", "target_credential")`, `extra_context={"incident_count": SecurityIncident.objects.filter(tenant=request.tenant, primary_threat_id=pk).count(), "age_days": obj.age_days, "source_ip_display": obj.source_ip_display, "notes": SECURITY_NOTES}`. `create` redirects to the list; `edit` uses `reverse("core:securitythreat_detail", args=[pk])`.
+- [ ] `vulnerabilityfinding_create` / `_detail` / `_edit` / `_delete` - same four shapes. `detail`
+      `select_related=("component", "accepted_by")`, `extra_context={"sla_days": obj.sla_days, "is_overdue": obj.is_overdue, "days_overdue": obj.days_overdue, "is_fixable": obj.is_fixable, "cvss_display": obj.cvss_display, "notes": SECURITY_NOTES}`.
+- [ ] `securityincident_create` / `_detail` / `_edit` / `_delete` - same four shapes. `detail`
+      `select_related=("incident", "primary_threat", "owner")`, `extra_context={"deadline_display": obj.deadline_display, "hours_remaining": obj.hours_remaining, "is_overdue": obj.is_overdue, "window_hours": NOTIFICATION_WINDOW_HOURS, "notes": SECURITY_NOTES}`.
+
+### 4.4 The eight POST-only actions (0.17's `alertevent_acknowledge` / `_resolve` shape)
+
+- [ ] `securitythreat_triage(request, pk)` - guard: refuse when `status != "new"` ("only a new finding is waiting on a
+      analyst"). Sets `status="triaged"`, `write_audit_log(..., {"verb": "securitythreat_triage", ...})`, message
+      "Triaged. This records that somebody looked at it - NavERP did not detect anything.".
+- [ ] `securitythreat_resolve(request, pk)` - guard: refuse when `status in {"resolved", "false_positive", "ignored"}`
+      (re-resolving would overwrite a settled history). Takes an optional `resolution_note` from `request.POST`,
+      **truncated to the column's 255 chars** (an untruncated string raises `DataError` inside the driver and the
+      operator sees a 500 for a write that half-happened). Sets `status="resolved"`, `resolved_at=now`,
+      `resolved_by=request.user`, message "Resolution recorded. NavERP did not fix anything - this records that
+      somebody said it was fixed."
+- [ ] `securityincident_contain` / `_eradicate` / `_recover` / `_close` - the NIST lifecycle as four POST-only verbs, one
+      stamp each: `contained_at` / `eradicated_at` / `recovered_at` / `closed_at`. Each guards the **legal predecessor**
+      (you cannot contain before triage, cannot close before `is_notifiable` is decided - the model's `clean()` refuses a
+      closed undecided breach anyway, and the action's guard is the readable version of the same rule). Each is refused
+      when its stamp is already set, so a second POST cannot rewrite the first. Messages say "recorded".
+- [ ] `securityincident_notify_authority` - guard: refuse unless `is_notifiable is True` and `authority_notified_at is
+      None`. Stamps `authority_notified_at`; the message states that NavERP **filed nothing** - "This records that
+      somebody says a filing was made. NavERP sends nothing to any authority."
+- [ ] `securityincident_notify_subjects` - guard: refuse unless `subject_exemption == "none"` and `subjects_notified is
+      not True`. Stamps `subjects_notified=True` and `subjects_notified_at`; the same "NavERP notified nobody" message.
+- [ ] Every action redirects to `core:securitythreat_detail` / `core:securityincident_detail` for that pk, passes
+      `tenant=request.tenant` into every `get_object_or_404`, and truncates any `request.POST` string it echoes back.
+## 5. URLs — `apps/core/urls.py` (the 37-line `crud(slug, name)` factory; literal routes BEFORE `<int:pk>`)
+
+- [ ] Append one 0.18 block at the end of the existing `urlpatterns` tuple, immediately after the 0.17 block. Surgical `Edit` only - another session may be in this file (L43). The `crud()` factory generates the five standard routes per model, so the four entities need four `crud(...)` calls and **no hand-written CRUD `path()` lines**.
+- [ ] The five literal (board/overview) routes come **first**, in their own list, before the `crud()` groups - Django is first-match-wins and a greedy route declared first shadows `add/` (the 0.16 and 0.17 ordering, for the same reason):
+
+```python
+# ===================== 0.18 Threat Protection & Security Operations =====================
+# Literal segments BEFORE the `crud()` groups below, and the POST-only action routes AFTER the
+# group that owns them - the 0.17 ordering, for the same reason.
++ [
+    path("security/", views.security_overview, name="security_overview"),
+    path("security/board/threats/", views.threat_board, name="threat_board"),
+    path("security/board/vulnerabilities/", views.vulnerability_board, name="vulnerability_board"),
+    path("security/board/breach-clock/", views.breach_clock_board, name="breach_clock_board"),
+    path("security/board/brute-force/", views.brute_force_board, name="brute_force_board"),
+]
++ crud("security/ip-rules", "ipaccessrule")
++ crud("security/threats", "securitythreat")
++ [
+    path("security/threats/<int:pk>/triage/", views.securitythreat_triage, name="securitythreat_triage"),
+    path("security/threats/<int:pk>/resolve/", views.securitythreat_resolve, name="securitythreat_resolve"),
+]
++ crud("security/vulnerabilities", "vulnerabilityfinding")
++ crud("security/incidents", "securityincident")
++ [
+    path("security/incidents/<int:pk>/contain/", views.securityincident_contain, name="securityincident_contain"),
+    path("security/incidents/<int:pk>/eradicate/", views.securityincident_eradicate, name="securityincident_eradicate"),
+    path("security/incidents/<int:pk>/recover/", views.securityincident_recover, name="securityincident_recover"),
+    path("security/incidents/<int:pk>/close/", views.securityincident_close, name="securityincident_close"),
+    path("security/incidents/<int:pk>/notify-authority/", views.securityincident_notify_authority, name="securityincident_notify_authority"),
+    path("security/incidents/<int:pk>/notify-subjects/", views.securityincident_notify_subjects, name="securityincident_notify_subjects"),
+]
+```
+
+- [ ] URL-name ledger (every name here must reverse, and `temp/audit_integrity.py` check 5 walks `LIVE_LINKS` and fails on any that does not): `security_overview`, `threat_board`, `vulnerability_board`, `breach_clock_board`, `brute_force_board`, and per entity `<name>_list` / `_create` / `_detail` / `_edit` / `_delete` for `ipaccessrule`, `securitythreat`, `vulnerabilityfinding`, `securityincident`, plus `securitythreat_triage`, `securitythreat_resolve`, `securityincident_contain`, `securityincident_eradicate`, `securityincident_recover`, `securityincident_close`, `securityincident_notify_authority`, `securityincident_notify_subjects`. **41 route names.**
+- [ ] **The literal-route check, done before the smoke run:** `security/board/...` cannot be shadowed by any `crud()` route (none of the four entity slugs starts with `board`), and `<int:pk>` cannot match a non-numeric segment, so the board paths are safe above. Confirm by resolving each `core:` name in a shell rather than by reading.
+- [ ] **Re-export blocks (three surgical edits, after the files exist - L12):** `apps/core/models/__init__.py` gains `from .Security import (SecurityThreat, IpAccessRule, VulnerabilityFinding, SecurityIncident)` after the `Monitoring` block; `apps/core/forms/__init__.py` gains the four form classes; `apps/core/views/__init__.py` gains all 29 view functions (5 boards + 4 CRUD sets of 5 + 8 actions). A model/form/view without its re-export is a bug - it `ImportError`s at runtime, not at build time.
+
+## 6. Templates — flat at `templates/core/` (foundation rule 4; the entity folder sits at the app root)
+
+- [ ] Four entity folders, three files each: `templates/core/securitythreat/{list,detail,form}.html`,
+      `templates/core/ipaccessrule/{list,detail,form}.html`, `templates/core/vulnerabilityfinding/{list,detail,form}.html`,
+      `templates/core/securityincident/{list,detail,form}.html`. The page file is the bare name - **never** a flat
+      `securitythreat_list.html`.
+- [ ] Five standalone pages flat at the app root: `templates/core/securityoverview.html`, `threatboard.html`,
+      `vulnerabilityboard.html`, `breachclock.html`, `bruteforceboard.html`.
+- [ ] Every template `{% extends "base.html" %}`, uses the house classes (`page-header`, `page-title`, `breadcrumb`,
+      `page-actions`, `card` / `card-body`, `filter-bar`, `table-wrap`, `table`, `table-actions`, `btn-icon`, `empty-state`,
+      `text-muted`, `fw-600`) and the lucide icon set. Copy `templates/core/alertrule/list.html` as the list reference and
+      `templates/core/firingboard.html` as the board reference.
+- [ ] **`{% include "partials/pagination.html" %}`** after every list's table, and `{% include %}` for any shared
+      sub-block rather than copy-pasting one - `{% extends %}` / `{% include %}` are unaffected by the folder rule.
+- [ ] **Every list has an Actions column** with all three, unconditionally (none of these four has a status gate that
+      would justify hiding Edit or Delete): a View button (`data-lucide="eye"`, `btn-icon`), an Edit button
+      (`data-lucide="pencil"`), and a **POST** delete form with `{% csrf_token %}`, `method="post"`,
+      `onsubmit="return confirm('…')"` and a `data-lucide="trash-2"` `btn-icon danger` button.
+- [ ] **Every detail has an Actions sidebar** with Edit, a POST delete form with confirm, and a Back-to-list link, plus
+      the module's honest-limit line. Every detail also links to the sibling surfaces the seam implies: the threat detail
+      links to its `alert_event` (`core:alert_event_detail`) and its `rate_limit_policy` (`core:rate_limit_detail`) when
+      set; the incident detail links its `incident` (`core:incident_detail`) and its `primary_threat`
+      (`core:securitythreat_detail`) when set; the IP-rule detail lists the threats it mitigates.
+- [ ] **Filter rules, applied exactly:** string filters compare with `{% if request.GET.status == value %}`; **FK/pk
+      filters use `|stringformat:"d"`, never `|slugify`** (`{% if request.GET.service == s.pk|stringformat:"d" %}`);
+      booleans compare against the literal strings `"True"` / `"False"`. Every dropdown's option list comes from the
+      `*_choices` key its view actually passed (a filter with no dropdown behind it is a key the template reads for
+      nothing), and every dropdown has an "Any …" blank option plus a Reset link back to the bare list URL.
+- [ ] **Badges are colour-named only** and match the exact CHOICES values: `badge-info`, `badge-amber`, `badge-red`,
+      `badge-green`, `badge-muted`, `badge-slate` (these six are the entire vocabulary in `static/css/theme.css` - there
+      is no `badge-warning`, `badge-danger` or `badge-purple`). Every badge branch has an `{% else %}` fallback rendering
+      `{{ obj.get_<field>_display }}`. Severity → `info` → `badge-info`, `warning` → `badge-amber`, `critical` →
+      `badge-red`; the CVSS band → `none`/`low` → `badge-slate`, `medium` → `badge-amber`, `high`/`critical` →
+      `badge-red`. **`badge-green` appears on no board** (the zero rule) and on no security register row.
+- [ ] **The decline prose is IN the pages, not only in the docstrings** (research section 3). In the same voice 0.17 uses
+      on every register page: this is a register of claims a person wrote - NavERP has no IDS/IPS agent, no scanner, no
+      WAF, no CAPTCHA, no SIEM client, no log pipeline and no scheduler, so nothing here detects, blocks, scans,
+      enforces, ships or notifies anything; a row is a record of what somebody reported. Each board additionally prints
+      its own specific decline (the breach clock prints that NavERP files nothing with any authority and tells no data
+      subject anything; the brute-force board prints that it reads `accounts.LoginAttempt` and adds no 0.18 table and no
+      lockout).
+- [ ] **The `NULL` rendering discipline on every page:** `source_ip` NULL → `"—"`; `cvss_score` / `epss_score` NULL →
+      `"—"`; `fix_available` NULL → `"—"`; `due_on` NULL → `"no deadline set"` (never today's date); `expires_at` NULL →
+      `"permanent"`; `ipaccessrule` counts the board cannot justify print the reason, never a bare `0`.
+- [ ] **Empty states are honest, not reassuring.** Each register's `{% empty %}` block uses the standard
+      `.empty-state` block and says what is missing rather than implying all-clear: no threats → "No threats have been
+      recorded"; no findings → "No vulnerability findings have been recorded"; no incidents → "No security incidents have
+      been recorded". None of them says "secure", "healthy" or "no action needed".
+## 7. Admin — `apps/core/admin.py` (four registrations, surgical `Edit` after the 0.17 block)
+
+- [ ] `SecurityThreatAdmin`: `list_display = ["title", "threat_type", "severity", "status", "detected_at", "service", "tenant"]`;
+      `list_filter = ["threat_type", "severity", "status", "is_active" if present else omitted, "tenant"]` - use the real
+      field set: `["threat_type", "severity", "status", "tenant"]`; `search_fields = ["title", "mitre_technique", "source_ip", "summary", "notes"]`;
+      `readonly_fields = ["service_label", "resolved_at", "resolved_by", "created_at"]`; `list_per_page = 25`.
+- [ ] `IpAccessRuleAdmin`: `list_display = ["cidr", "direction", "action", "scope", "is_active", "expires_at", "tenant"]`;
+      `list_filter = ["direction", "action", "scope", "source", "is_active", "tenant"]`; `search_fields = ["cidr", "reason", "notes"]`;
+      `readonly_fields = ["added_by", "added_by_label", "created_at", "updated_at"]`.
+- [ ] `VulnerabilityFindingAdmin`: `list_display = ["advisory_id", "title", "severity", "status", "cvss_score", "due_on", "tenant"]`;
+      `list_filter = ["severity", "status", "finding_source", "fix_available", "tenant"]`; `search_fields = ["advisory_id", "title", "package_name", "notes"]`;
+      `readonly_fields = ["accepted_at", "created_at", "updated_at"]`.
+- [ ] `SecurityIncidentAdmin`: `list_display = ["title", "incident_class", "status", "severity", "discovered_at", "is_notifiable", "tenant"]`;
+      `list_filter = ["incident_class", "status", "severity", "is_notifiable", "subject_exemption", "tenant"]`;
+      `search_fields = ["title", "authority_reference", "notifiable_reason", "root_cause"]`;
+      `readonly_fields = ["owner_label", "contained_at", "eradicated_at", "recovered_at", "closed_at", "authority_notified_at", "subjects_notified", "subjects_notified_at", "created_at", "updated_at"]`.
+- [ ] The admin is the **second** path past every `clean()` rule, and it is a different one: it uses a plain `ModelForm`,
+      so the refusal messages are what protect it. Add one comment per admin class saying so, and do not add a
+      `save_model()` that re-implements anything the model already refuses.
+- [ ] `TenantConsistentMixin` walks `ForeignKey`/`OneToOneField` only, so `SecurityIncident.affected_services` (an M2M)
+      is **not** tenant-checked on the admin path. This is the same documented limitation 0.16 escalated (C7) and 0.17
+      recorded; `TenantModelForm` *does* narrow M2M querysets, so the form path is covered. Record it in the
+      `Security.py` docstring as a known limitation - **do not** "fix" it by changing `TenantModelForm`, which would
+      break committed tests in three other apps.
+
+## 8. Seeder — `seed_core._seed_security(tenant)` (surgical `Edit`; per-entity guards, never `--flush`)
+
+- [ ] Add the call to `handle()` immediately after `self._seed_monitoring(tenant)`, inside the per-tenant loop.
+- [ ] **SEEDED - the L52 ruling, and the load-bearing one.** Two kinds of row only:
+      **(a)** up to two `AlertRule` rows with `category="security"` and an existing `metric_key` (never a new key - adding
+      one would be growing 0.17's vocabulary, which the seam forbids), each with a real bound (`AlertRule.clean()`
+      refuses an active rule with no bound), `is_active` set, and `notes` saying plainly that nothing in NavERP evaluates
+      it. A declared threshold is a *policy somebody wrote* - exactly what a seeder is allowed to fabricate, the same
+      basis on which 0.17 seeds `AlertRule` and 0.16 seeds `BackupJob.frequency`.
+      **(b)** at most two `VulnerabilityFinding` rows clearly marked as **published advisory records entered by hand** -
+      a real `advisory_id`, `finding_source="dependency"`, `component=None`, `evidence` saying the row was entered by a
+      person from a published advisory and that NavERP ran no scanner and no dependency check, and `notes` saying it is a
+      worked example and not a finding about this installation. Never present a seeded row as a scan NavERP performed.
+- [ ] **NOT SEEDED - and the consequence is intended, so do not "fix" it:** **zero `SecurityThreat`, zero
+      `SecurityIncident`, zero `IpAccessRule`.** A fabricated "we detected a brute-force attack" or "we blocked this
+      address" is a **recorded event that did not happen** - the L52 defect, and worse than 0.16's, because a security
+      register that lies is actively dangerous. An `IpAccessRule` is a *policy* but it is also a claim that an address is
+      denied, and a seeded deny entry is indistinguishable on the page from one a person wrote after an incident.
+      **Therefore a fresh seed leaves the threat board, the vulnerability board and the breach-clock board with nothing
+      declared, and a naive smoke run reads that as contract drift. It is not drift** - it is the boards telling the
+      truth about a system that watches nothing. The smoke script creates the rows it needs through the ORM and deletes
+      them in a `finally`.
+- [ ] Add `SecurityThreat`, `SecurityIncident` and `IpAccessRule` to `KNOWN_OK` in `temp/audit_integrity.py`'s
+      `check_seeders`, **each with its reason printed** (0.17's `AlertEvent` / `Incident` entries are the precedent, and
+      an unexplained exemption is indistinguishable from an oversight - the exact thing that check exists to catch). This
+      is a shared single-writer file: re-read it immediately before editing.
+- [ ] **Per-entity guards, never a tenant-wide one** - the documented defect that left everything added to this command
+      after the fact unreachable in workspaces that already existed. The `AlertRule` guard is **category-scoped**:
+      `if not AlertRule.objects.filter(tenant=tenant, category="security").exists():`. That matters: 0.17's own guard is
+      `AlertRule.objects.filter(tenant=tenant).exists()`, so on a workspace that already ran 0.17 a tenant-wide guard
+      would skip these two rows forever, while a category-scoped guard creates them on the first run and creates nothing
+      on the second. The `VulnerabilityFinding` guard is `if not VulnerabilityFinding.objects.filter(tenant=tenant).exists():`.
+- [ ] **Idempotent on a second run** with no `--flush` and no duplicate rows, and `get_or_create` is used wherever a
+      unique constraint applies. After the second run, print the counts of the three non-seeded models so the operator can
+      see the zero is deliberate.
+- [ ] **Nothing in 0.18 writes to `accounts`, `tenants` or `procurement`.** The seeder creates no `LoginAttempt` (an
+      attempt is evidence of an event), and the brute-force board's source rows come from `seed_accounts`, not from here.
+## 9. Navigation — `LIVE_LINKS["0.18"]` in `apps/core/navigation.py` (adjacent to `LIVE_LINKS["0.17"]`)
+
+- [ ] **The five bullet labels are copied BYTE-IDENTICALLY from `NavERP.md` section 0.18** (lines 244-248).
+      `parse_catalog()` matches them by exact string, so a one-character drift renders a fully built page as a "soon"
+      roadmap pill with no error anywhere - a silent failure behind a green build. Copy them, do not retype them, and
+      diff them against `NavERP.md` before committing.
+- [ ] **Nine labels, nine DISTINCT targets.** `resolve_nav` renders every label in the dict, so two labels pointing at
+      one page light the active-link highlight twice - the defect 0.17's own comment records. The pinned block, with the
+      collision already resolved:
+
+```python
+    "0.18": {
+        # Bullets, copied BYTE-IDENTICALLY from NavERP.md section 0.18 (lines 244-248).
+        "Intrusion Detection & Prevention": "core:ipaccessrule_list",         # bullet 1 - the allow/deny lists, verbatim
+        "Vulnerability & Patch Management": "core:vulnerabilityfinding_list",  # bullet 2
+        "Security Incident Response": "core:securityincident_list",          # bullet 3
+        "Bot & Abuse Protection": "core:securitythreat_list",                # bullet 4 - CAPTCHA and WAF DECLINED
+        "Security Alerting & SIEM": "core:threat_board",                     # bullet 5 - through the 0.17 seam
+        # Extra built pages that are NOT NavERP.md bullets. `resolve_nav` appends these AFTER the
+        # bullets, so they read as operational leaves rather than as more promised features.
+        "Vulnerability Board": "core:vulnerability_board",                   # extra (the aging / overdue board)
+        "Breach Clock": "core:breach_clock_board",                           # extra (the 72h Art. 33 clock)
+        "Brute-Force Correlation": "core:brute_force_board",                 # extra (reads accounts.LoginAttempt)
+        "Security Overview": "core:security_overview",                       # extra (landing page)
+    },
+```
+
+- [ ] Bullet 1 points at the IP lists (its verbatim noun) and bullet 5 at the threat board (the correlated-alert /
+      hunting surface, where a `SecurityThreat` carrying an `alert_event` FK is the 0.17 seam made visible). **No
+      duplicate target anywhere in the block** - verify that programmatically (nine names in, nine distinct values out)
+      before committing, not by eye.
+- [ ] Where a bullet is only partly served, the trailing comment says which half: bullet 4's CAPTCHA and WAF are
+      **DECLINED** (no `captcha` library in `requirements.txt`, no WAF in front of the app), bullet 5's "real-time" and
+      SIEM/SOC export are **DECLINED** (no scheduler, no event bus, no exporter). The sidebar must never advertise a
+      capability the pages themselves decline - a pill that promises a WAF the app cannot run is the 0.16 lie one level
+      up.
+- [ ] The extras that are boards are listed **after** the bullets (that is the `resolve_nav` order), each with a comment
+      saying what it is, in the 0.17 style. **The landing page is the last extra**, never the first bullet.
+- [ ] `apps/core/tests/test_navigation_active.py` and `temp/audit_integrity.py` check 5 both walk `LIVE_LINKS`: every
+      name above must reverse, and the active-link logic must light exactly one label per page.
+## 10. Migration — `core.0016_*` (L43: claim the number BEFORE generating)
+
+- [ ] `core` is at `0015_alertrule_alertevent_servicecomponent_incident_and_more.py`. **Re-list
+      `apps/core/migrations/` immediately before generating - not from this line.** If a peer session has already added a
+      `core` model and generated a `0016`, **concede the lower number and generate last**; never `makemigrations --merge`
+      (that makes the double leaf permanent) and never renumber or delete a migration another session created.
+- [ ] Generate as the **last backend step**, after all four model files exist and are re-exported, so Django auto-depends
+      on anything a peer landed in the meantime. `makemigrations` is scoped to the app registry, not to your files - check
+      no peer added a model to `core` in this checkout first, or you will sweep their model into your migration.
+- [ ] **Expected content:** four `CreateModel`s, **zero `AddField`** (no existing model is touched - that is the whole
+      point of the RateLimitPolicy ruling and the 0.17-seam ruling), the auto-generated
+      `SecurityIncident.affected_services` through table, `SecurityThreat.mitigated_by` -> `IpAccessRule` (a FK between
+      two new models, which is why the class order in section 2 is `IpAccessRule` first), and the list-ordering indexes
+      named exactly as pinned above - MariaDB imposes a hard index-name length limit, so keep every name short enough to
+      clear it. If the generated migration contains an `AddField` on a 0.13 or 0.17 table, **stop**: something was edited
+      that must not have been.
+- [ ] Run `migrate`, then `makemigrations --check --dry-run` again and confirm **"No changes detected"** - a non-empty
+      result means a model was edited after the migration was generated.
+
+## 11. Verify — the gate, in this order (all from the repo root, `venv\Scripts\python.exe manage.py ...`)
+
+- [ ] `manage.py check` - zero issues.
+- [ ] `makemigrations --check --dry-run` - **"No changes detected"**.
+- [ ] `migrate` - applies `core.0016_*` cleanly, one leaf node.
+- [ ] `seed_core` **twice** (never `--flush` on this shared checkout). The second run must add **no** duplicate rows and
+      must still report **zero** `SecurityThreat`, **zero** `SecurityIncident` and **zero** `IpAccessRule` - that zero is
+      the L52 ruling working, not a failure.
+- [ ] `venv\Scripts\python.exe temp\audit_integrity.py` - **all six checks PASS**: 1 catalog, 2 every migration applied,
+      3 every route name reverses, 4 every template renders, 5 every `LIVE_LINKS` target reverses, 6 seeder coverage with
+      the three new `KNOWN_OK` exemptions printing their reasons. A failure in check 5 means a nav label drifted.
+- [ ] **Smoke pass (`qa-smoke-tester`) asserting CONTENT, not just status (L8).** Render as `admin_acme` and assert a
+      real string from each page - the entity's own name or a seeded title - plus the `SECURITY_NOTES` line, on all
+      **41 routes**: 4 lists, 4 details, 4 create forms, 4 edit forms, 5 boards/overview, 8 actions (via POST), and the
+      four delete redirects. A mismatched context var returns **200 and renders blank**, so a status-only check passes a
+      broken page. The smoke script creates the `SecurityThreat` / `SecurityIncident` rows it needs through the ORM and
+      deletes them in a `finally` (the seeder deliberately created none).
+- [ ] **Junk-param list** on all four list views: `?status=nope`, `?severity=not_a_band`, `?service=abc`, `?service=0`,
+      `?service=999999999999999999999`, `?fix=maybe`, `?notifiable=maybe` - each must be **ignored** and return the
+      unfiltered register (200, same row count), never a 500 and never a silently emptied page.
+- [ ] **Page 2** on each of the four lists (seed enough rows to paginate, or assert `page_obj` exists and
+      `?page=2` resolves) - prev/next guards hold and no template 500s.
+- [ ] **Cross-tenant IDOR -> 404**: log in as the second tenant's admin and request every detail, edit, delete and action
+      URL for a row owned by the first tenant. All **404** (the tenant filter is inside `get_object_or_404`), and each of
+      the eight POST actions refuses as well.
+- [ ] **Method check**: `GET` on all four delete URLs and all eight action URLs returns **405** (the `@require_POST` is
+      above the role gate), and an unauthenticated request redirects to login.
+- [ ] Confirm the `SEVERITY_CHOICES` and `SCAN_FREQUENCY_CHOICES` reuse-by-reference assertions pass (`is` identity), so
+      the vocabularies have not forked.
+## 12. Review, fix, tests and docs (Phases 4-7 — strictly serial, one thing at a time)
+
+- [ ] **Phase 4 - six reviewers, ONE AFTER ANOTHER, each in its own `Agent` call, waiting for each to report before
+      starting the next:** `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` ->
+      `qa-smoke-tester` -> `security-reviewer`. Each reviews `BASE...HEAD` = `64780680...HEAD`. The reviewers are
+      **read-only** - they never edit code and never commit; `qa-smoke-tester`'s normal "fix what you find" behaviour is
+      overridden to **report it instead** (it is the only one that touches the DB, and it uses its own throwaway
+      `temp/` script). **Never use the `Workflow` tool and never launch two agents in one message.**
+- [ ] **After each reviewer reports, append its findings to `.claude/tasks/review-core-0.18.md`** - do not carry findings
+      in your head between agents. When all six have run, dedupe the file, sort Critical -> Important -> Minor, assign
+      IDs (`C1`, `I3`, `M7`) and commit that one file. If a reviewer returns nothing usable, **re-run that one agent** -
+      a missing pass is missing coverage, not a clean bill of health.
+- [ ] **The one review question that matters most** (research section 4, residual risk): *"does any page on these four
+      models imply that NavERP detected, blocked, scanned, enforced or notified anything?"* A page headed "Blocked IP"
+      when nothing blocks is the 0.16 lie; a page headed "Recorded block - requires an enforcing layer" is the same fact
+      told honestly. Check every template against this question before Phase 5 starts.
+- [ ] **Phase 5 - one `code-fixer` agent**, handed the findings file. It fixes every finding **in ID order** (all
+      Critical, then Important, then Minor), verifies each, and makes **one commit per file** as it goes, marking each
+      finding `[x] fixed` / `[~] skipped - reason` in the file. **The main session does not apply findings itself** - that
+      is what kept blowing out the context window. When it reports, check no finding is left `[ ] open` and that
+      `manage.py check` is clean.
+- [ ] **Phase 6 - tests, serial, four lanes, one file at a time, each committed as it lands.** **First**, one agent pins
+      the test contract (exact model / form / url / context names) and writes the shared `tests/__init__.py` +
+      `conftest.py` fixtures - `conftest.py` is **append-only** (L43): the existing `party_a` / `party_b` and the 0.15
+      fixtures are never rewritten, and the 0.18 fixtures are added below them. Then one `test-writer` agent per file:
+      `apps/core/tests/test_security_models.py` -> `test_security_forms.py` -> `test_security_views.py` ->
+      `test_security_security.py`.
+- [ ] **Naming discipline (L47):** every test function is `test_security_*` and every module-level helper is
+      `_security_*`, so the next sub-module appending nearby cannot shadow them. The pre-existing
+      `apps/core/tests/test_security.py` is **left exactly as it is** - it belongs to an earlier sub-module and is not
+      renamed or edited. The four new files are additive.
+- [ ] **What the four lanes must assert, at minimum.** *models*: the four `clean()` refusal sets; the `NULL`-is-not-`0`
+      displays; `SecurityThreat.SEVERITY_CHOICES is AlertRule.SEVERITY_CHOICES` and
+      `VulnerabilityFinding.SCAN_FREQUENCY_CHOICES is SyncSchedule.FREQUENCY_CHOICES` (**identity, not equality**);
+      `SecurityIncident.regulatory_deadline` is a property and is not a field; `SecurityThreat.tenant` and all three
+      other `tenant` FKs exist. *forms*: each `Meta.fields` list exactly, and each excluded system-set field absent.
+      *views*: every pinned context key is present on a 200 (**L8** - assert content, not status), search and each
+      filter narrows, junk params are ignored rather than emptying the register, pagination holds, and every delete and
+      action refuses a GET with 405. *security*: cross-tenant **404** on every detail/edit/delete/action, and a member
+      (non-admin) is refused on every 0.18 route.
+- [ ] **Finally, run the FULL UNFILTERED `core` suite and fix it green.** Never a `-k` filtered run - a filter excludes
+      exactly the tests a shared-file change can break, because the damage lands outside the filter (L47). Tests run on
+      SQLite in-memory.
+- [ ] **Phase 7 - docs, one file per commit.** `NavERP.md`: mark 0.18 built (module table "17 of 21" -> "18 of 21", and
+      the 0.18 section's status line). `NavERP-ERD.md`: **L36 section 2 - reconcile BOTH rows in the same pass** - 0.18's
+      row gains the four models and states that it *extends* `core.RateLimitPolicy`, `core.AlertRule`, `core.AlertEvent`,
+      `core.Incident` and `accounts.LoginAttempt` by FK, and procurement 6.17's row notes that the `AuditSeal` is the
+      integrity layer over `core.AuditLog` while 0.18's forensic field is narrative only. **Editing only 0.18's row
+      leaves the doc contradicting the code**, which is what L36 section 2 forbids. Also flag the 0.19 boundary (0.19 owns
+      the quota, 0.18 owns the abuse bound and the evidence of breaching it) in the same pass, for **both** modules.
+      `README.md`: mark the sub-module complete. `.claude/skills/` - Module 0's reference skills already exist, so
+      update the `core` / `next-module` skill's 0.18 rows rather than authoring a new per-module skill.
+- [ ] **Commit discipline for the whole build:** **one file per commit**, explicit paths, `git add '<path>'; git commit
+      -m '<specific message about that one file>'` - PowerShell `;` separators, never `&&`. **Never `git push`, at any
+      step.** Never stage the four `templates/projects/reporting/*.html` files or the untracked `.commandcode/`, `.gemini/`,
+      `.workbuddy-ai/`, `.zcode/` directories - they belong to the other session (L45). If a build step appears to need
+      one of them, stop and re-plan rather than staging it.
+
 # Build Plan — Module 8 8.1 Lead Management
 
 Source of truth: `.claude/tasks/research-sales-8.1.md`.
