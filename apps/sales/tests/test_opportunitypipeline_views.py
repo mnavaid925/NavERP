@@ -174,7 +174,7 @@ def _opportunitypipeline_team_payload(user, **overrides):
     payload = {
         "user": str(user.pk),
         "org_unit": "",
-        "role": "sales_rep",
+        "role": "sales_support",
         "responsibility": "Primary Deal Lead",
         "is_active": True,
     }
@@ -202,7 +202,7 @@ def _opportunitypipeline_competitor_payload(party, **overrides):
 def _opportunitypipeline_competitor_link_payload(competitor_profile, **overrides):
     payload = {
         "competitor_profile": str(competitor_profile.pk),
-        "relationship": "direct",
+        "relationship": "evaluating",
         "is_primary": True,
         "pricing_notes": "Undercutting list by 30%",
         "deal_notes": "Incumbent vendor for past 3 years",
@@ -219,7 +219,7 @@ def _opportunitypipeline_reason_payload(**overrides):
         "description": "Customer selected us due to pre-built ERP integrations.",
         "sequence": 15,
         "result": "won",
-        "category": "product",
+        "category": "product_fit",
         "is_active": True,
     }
     payload.update(overrides)
@@ -231,14 +231,14 @@ def _opportunitypipeline_reason_payload(**overrides):
 # ============================================================================
 
 def test_opportunitypipeline_routes_reverse_and_resolve(
-    opportunitypipeline_admin_client_a,
+    opportunitypipeline_client_a,
     opportunitypipeline_pipeline_a,
     opportunitypipeline_opportunity_a,
     opportunitypipeline_competitor_a,
     opportunitypipeline_reason_a,
 ):
-    """Verify that all 33 opportunity pipeline routes reverse, match URL patterns, and enforce HTTP methods."""
-    assert len(_opportunitypipeline_routes) == 33
+    """Verify that all 34 opportunity pipeline routes reverse, match URL patterns, and enforce HTTP methods."""
+    assert len(_opportunitypipeline_routes) == 34
     positions = {
         pattern.name: idx
         for idx, pattern in enumerate(sales_urls.urlpatterns)
@@ -297,7 +297,7 @@ def test_opportunitypipeline_routes_reverse_and_resolve(
     ]
     for route_name, kw in post_only_routes:
         url = _opportunitypipeline_url(route_name, **kw)
-        resp = opportunitypipeline_admin_client_a.get(url)
+        resp = opportunitypipeline_client_a.get(url)
         assert resp.status_code == 405, f"{route_name} did not return 405 on GET"
 
 
@@ -532,14 +532,14 @@ def test_opportunitypipeline_stages_list_and_create_view(
     payload = _opportunitypipeline_stage_payload(
         opportunitypipeline_pipeline_a,
         name="Security Review",
-        code="SEC_REV",
+        code="sec_rev",
         sequence=35,
         probability=60,
     )
     post_resp = opportunitypipeline_client_a.post(create_stage_url, payload)
     assert post_resp.status_code == 302
     assert post_resp.url == stages_url
-    assert opportunitypipeline_pipeline_a.stages.filter(code="SEC_REV").exists()
+    assert opportunitypipeline_pipeline_a.stages.filter(code="sec_rev").exists()
 
 
 def test_opportunitypipeline_stage_edit_delete_reorder_view(
@@ -726,7 +726,7 @@ def test_opportunitypipeline_workspace_list_view(
     assert opportunitypipeline_opportunity_b.pk not in opp_pks
 
     # Search filter
-    resp_q = opportunitypipeline_client_a.get(url, {"q": opportunitypipeline_opportunity_a.title})
+    resp_q = opportunitypipeline_client_a.get(url, {"q": opportunitypipeline_opportunity_a.name})
     assert resp_q.status_code == 200
     assert opportunitypipeline_opportunity_a.pk in [o.pk for o in resp_q.context["opportunities"]]
 
@@ -795,14 +795,14 @@ def test_opportunitypipeline_workspace_detail_view(
     contract = ContractDocument.objects.create(
         tenant=opportunitypipeline_tenant_a,
         opportunity=opportunitypipeline_opportunity_a,
-        title="Master Services Agreement Draft",
+        name="Master Services Agreement Draft",
         status="draft",
         owner=user,
     )
     doc = Document.objects.create(
         tenant=opportunitypipeline_tenant_a,
-        content_object=opportunitypipeline_opportunity_a,
-        title="Architecture Diagram",
+        related=opportunitypipeline_opportunity_a,
+        name="Architecture Diagram",
         file=SimpleUploadedFile("arch.png", b"file_content"),
     )
     audit = AuditLog.objects.create(
@@ -810,7 +810,7 @@ def test_opportunitypipeline_workspace_detail_view(
         user=user,
         target=f"Opportunity {opportunitypipeline_opportunity_a.pk}",
         action="update",
-        content_object=opportunitypipeline_opportunity_a,
+        related=opportunitypipeline_opportunity_a,
         changes={"operation": "advance_stage"},
     )
 
@@ -977,7 +977,7 @@ def test_opportunitypipeline_team_members_add_edit_remove(
     assert bad_post.context["form"].errors
 
     # POST valid add
-    payload = _opportunitypipeline_team_payload(opportunitypipeline_user_a, role="technical_lead")
+    payload = _opportunitypipeline_team_payload(opportunitypipeline_user_a, role="solution_consultant")
     post_add = opportunitypipeline_client_a.post(add_url, payload)
     assert post_add.status_code == 302
     member = OpportunityTeamMember.objects.filter(
@@ -985,7 +985,7 @@ def test_opportunitypipeline_team_members_add_edit_remove(
         user=opportunitypipeline_user_a,
     ).first()
     assert member is not None
-    assert member.role == "technical_lead"
+    assert member.role == "solution_consultant"
 
     # Edit member
     edit_url = _opportunitypipeline_url(
@@ -1000,13 +1000,13 @@ def test_opportunitypipeline_team_members_add_edit_remove(
 
     edit_payload = _opportunitypipeline_team_payload(
         opportunitypipeline_user_a,
-        role="solution_architect",
+        role="collaborator",
         responsibility="Enterprise Architecture Blueprint",
     )
     post_edit = opportunitypipeline_client_a.post(edit_url, edit_payload)
     assert post_edit.status_code == 302
     member.refresh_from_db()
-    assert member.role == "solution_architect"
+    assert member.role == "collaborator"
     assert member.responsibility == "Enterprise Architecture Blueprint"
 
     # Remove member
@@ -1152,7 +1152,7 @@ def test_opportunitypipeline_win_loss_reason_crud(
     assert opportunitypipeline_reason_a.pk in [r.pk for r in resp_list.context["object_list"]]
 
     # Filter reasons
-    resp_filt = opportunitypipeline_client_a.get(list_url, {"result": "won", "category": "product", "active": "active"})
+    resp_filt = opportunitypipeline_client_a.get(list_url, {"result": "won", "category": "product_fit", "active": "active"})
     assert resp_filt.status_code == 200
 
     # Create reason
