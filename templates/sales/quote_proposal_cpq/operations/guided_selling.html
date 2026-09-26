@@ -35,7 +35,7 @@
                     <option value="">-- Choose a Product Bundle to Configure --</option>
                     {% for bp in bundle_products %}
                         <option value="{{ bp.pk }}" {% if selected_bundle and selected_bundle.pk == bp.pk %}selected{% endif %}>
-                            {{ bp.name }} — (List: ${{ bp.list_price:,.2f }})
+                            {{ bp.name }} — (Price: ${{ bp.unit_price|floatformat:2 }})
                         </option>
                     {% endfor %}
                 </select>
@@ -61,7 +61,7 @@
                     <div>
                         <span class="text-xs uppercase font-semibold text-purple-700 tracking-wider">Configuring Package</span>
                         <h3 class="text-lg font-bold text-slate-900 mt-0.5">{{ selected_bundle.name }}</h3>
-                        <p class="text-xs text-slate-500 font-mono">SKU: {{ selected_bundle.number }} · Base Price: ${{ selected_bundle.list_price:,.2f }}</p>
+                        <p class="text-xs text-slate-500 font-mono">SKU: {{ selected_bundle.number }} · Base Price: ${{ selected_bundle.unit_price|floatformat:2 }}</p>
                     </div>
                     {% if not preselect_quote_id %}
                         <div class="w-72">
@@ -116,9 +116,9 @@
                                         <label class="block text-xs text-slate-500 mb-0.5">Unit Price</label>
                                         <div class="font-mono text-sm font-semibold text-slate-900">
                                             {% if opt.unit_price_override %}
-                                                ${{ opt.unit_price_override:,.2f }}
+                                                ${{ opt.unit_price_override|floatformat:2 }}
                                             {% else %}
-                                                ${{ opt.component_product.list_price:,.2f }}
+                                                ${{ opt.component_product.unit_price|floatformat:2 }}
                                             {% endif %}
                                         </div>
                                         {% if opt.discount_pct_override %}
