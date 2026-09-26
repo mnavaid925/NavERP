@@ -256,6 +256,50 @@ the immutable measurement. Collapsing them would let a missed RPO silently rewri
 - [x] `### Module 0 0.16 — Backup, Recovery & Data Lifecycle (close-out 2026-09-25)` prose section.
 - [x] Update `.claude/skills/core/SKILL.md` with the 0.16 section; update `NavERP.md` + `README.md` counters.
 
+### Module 0 0.17 — Monitoring, Logging & Observability (close-out 2026-09-26)
+
+**Status: 0.17 is built, reviewed, fixed, tested and documented.** Four models in
+`apps/core/models/Monitoring.py` — `ServiceComponent`, `AlertRule`, `AlertEvent`, `Incident`, each
+`TenantConsistentMixin`. Migration **`core.0015`**. 17 templates: the four entity triples
+(`alertrule/`, `alertevent/`, `incident/`, `servicecomponent/`) plus five standalone board/landing
+pages (`healthboard.html`, `firingboard.html`, `capacityboard.html`, `monitoringoverview.html`,
+`processmonitor.html`). Seeder block `seed_core._seed_monitoring(tenant)`, guarded per entity.
+
+**It is a register of *declared* thresholds and *recorded* firings, not a collection agent.** Nothing
+here scrapes a metric, tails a log file or pages a human.
+
+**Three of the five NavERP bullets are DECLINED, and the `LIVE_LINKS["0.17"]` comments say so at the
+point of use so a reader does not mistake a decline for a partial build:**
+
+- **b2 "Centralized logs"** — no log pipeline exists anywhere in this repo. What ships is the alert
+  threshold vocabulary plus the register of hand-reported firings.
+- **b3 "Distributed tracing"** — no tracing SDK, no OpenTelemetry. Latency / throughput / slow-query
+  exist as **threshold vocabulary on `AlertRule`** plus a computed board, not as an APM product.
+- **b4 "Quota management"** — billing's. 0.17 keeps only the scaling trigger.
+
+**0.18 inherits that boundary** and must not re-declare an observability store either; it has to
+state in its own contract whether it can now serve log aggregation or carries the same deferral.
+
+**Performance, from the review pass:** the rule-detail figures were computed by loading a rule's entire
+firing history (**23× measured at 20k events**) and are now one database aggregate; the four list counts
+folded into a single aggregate (`event_totals`); the originating-alert dropdown was N+1 because
+`AlertEvent.__str__` dereferences `rule` (**measured 200 events = 201 queries**) and is now joined and
+capped; the capacity board's usage scan is capped. Two badge ladders were reading the display label
+instead of the stored value, which lit the wrong badge.
+
+**Contract correction before the tests were written:** the pinned context contract was repaired to
+as-built — `event_totals` aggregate, `type_choices`, `component_total`/`rule_total`, `open_events`/
+`open_total`, and the comparator-aware capacity row.
+
+- [x] Phase 4 review → `.claude/tasks/review-core-0.17.md` (frontend, performance, qa and security passes recorded).
+- [x] Phase 6 tests → `.claude/tasks/test-contract-core-0.17.md`; `apps/core/tests/test_monitoring_*`.
+- [x] `temp/audit_integrity.py` passes **6/6** and independently reports `core: 17 live sub-modules`
+      and `module 0: 4 catalogued but NOT built -> 0.18, 0.19, 0.20, 0.21`.
+- [x] Docs corrected in one sweep 2026-09-26 — **0.17 had landed with no docs close-out at all**, so
+      `plan-remaining-INDEX.md`, `plan-remaining-1-module0-submodules.md`, `README.md`, `NavERP.md`,
+      `.claude/skills/core/SKILL.md` and this file all undercounted it. All now read **17 of 21 built
+      (0.1–0.17), 4 remaining (0.18–0.21)**.
+
 ### Module 0 0.16 — Backup, Recovery & Data Lifecycle (close-out 2026-09-25)
 
 **Status: 0.16 is built, reviewed, fixed, tested and documented.** Seven models in `core`
@@ -9310,7 +9354,8 @@ two registries are global) and `_seed_localization(tenant)` with **per-entity** 
 Five models in `apps/core/models/Localization.py`: `Language` and `TimeZone` (**global**, no `tenant` FK —
 the `accounting.Currency` precedent), `LocaleProfile` (tenant `OneToOne` singleton), `UserLocalePreference`
 (per-user singleton), `StatutoryRule`. 3 forms, 11 views, 11 routes, 9 templates, 5 admin registrations.
-**`core` is now 15 of 21; 6 remain (0.16–0.21).**
+**`core` is now 17 of 21; 4 remain (0.18–0.21).** *(This line read "15 of 21; 6 remain (0.16–0.21)" until
+the 2026-09-26 docs sweep — 0.16 and 0.17 had both landed without updating it.)*
 
 **L36 ownership call.** Bullets 2 and 4 are already half-built by `accounting`: `Currency` (2.2),
 `ExchangeRate` (2.2) and `TaxCode` (2.11) all exist. 0.15 **points at** them — `LocaleProfile.base_currency`
