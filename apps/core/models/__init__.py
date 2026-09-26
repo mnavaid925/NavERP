@@ -119,3 +119,9 @@ from .Backup import (
 from .LegalHold import (
     LegalHold,
 )  # noqa: F401
+from .Monitoring import (
+    ServiceComponent,
+    AlertRule,
+    AlertEvent,
+    Incident,
+)  # noqa: F401
