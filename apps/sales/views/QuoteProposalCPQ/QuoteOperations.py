@@ -294,8 +294,8 @@ def quote_portal_view(request, token):
         signing_token=token
     )
     
-    # Recalculate to ensure accurate figures
-    cpq_recalc_quote_totals(quote, save=True)
+    # Recalculate to ensure accurate figures in memory without write amplification
+    cpq_recalc_quote_totals(quote, save=False)
 
     lines = list(quote.lines.select_related("product").order_by("sequence", "id"))
     form = CPQPortalSignForm(initial={
