@@ -146,10 +146,10 @@
                             </td>
                             <td>
                                 <div class="text-sm font-bold text-slate-900">
-                                    {{ q.currency.code|default:"USD" }} {{ q.total:,.2f }}
+                                    {{ q.currency.code|default:"USD" }} {{ q.total|floatformat:2 }}
                                 </div>
                                 {% if q.discount_total > 0 %}
-                                    <div class="text-xs text-amber-700">Disc: {{ q.currency.code }} {{ q.discount_total:,.2f }}</div>
+                                    <div class="text-xs text-amber-700">Disc: {{ q.currency.code }} {{ q.discount_total|floatformat:2 }}</div>
                                 {% endif %}
                             </td>
                             <td>
