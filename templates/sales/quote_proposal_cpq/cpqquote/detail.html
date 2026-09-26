@@ -77,6 +77,15 @@
                     <i data-lucide="pencil" class="w-4 h-4 mr-1.5"></i> Edit Header
                 </a>
             {% endif %}
+
+            {% if quote.status == 'draft' or quote.status == 'rejected' %}
+                <form method="POST" action="{% url 'sales:cpq_quote_delete' quote.pk %}" class="inline-block" onsubmit="return confirm('Are you sure you want to delete quote {{ quote.number }}? This action cannot be undone.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50 hover:border-red-300">
+                        <i data-lucide="trash-2" class="w-4 h-4 mr-1.5"></i> Delete
+                    </button>
+                </form>
+            {% endif %}
         </div>
     </div>
 
