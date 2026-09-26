@@ -236,6 +236,9 @@ def alert_event_list(request):
             "state_choices": AlertEvent.STATE_CHOICES,
             "severity_choices": AlertEvent.SEVERITY_CHOICES,
             "services": ServiceComponent.objects.filter(tenant=request.tenant).order_by("name"),
+            # Backs the `?rule=` filter above. Without it the filter is reachable only by hand-typing
+            # a URL, which is the 0.10 "Live sidebar over a page that 500s" failure in filter form.
+            "rules": AlertRule.objects.filter(tenant=request.tenant).order_by("name"),
             # A real count on a real column, so 0 is a legitimate figure on a firing board.
             "firing_count": AlertEvent.objects.filter(tenant=request.tenant, state="firing").count(),
             # Contract §5.4: the open set is `firing` + `acknowledged` — the same definition
@@ -403,7 +406,13 @@ def incident_list(request):
             "impact_choices": Incident.IMPACT_CHOICES,
             "type_choices": Incident.INCIDENT_TYPE_CHOICES,
             "services": ServiceComponent.objects.filter(tenant=request.tenant).order_by("name"),
-            "active_count": Incident.objects.filter(tenant=request.tenant, is_active=True).count(),
+            # `is_active` is REGISTER MEMBERSHIP (has this row been archived?), which is NOT the same
+        # question as "is this incident still open" — that is `Incident.is_open`, a status test. A
+        # resolved-but-unarchived incident would be counted here and called "still open", and an
+        # archived-but-open one would vanish. Both figures are passed under their own names.
+        "active_count": Incident.objects.filter(tenant=request.tenant, is_active=True).count(),
+        "open_count": Incident.objects.filter(tenant=request.tenant).exclude(
+            status__in=["resolved", "completed"]).count(),
             "notes": MONITORING_NOTES,
         })
 
@@ -488,8 +497,15 @@ def monitoring_overview(request):
     if tenant is None:
         messages.info(request, "Monitoring applies to a tenant workspace.")
         return redirect("dashboard:home")
-    components = list(ServiceComponent.objects.filter(tenant=tenant)
-                      .select_related("owner_role").order_by("-id"))
+    # The overview counts the ACTIVE register, matching the health board's roll-up, and says so
+    # explicitly. It previously counted every row while the health board counted only active ones, so
+    # the same "components" figure meant two different things on two pages of the same sub-module — and
+    # a workspace whose components were all retired showed a non-zero total here while the health board
+    # rendered "No components registered", which is simply false.
+    all_components = ServiceComponent.objects.filter(tenant=tenant)
+    components = [c for c in all_components.select_related("owner_role").order_by("-id")
+                  if c.is_active]
+    retired_component_count = all_components.filter(is_active=False).count()
     rules = list(AlertRule.objects.filter(tenant=tenant).select_related("service").order_by("-id"))
     events = list(AlertEvent.objects.filter(tenant=tenant)
                   .select_related("rule", "service").order_by("-id"))
@@ -503,6 +519,7 @@ def monitoring_overview(request):
     open_events = [e for e in events if e.is_open]
     context = {
         "component_total": len(components),
+        "retired_component_count": retired_component_count,
         "operational_count": sum(1 for c in components if c.current_status == "operational"),
         # Readable from one column, so a literal 0 is legitimate ONLY when there are components at all.
         # The template renders "not applicable" when `component_total == 0` rather than a green zero.
@@ -513,6 +530,8 @@ def monitoring_overview(request):
         "open_event_count": len(open_events),
         "unmeasured_count": sum(1 for e in events if e.observed_value is None),
         "active_incident_count": sum(1 for i in incidents if i.is_open),
+        "archived_incident_count": Incident.objects.filter(
+            tenant=request.tenant, is_active=False).count(),
         "latest_metrics": metrics,
         "notes": MONITORING_NOTES,
     }
@@ -565,21 +584,33 @@ def health_board(request):
     status_rows = [(label, status_counts[value]) for value, label in ServiceComponent.STATUS_CHOICES]
 
     rollup = "operational"
+    # A `{status: rank}` lookup, not `list.index()`. `.index()` raises `ValueError` -> HTTP 500 for any
+    # status value that is not one of the five currently declared choices (a choice retired by a later
+    # migration, or a row written by a bulk `.update()`), which would take down the whole board over one
+    # bad row. An unrecognised status ranks as `unknown` and degrades quietly instead.
+    rank = {status: i for i, (status, _label) in enumerate(ServiceComponent.STATUS_CHOICES)}
     for c in components:
         # `components` is already filtered to `is_active=True` above, so there is no `c.is_active`
         # test here to make — the queryset is the guarantee, and a second identical guard would only
         # read as though inactive components could reach this loop.
-        if _STATUS_SEVERITY.index(c.current_status) < _STATUS_SEVERITY.index(rollup):
+        if rank.get(c.current_status, rank.get("unknown", 0)) < rank.get(rollup, 0):
             rollup = c.current_status
     if not components:
         # NEVER "operational" by default: no components means no claim, and an all-green board over an
         # empty register is the false all-clear 0.8 refuses.
         rollup = "unknown"
+    # Registered-but-retired is NOT the same as never-registered. Saying "no components are registered"
+    # when four are registered and all four are retired is simply false, and it is exactly the kind of
+    # over-confident empty state this sub-module exists to avoid.
+    registered_total = ServiceComponent.objects.filter(tenant=tenant).count()
+    retired_count = registered_total - len(components)
 
     return render(request, "core/healthboard.html", {
         "components": [{"component": c, "open_alerts": per_component.get(c.pk, 0),
                         "note": c.status_note} for c in components],
         "component_total": len(components),
+        "registered_total": registered_total,
+        "retired_count": retired_count,
         "critical_count": sum(1 for c in components if c.is_critical),
         "public_count": sum(1 for c in components if c.is_public),
         "status_counts": status_counts,
@@ -608,25 +639,38 @@ def firing_board(request):
         messages.info(request, "Alert firings apply to a tenant workspace.")
         return redirect("dashboard:home")
 
-    events = list(AlertEvent.objects.filter(tenant=tenant)
-                  .select_related("rule", "service").order_by("-fired_at", "-id"))
-    open_events = [e for e in events if e.is_open]
+    # The board shows OPEN firings, so the row fetch is narrowed to the open set rather than loading
+    # every firing ever recorded and discarding most of them in Python. The two histograms are GROUPED
+    # counts straight from the database, so they stay correct at any table size instead of costing one
+    # full scan per page view.
+    base = AlertEvent.objects.filter(tenant=tenant)
+    open_qs = base.filter(state__in=["firing", "acknowledged"])
+    # The open set is bounded for display. A board that must render every open firing ever recorded is
+    # a board that eventually stops rendering; `open_total` below is what tells the page when the list
+    # it is showing is not the whole truth.
+    open_events = list(open_qs.select_related("rule", "service").order_by("-fired_at", "-id")[:200])
+
     state_counts = {value: 0 for value, _ in AlertEvent.STATE_CHOICES}
+    for row in base.values("state").annotate(n=Count("id")):
+        state_counts[row["state"]] = row["n"]
     severity_counts = {value: 0 for value, _ in AlertEvent.SEVERITY_CHOICES}
-    for e in events:
-        state_counts[e.state] = state_counts.get(e.state, 0) + 1
-        severity_counts[e.severity_at_fire] = severity_counts.get(e.severity_at_fire, 0) + 1
+    for row in base.values("severity_at_fire").annotate(n=Count("id")):
+        severity_counts[row["severity_at_fire"]] = row["n"]
     # Zipped in the view for the same reason as the health board's `status_rows`: a template cannot
     # index a dict by a loop variable, so `{{ state_counts|default_if_none:0 }}` inside the loop
     # printed the entire dict after every label instead of that label's count.
     state_rows = [(label, state_counts[value]) for value, label in AlertEvent.STATE_CHOICES]
     severity_rows = [(label, severity_counts[value])
                      for value, label in AlertEvent.SEVERITY_CHOICES]
+    # How many of the open firings this board would even show, so a truncated list is never mistaken
+    # for a quiet one.
+    open_total = open_qs.count()
 
     return render(request, "core/firingboard.html", {
         "open_events": [{"event": e, "age_days": e.age_days, "muted": e.is_muted,
                          "note": e.measure_note} for e in open_events],
         "open_count": len(open_events),
+        "open_total": open_total,
         "acknowledged_count": sum(1 for e in open_events if e.state == "acknowledged"),
         "muted_count": sum(1 for e in open_events if e.is_muted),
         "state_counts": state_counts,
@@ -679,10 +723,19 @@ def capacity_board(request):
                            "overage": u.overage_quantity if included is not None else None,
                            "note": note})
 
+    # Inactive rules are shown but must not be counted as live triggers: a parked rule is a written
+    # intention nobody is holding to, and letting it inflate `over_threshold_count` would make this
+    # board claim something is over a bound when the rule was switched off years ago.
     capacity_rules = list(AlertRule.objects.filter(tenant=tenant, category="capacity")
                           .select_related("service").order_by("name"))
     capacity_rows = []
     over_threshold_count = 0
+    # Which operators have a meaningful numeric headroom, and which way round the subtraction goes.
+    # `BusinessRule.OPERATORS` is a general-purpose vocabulary (it also serves 0.11's process rules),
+    # so most of its values are legal here but simply are not an ordered comparison. Those fall to
+    # `headroom = None` and the "cannot compare" note rather than inventing a number.
+    _UPPER_BOUND_OPS = {"lte", "lt"}
+    _LOWER_BOUND_OPS = {"gte", "gt"}
     for r in capacity_rules:
         bound = r.critical_threshold if r.critical_threshold is not None else r.warning_threshold
         # Join on the RAW key, never the display label. `AlertRule.METRIC_CHOICES` and
@@ -693,19 +746,37 @@ def capacity_board(request):
         # "Cannot compare" for every real pair. `metric_key` is the only value both sides share.
         matching = [row for row in usage_rows if row["metric_key"] == r.metric_key]
         current = matching[0]["quantity"] if matching else None
-        if bound is None or current is None:
+        comparator = r.comparator
+        if comparator not in _UPPER_BOUND_OPS and comparator not in _LOWER_BOUND_OPS:
             headroom = None
+            breached = None
+            note = (f'This rule compares with "{r.get_comparator_display()}", which is not an ordered '
+                    "comparison, so no headroom can be calculated. The figure is not reported as 0.")
+        elif bound is None or current is None:
+            headroom = None
+            breached = None
             note = ("Cannot compare: the rule has no bound set, or this workspace has no consumption "
                     "recorded for the metric. Neither side is reported as 0.")
-        else:
+        elif comparator in _UPPER_BOUND_OPS:
+            # A ceiling: staying BELOW the bound is healthy, so headroom is how much room is left.
             headroom = bound - current
-            if current > bound:
-                over_threshold_count += 1
-                note = "Recorded consumption is above the declared bound. Nothing acts on that."
-            else:
-                note = "Recorded consumption is within the declared bound."
+            breached = current > bound
+            note = ("Recorded consumption is above the declared ceiling. Nothing acts on that."
+                    if breached else
+                    "Recorded consumption is within the declared ceiling.")
+        else:
+            # A floor: staying ABOVE the bound is healthy, so the subtraction runs the other way.
+            headroom = current - bound
+            breached = current < bound
+            note = ("Recorded consumption is below the declared floor. Nothing acts on that."
+                    if breached else
+                    "Recorded consumption is within the declared floor.")
+        if breached and r.is_active:
+            over_threshold_count += 1
         capacity_rows.append({"rule": r, "headroom": headroom, "note": note,
-                              "bound": bound, "current": current})
+                              "bound": bound, "current": current,
+                              "comparator": r.get_comparator_display(),
+                              "breached": breached, "inactive": not r.is_active})
 
     unmetered_count = sum(1 for row in usage_rows if row["included"] is None)
     return render(request, "core/capacityboard.html", {
