@@ -2227,21 +2227,15 @@ LIVE_LINKS = {
         # The five NavERP.md 8.4 bullet strings, verbatim. parse_catalog() keys the module
         # tree off them, so a typo silently produces a dead bullet. Every value is a
         # staff-reachable management page -- never a login-gated portal view (L32).
-        #
-        # DEVIATION (integrate pass): the contract's 5.5 derived-report pages
-        # (`forecast_board`, `forecast_attainment`, `forecast_accuracy`, `forecast_call`)
-        # were never built -- no ForecastBoards views/urls module and no templates exist.
-        # Rather than pin three dead bullets, those three point at the submission register,
-        # which is the page that actually carries the committed / best-case / pipeline /
-        # quota-attainment figures today. Re-point them once the board module lands.
         "Forecast Categories & Commitments": "sales:forecast_submission_list",
-        "AI-Powered Predictive Forecasting": "sales:forecast_submission_list",
-        "Quota Management & Attainment": "sales:forecast_submission_list",
+        "AI-Powered Predictive Forecasting": "sales:forecast_board",
+        "Quota Management & Attainment": "sales:forecast_attainment",
         "Forecast Rollups & Adjustments": "sales:forecast_adjustment_list",
-        "Forecast Accuracy & Variance Analysis": "sales:forecast_submission_list",
+        "Forecast Accuracy & Variance Analysis": "sales:forecast_accuracy",
         # Extra live leaves (not NavERP.md bullets):
         "Forecast Periods": "sales:forecast_period_list",
         "Scenarios & What-If": "sales:forecast_scenario_list",
+        "Forecast Call": "sales:forecast_call",
     },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
