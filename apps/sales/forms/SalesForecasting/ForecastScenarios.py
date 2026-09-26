@@ -187,8 +187,3 @@ class ForecastScenarioApplyForm(TenantActionForm):
             cleaned["variance_threshold_pct"] = DEFAULT_VARIANCE_THRESHOLD_PCT
         return cleaned
 
-
-        # visible instead of the field simply vanishing.
-        if self.instance.pk and self.instance.period_id and self.instance.period.is_locked:
-            for field_name in self.fields:
-                self.fields[field_name].disabled = True
