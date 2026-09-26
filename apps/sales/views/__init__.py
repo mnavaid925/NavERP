@@ -124,6 +124,45 @@ from .OpportunityOutcomes.OpportunityOutcomes import (
     opportunity_win_loss_reason_edit,
     opportunity_win_loss_reason_list,
 )
+from .SalesForecasting.ForecastPeriods import (
+    forecast_period_create,
+    forecast_period_delete,
+    forecast_period_detail,
+    forecast_period_edit,
+    forecast_period_export,
+    forecast_period_list,
+    forecast_period_lock,
+    forecast_period_unlock,
+)
+from .SalesForecasting.ForecastSubmissions import (
+    forecast_submission_approve,
+    forecast_submission_create,
+    forecast_submission_delete,
+    forecast_submission_detail,
+    forecast_submission_edit,
+    forecast_submission_export,
+    forecast_submission_list,
+    forecast_submission_reject,
+    forecast_submission_submit,
+)
+from .SalesForecasting.ForecastAdjustments import (
+    forecast_adjustment_create,
+    forecast_adjustment_delete,
+    forecast_adjustment_detail,
+    forecast_adjustment_edit,
+    forecast_adjustment_export,
+    forecast_adjustment_list,
+    forecast_adjustment_revert,
+)
+from .SalesForecasting.ForecastScenarios import (
+    forecast_scenario_apply,
+    forecast_scenario_create,
+    forecast_scenario_delete,
+    forecast_scenario_detail,
+    forecast_scenario_edit,
+    forecast_scenario_list,
+    forecast_scenario_select,
+)
 from .Workspace import (
     opportunity_place,
     opportunity_unplace,
@@ -131,5 +170,8 @@ from .Workspace import (
     opportunity_workspace_list,
 )
 
-__all__ = [name for name in globals() if name.startswith(("lead_", "party_enrichment_", "account_", "opportunity_"))]
+# "forecast_" covers the 31 8.4 view functions. The three service functions
+# (`forecast_org_unit_chain`, `forecast_submission_snapshot`, `forecast_ai_gate`) live in
+# `apps/sales/forecast_services.py` and are deliberately NOT imported here: they are not views.
+__all__ = [name for name in globals() if name.startswith(("lead_", "party_enrichment_", "account_", "opportunity_", "forecast_"))]
 
