@@ -123,6 +123,23 @@
                 </tbody>
             </table>
         </div>
+
+        {% if ready_quotes.has_other_pages %}
+            <div class="card-footer border-t border-slate-200 p-4 flex items-center justify-between">
+                <div class="text-sm text-slate-500">
+                    Showing {{ ready_quotes.start_index }} to {{ ready_quotes.end_index }} of {{ ready_quotes.paginator.count }} quotes
+                </div>
+                <div class="pagination flex items-center space-x-2">
+                    {% if ready_quotes.has_previous %}
+                        <a href="?page={{ ready_quotes.previous_page_number }}" class="btn btn-outline py-1 px-3 text-sm">Previous</a>
+                    {% endif %}
+                    <span class="text-sm font-medium text-slate-700">Page {{ ready_quotes.number }} of {{ ready_quotes.paginator.num_pages }}</span>
+                    {% if ready_quotes.has_next %}
+                        <a href="?page={{ ready_quotes.next_page_number }}" class="btn btn-outline py-1 px-3 text-sm">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
     </div>
 
     <!-- Converted Orders History -->
