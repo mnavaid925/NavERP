@@ -19,7 +19,7 @@ reference for a foundation app with flat entity files. Read them before inventin
 
 ## As-built
 
-**16 of 21 sub-modules are live** (`LIVE_LINKS` in `apps/core/navigation.py` is the source of truth):
+**17 of 21 sub-modules are live** (`LIVE_LINKS` in `apps/core/navigation.py` is the source of truth):
 
 `0.1` Tenant & Subscription · `0.2` Identity & Access Management · `0.3` RBAC & Permissions ·
 `0.4` Authentication & SSO · `0.5` User & Organization · `0.6` Module Administration & Access Scope ·
