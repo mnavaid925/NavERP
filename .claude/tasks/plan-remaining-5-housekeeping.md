@@ -15,7 +15,7 @@
 > | Item | Outcome |
 > |---|---|
 > | **A** — dashboard tests | ✅ Done earlier (`32913e28`, `3fc46276`, `33447c3a`, `5c841a3e`) |
-> | **B** — 2026-09-01 artifacts | 🟨 `enum-guard-pass.md` **deleted** as `2500eec1`; the two `.log` files pending the test re-check + user OK |
+> | **B** — 2026-09-01 artifacts | ✅ **CLOSED.** `enum-guard-pass.md` **deleted** as `2500eec1`; the two `.log` files **deliberately kept on disk** (user's call, 2026-09-26) — they are gitignored, so keeping them costs nothing and a delete is unrecoverable |
 > | **C** — 14 BOM files | ✅ **DECIDED: leave them.** Re-verified all 14 still begin `ef bb bf`; not a defect |
 >
 > **Re-verification done before acting on B** (not taken on the plan's 2026-09-22 word): the central
@@ -24,8 +24,25 @@
 > `apps/procurement/tests/test_receipt_views.py:649` and `:1163` now assert
 > `_receipt_pks(r) == [<the row>]`, not `== []`, each with a docstring naming the old behaviour.
 > The note's content survives in the code, the two tests and `lessons.md`, so deleting it loses
-> nothing. **The `git rm` was safe precisely because this file was tracked; the two logs were not,
-> and are gone via a plain delete — that is why they needed your explicit OK.**
+> nothing — and it *was* tracked, which is the only reason that `git rm` was safe.
+>
+> **Item B's final state — one deleted, two deliberately kept (decided 2026-09-26).** The tracked
+> `enum-guard-pass.md` was removed as `2500eec1`. The two `.log` files were **kept on disk by explicit
+> user decision**: they are gitignored, so they never reach a commit and keeping them costs nothing,
+> while deleting them is the one unrecoverable action in this whole plan. **Item B is closed — do not
+> re-open it and do not try to `git rm` the logs; that command will fail and the intent was settled.**
+>
+> The evidence that made the decision safe to defer is recorded above, and was **re-verified
+> independently on 2026-09-26** rather than taken from the 2026-09-22 run:
+>
+> ```
+> apps/procurement/tests/test_invoice_{forms,views,security}.py
+> apps/procurement/tests/test_spend_{forms,views,security}.py
+> -> 808 tests, 0 failures, 0 errors, 1 skipped, 343.6 s
+>    (temp/junit_plan5_itemB_recheck.xml, read via xml.etree)
+> ```
+>
+> So all 20 failures the logs name are genuinely resolved and **nothing needs filing in `todo.md`**.
 >
 > **Item C's decision — "leave", taken deliberately, not by omission.** Python strips a UTF-8 BOM per
 > PEP 263, so every one of the 14 files imports fine and `manage.py check` is clean. The only cost is
@@ -222,16 +239,17 @@ strip the BOM in that same commit.
 - [x] `apps/dashboard/tests/` exists with a views lane and a security lane, both green — **verified
       2026-09-22: 15 tests, 0 failures, 0 errors** (`temp/junit_dashboard_check.xml`). Landed by
       `32913e28` / `3fc46276` / `33447c3a` / `5c841a3e`.
-- [ ] The three 2026-09-01 artifacts are either folded into `lessons.md`/`todo.md` or removed
-      (user-confirmed). **Verdict recorded: `enum-guard-pass.md` is redundant and deletable;
-      the two logs are gitignored/untracked so their deletion is irreversible and needs the user's OK.**
-- [ ] Item C: explicitly decided (leave, or strip opportunistically) — a decision counts as done.
-      **Recommended: leave.**
-- [ ] Each change committed separately. **Never `git push`.**
+- [x] The three 2026-09-01 artifacts are resolved — **`enum-guard-pass.md` deleted** as `2500eec1`
+      (its content already lived in `apps/core/crud.py` and two corrected tests); **the two `.log`
+      files deliberately kept on disk** by user decision, since they are gitignored and a delete is
+      unrecoverable. Re-verified 2026-09-26 that all 20 failures they name are resolved:
+      **808 tests, 0 failures, 0 errors, 1 skipped** (`temp/junit_plan5_itemB_recheck.xml`).
+- [x] Item C: explicitly decided — **LEAVE the 14 BOM files.** All 14 re-confirmed to begin
+      `ef bb bf` on 2026-09-26. Not a defect (PEP 263); strip opportunistically if already editing one.
+- [x] Each change committed separately. **Never `git push`.**
 
 ## Note
 
-This is the lowest-value plan of the five. **Plans 2, 3 and 4 are now COMPLETE** (re-verified 2026-09-22 —
-see `plan-remaining-INDEX.md`), and **Item A of this plan is complete too**, so the only work left across
-the whole `plan-remaining-*` set is: **Plan 1 (Module 0, 0.16–0.21)** — the real remaining work — plus
-Item B and the Item C decision here.
+This was the lowest-value plan of the five, and **all five are now complete** (re-verified
+2026-09-26 — see `plan-remaining-INDEX.md`). **Nothing in the `plan-remaining-*` set is outstanding
+except Plan 1 (Module 0, 0.17–0.21)** — the real remaining work.
