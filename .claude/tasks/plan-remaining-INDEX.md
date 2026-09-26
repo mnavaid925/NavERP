@@ -19,7 +19,9 @@ Five plans, one per remaining item. Each is self-contained — read only the one
 > Commits proving 2/3/4: `67e0195e`, `7a4d55d3`, `7c2c446f` (plus the earlier `c7a9eef4`, `81e7a99d`,
 > `9248505f`, `3db5a589`, `4b088965`, `1962ae89`). Plan 5 Item A: `32913e28`, `3fc46276`, `33447c3a`,
 > `5c841a3e` (dashboard tests, 15 green). Plan 5 Item B: `2500eec1` (deleted the redundant
-> `enum-guard-pass.md`). Plan 5 Item C: **decided — leave the 14 BOM files.**
+> `enum-guard-pass.md`; the two `.log` files were **kept on disk by user decision** — they are
+> gitignored, so keeping them costs nothing and deleting them is unrecoverable). Plan 5 Item C:
+> **decided — leave the 14 BOM files.**
 >
 > **Progress since the 2026-09-22 re-verification:** Module 0 gained **0.16 — Backup, Recovery & Data
 > Lifecycle**, so the remaining Module 0 work is **5 sub-modules (0.17–0.21), not 6**. This file and
