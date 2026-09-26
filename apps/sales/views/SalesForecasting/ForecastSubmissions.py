@@ -33,6 +33,7 @@ from apps.sales.forecast_services import (
     _call_period,
     _open_opportunities,
     _rollup_by_currency,
+    _undated_opportunity_count,
     forecast_ai_gate,
     forecast_submission_snapshot,
 )
@@ -208,6 +209,24 @@ def _opportunity_rollups(obj):
     ))
 
 
+def _undated_pipeline_note(obj):
+    """Caveat text when a call's pipeline includes deals with no expected close date.
+
+    Empty string when every matched deal is dated, so the template renders nothing.
+    """
+    count = _undated_opportunity_count(
+        obj.tenant_id, obj.owner, obj.territory, obj.pipeline, _call_period(obj),
+    )
+    if not count:
+        return ""
+    deals = "deal" if count == 1 else "deals"
+    return (
+        f"{count} of the {deals} behind this call have no expected close date. They are "
+        "counted here as landing in the period, because an undated open deal is still "
+        "live pipeline rather than no pipeline at all."
+    )
+
+
 def _allowed_actions(obj, request):
     """The actions the acting user may take, re-derived server-side.
 
@@ -267,6 +286,7 @@ def forecast_submission_detail(request, pk):
         "adjustments": obj.adjustment_rows(),
         "adjustment_rows": adjustment_rows,
         "opportunity_rollups": _opportunity_rollups(obj),
+        "undated_pipeline_note": _undated_pipeline_note(obj),
         "ai_available": ai_available,
         "ai_gate_message": ai_gate_message,
         "ai_explanation": obj.ai_explanation,
