@@ -4,7 +4,7 @@ from apps.sales.forms._common import TenantModelForm
 from apps.sales.models.QuoteProposalCPQ.CPQQuotes import CPQQuote
 from apps.crm.models import Opportunity, PriceBook, DocTemplate
 from apps.core.models import Party
-from apps.accounting.models.GeneralLedger.Currencies import Currency
+from apps.accounting.models import Currency
 from apps.accounts.models import User
 
 
