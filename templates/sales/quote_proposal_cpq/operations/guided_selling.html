@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}CPQ Guided Selling Wizard — Solution Bundling{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">CPQ</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">Guided Selling</span>
+            </nav>
+            <h1 class="page-title">CPQ Guided Selling Wizard</h1>
+            <p class="text-sm text-slate-500 mt-1">Configure solution bundles with automated compatibility validation and add to quotes.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'sales:cpq_quote_list' %}" class="btn btn-outline">
+                <i data-lucide="arrow-left" class="w-4 h-4 mr-1.5"></i> Back to Quotes
+            </a>
+        </div>
+    </div>
+
+    <!-- Step 1: Package Selector -->
+    <div class="card p-6">
+        <h2 class="text-base font-semibold text-slate-900 mb-2">Step 1: Select Solution Package / Product Bundle</h2>
+        <form method="GET" class="flex flex-wrap items-center gap-3">
+            {% if preselect_quote_id %}
+                <input type="hidden" name="quote" value="{{ preselect_quote_id }}">
+            {% endif %}
+            <div class="flex-1 min-w-[280px]">
+                <select name="bundle" class="form-select text-sm w-full" onchange="this.form.submit()">
+                    <option value="">-- Choose a Product Bundle to Configure --</option>
+                    {% for bp in bundle_products %}
+                        <option value="{{ bp.pk }}" {% if selected_bundle and selected_bundle.pk == bp.pk %}selected{% endif %}>
+                            {{ bp.name }} — (List: ${{ bp.list_price:,.2f }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary text-sm py-2 px-4">
+                Load Bundle &rarr;
+            </button>
+        </form>
+    </div>
+
+    <!-- Step 2: Component Configuration & Options -->
+    {% if selected_bundle %}
+        <div class="card">
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="apply_guided_bundle" value="1">
+                <input type="hidden" name="bundle" value="{{ selected_bundle.pk }}">
+                {% if preselect_quote_id %}
+                    <input type="hidden" name="quote_id" value="{{ preselect_quote_id }}">
+                {% endif %}
+
+                <div class="card-header border-b border-slate-200 p-5 bg-slate-50 flex items-center justify-between">
+                    <div>
+                        <span class="text-xs uppercase font-semibold text-purple-700 tracking-wider">Configuring Package</span>
+                        <h3 class="text-lg font-bold text-slate-900 mt-0.5">{{ selected_bundle.name }}</h3>
+                        <p class="text-xs text-slate-500 font-mono">SKU: {{ selected_bundle.number }} · Base Price: ${{ selected_bundle.list_price:,.2f }}</p>
+                    </div>
+                    {% if not preselect_quote_id %}
+                        <div class="w-72">
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Target Opportunity (Optional)</label>
+                            <select name="opportunity_id" class="form-select text-xs">
+                                <option value="">-- Create Standalone Quote --</option>
+                                {% for opp in opportunities %}
+                                    <option value="{{ opp.pk }}">{{ opp.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="card-body p-6 space-y-6">
+                    <h4 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
+                        Bundle Components &amp; Add-on Selection
+                    </h4>
+
+                    <div class="space-y-4">
+                        {% for opt in options %}
+                            <div class="p-4 border border-slate-200 rounded-lg hover:border-blue-300 transition flex flex-wrap items-center justify-between gap-4 {% if opt.is_required %}bg-slate-50/70{% endif %}">
+                                <div class="flex items-start space-x-3 flex-1 min-w-[240px]">
+                                    <input type="checkbox" name="opt_{{ opt.id }}" id="opt_{{ opt.id }}" 
+                                           class="form-checkbox mt-1 text-blue-600 rounded"
+                                           {% if opt.is_required %}checked disabled{% elif opt.is_default %}checked{% endif %}>
+                                    <div>
+                                        <label for="opt_{{ opt.id }}" class="font-medium text-slate-900 cursor-pointer text-sm">
+                                            {{ opt.name }}
+                                        </label>
+                                        <div class="text-xs text-slate-500 mt-0.5">
+                                            Product: <strong>{{ opt.component_product.name }}</strong>
+                                            &nbsp;·&nbsp; Group: <span class="badge badge-slate text-xs">{{ opt.option_group }}</span>
+                                            {% if opt.is_required %}<span class="badge badge-amber text-xs ml-1">Mandatory</span>{% endif %}
+                                        </div>
+                                        {% if opt.compatibility_rule != 'none' %}
+                                            <div class="text-xs text-purple-700 mt-1 flex items-center">
+                                                <i data-lucide="git-merge" class="w-3.5 h-3.5 mr-1"></i>
+                                                {{ opt.get_compatibility_rule_display }}
+                                                {% if opt.depends_on_product %}: {{ opt.depends_on_product.name }}{% endif %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center space-x-4">
+                                    <div>
+                                        <label class="block text-xs text-slate-500 mb-0.5">Qty</label>
+                                        <input type="number" name="qty_{{ opt.id }}" value="{{ opt.default_quantity }}" min="{{ opt.min_quantity }}" max="{{ opt.max_quantity }}" class="form-input text-xs w-20 text-right">
+                                    </div>
+                                    <div class="text-right w-28">
+                                        <label class="block text-xs text-slate-500 mb-0.5">Unit Price</label>
+                                        <div class="font-mono text-sm font-semibold text-slate-900">
+                                            {% if opt.unit_price_override %}
+                                                ${{ opt.unit_price_override:,.2f }}
+                                            {% else %}
+                                                ${{ opt.component_product.list_price:,.2f }}
+                                            {% endif %}
+                                        </div>
+                                        {% if opt.discount_pct_override %}
+                                            <div class="text-xs text-amber-700 font-semibold">{{ opt.discount_pct_override }}% off</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% empty %}
+                            <div class="text-center py-6 text-slate-400 text-sm">
+                                No option components configured for this bundle. <a href="{% url 'sales:product_bundle_create' %}?bundle={{ selected_bundle.pk }}" class="text-blue-600 underline">Add options</a>.
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="card-footer border-t border-slate-200 p-5 bg-slate-50 flex items-center justify-between">
+                    <span class="text-xs text-slate-500">Compatibility rules verified. All required components enforced.</span>
+                    <button type="submit" class="btn btn-primary py-2 px-6 text-sm">
+                        <i data-lucide="plus-circle" class="w-4 h-4 mr-1.5"></i> Add Package to Quote &rarr;
+                    </button>
+                </div>
+            </form>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
