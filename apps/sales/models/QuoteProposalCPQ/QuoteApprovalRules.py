@@ -74,7 +74,7 @@ class QuoteApprovalRule(TenantNumbered):
     def __str__(self):
         return f"{self.number} · {self.name} ({self.get_rule_type_display()})"
 
-    def evaluate(self, quote):
+    def evaluate(self, quote, max_line_disc=None):
         """Evaluate if quote violates this rule's thresholds.
         
         Returns:
@@ -84,10 +84,12 @@ class QuoteApprovalRule(TenantNumbered):
         quote_disc = Decimal(str(quote.header_discount_pct or 0))
         
         # Line discounts check
-        max_line_disc = Decimal("0")
-        for line in quote.lines.filter(is_selected=True):
-            if line.discount_pct and line.discount_pct > max_line_disc:
-                max_line_disc = line.discount_pct
+        if max_line_disc is None:
+            from django.db.models import Max
+            agg = quote.lines.filter(is_selected=True).aggregate(m=Max("discount_pct"))
+            max_line_disc = Decimal(str(agg["m"])) if agg["m"] is not None else Decimal("0")
+        else:
+            max_line_disc = Decimal(str(max_line_disc))
 
         effective_disc = max(quote_disc, max_line_disc)
         quote_margin = Decimal(str(quote.margin_pct or 0))
