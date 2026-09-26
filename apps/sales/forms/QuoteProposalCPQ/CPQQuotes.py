@@ -1,4 +1,5 @@
 """Form definitions for CPQQuote model, approval actions, and portal signing."""
+from decimal import Decimal
 from django import forms
 from apps.sales.forms._common import TenantModelForm
 from apps.sales.models.QuoteProposalCPQ.CPQQuotes import CPQQuote
@@ -54,6 +55,15 @@ class CPQQuoteForm(TenantModelForm):
             self.fields["currency"].queryset = Currency.objects.filter(is_active=True)
             self.fields["proposal_template"].queryset = DocTemplate.objects.filter(tenant=self.tenant)
             self.fields["owner"].queryset = User.objects.filter(tenant=self.tenant, is_active=True)
+
+        if "header_discount_pct" in self.fields:
+            self.fields["header_discount_pct"].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("header_discount_pct") is None:
+            cleaned_data["header_discount_pct"] = Decimal("0.00")
+        return cleaned_data
 
 
 class CPQQuoteApprovalActionForm(forms.Form):
