@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -51,15 +51,15 @@ def cpq_quote_list(request):
     elif is_primary in ["false", "0"]:
         qs = qs.filter(is_primary=False)
 
-    stats = {
-        "total": CPQQuote.objects.filter(tenant=tenant).count(),
-        "draft": CPQQuote.objects.filter(tenant=tenant, status="draft").count(),
-        "in_review": CPQQuote.objects.filter(tenant=tenant, status="in_review").count(),
-        "approved": CPQQuote.objects.filter(tenant=tenant, status="approved").count(),
-        "presented": CPQQuote.objects.filter(tenant=tenant, status="presented").count(),
-        "accepted": CPQQuote.objects.filter(tenant=tenant, status="accepted").count(),
-        "converted": CPQQuote.objects.filter(tenant=tenant, status="converted").count(),
-    }
+    stats = CPQQuote.objects.filter(tenant=tenant).aggregate(
+        total=Count("id"),
+        draft=Count("id", filter=Q(status="draft")),
+        in_review=Count("id", filter=Q(status="in_review")),
+        approved=Count("id", filter=Q(status="approved")),
+        presented=Count("id", filter=Q(status="presented")),
+        accepted=Count("id", filter=Q(status="accepted")),
+        converted=Count("id", filter=Q(status="converted")),
+    )
 
     opportunities = Opportunity.objects.filter(
         tenant=tenant,
