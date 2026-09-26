@@ -58,18 +58,23 @@ def cpq_recalc_quote_totals(quote, save=True):
         line.line_cost = line_cost
         line.line_margin = line_margin
         line.margin_pct = margin_pct
+        line.updated_at = timezone.now()
         
-        if save:
-            line.save(update_fields=[
-                "unit_price", "line_subtotal", "line_tax", "line_total",
-                "line_cost", "line_margin", "margin_pct", "updated_at"
-            ])
-            
         # Only include selected items in quote header totals
         if not (line.is_optional and not line.is_selected):
             subtotal_sum += line_subtotal
             tax_sum += line_tax
             cost_sum += line_cost
+
+    if save and lines:
+        from apps.sales.models.QuoteProposalCPQ.CPQQuoteLines import CPQQuoteLine
+        CPQQuoteLine.objects.bulk_update(
+            lines,
+            [
+                "unit_price", "line_subtotal", "line_tax", "line_total",
+                "line_cost", "line_margin", "margin_pct", "updated_at"
+            ]
+        )
 
     # Apply header discount factor
     header_disc_pct = Decimal(str(quote.header_discount_pct or 0))
