@@ -67,6 +67,7 @@ class QuoteApprovalRule(TenantNumbered):
 
     class Meta:
         ordering = ["priority", "name"]
+        unique_together = ("tenant", "number")
         indexes = [
             models.Index(fields=["tenant", "is_active", "priority"], name="sales_qar_active_prio_idx"),
         ]
