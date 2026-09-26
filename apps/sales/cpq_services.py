@@ -411,30 +411,32 @@ def cpq_convert_to_sales_order(quote, user=None):
     if quote.status not in ["approved", "presented", "accepted"]:
         raise ValidationError(f"Quote must be approved, presented, or accepted before conversion (current status: {quote.get_status_display()}).")
         
+    if not quote.account:
+        raise ValidationError(f"Quote {quote.number} cannot be converted without an associated account (customer).")
+
     # Create the SCM SalesOrder
     order = SalesOrder.objects.create(
         tenant=quote.tenant,
         customer=quote.account,
         order_date=timezone.localdate(),
-        currency=quote.currency.code if quote.currency else "USD",
+        currency=quote.currency,
         status="draft",
         subtotal=quote.subtotal,
         tax_total=quote.tax_total,
-        total_amount=quote.total,
+        total=quote.total,
         notes=f"Converted from CPQ Quote {quote.number} (Rev {quote.revision_number}). {quote.notes}".strip(),
-        created_by=user or quote.owner,
     )
     
     # Create line items
     for idx, q_line in enumerate(quote.lines.filter(is_selected=True).order_by("sequence", "id"), start=1):
         SalesOrderLine.objects.create(
-            order=order,
+            sales_order=order,
             item=q_line.item,
             description=q_line.description,
-            quantity=q_line.quantity,
+            quantity_ordered=q_line.quantity,
             unit_price=q_line.unit_price,
-            line_total=q_line.line_total,
-            notes=f"Line Type: {q_line.get_line_type_display()}" if q_line.line_type != 'standard' else "",
+            discount_pct=q_line.discount_pct,
+            tax_pct=q_line.tax_pct,
         )
         
     quote.converted_order = order
