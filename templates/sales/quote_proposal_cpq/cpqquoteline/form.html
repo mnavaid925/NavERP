@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_create %}Add Line Item{% else %}Edit Line Item{% endif %} — {{ quote.number }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">Quotes</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_detail' quote.pk %}" class="text-slate-500 hover:text-slate-700">{{ quote.number }}</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">{% if is_create %}Add Line Item{% else %}Edit Line{% endif %}</span>
+            </nav>
+            <h1 class="page-title">{% if is_create %}Add Line Item to {{ quote.number }}{% else %}Edit Line Item{% endif %}</h1>
+            <p class="text-sm text-slate-500 mt-1">Specify product, quantities, discount %, unit cost, and bundle packaging.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'sales:cpq_quote_detail' quote.pk %}" class="btn btn-outline">
+                Cancel
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <form method="POST">
+            {% csrf_token %}
+            <div class="card-body p-6 space-y-6">
+                {% if form.non_field_errors %}
+                    <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <!-- Item Identification -->
+                <div class="space-y-4">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">Item Classification</h3>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.description.id_for_label }}">Line Description / Name <span class="text-red-500">*</span></label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                            <p class="form-error text-xs text-red-600 mt-1">{{ form.description.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.line_type.id_for_label }}">Line Type <span class="text-red-500">*</span></label>
+                            {{ form.line_type }}
+                            {% if form.line_type.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.line_type.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.parent_line.id_for_label }}">Parent Bundle Header (Optional)</label>
+                            {{ form.parent_line }}
+                            <p class="text-xs text-slate-400 mt-1">Select if this is a component inside a bundle package</p>
+                            {% if form.parent_line.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.parent_line.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.product.id_for_label }}">Catalog Product</label>
+                            {{ form.product }}
+                            {% if form.product.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.product.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.item.id_for_label }}">Inventory SKU (SCM Item)</label>
+                            {{ form.item }}
+                            {% if form.item.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.item.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.uom.id_for_label }}">Unit of Measure</label>
+                            {{ form.uom }}
+                            {% if form.uom.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.uom.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pricing & Economics -->
+                <div class="space-y-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">Pricing &amp; Margins</h3>
+
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.quantity.id_for_label }}">Quantity <span class="text-red-500">*</span></label>
+                            {{ form.quantity }}
+                            {% if form.quantity.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.quantity.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.list_price.id_for_label }}">List Price <span class="text-red-500">*</span></label>
+                            {{ form.list_price }}
+                            {% if form.list_price.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.list_price.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.discount_pct.id_for_label }}">Line Discount %</label>
+                            {{ form.discount_pct }}
+                            {% if form.discount_pct.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.discount_pct.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.unit_price.id_for_label }}">Unit Price (Net)</label>
+                            {{ form.unit_price }}
+                            <p class="text-xs text-slate-400 mt-1">Leave 0 to auto-calculate from List &amp; Discount</p>
+                            {% if form.unit_price.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.unit_price.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.unit_cost.id_for_label }}">Unit Cost (Internal)</label>
+                            {{ form.unit_cost }}
+                            <p class="text-xs text-slate-400 mt-1">Used for profit margin calculation</p>
+                            {% if form.unit_cost.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.unit_cost.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.tax_code.id_for_label }}">Tax Code</label>
+                            {{ form.tax_code }}
+                            {% if form.tax_code.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.tax_code.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.tax_pct.id_for_label }}">Tax Rate %</label>
+                            {{ form.tax_pct }}
+                            {% if form.tax_pct.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.tax_pct.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.sequence.id_for_label }}">Display Sequence</label>
+                            {{ form.sequence }}
+                            {% if form.sequence.errors %}
+                                <p class="form-error text-xs text-red-600 mt-1">{{ form.sequence.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="flex items-center space-x-2 pt-6">
+                            {{ form.is_optional }}
+                            <div>
+                                <label class="form-label mb-0 cursor-pointer" for="{{ form.is_optional.id_for_label }}">Customer Optional Add-on</label>
+                                <p class="text-xs text-slate-400">Can be toggled by customer on portal</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center space-x-2 pt-6">
+                            {{ form.is_selected }}
+                            <div>
+                                <label class="form-label mb-0 cursor-pointer" for="{{ form.is_selected.id_for_label }}">Active in Quote Totals</label>
+                                <p class="text-xs text-slate-400">Included in financial calculations</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-footer border-t border-slate-200 p-4 flex items-center justify-end space-x-3 bg-slate-50">
+                <a href="{% url 'sales:cpq_quote_detail' quote.pk %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if is_create %}Add Line Item{% else %}Update Line Item{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
