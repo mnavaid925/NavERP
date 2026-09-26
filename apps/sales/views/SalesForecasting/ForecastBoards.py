@@ -20,6 +20,7 @@ from collections import OrderedDict
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Sum
 from django.utils import timezone
 
 from apps.crm.models import Opportunity
@@ -604,7 +605,10 @@ def forecast_accuracy(request):
     count_by_period = OrderedDict()
     owner_totals = OrderedDict()
     if tenant is not None and pks:
-        submission_fields = [field for _, field in ROLLUP_CATEGORY_FIELDS]
+        # One Sum() PER FIELD rather than Sum(*fields): Django's multi-expression
+        # aggregate is unsupported by the MySQL/MariaDB backend this project runs on
+        # and fails there as a raw SQL syntax error (1064).
+        amount_aggregates = {f"sum__{field}": Sum(field) for _, field in ROLLUP_CATEGORY_FIELDS}
         grouped = (
             ForecastSubmission.objects.filter(tenant=tenant, period_id__in=pks)
             .values(
@@ -612,15 +616,17 @@ def forecast_accuracy(request):
                 "owner__first_name", "owner__last_name",
             )
             .annotate(
-                submitted=Sum(*submission_fields),
                 actual=Sum("actual_amount"),
                 weighted=Sum("weighted_amount"),
                 rows=Count("pk"),
+                **amount_aggregates,
             )
         )
         for record in grouped:
             period_pk = record["period_id"]
-            submitted = Decimal(record["submitted"] or 0)
+            submitted = _sum(
+                Decimal(record[f"sum__{field}"] or 0) for _, field in ROLLUP_CATEGORY_FIELDS
+            )
             actual = Decimal(record["actual"] or 0)
             weighted = Decimal(record["weighted"] or 0)
             submitted_by_period[period_pk] = submitted_by_period.get(period_pk, ZERO) + submitted
