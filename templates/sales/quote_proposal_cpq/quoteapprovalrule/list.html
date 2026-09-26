@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Quote Approval Rules — CPQ{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">CPQ</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">Approval Rules</span>
+            </nav>
+            <h1 class="page-title">Quote Approval Rules</h1>
+            <p class="text-sm text-slate-500 mt-1">Configure discount thresholds, margin floors, and manager escalation workflows.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'sales:quote_approval_queue' %}" class="btn btn-outline">
+                <i data-lucide="inbox" class="w-4 h-4 mr-1.5"></i> Approval Queue
+            </a>
+            <a href="{% url 'sales:quote_approval_rule_create' %}" class="btn btn-primary">
+                <i data-lucide="plus" class="w-4 h-4 mr-1.5"></i> New Approval Rule
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Rules</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total }}</div>
+                </div>
+                <div class="stat-icon purple">
+                    <i data-lucide="shield-check" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Active Rules</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.active }}</div>
+                </div>
+                <div class="stat-icon green">
+                    <i data-lucide="check-circle" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Discount Rules</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.max_discount }}</div>
+                </div>
+                <div class="stat-icon orange">
+                    <i data-lucide="percent" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Margin Floors</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.min_margin }}</div>
+                </div>
+                <div class="stat-icon blue">
+                    <i data-lucide="trending-up" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters & List -->
+    <div class="card">
+        <div class="card-header border-b border-slate-200 p-4">
+            <form method="GET" class="flex flex-wrap items-center gap-3">
+                <div class="flex-1 min-w-[200px]">
+                    <div class="relative">
+                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search rules by name, number..." class="form-input pl-9 w-full">
+                    </div>
+                </div>
+                <div>
+                    <select name="rule_type" class="form-select text-sm">
+                        <option value="">All Rule Types</option>
+                        {% for val, label in rule_type_choices %}
+                            <option value="{{ val }}" {% if request.GET.rule_type == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <select name="approver_role" class="form-select text-sm">
+                        <option value="">All Approver Roles</option>
+                        {% for val, label in approver_role_choices %}
+                            <option value="{{ val }}" {% if request.GET.approver_role == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <select name="is_active" class="form-select text-sm">
+                        <option value="">Status: All</option>
+                        <option value="1" {% if request.GET.is_active == '1' %}selected{% endif %}>Active</option>
+                        <option value="0" {% if request.GET.is_active == '0' %}selected{% endif %}>Inactive</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-outline py-2 px-3 text-sm">
+                    <i data-lucide="filter" class="w-4 h-4 mr-1"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.rule_type or request.GET.approver_role or request.GET.is_active %}
+                    <a href="{% url 'sales:quote_approval_rule_list' %}" class="text-sm text-slate-500 hover:text-slate-800 ml-1">Reset</a>
+                {% endif %}
+            </form>
+        </div>
+
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Rule</th>
+                        <th>Type</th>
+                        <th>Thresholds</th>
+                        <th>Required Role</th>
+                        <th>Priority</th>
+                        <th>Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rule in rules %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'sales:quote_approval_rule_detail' rule.pk %}" class="font-medium text-blue-600 hover:text-blue-800">
+                                    {{ rule.name }}
+                                </a>
+                                <div class="text-xs text-slate-400 font-mono">{{ rule.number }}</div>
+                            </td>
+                            <td>
+                                <span class="badge badge-info">{{ rule.get_rule_type_display }}</span>
+                            </td>
+                            <td class="text-sm text-slate-700">
+                                {% if rule.rule_type == 'max_discount' %}
+                                    Discount &gt; <strong class="text-amber-700">{{ rule.discount_threshold_pct }}%</strong>
+                                {% elif rule.rule_type == 'min_margin' %}
+                                    Margin &lt; <strong class="text-red-700">{{ rule.min_margin_pct }}%</strong>
+                                {% elif rule.rule_type == 'max_amount' %}
+                                    Amount &gt; <strong>{{ rule.amount_threshold|default:"0.00" }}</strong>
+                                {% elif rule.rule_type == 'composite' %}
+                                    Disc &gt; {{ rule.discount_threshold_pct }}% &amp; Margin &lt; {{ rule.min_margin_pct }}%
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-slate">{{ rule.get_approver_role_display }}</span>
+                            </td>
+                            <td class="text-sm font-mono text-slate-600">
+                                {{ rule.priority }}
+                            </td>
+                            <td>
+                                {% if rule.is_active %}
+                                    <span class="badge badge-green">Active</span>
+                                {% else %}
+                                    <span class="badge badge-muted">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td class="table-actions text-right">
+                                <a href="{% url 'sales:quote_approval_rule_detail' rule.pk %}" class="btn-icon" title="View Details">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'sales:quote_approval_rule_edit' rule.pk %}" class="btn-icon" title="Edit Rule">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="POST" action="{% url 'sales:quote_approval_rule_delete' rule.pk %}" class="inline-block" onsubmit="return confirm('Are you sure you want to delete approval rule {{ rule.name }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn-icon text-red-600 hover:text-red-800" title="Delete">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7">
+                                <div class="empty-state text-center py-12">
+                                    <i data-lucide="shield-alert" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                                    <h3 class="text-base font-medium text-slate-800">No approval rules found</h3>
+                                    <p class="text-sm text-slate-500 mt-1 mb-4">Create rules to safeguard margins and control sales discounts.</p>
+                                    <a href="{% url 'sales:quote_approval_rule_create' %}" class="btn btn-primary">
+                                        <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Add Rule
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if rules.has_other_pages %}
+            <div class="card-footer border-t border-slate-200 p-4 flex items-center justify-between">
+                <div class="text-sm text-slate-500">
+                    Showing {{ rules.start_index }} to {{ rules.end_index }} of {{ rules.paginator.count }} rules
+                </div>
+                <div class="pagination flex items-center space-x-2">
+                    {% if rules.has_previous %}
+                        <a href="?page={{ rules.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.rule_type %}&rule_type={{ request.GET.rule_type }}{% endif %}" class="btn btn-outline py-1 px-3 text-sm">Previous</a>
+                    {% endif %}
+                    <span class="text-sm font-medium text-slate-700">Page {{ rules.number }} of {{ rules.paginator.num_pages }}</span>
+                    {% if rules.has_next %}
+                        <a href="?page={{ rules.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.rule_type %}&rule_type={{ request.GET.rule_type }}{% endif %}" class="btn btn-outline py-1 px-3 text-sm">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
