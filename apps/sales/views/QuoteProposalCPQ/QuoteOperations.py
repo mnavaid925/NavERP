@@ -461,7 +461,9 @@ def cpq_guided_selling(request):
             tenant=tenant,
             bundle_product=selected_bundle,
             is_active=True
-        ).select_related("component_product", "component_item", "depends_on_product").order_by("option_group", "sort_order"))
+        ).select_related(
+            "bundle_product", "component_product", "component_item", "depends_on_product"
+        ).order_by("option_group", "sort_order"))
 
     if request.method == "POST" and "apply_guided_bundle" in request.POST:
         if not selected_bundle:
