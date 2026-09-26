@@ -2,7 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -42,12 +42,12 @@ def quote_approval_rule_list(request):
     elif is_active in ["false", "0"]:
         qs = qs.filter(is_active=False)
 
-    stats = {
-        "total": QuoteApprovalRule.objects.filter(tenant=tenant).count(),
-        "active": QuoteApprovalRule.objects.filter(tenant=tenant, is_active=True).count(),
-        "max_discount": QuoteApprovalRule.objects.filter(tenant=tenant, rule_type="max_discount").count(),
-        "min_margin": QuoteApprovalRule.objects.filter(tenant=tenant, rule_type="min_margin").count(),
-    }
+    stats = QuoteApprovalRule.objects.filter(tenant=tenant).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+        max_discount=Count("id", filter=Q(rule_type="max_discount")),
+        min_margin=Count("id", filter=Q(rule_type="min_margin")),
+    )
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
