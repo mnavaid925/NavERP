@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Proposal Generation &amp; Presentation Board — CPQ{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">CPQ</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">Proposal Board</span>
+            </nav>
+            <h1 class="page-title">Proposal Generation &amp; Presentation</h1>
+            <p class="text-sm text-slate-500 mt-1">Generate branded proposal documents, track presentations, and send e-signature portal links.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'sales:cpq_quote_list' %}" class="btn btn-outline">
+                <i data-lucide="arrow-left" class="w-4 h-4 mr-1.5"></i> Back to Quotes
+            </a>
+        </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="stat-card">
+            <div class="text-xs uppercase text-slate-500 font-medium">Presented Proposals</div>
+            <div class="text-2xl font-bold text-amber-600 mt-1">{{ stats.presented }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="text-xs uppercase text-slate-500 font-medium">Customer Accepted</div>
+            <div class="text-2xl font-bold text-emerald-600 mt-1">{{ stats.accepted }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="text-xs uppercase text-slate-500 font-medium">Digitally Signed</div>
+            <div class="text-2xl font-bold text-blue-600 mt-1">{{ stats.signed }}</div>
+        </div>
+    </div>
+
+    <!-- Active Proposals Table -->
+    <div class="card">
+        <div class="card-header border-b border-slate-200 p-4">
+            <h2 class="text-base font-semibold text-slate-900">Approved &amp; Active Proposals</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Quote &amp; Revision</th>
+                        <th>Account / Opportunity</th>
+                        <th>Proposal Status</th>
+                        <th>Total Value</th>
+                        <th>Signature Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for q in quotes %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'sales:cpq_quote_detail' q.pk %}" class="font-medium text-blue-600 hover:text-blue-800">
+                                    {{ q.name }}
+                                </a>
+                                <div class="text-xs text-slate-400 font-mono">{{ q.number }} · Rev {{ q.revision_number }}</div>
+                            </td>
+                            <td>
+                                <div class="text-sm font-medium text-slate-800">{{ q.account.name|default:"—" }}</div>
+                                {% if q.opportunity %}<div class="text-xs text-slate-500">{{ q.opportunity.name }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if q.status == 'accepted' %}
+                                    <span class="badge badge-green">Accepted</span>
+                                {% elif q.status == 'presented' %}
+                                    <span class="badge badge-amber">Presented</span>
+                                {% else %}
+                                    <span class="badge badge-info">{{ q.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="font-mono font-bold text-slate-900 text-sm">
+                                ${{ q.total:,.2f }}
+                            </td>
+                            <td>
+                                {% if q.signed_at %}
+                                    <span class="badge badge-green text-xs">Signed by {{ q.signer_name }}</span>
+                                    <div class="text-xs text-slate-400 mt-0.5">{{ q.signed_at|date:"M d, Y" }}</div>
+                                {% else %}
+                                    <span class="badge badge-muted text-xs">Awaiting E-Sign</span>
+                                {% endif %}
+                            </td>
+                            <td class="table-actions text-right space-x-1">
+                                <a href="{% url 'sales:quote_generate_proposal' q.pk %}" class="btn btn-outline py-1 px-2.5 text-xs">
+                                    <i data-lucide="file-text" class="w-3.5 h-3.5 mr-1"></i> Preview
+                                </a>
+                                <a href="{% url 'sales:quote_portal_view' q.signing_token %}" target="_blank" class="btn btn-primary py-1 px-2.5 text-xs">
+                                    <i data-lucide="external-link" class="w-3.5 h-3.5 mr-1"></i> Portal Link
+                                </a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-8 text-slate-400">
+                                No proposals currently in presented or approved state.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
