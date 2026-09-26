@@ -171,10 +171,8 @@ class ForecastReviewForm(TenantActionForm):
     def __init__(self, *args, tenant=None, approved=True, **kwargs):
         super().__init__(*args, tenant=tenant, **kwargs)
         self.approved = approved
+        # The declarative `required` is the whole rule. A clean() re-check on top of it
+        # produced a SECOND error for the same blank field ("This field is required."
+        # plus "A rejection must say why."), so the user saw one mistake twice.
         self.fields["note"].required = not approved
 
-    def clean(self):
-        cleaned = super().clean()
-        if not self.approved and not (cleaned.get("note") or "").strip():
-            self.add_error("note", "A rejection must say why.")
-        return cleaned
