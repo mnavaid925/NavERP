@@ -40,6 +40,15 @@
         </select>
       </div>
       <div class="form-group">
+        {# The `rule` filter the view declares. A firing can outlive its rule (SET_NULL), so the empty
+           option is "any rule" AND the unattributed firings are still reachable via ?rule= on a
+           retired rule's former id. FK dropdown compared with |stringformat:"d", never |slugify. #}
+        <select name="rule" class="form-select" aria-label="Rule">
+          <option value="">Any rule</option>
+          {% for r in rules %}<option value="{{ r.pk }}" {% if request.GET.rule == r.pk|stringformat:"d" %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
         <select name="service" class="form-select" aria-label="Component">
           <option value="">Any component</option>
           {% for s in services %}<option value="{{ s.pk }}" {% if request.GET.service == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
