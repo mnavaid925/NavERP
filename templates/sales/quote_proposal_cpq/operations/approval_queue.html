@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}CPQ Approval Queue — Sales Governance{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">CPQ</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">Approval Queue</span>
+            </nav>
+            <h1 class="page-title">Pricing &amp; Discount Approval Queue</h1>
+            <p class="text-sm text-slate-500 mt-1">Review pending sales quotes exceeding discount ceilings or violating margin floors.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'sales:quote_approval_rule_list' %}" class="btn btn-outline">
+                <i data-lucide="sliders" class="w-4 h-4 mr-1.5"></i> Approval Rules
+            </a>
+            <a href="{% url 'sales:cpq_quote_list' %}" class="btn btn-primary">
+                <i data-lucide="file-spreadsheet" class="w-4 h-4 mr-1.5"></i> All Quotes
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Awaiting Review</div>
+                    <div class="text-2xl font-bold text-amber-600 mt-1">{{ stats.pending }}</div>
+                </div>
+                <div class="stat-icon orange">
+                    <i data-lucide="clock" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Approved This Month</div>
+                    <div class="text-2xl font-bold text-emerald-600 mt-1">{{ stats.approved_this_month }}</div>
+                </div>
+                <div class="stat-icon green">
+                    <i data-lucide="check-circle" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Rejected This Month</div>
+                    <div class="text-2xl font-bold text-red-600 mt-1">{{ stats.rejected_this_month }}</div>
+                </div>
+                <div class="stat-icon purple">
+                    <i data-lucide="x-circle" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header border-b border-slate-200 p-4">
+            <h2 class="text-base font-semibold text-slate-900">Quotes Pending Review</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Quote</th>
+                        <th>Account / Opportunity</th>
+                        <th>Total Value</th>
+                        <th>Discount %</th>
+                        <th>Margin %</th>
+                        <th>Triggered Rule</th>
+                        <th>Sales Rep</th>
+                        <th class="text-right">Decision</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for q in pending_quotes %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'sales:cpq_quote_detail' q.pk %}" class="font-medium text-blue-600 hover:text-blue-800">
+                                    {{ q.name }}
+                                </a>
+                                <div class="text-xs text-slate-400 font-mono">{{ q.number }} · Rev {{ q.revision_number }}</div>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-800">{{ q.account.name|default:"—" }}</div>
+                                {% if q.opportunity %}<div class="text-xs text-slate-500">{{ q.opportunity.name }}</div>{% endif %}
+                            </td>
+                            <td class="font-bold text-slate-900">${{ q.total:,.2f }}</td>
+                            <td class="text-amber-700 font-semibold">{{ q.header_discount_pct }}%</td>
+                            <td>
+                                <span class="{% if q.margin_pct < 15 %}text-red-600 font-bold{% else %}text-slate-800{% endif %}">
+                                    {{ q.margin_pct }}%
+                                </span>
+                            </td>
+                            <td>
+                                {% if q.approval_rule %}
+                                    <span class="badge badge-amber">{{ q.approval_rule.name }}</span>
+                                    <div class="text-xs text-slate-400 mt-0.5">{{ q.approval_rule.get_approver_role_display }}</div>
+                                {% else %}
+                                    <span class="badge badge-slate">Manager Review</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-xs text-slate-600">
+                                {{ q.owner.get_full_name|default:q.owner.username }}
+                            </td>
+                            <td class="table-actions text-right">
+                                <a href="{% url 'sales:quote_approval_action' q.pk %}" class="btn btn-primary py-1 px-3 text-xs">
+                                    Review &amp; Sign-off
+                                </a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="8">
+                                <div class="empty-state text-center py-12">
+                                    <i data-lucide="check-check" class="w-12 h-12 text-emerald-400 mx-auto mb-3"></i>
+                                    <h3 class="text-base font-medium text-slate-800">All clear — No quotes pending approval</h3>
+                                    <p class="text-sm text-slate-500 mt-1">Quotes requiring discounts or margin exceptions will appear here.</p>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
