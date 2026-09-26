@@ -124,6 +124,12 @@ from .OpportunityOutcomes.OpportunityOutcomes import (
     opportunity_win_loss_reason_edit,
     opportunity_win_loss_reason_list,
 )
+from .SalesForecasting.ForecastBoards import (
+    forecast_accuracy,
+    forecast_attainment,
+    forecast_board,
+    forecast_call,
+)
 from .SalesForecasting.ForecastPeriods import (
     forecast_period_create,
     forecast_period_delete,
