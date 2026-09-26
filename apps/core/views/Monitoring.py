@@ -61,10 +61,11 @@ MONITORING_NOTES = [
 # ====================================================== ServiceComponent
 @tenant_admin_required
 def service_component_list(request):
-    # `accounts.models.Role` is imported LAZILY inside the function: `core` is imported before
-    # `accounts` at startup, so a module-level import here is a circular import. 0.16's seeder does
-    # the same thing for the same reason.
-    from accounts.models import Role
+    # `Role` is imported LAZILY inside the function: `core` is imported before `accounts` at startup, so
+    # a module-level import here is a circular import. The path is `apps.accounts.models` (a package
+    # whose __init__ re-exports Role), NOT `accounts.models.Role` - `accounts` is a FLAT app, so that
+    # dotted form is a ModuleNotFoundError. Same posture as 0.16's lazy import in the seeder.
+    from apps.accounts.models import Role
 
     return crud_list(
         request,
@@ -645,7 +646,10 @@ def capacity_board(request):
     over_threshold_count = 0
     for r in capacity_rules:
         bound = r.critical_threshold if r.critical_threshold is not None else r.warning_threshold
-        matching = [row for row in usage_rows if row["metric"] == r.get_metric_display()]
+        # `get_metric_key_display`, not `get_metric_display`: the FIELD is `metric_key` (Django derives
+        # the accessor from the field name), so the shorter name is an AttributeError and this board 500s
+        # the moment a capacity rule exists. Caught by the smoke test, not by `manage.py check`.
+        matching = [row for row in usage_rows if row["metric"] == r.get_metric_key_display()]
         current = matching[0]["quantity"] if matching else None
         if bound is None or current is None:
             headroom = None
