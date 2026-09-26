@@ -72,7 +72,7 @@ def quote_approval_rule_create(request):
             rule = form.save(commit=False)
             rule.tenant = request.tenant
             rule.save()
-            write_audit_log(request.user, "create", "QuoteApprovalRule", rule.id, f"Created rule {rule.number} ({rule.name})")
+            write_audit_log(request.user, rule, "create", {"action": "create_rule", "number": rule.number, "name": rule.name}, tenant=request.tenant)
             messages.success(request, f"Approval rule {rule.name} created successfully.")
             return redirect("sales:quote_approval_rule_detail", pk=rule.pk)
     else:
@@ -104,7 +104,7 @@ def quote_approval_rule_edit(request, pk):
         form = QuoteApprovalRuleForm(request.POST, instance=rule, tenant=request.tenant)
         if form.is_valid():
             rule = form.save()
-            write_audit_log(request.user, "update", "QuoteApprovalRule", rule.id, f"Updated rule {rule.number}")
+            write_audit_log(request.user, rule, "update", {"action": "update_rule", "number": rule.number}, tenant=request.tenant)
             messages.success(request, f"Approval rule {rule.name} updated successfully.")
             return redirect("sales:quote_approval_rule_detail", pk=rule.pk)
     else:
@@ -124,8 +124,7 @@ def quote_approval_rule_delete(request, pk):
     """Delete a QuoteApprovalRule."""
     rule = get_object_or_404(QuoteApprovalRule, pk=pk, tenant=request.tenant)
     name = rule.name
-    rule_id = rule.id
+    write_audit_log(request.user, rule, "delete", {"action": "delete_rule", "name": name}, tenant=request.tenant)
     rule.delete()
-    write_audit_log(request.user, "delete", "QuoteApprovalRule", rule_id, f"Deleted rule {name}")
     messages.success(request, f"Approval rule {name} deleted successfully.")
     return redirect("sales:quote_approval_rule_list")
