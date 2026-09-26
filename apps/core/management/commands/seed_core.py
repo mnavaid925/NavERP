@@ -1112,13 +1112,15 @@ class Command(BaseCommand):
             db = ServiceComponent.objects.filter(tenant=tenant, code="db").first()
             gateway = ServiceComponent.objects.filter(tenant=tenant, code="payments").first()
             rules = [
-                dict(name="Payments API latency budget", service=db, module_slug="core",
+                dict(name="Payments API latency budget", service=gateway, module_slug="core",
                      metric_key="latency_p95_ms", comparator="gte",
                      warning_threshold=Decimal("800.0000"), critical_threshold=Decimal("1500.0000"),
                      must_persist_seconds=300, frequency="hourly", severity="warning",
                      category="performance", no_data_action="ignore", notification_rule=notify_rule,
-                     notes="Seeded two-tier threshold. Nothing in NavERP evaluates this rule and no "
-                           "reading of latency_p95_ms is stored anywhere in this repository."),
+                     notes="Seeded two-tier threshold, on the payments component it actually guards "
+                           "(a latency budget on the database component was the seed's original "
+                           "mismatch). Nothing in NavERP evaluates this rule and no reading of "
+                           "latency_p95_ms is stored anywhere in this repository."),
                 dict(name="Gateway availability floor", service=gateway, module_slug="core",
                      metric_key="uptime_pct", comparator="lt",
                      warning_threshold=None, critical_threshold=Decimal("99.5000"),
@@ -1126,7 +1128,7 @@ class Command(BaseCommand):
                      category="availability", no_data_action="fire", notification_rule=notify_rule,
                      notes="Seeded ONE-TIER rule (critical only) - a single bound is a normal shape, "
                            "not a half-finished one. 'no data' fires rather than passing silently."),
-                dict(name="Database storage headroom", service=web, module_slug="tenants",
+                dict(name="Database storage headroom", service=db, module_slug="tenants",
                      metric_key="storage_mb", comparator="gte",
                      warning_threshold=Decimal("51200.0000"), critical_threshold=None,
                      must_persist_seconds=0, frequency="weekly", severity="warning",
