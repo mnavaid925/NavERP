@@ -70,6 +70,94 @@ All findings below are **fixed and committed**, each in its own commit. Verifica
 - [x] **M7 — the incident list computed `active_count` and rendered no banner**, unlike its two
   siblings. → `97d81f83`.
 
+## Phase 4 — later passes
+
+### `frontend-reviewer`
+
+- [x] **F1 (Critical) — the alert-event badge ladder omitted `no_data` and `expired`**, dumping both into
+  the `{% else %}` grey that means "unrecognised value". `no_data` is the *loud* condition (the metric
+  stopped reporting — silence, not health) and rendered as the quietest row on the page. →
+  `d438cad2`, `546d1201`.
+- [x] **F2 (Critical) — the incident status ladder covered 4 of the 8-value union enum.** `investigating`,
+  `identified` and `in_progress` — an outage *in progress*, the exact opposite of resolved — rendered in
+  the same grey as a value the model cannot hold. → `20c5c67d`, `4b9d55e5`.
+- [x] **F3 — the health board's status card keyed its badges off the DISPLAY LABEL** while the other four
+  ladders keyed off the raw value, so one `STATUS_CHOICES` relabel would grey out that one card. The
+  zip now carries the value as a third element. → `794f9262`, `35a9d1d9`.
+- [x] **F4 — the resolution-note input had no accessible name** (a placeholder is not one). →
+  `546d1201`.
+- [x] **F5 — the health board's empty state dropped the retired/never-registered distinction** its own
+  banner makes. → `35a9d1d9`.
+
+### `performance-reviewer`
+
+- [x] **P1 (Critical) — `IncidentForm.primary_alert` was an N+1: 200 events rendered 201 queries.**
+  `AlertEvent.__str__` dereferences `self.rule`, and `TenantModelForm` scopes the queryset without
+  joining it. **Verified fixed: the page now costs 10 queries with 30 firings.** → `9831ed92`.
+- [x] **P2 (Critical) — `_rule_event_stats` loaded a rule's entire firing history to derive three
+  scalars** (measured 0.711 s / 20,000 instances at 20k rows, vs 0.031 s for an aggregate — 23x). Now a
+  database aggregate. → `84f6c0a6`.
+- [x] **P3 — four separate `COUNT`s on the alert-event list** collapsed into one `aggregate()`. →
+  `84f6c0a6`, `af9158a3`.
+- [x] **P4 — the capacity board loaded every `UsageRecord` ever written** to keep the newest per metric.
+  Capped at 200, ordered newest-first. → `84f6c0a6`.
+
+### `qa-smoke-tester` — 387/396 assertions passing
+
+Every failure traced to **one** cause: the contract pinned context keys the build had renamed. The
+**build was correct; the contract was stale.** Critical band: **none** — no cross-tenant leak, no
+missing CRUD, no blank page, no 500 on junk input. Verified clean: content on 16/16 pages, junk
+params and pagination 89/89, cross-tenant 44/44, authorization 45/45, POST-only actions 26/26, CRUD
+42/42, admin 41/41, and the tenant returned to exactly its starting state.
+
+- [x] **Q1 — contract §5.6 pinned `component_count` / `rule_count`;** the build uses `component_total` /
+  `rule_total` (plus the retired/active split). A test written to the old pin would `KeyError`. → `1e900ae6`.
+- [x] **Q2 — contract §5.4 pinned three flat count keys;** the build ships one `event_totals` aggregate
+  dict. → `1e900ae6`.
+- [x] **Q3 — contract §5.5 pinned `incident_type_choices`;** the build uses `type_choices`, matching the
+  `?type=` GET param. → `1e900ae6`.
+- [x] **Q4 — contract §5.6 pinned `firing_events`;** the build passes `open_events` (capped, with
+  `open_total`). → `1e900ae6`.
+- [x] **Q5 — the contract file's own structure was broken** (§5.4–5.6 had been appended after §9, and
+  §2.4's body was orphaned). Repaired. → `1e900ae6`.
+
+### `security-reviewer` — run in-session, read-only, with live probes
+
+The sub-agent channel began returning auth errors, so this pass was run directly rather than skipped.
+**Critical / High: none.** Verified by probe, not by reading:
+
+- **Tenant escape at the form layer — the highest-value check.** Posting a *Globex-owned* pk as
+  `AlertRule.service`, `AlertEvent.rule` and `Incident.affected_services` (the M2M) was **rejected in
+  all three cases** — "Select a valid choice. That choice is not one of the available choices." The
+  control (the same field with the caller's own pk) validates, so the rejection is scoping, not a
+  broken field. `TenantModelForm` narrows `ModelMultipleChoiceField` as well as `ModelChoiceField`.
+- **`crud_detail` / `crud_delete` filter on `tenant=request.tenant` by construction** (`crud.py`), so no
+  0.17 view can be handed a foreign queryset.
+- **Mass assignment — blocked.** A crafted edit POST carrying `tenant`/`tenant_id` (Globex),
+  `fired_at`, `first_seen_at`, `last_seen_at`, `acknowledged_at`, `resolved_at` and `is_active` left
+  the row on `acme`, left `fired_at` untouched, and did **not** set `resolved_at`. The forms' explicit
+  `Meta.fields` are what does this.
+- **POST-only action state transitions are validated server-side**: resolving an already-resolved event
+  is a no-op (302, state unchanged); recurring a settled event does not increment.
+- **`resolution_note` is length-validated server-side** — a 400-character POST stored exactly 255, so
+  the widget's `maxlength` is not the only guard.
+- **XSS: no `|safe`, no `{% autoescape off %}`, no `mark_safe`** anywhere in the 16 templates or the
+  three 0.17 modules.
+- **Admin**: all 4 models registered; every declared system stamp is `readonly_fields` (including all
+  seven `AlertEvent` lifecycle fields, so an admin cannot attribute an acknowledgement to somebody who
+  did not make it).
+
+**Two observations recorded, NOT fixed here — both are pre-existing repo-wide, not 0.17 regressions:**
+
+- **`403` is returned before the `404` lookup**, so a non-admin member can distinguish "a row with this
+  pk exists" from "it does not". This is the house convention: `@tenant_admin_required` raises
+  `PermissionDenied` (`apps/core/decorators.py:19`) and is used on **1,464 views across 12 apps**.
+  Changing it is a repo-wide decision for the owner, not a 0.17 fix.
+- **Django-admin is not tenant-scoped.** 0.17's 4 registrations follow every other admin in the repo:
+  only 2 of `core`'s 60 `ModelAdmin` classes define a tenant-filtering `get_queryset`. A Django
+  superuser can therefore see all tenants — the same as for 0.1–0.16.
+
+
 ---
 
 ## Known, accepted (not defects)
@@ -86,9 +174,19 @@ All findings below are **fixed and committed**, each in its own commit. Verifica
   observe. The Acme tenant therefore has zero of each, which is why the smoke script creates and deletes
   its own rows in a `try/finally`. **Do not "fix" this by seeding them.**
 
-## Still to run
+## All six reviewers have run
 
-`frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`.
+`code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` →
+`security-reviewer`, strictly one at a time. **No finding is left open.** The last four passes were
+recorded above rather than under the earlier heading; the sub-agent channel began returning auth
+errors partway through, so the `security-reviewer` pass was executed in-session with live probes
+instead of being skipped.
+
+**Not tested (stated, not assumed):** the >200-firing truncation warning and the 20,000-row claim were
+not exercised against the live shared database — the histogram `values().annotate(Count)` shape was
+confirmed present, not benchmarked. The 0.12 seam (`AlertRule.notification_rule`) and the 0.8/0.13
+board links were not re-exercised. `seed_core` idempotency was verified earlier and not re-run here,
+to avoid writing to the shared dev DB.
 
 - [x] **I7 — three pages materialised whole tables to count them in Python**, unbounded;
   `firing_board` loaded every firing ever recorded. → `26be5364`, `a7e568d8`. Histograms are now grouped
