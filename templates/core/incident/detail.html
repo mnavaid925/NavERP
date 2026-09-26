@@ -48,7 +48,7 @@
           {% elif obj.impact == "critical" %}<span class="badge badge-red">{{ obj.get_impact_display }}</span>
           {% else %}<span class="badge badge-slate">{{ obj.get_impact_display }}</span>{% endif %}
         </dd></div>
-        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_incident_type_display }}</dd></div>
+        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_incident_type_display }}{% if obj.is_scheduled %} <span class="badge badge-info">a notice, not a live outage</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Progress</dt><dd>{{ obj.progress_display }}</dd></div>
         <div class="detail-item"><dt>Primary component</dt><dd>{% if obj.service %}<a href="{% url 'core:service_component_detail' obj.service.pk %}">{{ obj.service.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Also affecting</dt><dd>{% for c in affected %}{{ c.name }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="text-muted">none recorded</span>{% endfor %}</dd></div>
