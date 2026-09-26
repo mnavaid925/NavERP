@@ -551,7 +551,15 @@ def cpq_guided_selling(request):
         return redirect("sales:cpq_quote_detail", pk=quote.pk)
 
     preselect_param = (request.GET.get("quote") or "").strip()
-    preselect_quote_id = preselect_param if preselect_param.isdigit() else None
+    preselect_quote_id = None
+    if preselect_param.isdigit():
+        # Scope to the tenant: a bare pk from the query string would otherwise let
+        # the select pre-fill another tenant's quote id.
+        preselect_quote_id = (
+            CPQQuote.objects.filter(pk=int(preselect_param), tenant=tenant)
+            .values_list("pk", flat=True)
+            .first()
+        )
 
     return render(request, "sales/quote_proposal_cpq/operations/guided_selling.html", {
         "bundle_products": bundle_products,
