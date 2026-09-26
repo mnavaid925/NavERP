@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Quote Versioning &amp; Families — CPQ{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">Quotes</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">Revision Families</span>
+            </nav>
+            <h1 class="page-title">Quote Versioning &amp; Families</h1>
+            <p class="text-sm text-slate-500 mt-1">Audit lifecycle changes, inspect revision trees, and compare versions.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'sales:cpq_quote_list' %}" class="btn btn-outline">
+                <i data-lucide="file-spreadsheet" class="w-4 h-4 mr-1.5"></i> All Quotes
+            </a>
+            <a href="{% url 'sales:cpq_quote_create' %}" class="btn btn-primary">
+                <i data-lucide="plus" class="w-4 h-4 mr-1.5"></i> New Quote
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Family Group Code</th>
+                        <th>Latest Quote Title</th>
+                        <th>Account / Opportunity</th>
+                        <th>Revisions</th>
+                        <th>Latest Status</th>
+                        <th>Current Value</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in families %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'sales:cpq_quote_detail' item.latest_quote.pk %}" class="font-mono text-sm font-semibold text-blue-600 hover:text-blue-800">
+                                    {{ item.group_id }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-900">{{ item.latest_quote.name }}</div>
+                                <div class="text-xs text-slate-400">Latest: {{ item.latest_quote.number }} (Rev {{ item.latest_quote.revision_number }})</div>
+                            </td>
+                            <td>
+                                <div class="text-sm text-slate-800">{{ item.latest_quote.account.name|default:"—" }}</div>
+                                {% if item.latest_quote.opportunity %}
+                                    <div class="text-xs text-slate-500">{{ item.latest_quote.opportunity.name }}</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-purple">{{ item.version_count }} Version{% if item.version_count > 1 %}s{% endif %}</span>
+                            </td>
+                            <td>
+                                <span class="badge badge-slate">{{ item.latest_quote.get_status_display }}</span>
+                            </td>
+                            <td class="font-mono text-sm font-bold text-slate-900">
+                                ${{ item.latest_quote.total:,.2f }}
+                            </td>
+                            <td class="table-actions text-right">
+                                <a href="{% url 'sales:cpq_quote_detail' item.latest_quote.pk %}" class="btn btn-outline py-1 px-2.5 text-xs">
+                                    View Workspace &rarr;
+                                </a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7">
+                                <div class="empty-state text-center py-10">
+                                    <i data-lucide="git-branch" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+                                    <h4 class="text-sm font-medium text-slate-700">No quote families recorded</h4>
+                                    <p class="text-xs text-slate-400 mt-1">Revisions and clone histories will be aggregated here.</p>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
