@@ -439,12 +439,13 @@ def cpq_guided_selling(request):
     bundle_products = Product.objects.filter(tenant=tenant, bundle_options__isnull=False, is_active=True).distinct()
     opportunities = Opportunity.objects.filter(tenant=tenant).order_by("name")
 
-    selected_bundle_id = request.GET.get("bundle") or request.POST.get("bundle")
+    raw_bundle = (request.GET.get("bundle") or request.POST.get("bundle") or "").strip()
+    selected_bundle_id = raw_bundle if raw_bundle.isdigit() else None
     selected_bundle = None
     options = []
 
     if selected_bundle_id:
-        selected_bundle = get_object_or_404(Product, pk=selected_bundle_id, tenant=tenant)
+        selected_bundle = get_object_or_404(Product, pk=int(selected_bundle_id), tenant=tenant)
         options = list(ProductBundleOption.objects.filter(
             tenant=tenant,
             bundle_product=selected_bundle,
@@ -452,17 +453,23 @@ def cpq_guided_selling(request):
         ).select_related("component_product", "component_item", "depends_on_product").order_by("option_group", "sort_order"))
 
     if request.method == "POST" and "apply_guided_bundle" in request.POST:
-        quote_id = request.POST.get("quote_id")
-        opp_id = request.POST.get("opportunity_id")
+        if not selected_bundle:
+            messages.error(request, "Please select a valid product bundle.")
+            return redirect("sales:cpq_guided_selling")
+
+        raw_quote_id = (request.POST.get("quote_id") or "").strip()
+        quote_id = raw_quote_id if raw_quote_id.isdigit() else None
+        raw_opp_id = (request.POST.get("opportunity_id") or "").strip()
+        opp_id = raw_opp_id if raw_opp_id.isdigit() else None
 
         if quote_id:
-            quote = get_object_or_404(CPQQuote, pk=quote_id, tenant=tenant)
+            quote = get_object_or_404(CPQQuote, pk=int(quote_id), tenant=tenant)
             if not quote.is_editable and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)):
                 messages.warning(request, f"Quote {quote.number} is locked in status '{quote.get_status_display()}'. Create a revision to add bundle options.")
                 return redirect("sales:cpq_quote_detail", pk=quote.pk)
         else:
             # Create a new quote
-            opp = Opportunity.objects.filter(pk=opp_id, tenant=tenant).first() if opp_id else None
+            opp = Opportunity.objects.filter(pk=int(opp_id), tenant=tenant).first() if opp_id else None
             currency = (opp.currency if opp and opp.currency else None) or Currency.objects.filter(code="USD").first() or Currency.objects.filter(is_active=True).first()
             quote = CPQQuote.objects.create(
                 tenant=tenant,
@@ -526,10 +533,13 @@ def cpq_guided_selling(request):
         messages.success(request, f"Bundle '{selected_bundle.name}' added to quote {quote.number}!")
         return redirect("sales:cpq_quote_detail", pk=quote.pk)
 
+    preselect_param = (request.GET.get("quote") or "").strip()
+    preselect_quote_id = preselect_param if preselect_param.isdigit() else None
+
     return render(request, "sales/quote_proposal_cpq/operations/guided_selling.html", {
         "bundle_products": bundle_products,
         "selected_bundle": selected_bundle,
         "options": options,
         "opportunities": opportunities,
-        "preselect_quote_id": request.GET.get("quote"),
+        "preselect_quote_id": preselect_quote_id,
     })
