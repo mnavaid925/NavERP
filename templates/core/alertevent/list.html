@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Alert Events{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Alert Events</h1>
+      <div class="breadcrumb"><a href="{% url 'core:monitoring_overview' %}">Monitoring</a><span class="sep">›</span><span>Alert Events</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:firing_board' %}" class="btn btn-outline"><i data-lucide="flame"></i> Firing board</a>
+      <a href="{% url 'core:alert_event_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record a firing</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">One row per firing <strong>somebody reported</strong>. NavERP detects nothing;
+      recording a row here does not make the crossing true.</p>
+    {% if unmeasured_count %}
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>{{ unmeasured_count }} of these firings record no reading.</strong>
+        A firing with no number attached cannot be checked against the threshold it supposedly crossed.</p>
+    {% endif %}
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search message, detail, evidence, component…">
+      </div>
+      <div class="form-group">
+        <select name="state" class="form-select" aria-label="State">
+          <option value="">Any state</option>
+          {% for value, label in state_choices %}<option value="{{ value }}" {% if request.GET.state == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        {# GET param is `severity`; the column is the severity_at_fire SNAPSHOT. #}
+        <select name="severity" class="form-select" aria-label="Severity at fire">
+          <option value="">Any severity</option>
+          {% for value, label in severity_choices %}<option value="{{ value }}" {% if request.GET.severity == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="service" class="form-select" aria-label="Component">
+          <option value="">Any component</option>
+          {% for s in services %}<option value="{{ s.pk }}" {% if request.GET.service == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:alert_event_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Firing</th><th>Component</th><th>State</th><th>Severity at fire</th><th>Reading</th><th>Fired</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:alert_event_detail' obj.pk %}">{{ obj.message|truncatechars:70 }}</a>
+              {% if obj.rule %}<div class="text-muted">{{ obj.rule.name }}</div>{% else %}<div class="text-muted">ad-hoc — no rule</div>{% endif %}</td>
+            <td>{{ obj.service_display|default:"—" }}</td>
+            <td>
+              {% if obj.state == "firing" %}<span class="badge badge-red">{{ obj.get_state_display }}</span>
+              {% elif obj.state == "acknowledged" %}<span class="badge badge-amber">{{ obj.get_state_display }}</span>
+              {% elif obj.state == "resolved" %}<span class="badge badge-green">{{ obj.get_state_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_state_display }}</span>{% endif %}
+            </td>
+            <td>
+              {% if obj.severity_at_fire == "info" %}<span class="badge badge-info">{{ obj.get_severity_at_fire_display }}</span>
+              {% elif obj.severity_at_fire == "warning" %}<span class="badge badge-amber">{{ obj.get_severity_at_fire_display }}</span>
+              {% elif obj.severity_at_fire == "critical" %}<span class="badge badge-red">{{ obj.get_severity_at_fire_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_severity_at_fire_display }}</span>{% endif %}
+            </td>
+            <td>{% if obj.observed_value is not None %}{{ obj.observed_value }}{% else %}<span class="text-muted">not measured</span>{% endif %}</td>
+            <td>{{ obj.fired_at|date:"M d, Y H:i" }}<div class="text-muted">{{ obj.age_days }}d ago</div></td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:alert_event_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:alert_event_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:alert_event_delete' obj.pk %}" onsubmit="return confirm('Delete this firing record? This removes the report, not the event it describes.');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="bell-off"></i><h3>No firings recorded</h3><p class="text-muted">Nothing here means nothing was reported — and NavERP evaluates no rules, so it cannot mean everything is fine.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
+
