@@ -1,30 +1,33 @@
-# Plan 1 — Finish Module 0 (System Admin & Security): **5** unbuilt sub-modules (0.17–0.21)
+# Plan 1 — Finish Module 0 (System Admin & Security): **4** unbuilt sub-modules (0.18–0.21)
 
-**Created:** 2026-09-19 · **HEAD at authoring:** `0ba7f760` · **Status:** 🟨 **9 of the 14 built since authoring; 5 remain**
-**Scope:** `core` + `accounts` + `tenants` + `dashboard` · **Effort:** large — 5 remaining `/next-module` runs
+**Created:** 2026-09-19 · **HEAD at authoring:** `0ba7f760` · **Status:** 🟨 **10 of the 14 built since authoring; 4 remain**
+**Scope:** `core` + `accounts` + `tenants` + `dashboard` · **Effort:** large — 4 remaining `/next-module` runs
 
 > **Re-verified 2026-09-26 against `LIVE_LINKS` (authoritative).** The original header said "14
-> unbuilt"; **nine of those fourteen are now live**: **0.4, 0.6, 0.8, 0.10, 0.11, 0.12, 0.13, 0.15,
-> 0.16**. Module 0 is now **16 of 21 built (0.1–0.16)** and the remaining work is exactly
-> **0.17–0.21 — five sub-modules, not six.**
+> unbuilt"; **ten of those fourteen are now live**: **0.4, 0.6, 0.8, 0.10, 0.11, 0.12, 0.13, 0.15,
+> 0.16, 0.17**. Module 0 is now **17 of 21 built (0.1–0.17)** and the remaining work is exactly
+> **0.18–0.21 — four sub-modules, not six.**
 > Steps 0 and 2 of this plan are also **DONE** (reconcile file committed; `core/SKILL.md` written).
 > The table in Step 1 carries per-row status so the finished ones are not rebuilt.
 >
-> `README.md:1193` and `NavERP.md:61` were already correct at "16 of 21 … (5 remain: 0.17–0.21)";
-> this file and `plan-remaining-INDEX.md` were the only two documents still saying 0.16–0.21, and both
-> are now corrected. **`temp/audit_integrity.py` passes all six checks** (re-run 2026-09-26).
+> **0.17 landed without a docs close-out** — migration `core.0015`, four models
+> (`ServiceComponent`, `AlertRule`, `AlertEvent`, `Incident`), `_seed_monitoring(tenant)`, a full
+> `LIVE_LINKS["0.17"]` block and 17 templates were all committed, but this file, `plan-remaining-INDEX.md`,
+> `README.md`, `NavERP.md`, `.claude/skills/core/SKILL.md` and `todo.md` were never updated. All of
+> them now read 0.18–0.21. **`temp/audit_integrity.py` passes all six checks** (re-run 2026-09-26:
+> `module 0: 4 catalogued but NOT built -> 0.18, 0.19, 0.20, 0.21`).
 
 ---
 
 ## Goal
 
 Module 0 is the only module in the 0–7.13 range that is materially unfinished. At authoring it was
-**7 of 21 sub-modules live**; it is now **15 of 21 (0.1–0.15)**. Every other module in the range is
-complete against the catalog. This plan closes the last six: **0.16–0.21**.
+**7 of 21 sub-modules live**; it is now **17 of 21 (0.1–0.17)**. Every other module in the range is
+complete against the catalog. This plan closes the last four: **0.18–0.21**.
 
 ## Why it is the biggest item
 
-This is **not one task — it is 14.** Each unbuilt sub-module is a full Module Creation Sequence run
+This is **not one task — it is 4.** Each unbuilt sub-module is a full Module Creation Sequence run
 (Phases 0–7 of `.claude/CLAUDE.md`): research → todo → build → 6 serial reviewers → `code-fixer` →
 tests → docs. Do them **one at a time, strictly serially**, exactly like 7.1–7.15 were done.
 
@@ -94,16 +97,21 @@ before starting the next.
 | 7 | 0.13 | Integration & API Management | ✅ **built** — API keys, webhooks/event bus, connectors |
 | 8 | 0.15 | Localization & Regional Settings | ✅ **built** — language packs, RTL, multi-currency |
 | 9 | 0.16 | Backup, Recovery & Data Lifecycle | ✅ **built** — 7 models, `core/migrations/0013_backup_recovery_data_lifecycle.py` |
-| 10 | **0.17** | **Monitoring, Logging & Observability** | ⬜ **OPEN — next** |
-| 11 | **0.18** | **Threat Protection & Security Operations** | ⬜ **OPEN** |
+| 10 | 0.17 | Monitoring, Logging & Observability | ✅ **built** — 4 models, `core/migrations/0015_alertrule_alertevent_servicecomponent_incident_and_more.py` |
+| 11 | **0.18** | **Threat Protection & Security Operations** | ⬜ **OPEN — next** |
 | 12 | **0.19** | **License & Subscription Administration** | ⬜ **OPEN** |
 | 13 | **0.20** | **Admin Console & System Operations** | ⬜ **OPEN** |
 | 14 | **0.21** | **Compliance, Governance & Risk** | ⬜ **OPEN** |
 
-### Notes carried forward for the five still open
+### Notes carried forward for the four still open
 
-- **0.17** Health checks, metrics, log aggregation, alerting. `core.AuditLog` and `core.BusinessRuleLog`
-  already exist; this is the *observability* layer over them, not a second log store.
+- **0.17 is closed** — it landed in `apps/core/models/Monitoring.py` as `ServiceComponent`, `AlertRule`,
+  `AlertEvent` and `Incident` (migration `core.0015`, seeder block `_seed_monitoring(tenant)`). Note it
+  **declines** three of the five bullets rather than faking them: centralized log aggregation
+  (no log pipeline exists in this repo), distributed tracing / true APM (no tracing SDK) and quota
+  management (billing's). What ships is the alert-threshold vocabulary, the register of recorded
+  firings, latency/throughput/slow-query thresholds, the capacity board and the incident register.
+  **0.18 picks up from exactly that boundary.**
 - **0.18** WAF/rate limiting, threat detection, incident response, vulnerability mgmt. Note
   `core.RateLimitPolicy` already exists (claimed by 0.2/0.4) — extend, do not re-declare.
 - **0.19** Entitlements, seat counting, renewals. Overlaps `tenants.Subscription` /
@@ -176,28 +184,34 @@ failing is the 7.10 failure mode and must be finished before moving on.
 
 - [x] Step 0 reconcile file committed and every unmapped bullet classified —
       `.claude/tasks/plan-1-module0-reconcile.md`; verdict: nothing was built-but-unsurfaced.
-- [ ] All 21 sub-modules have a `LIVE_LINKS["N.M"]` entry — **16 of 21 today; 0.17–0.21 outstanding.**
+- [ ] All 21 sub-modules have a `LIVE_LINKS["N.M"]` entry — **17 of 21 today; 0.18–0.21 outstanding.**
 - [ ] `temp/audit_integrity.py` passes all 6 checks — ✅ **verified 2026-09-26: all six PASS** at the
-      current HEAD (3,720 routes, 2,255 template refs, 706 sidebar targets, 0 unexplained unseeded
-      models). It reports "module 0: 5 catalogued but NOT built -> 0.17, 0.18, 0.19, 0.20, 0.21".
-- [x] `.claude/skills/core/SKILL.md` exists with an accurate As-built line — `4ce6b4a2`.
-- [x] `README.md` module-0 row updated — now `🟦 16 of 21 sub-modules built (0.1–0.16)` (`README.md:1193`),
-      landed by Plan 4; `NavERP.md:61` likewise.
-- [ ] `.claude/tasks/todo.md` has a close-out note per sub-module — 0.1–0.16 done; 0.17–0.21
-      outstanding. **A stale `core is now 15 of 21` line survives at `todo.md:9313`** — fix it in the
-      same commit that owns `todo.md`, never while another session has that file dirty (L43/L45).
+      current HEAD (3,748 routes, 2,275 template refs, 730 sidebar targets, 0 unexplained unseeded
+      models). It reports "module 0: 4 catalogued but NOT built -> 0.18, 0.19, 0.20, 0.21".
+- [x] `.claude/skills/core/SKILL.md` exists with an accurate As-built line — `4ce6b4a2`; the as-built
+      list now ends at `0.17` and reads "Unbuilt: `0.18`–`0.21`".
+- [x] `README.md` module-0 row updated — now `🟦 17 of 21 sub-modules built (0.1–0.17)` (`README.md:1193`);
+      `NavERP.md:61` likewise. Both corrected after 0.17 landed without a docs close-out.
+- [ ] `.claude/tasks/todo.md` has a close-out note per sub-module — 0.1–0.17 done; 0.18–0.21
+      outstanding. The stale `core is now 15 of 21; 6 remain (0.16–0.21)` line that sat at
+      `todo.md:9313` is now corrected and a 0.17 close-out note added.
 
 ## Risks
 
 - **Auto-detect will fight you.** Bare `/next-module` picks the lowest `N.M` in the module in progress —
-  which is now **module 8** (a concurrent session is mid-build on **8.2** in `apps/sales/`). Always
-  pass `0.N`, starting with `/next-module 0.17`.
+  which is now **module 8** (a concurrent session is working in `apps/sales/`, with 8.1–8.5 live).
+  Always pass `0.N`, starting with `/next-module 0.18`.
 - **Migration collisions** with the concurrent session — agree the number first (L43). `core` is at
-  `0013_backup_recovery_data_lifecycle`, so 0.17 will likely be `0014_*`; confirm before generating.
+  `0015_alertrule_alertevent_servicecomponent_incident_and_more` (0.17), so 0.18 will likely be
+  `0016_*`; confirm before generating.
 - **0.19 and 0.21 overlap existing registers.** Procurement 6.17 owns `ComplianceScreening`/`AuditSeal`;
   `tenants` owns the subscription spine (`Subscription`, `SubscriptionInvoice`, `UsageRecord`).
   `core.RateLimitPolicy` already exists. The house rule is *never re-declare a sibling's spine* (L36) —
   state the boundary in the contract, as 7.6 did with `DeliverableInspection`.
-- **Dirty tree.** `.claude/tasks/todo.md` and four `templates/projects/reporting/*.html` files were
-  modified in the tree on 2026-09-26 and belong to another session. Leave them alone; never commit
-  them (L45).
+- **0.18 inherits three deferred 0.17 bullets** — centralized log aggregation, distributed tracing / true
+  APM, and capacity quota. 0.17 declined them explicitly in `LIVE_LINKS["0.17"]`'s comments. Decide
+  honestly whether 0.18 can now serve them or must carry the same deferral, and say which in the contract.
+- **Dirty tree.** Four `templates/projects/reporting/*.html` files are modified in the tree on
+  2026-09-26, and `apps/core/tests/test_monitoring_*.py` plus
+  `.claude/tasks/test-contract-core-0.17.md` are **untracked in-flight 0.17 Phase-6 work** — they belong
+  to another session. Leave them alone; never commit them (L45).
