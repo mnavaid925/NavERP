@@ -54,9 +54,12 @@ class CPQQuoteLineForm(TenantModelForm):
         self.quote = quote or (self.instance.quote if self.instance.pk else None)
         if self.tenant:
             if self.quote:
+                # select_related("quote") because the ModelChoiceField renders each
+                # option through CPQQuoteLine.__str__, which reads self.quote.number --
+                # without it the select costs one extra query per parent line.
                 self.fields["parent_line"].queryset = CPQQuoteLine.objects.filter(
                     tenant=self.tenant, quote=self.quote, parent_line__isnull=True
-                )
+                ).select_related("quote")
                 if self.instance.pk:
                     self.fields["parent_line"].queryset = self.fields["parent_line"].queryset.exclude(pk=self.instance.pk)
             else:
