@@ -66,7 +66,7 @@
           {% for row in capacity_rules %}
             <tr>
               <td class="fw-600"><a href="{% url 'core:alert_rule_detail' row.rule.pk %}">{{ row.rule.name }}</a>
-                <div class="text-muted">{{ row.rule.get_metric_display }} · {{ row.rule.service.name|default:"no component" }}
+                <div class="text-muted">{{ row.rule.get_metric_key_display }} · {{ row.rule.service.name|default:"no component" }}
                   {% if not row.rule.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}</div>
               </td>
               <td>{% if row.bound is not None %}{{ row.bound }}{% else %}<span class="text-muted">— no bound set</span>{% endif %}</td>
