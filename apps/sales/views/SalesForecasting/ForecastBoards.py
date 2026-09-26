@@ -28,8 +28,8 @@ from apps.sales.models.SalesForecasting.ForecastAdjustments import ForecastAdjus
 from apps.sales.models.SalesForecasting.ForecastPeriods import ForecastPeriod
 from apps.sales.models.SalesForecasting.ForecastScenarios import ForecastScenario
 from apps.sales.models.SalesForecasting.ForecastSubmissions import ForecastSubmission
-from apps.sales.views.SalesForecasting.ForecastPeriods import _is_tenant_admin
 from apps.sales.views._common import *  # noqa: F401,F403
+from apps.sales.views._helpers import is_tenant_admin as _is_tenant_admin
 
 TEMPLATE_BOARD = "sales/salesforecasting/forecastboard/board.html"
 TEMPLATE_ATTAINMENT = "sales/salesforecasting/forecastboard/attainment.html"
@@ -161,6 +161,57 @@ def _scenarios(tenant, period):
         .select_related("owner")
         .order_by("pk")[:MAX_ROWS]
     )
+
+
+def _owner_from_record(record, prefix="owner__"):
+    """A stand-in `User` built from `.values()` columns, for the bulk aggregates.
+
+    I4 means the accuracy report no longer holds real `User` instances, but the row
+    dicts still need something whose `get_full_name()` works. A tiny proxy keeps
+    `_owner_label` and `{{ stats.worst_biased_owner }}` unchanged instead of
+    threading a parallel label through every template.
+    """
+    class _OwnerProxy:
+        __slots__ = ("_first", "_last", "_username")
+
+        def __init__(self, first, last, username):
+            self._first, self._last, self._username = first, last, username
+
+        def get_full_name(self):
+            return f"{self._first} {self._last}".strip()
+
+        def get_username(self):
+            return self._username or ""
+
+        def __str__(self):
+            return self.get_full_name() or self.get_username() or "Unassigned"
+
+    username = record.get(f"{prefix}username")
+    if username is None and prefix:
+        username = record.get("owner__username")
+    return _OwnerProxy(
+        record.get(f"{prefix}first_name"),
+        record.get(f"{prefix}last_name"),
+        username,
+    )
+
+
+def _row_override_move_pct(record):
+    """`_override_move_pct` for a `.values()` row rather than a model instance."""
+    if record.get("target_field") != "amount":
+        return None
+    original = Decimal(record.get("original_value") or 0)
+    if original == 0:
+        return None
+    adjusted = Decimal(record.get("adjusted_value") or 0)
+    return ((adjusted - original) / original) * Decimal(100)
+
+
+def _row_net_delta(record):
+    """`ForecastAdjustment.net_delta` for a `.values()` row; `0` for a category override."""
+    if record.get("target_field") != "amount":
+        return ZERO
+    return Decimal(record.get("adjusted_value") or 0) - Decimal(record.get("original_value") or 0)
 
 
 def _owner_label(owner):
@@ -540,24 +591,82 @@ def forecast_accuracy(request):
     period_bias_values = []
     owner_bias_values = []
 
-    for period in periods[:MAX_PERIODS]:
-        submissions = _submissions(tenant, period)
-        if not submissions:
-            continue
-        submitted_total = _sum(
-            getattr(s, field) or ZERO for s in submissions for _, field in ROLLUP_CATEGORY_FIELDS
+    # I4: the report used to call _submissions() and _adjustments() once per period --
+    # up to 400 queries plus 200 round trips for a single page. Both are now bulk
+    # aggregates over the whole period set, grouped in Python afterwards. A handful of
+    # queries replaces the storm, and the arithmetic below is unchanged.
+    pks = [p.pk for p in periods[:MAX_PERIODS]]
+    periods_by_pk = {p.pk: p for p in periods[:MAX_PERIODS]}
+
+    submitted_by_period = OrderedDict()
+    actual_by_period = OrderedDict()
+    weighted_by_period = OrderedDict()
+    count_by_period = OrderedDict()
+    owner_totals = OrderedDict()
+    if tenant is not None and pks:
+        submission_fields = [field for _, field in ROLLUP_CATEGORY_FIELDS]
+        grouped = (
+            ForecastSubmission.objects.filter(tenant=tenant, period_id__in=pks)
+            .values(
+                "period_id", "owner_id", "owner__username",
+                "owner__first_name", "owner__last_name",
+            )
+            .annotate(
+                submitted=Sum(*submission_fields),
+                actual=Sum("actual_amount"),
+                weighted=Sum("weighted_amount"),
+                rows=Count("pk"),
+            )
         )
-        actual_amount = _sum(s.actual_amount for s in submissions)
+        for record in grouped:
+            period_pk = record["period_id"]
+            submitted = Decimal(record["submitted"] or 0)
+            actual = Decimal(record["actual"] or 0)
+            weighted = Decimal(record["weighted"] or 0)
+            submitted_by_period[period_pk] = submitted_by_period.get(period_pk, ZERO) + submitted
+            actual_by_period[period_pk] = actual_by_period.get(period_pk, ZERO) + actual
+            weighted_by_period[period_pk] = weighted_by_period.get(period_pk, ZERO) + weighted
+            count_by_period[period_pk] = count_by_period.get(period_pk, 0) + record["rows"]
+            # Per-rep bias: the mean signed % move over that rep's calls, exactly as
+            # the old per-submission loop computed it.
+            if actual:
+                bucket = owner_totals.setdefault(
+                    record["owner_id"],
+                    {"owner": _owner_from_record(record), "total": ZERO, "count": 0},
+                )
+                bucket["total"] += ((submitted - actual) / actual) * Decimal(100)
+                bucket["count"] += 1
+
+    override_rows = []
+    if tenant is not None and pks:
+        override_rows = list(
+            ForecastAdjustment.objects.filter(
+                tenant=tenant, submission__period_id__in=pks, is_reverted=False,
+            ).values(
+                "submission__period_id", "submission__owner_id",
+                "submission__owner__username", "submission__owner__first_name",
+                "submission__owner__last_name", "target_field",
+                "original_value", "adjusted_value",
+            )
+        )
+    for period in periods_by_pk.values():
+        period_pk = period.pk
+        if not count_by_period.get(period_pk):
+            continue
+        submitted_total = submitted_by_period.get(period_pk, ZERO)
+        actual_amount = actual_by_period.get(period_pk, ZERO)
         # Bias is signed on purpose: a negative number is a rep who consistently
         # forecasts under the eventual outcome — the sandbagging signal.
         bias_pct = None
         if submitted_total and actual_amount:
             bias_pct = ((submitted_total - actual_amount) / actual_amount) * Decimal(100)
             period_bias_values.append(bias_pct)
-        adjustments = _adjustments(tenant, period, [s.pk for s in submissions])
-        capped = _truncation_note("forecast calls", period, len(submissions))
-        if capped:
-            caveats.append(capped)
+        adjustments = [r for r in override_rows if r["submission__period_id"] == period_pk]
+        capped = ""
+        if count_by_period.get(period_pk, 0) > MAX_ROWS:
+            capped = _truncation_note("forecast calls", period, MAX_ROWS)
+            if capped:
+                caveats.append(capped)
         rows.append(
             {
                 "period": period,
@@ -567,33 +676,17 @@ def forecast_accuracy(request):
                 "variance_amount": submitted_total - actual_amount,
                 "bias_pct": bias_pct,
                 "weight_bias": _safe_pct(
-                    _sum(s.weighted_amount for s in submissions), submitted_total
+                    weighted_by_period.get(period_pk, ZERO), submitted_total
                 ),
                 "adjustment_count": len(adjustments),
                 "truncated": bool(capped),
             }
         )
-
-        for submission in submissions:
-            forecast_amount = _sum(
-                getattr(submission, field) or ZERO for _, field in ROLLUP_CATEGORY_FIELDS
-            )
-            bucket = bias_by_owner.setdefault(
-                submission.owner_id, {"owner": submission.owner, "total": ZERO, "count": 0}
-            )
-            if submission.actual_amount:
-                bucket["total"] += (
-                    (forecast_amount - submission.actual_amount) / submission.actual_amount
-                ) * Decimal(100)
-                bucket["count"] += 1
-
         for adjustment in adjustments:
-            if adjustment.is_reverted:
-                continue
             bucket = sandbagging_by_owner.setdefault(
-                adjustment.submission.owner_id,
+                adjustment["submission__owner_id"],
                 {
-                    "owner": adjustment.submission.owner,
+                    "owner": _owner_from_record(adjustment, prefix="submission__owner__"),
                     "pct_total": ZERO,
                     "pct_count": 0,
                     "adjustment_count": 0,
@@ -606,7 +699,7 @@ def forecast_accuracy(request):
             bucket["adjustment_count"] += 1
             # Contract 5.4 pins early_vs_final_pct: the mean signed % move a rep's
             # overrides made, which is currency-free by construction.
-            move_pct = _override_move_pct(adjustment)
+            move_pct = _row_override_move_pct(adjustment)
             if move_pct is not None:
                 bucket["pct_total"] += move_pct
                 bucket["pct_count"] += 1
@@ -615,7 +708,9 @@ def forecast_accuracy(request):
                 currency_code, {"net_delta": ZERO, "count": 0}
             )
             money_bucket["count"] += 1
-            money_bucket["net_delta"] += adjustment.net_delta or ZERO
+            money_bucket["net_delta"] += _row_net_delta(adjustment)
+
+    bias_by_owner.update(owner_totals)
 
     bias_rows = []
     for bucket in bias_by_owner.values():
