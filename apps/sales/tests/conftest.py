@@ -2275,3 +2275,433 @@ def opportunitypipeline_competitor_a(db, opportunitypipeline_tenant_a):
 def opportunitypipeline_reason_a(db, opportunitypipeline_tenant_a):
     return _opportunitypipeline_win_loss_reason(opportunitypipeline_tenant_a, name="Superior Features", code="FEAT_A", result="won")
 
+
+
+# ============================================================================
+# 8.4 Sales Forecasting Test Helpers and Fixtures
+# ============================================================================
+
+SALESFORECASTING_MODEL_FIELDS = {
+    "ForecastPeriod": (
+        "tenant", "created_at", "updated_at", "number", "name", "period_type",
+        "period_year", "period_number", "start_date", "end_date", "rollup_dimension",
+        "reporting_currency", "fx_rate_source_date", "is_active", "is_locked",
+    ),
+    "ForecastSubmission": (
+        "tenant", "created_at", "updated_at", "number", "period", "owner", "org_unit",
+        "territory", "pipeline", "quota_ref", "submitted_by", "reviewed_by", "status",
+        "omitted_amount", "pipeline_amount", "best_case_amount", "commit_amount",
+        "closed_amount", "weighted_amount", "quota_amount", "actual_amount",
+        "submitted_at", "reviewed_at", "review_note", "ai_predicted_pipeline",
+        "ai_predicted_best_case", "ai_predicted_commit", "ai_confidence_pct",
+        "ai_model_name", "ai_model_version", "ai_generated_at", "ai_explanation", "notes",
+    ),
+    "ForecastAdjustment": (
+        "tenant", "created_at", "updated_at", "number", "submission", "opportunity",
+        "placement", "created_by", "adjustment_kind", "target_field", "original_value",
+        "adjusted_value", "original_category", "adjusted_category", "reason_code", "note",
+        "is_reverted", "reverted_at", "revert_reason",
+    ),
+    "ForecastScenario": (
+        "tenant", "created_at", "updated_at", "number", "period", "owner", "name",
+        "scenario_type", "probability_pct", "is_baseline", "is_selected",
+        "pipeline_delta_pct", "best_case_delta_pct", "commit_delta_pct",
+        "projected_commit_amount", "projected_total_amount", "assumption_notes",
+    ),
+}
+
+SALESFORECASTING_CHOICES = {
+    "ForecastPeriod": {
+        "rollup_dimension": (
+            ("user", "Sales Representative"),
+            ("org_unit", "Organizational Unit"),
+            ("territory", "Territory"),
+        ),
+    },
+    "ForecastSubmission": {
+        "status": (
+            ("draft", "Draft"),
+            ("submitted", "Submitted"),
+            ("approved", "Approved"),
+            ("rejected", "Rejected"),
+            ("locked", "Locked"),
+        ),
+    },
+    "ForecastAdjustment": {
+        "adjustment_kind": (
+            ("direct", "Direct"),
+            ("indirect", "Indirect"),
+            ("revert", "Revert"),
+        ),
+        "target_field": (
+            ("category", "Forecast Category"),
+            ("amount", "Amount"),
+        ),
+        "reason_code": (
+            ("new_deal", "New Deal Added"),
+            ("deal_advanced", "Deal Advanced A Stage"),
+            ("deal_slipped", "Deal Slipped"),
+            ("deal_lost", "Deal Lost"),
+            ("deal_won", "Deal Won"),
+            ("amount_revised", "Amount Revised"),
+            ("timing_revised", "Timing Revised"),
+            ("territory_reassigned", "Territory Reassigned"),
+            ("manager_judgement", "Manager Judgement"),
+            ("correction", "Data Correction"),
+        ),
+    },
+    "ForecastScenario": {
+        "scenario_type": (
+            ("upside", "Upside"),
+            ("base", "Base"),
+            ("downside", "Downside"),
+            ("custom", "Custom"),
+        ),
+    },
+}
+
+
+
+def _salesforecasting_tenant_id(tenant):
+    return tenant.pk if hasattr(tenant, "pk") else tenant
+
+
+def _salesforecasting_user(tenant, email_prefix="user", *, is_admin=False, **overrides):
+    from apps.accounts.models import User
+
+    tid = _salesforecasting_tenant_id(tenant)
+    email = overrides.pop("email", f"{email_prefix}_{tid}_{timezone.now().timestamp()}@example.com")
+    username = overrides.pop("username", email.split("@")[0][:30])
+    return User.objects.create_user(
+        email=email,
+        username=username,
+        password="password",
+        tenant=tenant,
+        is_tenant_admin=is_admin,
+        **overrides,
+    )
+
+
+def _salesforecasting_org_unit(tenant, name=None, kind="department", parent=None, **overrides):
+    from apps.core.models import OrgUnit
+
+    tid = _salesforecasting_tenant_id(tenant)
+    name = name or f"OrgUnit_{tid}_{timezone.now().timestamp()}"
+    return OrgUnit.objects.create(
+        tenant=tenant,
+        name=name,
+        kind=kind,
+        parent=parent,
+        **overrides,
+    )
+
+
+def _salesforecasting_currency(code="USD", name="US Dollar", symbol="$"):
+    """``accounting.Currency`` is GLOBAL (no tenant FK) -- never tenant-scoped (L29)."""
+    from apps.accounting.models import Currency
+
+    currency, _ = Currency.objects.get_or_create(
+        code=code,
+        defaults={"name": name, "symbol": symbol, "is_active": True},
+    )
+    return currency
+
+
+def _salesforecasting_pipeline(tenant, name="Standard Pipeline", is_default=False, **overrides):
+    from apps.sales.models.OpportunityPipeline.Pipelines import Pipeline
+
+    overrides.pop("code", None)
+    overrides.pop("owner", None)
+    overrides.pop("currency", None)
+    return Pipeline.objects.create(
+        tenant=tenant,
+        name=name,
+        is_default=is_default,
+        **overrides,
+    )
+
+
+
+def _salesforecasting_period(
+    tenant,
+    name="Forecast Period",
+    period_type="quarter",
+    period_year=None,
+    period_number=1,
+    reporting_currency=None,
+    is_active=True,
+    is_locked=False,
+    **overrides,
+):
+    from apps.sales.models.SalesForecasting.ForecastPeriods import ForecastPeriod
+
+    if period_year is None:
+        period_year = timezone.localdate().year
+    return ForecastPeriod.objects.create(
+        tenant=tenant,
+        name=name,
+        period_type=period_type,
+        period_year=period_year,
+        period_number=period_number,
+        reporting_currency=reporting_currency,
+        is_active=is_active,
+        is_locked=is_locked,
+        **overrides,
+    )
+
+
+def _salesforecasting_submission(
+    tenant,
+    period,
+    owner=None,
+    status="draft",
+    org_unit=None,
+    pipeline=None,
+    pipeline_amount=Decimal("10000.00"),
+    best_case_amount=Decimal("8000.00"),
+    commit_amount=Decimal("5000.00"),
+    **overrides,
+):
+    from apps.sales.models.SalesForecasting.ForecastSubmissions import ForecastSubmission
+
+    overrides.setdefault("closed_amount", Decimal("0.00"))
+    overrides.setdefault("omitted_amount", Decimal("0.00"))
+    overrides.setdefault("weighted_amount", Decimal("6000.00"))
+    overrides.setdefault("quota_amount", Decimal("20000.00"))
+    overrides.setdefault("actual_amount", Decimal("9000.00"))
+    return ForecastSubmission.objects.create(
+        tenant=tenant,
+        period=period,
+        owner=owner,
+        status=status,
+        org_unit=org_unit,
+        pipeline=pipeline,
+        pipeline_amount=pipeline_amount,
+        best_case_amount=best_case_amount,
+        commit_amount=commit_amount,
+        **overrides,
+    )
+
+
+
+def _salesforecasting_adjustment(
+    tenant,
+    submission,
+    reason_code="manager_judgement",
+    adjustment_kind="direct",
+    target_field="category",
+    adjusted_category="commit",
+    adjusted_value=None,
+    **overrides,
+):
+    from apps.sales.models.SalesForecasting.ForecastAdjustments import ForecastAdjustment
+
+    return ForecastAdjustment.objects.create(
+        tenant=tenant,
+        submission=submission,
+        adjustment_kind=adjustment_kind,
+        target_field=target_field,
+        adjusted_category=adjusted_category,
+        adjusted_value=adjusted_value,
+        reason_code=reason_code,
+        **overrides,
+    )
+
+
+def _salesforecasting_scenario(
+    tenant,
+    period,
+    name="Upside Case",
+    scenario_type="upside",
+    owner=None,
+    is_baseline=False,
+    is_selected=False,
+    pipeline_delta_pct=Decimal("10.00"),
+    best_case_delta_pct=Decimal("5.00"),
+    commit_delta_pct=Decimal("0.00"),
+    **overrides,
+):
+    from apps.sales.models.SalesForecasting.ForecastScenarios import ForecastScenario
+
+    return ForecastScenario.objects.create(
+        tenant=tenant,
+        period=period,
+        owner=owner,
+        name=name,
+        scenario_type=scenario_type,
+        is_baseline=is_baseline,
+        is_selected=is_selected,
+        pipeline_delta_pct=pipeline_delta_pct,
+        best_case_delta_pct=best_case_delta_pct,
+        commit_delta_pct=commit_delta_pct,
+        **overrides,
+    )
+
+
+
+@pytest.fixture
+def salesforecasting_tenant_a(db):
+    from apps.core.models import Tenant
+
+    tenant, _ = Tenant.objects.get_or_create(name="Acme Corp", slug="acme")
+    return tenant
+
+
+@pytest.fixture
+def salesforecasting_tenant_b(db):
+    from apps.core.models import Tenant
+
+    tenant, _ = Tenant.objects.get_or_create(name="Globex Corp", slug="globex")
+    return tenant
+
+
+@pytest.fixture
+def salesforecasting_admin_a(db, salesforecasting_tenant_a):
+    return _salesforecasting_user(salesforecasting_tenant_a, "fc_admin_a", is_admin=True)
+
+
+@pytest.fixture
+def salesforecasting_rep_a(db, salesforecasting_tenant_a):
+    """A plain rep: not a tenant admin, so the privileged-action lanes have a subject."""
+    return _salesforecasting_user(salesforecasting_tenant_a, "fc_rep_a", is_admin=False)
+
+
+@pytest.fixture
+def salesforecasting_admin_b(db, salesforecasting_tenant_b):
+    return _salesforecasting_user(salesforecasting_tenant_b, "fc_admin_b", is_admin=True)
+
+
+@pytest.fixture
+def salesforecasting_client_a(salesforecasting_admin_a):
+    client = Client()
+    client.force_login(salesforecasting_admin_a)
+    return client
+
+
+@pytest.fixture
+def salesforecasting_client_b(salesforecasting_admin_b):
+    client = Client()
+    client.force_login(salesforecasting_admin_b)
+    return client
+
+
+@pytest.fixture
+def salesforecasting_client_rep_a(salesforecasting_rep_a):
+    client = Client()
+    client.force_login(salesforecasting_rep_a)
+    return client
+
+
+@pytest.fixture
+def salesforecasting_currency(db):
+    return _salesforecasting_currency()
+
+
+
+@pytest.fixture
+def salesforecasting_org_unit_parent_a(db, salesforecasting_tenant_a):
+    return _salesforecasting_org_unit(salesforecasting_tenant_a, name="Acme Group", kind="company")
+
+
+@pytest.fixture
+def salesforecasting_org_unit_child_a(db, salesforecasting_tenant_a, salesforecasting_org_unit_parent_a):
+    return _salesforecasting_org_unit(
+        salesforecasting_tenant_a,
+        name="Acme East Sales",
+        kind="department",
+        parent=salesforecasting_org_unit_parent_a,
+    )
+
+
+@pytest.fixture
+def salesforecasting_org_unit_b(db, salesforecasting_tenant_b):
+    return _salesforecasting_org_unit(salesforecasting_tenant_b, name="Globex Group", kind="company")
+
+
+@pytest.fixture
+def salesforecasting_pipeline_a(db, salesforecasting_tenant_a):
+    return _salesforecasting_pipeline(salesforecasting_tenant_a, name="Acme Direct", is_default=True)
+
+
+@pytest.fixture
+def salesforecasting_pipeline_b(db, salesforecasting_tenant_b):
+    return _salesforecasting_pipeline(salesforecasting_tenant_b, name="Globex Direct", is_default=True)
+
+
+@pytest.fixture
+def salesforecasting_period_a(db, salesforecasting_tenant_a, salesforecasting_currency):
+    """The tenant's current quarter -- the window most board assertions read."""
+    today = timezone.localdate()
+    return _salesforecasting_period(
+        salesforecasting_tenant_a,
+        name=f"Q{(today.month - 1) // 3 + 1} {today.year}",
+        period_type="quarter",
+        period_year=today.year,
+        period_number=(today.month - 1) // 3 + 1,
+        reporting_currency=salesforecasting_currency,
+    )
+
+
+@pytest.fixture
+def salesforecasting_past_period_a(db, salesforecasting_tenant_a):
+    """A closed window: ``period_elapsed_pct`` must read 100, not divide by zero."""
+    today = timezone.localdate()
+    return _salesforecasting_period(
+        salesforecasting_tenant_a,
+        name=f"Q4 {today.year - 1}",
+        period_type="quarter",
+        period_year=today.year - 1,
+        period_number=4,
+    )
+
+
+
+@pytest.fixture
+def salesforecasting_period_b(db, salesforecasting_tenant_b):
+    """The IDOR lane's target: a period that belongs to the OTHER workspace."""
+    today = timezone.localdate()
+    return _salesforecasting_period(
+        salesforecasting_tenant_b,
+        name="Globex Current Quarter",
+        period_type="quarter",
+        period_year=today.year,
+        period_number=(today.month - 1) // 3 + 1,
+    )
+
+
+@pytest.fixture
+def salesforecasting_submission_a(
+    db,
+    salesforecasting_tenant_a,
+    salesforecasting_period_a,
+    salesforecasting_rep_a,
+    salesforecasting_org_unit_child_a,
+    salesforecasting_pipeline_a,
+):
+    return _salesforecasting_submission(
+        salesforecasting_tenant_a,
+        salesforecasting_period_a,
+        owner=salesforecasting_rep_a,
+        org_unit=salesforecasting_org_unit_child_a,
+        pipeline=salesforecasting_pipeline_a,
+    )
+
+
+@pytest.fixture
+def salesforecasting_adjustment_a(db, salesforecasting_tenant_a, salesforecasting_submission_a):
+    return _salesforecasting_adjustment(
+        salesforecasting_tenant_a,
+        salesforecasting_submission_a,
+        reason_code="deal_won",
+    )
+
+
+@pytest.fixture
+def salesforecasting_scenario_a(db, salesforecasting_tenant_a, salesforecasting_period_a, salesforecasting_admin_a):
+    return _salesforecasting_scenario(
+        salesforecasting_tenant_a,
+        salesforecasting_period_a,
+        name="Acme Upside",
+        owner=salesforecasting_admin_a,
+    )
+
