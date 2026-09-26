@@ -286,9 +286,6 @@ def quote_generate_proposal(request, pk):
     )
 
     proposal_html = cpq_render_proposal_html(quote)
-    if quote.status == "approved":
-        quote.status = "presented"
-        quote.save(update_fields=["status", "updated_at"])
 
     return render(request, "sales/quote_proposal_cpq/operations/proposal_preview.html", {
         "quote": quote,
