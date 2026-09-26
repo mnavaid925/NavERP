@@ -22,6 +22,10 @@ from .OpportunityOutcomes.OpportunityOutcomes import (
     OpportunityOutcome,
     WinLossReason,
 )
+from .SalesForecasting.ForecastPeriods import ForecastPeriod
+from .SalesForecasting.ForecastSubmissions import ForecastSubmission
+from .SalesForecasting.ForecastAdjustments import ForecastAdjustment
+from .SalesForecasting.ForecastScenarios import ForecastScenario
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
@@ -32,5 +36,6 @@ __all__ = [
     "OpportunityTeamMember",
     "CompetitorProfile", "OpportunityCompetitor",
     "WinLossReason", "OpportunityOutcome",
+    "ForecastPeriod", "ForecastSubmission", "ForecastAdjustment", "ForecastScenario",
 ]
 
