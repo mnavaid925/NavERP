@@ -98,7 +98,7 @@
                             <span class="text-xs uppercase text-slate-500 font-medium">Pricing Override</span>
                             <div class="text-sm mt-1">
                                 {% if bundle.unit_price_override %}
-                                    <span class="font-bold text-slate-900">${{ bundle.unit_price_override:,.2f }}</span> (Fixed unit price)
+                                    <span class="font-bold text-slate-900">${{ bundle.unit_price_override|floatformat:2 }}</span> (Fixed unit price)
                                 {% elif bundle.discount_pct_override %}
                                     <span class="font-bold text-amber-700">{{ bundle.discount_pct_override }}% off</span> (Bundle discount)
                                 {% else %}
