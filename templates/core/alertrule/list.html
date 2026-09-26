@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Alert Thresholds{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Alert Thresholds</h1>
+      <div class="breadcrumb"><a href="{% url 'core:monitoring_overview' %}">Monitoring</a><span class="sep">›</span><span>Alert Thresholds</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:firing_board' %}" class="btn btn-outline"><i data-lucide="flame"></i> Firing board</a>
+      <a href="{% url 'core:alert_rule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Declare a threshold</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Thresholds somebody intends to be warned by. <strong>Nothing in NavERP evaluates
+      these rules</strong> — there is no scheduler and no collector, so a rule here is a written intention,
+      not a running check.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, module, metric, notes…">
+      </div>
+      <div class="form-group">
+        <select name="category" class="form-select" aria-label="Category">
+          <option value="">Any category</option>
+          {% for value, label in category_choices %}<option value="{{ value }}" {% if request.GET.category == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="severity" class="form-select" aria-label="Severity">
+          <option value="">Any severity</option>
+          {% for value, label in severity_choices %}<option value="{{ value }}" {% if request.GET.severity == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        {# GET param is `metric`; the column is metric_key. #}
+        <select name="metric" class="form-select" aria-label="Metric">
+          <option value="">Any metric</option>
+          {% for value, label in metric_choices %}<option value="{{ value }}" {% if request.GET.metric == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="service" class="form-select" aria-label="Component">
+          <option value="">Any component</option>
+          {% for s in services %}<option value="{{ s.pk }}" {% if request.GET.service == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="active" class="form-select" aria-label="Active">
+          <option value="">Active and inactive</option>
+          <option value="True" {% if request.GET.active == "True" %}selected{% endif %}>Active only</option>
+          <option value="False" {% if request.GET.active == "False" %}selected{% endif %}>Inactive only</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:alert_rule_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Rule</th><th>Component</th><th>Condition</th><th>Severity</th><th>Category</th><th>No data</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:alert_rule_detail' obj.pk %}">{{ obj.name }}</a>
+              {% if obj.module_slug %}<div class="text-muted">{{ obj.module_slug }}</div>{% endif %}
+              {% if not obj.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+            <td>{% if obj.service %}{{ obj.service.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td>{{ obj.get_metric_display }} {{ obj.get_comparator_display }}<br>
+              <span class="text-muted">{{ obj.threshold_display }}</span></td>
+            <td>
+              {% if obj.severity == "info" %}<span class="badge badge-info">{{ obj.get_severity_display }}</span>
+              {% elif obj.severity == "warning" %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>
+              {% elif obj.severity == "critical" %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>{% endif %}
+            </td>
+            <td>{{ obj.get_category_display }}</td>
+            <td>{{ obj.get_no_data_action_display }}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:alert_rule_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:alert_rule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:alert_rule_delete' obj.pk %}" onsubmit="return confirm('Delete this threshold rule?');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="sliders-horizontal"></i><h3>No thresholds declared</h3><p class="text-muted">With no rules registered, nothing can ever be evaluated — that is not an all-clear, it is an unwatched system.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
+
