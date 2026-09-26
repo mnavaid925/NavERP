@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Quote-to-Order Conversion Board — CPQ{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">CPQ</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">Quote-to-Order Conversion</span>
+            </nav>
+            <h1 class="page-title">Quote-to-Order Conversion Board</h1>
+            <p class="text-sm text-slate-500 mt-1">Convert won and approved CPQ quotes into formal SCM Sales Orders for warehouse fulfillment.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'sales:cpq_quote_list' %}" class="btn btn-outline">
+                <i data-lucide="arrow-left" class="w-4 h-4 mr-1.5"></i> Back to Quotes
+            </a>
+        </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs uppercase text-slate-500 font-medium">Ready for Conversion</div>
+                    <div class="text-2xl font-bold text-blue-600 mt-1">{{ stats.ready_count }}</div>
+                </div>
+                <div class="stat-icon blue">
+                    <i data-lucide="arrow-right-circle" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs uppercase text-slate-500 font-medium">Converted to ERP Orders</div>
+                    <div class="text-2xl font-bold text-emerald-600 mt-1">{{ stats.converted_count }}</div>
+                </div>
+                <div class="stat-icon green">
+                    <i data-lucide="check-circle" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ready Quotes Table -->
+    <div class="card">
+        <div class="card-header border-b border-slate-200 p-4">
+            <h2 class="text-base font-semibold text-slate-900">Approved Quotes Ready for Order Handoff</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Quote Number &amp; Title</th>
+                        <th>Account</th>
+                        <th>Status</th>
+                        <th>Total Amount</th>
+                        <th>Margin %</th>
+                        <th>Signed?</th>
+                        <th class="text-right">ERP Handoff Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for q in ready_quotes %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'sales:cpq_quote_detail' q.pk %}" class="font-medium text-blue-600 hover:text-blue-800">
+                                    {{ q.name }}
+                                </a>
+                                <div class="text-xs text-slate-400 font-mono">{{ q.number }} · Rev {{ q.revision_number }}</div>
+                            </td>
+                            <td>
+                                <span class="font-medium text-slate-800">{{ q.account.name|default:"—" }}</span>
+                            </td>
+                            <td>
+                                {% if q.status == 'accepted' %}
+                                    <span class="badge badge-green">Accepted</span>
+                                {% else %}
+                                    <span class="badge badge-info">{{ q.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="font-bold text-slate-900 font-mono">
+                                ${{ q.total:,.2f }}
+                            </td>
+                            <td class="text-sm font-semibold {% if q.margin_pct < 15 %}text-red-600{% else %}text-emerald-700{% endif %}">
+                                {{ q.margin_pct }}%
+                            </td>
+                            <td>
+                                {% if q.signed_at %}
+                                    <span class="badge badge-green text-xs">✓ E-Signed</span>
+                                {% else %}
+                                    <span class="badge badge-muted text-xs">Unsigned</span>
+                                {% endif %}
+                            </td>
+                            <td class="table-actions text-right">
+                                <form method="POST" action="{% url 'sales:quote_convert_to_order' q.pk %}" class="inline-block" onsubmit="return confirm('Generate SCM Sales Order from quote {{ q.number }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-primary py-1.5 px-3 text-xs bg-emerald-600 hover:bg-emerald-700">
+                                        <i data-lucide="shopping-cart" class="w-3.5 h-3.5 mr-1"></i> Convert to Order
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7">
+                                <div class="empty-state text-center py-10">
+                                    <i data-lucide="inbox" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+                                    <h4 class="text-sm font-medium text-slate-700">No quotes currently waiting for conversion</h4>
+                                    <p class="text-xs text-slate-400 mt-1">Quotes in approved or accepted status will populate this list.</p>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Converted Orders History -->
+    <div class="card">
+        <div class="card-header border-b border-slate-200 p-4">
+            <h3 class="text-base font-semibold text-slate-900">Converted Orders History</h3>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Quote Reference</th>
+                        <th>Created Sales Order</th>
+                        <th>Customer Account</th>
+                        <th>Order Value</th>
+                        <th>Order Status</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for q in converted_quotes %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'sales:cpq_quote_detail' q.pk %}" class="font-medium text-blue-600 hover:text-blue-800">
+                                    {{ q.number }}
+                                </a>
+                                <div class="text-xs text-slate-400">{{ q.name }}</div>
+                            </td>
+                            <td>
+                                {% if q.converted_order %}
+                                    <a href="{% url 'scm:salesorder_detail' q.converted_order.pk %}" class="font-mono text-sm font-bold text-emerald-700 hover:underline">
+                                        {{ q.converted_order.number }}
+                                    </a>
+                                {% else %}
+                                    <span class="text-slate-400 italic">Order link missing</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ q.account.name|default:"—" }}</td>
+                            <td class="font-mono font-bold text-slate-900">${{ q.total:,.2f }}</td>
+                            <td>
+                                <span class="badge badge-green">Converted</span>
+                            </td>
+                            <td class="text-right">
+                                {% if q.converted_order %}
+                                    <a href="{% url 'scm:salesorder_detail' q.converted_order.pk %}" class="btn btn-outline py-1 px-2.5 text-xs">
+                                        View SCM Order &rarr;
+                                    </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-6 text-slate-400 text-sm">
+                                No orders converted yet.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
