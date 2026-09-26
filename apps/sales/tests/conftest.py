@@ -1986,7 +1986,7 @@ def _opportunitypipeline_party(tenant, name=None, kind="organization", **overrid
     return Party.objects.create(
         tenant=tenant,
         name=name,
-        party_kind=kind,
+        kind=kind,
         **overrides,
     )
 
@@ -1994,16 +1994,13 @@ def _opportunitypipeline_party(tenant, name=None, kind="organization", **overrid
 def _opportunitypipeline_opportunity(tenant, title=None, owner=None, stage="prospecting", amount=Decimal("15000.00"), **overrides):
     from apps.crm.models import Opportunity
 
-    tid = _opportunitypipeline_tenant_id(tenant)
-    title = title or f"Deal_{tid}_{timezone.now().timestamp()}"
+    deal_name = overrides.pop("name", None) or overrides.pop("title", None) or title or f"Deal_{tid}_{timezone.now().timestamp()}"
     account = overrides.pop("account", None)
     if account is None:
-        from apps.crm.models import AccountProfile
-        party = _opportunitypipeline_party(tenant, name=f"AccountParty_{title}")
-        account, _ = AccountProfile.objects.get_or_create(tenant=tenant, party=party)
+        account = _opportunitypipeline_party(tenant, name=f"AccountParty_{deal_name}")
     return Opportunity.objects.create(
         tenant=tenant,
-        title=title,
+        name=deal_name,
         account=account,
         owner=owner,
         stage=stage,
@@ -2013,24 +2010,38 @@ def _opportunitypipeline_opportunity(tenant, title=None, owner=None, stage="pros
 
 
 def _opportunitypipeline_pipeline(tenant, name="Standard Pipeline", code=None, is_default=False, owner=None, **overrides):
-    from apps.sales.models import OpportunityPipeline
+    from apps.sales.models.OpportunityPipeline.Pipelines import Pipeline
 
-    tid = _opportunitypipeline_tenant_id(tenant)
-    code = code or f"P{str(tid)[-3:]}{int(timezone.now().timestamp() % 1000)}"
-    return OpportunityPipeline.objects.create(
+    overrides.pop("code", None)
+    overrides.pop("owner", None)
+    overrides.pop("currency", None)
+    return Pipeline.objects.create(
         tenant=tenant,
         name=name,
-        code=code,
         is_default=is_default,
-        owner=owner,
         **overrides,
     )
 
 
 def _opportunitypipeline_stage(tenant, pipeline, name="Discovery", sequence=10, stage_kind="open", probability=20, target_days=14, **overrides):
-    from apps.sales.models import PipelineStage
+    from apps.sales.models.OpportunityPipeline.Pipelines import PipelineStage
 
-    code = overrides.pop("code", f"STG{sequence}")
+    code = overrides.pop("code", f"stg_{sequence}")
+    if stage_kind == "won":
+        crm_key = "closed_won"
+        prob = 100
+        fc = "closed"
+    elif stage_kind == "lost":
+        crm_key = "closed_lost"
+        prob = 0
+        fc = "closed"
+    else:
+        crm_key = "proposal"
+        prob = probability
+        fc = "pipeline"
+    crm_stage_key = overrides.pop("crm_stage_key", crm_key)
+    probability = overrides.pop("probability", prob)
+    forecast_category = overrides.pop("forecast_category", fc)
     return PipelineStage.objects.create(
         tenant=tenant,
         pipeline=pipeline,
@@ -2038,7 +2049,9 @@ def _opportunitypipeline_stage(tenant, pipeline, name="Discovery", sequence=10, 
         code=code,
         sequence=sequence,
         stage_kind=stage_kind,
+        crm_stage_key=crm_stage_key,
         probability=probability,
+        forecast_category=forecast_category,
         target_days=target_days,
         **overrides,
     )
@@ -2057,54 +2070,89 @@ def _opportunitypipeline_placement(tenant, opportunity, pipeline, current_stage,
     )
 
 
-def _opportunitypipeline_team_member(tenant, opportunity, user, role="sales_rep", **overrides):
+def _opportunitypipeline_team_member(tenant, opportunity, user, role="sales_support", **overrides):
     from apps.sales.models import OpportunityTeamMember
 
+    valid_roles = dict(OpportunityTeamMember.ROLE_CHOICES)
+    role_mapped = {
+        "sales_rep": "sales_support",
+        "solutions_engineer": "solution_consultant",
+        "proposal_manager": "sales_support",
+        "legal_counsel": "sales_support",
+        "finance_commercial": "sales_support",
+        "customer_success": "sales_support",
+        "channel_manager": "collaborator",
+        "owner": "co_owner",
+        "technical_lead": "solution_consultant",
+        "subject_matter_expert": "solution_consultant",
+    }
+    actual_role = role_mapped.get(role, role)
+    if actual_role not in valid_roles:
+        actual_role = "sales_support"
+    overrides.pop("notes", None)
     return OpportunityTeamMember.objects.create(
         tenant=tenant,
         opportunity=opportunity,
         user=user,
-        role=role,
+        role=actual_role,
         **overrides,
     )
 
 
-def _opportunitypipeline_competitor_profile(tenant, party=None, website="https://competitor.example.com", tier="tier_1", **overrides):
+def _opportunitypipeline_competitor_profile(tenant, party=None, website_url=None, **overrides):
     from apps.sales.models import CompetitorProfile
 
     if party is None:
         party = _opportunitypipeline_party(tenant, name=f"Competitor_{timezone.now().timestamp()}")
+    url = overrides.pop("website", None) or website_url or overrides.pop("website_url", "https://competitor.example.com")
+    overrides.pop("tier", None)
     return CompetitorProfile.objects.create(
         tenant=tenant,
         party=party,
-        website=website,
-        tier=tier,
+        website_url=url,
         **overrides,
     )
 
 
-def _opportunitypipeline_opportunity_competitor(tenant, opportunity, competitor_profile, threat_level="high", **overrides):
+def _opportunitypipeline_opportunity_competitor(tenant, opportunity, competitor_profile, **overrides):
     from apps.sales.models import OpportunityCompetitor
 
+    overrides.pop("threat_level", None)
+    overrides.pop("strategy_notes", None)
+    relationship = overrides.pop("relationship", "evaluating")
+    if relationship not in dict(OpportunityCompetitor.RELATIONSHIP_CHOICES):
+        relationship = "evaluating"
     return OpportunityCompetitor.objects.create(
         tenant=tenant,
         opportunity=opportunity,
         competitor_profile=competitor_profile,
-        threat_level=threat_level,
+        relationship=relationship,
         **overrides,
     )
 
 
-def _opportunitypipeline_win_loss_reason(tenant, name="Product Fit", code=None, result="both", category="product", **overrides):
+def _opportunitypipeline_win_loss_reason(tenant, name="Product Fit", code=None, result="both", category="product_fit", **overrides):
     from apps.sales.models import WinLossReason
 
     code = code or f"R{int(timezone.now().timestamp() % 10000)}"
+    category_map = {
+        "product": "product_fit",
+        "competition": "competition",
+        "price": "price",
+        "timing": "timing",
+        "relationship": "relationship",
+    }
+    cat = category_map.get(category, category)
+    if cat not in dict(WinLossReason.CATEGORY_CHOICES):
+        cat = "other"
+    overrides.pop("requires_competitor", None)
+    overrides.pop("notes", None)
     return WinLossReason.objects.create(
         tenant=tenant,
         name=name,
         code=code,
         result=result,
-        category=category,
+        category=cat,
         **overrides,
     )
 
@@ -2112,6 +2160,7 @@ def _opportunitypipeline_win_loss_reason(tenant, name="Product Fit", code=None, 
 def _opportunitypipeline_outcome(tenant, opportunity, result="won", reason=None, recorded_by=None, **overrides):
     from apps.sales.models import OpportunityOutcome
 
+    overrides.pop("decision_maker_feedback", None)
     if reason is None:
         reason = _opportunitypipeline_win_loss_reason(tenant, result=result)
     return OpportunityOutcome.objects.create(
