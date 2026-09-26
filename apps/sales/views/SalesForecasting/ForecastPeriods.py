@@ -323,6 +323,14 @@ def forecast_period_edit(request, pk):
                 if locked.is_locked and not _shape_unchanged(locked, form):
                     form.add_error(None, "A locked period's shape cannot be changed.")
                 if not form.errors:
+                    # form.clean() already derived the window for the NEW
+                    # type/year/number and wrote it onto form.instance. Both fields are
+                    # editable=False, so they are absent from form._meta.fields and the
+                    # copy loop below would silently leave `locked` holding the OLD
+                    # window -- a row whose shape contradicts its own dates. Carry them
+                    # across the swap explicitly.
+                    locked.start_date = form.instance.start_date
+                    locked.end_date = form.instance.end_date
                     form.instance = locked
                     for field_name in form._meta.fields:
                         model_field = form.instance._meta.get_field(field_name)
