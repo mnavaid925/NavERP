@@ -279,22 +279,37 @@ def cpq_compare_quote_versions(quote_a, quote_b):
     total_delta = quote_b.total - quote_a.total
     margin_delta = quote_b.margin_pct - quote_a.margin_pct
     
-    # Map lines by description/product for diffing
-    lines_a = {ln.description: ln for ln in quote_a.lines.all()}
-    lines_b = {ln.description: ln for ln in quote_b.lines.all()}
-    
+    # Key the diff on line POSITION, not on description: a quote may legitimately
+    # carry two lines with the same description, and a description-keyed dict silently
+    # collapsed them into one row (dropping a line and understating the deltas).
+    # pk is not usable here because cpq_create_revision clones lines into new rows.
+    # Sequence is copied across revisions, so it is the stable identity; the
+    # occurrence counter keeps two lines that share a sequence distinct as well.
+    def _by_position(quote):
+        positions = {}
+        occurrences = {}
+        for ln in quote.lines.order_by("sequence", "id"):
+            seq = ln.sequence
+            nth = occurrences.get(seq, 0)
+            occurrences[seq] = nth + 1
+            positions[(seq, nth)] = ln
+        return positions
+
+    lines_a = _by_position(quote_a)
+    lines_b = _by_position(quote_b)
+
     all_keys = sorted(set(lines_a.keys()).union(lines_b.keys()))
     line_diffs = []
-    
+
     for key in all_keys:
         la = lines_a.get(key)
         lb = lines_b.get(key)
-        
+
         status = "unchanged"
         qty_delta = Decimal("0")
         price_delta = Decimal("0")
         total_line_delta = Decimal("0")
-        
+
         if la and not lb:
             status = "removed"
         elif lb and not la:
@@ -305,9 +320,11 @@ def cpq_compare_quote_versions(quote_a, quote_b):
             total_line_delta = lb.line_total - la.line_total
             if qty_delta != 0 or price_delta != 0 or la.discount_pct != lb.discount_pct:
                 status = "modified"
-                
+
         line_diffs.append({
-            "description": key,
+            # Prefer the newer revision's wording, falling back to the older one.
+            "description": (lb or la).description,
+            "sequence": key[0],
             "status": status,
             "line_a": la,
             "line_b": lb,
