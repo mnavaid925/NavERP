@@ -41,8 +41,8 @@
     <div class="card-header"><h2 class="card-title">Status counts</h2></div>
     <div class="card-body">
       <div class="badge-group">
-        {% for value, label in status_choices %}
-          <span class="badge {% if value == 'operational' %}badge-green{% elif value == 'degraded' %}badge-amber{% elif value == 'partial_outage' or value == 'major_outage' %}badge-red{% else %}badge-slate{% endif %}">{{ label }}: {{ status_counts|default_if_none:0 }}</span>
+        {% for label, count in status_rows %}
+          <span class="badge {% if label == 'Operational' %}badge-green{% elif label == 'Degraded' %}badge-amber{% elif label == 'Partial outage' or label == 'Major outage' %}badge-red{% else %}badge-slate{% endif %}">{{ label }}: {{ count }}</span>
         {% endfor %}
       </div>
       {% if component_total %}
