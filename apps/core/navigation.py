@@ -249,15 +249,18 @@ LIVE_LINKS = {
     #   b4 quota management is the billing sub-module's; 0.17 keeps only the scaling trigger.
     "0.17": {
         "System Health Dashboards": "core:health_board",                 # bullet 1 (the roll-up board)
-        "Application & Error Logging": "core:alert_event_list",           # bullet 2 (thresholds + firings)
+        "Application & Error Logging": "core:alert_event_list",           # bullet 2 (recorded firings)
         "Performance Metrics & APM": "core:alert_rule_list",              # bullet 3 (latency/throughput rules)
         "Capacity & Resource Planning": "core:capacity_board",             # bullet 4 (billing owns the quota)
         "Status Page & Incident Comms": "core:incident_list",              # bullet 5
         # Extra built pages that are NOT NavERP.md bullets. `resolve_nav` appends these AFTER the
         # bullets, so they read as operational leaves rather than as more promised features.
+        #
+        # Every label must resolve to a DISTINCT page, or the sidebar shows several labels over one
+        # page and the active-link highlight lights all of them at once. The original extras
+        # "Alert Thresholds" and "Alert Events" were pure duplicates of bullets 2 and 3, so they are
+        # gone rather than repointed — a bullet already advertises the page it links to.
         "Service Components": "core:service_component_list",               # extra (the entity half)
-        "Alert Thresholds": "core:alert_rule_list",                        # extra
-        "Alert Events": "core:alert_event_list",                           # extra
         "Firing Board": "core:firing_board",                               # extra (the zero rule)
         "Monitoring Overview": "core:monitoring_overview",                 # extra (landing page)
     },
