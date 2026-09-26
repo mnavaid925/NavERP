@@ -1,4 +1,5 @@
 """Form definitions for QuoteApprovalRule model."""
+from decimal import Decimal
 from django import forms
 from apps.sales.forms._common import TenantModelForm
 from apps.sales.models.QuoteProposalCPQ.QuoteApprovalRules import QuoteApprovalRule
@@ -33,3 +34,18 @@ class QuoteApprovalRuleForm(TenantModelForm):
             "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
             "description": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Describe conditions triggering this approval rule..."}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "min_margin_pct" in self.fields:
+            self.fields["min_margin_pct"].required = False
+        if "discount_threshold_pct" in self.fields:
+            self.fields["discount_threshold_pct"].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("min_margin_pct") is None:
+            cleaned_data["min_margin_pct"] = Decimal("15.00")
+        if cleaned_data.get("discount_threshold_pct") is None:
+            cleaned_data["discount_threshold_pct"] = Decimal("20.00")
+        return cleaned_data
