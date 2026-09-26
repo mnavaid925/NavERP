@@ -25,6 +25,10 @@ from .SalesForecasting.ForecastPeriods import ForecastPeriodForm
 from .SalesForecasting.ForecastSubmissions import ForecastReviewForm, ForecastSubmissionForm
 from .SalesForecasting.ForecastAdjustments import ForecastAdjustmentForm, ForecastRevertForm
 from .SalesForecasting.ForecastScenarios import ForecastScenarioApplyForm, ForecastScenarioForm
+from .QuoteProposalCPQ.CPQQuotes import CPQQuoteForm, CPQQuoteApprovalActionForm, CPQPortalSignForm
+from .QuoteProposalCPQ.CPQQuoteLines import CPQQuoteLineForm
+from .QuoteProposalCPQ.ProductBundles import ProductBundleOptionForm
+from .QuoteProposalCPQ.QuoteApprovalRules import QuoteApprovalRuleForm
 
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
@@ -39,5 +43,8 @@ __all__ = [
     "ForecastPeriodForm", "ForecastSubmissionForm", "ForecastReviewForm",
     "ForecastAdjustmentForm", "ForecastRevertForm",
     "ForecastScenarioForm", "ForecastScenarioApplyForm",
+    "CPQQuoteForm", "CPQQuoteApprovalActionForm", "CPQPortalSignForm",
+    "CPQQuoteLineForm", "ProductBundleOptionForm", "QuoteApprovalRuleForm",
 ]
+
 
