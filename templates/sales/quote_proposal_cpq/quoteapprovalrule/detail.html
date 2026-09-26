@@ -130,7 +130,7 @@
                                         <span class="badge badge-info">{{ q.get_status_display }}</span>
                                     </td>
                                     <td class="font-medium text-slate-900">
-                                        {{ q.currency.code|default:"USD" }} {{ q.total:,.2f }}
+                                        {{ q.currency.code|default:"USD" }} {{ q.total|floatformat:2 }}
                                     </td>
                                     <td class="text-sm">
                                         {{ q.margin_pct }}%
