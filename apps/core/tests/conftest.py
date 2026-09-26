@@ -549,4 +549,227 @@ def bkp_hold_payload():
         "release_reason": "",
         "authority_reference": "",
         "notes": "",
+        "authority_reference": "",
+        "notes": "",
+    }
+
+
+# ------------------------------------------------------------------ 0.17 Monitoring
+# APPEND-ONLY (L43): nothing above this point is rewritten; this whole section is added.
+#
+# Names are prefixed `mon_` rather than `monitoring_` so they cannot collide with the 0.15
+# `localization_*` or the 0.16 `bkp_*` blocks above, nor with whatever the next sub-module appends.
+# The test contract is `.claude/tasks/test-contract-core-0.17.md`.
+
+@pytest.fixture
+def _mon_svc(db, tenant_a):
+    """A `ServiceComponent` factory for tenant A. Several tests need a second component."""
+    from apps.core.models import ServiceComponent
+
+    def _make(**kwargs):
+        n = ServiceComponent.objects.filter(tenant=tenant_a).count()
+        defaults = {"tenant": tenant_a, "name": f"Component {n}", "code": f"mon-{n}",
+                    "kind": "web_service", "current_status": "operational"}
+        defaults.update(kwargs)
+        return ServiceComponent.objects.create(**defaults)
+
+    return _make
+
+
+@pytest.fixture
+def mon_service_ok_a(db, tenant_a):
+    """An operational component that HAS been given a status by hand."""
+    from apps.core.models import ServiceComponent
+    from django.utils import timezone
+    return ServiceComponent.objects.create(
+        tenant=tenant_a, name="Web front end", code="web", kind="web_service",
+        current_status="operational", last_status_at=timezone.now())
+
+
+@pytest.fixture
+def mon_service_unreported_a(db, tenant_a):
+    """A component nobody has ever set a status on. `last_status_at` is NULL, not epoch."""
+    from apps.core.models import ServiceComponent
+    return ServiceComponent.objects.create(
+        tenant=tenant_a, name="Unreported thing", code="unreported", kind="api",
+        current_status="unknown", last_status_at=None)
+
+
+@pytest.fixture
+def mon_service_retired_a(db, tenant_a):
+    """A retired component - registered, but excluded from the roll-up."""
+    from apps.core.models import ServiceComponent
+    return ServiceComponent.objects.create(
+        tenant=tenant_a, name="Retired thing", code="retired", kind="database",
+        current_status="degraded", is_active=False)
+
+
+@pytest.fixture
+def mon_rule_two_tier_a(db, tenant_a, mon_service_ok_a):
+    """A correctly ordered `gte` rule: warning 800 < critical 1500."""
+    from decimal import Decimal
+    from apps.core.models import AlertRule
+    return AlertRule.objects.create(
+        tenant=tenant_a, name="Latency budget", service=mon_service_ok_a,
+        metric_key="latency_p95_ms", comparator="gte",
+        warning_threshold=Decimal("800"), critical_threshold=Decimal("1500"),
+        must_persist_seconds=300, frequency="hourly", severity="warning",
+        category="performance", no_data_action="ignore")
+
+
+@pytest.fixture
+def mon_rule_floor_a(db, tenant_a, mon_service_ok_a):
+    """An `lt` rule - a FLOOR, so the capacity board must subtract the other way round."""
+    from decimal import Decimal
+    from apps.core.models import AlertRule
+    return AlertRule.objects.create(
+        tenant=tenant_a, name="Uptime floor", service=mon_service_ok_a,
+        metric_key="uptime_pct", comparator="lt",
+        warning_threshold=None, critical_threshold=Decimal("99.5"),
+        frequency="daily", severity="critical", category="availability",
+        no_data_action="fire")
+
+
+@pytest.fixture
+def mon_rule_inactive_a(db, tenant_a, mon_service_ok_a):
+    """A parked rule, for the `?active=` filter and the capacity board's inactive row."""
+    from decimal import Decimal
+    from apps.core.models import AlertRule
+    return AlertRule.objects.create(
+        tenant=tenant_a, name="Parked rule", service=mon_service_ok_a,
+        metric_key="cpu_pct", comparator="gte", warning_threshold=Decimal("90"),
+        frequency="weekly", severity="info", category="capacity",
+        no_data_action="ignore", is_active=False)
+
+
+@pytest.fixture
+def _mon_event(db):
+    """Build an `AlertEvent` for a tenant. `service` is optional so the orphan case is expressible."""
+    from apps.core.models import AlertEvent
+    from django.utils import timezone
+
+    def _make(tenant, *, rule=None, service=None, state="firing", **kwargs):
+        defaults = {
+            "tenant": tenant, "rule": rule, "service": service,
+            "service_label": service.name if service else "",
+            "state": state, "severity_at_fire": "warning",
+            "message": "A firing somebody reported",
+            "fired_at": timezone.now(), "occurrence_count": 1,
+        }
+        defaults.update(kwargs)
+        return AlertEvent.objects.create(**defaults)
+
+    return _make
+
+
+@pytest.fixture
+def mon_event_firing_a(db, tenant_a, _mon_event, mon_rule_two_tier_a, mon_service_ok_a):
+    return _mon_event(tenant_a, rule=mon_rule_two_tier_a, service=mon_service_ok_a)
+
+
+@pytest.fixture
+def mon_event_ack_a(db, tenant_a, _mon_event, mon_rule_two_tier_a, mon_service_ok_a):
+    """Acknowledged is part of the OPEN set, so a board counting only `firing` under-counts."""
+    return _mon_event(tenant_a, rule=mon_rule_two_tier_a, service=mon_service_ok_a, state="acknowledged")
+
+
+@pytest.fixture
+def mon_event_resolved_a(db, tenant_a, _mon_event, mon_rule_two_tier_a, mon_service_ok_a):
+    return _mon_event(tenant_a, rule=mon_rule_two_tier_a, service=mon_service_ok_a, state="resolved")
+
+
+@pytest.fixture
+def mon_event_no_data_a(db, tenant_a, _mon_event, mon_rule_two_tier_a, mon_service_ok_a):
+    """The state the badge ladder dropped into the grey 'unrecognised' branch."""
+    return _mon_event(tenant_a, rule=mon_rule_two_tier_a, service=mon_service_ok_a, state="no_data")
+
+
+@pytest.fixture
+def mon_event_unmeasured_a(db, tenant_a, _mon_event, mon_rule_two_tier_a, mon_service_ok_a):
+    """A firing with no reading attached - the register's own honesty score."""
+    return _mon_event(tenant_a, rule=mon_rule_two_tier_a, service=mon_service_ok_a, observed_value=None)
+
+
+@pytest.fixture
+def mon_event_orphan_a(db, tenant_a, _mon_event, mon_service_ok_a):
+    """A firing whose rule was retired. `rule_id` is NULL and it must still be listed."""
+    return _mon_event(tenant_a, rule=None, service=mon_service_ok_a)
+
+
+@pytest.fixture
+def mon_event_b(db, tenant_b, _mon_event):
+    """A tenant-B firing, for the cross-tenant lane."""
+    return _mon_event(tenant_b, message="Globex firing")
+
+
+@pytest.fixture
+def mon_incident_open_a(db, tenant_a, mon_service_ok_a):
+    from apps.core.models import Incident
+    from django.utils import timezone
+    inc = Incident.objects.create(
+        tenant=tenant_a, service=mon_service_ok_a, title="Checkout down",
+        incident_type="incident", status="investigating", impact="major",
+        public_note="We are looking into it.", started_at=timezone.now())
+    inc.affected_services.add(mon_service_ok_a)
+    return inc
+
+
+@pytest.fixture
+def mon_incident_resolved_a(db, tenant_a, mon_service_ok_a):
+    from apps.core.models import Incident
+    from django.utils import timezone
+    return Incident.objects.create(
+        tenant=tenant_a, service=mon_service_ok_a, title="Old blip",
+        incident_type="incident", status="resolved", impact="minor", started_at=timezone.now())
+
+
+@pytest.fixture
+def mon_incident_maintenance_a(db, tenant_a, mon_service_ok_a):
+    from apps.core.models import Incident
+    from django.utils import timezone
+    return Incident.objects.create(
+        tenant=tenant_a, service=mon_service_ok_a, title="Planned window",
+        incident_type="scheduled_maintenance", status="scheduled", impact="none",
+        scheduled_for=timezone.now() + timezone.timedelta(days=1),
+        scheduled_until=timezone.now() + timezone.timedelta(days=1, hours=2))
+
+
+@pytest.fixture
+def mon_incident_b(db, tenant_b):
+    from apps.core.models import Incident
+    from django.utils import timezone
+    return Incident.objects.create(
+        tenant=tenant_b, title="Globex outage", incident_type="incident",
+        status="investigating", impact="critical", started_at=timezone.now())
+
+
+@pytest.fixture
+def mon_component_payload():
+    """Valid `ServiceComponentForm` POST fields.
+
+    **No `last_status_at`** - it is deliberately not a form field (L22), so posting one is silently
+    ignored; including it here would imply it works. `tenant` is absent for the usual reason: a form
+    must never be able to set it.
+    """
+    return {
+        "name": "Payments API", "code": "payments", "kind": "api",
+        "description": "The customer-facing payments endpoint.", "owner_role": "",
+        "is_public": "on", "is_critical": "on", "display_order": "1",
+        "current_status": "operational", "notes": "", "is_active": "on",
+    }
+
+
+@pytest.fixture
+def mon_rule_payload():
+    """Valid `AlertRuleForm` POST fields - a ONE-tier rule, which `clean()` accepts.
+
+    `critical_threshold` is blank so this does not depend on the tier-order rule; the tier-order tests
+    build their own payloads.
+    """
+    return {
+        "name": "Disk usage ceiling", "module_slug": "core", "metric_key": "disk_usage_pct",
+        "comparator": "gte", "warning_threshold": "85", "critical_threshold": "",
+        "must_persist_seconds": "600", "frequency": "hourly", "severity": "warning",
+        "category": "capacity", "no_data_action": "ignore", "service": "",
+        "notification_rule": "", "notes": "", "is_active": "on",
     }
