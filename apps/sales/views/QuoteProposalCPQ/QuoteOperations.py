@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Max
+from django.db.models import Count, Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -86,21 +86,20 @@ def quote_approval_queue(request):
         approval_status="pending"
     ).select_related("opportunity", "account", "owner", "approval_rule", "currency").order_by("-created_at")
 
-    stats = {
-        "pending": pending_quotes.count(),
-        "approved_this_month": CPQQuote.objects.filter(
-            tenant=tenant,
+    now = timezone.now()
+    stats = CPQQuote.objects.filter(tenant=tenant).aggregate(
+        pending=Count("id", filter=Q(approval_status="pending")),
+        approved_this_month=Count("id", filter=Q(
             approval_status="approved",
-            approved_at__year=timezone.now().year,
-            approved_at__month=timezone.now().month
-        ).count(),
-        "rejected_this_month": CPQQuote.objects.filter(
-            tenant=tenant,
+            approved_at__year=now.year,
+            approved_at__month=now.month
+        )),
+        rejected_this_month=Count("id", filter=Q(
             approval_status="rejected",
-            updated_at__year=timezone.now().year,
-            updated_at__month=timezone.now().month
-        ).count(),
-    }
+            updated_at__year=now.year,
+            updated_at__month=now.month
+        )),
+    )
 
     return render(request, "sales/quote_proposal_cpq/operations/approval_queue.html", {
         "pending_quotes": pending_quotes,
@@ -254,11 +253,11 @@ def quote_proposal_board(request):
         status__in=["approved", "presented", "accepted"]
     ).select_related("opportunity", "account", "owner", "currency").order_by("-updated_at")
 
-    stats = {
-        "presented": CPQQuote.objects.filter(tenant=tenant, status="presented").count(),
-        "accepted": CPQQuote.objects.filter(tenant=tenant, status="accepted").count(),
-        "signed": CPQQuote.objects.filter(tenant=tenant, signed_at__isnull=False).count(),
-    }
+    stats = CPQQuote.objects.filter(tenant=tenant).aggregate(
+        presented=Count("id", filter=Q(status="presented")),
+        accepted=Count("id", filter=Q(status="accepted")),
+        signed=Count("id", filter=Q(signed_at__isnull=False)),
+    )
 
     return render(request, "sales/quote_proposal_cpq/operations/proposal_board.html", {
         "quotes": quotes,
@@ -399,10 +398,10 @@ def quote_conversion_board(request):
         status="converted"
     ).select_related("converted_order", "account", "currency", "owner").order_by("-updated_at")[:20]
 
-    stats = {
-        "ready_count": ready_quotes.count(),
-        "converted_count": CPQQuote.objects.filter(tenant=tenant, status="converted").count(),
-    }
+    stats = CPQQuote.objects.filter(tenant=tenant).aggregate(
+        ready_count=Count("id", filter=Q(status__in=["approved", "accepted"], converted_order__isnull=True)),
+        converted_count=Count("id", filter=Q(status="converted")),
+    )
 
     return render(request, "sales/quote_proposal_cpq/operations/conversion_board.html", {
         "ready_quotes": ready_quotes,
