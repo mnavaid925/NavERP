@@ -93,7 +93,7 @@
                                 <div class="font-medium text-slate-800">{{ q.account.name|default:"—" }}</div>
                                 {% if q.opportunity %}<div class="text-xs text-slate-500">{{ q.opportunity.name }}</div>{% endif %}
                             </td>
-                            <td class="font-bold text-slate-900">${{ q.total:,.2f }}</td>
+                            <td class="font-bold text-slate-900">${{ q.total|floatformat:2 }}</td>
                             <td class="text-amber-700 font-semibold">{{ q.header_discount_pct }}%</td>
                             <td>
                                 <span class="{% if q.margin_pct < 15 %}text-red-600 font-bold{% else %}text-slate-800{% endif %}">
