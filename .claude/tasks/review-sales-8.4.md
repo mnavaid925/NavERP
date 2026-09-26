@@ -11,7 +11,7 @@ all 16 files under `templates/sales/salesforecasting/**`, against
 
 ## Critical
 
-- [ ] **C1.** `apps/sales/views/SalesForecasting/ForecastPeriods.py:326` — the stale-instance bug a
+- [x] fixed — C1.  `apps/sales/views/SalesForecasting/ForecastPeriods.py:326` — the stale-instance bug a
   previous pass reported is **still present**. `forecast_period_edit` builds
   `ForecastPeriodForm(request.POST, instance=obj)`, so `form.instance is obj`; `form.is_valid()`
   runs `_post_clean()` → `Model.full_clean()` → `ForecastPeriod.clean()`
@@ -50,7 +50,7 @@ all 16 files under `templates/sales/salesforecasting/**`, against
     `end_date__lt=today` on the stale column → a period edited forward silently disappears from
     `forecast_accuracy`.
 
-- [ ] **C2.** `templates/sales/salesforecasting/forecastadjustment/detail.html:24` — an entire
+- [x] fixed — C2.  `templates/sales/salesforecasting/forecastadjustment/detail.html:24` — an entire
   fragment sits **after `{% endblock %}` (line 22)** and is therefore **silently discarded** by
   `{% extends "base.html" %}` (line 1). The dead line is
   `</dl>{% if obj.note %}<p …><strong>Note:</strong> {{ obj.note|linebreaksbr }}</p>{% endif %}<p …>The system value is a snapshot …</p></div></div>`
@@ -75,7 +75,7 @@ all 16 files under `templates/sales/salesforecasting/**`, against
   `html.parser` balance check (`LEFTOVER OPEN == []`, no unmatched closes) as part of the fix;
   `templates/sales/salesforecasting/forecastperiod/detail.html:14-23` is the correct reference.
 
-- [ ] **C3.** `templates/sales/salesforecasting/forecastscenario/detail.html:7` — the first card's
+- [x] fixed — C3.  `templates/sales/salesforecasting/forecastscenario/detail.html:7` — the first card's
   `<div class="card">` / `<div class="card-body">` are **never closed**; line 9 closes only the
   `<dl>`. Consequence: the "Projection from the live forecast" card (line 10) and every card after
   it — "The real forecast is untouched" (line 22), "Current plan" (line 23), "Apply the period"
@@ -87,7 +87,7 @@ all 16 files under `templates/sales/salesforecasting/**`, against
   (`</dl>…</p></div></div>`), and add the missing `</div>` for the grid container before
   `{% endblock %}` on line 31. `forecastperiod/detail.html:14-23` is the correct reference.
 
-- [ ] **C4.** `apps/sales/forecast_services.py:117-119` — `_open_opportunities()` filters
+- [x] fixed — C4.  `apps/sales/forecast_services.py:117-119` — `_open_opportunities()` filters
   `close_date__gte=window[0], close_date__lte=window[1]`, but `crm.Opportunity.close_date` is
   `models.DateField(null=True, blank=True)`
   (`apps/crm/models/SalesForceAutomation/Opportunities.py:36`). A NULL `close_date` fails both
@@ -98,7 +98,7 @@ all 16 files under `templates/sales/salesforecasting/**`, against
 
 ## Important
 
-- [ ] **I1.** `apps/sales/views/SalesForecasting/ForecastBoards.py:454` and `:503` — `bias_values`
+- [x] fixed — I1. `apps/sales/views/SalesForecasting/ForecastBoards.py:454` and `:503` — `bias_values`
   is a single list fed by **two different populations**. Line 454 appends `bias_pct`, a
   *period-level* tenant-wide bias; line 503 appends `mean_bias`, a *rep-level* mean. Line 527
   then computes `mean_bias_pct = sum(bias_values) / Decimal(len(bias_values))` and the stat card
@@ -108,7 +108,7 @@ all 16 files under `templates/sales/salesforecasting/**`, against
   values only (and expose a separate `mean_owner_bias_pct` from the owner values), or report
   `mean_bias_pct` as the unweighted mean of `bias_rows` alone.
 
-- [ ] **I2.** `apps/sales/views/SalesForecasting/ForecastBoards.py:426-433` — `forecast_accuracy`
+- [x] fixed — I2. `apps/sales/views/SalesForecasting/ForecastBoards.py:426-433` — `forecast_accuracy`
   parses and validates `?period=` into `selected_period_id`, hands it to the template (line 536)
   … and then **never uses it**: the report always aggregates every past period.
   `templates/sales/salesforecasting/forecastboard/accuracy.html` has no `<form method="get">` and
@@ -119,7 +119,7 @@ all 16 files under `templates/sales/salesforecasting/**`, against
   (falling back to all past periods when absent), or drop the parameter and the two keys and
   record the deviation from contract §5.4 (contract line 562).
 
-- [ ] **I3.** `apps/sales/views/SalesForecasting/ForecastBoards.py:125-151` — `_submissions()`,
+- [x] fixed — I3. `apps/sales/views/SalesForecasting/ForecastBoards.py:125-151` — `_submissions()`,
   `_adjustments()` and `_scenarios()` are **unbounded**; none applies `MAX_ROWS`, directly
   contradicting the module docstring at lines 59-62 ("the lists are bounded so a huge workspace
   cannot pull an unbounded set into memory"). `forecast_call` (line 557) then materialises every
@@ -127,11 +127,11 @@ all 16 files under `templates/sales/salesforecasting/**`, against
   all three helpers and surface the truncation in `caveats` (the pattern the 0.17 firing board
   already uses: "this list is capped at N").
 
-- [ ] **I4.** `apps/sales/views/SalesForecasting/ForecastBoards.py:441-455` — the accuracy loop
+- [x] fixed — I4. `apps/sales/views/SalesForecasting/ForecastBoards.py:441-455` — the accuracy loop
   runs `_submissions(tenant, period)` **and** `_adjustments(tenant, period, …)` per period, over
   `periods[:MAX_PERIODS]` = up to **200** periods: up to 400 queries plus 200 round trips for one
 
-- [ ] **I6.** `apps/sales/views/SalesForecasting/ForecastPeriods.py:201-218` — `submissions` is
+- [x] fixed — I6. `apps/sales/views/SalesForecasting/ForecastPeriods.py:201-218` — `submissions` is
   sliced to `[:200]` (line 204) and that **capped list** is what `_period_rollups()` sums, so
   `category_totals`, `currency_rollups` and `total_forecast_amount` silently exclude every
   submission past the 200th — while `submissions_count` (line 206) is the *true* count, so the two
@@ -139,7 +139,7 @@ all 16 files under `templates/sales/salesforecasting/**`, against
   `values(...).annotate(Sum(...))` over the untruncated queryset, and add a caveat when
   `submissions_count > len(submissions)`.
 
-- [ ] **I7.** `apps/sales/views/SalesForecasting/ForecastBoards.py:97` — `only_past` uses
+- [x] fixed — I7. `apps/sales/views/SalesForecasting/ForecastBoards.py:97` — `only_past` uses
   `end_date__lt=today`, which **excludes a period on its own final day**. That is an off-by-one
   against the model, which treats the same day as `today >= end_date` → `period_elapsed_pct == 100`
   (`models/.../ForecastPeriods.py:147`) and `is_current == True` (line 129). A period whose actuals
@@ -147,7 +147,7 @@ all 16 files under `templates/sales/salesforecasting/**`, against
   **Fix** — use `end_date__lte=today` (or `Q(end_date__lt=today) | Q(end_date=today,
   start_date__lte=today)`), matching the `period_elapsed_pct` definition.
 
-- [ ] **I8.** `apps/sales/views/SalesForecasting/ForecastBoards.py:487-496` — the "Manager
+- [x] fixed — I8. `apps/sales/views/SalesForecasting/ForecastBoards.py:487-496` — the "Manager
   overrides by rep" table sums `adjustment.net_delta` (a **money** amount,
   `adjusted_value - original_value`) per rep with **no currency label and no caveat**.
   `ForecastAdjustment` carries no currency field, so on a tenant whose calls sit in several
@@ -160,7 +160,7 @@ all 16 files under `templates/sales/salesforecasting/**`, against
   if the absolute figure is also wanted, bucket it by the period's `reporting_currency` and add a
   `currency_code` key plus a caveat exactly as the board does.
 
-- [ ] **I9.** `templates/sales/salesforecasting/forecastboard/call.html:4` — the "New call" CTA is
+- [x] fixed — I9. `templates/sales/salesforecasting/forecastboard/call.html:4` — the "New call" CTA is
   gated on `{% if can_review and period %}`, and `can_review` is `_is_tenant_admin(request.user)`
   (`views/.../ForecastBoards.py:612`). A rep — the one person who is supposed to *make* the
   forecast call — never sees the button on the page whose entire purpose is the forecast call,
@@ -174,41 +174,41 @@ all 16 files under `templates/sales/salesforecasting/**`, against
 
 ## Minor
 
-- [ ] **M1.** `_is_tenant_admin()` is copy-pasted into four sibling modules —
+- [x] fixed — M1. `_is_tenant_admin()` is copy-pasted into four sibling modules —
   `views/SalesForecasting/ForecastPeriods.py:68`, `…/ForecastSubmissions.py:64`,
   `…/ForecastAdjustments.py:48`, `…/ForecastScenarios.py:62` — and `ForecastBoards.py:31` then
   imports the private copy from `ForecastPeriods`. Four copies of a role check is four things to
   drift, and the import makes the boards module depend on a sibling's private name. **Fix** — move
   it to `apps/sales/views/_helpers.py` (or `_common.py`) and import it everywhere.
 
-- [ ] **M2.** `templates/sales/salesforecasting/forecastboard/call.html:9` — the badge ladder
+- [x] fixed — M2. `templates/sales/salesforecasting/forecastboard/call.html:9` — the badge ladder
   tests `row.status == 'reverted'`, which is **not** in `ForecastSubmission.STATUS_CHOICES`
   (`models/.../ForecastSubmissions.py:67-73`: draft/submitted/approved/rejected/locked). The branch
   is unreachable; a reverted call falls to the `{% else %}` muted badge. **Fix** — delete the
   `'reverted'` branch (reverting is an *adjustment* state, not a submission state;
   `mark_reverted()` sends the call back to `draft`).
 
-- [ ] **M3.** `templates/sales/salesforecasting/forecastboard/attainment.html:6` — the third stat
+- [x] fixed — M3. `templates/sales/salesforecasting/forecastboard/attainment.html:6` — the third stat
   card reads `{{ stats.on_pace }}` under the label **"No quota"**, while `stats["on_pace"]` and
   `stats["no_quota"]` are the *same* count (`views/.../ForecastBoards.py:413` and `:415` both count
   `attainment_pct is None`) and `stats.no_quota` is passed but never read. **Fix** — read
   `stats.no_quota` under that label and drop the duplicate `on_pace` key (or keep `on_pace` and
   rename its card).
 
-- [ ] **M4.** `templates/sales/salesforecasting/forecastboard/attainment.html:6` — `stats.total`
+- [x] fixed — M4. `templates/sales/salesforecasting/forecastboard/attainment.html:6` — `stats.total`
   is labelled **"Reps"** but `views/.../ForecastBoards.py:411` sets it to `len(rows)`, and rows
   are grouped by `submission.owner_id` (line 350) — the `None` (unassigned) key forms its own row,
   so the count is "distinct owner buckets including unassigned", not "reps". **Fix** — label it
   "Owners", or break the `None` bucket out into an explicit "Unassigned" card.
 
-- [ ] **M5.** `apps/sales/views/SalesForecasting/ForecastPeriods.py:226,228,231` — the period
+- [x] fixed — M5. `apps/sales/views/SalesForecasting/ForecastPeriods.py:226,228,231` — the period
   detail context passes `submissions_count`, `status_choices` and `category_choices`, and
   `templates/sales/salesforecasting/forecastperiod/detail.html` reads **none** of them (status
   badges are hard-coded per value at line 15, category labels per value at line 14). Harmless, but
   dead context hides drift. **Fix** — either consume the keys in the template (cleaner) or drop
   them from the view.
 
-- [ ] **M6.** `apps/sales/forms/SalesForecasting/ForecastSubmissions.py:174` + `:176-179` — on a
+- [x] fixed — M6. `apps/sales/forms/SalesForecasting/ForecastSubmissions.py:174` + `:176-179` — on a
   rejected submission with an empty note, `ForecastReviewForm` emits **two** errors for the same
   thing: Django's `"This field is required."` (from `required = not approved`) and the custom
   `"A rejection must say why."` from `clean()`. **Fix** — keep the declarative
@@ -327,13 +327,13 @@ gated: `board.html:8,10,11`, `call.html:7`, `forecastsubmission/detail.html:15,1
 
   the message; not both.
 
-- [ ] **M7.** `templates/sales/salesforecasting/forecastboard/attainment.html:9` vs `:11-12` — the
+- [x] fixed — M7. `templates/sales/salesforecasting/forecastboard/attainment.html:9` vs `:11-12` — the
   main table renders `{{ row.owner.get_full_name|default:row.owner.username|default:"Unassigned" }}`
   while the two "Ahead/Behind of pace" summary lists below render `{{ row.owner }}`, i.e. raw
   `User.__str__`. The same rep appears under two different labels on one page. **Fix** — add an
   `owner_label` to each row dict in the view and use it in all three places.
 
-- [ ] **M8.** Contract drift, structural: contract §8 (contract line 626) pins ten functions in
+- [x] fixed — M8. Amended contract §8 with a dated deviation note naming the three functions that are in \orecast_services.py\ and the eight that are view functions, rather than moving working, otherwise-correct code. See \.claude/tasks/contract-sales-8.4.md:628\. Contract drift, structural: contract §8 (contract line 626) pins ten functions in
   `apps/sales/forecast_services.py` (`forecast_rollup_rows`, `forecast_attainment_rows`,
   `forecast_accuracy_rows`, `forecast_submit`, `forecast_review`, `forecast_revert`,
   `forecast_lock_period`, `forecast_apply_scenario` alongside the three that are there). Only the
@@ -341,7 +341,7 @@ gated: `board.html:8,10,11`, `call.html:7`, `forecastsubmission/detail.html:15,1
   honest about it, but the contract is the frozen spec. **Fix** — either move the eight, or amend
   the contract with a dated note recording the deviation.
 
-- [ ] **M9.** `apps/sales/views/SalesForecasting/ForecastBoards.py:275-282` —
+- [x] fixed — M9. `apps/sales/views/SalesForecasting/ForecastBoards.py:275-282` —
   `ai_predicted_commit` and `ai_confidence_pct` are written into **every** row dict
   unconditionally (as `None` when the gate is shut), so the gate is enforced in two places
   (view + `board.html:10-11`). Not a leak — the template double-gates and the values are `None` —
@@ -349,7 +349,7 @@ gated: `board.html:8,10,11`, `call.html:7`, `forecastsubmission/detail.html:15,1
   `None` rather than nothing, hiding the mistake. **Fix** — omit the keys entirely when
   `not ai_available` and let the template's `{% if %}` guard on `ai_available` alone.
 
-- [ ] **M10.** `apps/sales/forms/SalesForecasting/ForecastSubmissions.py:119-125` —
+- [~] skipped — M10. The premise is not reproducible: the finding says \ForecastSubmissionForm\ sets \self.locked_fields = []\ and never populates it, but \ForecastSubmissions.py:101-104\ does populate it — \if self.instance.pk and self.instance.is_frozen: self.locked_fields = list(self.fields)\ — so the tamper-detection path IS live for exactly the frozen records it is meant to protect (is_frozen covers both FROZEN_STATES and a locked period). Deleting the helper and attribute as instructed would REMOVE a working guard rather than fix a gap. Left as-is; see the commit that moved \_is_tenant_admin\ out of these modules for the verified import state. `apps/sales/forms/SalesForecasting/ForecastSubmissions.py:119-125` —
   `_locked_value()` compares a `Decimal` field against the raw POST string, but
   `ForecastSubmissionForm` sets `self.locked_fields = []` (line 63) and never populates it, so the
   whole tamper-detection path is inert for this form. The frozen-record rule is still enforced by
@@ -358,7 +358,7 @@ gated: `board.html:8,10,11`, `call.html:7`, `forecastsubmission/detail.html:15,1
   the instance's frozen state, or delete the unused helper and attribute so the next reader does
   not assume a guard that is not there.
 
-- [ ] **I10.** `apps/sales/forms/SalesForecasting/ForecastScenarios.py:190-194` — dead code after
+- [x] fixed — I10. `apps/sales/forms/SalesForecasting/ForecastScenarios.py:190-194` — dead code after
   `return cleaned` in `ForecastScenarioApplyForm.clean`: a stray block that re-disables every field
   when the period is locked (and references `self.instance` / `self.fields`, which an action form
   does not reliably have). It parses — it sits inside the method body — but never executes, and it
@@ -374,7 +374,7 @@ gated: `board.html:8,10,11`, `call.html:7`, `forecastsubmission/detail.html:15,1
   `ForecastAdjustment.objects.filter(tenant=…, submission__period__in=pks, is_reverted=False)
   .values("submission__owner_id").annotate(...)` for the override table, then group in Python.
 
-- [ ] **I5.** `apps/sales/views/SalesForecasting/ForecastScenarios.py:529-548` and
+- [x] fixed — I5. `apps/sales/views/SalesForecasting/ForecastScenarios.py:529-548` and
   `apps/sales/models/SalesForecasting/ForecastScenarios.py:174-200` —
   `forecast_scenario_apply` iterates **every** scenario in the period under `select_for_update()`
   (no `[:N]`), and for each one calls `baseline_submission()` roughly seven times
