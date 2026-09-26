@@ -2,7 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -51,12 +51,12 @@ def product_bundle_list(request):
     elif is_active in ["false", "0"]:
         qs = qs.filter(is_active=False)
 
-    stats = {
-        "total": ProductBundleOption.objects.filter(tenant=tenant).count(),
-        "active": ProductBundleOption.objects.filter(tenant=tenant, is_active=True).count(),
-        "required": ProductBundleOption.objects.filter(tenant=tenant, is_required=True).count(),
-        "with_rules": ProductBundleOption.objects.filter(tenant=tenant).exclude(compatibility_rule="none").count(),
-    }
+    stats = ProductBundleOption.objects.filter(tenant=tenant).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+        required=Count("id", filter=Q(is_required=True)),
+        with_rules=Count("id", filter=~Q(compatibility_rule="none")),
+    )
 
     # Groups & bundle products for filters
     bundle_products = Product.objects.filter(
