@@ -312,7 +312,11 @@ class AlertRule(TenantConsistentMixin, models.Model):
         ]
 
     def __str__(self):
-        return f"{self.name} ({self.get_metric_display()} {self.get_comparator_display()})"
+        # `get_metric_key_display`, not `get_metric_display`: the FIELD is `metric_key`, so Django
+        # derives the accessor from that name. The shorter name raises AttributeError, and because
+        # `__str__` is what every ModelChoiceField calls to label a dropdown option, it takes down
+        # any form that selects an AlertRule — not just this model's own pages.
+        return f"{self.name} ({self.get_metric_key_display()} {self.get_comparator_display()})"
 
     def clean(self):
         super().clean()
