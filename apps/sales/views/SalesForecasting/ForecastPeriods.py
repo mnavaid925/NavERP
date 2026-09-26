@@ -138,40 +138,50 @@ def forecast_period_list(request):
     })
 
 
-def _period_rollups(obj, submissions):
+def _period_rollups(obj):
     """Category totals, the currency-bucketed rollup and the count by status.
 
-    Amounts are summed as ``Decimal`` and grouped by **currency code only** -- a bucket is
-    never combined with another and a missing currency stays an explicit ``unspecified``
-    bucket rather than silently defaulting to USD (L29).
+    Amounts are summed by the DATABASE over the untruncated queryset, not in Python
+    over the page's capped `submissions` list: the detail page slices to 200 rows, and
+    summing that slice made `category_totals` / `currency_rollups` /
+    `total_forecast_amount` silently exclude everything past the 200th while
+    `submissions_count` on the same page reported the true total. Two numbers that
+    disagree on one page with nothing to explain them is the failure this avoids.
+
+    Sums are grouped by **currency code only** -- a bucket is never combined with
+    another and a missing currency stays an explicit ``unspecified`` bucket rather
+    than silently defaulting to USD (L29).
     """
     category_totals = {value: Decimal("0") for value, _ in CATEGORY_AMOUNT_FIELDS}
-    for submission in submissions:
-        for value, field in CATEGORY_AMOUNT_FIELDS:
-            category_totals[value] += Decimal(getattr(submission, field, 0) or 0)
-
     submission_rows = []
     submission_model = _optional_sales_model("ForecastSubmission")
     if submission_model is not None:
+        base = submission_model.objects.filter(period=obj, tenant_id=obj.tenant_id)
         labels = dict(submission_model.STATUS_CHOICES)
         for row in (
-            submission_model.objects.filter(period=obj, tenant_id=obj.tenant_id)
-            .values("status")
-            .annotate(count=Count("pk"))
-            .order_by("status")
+            base.values("status").annotate(count=Count("pk")).order_by("status")
         ):
             submission_rows.append({
                 "status": row["status"],
                 "label": labels.get(row["status"], row["status"]),
                 "count": row["count"],
             })
+        aggregates = base.aggregate(**{
+            f"total__{field}": Sum(field) for _, field in CATEGORY_AMOUNT_FIELDS
+        })
+        for value, field in CATEGORY_AMOUNT_FIELDS:
+            category_totals[value] = Decimal(aggregates[f"total__{field}"] or 0)
 
     # The reporting currency is a property of the period, so there is exactly one bucket.
     code = obj.reporting_currency.code if obj.reporting_currency_id else "unspecified"
     bucket = {key: Decimal("0") for key, _ in CURRENCY_ROLLUP_FIELDS}
-    for submission in submissions:
+    if submission_model is not None:
+        money = (
+            submission_model.objects.filter(period=obj, tenant_id=obj.tenant_id)
+            .aggregate(**{f"total__{field}": Sum(field) for _, field in CURRENCY_ROLLUP_FIELDS})
+        )
         for key, field in CURRENCY_ROLLUP_FIELDS:
-            bucket[key] += Decimal(getattr(submission, field, 0) or 0)
+            bucket[key] = Decimal(money[f"total__{field}"] or 0)
     bucket["total"] = sum(bucket.values(), Decimal("0"))
     currency_rollups = {code: bucket}
     return category_totals, currency_rollups, submission_rows
@@ -215,15 +225,19 @@ def forecast_period_detail(request, pk):
             scenario_model.objects.filter(period=obj, tenant_id=obj.tenant_id)
             .order_by("-created_at", "-id")[:200]
         )
-    category_totals, currency_rollups, submission_rows = _period_rollups(obj, submissions)
+    category_totals, currency_rollups, submission_rows = _period_rollups(obj)
     # total_forecast_amount is the sum over the category dict -- a derived figure, never a
     # stored column.
     total_forecast_amount = sum(category_totals.values(), Decimal("0"))
     can_edit = _is_tenant_admin(request.user)
+    # The list below is capped but the rollups above are not, so say so rather than
+    # letting a long period look short.
+    submissions_capped = submissions_count > len(submissions)
     return render(request, TEMPLATE_DETAIL, {
         "obj": obj,
         "submissions": submissions,
         "submissions_count": submissions_count,
+        "submissions_capped": submissions_capped,
         "submission_rows": submission_rows,
         "status_choices": (
             list(submission_model.STATUS_CHOICES) if submission_model is not None else []
