@@ -102,7 +102,7 @@ def cpq_quote_create(request):
                 ).exclude(pk=quote.pk).update(is_primary=False)
 
             cpq_recalc_quote_totals(quote, save=True)
-            write_audit_log(request.user, "create", "CPQQuote", quote.id, f"Created quote {quote.number} ({quote.name})")
+            write_audit_log(request.user, quote, "create", {"action": "create_quote", "number": quote.number, "name": quote.name}, tenant=tenant)
             messages.success(request, f"Quote {quote.number} created successfully. You can now configure line items and bundles.")
             return redirect("sales:cpq_quote_detail", pk=quote.pk)
     else:
@@ -180,7 +180,7 @@ def cpq_quote_edit(request, pk):
                 ).exclude(pk=quote.pk).update(is_primary=False)
 
             cpq_recalc_quote_totals(quote, save=True)
-            write_audit_log(request.user, "update", "CPQQuote", quote.id, f"Updated quote {quote.number}")
+            write_audit_log(request.user, quote, "update", {"action": "update_quote", "number": quote.number}, tenant=tenant)
             messages.success(request, f"Quote {quote.number} updated successfully.")
             return redirect("sales:cpq_quote_detail", pk=quote.pk)
     else:
@@ -205,8 +205,7 @@ def cpq_quote_delete(request, pk):
         return redirect("sales:cpq_quote_detail", pk=quote.pk)
 
     number = quote.number
-    quote_id = quote.id
+    write_audit_log(request.user, quote, "delete", {"action": "delete_quote", "number": number}, tenant=tenant)
     quote.delete()
-    write_audit_log(request.user, "delete", "CPQQuote", quote_id, f"Deleted quote {number}")
     messages.success(request, f"Quote {number} deleted successfully.")
     return redirect("sales:cpq_quote_list")
