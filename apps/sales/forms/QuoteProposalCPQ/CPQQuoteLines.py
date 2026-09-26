@@ -4,7 +4,7 @@ from apps.sales.forms._common import TenantModelForm
 from apps.sales.models.QuoteProposalCPQ.CPQQuoteLines import CPQQuoteLine
 from apps.crm.models import Product
 from apps.scm.models.InventoryManagement.Items import Item, UOM
-from apps.accounting.models.GeneralLedger.TaxCodes import TaxCode
+from apps.accounting.models import TaxCode
 
 
 class CPQQuoteLineForm(TenantModelForm):
