@@ -27,12 +27,12 @@ reference for a foundation app with flat entity files. Read them before inventin
 `0.10` System Configuration & Settings · `0.11` Workflow & Approval Administration ·
 `0.12` Notification & Communication · `0.13` Integration & API Management · `0.14` Master Data &
 Reference Configuration · `0.15` Localization & Regional Settings ·
-`0.16` Backup, Recovery & Data Lifecycle.
+`0.16` Backup, Recovery & Data Lifecycle · `0.17` Monitoring, Logging & Observability.
 
-**Unbuilt: `0.17`–`0.21`** (Monitoring/Observability, Threat Protection, License Administration,
-Admin Console, Compliance & Governance). They render as roadmap pills.
+**Unbuilt: `0.18`–`0.21`** (Threat Protection, License Administration, Admin Console,
+Compliance & Governance). They render as roadmap pills.
 
-Migrations: `core.0005`–`core.0014`, `accounts.0003`–`accounts.0004`, `tenants.0004`.
+Migrations: `core.0005`–`core.0015`, `accounts.0003`–`accounts.0004`, `tenants.0004`.
 
 ## App layout — FOUNDATION apps keep entity files FLAT
 
@@ -139,6 +139,35 @@ landing page is `backup_overview`.
   explicitly.
 - **`L5-M1` (verify idempotency) was never carried into the consolidated Minor list** and is therefore
   unfixed: a second POST to `backup_job_verify` re-dates the stamp. No test enforces either behaviour.
+
+## 0.17 — Monitoring, Logging & Observability
+
+Migration **core.0015** (`0015_alertrule_alertevent_servicecomponent_incident_and_more.py`). Four models
+in **`models/Monitoring.py`** — `ServiceComponent`, `AlertRule`, `AlertEvent`, `Incident`, each
+`TenantConsistentMixin`. Seeder block `seed_core._seed_monitoring(tenant)`.
+
+**Routes** — `core:`-namespaced, declared in `apps/core/urls.py`: five-route `crud()` sets for
+`service_component`, `alert_rule`, `alert_event` and `incident`, plus the board/landing pages
+`health_board`, `firing_board`, `capacity_board`, `monitoring_overview` and the process board
+`process_monitor`.
+
+**Templates** — `templates/core/` at the flat root (foundation app, so no sub-module level):
+`alertrule/{list,detail,form}.html`, `alertevent/{list,detail,form}.html`,
+`incident/{list,detail,form}.html`, `servicecomponent/{list,detail,form}.html`, plus the standalone
+`healthboard.html`, `firingboard.html`, `capacityboard.html`, `monitoringoverview.html` and
+`processmonitor.html`.
+
+**Three of the five NavERP bullets are deliberately DECLINED, not partially faked** — this is the
+thing a reader will otherwise re-litigate, so `LIVE_LINKS["0.17"]` says it in comments as well:
+
+- **b2 "Centralized logs"** — no log pipeline exists anywhere in this repo. What ships is the alert
+  threshold vocabulary and the register of hand-reported firings.
+- **b3 "Distributed tracing"** — no tracing SDK, no OpenTelemetry. Latency/throughput/slow-query exist
+  as **threshold vocabulary on `AlertRule`** plus a computed board, not as an APM product.
+- **b4 "Quota management"** — billing's. 0.17 keeps only the scaling trigger.
+
+**0.18 inherits that boundary** — it must not re-declare the observability store either, and must say
+in its own contract whether it can now serve log aggregation or carries the same deferral.
 
 ## Multi-tenancy (mandatory)
 
