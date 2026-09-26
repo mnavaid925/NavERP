@@ -62,6 +62,9 @@
                             <td class="text-right font-mono text-sm">{{ line.discount_pct }}%</td>
                             <td class="text-right font-mono text-sm font-bold text-slate-900">${{ line.line_total|floatformat:2 }}</td>
                             <td class="table-actions text-right">
+                                <a href="{% url 'sales:cpq_quote_line_detail' quote.pk line.pk %}" class="btn-icon" title="View">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
                                 <a href="{% url 'sales:cpq_quote_line_edit' quote.pk line.pk %}" class="btn-icon" title="Edit">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </a>
