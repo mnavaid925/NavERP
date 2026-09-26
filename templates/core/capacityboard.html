@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Capacity Board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Capacity &amp; Resource Planning</h1>
+      <div class="breadcrumb"><a href="{% url 'core:monitoring_overview' %}">Monitoring</a><span class="sep">›</span><span>Capacity</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:alert_rule_list' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Thresholds</a>
+    </div>
+  </div>
+
+  {% comment %}
+    0.19 HANDOFF, visible on the page rather than only in a commit message. Quota allowances, overage and
+    fair-use limits belong to the billing sub-module; 0.17 contributes only the *scaling trigger* - a
+    bound an operator declared so somebody would be warned. Overage is NOT recomputed here: UsageRecord
+    already derives it, and a second derivation is the parallel-schema bug L36 forbids.
+
+    `included is None` means UNMETERED on this plan, and prints "unmetered" - never 0. A zero allowance
+    would make every single unit an overage, which is a different and much stronger claim.
+  {% endcomment %}
+  <div class="card"><div class="card-body">
+    <p class="text-muted"><i data-lucide="info"></i> <strong>Quota allowances, overage and fair-use limits
+      are the billing module's. This page shows a scaling trigger a person declared, not a quota the
+      system enforces.</strong> The consumption figures are workspace usage records somebody entered;
+      NavERP does not meter anything itself.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recorded consumption</h2></div>
+    <div class="card-body">
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Metric</th><th>Consumption</th><th>Included</th><th>Overage</th><th>Note</th></tr></thead>
+        <tbody>
+          {% for row in usage_rows %}
+            <tr>
+              <td class="fw-600">{{ row.metric }}</td>
+              <td>{{ row.quantity }}</td>
+              <td>{% if row.included is not None %}{{ row.included }}{% else %}<span class="badge badge-slate">unmetered</span>{% endif %}</td>
+              <td>{% if row.overage is not None %}{{ row.overage }}{% else %}<span class="text-muted">— not computable</span>{% endif %}</td>
+              <td class="text-muted">{{ row.note }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="gauge"></i><h3>No usage recorded</h3><p class="text-muted">Nothing to compare against. This board reads workspace usage records, and there are none for this workspace.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table></div>
+      {% if unmetered_count %}
+        <p class="text-muted" style="margin-top:.6rem;">{{ unmetered_count }} metric{{ unmetered_count|pluralize }}
+          unmetered on this plan — an absent allowance, not a zero one.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Declared capacity triggers</h2></div>
+    <div class="card-body">
+      <p class="text-muted">{{ rule_count }} capacity rule{{ rule_count|pluralize }} declared,
+        {{ over_threshold_count }} of them with recorded consumption above the bound.
+        {% if rule_count == 0 %}With no capacity rule declared, nothing on this page is being watched against anything — the figure above is not an all-clear.{% endif %}</p>
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Rule</th><th>Bound</th><th>Recorded</th><th>Headroom</th><th>Note</th></tr></thead>
+        <tbody>
+          {% for row in capacity_rules %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:alert_rule_detail' row.rule.pk %}">{{ row.rule.name }}</a>
+                <div class="text-muted">{{ row.rule.get_metric_display }} · {{ row.rule.service.name|default:"no component" }}
+                  {% if not row.rule.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}</div>
+              </td>
+              <td>{% if row.bound is not None %}{{ row.bound }}{% else %}<span class="text-muted">— no bound set</span>{% endif %}</td>
+              <td>{% if row.current is not None %}{{ row.current }}{% else %}<span class="text-muted">— none recorded</span>{% endif %}</td>
+              <td>{% if row.headroom is not None %}{{ row.headroom }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-muted">{{ row.note }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="sliders-horizontal"></i><h3>No capacity rules declared</h3><p class="text-muted">A scaling trigger is something a person writes down. None has been, so this page has nothing to compare against.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+{% endblock %}
