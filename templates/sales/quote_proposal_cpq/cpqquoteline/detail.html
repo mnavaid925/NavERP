@@ -31,6 +31,14 @@
             <a href="{% url 'sales:cpq_quote_line_edit' quote.pk line.pk %}" class="btn btn-outline">
                 <i data-lucide="pencil" class="w-4 h-4 mr-1.5"></i> Edit Line
             </a>
+            {% if quote.is_editable or user.is_superuser or user.is_tenant_admin %}
+                <form method="POST" action="{% url 'sales:cpq_quote_line_delete' quote.pk line.pk %}" class="inline-block" onsubmit="return confirm('Are you sure you want to delete this line item? This will recalculate quote totals.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50 hover:border-red-300">
+                        <i data-lucide="trash-2" class="w-4 h-4 mr-1.5"></i> Delete Line
+                    </button>
+                </form>
+            {% endif %}
         </div>
     </div>
 
