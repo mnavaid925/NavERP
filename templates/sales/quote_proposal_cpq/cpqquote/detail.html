@@ -1,0 +1,412 @@
+{% extends "base.html" %}
+
+{% block title %}{{ quote.name }} ({{ quote.number }}) — CPQ Quote Workspace{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">Quotes</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">{{ quote.number }}</span>
+            </nav>
+            <div class="flex items-center space-x-3">
+                <h1 class="page-title">{{ quote.name }}</h1>
+                <span class="font-mono text-sm text-slate-500 bg-slate-100 px-2 py-0.5 rounded">Rev {{ quote.revision_number }}</span>
+                {% if quote.is_primary %}
+                    <span class="badge badge-purple">Primary Quote</span>
+                {% endif %}
+                {% if quote.status == 'approved' or quote.status == 'accepted' or quote.status == 'converted' %}
+                    <span class="badge badge-green">{{ quote.get_status_display }}</span>
+                {% elif quote.status == 'in_review' or quote.status == 'presented' %}
+                    <span class="badge badge-amber">{{ quote.get_status_display }}</span>
+                {% elif quote.status == 'rejected' or quote.status == 'declined' %}
+                    <span class="badge badge-red">{{ quote.get_status_display }}</span>
+                {% else %}
+                    <span class="badge badge-muted">{{ quote.get_status_display }}</span>
+                {% endif %}
+            </div>
+            <p class="text-sm text-slate-500 mt-1">
+                Account: <strong class="text-slate-700">{{ quote.account.name|default:"Not assigned" }}</strong>
+                {% if quote.opportunity %}
+                    &nbsp;·&nbsp; Deal: <a href="{% url 'sales:opportunity_workspace_detail' quote.opportunity.pk %}" class="text-blue-600 hover:underline">{{ quote.opportunity.name }}</a>
+                {% endif %}
+                &nbsp;·&nbsp; Currency: <strong>{{ quote.currency.code }}</strong>
+            </p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="page-actions flex flex-wrap items-center gap-2">
+            <a href="{% url 'sales:quote_generate_proposal' quote.pk %}" class="btn btn-outline">
+                <i data-lucide="file-text" class="w-4 h-4 mr-1.5"></i> Proposal
+            </a>
+            <a href="{% url 'sales:quote_portal_view' quote.signing_token %}" target="_blank" class="btn btn-outline" title="Open customer acceptance portal">
+                <i data-lucide="external-link" class="w-4 h-4 mr-1.5"></i> Customer Portal
+            </a>
+            <form method="POST" action="{% url 'sales:quote_create_revision' quote.pk %}" class="inline-block" onsubmit="return confirm('Create a new revision? This will clone the current quote to Rev {{ quote.revision_number|add:1 }} and supersede this one.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">
+                    <i data-lucide="copy" class="w-4 h-4 mr-1.5"></i> New Revision
+                </button>
+            </form>
+
+            {% if quote.status == 'draft' or quote.status == 'rejected' %}
+                <form method="POST" action="{% url 'sales:quote_submit_approval' quote.pk %}" class="inline-block">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="send" class="w-4 h-4 mr-1.5"></i> Submit for Approval
+                    </button>
+                </form>
+            {% endif %}
+
+            {% if can_convert %}
+                <form method="POST" action="{% url 'sales:quote_convert_to_order' quote.pk %}" class="inline-block" onsubmit="return confirm('Convert this quote into an SCM Sales Order?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
+                        <i data-lucide="shopping-cart" class="w-4 h-4 mr-1.5"></i> Convert to Order
+                    </button>
+                </form>
+            {% endif %}
+
+            {% if can_edit %}
+                <a href="{% url 'sales:cpq_quote_edit' quote.pk %}" class="btn btn-outline">
+                    <i data-lucide="pencil" class="w-4 h-4 mr-1.5"></i> Edit Header
+                </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Converted Order Notice Banner -->
+    {% if quote.converted_order %}
+        <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <i data-lucide="check-circle-2" class="w-6 h-6 text-emerald-600"></i>
+                <div>
+                    <h4 class="text-sm font-semibold text-emerald-900">Converted to Sales Order</h4>
+                    <p class="text-xs text-emerald-700">Order Reference: <strong>{{ quote.converted_order.number }}</strong> (Date: {{ quote.converted_order.order_date }})</p>
+                </div>
+            </div>
+            <a href="{% url 'scm:salesorder_detail' quote.converted_order.pk %}" class="btn btn-outline border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-xs">
+                View Sales Order &rarr;
+            </a>
+        </div>
+    {% endif %}
+
+    <!-- Signed Customer Notification -->
+    {% if quote.signed_at %}
+        <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <i data-lucide="pen-tool" class="w-6 h-6 text-blue-600"></i>
+                <div>
+                    <h4 class="text-sm font-semibold text-blue-900">Digitally Accepted &amp; Signed</h4>
+                    <p class="text-xs text-blue-700">Signed by <strong>{{ quote.signer_name }}</strong> ({{ quote.signer_title }}) on {{ quote.signed_at|date:"M d, Y H:i" }}</p>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Main Workspace Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Lines Workspace (3 Cols) -->
+        <div class="lg:col-span-3 space-y-6">
+            <div class="card">
+                <div class="card-header border-b border-slate-200 p-4 flex items-center justify-between">
+                    <div>
+                        <h2 class="text-base font-semibold text-slate-900">Line Items &amp; Packages</h2>
+                        <p class="text-xs text-slate-500">Configure products, bundles, discounts, and optional add-ons</p>
+                    </div>
+                    {% if can_edit %}
+                        <div class="flex items-center space-x-2">
+                            <a href="{% url 'sales:cpq_guided_selling' %}?quote={{ quote.pk }}" class="btn btn-outline text-xs py-1.5">
+                                <i data-lucide="sparkles" class="w-3.5 h-3.5 mr-1 text-purple-600"></i> Guided Bundle
+                            </a>
+                            <a href="{% url 'sales:cpq_quote_line_create' quote.pk %}" class="btn btn-primary text-xs py-1.5">
+                                <i data-lucide="plus" class="w-3.5 h-3.5 mr-1"></i> Add Line
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Item / Description</th>
+                                <th class="text-right">Qty</th>
+                                <th class="text-right">List Price</th>
+                                <th class="text-right">Disc %</th>
+                                <th class="text-right">Unit Price</th>
+                                <th class="text-right">Margin %</th>
+                                <th class="text-right">Line Total</th>
+                                {% if can_edit %}<th class="text-right">Actions</th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for line in lines %}
+                                <tr class="{% if line.parent_line %}bg-slate-50/70{% endif %}">
+                                    <td>
+                                        <div class="flex items-start">
+                                            {% if line.parent_line %}
+                                                <span class="text-slate-400 mr-2 ml-4">↳</span>
+                                            {% endif %}
+                                            <div>
+                                                <div class="font-medium text-slate-900 flex items-center space-x-1.5">
+                                                    <span>{{ line.description }}</span>
+                                                    {% if line.line_type == 'bundle_parent' %}
+                                                        <span class="badge badge-purple text-xs">Bundle</span>
+                                                    {% elif line.line_type == 'bundle_component' %}
+                                                        <span class="badge badge-slate text-xs">Component</span>
+                                                    {% elif line.line_type == 'optional_addon' %}
+                                                        <span class="badge badge-info text-xs">Add-on</span>
+                                                    {% endif %}
+                                                    {% if line.is_optional and not line.is_selected %}
+                                                        <span class="badge badge-muted text-xs">Unselected</span>
+                                                    {% endif %}
+                                                </div>
+                                                <div class="text-xs text-slate-400">
+                                                    {% if line.product %}Product: {{ line.product.name }}{% endif %}
+                                                    {% if line.item %} · SKU: {{ line.item.number }}{% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="text-right font-mono text-sm">{{ line.quantity }}</td>
+                                    <td class="text-right font-mono text-sm text-slate-600">${{ line.list_price:,.2f }}</td>
+                                    <td class="text-right font-mono text-sm {% if line.discount_pct > 0 %}text-amber-700 font-semibold{% else %}text-slate-400{% endif %}">
+                                        {{ line.discount_pct }}%
+                                    </td>
+                                    <td class="text-right font-mono text-sm font-medium text-slate-800">${{ line.unit_price:,.2f }}</td>
+                                    <td class="text-right font-mono text-sm {% if line.margin_pct < 15 %}text-red-600{% else %}text-emerald-700{% endif %}">
+                                        {{ line.margin_pct }}%
+                                    </td>
+                                    <td class="text-right font-mono text-sm font-bold text-slate-900">${{ line.line_total:,.2f }}</td>
+                                    {% if can_edit %}
+                                        <td class="table-actions text-right">
+                                            <a href="{% url 'sales:cpq_quote_line_edit' quote.pk line.pk %}" class="btn-icon" title="Edit Line">
+                                                <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                                            </a>
+                                            <form method="POST" action="{% url 'sales:cpq_quote_line_delete' quote.pk line.pk %}" class="inline-block" onsubmit="return confirm('Remove line item?');">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn-icon text-red-600 hover:text-red-800" title="Delete">
+                                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    {% endif %}
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="{% if can_edit %}8{% else %}7{% endif %}">
+                                        <div class="empty-state text-center py-10">
+                                            <i data-lucide="package-plus" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+                                            <p class="text-sm font-medium text-slate-700">No items added to this quote yet</p>
+                                            <p class="text-xs text-slate-400 mt-1 mb-3">Add standard products, build bundled solutions, or launch guided selling.</p>
+                                            {% if can_edit %}
+                                                <div class="space-x-2">
+                                                    <a href="{% url 'sales:cpq_guided_selling' %}?quote={{ quote.pk }}" class="btn btn-outline text-xs">
+                                                        <i data-lucide="sparkles" class="w-3.5 h-3.5 mr-1"></i> Guided Selling
+                                                    </a>
+                                                    <a href="{% url 'sales:cpq_quote_line_create' quote.pk %}" class="btn btn-primary text-xs">
+                                                        <i data-lucide="plus" class="w-3.5 h-3.5 mr-1"></i> Add Line Item
+                                                    </a>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Version / Revision Comparison Card -->
+            <div class="card">
+                <div class="card-header border-b border-slate-200 p-4 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-900">Revision Family ({{ quote.quote_group_id }})</h3>
+                        <p class="text-xs text-slate-500">History of quote revisions and side-by-side versions</p>
+                    </div>
+                    {% if revisions|length > 1 %}
+                        <a href="{% url 'sales:quote_version_list' %}" class="text-xs text-blue-600 hover:underline">
+                            View All Families &rarr;
+                        </a>
+                    {% endif %}
+                </div>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Revision</th>
+                                <th>Quote Number</th>
+                                <th>Status</th>
+                                <th>Total Amount</th>
+                                <th>Margin %</th>
+                                <th>Created</th>
+                                <th class="text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rev in revisions %}
+                                <tr class="{% if rev.pk == quote.pk %}bg-blue-50/50 font-medium{% endif %}">
+                                    <td>
+                                        Rev {{ rev.revision_number }}
+                                        {% if rev.pk == quote.pk %}<span class="badge badge-info ml-1 text-xs">Current</span>{% endif %}
+                                        {% if rev.is_primary %}<span class="badge badge-purple ml-1 text-xs">Primary</span>{% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'sales:cpq_quote_detail' rev.pk %}" class="text-blue-600 hover:underline font-mono text-xs">
+                                            {{ rev.number }}
+                                        </a>
+                                    </td>
+                                    <td><span class="badge badge-slate text-xs">{{ rev.get_status_display }}</span></td>
+                                    <td class="font-mono text-sm">${{ rev.total:,.2f }}</td>
+                                    <td class="text-sm">{{ rev.margin_pct }}%</td>
+                                    <td class="text-xs text-slate-500">{{ rev.created_at|date:"M d, Y H:i" }}</td>
+                                    <td class="text-right">
+                                        {% if rev.pk != quote.pk %}
+                                            <a href="{% url 'sales:quote_compare_versions' quote.pk rev.pk %}" class="btn btn-outline py-1 px-2 text-xs">
+                                                <i data-lucide="git-compare" class="w-3 h-3 mr-1"></i> Diff
+                                            </a>
+                                        {% else %}
+                                            <span class="text-xs text-slate-400">Viewing</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar Financials & Approval Status (1 Col) -->
+        <div class="space-y-6">
+            <!-- Pricing Waterfall Card -->
+            <div class="card">
+                <div class="card-header border-b border-slate-200 p-4">
+                    <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider">Pricing Waterfall</h3>
+                </div>
+                <div class="card-body p-4 space-y-3">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-slate-500">Gross Subtotal:</span>
+                        <span class="font-medium text-slate-900">${{ quote.subtotal:,.2f }}</span>
+                    </div>
+
+                    {% if quote.discount_total > 0 %}
+                        <div class="flex justify-between text-sm text-amber-700">
+                            <span>Header Discount ({{ quote.header_discount_pct }}%):</span>
+                            <span class="font-semibold">-${{ quote.discount_total:,.2f }}</span>
+                        </div>
+                    {% endif %}
+
+                    <div class="flex justify-between text-sm">
+                        <span class="text-slate-500">Estimated Taxes:</span>
+                        <span class="font-medium text-slate-800">${{ quote.tax_total:,.2f }}</span>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-200 flex justify-between items-baseline">
+                        <span class="text-base font-bold text-slate-900">Total Investment:</span>
+                        <span class="text-xl font-bold text-blue-700 font-mono">${{ quote.total:,.2f }}</span>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-100 space-y-1.5 bg-slate-50 -mx-4 -mb-4 p-4 rounded-b-lg">
+                        <div class="flex justify-between text-xs text-slate-500">
+                            <span>Total Estimated Cost:</span>
+                            <span class="font-mono">${{ quote.cost_total:,.2f }}</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-slate-500">
+                            <span>Gross Margin Amount:</span>
+                            <span class="font-mono">${{ quote.margin_total:,.2f }}</span>
+                        </div>
+                        <div class="flex justify-between text-xs font-semibold">
+                            <span class="text-slate-700">Net Profit Margin:</span>
+                            <span class="{% if quote.margin_pct < 15 %}text-red-600{% else %}text-emerald-700{% endif %}">
+                                {{ quote.margin_pct }}%
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Approval Engine Gate Card -->
+            <div class="card">
+                <div class="card-header border-b border-slate-200 p-4">
+                    <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider">Approval Governance</h3>
+                </div>
+                <div class="card-body p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-slate-500">Status:</span>
+                        {% if quote.approval_status == 'approved' %}
+                            <span class="badge badge-green">Approved</span>
+                        {% elif quote.approval_status == 'pending' %}
+                            <span class="badge badge-amber">Pending Approval</span>
+                        {% elif quote.approval_status == 'rejected' %}
+                            <span class="badge badge-red">Rejected</span>
+                        {% else %}
+                            <span class="badge badge-slate">Not Required</span>
+                        {% endif %}
+                    </div>
+
+                    {% if quote.approval_rule %}
+                        <div class="text-xs text-slate-600 pt-2 border-t border-slate-100">
+                            <span class="font-medium text-slate-700">Triggered Rule:</span>
+                            <div class="mt-0.5 text-blue-600 font-medium">{{ quote.approval_rule.name }}</div>
+                            <div class="text-slate-400 mt-0.5">Required Role: {{ quote.approval_rule.get_approver_role_display }}</div>
+                        </div>
+                    {% endif %}
+
+                    {% if quote.approved_by %}
+                        <div class="text-xs text-slate-500 pt-2 border-t border-slate-100">
+                            <span>Reviewed by: <strong>{{ quote.approved_by.get_full_name|default:quote.approved_by.username }}</strong></span>
+                            <div class="text-slate-400">{{ quote.approved_at|date:"M d, Y H:i" }}</div>
+                            {% if quote.approval_note %}
+                                <p class="mt-1 italic text-slate-600 bg-slate-50 p-2 rounded">"{{ quote.approval_note }}"</p>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+
+                    {% if can_approve %}
+                        <div class="pt-3 border-t border-slate-200">
+                            <a href="{% url 'sales:quote_approval_action' quote.pk %}" class="btn btn-primary w-full text-center text-xs">
+                                Review &amp; Sign-off &rarr;
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Customer Presentation Details -->
+            <div class="card">
+                <div class="card-header border-b border-slate-200 p-4">
+                    <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider">Proposal Terms</h3>
+                </div>
+                <div class="card-body p-4 space-y-3 text-xs">
+                    <div>
+                        <span class="text-slate-500">Proposal Valid Until:</span>
+                        <div class="font-medium text-slate-800 mt-0.5">
+                            {% if quote.valid_until %}{{ quote.valid_until|date:"M d, Y" }}{% else %}30 Days from issue{% endif %}
+                        </div>
+                    </div>
+                    {% if quote.proposal_template %}
+                        <div>
+                            <span class="text-slate-500">Document Template:</span>
+                            <div class="font-medium text-slate-800 mt-0.5">{{ quote.proposal_template.name }}</div>
+                        </div>
+                    {% endif %}
+                    {% if quote.terms_and_conditions %}
+                        <div>
+                            <span class="text-slate-500">Terms &amp; SLA:</span>
+                            <div class="text-slate-700 mt-0.5 line-clamp-3">{{ quote.terms_and_conditions }}</div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
