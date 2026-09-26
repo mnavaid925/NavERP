@@ -21,6 +21,10 @@ from .OpportunityOutcomes.OpportunityOutcomes import (
     OpportunityTransitionForm,
     WinLossReasonForm,
 )
+from .SalesForecasting.ForecastPeriods import ForecastPeriodForm
+from .SalesForecasting.ForecastSubmissions import ForecastReviewForm, ForecastSubmissionForm
+from .SalesForecasting.ForecastAdjustments import ForecastAdjustmentForm, ForecastRevertForm
+from .SalesForecasting.ForecastScenarios import ForecastScenarioApplyForm, ForecastScenarioForm
 
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
@@ -32,5 +36,8 @@ __all__ = [
     "OpportunityTeamMemberForm",
     "CompetitorProfileForm", "OpportunityCompetitorForm",
     "WinLossReasonForm", "OpportunityTransitionForm",
+    "ForecastPeriodForm", "ForecastSubmissionForm", "ForecastReviewForm",
+    "ForecastAdjustmentForm", "ForecastRevertForm",
+    "ForecastScenarioForm", "ForecastScenarioApplyForm",
 ]
 
