@@ -43,7 +43,7 @@
             </div>
             <div>
                 <span class="text-xs text-slate-400">Sales Rep:</span>
-                <div class="text-sm font-medium text-slate-800 mt-1">{{ quote.owner.get_full_name|default:quote.owner.username }}</div>
+                <div class="text-sm font-medium text-slate-800 mt-1">{% if quote.owner %}{{ quote.owner.get_full_name|default:quote.owner.username }}{% else %}—{% endif %}</div>
             </div>
         </div>
 
