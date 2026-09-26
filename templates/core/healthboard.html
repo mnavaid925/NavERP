@@ -29,8 +29,17 @@
       {% else %}<span class="badge badge-slate">Unknown</span>{% endif %}
     </p>
     {% if not component_total %}
-      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>No components are registered, so
-        there is no status to report.</strong> That is not an all-clear — it means nothing is being watched.</p>
+      {% if retired_count %}
+        <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Every registered component is retired.</strong>
+          {{ registered_total }} component{{ registered_total|pluralize }} exist in the register but none is
+          active, so this roll-up has nothing to summarise. That is not an all-clear — it means nothing is being watched.</p>
+      {% else %}
+        <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>No components are registered, so
+          there is no status to report.</strong> That is not an all-clear — it means nothing is being watched.</p>
+      {% endif %}
+    {% elif retired_count %}
+      <p class="text-muted">{{ retired_count }} retired component{{ retired_count|pluralize }} {{ retired_count|pluralize:"is,are" }}
+        excluded from this roll-up and from every figure below.</p>
     {% endif %}
     <p class="text-muted"><i data-lucide="info"></i> This roll-up is the worst <em>hand-set claim</em>
       across the catalogue. NavERP computed it from what people typed; it did not measure anything.</p>
