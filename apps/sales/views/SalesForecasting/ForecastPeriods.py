@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.db.models.deletion import ProtectedError
 from django.urls import reverse
 from django.utils import timezone
@@ -163,6 +163,9 @@ def _period_rollups(obj):
                 "label": labels.get(row["status"], row["status"]),
                 "count": row["count"],
             })
+        # One Sum() PER FIELD, not Sum(*fields): Django's multi-expression aggregate
+        # is not supported by the MySQL/MariaDB backend, which is what this project
+        # runs on, and it fails as a raw SQL syntax error at 1064.
         aggregates = base.aggregate(**{
             f"total__{field}": Sum(field) for _, field in CATEGORY_AMOUNT_FIELDS
         })
