@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}{{ line.description }} — CPQ Quote Line Item{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">Quotes</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_detail' quote.pk %}" class="text-slate-500 hover:text-slate-700">{{ quote.number }}</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">Line {{ line.sequence }}</span>
+            </nav>
+            <div class="flex items-center space-x-3">
+                <h1 class="page-title">{{ line.description }}</h1>
+                <span class="badge badge-info">{{ line.get_line_type_display }}</span>
+                {% if line.is_optional %}
+                    <span class="badge badge-amber">Optional Add-on</span>
+                {% endif %}
+            </div>
+            <p class="text-sm text-slate-500 mt-1">Belongs to quote {{ quote.number }} ({{ quote.name }})</p>
+        </div>
+        <div class="page-actions flex space-x-2">
+            <a href="{% url 'sales:cpq_quote_detail' quote.pk %}" class="btn btn-outline">
+                <i data-lucide="arrow-left" class="w-4 h-4 mr-1.5"></i> Back to Quote
+            </a>
+            <a href="{% url 'sales:cpq_quote_line_edit' quote.pk line.pk %}" class="btn btn-outline">
+                <i data-lucide="pencil" class="w-4 h-4 mr-1.5"></i> Edit Line
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-6">
+            <div class="card">
+                <div class="card-header border-b border-slate-200 p-4">
+                    <h3 class="text-base font-semibold text-slate-900">Line Item Economics</h3>
+                </div>
+                <div class="card-body p-5">
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div>
+                            <span class="text-xs uppercase text-slate-500 font-medium">Quantity</span>
+                            <div class="text-xl font-bold text-slate-900 mt-1">{{ line.quantity }}</div>
+                        </div>
+                        <div>
+                            <span class="text-xs uppercase text-slate-500 font-medium">List Price</span>
+                            <div class="text-xl font-bold text-slate-700 mt-1">${{ line.list_price:,.2f }}</div>
+                        </div>
+                        <div>
+                            <span class="text-xs uppercase text-slate-500 font-medium">Discount %</span>
+                            <div class="text-xl font-bold text-amber-700 mt-1">{{ line.discount_pct }}%</div>
+                        </div>
+                        <div>
+                            <span class="text-xs uppercase text-slate-500 font-medium">Unit Price</span>
+                            <div class="text-xl font-bold text-blue-700 mt-1">${{ line.unit_price:,.2f }}</div>
+                        </div>
+                        <div>
+                            <span class="text-xs uppercase text-slate-500 font-medium">Unit Cost</span>
+                            <div class="text-xl font-bold text-slate-500 mt-1">${{ line.unit_cost:,.2f }}</div>
+                        </div>
+                        <div>
+                            <span class="text-xs uppercase text-slate-500 font-medium">Net Profit Margin</span>
+                            <div class="text-xl font-bold {% if line.margin_pct < 15 %}text-red-600{% else %}text-emerald-700{% endif %} mt-1">
+                                {{ line.margin_pct }}%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if children %}
+                <div class="card">
+                    <div class="card-header border-b border-slate-200 p-4">
+                        <h3 class="text-base font-semibold text-slate-900">Bundle Sub-components</h3>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Description</th>
+                                    <th class="text-right">Qty</th>
+                                    <th class="text-right">Unit Price</th>
+                                    <th class="text-right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for child in children %}
+                                    <tr>
+                                        <td>{{ child.description }}</td>
+                                        <td class="text-right font-mono">{{ child.quantity }}</td>
+                                        <td class="text-right font-mono">${{ child.unit_price:,.2f }}</td>
+                                        <td class="text-right font-mono font-bold">${{ child.line_total:,.2f }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="space-y-6">
+            <div class="card">
+                <div class="card-header border-b border-slate-200 p-4">
+                    <h3 class="text-sm font-semibold text-slate-900">Catalog &amp; Inventory Details</h3>
+                </div>
+                <div class="card-body p-4 space-y-3 text-sm">
+                    <div>
+                        <span class="text-xs text-slate-500">Catalog Product:</span>
+                        <div class="font-medium text-slate-800">{{ line.product.name|default:"Custom Line" }}</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Inventory SKU (SCM Item):</span>
+                        <div class="font-medium text-slate-800">{{ line.item.name|default:"Not linked to SKU" }}</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Parent Bundle Line:</span>
+                        <div class="font-medium text-slate-800">{{ line.parent_line.description|default:"Top-level Line" }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
