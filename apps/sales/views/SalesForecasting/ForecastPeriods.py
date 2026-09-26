@@ -27,6 +27,7 @@ from apps.sales.models.SalesForecasting.ForecastPeriods import (
     _optional_sales_model,
 )
 from apps.sales.views._common import *  # noqa: F401,F403
+from apps.sales.views._helpers import is_tenant_admin as _is_tenant_admin
 
 TEMPLATE_LIST = "sales/salesforecasting/forecastperiod/list.html"
 TEMPLATE_DETAIL = "sales/salesforecasting/forecastperiod/detail.html"
@@ -63,10 +64,6 @@ CURRENCY_ROLLUP_FIELDS = [
 
 def _period_queryset(request):
     return ForecastPeriod.objects.filter(tenant=request.tenant).select_related("reporting_currency")
-
-
-def _is_tenant_admin(user):
-    return bool(getattr(user, "is_superuser", False) or getattr(user, "is_tenant_admin", False))
 
 
 def _filter_period_queryset(request, queryset):
