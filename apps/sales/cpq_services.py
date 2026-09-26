@@ -183,55 +183,88 @@ def cpq_create_revision(quote, user=None):
     old_to_new_line = {}
     
     # 1. Clone parent/standalone lines first
-    parents = quote.lines.filter(parent_line__isnull=True).order_by("sequence", "id")
-    for parent in parents:
-        new_parent = CPQQuoteLine.objects.create(
-            tenant=new_quote.tenant,
-            quote=new_quote,
-            parent_line=None,
-            line_type=parent.line_type,
-            product=parent.product,
-            item=parent.item,
-            uom=parent.uom,
-            description=parent.description,
-            quantity=parent.quantity,
-            list_price=parent.list_price,
-            discount_pct=parent.discount_pct,
-            unit_price=parent.unit_price,
-            tax_code=parent.tax_code,
-            tax_pct=parent.tax_pct,
-            unit_cost=parent.unit_cost,
-            is_optional=parent.is_optional,
-            is_selected=parent.is_selected,
-            sequence=parent.sequence,
-        )
-        old_to_new_line[parent.id] = new_parent
+    parents = list(quote.lines.filter(parent_line__isnull=True).order_by("sequence", "id"))
+    has_children = quote.lines.filter(parent_line__isnull=False).exists()
 
-    # 2. Clone child components
-    children = quote.lines.filter(parent_line__isnull=False).order_by("sequence", "id")
-    for child in children:
-        parent_mapped = old_to_new_line.get(child.parent_line_id)
-        new_child = CPQQuoteLine.objects.create(
-            tenant=new_quote.tenant,
-            quote=new_quote,
-            parent_line=parent_mapped,
-            line_type=child.line_type,
-            product=child.product,
-            item=child.item,
-            uom=child.uom,
-            description=child.description,
-            quantity=child.quantity,
-            list_price=child.list_price,
-            discount_pct=child.discount_pct,
-            unit_price=child.unit_price,
-            tax_code=child.tax_code,
-            tax_pct=child.tax_pct,
-            unit_cost=child.unit_cost,
-            is_optional=child.is_optional,
-            is_selected=child.is_selected,
-            sequence=child.sequence,
-        )
-        old_to_new_line[child.id] = new_child
+    if not has_children:
+        # All lines are standalone, bulk create all at once
+        new_lines = [
+            CPQQuoteLine(
+                tenant=new_quote.tenant,
+                quote=new_quote,
+                parent_line=None,
+                line_type=parent.line_type,
+                product=parent.product,
+                item=parent.item,
+                uom=parent.uom,
+                description=parent.description,
+                quantity=parent.quantity,
+                list_price=parent.list_price,
+                discount_pct=parent.discount_pct,
+                unit_price=parent.unit_price,
+                tax_code=parent.tax_code,
+                tax_pct=parent.tax_pct,
+                unit_cost=parent.unit_cost,
+                is_optional=parent.is_optional,
+                is_selected=parent.is_selected,
+                sequence=parent.sequence,
+            )
+            for parent in parents
+        ]
+        if new_lines:
+            CPQQuoteLine.objects.bulk_create(new_lines)
+    else:
+        # Clone parent lines individually so their primary keys are available for child FKs
+        for parent in parents:
+            new_parent = CPQQuoteLine.objects.create(
+                tenant=new_quote.tenant,
+                quote=new_quote,
+                parent_line=None,
+                line_type=parent.line_type,
+                product=parent.product,
+                item=parent.item,
+                uom=parent.uom,
+                description=parent.description,
+                quantity=parent.quantity,
+                list_price=parent.list_price,
+                discount_pct=parent.discount_pct,
+                unit_price=parent.unit_price,
+                tax_code=parent.tax_code,
+                tax_pct=parent.tax_pct,
+                unit_cost=parent.unit_cost,
+                is_optional=parent.is_optional,
+                is_selected=parent.is_selected,
+                sequence=parent.sequence,
+            )
+            old_to_new_line[parent.id] = new_parent
+
+        # 2. Bulk create child components
+        children = list(quote.lines.filter(parent_line__isnull=False).order_by("sequence", "id"))
+        new_children = [
+            CPQQuoteLine(
+                tenant=new_quote.tenant,
+                quote=new_quote,
+                parent_line=old_to_new_line.get(child.parent_line_id),
+                line_type=child.line_type,
+                product=child.product,
+                item=child.item,
+                uom=child.uom,
+                description=child.description,
+                quantity=child.quantity,
+                list_price=child.list_price,
+                discount_pct=child.discount_pct,
+                unit_price=child.unit_price,
+                tax_code=child.tax_code,
+                tax_pct=child.tax_pct,
+                unit_cost=child.unit_cost,
+                is_optional=child.is_optional,
+                is_selected=child.is_selected,
+                sequence=child.sequence,
+            )
+            for child in children
+        ]
+        if new_children:
+            CPQQuoteLine.objects.bulk_create(new_children)
 
     cpq_recalc_quote_totals(new_quote, save=True)
     return new_quote
@@ -455,9 +488,9 @@ def cpq_convert_to_sales_order(quote, user=None):
         notes=f"Converted from CPQ Quote {quote.number} (Rev {quote.revision_number}). {quote.notes}".strip(),
     )
     
-    # Create line items
-    for idx, q_line in enumerate(quote.lines.filter(is_selected=True).order_by("sequence", "id"), start=1):
-        SalesOrderLine.objects.create(
+    # Create line items in bulk
+    so_lines = [
+        SalesOrderLine(
             sales_order=order,
             item=q_line.item,
             description=q_line.description,
@@ -466,6 +499,10 @@ def cpq_convert_to_sales_order(quote, user=None):
             discount_pct=q_line.discount_pct,
             tax_pct=q_line.tax_pct,
         )
+        for q_line in quote.lines.filter(is_selected=True).order_by("sequence", "id")
+    ]
+    if so_lines:
+        SalesOrderLine.objects.bulk_create(so_lines)
         
     quote.converted_order = order
     quote.status = "converted"
