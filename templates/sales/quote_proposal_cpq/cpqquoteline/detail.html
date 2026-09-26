@@ -48,7 +48,7 @@
                         </div>
                         <div>
                             <span class="text-xs uppercase text-slate-500 font-medium">List Price</span>
-                            <div class="text-xl font-bold text-slate-700 mt-1">${{ line.list_price:,.2f }}</div>
+                            <div class="text-xl font-bold text-slate-700 mt-1">${{ line.list_price|floatformat:2 }}</div>
                         </div>
                         <div>
                             <span class="text-xs uppercase text-slate-500 font-medium">Discount %</span>
@@ -56,11 +56,11 @@
                         </div>
                         <div>
                             <span class="text-xs uppercase text-slate-500 font-medium">Unit Price</span>
-                            <div class="text-xl font-bold text-blue-700 mt-1">${{ line.unit_price:,.2f }}</div>
+                            <div class="text-xl font-bold text-blue-700 mt-1">${{ line.unit_price|floatformat:2 }}</div>
                         </div>
                         <div>
                             <span class="text-xs uppercase text-slate-500 font-medium">Unit Cost</span>
-                            <div class="text-xl font-bold text-slate-500 mt-1">${{ line.unit_cost:,.2f }}</div>
+                            <div class="text-xl font-bold text-slate-500 mt-1">${{ line.unit_cost|floatformat:2 }}</div>
                         </div>
                         <div>
                             <span class="text-xs uppercase text-slate-500 font-medium">Net Profit Margin</span>
@@ -92,8 +92,8 @@
                                     <tr>
                                         <td>{{ child.description }}</td>
                                         <td class="text-right font-mono">{{ child.quantity }}</td>
-                                        <td class="text-right font-mono">${{ child.unit_price:,.2f }}</td>
-                                        <td class="text-right font-mono font-bold">${{ child.line_total:,.2f }}</td>
+                                        <td class="text-right font-mono">${{ child.unit_price|floatformat:2 }}</td>
+                                        <td class="text-right font-mono font-bold">${{ child.line_total|floatformat:2 }}</td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
