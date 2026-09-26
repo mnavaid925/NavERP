@@ -42,8 +42,8 @@ def cpq_quote_list(request):
         qs = qs.filter(approval_status=approval_status)
 
     opp_id = request.GET.get("opportunity", "").strip()
-    if opp_id:
-        qs = qs.filter(opportunity_id=opp_id)
+    if opp_id and opp_id.isdigit():
+        qs = qs.filter(opportunity_id=int(opp_id))
 
     is_primary = request.GET.get("is_primary", "").strip()
     if is_primary in ["true", "1"]:
@@ -107,8 +107,9 @@ def cpq_quote_create(request):
             return redirect("sales:cpq_quote_detail", pk=quote.pk)
     else:
         initial = {}
-        if request.GET.get("opportunity"):
-            initial["opportunity"] = request.GET.get("opportunity")
+        opp_param = request.GET.get("opportunity", "").strip()
+        if opp_param and opp_param.isdigit():
+            initial["opportunity"] = opp_param
         form = CPQQuoteForm(tenant=tenant, initial=initial)
 
     return render(request, "sales/quote_proposal_cpq/cpqquote/form.html", {
