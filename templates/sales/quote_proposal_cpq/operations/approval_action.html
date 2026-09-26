@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Review Quote {{ quote.number }} — CPQ Approval{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:quote_approval_queue' %}" class="text-slate-500 hover:text-slate-700">Approval Queue</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">{{ quote.number }}</span>
+            </nav>
+            <h1 class="page-title">Sign-off on Quote {{ quote.number }}</h1>
+            <p class="text-sm text-slate-500 mt-1">Review deal economics and grant authorization or reject with revision instructions.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'sales:cpq_quote_detail' quote.pk %}" class="btn btn-outline">
+                View Full Quote
+            </a>
+        </div>
+    </div>
+
+    <!-- Pricing Summary Card -->
+    <div class="card p-5 bg-slate-50 border border-slate-200">
+        <h3 class="text-xs uppercase font-semibold text-slate-500 tracking-wider mb-3">Quote Economics Summary</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+                <span class="text-xs text-slate-400">Total Value:</span>
+                <div class="text-lg font-bold text-slate-900">${{ quote.total:,.2f }}</div>
+            </div>
+            <div>
+                <span class="text-xs text-slate-400">Header Discount:</span>
+                <div class="text-lg font-bold text-amber-700">{{ quote.header_discount_pct }}%</div>
+            </div>
+            <div>
+                <span class="text-xs text-slate-400">Profit Margin:</span>
+                <div class="text-lg font-bold {% if quote.margin_pct < 15 %}text-red-600{% else %}text-emerald-700{% endif %}">
+                    {{ quote.margin_pct }}%
+                </div>
+            </div>
+            <div>
+                <span class="text-xs text-slate-400">Sales Rep:</span>
+                <div class="text-sm font-medium text-slate-800 mt-1">{{ quote.owner.get_full_name|default:quote.owner.username }}</div>
+            </div>
+        </div>
+
+        {% if quote.approval_note %}
+            <div class="mt-4 pt-3 border-t border-slate-200 text-xs text-amber-900 bg-amber-50/70 p-3 rounded">
+                <strong>Trigger Reason:</strong> {{ quote.approval_note }}
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Decision Form -->
+    <div class="card">
+        <form method="POST">
+            {% csrf_token %}
+            <div class="card-body p-6 space-y-5">
+                {% if form.non_field_errors %}
+                    <div class="p-3 bg-red-50 text-red-700 text-sm rounded">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <div>
+                    <label class="form-label font-semibold text-slate-900">Managerial Decision <span class="text-red-500">*</span></label>
+                    <div class="space-y-2 mt-2">
+                        {% for choice in form.action %}
+                            <div class="flex items-center space-x-2 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                {{ choice.tag }}
+                                <label for="{{ choice.id_for_label }}" class="text-sm font-medium text-slate-800 cursor-pointer mb-0">
+                                    {{ choice.choice_label }}
+                                </label>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% if form.action.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.action.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.note.id_for_label }}">Approval Note / Rejection Reason</label>
+                    {{ form.note }}
+                    <p class="text-xs text-slate-400 mt-1">Required if rejecting. Provide clear feedback for the sales representative.</p>
+                    {% if form.note.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.note.errors.0 }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card-footer border-t border-slate-200 p-4 flex justify-end space-x-3 bg-slate-50">
+                <a href="{% url 'sales:quote_approval_queue' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">Submit Decision</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
