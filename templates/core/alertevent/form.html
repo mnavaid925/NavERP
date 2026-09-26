@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit firing record{% else %}Record a firing{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit firing record{% else %}Record a firing{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:alert_event_list' %}">Alert Events</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This records an alert somebody saw
+      elsewhere.</strong> NavERP detected nothing: it did not watch the metric, cross the threshold or raise
+      anything. Write this down for a crossing you read off a dashboard, an email or a phone call.</p>
+    {% comment %}
+      Three groups of fields are deliberately ABSENT from this form, and each exclusion is a rule:
+      `state` and the lifecycle stamps are written only by the three POST-only actions on the detail
+      page, and `acknowledged_by` / `resolved_by` are the request user - never a chosen value, because
+      attribution is the act an audit exists for. `muted_until` IS here on purpose: it is a
+      forward-declared boundary a human types, the 0.16 BackupJob.retain_until precedent, and nothing in
+      NavERP enforces a mute.
+    {% endcomment %}
+    <p class="text-muted"><i data-lucide="info"></i> <strong>Leaving the reading blank is honest.</strong>
+      A blank means nobody wrote down what the number was; a <code>0</code> claims the metric read zero,
+      which is a different and usually false statement.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What was seen</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.message %}
+          {% include "partials/form_field.html" with field=form.rule %}
+          {% include "partials/form_field.html" with field=form.service %}
+          {% include "partials/form_field.html" with field=form.severity_at_fire %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-6">
+      <div class="card-header"><h2 class="card-title">The numbers as they stood</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.observed_value %}
+          {% include "partials/form_field.html" with field=form.threshold_at_fire %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-6">
+      <div class="card-header"><h2 class="card-title">Context and evidence</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.detail %}
+          {% include "partials/form_field.html" with field=form.evidence %}
+          {% include "partials/form_field.html" with field=form.muted_until %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'core:alert_event_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted"><i data-lucide="info"></i> <strong>The component name is copied automatically.</strong>
+      Pick the component and this form stores its name alongside the link, so the record still reads after
+      the component is deleted from the catalogue.</p>
+  </div></div>
+{% endblock %}
