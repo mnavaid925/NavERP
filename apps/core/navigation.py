@@ -2240,6 +2240,19 @@ LIVE_LINKS = {
         "Scenarios & What-If": "sales:forecast_scenario_list",
         "Forecast Call": "sales:forecast_call",
     },
+    "8.5": {
+        # The five NavERP.md 8.5 bullet strings, verbatim.
+        "Quote Configuration (CPQ)": "sales:cpq_quote_list",
+        "Pricing & Discount Approval": "sales:quote_approval_queue",
+        "Proposal Generation & Templating": "sales:quote_proposal_board",
+        "Quote Versioning & Comparison": "sales:quote_version_list",
+        "Quote-to-Order Conversion": "sales:quote_conversion_board",
+        # Extra live leaves:
+        "Product Bundle Options": "sales:product_bundle_list",
+        "Quote Approval Rules": "sales:quote_approval_rule_list",
+        "CPQ Guided Selling": "sales:cpq_guided_selling",
+    },
+
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
