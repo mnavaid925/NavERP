@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.message|truncatechars:60 }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.message|truncatechars:80 }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:alert_event_list' %}">Alert Events</a><span class="sep">›</span><span>{{ obj.message|truncatechars:40 }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:alert_event_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:alert_event_delete' obj.pk %}" onsubmit="return confirm('Delete this firing record?');">
+        {% csrf_token %}
+        <button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This is a report that a threshold was
+      crossed — not a measurement NavERP took.</strong> Nothing in this application watched the metric,
+      compared it against the bound, or raised an alert.</p>
+    <p class="text-muted"><i data-lucide="info"></i> {{ obj.measure_note }}</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The firing</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>State</dt><dd>
+          {% if obj.state == "firing" %}<span class="badge badge-red">{{ obj.get_state_display }}</span>
+          {% elif obj.state == "acknowledged" %}<span class="badge badge-amber">{{ obj.get_state_display }}</span>
+          {% elif obj.state == "resolved" %}<span class="badge badge-green">{{ obj.get_state_display }}</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_state_display }}</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Severity at fire (snapshot)</dt><dd>
+          {% if obj.severity_at_fire == "info" %}<span class="badge badge-info">{{ obj.get_severity_at_fire_display }}</span>
+          {% elif obj.severity_at_fire == "warning" %}<span class="badge badge-amber">{{ obj.get_severity_at_fire_display }}</span>
+          {% elif obj.severity_at_fire == "critical" %}<span class="badge badge-red">{{ obj.get_severity_at_fire_display }}</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_severity_at_fire_display }}</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Rule</dt><dd>{% if obj.rule %}<a href="{% url 'core:alert_rule_detail' obj.rule.pk %}">{{ obj.rule.name }}</a>{% else %}<span class="text-muted">ad-hoc — no rule was registered for this</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Component</dt><dd>{% if obj.service %}<a href="{% url 'core:service_component_detail' obj.service.pk %}">{{ obj.service.name }}</a>{% else %}{{ obj.service_label|default:"—" }}{% if obj.service_label %} <span class="text-muted">(snapshot — the component has since been deleted)</span>{% endif %}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Reading observed</dt><dd>{{ obj.observed_value_display }} <span class="text-muted">— a dash means not measured, not zero</span></dd></div>
+        <div class="detail-item"><dt>Threshold at fire</dt><dd>{{ obj.threshold_at_fire_display }}</dd></div>
+        <div class="detail-item"><dt>Occurrences recorded</dt><dd>{{ obj.occurrence_count }} <span class="text-muted">(incremented only when somebody records a recurrence)</span></dd></div>
+        <div class="detail-item"><dt>Fired</dt><dd>{{ obj.fired_at|date:"M d, Y H:i" }} <span class="text-muted">({{ obj.age_days }}d ago)</span></dd></div>
+        <div class="detail-item"><dt>First seen</dt><dd>{% if obj.first_seen_at %}{{ obj.first_seen_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Last seen</dt><dd>{% if obj.last_seen_at %}{{ obj.last_seen_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">— no recurrence recorded</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Evidence</dt><dd>{% if obj.evidence %}<code>{{ obj.evidence }}</code>{% else %}<span class="text-muted">none recorded</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Muted until</dt><dd>{% if obj.muted_until %}{{ obj.muted_until|date:"M d, Y H:i" }}{% if obj.is_muted %} <span class="badge badge-amber">in effect</span>{% else %} <span class="text-muted">(already past — not a mute now)</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}
+          <div class="text-muted">A recorded mute. Nothing in NavERP silences an alert.</div></dd></div>
+        <div class="detail-item"><dt>Raised as an incident</dt><dd>{% if incident_count %}<span class="badge badge-info">{{ incident_count }} incident{{ incident_count|pluralize }}</span>{% else %}<span class="text-muted">no incident references this firing</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.detail %}<div class="detail-item"><dt>Detail</dt><dd>{{ obj.detail|linebreaksbr }}</dd></div>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% comment %}
+        The three POST-only actions. Each button is rendered only when its guard in the VIEW would allow
+        it, but that is a convenience, not the enforcement: the guard lives in the view, so a hand-made
+        POST is refused there and no audit row is written for it. Same posture as `backup_job_verify`.
+      {% endcomment %}
+      <div class="form-actions">
+        {% if obj.state == "firing" %}
+          <form method="post" action="{% url 'core:alertevent_acknowledge' obj.pk %}" onsubmit="return confirm('Record that you have looked at this firing? This does not silence it.');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="eye"></i> Acknowledge</button>
+          </form>
+        {% else %}
+          <p class="text-muted">Acknowledgement applies to a firing only — this event is {{ obj.get_state_display|lower }}.</p>
+        {% endif %}
+
+        {% if obj.state != "resolved" and obj.state != "expired" %}
+          <form method="post" action="{% url 'core:alertevent_resolve' obj.pk %}" onsubmit="return confirm('Record that somebody declared this resolved? NavERP will not fix anything.');">
+            {% csrf_token %}
+            <input type="text" name="resolution_note" maxlength="255" class="form-input" style="min-width:280px;" placeholder="Resolution note (optional)">
+            <button class="btn btn-outline" type="submit"><i data-lucide="check"></i> Record resolution</button>
+          </form>
+        {% else %}
+          <p class="text-muted">This event is already {{ obj.get_state_display|lower }} — a second resolution would overwrite the first.</p>
+        {% endif %}
+
+        {% if obj.state != "resolved" and obj.state != "expired" %}
+          <form method="post" action="{% url 'core:alertevent_recur' obj.pk %}" onsubmit="return confirm('Record that this firing came back?');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="rotate-ccw"></i> Record a recurrence</button>
+          </form>
+        {% endif %}
+      </div>
+      <p class="text-muted"><i data-lucide="info"></i> Each of these records that a person did something.
+        None of them silences, fixes or re-checks anything.</p>
+    </div>
+  </div>
+
+  {% if related_incidents %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Incidents raised from this firing</h2></div>
+      <div class="card-body">
+        <ul>{% for inc in related_incidents %}<li><a href="{% url 'core:incident_detail' inc.pk %}">{{ inc.title }}</a> — {{ inc.get_status_display }} ({{ inc.created_at|date:"M d, Y" }})</li>{% endfor %}</ul>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted"><i data-lucide="info"></i> <strong>No stack trace, log line or payload is
+      attached to this row.</strong> NavERP collects none of them, so there is nowhere to read them from —
+      name the ticket or runbook in <em>Evidence</em> instead.</p>
+  </div></div>
+{% endblock %}
+
