@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}Quotes &amp; Proposals (CPQ) — NavERP Sales{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">Quote &amp; Proposal Management (CPQ)</span>
+            </nav>
+            <h1 class="page-title">Quotes &amp; Proposals</h1>
+            <p class="text-sm text-slate-500 mt-1">Multi-tier CPQ quoting, bundle configuration, approval rules, and order conversion.</p>
+        </div>
+        <div class="page-actions flex flex-wrap gap-2">
+            <a href="{% url 'sales:cpq_guided_selling' %}" class="btn btn-outline">
+                <i data-lucide="compass" class="w-4 h-4 mr-1.5"></i> Guided Selling
+            </a>
+            <a href="{% url 'sales:quote_approval_queue' %}" class="btn btn-outline">
+                <i data-lucide="shield-check" class="w-4 h-4 mr-1.5"></i> Approvals
+            </a>
+            <a href="{% url 'sales:quote_version_list' %}" class="btn btn-outline">
+                <i data-lucide="git-branch" class="w-4 h-4 mr-1.5"></i> Versioning
+            </a>
+            <a href="{% url 'sales:cpq_quote_create' %}" class="btn btn-primary">
+                <i data-lucide="plus" class="w-4 h-4 mr-1.5"></i> Create Quote
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+        <div class="stat-card">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Quotes</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Drafting</div>
+            <div class="text-2xl font-bold text-slate-700 mt-1">{{ stats.draft }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">In Review</div>
+            <div class="text-2xl font-bold text-amber-600 mt-1">{{ stats.in_review }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Approved</div>
+            <div class="text-2xl font-bold text-blue-600 mt-1">{{ stats.approved }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Accepted</div>
+            <div class="text-2xl font-bold text-emerald-600 mt-1">{{ stats.accepted }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Converted</div>
+            <div class="text-2xl font-bold text-purple-600 mt-1">{{ stats.converted }}</div>
+        </div>
+    </div>
+
+    <!-- Filters & Quotes Register -->
+    <div class="card">
+        <div class="card-header border-b border-slate-200 p-4">
+            <form method="GET" class="flex flex-wrap items-center gap-3">
+                <div class="flex-1 min-w-[200px]">
+                    <div class="relative">
+                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search quote name, number, account..." class="form-input pl-9 w-full">
+                    </div>
+                </div>
+                <div>
+                    <select name="status" class="form-select text-sm">
+                        <option value="">All Statuses</option>
+                        {% for val, label in status_choices %}
+                            <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <select name="approval_status" class="form-select text-sm">
+                        <option value="">Approval: All</option>
+                        {% for val, label in approval_status_choices %}
+                            <option value="{{ val }}" {% if request.GET.approval_status == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <select name="opportunity" class="form-select text-sm">
+                        <option value="">All Opportunities</option>
+                        {% for opp in opportunities %}
+                            <option value="{{ opp.pk }}" {% if request.GET.opportunity == opp.pk|stringformat:"d" %}selected{% endif %}>{{ opp.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <select name="is_primary" class="form-select text-sm">
+                        <option value="">Primary: All</option>
+                        <option value="1" {% if request.GET.is_primary == '1' %}selected{% endif %}>Primary Only</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-outline py-2 px-3 text-sm">
+                    <i data-lucide="filter" class="w-4 h-4 mr-1"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.status or request.GET.approval_status or request.GET.opportunity or request.GET.is_primary %}
+                    <a href="{% url 'sales:cpq_quote_list' %}" class="text-sm text-slate-500 hover:text-slate-800 ml-1">Reset</a>
+                {% endif %}
+            </form>
+        </div>
+
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Quote Number &amp; Name</th>
+                        <th>Account / Opportunity</th>
+                        <th>Total Amount</th>
+                        <th>Margin %</th>
+                        <th>Status</th>
+                        <th>Approval</th>
+                        <th>Owner</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for q in quotes %}
+                        <tr>
+                            <td>
+                                <div class="flex items-center space-x-2">
+                                    <a href="{% url 'sales:cpq_quote_detail' q.pk %}" class="font-medium text-blue-600 hover:text-blue-800">
+                                        {{ q.name }}
+                                    </a>
+                                    {% if q.is_primary %}
+                                        <span class="badge badge-purple text-xs" title="Primary quote syncing with deal forecast">Primary</span>
+                                    {% endif %}
+                                </div>
+                                <div class="text-xs text-slate-400 font-mono mt-0.5">
+                                    {{ q.number }} · Rev {{ q.revision_number }}
+                                </div>
+                            </td>
+                            <td>
+                                <div class="text-sm font-medium text-slate-800">{{ q.account.name|default:"—" }}</div>
+                                {% if q.opportunity %}
+                                    <div class="text-xs text-slate-500">{{ q.opportunity.name }}</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="text-sm font-bold text-slate-900">
+                                    {{ q.currency.code|default:"USD" }} {{ q.total:,.2f }}
+                                </div>
+                                {% if q.discount_total > 0 %}
+                                    <div class="text-xs text-amber-700">Disc: {{ q.currency.code }} {{ q.discount_total:,.2f }}</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="text-sm font-medium {% if q.margin_pct < 15 %}text-red-600{% else %}text-emerald-700{% endif %}">
+                                    {{ q.margin_pct }}%
+                                </span>
+                            </td>
+                            <td>
+                                {% if q.status == 'approved' or q.status == 'accepted' or q.status == 'converted' %}
+                                    <span class="badge badge-green">{{ q.get_status_display }}</span>
+                                {% elif q.status == 'in_review' or q.status == 'presented' %}
+                                    <span class="badge badge-amber">{{ q.get_status_display }}</span>
+                                {% elif q.status == 'rejected' or q.status == 'declined' %}
+                                    <span class="badge badge-red">{{ q.get_status_display }}</span>
+                                {% else %}
+                                    <span class="badge badge-muted">{{ q.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if q.approval_status == 'approved' %}
+                                    <span class="badge badge-green">Approved</span>
+                                {% elif q.approval_status == 'pending' %}
+                                    <span class="badge badge-amber">Pending</span>
+                                {% elif q.approval_status == 'rejected' %}
+                                    <span class="badge badge-red">Rejected</span>
+                                {% else %}
+                                    <span class="badge badge-slate">Not Required</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-xs text-slate-600">
+                                {{ q.owner.get_full_name|default:q.owner.username|default:"—" }}
+                            </td>
+                            <td class="table-actions text-right">
+                                <a href="{% url 'sales:cpq_quote_detail' q.pk %}" class="btn-icon" title="View Workspace">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                {% if q.is_editable %}
+                                    <a href="{% url 'sales:cpq_quote_edit' q.pk %}" class="btn-icon" title="Edit Quote">
+                                        <i data-lucide="pencil" class="w-4 h-4"></i>
+                                    </a>
+                                {% endif %}
+                                <a href="{% url 'sales:quote_generate_proposal' q.pk %}" class="btn-icon" title="View Proposal">
+                                    <i data-lucide="file-text" class="w-4 h-4"></i>
+                                </a>
+                                {% if q.status != 'converted' %}
+                                    <form method="POST" action="{% url 'sales:cpq_quote_delete' q.pk %}" class="inline-block" onsubmit="return confirm('Delete quote {{ q.number }}?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn-icon text-red-600 hover:text-red-800" title="Delete">
+                                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="8">
+                                <div class="empty-state text-center py-12">
+                                    <i data-lucide="file-spreadsheet" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                                    <h3 class="text-base font-medium text-slate-800">No CPQ quotes found</h3>
+                                    <p class="text-sm text-slate-500 mt-1 mb-4">Create your first proposal with bundled options, custom pricing, and digital signing.</p>
+                                    <a href="{% url 'sales:cpq_quote_create' %}" class="btn btn-primary">
+                                        <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Quote
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if quotes.has_other_pages %}
+            <div class="card-footer border-t border-slate-200 p-4 flex items-center justify-between">
+                <div class="text-sm text-slate-500">
+                    Showing {{ quotes.start_index }} to {{ quotes.end_index }} of {{ quotes.paginator.count }} quotes
+                </div>
+                <div class="pagination flex items-center space-x-2">
+                    {% if quotes.has_previous %}
+                        <a href="?page={{ quotes.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline py-1 px-3 text-sm">Previous</a>
+                    {% endif %}
+                    <span class="text-sm font-medium text-slate-700">Page {{ quotes.number }} of {{ quotes.paginator.num_pages }}</span>
+                    {% if quotes.has_next %}
+                        <a href="?page={{ quotes.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline py-1 px-3 text-sm">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
