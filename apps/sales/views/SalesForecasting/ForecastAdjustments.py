@@ -14,9 +14,9 @@ Two structural rulings are enforced here rather than in the template:
 * **The reason is the signal.** `reason_code` is enforced in the form's `clean()` and a
   Reset demands `revert_reason` (Dynamics' mandatory-reason Reset), both server-side.
 
-`forecast_org_unit_chain` is the rollup walk this pass owns (contract 8): the rep ->
-manager -> director axis runs on `core.OrgUnit.parent`, which has **no cycle validation
-anywhere in the codebase**, so the walk is iterative, depth-bounded and carries a seen-set.
+`forecast_org_unit_chain` — the rep -> manager -> director rollup walk this pass depends
+on (contract 8) — now lives in `apps.sales/forecast_services.py`, because the scenario
+views need it too and a copy in either view module would be a second, divergent walk.
 """
 from decimal import Decimal
 
@@ -29,6 +29,7 @@ from django.urls import reverse
 from apps.core.crud import apply_search, as_db_int, paginate
 from apps.core.utils import write_audit_log
 from apps.crm.models import Opportunity
+from apps.sales.forecast_services import forecast_org_unit_chain
 from apps.sales.forms.SalesForecasting.ForecastAdjustments import (
     ForecastAdjustmentForm,
     ForecastRevertForm,
@@ -43,37 +44,9 @@ TEMPLATE_LIST = "sales/salesforecasting/forecastadjustment/list.html"
 TEMPLATE_DETAIL = "sales/salesforecasting/forecastadjustment/detail.html"
 TEMPLATE_FORM = "sales/salesforecasting/forecastadjustment/form.html"
 
-#: Hard cap on the OrgUnit walk. A hierarchy deeper than this is treated as unresolvable
-#: rather than walked: a legacy cycle must not become an infinite loop.
-ORG_UNIT_CHAIN_MAX_DEPTH = 12
-
 
 def _is_tenant_admin(user):
     return bool(getattr(user, "is_superuser", False) or getattr(user, "is_tenant_admin", False))
-
-
-def forecast_org_unit_chain(org_unit, max_depth=ORG_UNIT_CHAIN_MAX_DEPTH):
-    """The chain of `core.OrgUnit` nodes from `org_unit` up to its root, root last.
-
-    There is **no `User.manager` field** anywhere in this codebase, so the rep -> manager ->
-    director walk is the `OrgUnit.parent` self-FK. Three hazards, all handled here:
-
-    * `parent` is a self-FK with **no cycle validation anywhere**, so a legacy A->B->A row
-      is reachable. A `seen` set of pks stops it instead of hanging the request.
-    * the walk is **iterative**, never recursive, so a deep chain cannot blow the stack.
-    * it is **depth-bounded**; a chain past the cap is truncated rather than followed.
-
-    Returns `[]` for `None`, so every caller can iterate the result unguarded.
-    """
-    chain, seen, node, depth = [], set(), org_unit, 0
-    while node is not None and depth < max_depth:
-        if node.pk in seen:
-            break
-        seen.add(node.pk)
-        chain.append(node)
-        node = node.parent
-        depth += 1
-    return chain
 
 
 def _acting_org_unit(user, tenant):
