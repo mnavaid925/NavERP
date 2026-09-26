@@ -68,7 +68,7 @@ def quote_submit_approval(request, pk):
         messages.success(request, "Quote pricing is within standard thresholds and has been automatically approved.")
 
     quote.save(update_fields=["status", "approval_status", "approval_rule", "approved_at", "approved_by", "approval_note", "updated_at"])
-    write_audit_log(request.user, "submit_approval", "CPQQuote", quote.id, f"Submitted quote {quote.number} for approval: {quote.approval_status}")
+    write_audit_log(request.user, quote, "submit_approval", {"action": "submit_approval", "status": quote.approval_status}, tenant=tenant)
     return redirect("sales:cpq_quote_detail", pk=quote.pk)
 
 
@@ -132,7 +132,7 @@ def quote_approval_action(request, pk):
                 messages.warning(request, f"Quote {quote.number} rejected.")
 
             quote.save(update_fields=["approval_status", "status", "approved_by", "approved_at", "approval_note", "updated_at"])
-            write_audit_log(request.user, "approval_decision", "CPQQuote", quote.id, f"{action.upper()} quote {quote.number}: {note}")
+            write_audit_log(request.user, quote, "approval_decision", {"action": action, "note": note}, tenant=tenant)
             return redirect("sales:cpq_quote_detail", pk=quote.pk)
     else:
         form = CPQQuoteApprovalActionForm(initial={"action": "approved"})
@@ -155,7 +155,7 @@ def quote_create_revision(request, pk):
     quote = get_object_or_404(CPQQuote, pk=pk, tenant=tenant)
 
     new_quote = cpq_create_revision(quote, user=request.user)
-    write_audit_log(request.user, "create_revision", "CPQQuote", new_quote.id, f"Created revision {new_quote.number} from {quote.number}")
+    write_audit_log(request.user, new_quote, "create_revision", {"action": "create_revision", "from_quote": quote.number, "new_quote": new_quote.number}, tenant=tenant)
     messages.success(request, f"Created Revision {new_quote.revision_number} ({new_quote.number}). Prior revision marked superseded.")
     return redirect("sales:cpq_quote_detail", pk=new_quote.pk)
 
@@ -305,7 +305,7 @@ def quote_portal_sign(request, token):
         cpq_render_proposal_html(quote)
 
         # Audit
-        write_audit_log(None, "portal_sign", "CPQQuote", quote.id, f"Customer e-signed proposal {quote.number} by {quote.signer_name}")
+        write_audit_log(None, quote, "portal_sign", {"action": "portal_sign", "signer_name": quote.signer_name}, tenant=quote.tenant)
         messages.success(request, "Thank you! The proposal has been digitally signed and accepted.")
         return redirect("sales:quote_portal_view", token=token)
 
@@ -376,7 +376,7 @@ def quote_convert_to_order(request, pk):
 
     try:
         order = cpq_convert_to_sales_order(quote, user=request.user)
-        write_audit_log(request.user, "convert_order", "CPQQuote", quote.id, f"Converted quote {quote.number} to SalesOrder {order.number}")
+        write_audit_log(request.user, quote, "convert_order", {"action": "convert_order", "sales_order": order.number}, tenant=tenant)
         messages.success(request, f"Quote {quote.number} successfully converted to Sales Order {order.number}!")
         return redirect("sales:cpq_quote_detail", pk=quote.pk)
     except Exception as exc:
