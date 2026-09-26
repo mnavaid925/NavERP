@@ -26,6 +26,8 @@
                     <span class="badge badge-amber">{{ quote.get_status_display }}</span>
                 {% elif quote.status == 'rejected' or quote.status == 'declined' %}
                     <span class="badge badge-red">{{ quote.get_status_display }}</span>
+                {% elif quote.status == 'draft' %}
+                    <span class="badge badge-info">{{ quote.get_status_display }}</span>
                 {% else %}
                     <span class="badge badge-muted">{{ quote.get_status_display }}</span>
                 {% endif %}
