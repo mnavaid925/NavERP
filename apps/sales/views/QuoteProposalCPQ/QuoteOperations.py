@@ -297,7 +297,7 @@ def quote_portal_view(request, token):
     # Recalculate to ensure accurate figures in memory without write amplification
     cpq_recalc_quote_totals(quote, save=False)
 
-    lines = list(quote.lines.select_related("product").order_by("sequence", "id"))
+    lines = list(quote.lines.select_related("product", "parent_line").order_by("sequence", "id"))
     form = CPQPortalSignForm(initial={
         "signer_name": quote.contact.name if quote.contact else "",
         "signer_email": getattr(quote.contact, "email", ""),
