@@ -34,8 +34,8 @@ def product_bundle_list(request):
 
     # Filters
     bundle_id = request.GET.get("bundle", "").strip()
-    if bundle_id:
-        qs = qs.filter(bundle_product_id=bundle_id)
+    if bundle_id and bundle_id.isdigit():
+        qs = qs.filter(bundle_product_id=int(bundle_id))
 
     option_group = request.GET.get("option_group", "").strip()
     if option_group:
@@ -97,8 +97,9 @@ def product_bundle_create(request):
             return redirect("sales:product_bundle_detail", pk=bundle_opt.pk)
     else:
         initial = {}
-        if request.GET.get("bundle"):
-            initial["bundle_product"] = request.GET.get("bundle")
+        bundle_param = request.GET.get("bundle", "").strip()
+        if bundle_param and bundle_param.isdigit():
+            initial["bundle_product"] = bundle_param
         form = ProductBundleOptionForm(tenant=request.tenant, initial=initial)
 
     return render(request, "sales/quote_proposal_cpq/productbundleoption/form.html", {
