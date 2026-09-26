@@ -163,6 +163,7 @@ class CPQQuote(TenantNumbered):
 
     class Meta:
         ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
         indexes = [
             models.Index(fields=["tenant", "status"], name="sales_cpq_tnt_status_idx"),
             models.Index(fields=["tenant", "quote_group_id"], name="sales_cpq_tnt_group_idx"),
