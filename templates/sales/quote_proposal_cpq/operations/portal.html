@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ quote.name }} — Commercial Proposal Acceptance</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-100 text-slate-900 font-sans antialiased min-h-screen py-8 px-4">
+    <div class="max-w-4xl mx-auto space-y-6">
+        <!-- Messages -->
+        {% if messages %}
+            <div class="space-y-2">
+                {% for message in messages %}
+                    <div class="p-4 rounded-lg text-sm font-medium {% if message.tags == 'success' %}bg-emerald-50 text-emerald-800 border border-emerald-200{% elif message.tags == 'error' %}bg-red-50 text-red-800 border border-red-200{% else %}bg-blue-50 text-blue-800 border border-blue-200{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <!-- Document Card -->
+        <div class="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
+            <!-- Header Banner -->
+            <div class="p-8 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <span class="text-xs uppercase tracking-wider font-semibold text-blue-600">Customer Quote Portal</span>
+                    <h1 class="text-2xl font-bold text-slate-900 mt-1">{{ quote.name }}</h1>
+                    <p class="text-sm text-slate-500 mt-0.5">Reference: <strong>{{ quote.number }}</strong> (Rev {{ quote.revision_number }}) · Organization: {{ quote.tenant.name }}</p>
+                </div>
+                <div class="text-right">
+                    {% if quote.status == 'accepted' or quote.status == 'converted' %}
+                        <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                            ✓ Accepted &amp; Signed
+                        </span>
+                    {% elif quote.is_expired %}
+                        <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                            Expired
+                        </span>
+                    {% else %}
+                        <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                            Ready for Acceptance
+                        </span>
+                    {% endif %}
+                    <div class="text-xs text-slate-400 mt-1">Valid Until: {{ quote.valid_until|date:"M d, Y"|default:"30 Days" }}</div>
+                </div>
+            </div>
+
+            <!-- Content Area -->
+            <div class="p-8 space-y-8">
+                <!-- Proposal Meta -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 rounded-lg bg-slate-50 border border-slate-100 text-sm">
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase font-medium">Prepared For:</span>
+                        <div class="font-semibold text-slate-800 mt-0.5">{{ quote.account.name|default:"Valued Customer" }}</div>
+                        <div class="text-slate-500 text-xs">Attn: {{ quote.contact.name|default:"Purchasing Team" }}</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase font-medium">Prepared By:</span>
+                        <div class="font-semibold text-slate-800 mt-0.5">{{ quote.owner.get_full_name|default:quote.owner.username }}</div>
+                        <div class="text-slate-500 text-xs">{{ quote.tenant.name }}</div>
+                    </div>
+                </div>
+
+                <!-- Interactive Line Items Table -->
+                <div>
+                    <h3 class="text-base font-semibold text-slate-900 mb-3">Itemized Scope &amp; Options</h3>
+                    <div class="border border-slate-200 rounded-lg overflow-hidden">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="bg-slate-100 text-slate-600 text-xs uppercase border-b border-slate-200">
+                                <tr>
+                                    <th class="p-3">Item / Description</th>
+                                    <th class="p-3 text-right">Quantity</th>
+                                    <th class="p-3 text-right">Unit Price</th>
+                                    <th class="p-3 text-right">Discount</th>
+                                    <th class="p-3 text-right">Total</th>
+                                    {% if quote.status != 'accepted' and quote.status != 'converted' %}
+                                        <th class="p-3 text-center">Include</th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-200">
+                                {% for line in lines %}
+                                    <tr class="{% if line.parent_line %}bg-slate-50/70{% endif %} {% if line.is_optional and not line.is_selected %}opacity-50{% endif %}">
+                                        <td class="p-3">
+                                            <div class="flex items-center">
+                                                {% if line.parent_line %}<span class="text-slate-400 mr-2 ml-3">↳</span>{% endif %}
+                                                <div>
+                                                    <div class="font-medium text-slate-900">{{ line.description }}</div>
+                                                    {% if line.line_type == 'bundle_parent' %}
+                                                        <span class="inline-block mt-0.5 px-2 py-0.5 text-xs bg-purple-100 text-purple-800 rounded font-medium">Package Bundle</span>
+                                                    {% elif line.is_optional %}
+                                                        <span class="inline-block mt-0.5 px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded font-medium">Optional Add-on</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="p-3 text-right font-mono">{{ line.quantity }}</td>
+                                        <td class="p-3 text-right font-mono">${{ line.unit_price:,.2f }}</td>
+                                        <td class="p-3 text-right font-mono text-slate-500">{{ line.discount_pct }}%</td>
+                                        <td class="p-3 text-right font-mono font-semibold text-slate-900">
+                                            {% if line.is_optional and not line.is_selected %}
+                                                <span class="text-slate-400 line-through">${{ line.line_total:,.2f }}</span>
+                                            {% else %}
+                                                ${{ line.line_total:,.2f }}
+                                            {% endif %}
+                                        </td>
+                                        {% if quote.status != 'accepted' and quote.status != 'converted' %}
+                                            <td class="p-3 text-center">
+                                                {% if line.is_optional %}
+                                                    <form method="POST" action="{% url 'sales:quote_portal_toggle_line' quote.signing_token line.id %}">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="text-xs px-2.5 py-1 rounded font-medium transition {% if line.is_selected %}bg-emerald-100 text-emerald-800 hover:bg-emerald-200{% else %}bg-slate-200 text-slate-700 hover:bg-slate-300{% endif %}">
+                                                            {% if line.is_selected %}Selected ✓{% else %}+ Add to Quote{% endif %}
+                                                        </button>
+                                                    </form>
+                                                {% else %}
+                                                    <span class="text-xs text-slate-400">Included</span>
+                                                {% endif %}
+                                            </td>
+                                        {% endif %}
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Financial Totals Waterfall -->
+                <div class="flex justify-end">
+                    <div class="w-80 bg-slate-50 p-5 rounded-lg border border-slate-200 space-y-2 text-sm">
+                        <div class="flex justify-between text-slate-600">
+                            <span>Subtotal:</span>
+                            <span class="font-mono">${{ quote.subtotal:,.2f }}</span>
+                        </div>
+                        {% if quote.discount_total > 0 %}
+                            <div class="flex justify-between text-amber-700">
+                                <span>Discount ({{ quote.header_discount_pct }}%):</span>
+                                <span class="font-mono">-${{ quote.discount_total:,.2f }}</span>
+                            </div>
+                        {% endif %}
+                        <div class="flex justify-between text-slate-600">
+                            <span>Estimated Taxes:</span>
+                            <span class="font-mono">${{ quote.tax_total:,.2f }}</span>
+                        </div>
+                        <div class="pt-3 border-t border-slate-300 flex justify-between text-base font-bold text-slate-900">
+                            <span>Total Investment:</span>
+                            <span class="text-xl text-blue-700 font-mono">${{ quote.total:,.2f }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Terms -->
+                {% if quote.terms_and_conditions %}
+                    <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <h4 class="text-xs uppercase font-semibold text-slate-500 mb-2">Terms &amp; Conditions</h4>
+                        <div class="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{{ quote.terms_and_conditions }}</div>
+                    </div>
+                {% endif %}
+
+                <!-- E-Signature Section -->
+                {% if quote.signed_at %}
+                    <div class="p-6 bg-emerald-50 rounded-xl border border-emerald-200">
+                        <div class="flex items-center space-x-3 mb-2">
+                            <span class="text-emerald-700 font-bold text-lg">✓ Proposal Accepted &amp; E-Signed</span>
+                        </div>
+                        <p class="text-sm text-emerald-800">
+                            Signed by <strong>{{ quote.signer_name }}</strong> ({{ quote.signer_title }}) on {{ quote.signed_at|date:"F d, Y H:i:s T" }}.
+                        </p>
+                        <p class="text-xs text-emerald-600 mt-1">Signer Email: {{ quote.signer_email }} · Digital Signature: <em>{{ quote.signature_data }}</em></p>
+                    </div>
+                {% elif quote.is_expired %}
+                    <div class="p-6 bg-red-50 rounded-xl border border-red-200 text-center">
+                        <p class="text-red-700 font-semibold">This proposal has expired. Please contact {{ quote.owner.get_full_name|default:quote.owner.username }} for a refreshed quotation.</p>
+                    </div>
+                {% else %}
+                    <!-- E-Signing Form -->
+                    <div class="p-6 bg-blue-50/50 rounded-xl border border-blue-200">
+                        <h3 class="text-lg font-bold text-slate-900 mb-1">Accept Proposal &amp; Sign</h3>
+                        <p class="text-xs text-slate-500 mb-5">By submitting this form, you acknowledge and agree to the scope and pricing outlined above.</p>
+
+                        <form method="POST" action="{% url 'sales:quote_portal_sign' quote.signing_token %}" class="space-y-4">
+                            {% csrf_token %}
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-700 mb-1">Full Name <span class="text-red-500">*</span></label>
+                                    {{ form.signer_name }}
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-700 mb-1">Title / Role <span class="text-red-500">*</span></label>
+                                    {{ form.signer_title }}
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-700 mb-1">Business Email <span class="text-red-500">*</span></label>
+                                    {{ form.signer_email }}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Digital Signature <span class="text-red-500">*</span></label>
+                                {{ form.signature_data }}
+                                <p class="text-xs text-slate-400 mt-1">Type your full legal name as your electronic signature.</p>
+                            </div>
+
+                            <div class="pt-2 flex items-start space-x-2">
+                                {{ form.agree_terms }}
+                                <label class="text-xs text-slate-700 cursor-pointer">
+                                    I confirm I am authorized to bind my organization to this commercial proposal and accept all stated terms.
+                                </label>
+                            </div>
+
+                            <div class="pt-4">
+                                <button type="submit" class="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition text-center text-sm">
+                                    Confirm &amp; Digitally Accept Proposal (${{ quote.total:,.2f }})
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
