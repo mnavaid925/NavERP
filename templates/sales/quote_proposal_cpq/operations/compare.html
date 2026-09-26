@@ -32,17 +32,17 @@
         <div class="stat-card">
             <div class="text-xs uppercase text-slate-500 font-medium">Subtotal Variance</div>
             <div class="text-2xl font-bold mt-1 {% if diff_data.subtotal_delta > 0 %}text-emerald-600{% elif diff_data.subtotal_delta < 0 %}text-red-600{% else %}text-slate-700{% endif %}">
-                {% if diff_data.subtotal_delta > 0 %}+{% endif %}${{ diff_data.subtotal_delta:,.2f }}
+                {% if diff_data.subtotal_delta > 0 %}+{% endif %}${{ diff_data.subtotal_delta|floatformat:2 }}
             </div>
-            <div class="text-xs text-slate-400 mt-0.5">Rev {{ quote_a.revision_number }}: ${{ quote_a.subtotal:,.2f }} &rarr; Rev {{ quote_b.revision_number }}: ${{ quote_b.subtotal:,.2f }}</div>
+            <div class="text-xs text-slate-400 mt-0.5">Rev {{ quote_a.revision_number }}: ${{ quote_a.subtotal|floatformat:2 }} &rarr; Rev {{ quote_b.revision_number }}: ${{ quote_b.subtotal|floatformat:2 }}</div>
         </div>
 
         <div class="stat-card">
             <div class="text-xs uppercase text-slate-500 font-medium">Total Investment Delta</div>
             <div class="text-2xl font-bold mt-1 {% if diff_data.total_delta > 0 %}text-blue-600{% elif diff_data.total_delta < 0 %}text-amber-600{% else %}text-slate-700{% endif %}">
-                {% if diff_data.total_delta > 0 %}+{% endif %}${{ diff_data.total_delta:,.2f }}
+                {% if diff_data.total_delta > 0 %}+{% endif %}${{ diff_data.total_delta|floatformat:2 }}
             </div>
-            <div class="text-xs text-slate-400 mt-0.5">Rev {{ quote_a.revision_number }}: ${{ quote_a.total:,.2f }} &rarr; Rev {{ quote_b.revision_number }}: ${{ quote_b.total:,.2f }}</div>
+            <div class="text-xs text-slate-400 mt-0.5">Rev {{ quote_a.revision_number }}: ${{ quote_a.total|floatformat:2 }} &rarr; Rev {{ quote_b.revision_number }}: ${{ quote_b.total|floatformat:2 }}</div>
         </div>
 
         <div class="stat-card">
@@ -96,13 +96,13 @@
                                 {{ item.line_b.quantity|default:"—" }}
                             </td>
                             <td class="text-right font-mono text-sm text-slate-600">
-                                {% if item.line_a %}${{ item.line_a.unit_price:,.2f }}{% else %}—{% endif %}
+                                {% if item.line_a %}${{ item.line_a.unit_price|floatformat:2 }}{% else %}—{% endif %}
                             </td>
                             <td class="text-right font-mono text-sm font-semibold text-slate-900">
-                                {% if item.line_b %}${{ item.line_b.unit_price:,.2f }}{% else %}—{% endif %}
+                                {% if item.line_b %}${{ item.line_b.unit_price|floatformat:2 }}{% else %}—{% endif %}
                             </td>
                             <td class="text-right font-mono text-sm font-bold {% if item.total_delta > 0 %}text-emerald-700{% elif item.total_delta < 0 %}text-red-700{% else %}text-slate-600{% endif %}">
-                                {% if item.total_delta > 0 %}+{% endif %}${{ item.total_delta:,.2f }}
+                                {% if item.total_delta > 0 %}+{% endif %}${{ item.total_delta|floatformat:2 }}
                             </td>
                         </tr>
                     {% empty %}
