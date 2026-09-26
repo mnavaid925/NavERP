@@ -18,16 +18,9 @@ def cpq_quote_line_list(request, quote_pk):
     quote = get_object_or_404(CPQQuote, pk=quote_pk, tenant=tenant)
     lines = quote.lines.select_related("product", "item", "uom", "parent_line").order_by("sequence", "id")
 
-    stats = {
-        "total_lines": lines.count(),
-        "bundles": lines.filter(line_type="bundle_parent").count(),
-        "optional": lines.filter(is_optional=True).count(),
-    }
-
     return render(request, "sales/quote_proposal_cpq/cpqquoteline/list.html", {
         "quote": quote,
         "lines": lines,
-        "stats": stats,
     })
 
 
