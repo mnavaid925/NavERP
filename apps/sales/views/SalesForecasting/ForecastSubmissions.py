@@ -19,7 +19,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
 from django.urls import reverse
 
@@ -28,15 +28,19 @@ from apps.core.crud import apply_search, as_db_int, paginate
 from apps.core.models import OrgUnit
 from apps.core.utils import write_audit_log
 from apps.crm.models import Opportunity, SalesQuota, Territory
+from apps.sales.forecast_services import (
+    AI_GATE_MIN_PER_CLASS,
+    _call_period,
+    _open_opportunities,
+    _rollup_by_currency,
+    forecast_ai_gate,
+    forecast_submission_snapshot,
+)
 from apps.sales.forms.SalesForecasting.ForecastSubmissions import (
     ForecastReviewForm,
     ForecastSubmissionForm,
 )
-from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import OpportunityOutcome
-from apps.sales.models.OpportunityPipeline.Pipelines import (
-    OpportunityPipelinePlacement,
-    Pipeline,
-)
+from apps.sales.models.OpportunityPipeline.Pipelines import Pipeline
 from apps.sales.models.SalesForecasting.ForecastPeriods import (
     ForecastPeriod,
     _optional_sales_model,
@@ -51,9 +55,10 @@ TEMPLATE_LIST = "sales/salesforecasting/forecastsubmission/list.html"
 TEMPLATE_DETAIL = "sales/salesforecasting/forecastsubmission/detail.html"
 TEMPLATE_FORM = "sales/salesforecasting/forecastsubmission/form.html"
 
-#: The AI eligibility gate (contract 0.5): BOTH sides must clear it, counted from the
-#: append-only outcome table. Below it, no prediction value is ever rendered.
-AI_GATE_MIN_PER_CLASS = 40
+# `forecast_submission_snapshot` (the three snapshot figures) and `forecast_ai_gate` (the
+# 40-won AND 40-lost gate) now live in `apps/sales/forecast_services.py`, along with the
+# private period-window/currency/opportunity helpers they share. They are services, not
+# views, so they are not re-exported from `apps.sales.views`.
 
 
 def _is_tenant_admin(user):
@@ -140,156 +145,6 @@ def _quotas(tenant):
     return list(
         SalesQuota.objects.filter(tenant=tenant)
         .order_by("-period_year", "period_number")[:500]
-    )
-
-
-def _period_window(period):
-    """``(start_date, end_date)`` for a period, or ``None`` when undated.
-
-    Dates, not datetimes: ``closed_at`` is matched with ``__date__range`` so the window is
-    evaluated in the database's own date semantics on both MySQL and SQLite, and a
-    timezone offset can never push a boundary close out of the period.
-    """
-    if not period or not period.start_date or not period.end_date:
-        return None
-    return period.start_date, period.end_date
-
-
-def _reporting_currency_id(period):
-    """The currency a call's scalar amounts are stated in — the period's, or none."""
-    if period is None or not period.reporting_currency_id:
-        return None
-    return period.reporting_currency_id
-
-
-def _open_opportunities(tenant, owner, territory, pipeline, period):
-    """The open opportunities behind this call, inside the period window.
-
-    ``closed_lost`` is excluded: a lost deal is not forecastable. No currency filter is
-    applied here — the caller decides, because the scalar snapshot and the per-currency
-    breakdown want different things from the same base.
-    """
-    queryset = Opportunity.objects.filter(tenant=tenant)
-    if owner is not None:
-        queryset = queryset.filter(owner=owner)
-    if territory is not None:
-        queryset = queryset.filter(territory=territory)
-    if pipeline is not None:
-        queryset = queryset.filter(
-            pk__in=OpportunityPipelinePlacement.objects.filter(
-                pipeline=pipeline, tenant=tenant,
-            ).values_list("opportunity_id", flat=True)
-        )
-    window = _period_window(period)
-    if window is not None:
-        queryset = queryset.filter(close_date__gte=window[0], close_date__lte=window[1])
-    return queryset.exclude(stage="closed_lost")
-
-
-def _rollup_by_currency(opportunities):
-    """``{currency_code: {"weighted": Decimal, "open": int}}`` in ONE pass.
-
-    Each verified currency keeps its own bucket and a missing currency lands in an explicit
-    ``unspecified`` rather than defaulting to USD; the codes are never added together.
-    Weighting uses ``OpportunityPipelinePlacement.effective_probability`` — the property
-    that already prefers ``probability_override`` over the stage probability — and falls
-    back to the opportunity's own probability when the deal is not on a pipeline.
-    """
-    rollups = {}
-    for opportunity in opportunities.select_related(
-        "currency", "sales_pipeline_placement", "sales_pipeline_placement__current_stage",
-    ):
-        placement = getattr(opportunity, "sales_pipeline_placement", None)
-        probability = (
-            placement.effective_probability if placement is not None
-            else opportunity.probability
-        )
-        code = opportunity.currency.code if opportunity.currency_id else "unspecified"
-        bucket = rollups.setdefault(code, {"weighted": Decimal("0"), "open": 0})
-        bucket["weighted"] += Decimal(opportunity.amount or 0) * Decimal(probability) / Decimal("100")
-        bucket["open"] += 1
-    for bucket in rollups.values():
-        bucket["weighted"] = bucket["weighted"].quantize(Decimal("0.01"))
-    return rollups
-
-
-def forecast_submission_snapshot(submission, tenant=None):
-    """The three service-written snapshot figures for one call, as plain ``Decimal``.
-
-    The scalar ``weighted_amount`` and ``actual_amount`` are counted in the period's
-    **reporting currency only**, so a single stored figure is never a sum over unlike
-    amounts (L29). A period with no reporting currency adopts the call's own single
-    currency and reports zero when the call genuinely spans several — the per-currency
-    breakdown on the detail page is where those are still visible.
-
-    ``quota_amount`` is frozen by value from ``crm.SalesQuota.target_amount``, so a later
-    quota edit never rewrites this call. ``actual_amount`` reads the append-only
-    ``sales.OpportunityOutcome`` table for wins closed inside the period window.
-    """
-    tenant = tenant or submission.tenant
-    period = _call_period(submission)
-    currency_id = _reporting_currency_id(period)
-    reporting_code = period.reporting_currency.code if currency_id is not None else None
-    rollups = _rollup_by_currency(_open_opportunities(
-        tenant, submission.owner, submission.territory, submission.pipeline, period,
-    ))
-    if reporting_code is not None:
-        weighted = rollups.get(reporting_code, {}).get("weighted", Decimal("0"))
-    elif len(rollups) == 1:
-        weighted = next(iter(rollups.values()))["weighted"]
-    else:
-        weighted = Decimal("0")
-    quota = (
-        Decimal(submission.quota_ref.target_amount or 0)
-        if submission.quota_ref_id else Decimal("0")
-    )
-    actual = Decimal("0")
-    window = _period_window(period)
-    if window is not None:
-        won = OpportunityOutcome.objects.filter(
-            tenant=tenant, result="won", closed_at__date__range=window,
-        )
-        if submission.owner_id:
-            won = won.filter(opportunity__owner_id=submission.owner_id)
-        if submission.territory_id:
-            won = won.filter(opportunity__territory_id=submission.territory_id)
-        if currency_id is not None:
-            won = won.filter(opportunity__currency_id=currency_id)
-        actual = Decimal(won.aggregate(total=Sum("opportunity__amount"))["total"] or 0)
-    return {
-        "weighted_amount": weighted.quantize(Decimal("0.01")),
-        "quota_amount": quota.quantize(Decimal("0.01")),
-        "actual_amount": actual.quantize(Decimal("0.01")),
-        "currency_codes": sorted(rollups),
-    }
-
-
-def _call_period(submission):
-    """The call's period, or ``None`` when it has no computed window to scope by."""
-    if not submission.period_id:
-        return None
-    period = submission.period
-    return period if (period.start_date and period.end_date) else None
-
-
-def forecast_ai_gate(tenant):
-    """``(available, message)`` for the AI block — the 40-won AND 40-lost gate."""
-    if tenant is None:
-        return False, "Select a tenant workspace to see a prediction."
-    counts = {
-        row["result"]: row["total"]
-        for row in OpportunityOutcome.objects.filter(tenant=tenant)
-        .values("result")
-        .annotate(total=Count("pk"))
-    }
-    won = counts.get("won", 0)
-    lost = counts.get("lost", 0)
-    if won >= AI_GATE_MIN_PER_CLASS and lost >= AI_GATE_MIN_PER_CLASS:
-        return True, ""
-    return False, (
-        f"A prediction needs at least {AI_GATE_MIN_PER_CLASS} won and "
-        f"{AI_GATE_MIN_PER_CLASS} lost recorded opportunities. This workspace has "
-        f"{won} won and {lost} lost."
     )
 
 
