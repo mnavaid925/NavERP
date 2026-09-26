@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Version Diff: Rev {{ quote_a.revision_number }} vs Rev {{ quote_b.revision_number }} — CPQ{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header">
+        <div>
+            <nav class="breadcrumb mb-2">
+                <a href="{% url 'sales:opportunity_pipeline_list' %}" class="text-slate-500 hover:text-slate-700">Sales</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:cpq_quote_list' %}" class="text-slate-500 hover:text-slate-700">Quotes</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <a href="{% url 'sales:quote_version_list' %}" class="text-slate-500 hover:text-slate-700">Versioning</a>
+                <span class="mx-2 text-slate-400">/</span>
+                <span class="text-slate-800 font-medium">Revision Comparison</span>
+            </nav>
+            <h1 class="page-title">Quote Revision Comparison</h1>
+            <p class="text-sm text-slate-500 mt-1">
+                Comparing <strong>{{ quote_a.number }} (Rev {{ quote_a.revision_number }})</strong> against <strong>{{ quote_b.number }} (Rev {{ quote_b.revision_number }})</strong>
+            </p>
+        </div>
+        <div class="page-actions flex space-x-2">
+            <a href="{% url 'sales:cpq_quote_detail' quote_a.pk %}" class="btn btn-outline">
+                <i data-lucide="arrow-left" class="w-4 h-4 mr-1.5"></i> Back to Quote
+            </a>
+        </div>
+    </div>
+
+    <!-- Variance Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="stat-card">
+            <div class="text-xs uppercase text-slate-500 font-medium">Subtotal Variance</div>
+            <div class="text-2xl font-bold mt-1 {% if diff_data.subtotal_delta > 0 %}text-emerald-600{% elif diff_data.subtotal_delta < 0 %}text-red-600{% else %}text-slate-700{% endif %}">
+                {% if diff_data.subtotal_delta > 0 %}+{% endif %}${{ diff_data.subtotal_delta:,.2f }}
+            </div>
+            <div class="text-xs text-slate-400 mt-0.5">Rev {{ quote_a.revision_number }}: ${{ quote_a.subtotal:,.2f }} &rarr; Rev {{ quote_b.revision_number }}: ${{ quote_b.subtotal:,.2f }}</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="text-xs uppercase text-slate-500 font-medium">Total Investment Delta</div>
+            <div class="text-2xl font-bold mt-1 {% if diff_data.total_delta > 0 %}text-blue-600{% elif diff_data.total_delta < 0 %}text-amber-600{% else %}text-slate-700{% endif %}">
+                {% if diff_data.total_delta > 0 %}+{% endif %}${{ diff_data.total_delta:,.2f }}
+            </div>
+            <div class="text-xs text-slate-400 mt-0.5">Rev {{ quote_a.revision_number }}: ${{ quote_a.total:,.2f }} &rarr; Rev {{ quote_b.revision_number }}: ${{ quote_b.total:,.2f }}</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="text-xs uppercase text-slate-500 font-medium">Profit Margin Shift</div>
+            <div class="text-2xl font-bold mt-1 {% if diff_data.margin_delta > 0 %}text-emerald-600{% elif diff_data.margin_delta < 0 %}text-red-600{% else %}text-slate-700{% endif %}">
+                {% if diff_data.margin_delta > 0 %}+{% endif %}{{ diff_data.margin_delta }}%
+            </div>
+            <div class="text-xs text-slate-400 mt-0.5">Rev {{ quote_a.revision_number }}: {{ quote_a.margin_pct }}% &rarr; Rev {{ quote_b.revision_number }}: {{ quote_b.margin_pct }}%</div>
+        </div>
+    </div>
+
+    <!-- Line-by-Line Diff Table -->
+    <div class="card">
+        <div class="card-header border-b border-slate-200 p-4">
+            <h2 class="text-base font-semibold text-slate-900">Line Items Diff Breakdown</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Item Description</th>
+                        <th class="text-right">Rev {{ quote_a.revision_number }} Qty</th>
+                        <th class="text-right">Rev {{ quote_b.revision_number }} Qty</th>
+                        <th class="text-right">Rev {{ quote_a.revision_number }} Price</th>
+                        <th class="text-right">Rev {{ quote_b.revision_number }} Price</th>
+                        <th class="text-right">Line Total Delta</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in diff_data.line_diffs %}
+                        <tr class="{% if item.status == 'added' %}bg-emerald-50/50{% elif item.status == 'removed' %}bg-red-50/50{% elif item.status == 'modified' %}bg-amber-50/50{% endif %}">
+                            <td>
+                                {% if item.status == 'added' %}
+                                    <span class="badge badge-green text-xs">+ Added</span>
+                                {% elif item.status == 'removed' %}
+                                    <span class="badge badge-red text-xs">- Removed</span>
+                                {% elif item.status == 'modified' %}
+                                    <span class="badge badge-amber text-xs">~ Modified</span>
+                                {% else %}
+                                    <span class="badge badge-muted text-xs">Unchanged</span>
+                                {% endif %}
+                            </td>
+                            <td class="font-medium text-slate-900">
+                                {{ item.description }}
+                            </td>
+                            <td class="text-right font-mono text-sm text-slate-600">
+                                {{ item.line_a.quantity|default:"—" }}
+                            </td>
+                            <td class="text-right font-mono text-sm font-semibold text-slate-900">
+                                {{ item.line_b.quantity|default:"—" }}
+                            </td>
+                            <td class="text-right font-mono text-sm text-slate-600">
+                                {% if item.line_a %}${{ item.line_a.unit_price:,.2f }}{% else %}—{% endif %}
+                            </td>
+                            <td class="text-right font-mono text-sm font-semibold text-slate-900">
+                                {% if item.line_b %}${{ item.line_b.unit_price:,.2f }}{% else %}—{% endif %}
+                            </td>
+                            <td class="text-right font-mono text-sm font-bold {% if item.total_delta > 0 %}text-emerald-700{% elif item.total_delta < 0 %}text-red-700{% else %}text-slate-600{% endif %}">
+                                {% if item.total_delta > 0 %}+{% endif %}${{ item.total_delta:,.2f }}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-6 text-slate-400">
+                                No differences identified between these revisions.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
