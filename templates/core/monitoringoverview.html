@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Monitoring{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Monitoring, Logging &amp; Observability</h1>
+      <div class="breadcrumb"><span>Monitoring</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:health_board' %}" class="btn btn-outline"><i data-lucide="activity"></i> Health</a>
+      <a href="{% url 'core:firing_board' %}" class="btn btn-outline"><i data-lucide="flame"></i> Firing</a>
+      <a href="{% url 'core:capacity_board' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Capacity</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Nothing on this page is monitoring
+      anything.</strong> NavERP has no probe, no collector, no log pipeline and no scheduler. What follows
+      is a register of claims a person wrote, and the figures below count those claims.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The registers</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Components registered</dt><dd>
+          {% if component_total %}
+            <a href="{% url 'core:service_component_list' %}">{{ component_total }}</a>
+            <div class="text-muted">{{ operational_count }} hand-set operational</div>
+          {% else %}
+            <span class="text-muted">none — so there is no status to report</span>
+          {% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Never given a status</dt><dd>
+          {% if component_total %}
+            {% if unreported_count %}<span class="badge badge-amber">{{ unreported_count }}</span>{% else %}{{ unreported_count }}{% endif %}
+            <div class="text-muted">readable from one column, so 0 is a real answer here</div>
+          {% else %}
+            <span class="text-muted">not applicable — nothing is registered</span>
+          {% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Thresholds declared</dt><dd>
+          <a href="{% url 'core:alert_rule_list' %}">{{ rule_total }}</a>
+          <div class="text-muted">{{ active_rule_count }} marked active — none of them is evaluated</div>
+        </dd></div>
+        <div class="detail-item"><dt>Firings recorded</dt><dd>
+          <a href="{% url 'core:alert_event_list' %}">{{ open_event_count }}</a> open
+          <div class="text-muted">{{ firing_count }} firing, {{ unmeasured_count }} with no reading recorded</div>
+        </dd></div>
+        <div class="detail-item"><dt>Incidents &amp; notices</dt><dd>
+          {% if active_incident_count %}
+            <a href="{% url 'core:incident_list' %}">{{ active_incident_count }}</a> open
+          {% else %}
+            <a href="{% url 'core:incident_list' %}">{{ active_incident_count }}</a> open
+            <div class="text-muted">NavERP recorded no outage — it was not watching for one</div>
+          {% endif %}
+        </dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The boards</h2></div>
+    <div class="card-body">
+      <ul>
+        <li><a href="{% url 'core:health_board' %}">Health board</a> — the roll-up across registered components, worst first.</li>
+        <li><a href="{% url 'core:firing_board' %}">Firing board</a> — what somebody reported. An empty board is an unmonitored one, not a healthy one.</li>
+        <li><a href="{% url 'core:capacity_board' %}">Capacity board</a> — recorded consumption against a declared scaling trigger. The quota itself belongs to billing.</li>
+      </ul>
+    </div>
+  </div>
+
+  {% if latest_metrics %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Latest workspace health readings</h2></div>
+      <div class="card-body">
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th>Metric</th><th>Value</th><th>Status</th><th>Recorded</th></tr></thead>
+          <tbody>
+            {% for m in latest_metrics %}
+              <tr>
+                <td>{{ m.get_metric_display }}</td>
+                <td>{{ m.value }}</td>
+                <td>
+                  {% if m.status == "ok" %}<span class="badge badge-green">{{ m.get_status_display }}</span>
+                  {% elif m.status == "warning" %}<span class="badge badge-amber">{{ m.get_status_display }}</span>
+                  {% else %}<span class="badge badge-red">{{ m.get_status_display }}</span>{% endif %}
+                </td>
+                <td>{% if m.recorded_at %}{{ m.recorded_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">not timestamped</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table></div>
+        <p class="text-muted"><i data-lucide="info"></i> These are 0.1's workspace usage figures, read here
+          and never copied. They are the one place in 0.17 where a recorded reading exists — and it is a
+          reading somebody entered, not one NavERP took.</p>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
