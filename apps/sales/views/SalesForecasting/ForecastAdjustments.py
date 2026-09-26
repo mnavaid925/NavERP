@@ -39,14 +39,11 @@ from apps.sales.models.OpportunityTeams.OpportunityTeams import OpportunityTeamM
 from apps.sales.models.SalesForecasting.ForecastAdjustments import ForecastAdjustment
 from apps.sales.models.SalesForecasting.ForecastSubmissions import ForecastSubmission
 from apps.sales.views._common import *  # noqa: F401,F403
+from apps.sales.views._helpers import is_tenant_admin as _is_tenant_admin
 
 TEMPLATE_LIST = "sales/salesforecasting/forecastadjustment/list.html"
 TEMPLATE_DETAIL = "sales/salesforecasting/forecastadjustment/detail.html"
 TEMPLATE_FORM = "sales/salesforecasting/forecastadjustment/form.html"
-
-
-def _is_tenant_admin(user):
-    return bool(getattr(user, "is_superuser", False) or getattr(user, "is_tenant_admin", False))
 
 
 def _acting_org_unit(user, tenant):
