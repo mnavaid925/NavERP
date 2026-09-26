@@ -144,6 +144,31 @@ class IncidentForm(TenantModelForm):
             "public_note": "Public note (what a status page would show)",
             "internal_note": "Internal note (never public)",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # `primary_alert` is an N+1 waiting to happen, and this is where it is defused.
+        #
+        # `AlertEvent.__str__` renders `self.rule`, so every `<option>` Django builds calls a method
+        # that dereferences a foreign key. `TenantModelForm` scopes the queryset by tenant but does not
+        # join anything, so without this the compiled SQL is a bare `SELECT ... FROM core_alertevent`
+        # and each option costs its own round trip — measured at 200 events rendering 201 queries on the
+        # incident create page.
+        #
+        # The fix belongs HERE and not in `forms/_common.py`: changing the shared base to
+        # `select_related` every FK would be the general cure, but it alters the queryset of every
+        # `ModelChoiceField` in every app and would put committed tests in three other apps at risk.
+        # A local `__init__` cannot be re-filtered away by the base class's scoping loop, which runs
+        # inside `super().__init__` above.
+        field = self.fields.get("primary_alert")
+        if field is not None and field.queryset is not None:
+            # Capped as well as joined: an unbounded dropdown grows forever, and an operator picking
+            # "which firing caused this" wants the recent ones, not every firing since the register
+            # began. `-fired_at` puts the most relevant first.
+            field.queryset = (field.queryset
+                              .select_related("rule")
+                              .order_by("-fired_at", "-id")[:200])
+
     # NO `save()` override, deliberately: there is no snapshot to write and no system stamp this form is
     # allowed to set. `resolved_at` is derived in the MODEL's `save()` and `notified_at` is written only
     # by the POST-only `incident_notify` action. Confirm this before adding one (plan §2.4).
