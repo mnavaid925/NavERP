@@ -121,7 +121,11 @@ def product_bundle_detail(request, pk):
     sibling_options = ProductBundleOption.objects.filter(
         tenant=request.tenant,
         bundle_product=bundle_opt.bundle_product
-    ).exclude(pk=bundle_opt.pk).select_related("component_product")
+    ).exclude(pk=bundle_opt.pk).select_related(
+        # component_product and bundle_product both feed ProductBundleOption.__str__,
+        # so stringifying a sibling must not trigger a lazy fetch per row.
+        "bundle_product", "component_product"
+    )
 
     return render(request, "sales/quote_proposal_cpq/productbundleoption/detail.html", {
         "bundle": bundle_opt,
