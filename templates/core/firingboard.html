@@ -51,6 +51,10 @@
       </div>
       <p class="text-muted" style="margin-top:.6rem;">All times: {% for label, count in state_rows %}{{ label }} {{ count }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
       <p class="text-muted">By severity: {% for label, count in severity_rows %}{{ label }} {{ count }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+      {% if open_total > open_count %}
+        <p class="text-warn"><i data-lucide="alert-triangle"></i> Showing the {{ open_count }} most recent of
+          {{ open_total }} open firings. This is a truncated view, not a complete one.</p>
+      {% endif %}
     </div>
   </div>
 
