@@ -1,5 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
+import uuid
 
 import pytest
 from django.apps import apps
@@ -182,7 +183,7 @@ def _opportunitypipeline_opportunity_competitor(
 def _opportunitypipeline_win_loss_reason(
     tenant, name="Price Match", code=None, result="both", category="price", sequence=1, is_active=True, **kwargs
 ):
-    code = code or f"rsn_{int(timezone.now().timestamp() * 1000) % 100000}"
+    code = code or f"rsn_{uuid.uuid4().hex[:8]}"
     return WinLossReason.objects.create(
         tenant=tenant,
         name=name,
