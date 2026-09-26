@@ -18,7 +18,7 @@
   <div class="card"><div class="card-body">
     <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Nothing evaluates this rule.</strong>
       NavERP has no scheduler and no collector. Declaring a threshold here records an intention; it does
-      not arm a check, and no reading of {{ obj.get_metric_display }} is taken anywhere in this
+      not arm a check, and no reading of {{ obj.get_metric_key_display }} is taken anywhere in this
       application.</p>
     {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
   </div></div>
@@ -28,7 +28,7 @@
     <div class="card-body">
       <dl class="detail-grid">
         <div class="detail-item"><dt>Component</dt><dd>{% if obj.service %}<a href="{% url 'core:service_component_detail' obj.service.pk %}">{{ obj.service.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
-        <div class="detail-item"><dt>Metric</dt><dd>{{ obj.get_metric_display }}</dd></div>
+        <div class="detail-item"><dt>Metric</dt><dd>{{ obj.get_metric_key_display }}</dd></div>
         <div class="detail-item"><dt>Comparator</dt><dd>{{ obj.get_comparator_display }}</dd></div>
         <div class="detail-item"><dt>Warning threshold</dt><dd>{% if obj.warning_threshold is not None %}{{ obj.warning_threshold }}{% else %}<span class="text-muted">— unset</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Critical threshold</dt><dd>{% if obj.critical_threshold is not None %}{{ obj.critical_threshold }}{% else %}<span class="text-muted">— unset</span>{% endif %}</dd></div>
