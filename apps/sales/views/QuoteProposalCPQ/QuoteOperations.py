@@ -180,6 +180,17 @@ def quote_compare_versions(request, pk_a, pk_b):
     quote_a = get_object_or_404(CPQQuote.objects.select_related("currency", "account"), pk=pk_a, tenant=tenant)
     quote_b = get_object_or_404(CPQQuote.objects.select_related("currency", "account"), pk=pk_b, tenant=tenant)
 
+    # Two quotes are only comparable as revisions of the same family. Diffing across
+    # unrelated families produces a meaningless side-by-side that reads as if one
+    # quote had become the other, so refuse it rather than render a false diff.
+    if quote_a.pk != quote_b.pk and quote_a.quote_group_id != quote_b.quote_group_id:
+        messages.warning(
+            request,
+            f"{quote_a.number} and {quote_b.number} are not revisions of the same quote. "
+            "Open a revision from the quote workspace to compare them.",
+        )
+        return redirect("sales:cpq_quote_detail", pk=quote_a.pk)
+
     diff_data = cpq_compare_quote_versions(quote_a, quote_b)
 
     return render(request, "sales/quote_proposal_cpq/operations/compare.html", {
