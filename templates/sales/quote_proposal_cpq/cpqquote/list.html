@@ -164,6 +164,8 @@
                                     <span class="badge badge-amber">{{ q.get_status_display }}</span>
                                 {% elif q.status == 'rejected' or q.status == 'declined' %}
                                     <span class="badge badge-red">{{ q.get_status_display }}</span>
+                                {% elif q.status == 'draft' %}
+                                    <span class="badge badge-info">{{ q.get_status_display }}</span>
                                 {% else %}
                                     <span class="badge badge-muted">{{ q.get_status_display }}</span>
                                 {% endif %}
