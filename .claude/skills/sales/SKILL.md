@@ -108,6 +108,57 @@ Located in `templates/sales/opportunity/`:
 - Win/Loss Analysis → `sales:opportunity_win_loss_reason_list`
 - Deal Team Collaboration → `sales:opportunity_workspace_list`
 
+## 8.4 Sales Forecasting
+
+8.4 adds the forecasting cycle — periods, per-rep calls, manager overrides, what-if scenarios and four derived reports — over the 8.2 opportunity spine. It owns **no** customer, quota master, order or ledger: `crm.Opportunity` is the roll-up master, `crm.SalesQuota` is read/snapshotted only (quota *design* belongs to 8.7), and `accounting.Currency` remains the single currency spine.
+
+### 8.4 models
+
+All four live in `apps/sales/models/SalesForecasting/`.
+
+- `ForecastPeriod` — `ForecastPeriods.py`; `TenantNumbered` (`FCP-`) forecasting cycle. Fields: `name`, `period_type` (`month`/`quarter`/`year`), `period_year`, `period_number`, `start_date`/`end_date` (**both `editable=False`** — derived, never typed), `rollup_dimension` (`user`/`org_unit`/`territory`), `reporting_currency` (FK `accounting.Currency`), `fx_rate_source_date`, `is_active`, `is_locked`. Properties `label`, `is_current`, `period_elapsed_pct`.
+- `ForecastSubmission` — `ForecastSubmissions.py`; `TenantNumbered` (`FCS-`) one rep's call for a period. Fields: `period`, `owner`, `org_unit`, `territory`, `pipeline`, `quota_ref` (FK `crm.SalesQuota`), `submitted_by`, `reviewed_by`, `status` (`draft`/`submitted`/`approved`/`rejected`/`reverted`), the five category amounts `omitted_amount`/`pipeline_amount`/`best_case_amount`/`commit_amount`/`closed_amount`, the **service snapshot** `weighted_amount`, the `quota_amount` snapshot, `actual_amount`, `submitted_at`, `reviewed_at`, `review_note`, the explainable AI block (`ai_predicted_pipeline`/`_best_case`/`_commit`, `ai_confidence_pct`, `ai_model_name`, `ai_model_version`, `ai_generated_at`, `ai_explanation` JSON), `notes`. Properties `total_forecast_amount`, `variance_amount`, `attainment_pct`, `pace_pct`, `is_frozen`.
+- `ForecastAdjustment` — `ForecastAdjustments.py`; `TenantNumbered` (`FAD-`) the manager override audit trail. Fields: `submission`, `opportunity`, `placement`, `created_by`, `adjustment_kind` (direct/indirect/revert), `target_field`, `original_value`, `adjusted_value`, `original_category`, `adjusted_category`, **`reason_code` (mandatory — it *is* the sandbagging signal)**, `note`, `is_reverted`, `reverted_at`, `revert_reason`. **No `status` field** (deliberate). Property `net_delta`. The system value is never stored, which is what makes Reset always possible.
+- `ForecastScenario` — `ForecastScenarios.py`; `TenantNumbered` (`FSC-`) what-if modelling. Fields: `period`, `owner`, `name`, `scenario_type`, `probability_pct`, `is_baseline`, `is_selected` (workflow-owned), the deltas `pipeline_delta_pct`/`best_case_delta_pct`/`commit_delta_pct`, the snapshots `projected_commit_amount`/`projected_total_amount`, `assumption_notes`. A `CheckConstraint` keeps only the baseline selectable. **A scenario must never mutate a real submission.**
+
+### 8.4 routes and views
+
+- Periods: `forecast_period_list`, `_create`, `_detail`, `_edit`, `_delete`, `_export`, `_lock`, `_unlock`.
+- Submissions: `forecast_submission_list`, `_create`, `_detail`, `_edit`, `_delete`, `_export`, `_submit`, `_approve`, `_reject`.
+- Adjustments: `forecast_adjustment_list`, `_create`, `_detail`, `_edit`, `_delete`, `_export`, `_revert`.
+- Scenarios: `forecast_scenario_list`, `_create`, `_detail`, `_edit`, `_delete`, `_select`, `_apply`.
+- Derived reports (no model, read-only): `forecast_board` (rep→manager→director rollup), `forecast_attainment` (quota vs pace), `forecast_accuracy` (actual vs predicted, bias, sandbagging), `forecast_call` (per-rep call + override audit trail).
+
+### 8.4 templates
+
+`templates/sales/salesforecasting/` — lowercase folder, matching 8.1/8.3 (do **not** "fix" it to `forecasting/`):
+- `forecastperiod/{list,detail,form}.html`, `forecastsubmission/{list,detail,form}.html`, `forecastadjustment/{list,detail,form}.html`, `forecastscenario/{list,detail,form}.html`.
+- `forecastboard/{board,attainment,accuracy,call}.html` — the four report pages.
+
+### 8.4 services
+
+`apps/sales/forecast_services.py` (flat module at the app root, like `opportunity_services.py`): `forecast_org_unit_chain` (bounded, cycle-safe `core.OrgUnit.parent` walk — there is **no `User.manager`**), `forecast_submission_snapshot`, `forecast_ai_gate`.
+
+### 8.4 seeder, migration and conventions
+
+- Migration is **`apps/sales/migrations/0007_forecastperiod_forecastscenario_forecastsubmission_and_more.py`**. A correct model split needs no further migration — `makemigrations sales --check` must say *No changes detected*.
+- `seed_sales` is idempotent and seeds 2 `FCP-` periods (current + prior), 2 `FCS-` calls across two owners, 3 `FAD-` adjustments (one reverted) and 2 `FSC-` scenarios (baseline selected).
+- **Derived values are never columns.** `total_forecast_amount`, `variance_amount`, `attainment_pct`, `pace_pct`, `net_delta` are properties; `weighted_amount` is a service snapshot excluded from the form. Every percentage has a zero guard returning `None` — never `Infinity`/`NaN` (`Decimal` division by zero raises).
+- **The AI gate is 40 won AND 40 lost `OpportunityOutcome` rows.** With fewer, every prediction value must render as nothing and the gate message must show. A leaked prediction with the gate shut is a Critical defect.
+- **A period declares ONE `reporting_currency`**, so its submissions are commensurable by construction; a period with none gets a caveat rather than an unqualified grand total.
+- **Enum values are `PipelineStage.STAGE_KIND_*` / `FORECAST_CATEGORY_*` class attributes** — grep them before hardcoding a literal.
+- Tests live in `apps/sales/tests/test_salesforecasting_*.py`; every test is `test_salesforecasting_*` and every helper `_salesforecasting_*` so the next sub-module appending nearby cannot shadow them.
+
+### 8.4 navigation wiring
+
+`apps/core/navigation.py` `LIVE_LINKS["8.4"]`:
+- Forecast Categories & Commitments → `sales:forecast_submission_list`
+- AI-Powered Predictive Forecasting → `sales:forecast_board`
+- Quota Management & Attainment → `sales:forecast_attainment`
+- Forecast Rollups & Adjustments → `sales:forecast_adjustment_list`
+- Forecast Accuracy & Variance Analysis → `sales:forecast_accuracy`
+- Extra live leaves: Forecast Periods → `sales:forecast_period_list`, Scenarios & What-If → `sales:forecast_scenario_list`, Forecast Call → `sales:forecast_call`
+
 ## 8.3 Contact & Account Management
 
 8.3 is an account-workspace and buying-center layer over the canonical CRM/core spine. It adds only four Sales-owned records and four model-free boards. It does not add an account/contact master, health score, opportunity, order, invoice, product, or provider connector.
