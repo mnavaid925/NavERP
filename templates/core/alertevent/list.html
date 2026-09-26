@@ -71,7 +71,12 @@
             <td>
               {% if obj.state == "firing" %}<span class="badge badge-red">{{ obj.get_state_display }}</span>
               {% elif obj.state == "acknowledged" %}<span class="badge badge-amber">{{ obj.get_state_display }}</span>
+              {% elif obj.state == "no_data" %}<span class="badge badge-amber">{{ obj.get_state_display }}</span>
               {% elif obj.state == "resolved" %}<span class="badge badge-green">{{ obj.get_state_display }}</span>
+              {# `expired` is a real terminal state and stays slate, but it gets its own branch so that
+                 `no_data` above can be loud: a metric that STOPPED reporting is silence, not health,
+                 and greying it out here made it look like the quietest row on the page. #}
+              {% elif obj.state == "expired" %}<span class="badge badge-slate">{{ obj.get_state_display }}</span>
               {% else %}<span class="badge badge-slate">{{ obj.get_state_display }}</span>{% endif %}
             </td>
             <td>
