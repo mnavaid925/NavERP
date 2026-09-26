@@ -180,7 +180,7 @@
                                 {% endif %}
                             </td>
                             <td class="text-xs text-slate-600">
-                                {{ q.owner.get_full_name|default:q.owner.username|default:"—" }}
+                                {% if q.owner %}{{ q.owner.get_full_name|default:q.owner.username }}{% else %}—{% endif %}
                             </td>
                             <td class="table-actions text-right">
                                 <a href="{% url 'sales:cpq_quote_detail' q.pk %}" class="btn-icon" title="View Workspace">
