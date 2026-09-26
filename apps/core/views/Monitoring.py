@@ -58,6 +58,32 @@ MONITORING_NOTES = [
 ]
 
 
+def _rule_event_stats(tenant, rule_id, *, notes=None):
+    """The three figures `alert_rule_detail` shows about one rule's firings, from ONE query.
+
+    Previously three separate `.count()`/`.first()` calls over the same rows. They are now derived
+    from a single ordered fetch: `event_count` from the whole list, `open_event_count` from the
+    `firing`/`acknowledged` subset, and `latest_event` from the head. The ordering is `-fired_at`,
+    which is never NULL in this model, so the C5 MariaDB NULL-sorts-LAST-under-DESC trap cannot apply
+    (the same reason `BackupJob` had to be fixed).
+
+    The counts are real counts over real columns, so a `0` here is a legitimate figure and not a
+    stand-in for "cannot tell".
+    """
+    events = list(AlertEvent.objects.filter(tenant=tenant, rule_id=rule_id)
+                  .only("id", "state", "fired_at", "severity_at_fire", "message")
+                  .order_by("-fired_at", "-id"))
+    open_states = {"firing", "acknowledged"}
+    context = {
+        "event_count": len(events),
+        "open_event_count": sum(1 for e in events if e.state in open_states),
+        "latest_event": events[0] if events else None,
+    }
+    if notes is not None:
+        context["notes"] = notes
+    return context
+
+
 # ====================================================== ServiceComponent
 @tenant_admin_required
 def service_component_list(request):
@@ -174,17 +200,7 @@ def alert_rule_detail(request, pk):
     return crud_detail(
         request, model=AlertRule, pk=pk, template="core/alertrule/detail.html",
         select_related=("service", "notification_rule"),
-        extra_context={
-            "event_count": AlertEvent.objects.filter(tenant=request.tenant, rule_id=pk).count(),
-            "open_event_count": AlertEvent.objects.filter(
-                tenant=request.tenant, rule_id=pk,
-                state__in=["firing", "acknowledged"]).count(),
-            # Ordered by `-fired_at`, which is never NULL in this model, so the C5 MariaDB NULL-sorts-
-            # LAST-under-DESC trap cannot apply (the same reason `BackupJob` had to be fixed).
-            "latest_event": AlertEvent.objects.filter(tenant=request.tenant, rule_id=pk)
-                                   .order_by("-fired_at").first(),
-            "notes": MONITORING_NOTES,
-        })
+        extra_context=_rule_event_stats(request.tenant, pk, notes=MONITORING_NOTES))
 
 
 @tenant_admin_required
@@ -222,6 +238,11 @@ def alert_event_list(request):
             "services": ServiceComponent.objects.filter(tenant=request.tenant).order_by("name"),
             # A real count on a real column, so 0 is a legitimate figure on a firing board.
             "firing_count": AlertEvent.objects.filter(tenant=request.tenant, state="firing").count(),
+            # Contract §5.4: the open set is `firing` + `acknowledged` — the same definition
+            # `AlertEvent.is_open` uses, so the badge on the board and the banner here cannot disagree.
+            "open_count": AlertEvent.objects.filter(
+                tenant=request.tenant, state__in=["firing", "acknowledged"]).count(),
+            "total_count": AlertEvent.objects.filter(tenant=request.tenant).count(),
             # THE most useful number on this page: firings where nobody wrote down what the reading
             # actually was. This is the register's own honesty score, and it is a real count too.
             "unmeasured_count": AlertEvent.objects.filter(
@@ -537,10 +558,18 @@ def health_board(request):
     status_counts = {value: 0 for value, _ in ServiceComponent.STATUS_CHOICES}
     for c in components:
         status_counts[c.current_status] = status_counts.get(c.current_status, 0) + 1
+    # Zipped here, not in the template: a Django template CANNOT index a dict by a loop variable, so
+    # `{{ status_counts|default_if_none:0 }}` inside a `{% for value, label in ... %}` printed the whole
+    # dict on every row. `status_rows` is the only shape that renders one count per label. The raw
+    # `status_counts` dict is still passed so a template that needs the mapping still has it.
+    status_rows = [(label, status_counts[value]) for value, label in ServiceComponent.STATUS_CHOICES]
 
     rollup = "operational"
     for c in components:
-        if c.is_active and _STATUS_SEVERITY.index(c.current_status) < _STATUS_SEVERITY.index(rollup):
+        # `components` is already filtered to `is_active=True` above, so there is no `c.is_active`
+        # test here to make — the queryset is the guarantee, and a second identical guard would only
+        # read as though inactive components could reach this loop.
+        if _STATUS_SEVERITY.index(c.current_status) < _STATUS_SEVERITY.index(rollup):
             rollup = c.current_status
     if not components:
         # NEVER "operational" by default: no components means no claim, and an all-green board over an
@@ -549,11 +578,12 @@ def health_board(request):
 
     return render(request, "core/healthboard.html", {
         "components": [{"component": c, "open_alerts": per_component.get(c.pk, 0),
-                        "note": c.status_note()} for c in components],
+                        "note": c.status_note} for c in components],
         "component_total": len(components),
         "critical_count": sum(1 for c in components if c.is_critical),
         "public_count": sum(1 for c in components if c.is_public),
         "status_counts": status_counts,
+        "status_rows": status_rows,
         "unreported_count": sum(1 for c in components if c.last_status_at is None),
         "open_alert_count": sum(per_component.values()),
         "latest_metrics": latest_metrics,
@@ -586,15 +616,23 @@ def firing_board(request):
     for e in events:
         state_counts[e.state] = state_counts.get(e.state, 0) + 1
         severity_counts[e.severity_at_fire] = severity_counts.get(e.severity_at_fire, 0) + 1
+    # Zipped in the view for the same reason as the health board's `status_rows`: a template cannot
+    # index a dict by a loop variable, so `{{ state_counts|default_if_none:0 }}` inside the loop
+    # printed the entire dict after every label instead of that label's count.
+    state_rows = [(label, state_counts[value]) for value, label in AlertEvent.STATE_CHOICES]
+    severity_rows = [(label, severity_counts[value])
+                     for value, label in AlertEvent.SEVERITY_CHOICES]
 
     return render(request, "core/firingboard.html", {
         "open_events": [{"event": e, "age_days": e.age_days, "muted": e.is_muted,
-                         "note": e.measure_note()} for e in open_events],
+                         "note": e.measure_note} for e in open_events],
         "open_count": len(open_events),
         "acknowledged_count": sum(1 for e in open_events if e.state == "acknowledged"),
         "muted_count": sum(1 for e in open_events if e.is_muted),
         "state_counts": state_counts,
+        "state_rows": state_rows,
         "severity_counts": severity_counts,
+        "severity_rows": severity_rows,
         # The denominator. Without it, "0 firing" is indistinguishable from "nothing is watching".
         "rule_total": AlertRule.objects.filter(tenant=tenant).count(),
         # Open firings whose rule was retired (or never registered) — nobody owns these.
@@ -635,7 +673,8 @@ def capacity_board(request):
         else:
             note = ("Consumption and allowance both come from the usage record; overage is derived "
                     "there and is not recomputed here.")
-        usage_rows.append({"metric": u.get_metric_display(), "quantity": u.quantity,
+        usage_rows.append({"metric": u.get_metric_display(), "metric_key": u.metric,
+                           "quantity": u.quantity,
                            "included": included,
                            "overage": u.overage_quantity if included is not None else None,
                            "note": note})
@@ -646,10 +685,13 @@ def capacity_board(request):
     over_threshold_count = 0
     for r in capacity_rules:
         bound = r.critical_threshold if r.critical_threshold is not None else r.warning_threshold
-        # `get_metric_key_display`, not `get_metric_display`: the FIELD is `metric_key` (Django derives
-        # the accessor from the field name), so the shorter name is an AttributeError and this board 500s
-        # the moment a capacity rule exists. Caught by the smoke test, not by `manage.py check`.
-        matching = [row for row in usage_rows if row["metric"] == r.get_metric_key_display()]
+        # Join on the RAW key, never the display label. `AlertRule.METRIC_CHOICES` and
+        # `tenants.UsageRecord.METRIC_CHOICES` are deliberately different vocabularies that OVERLAP on
+        # some keys ("storage_mb") and label them differently ("Storage (MB)" both) but not identically
+        # ("active_users" has no AlertRule twin). Comparing `row["metric"]` to
+        # `r.get_metric_key_display()` therefore matched only by luck and silently reported
+        # "Cannot compare" for every real pair. `metric_key` is the only value both sides share.
+        matching = [row for row in usage_rows if row["metric_key"] == r.metric_key]
         current = matching[0]["quantity"] if matching else None
         if bound is None or current is None:
             headroom = None
