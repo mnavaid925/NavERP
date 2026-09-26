@@ -38,7 +38,18 @@ from apps.sales.views.SalesForecasting.ForecastScenarios import (
     forecast_scenario_select,
 )
 
+from apps.sales.views.SalesForecasting.ForecastBoards import (
+    forecast_accuracy,
+    forecast_attainment,
+    forecast_board,
+    forecast_call,
+)
+
 __all__ = [
+    "forecast_board",
+    "forecast_attainment",
+    "forecast_accuracy",
+    "forecast_call",
     "forecast_period_create",
     "forecast_period_delete",
     "forecast_period_detail",
