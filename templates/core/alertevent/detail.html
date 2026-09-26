@@ -30,7 +30,9 @@
         <div class="detail-item"><dt>State</dt><dd>
           {% if obj.state == "firing" %}<span class="badge badge-red">{{ obj.get_state_display }}</span>
           {% elif obj.state == "acknowledged" %}<span class="badge badge-amber">{{ obj.get_state_display }}</span>
+          {% elif obj.state == "no_data" %}<span class="badge badge-amber">{{ obj.get_state_display }}</span>
           {% elif obj.state == "resolved" %}<span class="badge badge-green">{{ obj.get_state_display }}</span>
+          {% elif obj.state == "expired" %}<span class="badge badge-slate">{{ obj.get_state_display }}</span>
           {% else %}<span class="badge badge-slate">{{ obj.get_state_display }}</span>{% endif %}
         </dd></div>
         <div class="detail-item"><dt>Severity at fire (snapshot)</dt><dd>
@@ -77,7 +79,7 @@
         {% if obj.state != "resolved" and obj.state != "expired" %}
           <form method="post" action="{% url 'core:alertevent_resolve' obj.pk %}" onsubmit="return confirm('Record that somebody declared this resolved? NavERP will not fix anything.');">
             {% csrf_token %}
-            <input type="text" name="resolution_note" maxlength="255" class="form-input" style="min-width:280px;" placeholder="Resolution note (optional)">
+            <input type="text" name="resolution_note" maxlength="255" class="form-input" style="min-width:280px;" placeholder="Resolution note (optional)" aria-label="Resolution note (optional)">
             <button class="btn btn-outline" type="submit"><i data-lucide="check"></i> Record resolution</button>
           </form>
         {% else %}
