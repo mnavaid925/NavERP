@@ -29,7 +29,7 @@
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
                 <span class="text-xs text-slate-400">Total Value:</span>
-                <div class="text-lg font-bold text-slate-900">${{ quote.total:,.2f }}</div>
+                <div class="text-lg font-bold text-slate-900">${{ quote.total|floatformat:2 }}</div>
             </div>
             <div>
                 <span class="text-xs text-slate-400">Header Discount:</span>
