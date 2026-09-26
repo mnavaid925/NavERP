@@ -1273,6 +1273,50 @@ wait on one disk event releases them all simultaneously onto the operation that 
   *directories* and none of the `.html` inside them — a reviewer handed that reads nothing and reports **clean**.
   Expand the glob and check the count against a pinned number first. An over-matching scope yields findings you
   can discard; an under-matching one yields silence you will believe (the L44 family).
+
+## L48 — a pytest session pays a ~46-minute FIXED cost here, and it is not your test
+
+**Measured 2026-09-26 while verifying 0.17.** `config.settings_test` uses **SQLite `:memory:`**, so
+`--reuse-db` in `pytest.ini` has nothing to reuse: every session builds the schema from scratch, and
+the repo now carries **266 migrations** across 15 apps (`hrm` 61, `scm` 35, `procurement` 30,
+`projects` 30, `inventory` 28, `crm` 26, `core` 15, …). A `--durations` run on the PRE-EXISTING 0.16
+lane `test_backup_models.py` reported:
+
+```
+2778.71s setup   apps/core/tests/test_backup_models.py::TestBackupJobIsInFlight::test_queued_is_in_flight
+   0.02s setup   ...every other test...
+   0.01s call    ...every other test...
+```
+
+**57 tests pass, and ONE of them cost 46 minutes.** The other 56 cost 0.01–0.02 s each. The cost is
+entirely in the first test's session setup, not in the tests.
+
+**Rule — three things follow, and all three were mistakes I made first:**
+
+1. **Never conclude "my new tests are slow" from wall-clock on a cold DB.** Run the *pre-existing*
+   sibling lane as a baseline. If it is equally slow, the problem is the environment, not the code.
+   I burned ~20 minutes of CPU assuming my 27 model tests were at fault before running that control.
+2. **Do not pass `-o addopts=-q` to "isolate" a run.** It drops `--reuse-db` and changes nothing
+   useful here (the DB is in-memory regardless) while making the invocation look different from the
+   documented one. Change nothing; just run the lane.
+3. **A second pytest process on this box makes the first appear hung.** The concurrent session runs
+   its own suite; both processes sit near 0 CPU waiting, and output is block-buffered to the redirect
+   file so the size does not move. **Check `Get-Process python | Select Id,CPU` before assuming a
+   hang** — one process climbing steadily is working, several at ~0 are contending.
+
+**Also: `-q` with a redirect gives you nothing until it exits.** Poll with `--durations` and read the
+durations table at the end rather than watching the file for progress dots.
+
+## L49 — pytest collection is instant; a run that produces no output is NOT necessarily failing
+
+`pytest --collect-only -q` on `apps/core/tests` returns in seconds and lists every test file. Use it
+as the cheap gate after writing a lane: it proves the file **parses** and the fixtures **import**,
+which is the failure mode a hand-written multi-chunk test file actually has (a truncated dict, an
+`IndentationError` from an `insert_line` that landed mid-expression). It says nothing about whether
+the assertions pass — do not report a lane as verified because collection succeeded.
+
+See [[next-builds-one-submodule]], L47.
+
 * **PowerShell 5.1:** a `@'…'@` here-string containing double quotes is re-tokenized when passed to a native
   exe, and `git commit -m` explodes into pathspec errors. Apostrophes are fine. Use `git commit -F <file>`.
 
