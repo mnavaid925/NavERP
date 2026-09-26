@@ -26,6 +26,10 @@ from .SalesForecasting.ForecastPeriods import ForecastPeriod
 from .SalesForecasting.ForecastSubmissions import ForecastSubmission
 from .SalesForecasting.ForecastAdjustments import ForecastAdjustment
 from .SalesForecasting.ForecastScenarios import ForecastScenario
+from .QuoteProposalCPQ.CPQQuotes import CPQQuote
+from .QuoteProposalCPQ.CPQQuoteLines import CPQQuoteLine
+from .QuoteProposalCPQ.ProductBundles import ProductBundleOption
+from .QuoteProposalCPQ.QuoteApprovalRules import QuoteApprovalRule
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
@@ -37,5 +41,7 @@ __all__ = [
     "CompetitorProfile", "OpportunityCompetitor",
     "WinLossReason", "OpportunityOutcome",
     "ForecastPeriod", "ForecastSubmission", "ForecastAdjustment", "ForecastScenario",
+    "CPQQuote", "CPQQuoteLine", "ProductBundleOption", "QuoteApprovalRule",
 ]
+
 
