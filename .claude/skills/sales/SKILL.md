@@ -1,6 +1,6 @@
 ---
 name: sales
-description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management scoring, BANT/MEDDIC qualification, deterministic owner routing, CRM drip nurture enrollment, and 8.3 Contact & Account Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
+description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, and 8.3 Contact & Account Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
 ---
 
 # Sales Management System (Module 8)
@@ -9,10 +9,10 @@ App path: `apps/sales/`; templates: `templates/sales/`; URL namespace: `sales`; 
 
 ## Ownership boundary
 
-8.1 is a thin operational layer over the canonical CRM and core spine. It does not create a second lead, opportunity, campaign, territory, task, party, contact, or conversion writer.
+8.1, 8.2, and 8.3 are operational layers over the canonical CRM and core spine. They do not duplicate `crm.Lead`, `crm.Opportunity`, `core.Party`, `core.OrgUnit`, or `accounts.User`.
 
 - Canonical lead: `crm.Lead` (`LEAD-`).
-- Canonical opportunity and conversion: `crm.Opportunity` and `apps/crm/services.py:convert_lead`.
+- Canonical opportunity and conversion: `crm.Opportunity` (`OPP-`) and `apps/crm/services.py:convert_lead`.
 - Web capture/ingestion: `crm.LandingPage`, `crm.FormSubmission`, `crm.Campaign`, `crm.CampaignMember`.
 - CRM drip campaign: `crm.EmailCampaign(send_type="drip")`.
 - Territory master: `crm.Territory`.
@@ -63,6 +63,50 @@ Numbered `LNE-#####` lifecycle state for one lead and one CRM drip campaign. Uni
 - Handoff: `lead_handoff` (`leads/<pk>/handoff/`) is POST-only and tenant-admin/qualified-assessment gated; it calls the CRM conversion service and never duplicates its writes.
 
 All pages use `@login_required` for reads. Configuration/manual score/activation/resume/archive actions are tenant-admin gated. All mutating actions are POST-only and CSRF-protected. Lists use `crud_list` with search, pre-pagination filters, pagination, Actions, and empty states. Lists pass every FK queryset and choice list consumed by their filter bars.
+
+## 8.2 Opportunity & Pipeline Management
+
+8.2 delivers multi-pipeline deal stage tracking, progression criteria, deal health scoring, velocity and stale deal detection, deal team collaboration, competitive intelligence battle cards, and structured win/loss outcome tracking over `crm.Opportunity`.
+
+### 8.2 models
+
+- `Pipeline` — `apps/sales/models/OpportunityPipeline/Pipelines.py`; `TenantNumbered` (`PIPE-`) model representing a structured sales process. Fields: `name`, `description`, `is_default`, `is_active`.
+- `PipelineStage` — `apps/sales/models/OpportunityPipeline/Pipelines.py`; ordered stage within a pipeline. Fields: `pipeline`, `name`, `code` (slug), `sequence`, `stage_kind` (`open`, `won`, `lost`), `crm_stage_key`, `probability` (0-100), `forecast_category` (`omitted`, `pipeline`, `best_case`, `commit`, `closed`), `entry_guidance`, `exit_guidance`, `entry_criteria` (JSON), `exit_criteria` (JSON), `target_days`, `is_active`. Enforces active shape invariants: exactly one won stage, exactly one lost stage, and at least one open stage.
+- `OpportunityPipelinePlacement` — `apps/sales/models/OpportunityPipeline/Pipelines.py`; placement of a `crm.Opportunity` on a pipeline stage. Fields: `opportunity` (OneToOne), `pipeline`, `current_stage`, `stage_entered_at`, `probability_override`, `notes`.
+- `OpportunityTeamMember` — `apps/sales/models/OpportunityTeams/OpportunityTeams.py`; cross-functional deal team. Fields: `opportunity`, `user`, `org_unit`, `role` (`co_owner`, `collaborator`, `sales_support`, `solution_consultant`, `executive_sponsor`, `approver`, `observer`), `responsibility`, `is_active`.
+- `CompetitorProfile` — `apps/sales/models/CompetitiveIntelligence/CompetitiveIntelligence.py`; `TenantNumbered` (`CMP-`) competitive intelligence. Fields: `party` (OneToOne `core.Party`, `kind='organization'`), `aliases`, `website_url`, `description`, `market_positioning`, `strengths`, `weaknesses`, `differentiators`, `objection_handling`, `is_active`.
+- `OpportunityCompetitor` — `apps/sales/models/CompetitiveIntelligence/CompetitiveIntelligence.py`; deal-specific competitor tracking. Fields: `opportunity`, `competitor_profile`, `relationship` (`identified`, `evaluating`, `shortlisted`, `preferred`, `incumbent`, `eliminated`, `lost_to`, `beaten`, `withdrew`), `is_primary`, `pricing_notes`, `deal_notes`, `positioning_notes`.
+- `WinLossReason` — `apps/sales/models/OpportunityOutcomes/OpportunityOutcomes.py`; `TenantNumbered` (`WLR-`) standardized decision drivers. Fields: `code` (slug), `name`, `description`, `sequence`, `result` (`won`, `lost`, `both`), `category` (`price`, `product_fit`, `timing`, `competition`, `relationship`, `authority`, `budget`, `no_decision`, `other`), `is_active`.
+- `OpportunityOutcome` — `apps/sales/models/OpportunityOutcomes/OpportunityOutcomes.py`; terminal deal closure decision. Fields: `opportunity` (OneToOne), `result` (`won`, `lost`), `reason` (FK `WinLossReason`), `competitor_link` (FK `OpportunityCompetitor`), `notes`, `closed_at`, `recorded_by`.
+
+### 8.2 routes and views
+
+- Pipelines & Stages: `opportunity_pipeline_list`, `_create`, `_detail`, `_edit`, `_delete`, `_set_default`, `_stages`, `_stage_create`, `_stage_edit`, `_stage_delete`, `_stage_reorder`.
+- Pipeline Boards & Analytics: `opportunity_pipeline_board` (Kanban deal stages with currency metrics and health filters), `opportunity_pipeline_visibility` (stale deals, age distribution, velocity projections).
+- Deal Workspace & Outcomes: `opportunity_workspace_list` (operational deal cockpit), `opportunity_workspace_detail` (comprehensive deal 360: placement, team, competitors, timeline, contracts, documents, audit logs), `opportunity_place`, `opportunity_unplace`, `opportunity_transition` (gated won/lost closures).
+- Deal Teams: `opportunity_team_member_add`, `_edit`, `_remove`.
+- Competitive Intelligence: `opportunity_competitor_profile_list`, `_create`, `_detail`, `_edit`, `_delete`, `opportunity_competitor_link_add`, `_edit`, `_remove`.
+- Win/Loss Governance: `opportunity_win_loss_reason_list`, `_create`, `_detail`, `_edit`, `_delete`.
+
+### 8.2 templates
+
+Located in `templates/sales/opportunity/`:
+- `workspace.html` — Deal 360 cockpit with active placement, team roster, competitor links, timeline, documents, contracts, and audit trails.
+- `placement.html` — Pipeline stage placement and stage transition modal/form.
+- `pipeline/list.html`, `detail.html`, `form.html`, `stages.html`, `board.html`, `visibility.html`.
+- `competitor/list.html`, `detail.html`, `form.html`, `link_form.html`.
+- `team_member/form.html`.
+- `winlossreason/list.html`, `detail.html`, `form.html`.
+
+### 8.2 navigation wiring
+
+`apps/core/navigation.py` contains `LIVE_LINKS["8.2"]`:
+- Visual Pipeline & Deal Stages → `sales:opportunity_pipeline_board`
+- Multiple Pipelines → `sales:opportunity_pipeline_list`
+- Deal Velocity & Stale Deals → `sales:opportunity_pipeline_visibility`
+- Competitive Tracking → `sales:opportunity_competitor_profile_list`
+- Win/Loss Analysis → `sales:opportunity_win_loss_reason_list`
+- Deal Team Collaboration → `sales:opportunity_workspace_list`
 
 ## 8.3 Contact & Account Management
 
