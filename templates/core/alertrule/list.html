@@ -68,7 +68,7 @@
               {% if obj.module_slug %}<div class="text-muted">{{ obj.module_slug }}</div>{% endif %}
               {% if not obj.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
             <td>{% if obj.service %}{{ obj.service.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
-            <td>{{ obj.get_metric_display }} {{ obj.get_comparator_display }}<br>
+            <td>{{ obj.get_metric_key_display }} {{ obj.get_comparator_display }}<br>
               <span class="text-muted">{{ obj.threshold_display }}</span></td>
             <td>
               {% if obj.severity == "info" %}<span class="badge badge-info">{{ obj.get_severity_display }}</span>
