@@ -50,7 +50,7 @@ def cpq_quote_line_create(request, quote_pk):
             line.save()
 
             cpq_recalc_quote_totals(quote, save=True)
-            write_audit_log(request.user, "create", "CPQQuoteLine", line.id, f"Added line {line.description} to quote {quote.number}")
+            write_audit_log(request.user, line, "create", {"action": "create_line", "quote": quote.number, "description": line.description}, tenant=tenant)
             messages.success(request, f"Added {line.description} to quote.")
             return redirect("sales:cpq_quote_detail", pk=quote.pk)
     else:
@@ -96,7 +96,7 @@ def cpq_quote_line_edit(request, quote_pk, pk):
         if form.is_valid():
             line = form.save()
             cpq_recalc_quote_totals(quote, save=True)
-            write_audit_log(request.user, "update", "CPQQuoteLine", line.id, f"Updated line {line.description} on quote {quote.number}")
+            write_audit_log(request.user, line, "update", {"action": "update_line", "quote": quote.number, "description": line.description}, tenant=tenant)
             messages.success(request, f"Updated {line.description}.")
             return redirect("sales:cpq_quote_detail", pk=quote.pk)
     else:
@@ -123,9 +123,8 @@ def cpq_quote_line_delete(request, quote_pk, pk):
         return redirect("sales:cpq_quote_detail", pk=quote.pk)
 
     desc = line.description
-    line_id = line.id
+    write_audit_log(request.user, line, "delete", {"action": "delete_line", "quote": quote.number, "description": desc}, tenant=tenant)
     line.delete()
     cpq_recalc_quote_totals(quote, save=True)
-    write_audit_log(request.user, "delete", "CPQQuoteLine", line_id, f"Deleted line {desc} from quote {quote.number}")
     messages.success(request, f"Removed line item {desc}.")
     return redirect("sales:cpq_quote_detail", pk=quote.pk)
