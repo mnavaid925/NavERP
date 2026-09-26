@@ -45,6 +45,7 @@ from apps.sales.models.SalesForecasting.ForecastScenarios import ForecastScenari
 from apps.sales.models.SalesForecasting.ForecastSubmissions import CATEGORY_AMOUNT_FIELDS
 from apps.sales.forecast_services import forecast_org_unit_chain
 from apps.sales.views._common import *  # noqa: F401,F403
+from apps.sales.views._helpers import is_tenant_admin as _is_tenant_admin
 
 TEMPLATE_LIST = "sales/salesforecasting/forecastscenario/list.html"
 TEMPLATE_DETAIL = "sales/salesforecasting/forecastscenario/detail.html"
@@ -58,9 +59,12 @@ ISOLATION_NOTE = (
     "pipeline figures stay exactly as they were submitted."
 )
 
-
-def _is_tenant_admin(user):
-    return bool(getattr(user, "is_superuser", False) or getattr(user, "is_tenant_admin", False))
+#: How many scenarios one Apply run will touch. The loop runs inside a transaction
+#: holding a SELECT ... FOR UPDATE row lock on every scenario it visits, so an
+#: unbounded sweep over a huge period is a long lock hold triggered by one click.
+#: What it skips is reported to the operator -- a capped sweep that said nothing
+#: would be indistinguishable from a sweep that had nothing to do.
+MAX_SCENARIOS_PER_APPLY = 200
 
 
 def _tenant_owners(tenant):
@@ -135,14 +139,16 @@ def _filter_choices(tenant):
     return periods, owners
 
 
-def _baseline_totals(obj):
+def _baseline_totals(obj, submission=None):
     """The five category amounts of the call this scenario projects -- the deltas' input.
 
     ``None`` for every bucket when the period has no forecast call at all, which is the honest
     answer: there is nothing to project, and the template renders an em dash rather than five
     confident zeros.
+
+    ``submission`` is the caller's already-fetched baseline (I5).
     """
-    submission = obj.baseline_submission()
+    submission = obj.baseline_submission() if submission is None else submission
     if submission is None:
         return {value: None for value, _ in CATEGORY_AMOUNT_FIELDS}
     return {
@@ -229,17 +235,21 @@ def forecast_scenario_detail(request, pk):
     permissions = _scenario_permissions(obj, request)
     periods, owners = _filter_choices(request.tenant)
     org_unit = _owner_org_unit(obj.owner, obj.tenant_id)
+    # I5: one baseline read feeds the three effective_* figures, the baseline totals
+    # and the context key, instead of five identical queries for one page.
+    baseline = obj.baseline_submission()
+    effective_pipeline, effective_best_case, effective_commit = obj.effective_amounts(baseline)
     return render(request, TEMPLATE_DETAIL, {
         "obj": obj,
         "period": obj.period if obj.period_id else None,
         "owner": obj.owner,
         # The PROPERTIES, never a column: each is None when the period has no call to
         # project, which renders as an em dash rather than a fake 0.00.
-        "effective_pipeline_amount": obj.effective_pipeline_amount,
-        "effective_best_case_amount": obj.effective_best_case_amount,
-        "effective_commit_amount": obj.effective_commit_amount,
-        "baseline_totals": _baseline_totals(obj),
-        "baseline_submission": obj.baseline_submission(),
+        "effective_pipeline_amount": effective_pipeline,
+        "effective_best_case_amount": effective_best_case,
+        "effective_commit_amount": effective_commit,
+        "baseline_totals": _baseline_totals(obj, baseline),
+        "baseline_submission": baseline,
         "periods": periods,
         "owners": owners,
         "scenario_type_choices": ForecastScenario.SCENARIO_TYPE_CHOICES,
@@ -441,36 +451,38 @@ def forecast_scenario_select(request, pk):
     return redirect("sales:forecast_scenario_detail", pk=obj.pk)
 
 
-def _apply_target_amount(obj, target):
+def _apply_target_amount(obj, target, baseline=None):
     """The figure a scenario is judged against, for the chosen ``target``.
 
     Read-only: it reads the baseline call and the scenario's own deltas and returns a number.
     No row is written here, which is the isolation rule again at the level of the helper.
+
+    ``baseline`` is the caller's already-fetched submission (I5): without it this and
+    `_baseline_target_amount` and the three ``effective_*`` reads all re-fetch the
+    same row.
     """
+    if target == "weighted":
+        # "weighted": the baseline call's own service snapshot, unprojected -- a scenario
+        # moves the three user-entered lines, and the weighted figure is the pipeline's.
+        submission = obj.baseline_submission() if baseline is None else baseline
+        return Decimal(submission.weighted_amount or 0) if submission is not None else None
     if target == "commit":
-        return obj.effective_commit_amount
+        return obj._project("commit_delta_pct", "commit_amount", baseline)
     if target == "total":
-        parts = (
-            obj.effective_pipeline_amount,
-            obj.effective_best_case_amount,
-            obj.effective_commit_amount,
-        )
+        parts = obj.effective_amounts(baseline)
         if any(part is None for part in parts):
             return None
         return sum(parts, Decimal("0")).quantize(Decimal("0.01"))
-    # "weighted": the baseline call's own service snapshot, unprojected -- a scenario moves the
-    # three user-entered lines, and the weighted figure is the pipeline's, not the plan's.
-    submission = obj.baseline_submission()
-    return Decimal(submission.weighted_amount or 0) if submission is not None else None
+    return None
 
 
-def _baseline_target_amount(obj, target):
+def _baseline_target_amount(obj, target, baseline=None):
     """The **unprojected** figure for a target: the real forecast, before any delta.
 
     This is the "before" side of the variance the apply action reports, and it is read
     straight off the baseline call -- never written, which is the isolation rule again.
     """
-    submission = obj.baseline_submission()
+    submission = obj.baseline_submission() if baseline is None else baseline
     if submission is None:
         return None
     if target == "commit":
@@ -525,13 +537,22 @@ def forecast_scenario_apply(request):
             if locked_period.is_locked:
                 messages.error(request, "The period is locked, so its scenarios are read-only.")
                 return redirect("sales:forecast_scenario_list")
-            applied, moved = 0, 0
-            for obj in (
+            applied, moved, skipped = 0, 0, 0
+            # I5: one baseline read for the whole loop, passed down instead of letting
+            # each scenario re-fetch the same submission seven times while holding
+            # row locks. The loop is also capped, and says how many it skipped rather
+            # than silently applying a prefix.
+            baseline = ForecastScenario(
+                tenant_id=request.tenant.pk, period_id=locked_period.pk
+            ).baseline_submission()
+            scenarios = list(
                 ForecastScenario.objects.select_for_update()
                 .filter(tenant=request.tenant, period_id=locked_period.pk)
                 .order_by("pk")
-            ):
-                obj.snapshot_projection()
+            )
+            skipped = max(0, len(scenarios) - MAX_SCENARIOS_PER_APPLY)
+            for obj in scenarios[:MAX_SCENARIOS_PER_APPLY]:
+                obj.snapshot_projection(baseline)
                 obj.sync_selected_from_baseline()
                 obj.save(update_fields=[
                     "projected_commit_amount", "projected_total_amount",
@@ -542,7 +563,8 @@ def forecast_scenario_apply(request):
                 # reported rather than blocked: the snapshot is already written, and a wild
                 # delta should be visible rather than silent.
                 variance = _variance_pct(
-                    _baseline_target_amount(obj, target), _apply_target_amount(obj, target),
+                    _baseline_target_amount(obj, target, baseline),
+                    _apply_target_amount(obj, target, baseline),
                 )
                 if variance is not None and abs(variance) > Decimal(threshold):
                     moved += 1
@@ -555,6 +577,7 @@ def forecast_scenario_apply(request):
                     "variance_threshold_pct": str(threshold)[:200],
                     "scenarios_applied": applied,
                     "scenarios_beyond_threshold": moved,
+                    "scenarios_skipped": skipped,
                     "note": "Scenario projections only; no forecast call was modified.",
                 },
                 tenant=request.tenant,
@@ -572,6 +595,14 @@ def forecast_scenario_apply(request):
     else:
         messages.success(
             request, f"Applied {applied} scenario projection(s). The real forecast is untouched.",
+        )
+    if skipped:
+        # Never apply a silent prefix: the operator is told exactly what was left out.
+        messages.warning(
+            request,
+            f"{skipped} scenario(s) were NOT applied -- this action is capped at "
+            f"{MAX_SCENARIOS_PER_APPLY} per run so it cannot hold row locks on a huge "
+            "period indefinitely. Run it again to cover the rest.",
         )
     return redirect("sales:forecast_scenario_list")
 
