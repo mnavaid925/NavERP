@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.accounting.models import Currency
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.crm.models import Opportunity, Product
@@ -416,12 +417,13 @@ def cpq_guided_selling(request):
         else:
             # Create a new quote
             opp = Opportunity.objects.filter(pk=opp_id, tenant=tenant).first() if opp_id else None
+            currency = (opp.currency if opp and opp.currency else None) or Currency.objects.filter(code="USD").first() or Currency.objects.filter(is_active=True).first()
             quote = CPQQuote.objects.create(
                 tenant=tenant,
                 name=f"{selected_bundle.name} Solution Package",
                 opportunity=opp,
                 account=opp.account if opp else None,
-                currency=opp.currency if opp and opp.currency else None,
+                currency=currency,
                 status="draft",
                 owner=request.user,
             )
@@ -435,8 +437,8 @@ def cpq_guided_selling(request):
             product=selected_bundle,
             description=f"Package: {selected_bundle.name}",
             quantity=Decimal("1.00"),
-            list_price=selected_bundle.list_price or Decimal("0.00"),
-            unit_price=selected_bundle.list_price or Decimal("0.00"),
+            list_price=selected_bundle.unit_price or Decimal("0.00"),
+            unit_price=selected_bundle.unit_price or Decimal("0.00"),
             sequence=10,
         )
 
@@ -454,7 +456,8 @@ def cpq_guided_selling(request):
                 except Exception:
                     qty = opt.default_quantity
 
-                unit_price = opt.unit_price_override or opt.component_product.list_price or Decimal("0.00")
+                comp_price = opt.component_product.unit_price if opt.component_product else Decimal("0.00")
+                unit_price = opt.unit_price_override if opt.unit_price_override is not None else (comp_price or Decimal("0.00"))
                 disc = opt.discount_pct_override or Decimal("0.00")
 
                 CPQQuoteLine.objects.create(
@@ -464,9 +467,9 @@ def cpq_guided_selling(request):
                     line_type="bundle_component",
                     product=opt.component_product,
                     item=opt.component_item,
-                    description=f"{opt.option_group}: {opt.component_product.name}",
+                    description=f"{opt.option_group}: {opt.component_product.name}" if opt.component_product else (opt.component_item.name if opt.component_item else opt.name),
                     quantity=qty,
-                    list_price=opt.component_product.list_price or Decimal("0.00"),
+                    list_price=comp_price or Decimal("0.00"),
                     discount_pct=disc,
                     unit_price=unit_price,
                     sequence=seq,
