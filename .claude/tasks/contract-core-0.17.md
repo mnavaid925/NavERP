@@ -100,6 +100,18 @@ Indexes: `(tenant, -fired_at)`, `(tenant, state)`, `(tenant, service, -fired_at)
 
 ### 2.4 `Incident` - the comms artifact
 
+FK `service` -> `ServiceComponent` (SET_NULL); M2M `affected_services` -> `ServiceComponent`;
+FK `primary_alert` -> `AlertEvent` (SET_NULL, `related_name="+"`) so a firing can *become* an incident.
+`INCIDENT_TYPE_CHOICES`: `incident, scheduled_maintenance, postmortem` - **`postmortem` is reserved and
+unused** (0.21's).
+`STATUS_CHOICES` is a **union** enum because one list renders both incident and maintenance:
+`scheduled, investigating, identified, in_progress, monitoring, verifying, resolved, completed`.
+`IMPACT_CHOICES`: `none, minor, major, critical` - `impact` is what drives `ServiceComponent.current_status`
+in the roll-up.
+`public_note` vs `internal_note` (Statuspage public vs private). `scheduled_for` / `scheduled_until` are
+the **notice window**, not the change itself.
+
+---
 
 ## 3. Forms - `apps/core/forms/Monitoring.py`
 
@@ -167,6 +179,56 @@ MONITORING_NOTES = [
 - **`comparator_choices` is NOT passed** - there is no comparator filter. **No `unbounded_count`** -
   `clean()` makes it structurally always `0`.
 
+### 5.4 `alert_event_list`
+- `search_fields`: `["message", "service_label", "evidence"]`
+- `filters`: `state`, `severity`->`severity_at_fire`, `rule`->`rule_id` (int), `service`->`service_id` (int)
+- `extra_context`: `state_choices`, `severity_choices`, `rules`, `services`, `notes`
+- **`event_totals`** - a single `aggregate()` dict with `firing` / `open` / `total` / `unmeasured`.
+  **Corrected 2026-09-26 (Phase 4):** this was originally pinned as three flat keys
+  (`firing_count`, `open_count`, `total_count`), but the build computes all four in ONE query
+  (a filtered `Count` inside `aggregate`) and the template reads them off the dict. The three flat
+  keys do not exist and never did in the shipped build. A test written to the old pin would
+  `KeyError`. All four are real counts over real columns, so a `0` is a legitimate figure.
+
+### 5.5 `incident_list`
+- `search_fields`: `["title", "public_note", "internal_note"]`
+- `filters`: `status`, `type` (GET param) -> `incident_type`, `impact`, `public`->`is_public`
+- `extra_context`: `status_choices`, **`type_choices`**, `impact_choices`, `notes`,
+  `active_count` (register membership), `open_count` (`exclude(status__in=["resolved","completed"])`)
+- **Corrected 2026-09-26 (Phase 4):** the key is `type_choices`, not `incident_type_choices` - the
+  GET param is `type` and the choice list is named to match. `active_count` and `open_count` are
+  **separate keys on purpose**: `is_active` is register membership and `is_open` is a status test.
+  One register counted the other way makes a resolved-but-unarchived row read as "still open".
+
+### 5.6 The four board / overview views
+- `monitoring_overview` - `notes`, **`component_total`**, `retired_component_count`,
+  `operational_count`, `unreported_count`, **`rule_total`**, `active_rule_count`, `firing_count`,
+  `open_event_count`, `unmeasured_count`, `active_incident_count`, `archived_incident_count`,
+  `latest_metrics`.
+  **Corrected 2026-09-26 (Phase 4):** this was pinned as `component_count` / `rule_count`; the
+  build uses `component_total` / `rule_total` to match the sibling sub-modules, and adds the
+  retired/active split. The overview and the health board now share an **active-only** denominator,
+  and the retired figure is passed explicitly so neither page can claim a component count the other
+  disagrees with.
+- `health_board` - `components` (active, `order_by("display_order", "name")`), `latest_metrics`,
+  `component_total`, `registered_total`, `retired_count`, `critical_count`, `public_count`,
+  `unreported_count`, `open_alert_count`, `rollup_status`, `status_counts`, **`status_rows`**,
+  `notes`. **`status_rows` is `(label, count, value)`** - a zip, because a Django template cannot
+  index a dict by a loop variable. The raw value is carried so the badge ladder keys off the stored
+  value, not the display label.
+- `firing_board` - `open_events`, `open_count`, **`open_total`**, `acknowledged_count`, `muted_count`,
+  `unattributed_count`, `state_counts`, `state_rows`, `severity_counts`, `severity_rows`,
+  `rule_total`, `notes`. **Corrected:** the key is `open_events`, not `firing_events`; the list is
+  capped at 200 and `open_total` is passed so a truncated view can say so. **The zero rule:** an empty
+  board must never render as "healthy" - it must say nothing is being reported.
+- `capacity_board` - `usage_rows`, `capacity_rules`, `rule_count`, `over_threshold_count`,
+  `unmetered_count`, `notes`. Each `capacity_rules` row carries `rule`, `bound`, `current`,
+  `headroom`, `note`, **`comparator`**, `breached`, `inactive`. **Corrected:** the board is
+  comparator-aware - `gt`/`gte` compute `bound - current` and `lt`/`lte` compute `current - bound`,
+  and a non-ordering operator yields `headroom = None` rather than an invented number.
+
+---
+
 ## 6. URLs - surgical `Edit` to the flat `apps/core/urls.py`
 
 **Do not convert `core/urls.py` to a package** (backend rule 10 - the `crud()` factory is the better
@@ -223,45 +285,3 @@ Status Page & Incident Comms.
 any other live session before generating (L43)** - a peer session is mid-build on 8.2 in `apps/sales/`
 and `makemigrations` operates on the app registry, so check no peer added a `core` model in this
 checkout (L51).
-
-
-### 5.4 `alert_event_list`
-- `search_fields`: `["message", "service_label", "evidence"]`
-- `filters`: `state`, `severity`->`severity_at_fire`, `rule`->`rule_id` (int), `service`->`service_id` (int)
-- `extra_context`: `state_choices`, `severity_choices`, `rules`, `services`, `notes`
-- `firing_count` and `open_count` are **real counts** (a real `0` is meaningful on a firing board).
-
-### 5.5 `incident_list`
-- `search_fields`: `["title", "public_note", "internal_note"]`
-- `filters`: `status`, `incident_type`, `impact`, `public`->`is_public`
-- `extra_context`: `status_choices`, `incident_type_choices`, `impact_choices`, `notes`
-
-### 5.6 The four board / overview views
-`monitoring_overview` - `notes`, `component_count`, `rule_count`, `open_event_count`, `active_incident_count`.
-`health_board` - `components` (active, `order_by("display_order", "name")`), `latest_metrics`
-(latest `tenants.HealthMetric` per metric), `notes`.
-`firing_board` - `firing_events` grouped by state, `notes`. **The zero rule:** an empty board must never
-render as "healthy" - it must say nothing is being reported.
-`capacity_board` - `usage_rows` from `tenants.UsageRecord` per metric against the `AlertRule` bound,
-`notes`.
-
----
-
-FK `service` -> `ServiceComponent` (SET_NULL); M2M `affected_services` -> `ServiceComponent`;
-FK `primary_alert` -> `AlertEvent` (SET_NULL, `related_name="+"`) so a firing can *become* an incident.
-`INCIDENT_TYPE_CHOICES`: `incident, scheduled_maintenance, postmortem` - **`postmortem` is reserved and
-unused** (0.21's).
-`STATUS_CHOICES` is a **union** enum because one list renders both incident and maintenance:
-`scheduled, investigating, identified, in_progress, monitoring, verifying, resolved, completed`.
-`IMPACT_CHOICES`: `none, minor, major, critical` - `impact` is what drives `ServiceComponent.current_status`
-in the roll-up.
-`public_note` vs `internal_note` (Statuspage public vs private). `scheduled_for` / `scheduled_until` are
-the **notice window**, not the change itself.
-
----
-
-**Known documented limitation, do not fix here:** the mixin walks `ForeignKey`/`OneToOneField` only, so
-`Incident.affected_services` (an M2M) is not tenant-checked on the **admin** path. `TenantModelForm`
-does narrow M2M querysets on the form path. Same posture as 0.16's escalated C7 - record it in
-`SKILL.md` at close-out. **Do not change `TenantModelForm`;** it would break committed tests in three
-other apps.
