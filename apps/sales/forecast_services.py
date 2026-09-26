@@ -27,7 +27,7 @@ Rulings that are enforced here rather than in a template:
 """
 from decimal import Decimal
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 
 from apps.crm.models import Opportunity
 from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import OpportunityOutcome
@@ -102,6 +102,12 @@ def _open_opportunities(tenant, owner, territory, pipeline, period):
     ``closed_lost`` is excluded: a lost deal is not forecastable. No currency filter is
     applied here — the caller decides, because the scalar snapshot and the per-currency
     breakdown want different things from the same base.
+
+    A NULL ``close_date`` counts as landing in this period rather than as not existing.
+    The field is ``null=True``, and an open deal with no expected close date is exactly
+    the pipeline a forecast call is supposed to be reporting on; excluding it made
+    ``weighted_amount`` snapshot as 0.00 and the detail panel claim there was no
+    pipeline at all. A dated deal is still bounded by the window.
     """
     queryset = Opportunity.objects.filter(tenant=tenant)
     if owner is not None:
@@ -116,8 +122,24 @@ def _open_opportunities(tenant, owner, territory, pipeline, period):
         )
     window = _period_window(period)
     if window is not None:
-        queryset = queryset.filter(close_date__gte=window[0], close_date__lte=window[1])
+        queryset = queryset.filter(
+            Q(close_date__isnull=True)
+            | Q(close_date__gte=window[0], close_date__lte=window[1])
+        )
     return queryset.exclude(stage="closed_lost")
+
+
+def _undated_opportunity_count(tenant, owner, territory, pipeline, period):
+    """How many of a call's open deals carry no expected close date.
+
+    Counted with the same filters as :func:`_open_opportunities`, so the figure is
+    always a subset of what that panel shows. The detail page turns this into a
+    caveat: without it, an undated deal sits in the weighted total with no visible
+    reason why it is in scope.
+    """
+    return _open_opportunities(
+        tenant, owner, territory, pipeline, period,
+    ).filter(close_date__isnull=True).count()
 
 
 def _rollup_by_currency(opportunities):
