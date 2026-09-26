@@ -147,15 +147,24 @@ in **`models/Monitoring.py`** — `ServiceComponent`, `AlertRule`, `AlertEvent`,
 `TenantConsistentMixin`. Seeder block `seed_core._seed_monitoring(tenant)`.
 
 **Routes** — `core:`-namespaced, declared in `apps/core/urls.py`: five-route `crud()` sets for
-`service_component`, `alert_rule`, `alert_event` and `incident`, plus the board/landing pages
-`health_board`, `firing_board`, `capacity_board`, `monitoring_overview` and the process board
-`process_monitor`.
+`service_component`, `alert_rule`, `alert_event` and `incident`, plus four board/landing pages
+`health_board`, `firing_board`, `capacity_board`, `monitoring_overview`, and the four POST-only
+actions `alertevent_acknowledge`, `alertevent_resolve`, `alertevent_recur`, `incident_notify`.
+**28 url names in all** (`test_monitoring_security.py::test_monitoring_the_url_inventory_is_complete`
+asserts the count, so a rename fails rather than quietly shrinking the covered surface).
+
+> **Do not confuse `core:process_monitor` with 0.17.** It is a *0.11 Workflow* page, defined in
+> `views/Workflow.py` and routed at `workflows/monitor/`. It is not one of 0.17's four boards.
 
 **Templates** — `templates/core/` at the flat root (foundation app, so no sub-module level):
 `alertrule/{list,detail,form}.html`, `alertevent/{list,detail,form}.html`,
 `incident/{list,detail,form}.html`, `servicecomponent/{list,detail,form}.html`, plus the standalone
-`healthboard.html`, `firingboard.html`, `capacityboard.html`, `monitoringoverview.html` and
-`processmonitor.html`.
+`healthboard.html`, `firingboard.html`, `capacityboard.html` and `monitoringoverview.html`.
+
+**The URL prefix is `monitoring/…` while the template folders are flat `core/<entity>/`.** That
+asymmetry is intentional and matches 0.16 (`backup/jobs` routes ↔ `templates/core/backupjob/`): the
+route namespace groups the pages in the URL bar, the template folder is flat because Module 0 has no
+sub-module level. **Do not "fix" it by creating `templates/core/monitoring/`.**
 
 **Three of the five NavERP bullets are deliberately DECLINED, not partially faked** — this is the
 thing a reader will otherwise re-litigate, so `LIVE_LINKS["0.17"]` says it in comments as well:
@@ -168,6 +177,42 @@ thing a reader will otherwise re-litigate, so `LIVE_LINKS["0.17"]` says it in co
 
 **0.18 inherits that boundary** — it must not re-declare the observability store either, and must say
 in its own contract whether it can now serve log aggregation or carries the same deferral.
+
+**Seeder (L52) — `seed_core._seed_monitoring` creates ZERO `AlertEvent` and ZERO `Incident` rows, on
+purpose.** They are evidence that a threshold was crossed and that an outage happened; NavERP observed
+neither, so seeding them would fabricate operational history and make the boards lie. Only
+`ServiceComponent` and `AlertRule` are seeded. **A test or smoke run that finds zero of the other two
+is correct, not broken** — create them in a `try/finally` and delete them after. This is the same
+ruling as 0.16's `DisposalRecord` and 0.11's `BusinessRuleLog`.
+
+**Five bugs this sub-module actually shipped and fixed — read before "simplifying" any of it:**
+
+- **A Django template cannot index a dict by a loop variable.** `{% for v, l in choices %}{{ counts|default_if_none:0 }}{% endfor %}` printed the *whole dict* on every row. The fix is to zip in the view (`status_rows = [(label, count, value), …]`) and loop the tuples. This is the single most 0.17-specific trap.
+- **A badge ladder must name every real value in its model's `CHOICES`.** Two ladders shipped incomplete — alert events omitted `no_data` and `expired`, incidents omitted `investigating`/`identified`/`in_progress` — so a real state rendered in the same grey as an unrecognised one. An outage *in progress* must not be grey.
+- **Key a badge off the stored VALUE, never the display LABEL.** One card compared `'Operational'` while four others compared `'operational'`; a single `STATUS_CHOICES` relabel would grey that one card out.
+- **`is_active` and `is_open` are different questions.** `is_active` is register membership; `is_open` is a status test. Using one for the other's count made a resolved-but-unarchived incident read as "still open". They are now separate context keys with separate sentences.
+- **A two-tier threshold needs a comparator-aware order check.** "Critical" is stricter *relative to the operator*: above the warning tier for `gt`/`gte`, below it for `lt`/`lte`, and meaningless for `eq`/`in`/`contains`. Without the check, a reversed pair is accepted and the capacity board then picks the looser tier as "the bound" and reports a breach as healthy.
+
+**Performance shape to preserve.** `AlertRule.COMPARATORS is BusinessRule.OPERATORS` and
+`AlertRule.FREQUENCY_CHOICES is SyncSchedule.FREQUENCY_CHOICES` are **reuse by reference** — never
+paste a second copy. `_rule_event_stats()` computes its three figures with one `aggregate()`; it once
+fetched a rule's whole firing history into Python (0.711 s at 20k rows against 0.031 s for the
+aggregate). `firing_board`'s histograms are grouped `values().annotate(Count(...))`, its open list is
+capped at 200, and `open_total` is passed so a truncated view says so. `IncidentForm.__init__` joins
+`primary_alert` with `select_related("rule")` **in the form, not in `forms/_common.py`** — a `__str__`
+that dereferences an FK turns every `<option>` into a query (measured 200 events → 201 queries), and
+changing the shared base would put committed tests in three other apps at risk.
+
+**Known, accepted limitation — do not fix here.** `TenantConsistentMixin` walks `ForeignKey` and
+`OneToOneField` only, so the `Incident.affected_services` **M2M is not tenant-checked on the admin
+path**. `TenantModelForm` narrows M2M querysets, so the form path is covered. Same posture as 0.16's
+escalated C7. **Do not change `TenantModelForm`** — it would break committed tests in three apps.
+
+**Flags for the next sub-modules.** **0.18** grows through exactly one value, `AlertRule.category ==
+"security"`, and must **not** add category-scoped columns to `AlertRule` (`threat_level`, `ip_address`,
+`cvss_score`) — those belong on 0.18 models that FK `AlertRule`/`ServiceComponent` if they want
+correlation. **0.20** owns scheduling: `AlertRule.frequency` reuses the 0.13 vocabulary and is a
+recorded intention nothing runs, so 0.20 will add a `schedule` FK alongside it or migrate the column.
 
 ## Multi-tenancy (mandatory)
 
