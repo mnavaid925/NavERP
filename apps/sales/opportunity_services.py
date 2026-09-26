@@ -395,8 +395,7 @@ def sales_reorder_pipeline_stages(pipeline, tenant, user, ordered_stage_ids):
                 sequence=temporary_start + offset,
                 updated_at=now,
             )
-            stage_by_id[stage_id].sequence = temporary_start + offset
-        for sequence, stage_id in enumerate(final_sequences):
+        for stage_id, sequence in zip(ordered_stage_ids, final_sequences):
             PipelineStage.objects.filter(pk=stage_id, tenant=tenant, pipeline=locked_pipeline).update(
                 sequence=sequence,
                 updated_at=now,
