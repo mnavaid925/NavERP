@@ -284,17 +284,20 @@ def cpq_compare_quote_versions(quote_a, quote_b):
 
 def cpq_render_proposal_html(quote):
     """Generate branded proposal HTML content snapshot for customer viewing and PDF/print."""
+    from django.utils.html import escape
+
     branding = getattr(quote.tenant, "branding", None)
-    company_name = quote.tenant.name
-    currency_code = quote.currency.code if quote.currency else "USD"
+    company_name = escape(quote.tenant.name)
+    currency_code = escape(quote.currency.code if quote.currency else "USD")
     
     lines_html = []
     for line in quote.lines.filter(is_selected=True).order_by("sequence", "id"):
         indent = "&nbsp;&nbsp;&nbsp;&nbsp;↳ " if line.parent_line else ""
+        escaped_desc = escape(line.description)
         lines_html.append(f"""
         <tr>
             <td style="padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px;">
-                {indent}<strong>{line.description}</strong>
+                {indent}<strong>{escaped_desc}</strong>
                 {' <span style="font-size:11px; background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px;">Bundle</span>' if line.line_type == 'bundle_parent' else ''}
             </td>
             <td style="padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-size: 14px;">
@@ -311,32 +314,46 @@ def cpq_render_proposal_html(quote):
             </td>
         </tr>
         """)
+
+    quote_number = escape(quote.number)
+    quote_revision = escape(str(quote.revision_number))
+    quote_date = quote.created_at.strftime('%B %d, %Y')
+    valid_until = escape(quote.valid_until.strftime('%B %d, %Y') if quote.valid_until else '30 Days from issue')
+    owner_str = escape(quote.owner.get_full_name() if quote.owner else 'Sales Team')
+    account_str = escape(quote.account.name if quote.account else 'Valued Customer')
+    contact_str = escape(quote.contact.name if quote.contact else 'Purchasing Department')
+    quote_name = escape(quote.name)
+    opp_str = escape(quote.opportunity.name if quote.opportunity else 'N/A')
+    terms_str = escape(quote.terms_and_conditions) if quote.terms_and_conditions else ''
+    signer_name = escape(quote.signer_name) if quote.signer_name else ''
+    signer_title = escape(quote.signer_title) if quote.signer_title else ''
+    signed_date = escape(quote.signed_at.strftime('%Y-%m-%d %H:%M:%S UTC') if quote.signed_at else '')
         
     proposal_html = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #0f172a; padding: 24px; line-height: 1.5;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #2563eb; padding-bottom: 20px; margin-bottom: 24px;">
             <div>
                 <h1 style="font-size: 26px; margin: 0 0 6px 0; color: #1e3a8a;">COMMERCIAL PROPOSAL</h1>
-                <p style="font-size: 15px; margin: 0; color: #475569;">Proposal Reference: <strong>{quote.number}</strong> (Rev {quote.revision_number})</p>
-                <p style="font-size: 13px; margin: 4px 0 0 0; color: #64748b;">Date: {quote.created_at.strftime('%B %d, %Y')}</p>
-                <p style="font-size: 13px; margin: 2px 0 0 0; color: #64748b;">Valid Until: {quote.valid_until.strftime('%B %d, %Y') if quote.valid_until else '30 Days from issue'}</p>
+                <p style="font-size: 15px; margin: 0; color: #475569;">Proposal Reference: <strong>{quote_number}</strong> (Rev {quote_revision})</p>
+                <p style="font-size: 13px; margin: 4px 0 0 0; color: #64748b;">Date: {quote_date}</p>
+                <p style="font-size: 13px; margin: 2px 0 0 0; color: #64748b;">Valid Until: {valid_until}</p>
             </div>
             <div style="text-align: right;">
                 <h2 style="font-size: 18px; margin: 0; color: #0f172a;">{company_name}</h2>
-                <p style="font-size: 13px; margin: 4px 0 0 0; color: #475569;">Prepared by: {quote.owner.get_full_name() if quote.owner else 'Sales Team'}</p>
+                <p style="font-size: 13px; margin: 4px 0 0 0; color: #475569;">Prepared by: {owner_str}</p>
             </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px;">
             <div style="background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0;">
                 <h3 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin: 0 0 8px 0;">Customer Information</h3>
-                <p style="font-size: 15px; font-weight: 600; margin: 0 0 4px 0;">{quote.account.name if quote.account else 'Valued Customer'}</p>
-                <p style="font-size: 13px; margin: 0; color: #475569;">Attention: {quote.contact.name if quote.contact else 'Purchasing Department'}</p>
+                <p style="font-size: 15px; font-weight: 600; margin: 0 0 4px 0;">{account_str}</p>
+                <p style="font-size: 13px; margin: 0; color: #475569;">Attention: {contact_str}</p>
             </div>
             <div style="background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0;">
                 <h3 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin: 0 0 8px 0;">Deal Summary</h3>
-                <p style="font-size: 15px; font-weight: 600; margin: 0 0 4px 0;">{quote.name}</p>
-                <p style="font-size: 13px; margin: 0; color: #475569;">Opportunity: {quote.opportunity.name if quote.opportunity else 'N/A'}</p>
+                <p style="font-size: 15px; font-weight: 600; margin: 0 0 4px 0;">{quote_name}</p>
+                <p style="font-size: 13px; margin: 0; color: #475569;">Opportunity: {opp_str}</p>
             </div>
         </div>
 
@@ -380,12 +397,12 @@ def cpq_render_proposal_html(quote):
 
         {f'''<div style="margin-bottom: 24px; padding: 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;">
             <h4 style="font-size: 13px; text-transform: uppercase; color: #475569; margin: 0 0 6px 0;">Terms & Conditions</h4>
-            <div style="font-size: 13px; color: #64748b; white-space: pre-line;">{quote.terms_and_conditions}</div>
-        </div>''' if quote.terms_and_conditions else ''}
+            <div style="font-size: 13px; color: #64748b; white-space: pre-line;">{terms_str}</div>
+        </div>''' if terms_str else ''}
 
         {f'''<div style="border: 2px dashed #10b981; background: #ecfdf5; border-radius: 8px; padding: 16px; margin-top: 24px;">
             <p style="margin: 0; font-size: 14px; color: #065f46; font-weight: 600;">✓ Digitally Accepted & Signed</p>
-            <p style="margin: 4px 0 0 0; font-size: 12px; color: #047857;">Signed by: {quote.signer_name} ({quote.signer_title}) on {quote.signed_at.strftime('%Y-%m-%d %H:%M:%S UTC') if quote.signed_at else ''}</p>
+            <p style="margin: 4px 0 0 0; font-size: 12px; color: #047857;">Signed by: {signer_name} ({signer_title}) on {signed_date}</p>
         </div>''' if quote.signed_at else ''}
     </div>
     """
