@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% comment %}
+  The incident register. Context: object_list, page_obj, q, status_choices,
+  incident_class_choices, severity_choices, subject_exemption_choices, notes.
+  The `notifiable` filter is three-state: the blank "Not decided" option means NO filter at
+  all, because `is_notifiable` is a nullable Boolean and NULL is the state this board exists
+  to surface. Selecting True or False narrows to that decision.
+{% endcomment %}
+{% block title %}Security incidents{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Security incidents</h1>
+      <div class="breadcrumb"><a href="{% url 'core:security_overview' %}">Security</a><span class="sep">&rsaquo;</span><span>Incidents</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:breach_clock_board' %}" class="btn btn-outline"><i data-lucide="timer"></i> Breach clock</a>
+      <a href="{% url 'core:securityincident_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record an incident</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>NavERP will not chase the 72-hour clock.</strong>
+      It has no scheduler, no mailer and no regulator integration, so it files nothing with any authority and tells
+      no data subject anything. These rows display a legal deadline; they do not discharge one.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search title, authority reference, root cause&hellip;">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        {# The GET param is `class`; the column it filters is incident_class. #}
+        <select name="class" class="form-select" aria-label="Incident class">
+          <option value="">Any class</option>
+          {% for value, label in incident_class_choices %}<option value="{{ value }}" {% if request.GET.class == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="severity" class="form-select" aria-label="Severity">
+          <option value="">Any severity</option>
+          {% for value, label in severity_choices %}<option value="{{ value }}" {% if request.GET.severity == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        {# The blank option means NO filter, not "filter to NULL". #}
+        <select name="notifiable" class="form-select" aria-label="Notifiable decision">
+          <option value="">Not decided</option>
+          <option value="True" {% if request.GET.notifiable == "True" %}selected{% endif %}>Decided notifiable</option>
+          <option value="False" {% if request.GET.notifiable == "False" %}selected{% endif %}>Decided not notifiable</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="exemption" class="form-select" aria-label="Art. 34(3) exemption">
+          <option value="">Any exemption</option>
+          {% for value, label in subject_exemption_choices %}<option value="{{ value }}" {% if request.GET.exemption == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:securityincident_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Incident</th><th>Class</th><th>Severity</th><th>Status</th><th>Notifiable</th><th>Subjects</th><th>Discovered</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:securityincident_detail' obj.pk %}">{{ obj.title|truncatechars:60 }}</a>
+              {% if obj.authority_reference %}<div class="text-muted">Ref: {{ obj.authority_reference }}</div>{% endif %}</td>
+            <td>{{ obj.get_incident_class_display }}</td>
+            <td>
+              {% if obj.severity == "info" %}<span class="badge badge-info">{{ obj.get_severity_display }}</span>
+              {% elif obj.severity == "warning" %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>
+              {% elif obj.severity == "critical" %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>{% endif %}
+            </td>
+            <td>
+              {% if obj.status == "detected" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "triage" or obj.status == "investigating" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "contained" or obj.status == "eradicated" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "recovered" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "closed" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "false_positive" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>{% if obj.is_notifiable is None %}<span class="badge badge-amber">Not decided</span>
+                {% elif obj.is_notifiable %}<span class="badge badge-red">Notifiable</span>
+                {% else %}<span class="badge badge-slate">Not notifiable</span>{% endif %}</td>
+            <td>{% if obj.subjects_notified is None %}<span class="text-muted">&mdash;</span>
+                {% elif obj.subjects_notified %}<span class="badge badge-info">Told</span>
+                {% else %}{{ obj.get_subject_exemption_display|truncatechars:40 }}{% endif %}</td>
+            <td>{{ obj.discovered_at|date:"M d, Y H:i" }}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:securityincident_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:securityincident_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:securityincident_delete' obj.pk %}" onsubmit="return confirm('Delete this incident record? It deletes the response record, not what happened.');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8"><div class="empty-state"><i data-lucide="shield-alert"></i><h3>No security incidents have been recorded</h3>
+            <p class="text-muted">This is not an all-clear. NavERP detects nothing and has no SIEM client, so an empty
+              register means <strong>nobody has written a response record down</strong> &mdash; it cannot tell you whether anything happened.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
