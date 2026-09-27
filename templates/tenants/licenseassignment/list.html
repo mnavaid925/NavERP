@@ -163,4 +163,35 @@
         itself ever writes.</p>
     </div>
   </div>
+
+  {% comment %}
+    I16 — the seat COUNT is recorded in three different places, and nothing said how they relate.
+    A reader landing here sees a total, a plan entitlement page shows a number per plan, and the
+    subscription form has a plain seat field. Left unstated, the obvious assumption is that they
+    are the same number enforced three times. They are not, and deliberately so: 0.19 records
+    terms, it does not reconcile them. Saying so is cheaper than an operator filing a bug about a
+    mismatch that is the designed state.
+  {% endcomment %}
+  <div class="card mt-3">
+    <div class="card-header"><h2 class="card-title">Three seat numbers, deliberately not reconciled</h2></div>
+    <div class="card-body">
+      <p class="text-muted mb-0">
+        A seat count appears in three places, and <strong>NavERP does not make them agree</strong>:
+      </p>
+      <ul class="text-muted mt-2 mb-0">
+        <li><strong>This register</strong> &mdash; the rows above. The record of who actually holds a seat.</li>
+        <li><strong>The <span class="mono">seats</span> entitlement</strong> &mdash; what the plan and any
+          subscription override grant (<a href="{% url 'tenants:planentitlement_list' %}">plan grants</a>).</li>
+        <li><strong><span class="mono">Subscription.seats</span></strong> &mdash; a purchased figure on the
+          subscription itself.</li>
+      </ul>
+      <p class="text-muted mt-2 mb-0">
+        Nothing enforces one against the others, and a subscription override of
+        <span class="mono">75</span> over a plan allowance of
+        <span class="mono">50</span> is a legitimate record rather than a conflict. Reconciling
+        the three is deferred; if you need a single answer, this register is the one that answers
+        &ldquo;who actually holds one&rdquo;.
+      </p>
+    </div>
+  </div>
 {% endblock %}
