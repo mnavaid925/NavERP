@@ -191,10 +191,10 @@ All four live in `apps/sales/models/QuoteProposalCPQ/`, are `TenantNumbered`, an
 
 `app_name` is `sales`; the URL modules are `apps/sales/urls/QuoteProposalCPQ/`.
 
-- Quotes: `cpq_quote_list`, `_create`, `_detail`, `_edit`, `_delete` (POST-only, draft/rejected only).
-- Lines: `cpq_quote_line_list`, `_create`, `_detail`, `_edit`, `_delete` (POST-only), all nested under `quotes/<int:quote_pk>/`.
-- Bundles: `product_bundle_list`, `_create`, `_detail`, `_edit`, `_delete` (POST-only).
-- Rules: `quote_approval_rule_list`, `_create`, `_detail`, `_edit`, `_delete` (POST-only).
+- Quotes: `cpq_quote_list`, `_create`, `_detail`, `_edit`, `_delete` (POST-only, draft/rejected only). List filters: `q`, `status`, `approval_status`, `opportunity`, `is_primary`, `account`, `owner` (accepts `none` for unassigned), `currency`.
+- Lines: `cpq_quote_line_list`, `_create`, `_detail`, `_edit`, `_delete` (POST-only), all nested under `quotes/<int:quote_pk>/`. List filters: `q`, `line_type`, `product`, `item`, `is_optional`, `is_selected`; the product/SKU dropdowns are scoped to that quote's own lines.
+- Bundles: `product_bundle_list`, `_create`, `_detail`, `_edit`, `_delete` (POST-only). List filters: `q`, `bundle`, `component_product`, `option_group`, `compatibility_rule`, `is_active`.
+- Rules: `quote_approval_rule_list`, `_create`, `_detail`, `_edit`, `_delete` (POST-only). List filters: `q`, `rule_type`, `approver_role`, `is_active`.
 - Operations (`QuoteOperations.py`): `quote_submit_approval` (POST), `quote_approval_queue`, `quote_approval_action` (tenant-admin), `quote_create_revision` (POST), `quote_compare_versions`, `quote_version_list`, `quote_proposal_board`, `quote_generate_proposal`, `quote_portal_view`, `quote_portal_sign` (POST), `quote_portal_toggle_line` (POST), `quote_conversion_board`, `quote_convert_to_order` (POST), `cpq_guided_selling`.
 
 **URLconf order is behaviour.** `quotes/approval-queue/`, `quotes/versions/`, `quotes/proposals/`, `quotes/conversions/` and `quotes/guided-selling/` are literal and must stay ahead of `quotes/<int:pk>/`.
@@ -218,6 +218,8 @@ Use only `badge-green/red/amber/info/muted/slate` — a semantic `badge-success`
 - `QuoteApprovalRule` has exactly one FK (`tenant`). A `select_related("currency")` on it raises `FieldError` and 500s both rule pages — that was introduced by the I9 pass and only caught by rendering the page (C13).
 - Compare views accept only two revisions **of the same family**; a cross-family pair redirects with a warning rather than rendering a misleading diff.
 - `cpq_guided_selling` scopes `?quote=` to `request.tenant` before pre-filling it, and falls back to a default currency when the quote has no opportunity (otherwise the non-nullable `currency` raises `IntegrityError`).
+- **Conversion is the only place 8.5 writes outside its own tables, and it writes three things**: the `scm.SalesOrder` + lines, a `scm.SalesOrderAllocation` per line that has a `scm.Item` (status `reserved`), and an append-only `sales.OpportunityOutcome` for the linked opportunity. All three are load-bearing — the allocation is what makes the order's ATP honest, and the outcome is what gives 8.4's accuracy report ground truth. The allocation posts **no `StockMove`**: on-hand is untouched and only availability-to-promise drops, which is the allocation model's stated contract.
+- **The reservation warehouse is resolved, not flagged.** `scm.Location` has no `is_default` column; `_default_fulfillment_location` takes an active, pickable `location_type="warehouse"`, preferring the lowest `pick_sequence` then the lowest code. If it resolves to `None`, conversion still succeeds (the order is the customer's commitment) but the gap is written onto the order as an ATP note and counted in the flash message — never silently skipped.
 - Quote numbers restart per tenant, so `CPQ-00001` exists in every workspace. Never use a number as a cross-tenant marker in a test — brand the record by name.
 
 ### 8.5 seeder and migrations
