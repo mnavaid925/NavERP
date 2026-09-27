@@ -51,4 +51,36 @@ urlpatterns = [
     path("onboarding/", views.onboarding, name="onboarding"),
     # Tenant isolation & security (0.1 bullet 3 — computed, no model)
     path("isolation/", views.isolation_overview, name="isolation_overview"),
+    # ===================== 0.19 License & Subscription Administration =====================
+    # The two computed boards come FIRST: `quota/` and `renewals/` are literal segments, and
+    # Django is first-match-wins, so a literal route placed after a `<str:...>` sibling would be
+    # swallowed by it.
+    path("licensing/quota-board/", views.quota_board, name="quota_board"),
+    path("licensing/renewal-board/", views.renewal_board, name="renewal_board"),
+    # Entitlement feature catalog (bullet 2)
+    path("licensing/features/", views.entitlementfeature_list, name="entitlementfeature_list"),
+    path("licensing/features/add/", views.entitlementfeature_create, name="entitlementfeature_create"),
+    path("licensing/features/<int:pk>/", views.entitlementfeature_detail, name="entitlementfeature_detail"),
+    path("licensing/features/<int:pk>/edit/", views.entitlementfeature_edit, name="entitlementfeature_edit"),
+    path("licensing/features/<int:pk>/delete/", views.entitlementfeature_delete, name="entitlementfeature_delete"),
+    # Plan entitlements (bullet 2)
+    path("licensing/entitlements/", views.planentitlement_list, name="planentitlement_list"),
+    path("licensing/entitlements/add/", views.planentitlement_create, name="planentitlement_create"),
+    path("licensing/entitlements/<int:pk>/", views.planentitlement_detail, name="planentitlement_detail"),
+    path("licensing/entitlements/<int:pk>/edit/", views.planentitlement_edit, name="planentitlement_edit"),
+    path("licensing/entitlements/<int:pk>/delete/", views.planentitlement_delete, name="planentitlement_delete"),
+    # Usage quotas (bullet 3 — the CEILING; the consumption rows are 0.1's UsageRecord)
+    path("licensing/quotas/", views.usagequota_list, name="usagequota_list"),
+    path("licensing/quotas/add/", views.usagequota_create, name="usagequota_create"),
+    path("licensing/quotas/<int:pk>/", views.usagequota_detail, name="usagequota_detail"),
+    path("licensing/quotas/<int:pk>/edit/", views.usagequota_edit, name="usagequota_edit"),
+    path("licensing/quotas/<int:pk>/delete/", views.usagequota_delete, name="usagequota_delete"),
+    path("licensing/quotas/<int:pk>/mark-breached/", views.usagequota_mark_breached, name="usagequota_mark_breached"),
+    # License assignments / seats (bullet 1)
+    path("licensing/seats/", views.licenseassignment_list, name="licenseassignment_list"),
+    path("licensing/seats/add/", views.licenseassignment_create, name="licenseassignment_create"),
+    path("licensing/seats/<int:pk>/", views.licenseassignment_detail, name="licenseassignment_detail"),
+    path("licensing/seats/<int:pk>/edit/", views.licenseassignment_edit, name="licenseassignment_edit"),
+    path("licensing/seats/<int:pk>/delete/", views.licenseassignment_delete, name="licenseassignment_delete"),
+    path("licensing/seats/<int:pk>/reclaim/", views.licenseassignment_reclaim, name="licenseassignment_reclaim"),
 ]
