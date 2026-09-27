@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% comment %}
+  0.19 — create/edit form for the commercial feature catalog.
+  Backing views: entitlementfeature_create / entitlementfeature_edit.
+  Context: form, is_edit (and obj on edit only). The field loop is the house shape,
+  so the form's Meta.fields is the single source of truth for what renders.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Feature{% else %}New Feature{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Feature{% else %}New Feature{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'tenants:entitlementfeature_list' %}">Entitlement features</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <p class="text-muted">The <code>code</code> is the stable key a grant joins on, so it is lowercase letters,
+        digits and underscores only — <span class="mono">SSO</span> and <span class="mono">sso</span> would be two
+        different features. A <strong>Select</strong> privilege needs its option list, or it is a privilege nobody
+        could ever be granted.</p>
+      <p class="text-warn"><i data-lucide="shield-check"></i>
+        <strong>NavERP records commercial terms somebody wrote down. It does not enforce them.</strong> Adding a
+        feature here puts a word in a catalog; it does not switch anything on for any customer, because no code in
+        NavERP consults this catalog at request time.</p>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        <a href="{% if is_edit %}{% url 'tenants:entitlementfeature_detail' obj.pk %}{% else %}{% url 'tenants:entitlementfeature_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
