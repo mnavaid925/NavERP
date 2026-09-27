@@ -8,4 +8,7 @@ from apps.tenants.models import (
 class SubscriptionForm(TenantModelForm):
     class Meta:
         model = Subscription
-        fields = ["plan", "status", "billing_cycle", "amount", "seats", "started_on", "renews_on"]
+        # `auto_renew` + `grace_ends_on` appended by 0.19. They are commercial terms an operator
+        # negotiates, not system stamps, so they are editable here (unlike `UsageQuota.breached_at`).
+        fields = ["plan", "status", "billing_cycle", "amount", "seats", "started_on", "renews_on",
+                  "auto_renew", "grace_ends_on"]
