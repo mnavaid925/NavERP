@@ -1584,3 +1584,50 @@ See [[next-builds-one-submodule]], L36, L29.
 **Why six reviews missed it:** every reviewer read the code instead of driving it. A reviewer asking "does a duplicate POST 500?" and *posting one* would have found this in under a minute. Reach for the cheapest test whenever a guard is claimed to hold.
 
 See [[next-builds-one-submodule]], L22, L47.
+
+---
+
+## L56 - a CONCURRENT session in the same checkout can break the build you did not cause
+
+*(Numbered L56, not L50: the file already has an L50 ? "Build serially. No Workflow tool, no
+parallel agents" ? plus L52 through L55, so the tail was renumbered by a later pass.)*
+
+**This happened for real during the 0.20 build.** A second session was building sub-module **0.21**
+in the same working tree, committing every 1-2 minutes and interleaved with mine. Its commit
+`516a14e6` added `apps/core/models/Compliance.py`, which fails to compile:
+
+```
+File "apps/core/models/Compliance.py", line 130
+    ### How many ACTIVE users a tenant has - the denominator ...
+SyntaxError: invalid character (U+2014)
+```
+
+The file is valid UTF-8 with no BOM and `tokenize` handles it, but `compile()` fails: the em-dash
+**odcount**: the preceding docstring has an odd count of triple-quote characters, so Python reads the
+line as source rather than as text. `manage.py check`, `makemigrations --check` and every
+0.20 verification script then fail against a file 0.20 never touched. `manage.py check` had been
+clean minutes earlier and no 0.20 line had changed.
+
+**Rules.**
+
+1. **A build failure in a file you did not write is not your bug, but it still blocks your
+   verification.** Diagnose it, report it, and do NOT fix it. That file is another session's live work.
+2. **Never `git checkout`, `git stash` or `git reset` a path another session is editing.** It
+   silently destroys their in-progress work. I stashed `Compliance.py` mid-diagnosis and had to pop it
+   straight back. The safe move is to READ, not to move.
+3. **Verify in ISOLATION rather than in the shared tree.** `git worktree add --detach <dir> <sha>`
+   gives a pristine copy of your own commit with none of their breakage. That is what proved 0.20
+   green while the main tree was unusable.
+4. **L43 already anticipated this** ("agree the migration number before generating one") but
+   understates the blast radius: a concurrent session can also make `manage.py check` fail for you.
+   Pin the migration number, and verify by worktree.
+5. **A third worktree or clone is itself a signal.** `git worktree list` shows it, and it explains a
+   `git status` that is not yours. Check it early.
+
+**And one encoding rule this run also proved, the hard way.** `lessons.md` is full of em-dashes and
+other non-ASCII. Writing a block into it through a console round-trip replaced every one with U+FFFD
+across 5 pre-existing lines (commit `fb01970e`, reverted as `853e389f`). **Before committing an edit to
+a file that already contains non-ASCII, check the diff for `-` lines you did not intend to change, and
+re-count U+FFFD afterwards.** A lesson file that mangles its own history is worse than no lesson.
+
+See [[next-builds-one-submodule]], L43, L45, L8.
