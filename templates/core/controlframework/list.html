@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Control Frameworks{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Control Frameworks</h1>
+      <div class="breadcrumb"><a href="{% url 'core:grc_overview' %}">Compliance</a><span class="sep">&rsaquo;</span><span>Frameworks</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:controlframeworkmapping_list' %}" class="btn btn-outline"><i data-lucide="link"></i> Mapping</a>
+      <a href="{% url 'core:controlframework_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Register a framework</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">The certification programmes this workspace is <em>measured against</em> &mdash; SOC&nbsp;2, ISO&nbsp;27001, PCI-DSS and the like. This is <strong>not</strong> the list of laws that apply: GDPR, CCPA, HIPAA and the rest are <code>core.RegulatoryFramework</code> (0.8), which owns their obligations and their response clocks. A framework row here records that a programme is <em>registered</em>; nothing certifies anything.</p>
+    <p class="text-muted"><strong>{{ framework_count }}</strong> framework{{ framework_count|pluralize }} registered, <strong>{{ mapping_count }}</strong> control-to-framework mapping{{ mapping_count|pluralize }} recorded.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search code, name, authority&hellip;">
+      </div>
+      <div class="form-group">
+        <select name="type" class="form-select" aria-label="Framework type">
+          <option value="">Any type</option>
+          {% for value, label in type_choices %}<option value="{{ value }}" {% if request.GET.type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="is_active" class="form-select" aria-label="Active">
+          <option value="">Active or inactive</option>
+          <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active only</option>
+          <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Inactive only</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:controlframework_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Framework</th><th>Type</th><th>Edition</th><th>Authority</th><th>Adopted</th><th>Controls</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:controlframework_detail' obj.pk %}">{{ obj.name }}</a>
+              <div class="text-muted">{{ obj.number }} &middot; {{ obj.code }}</div></td>
+            <td>{{ obj.get_framework_type_display }}</td>
+            <td>{% if obj.version %}{{ obj.version }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>{% if obj.authority %}{{ obj.authority }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>{% if obj.adopted_on %}{{ obj.adopted_on|date:"d M Y" }}
+              {% else %}<span class="text-muted">Not adopted</span>{% endif %}</td>
+            <td>{{ obj.control_count }}</td>
+            <td>
+              {% if obj.is_active %}<span class="badge badge-green">Active</span>
+              {% else %}<span class="badge badge-slate">Inactive</span>{% endif %}
+              {% if obj.is_overdue_review %}<span class="badge badge-amber">Review due</span>{% endif %}
+            </td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:controlframework_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:controlframework_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:controlframework_delete' obj.pk %}" onsubmit="return confirm('Delete this framework? Every control mapping under it is deleted too.');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8"><div class="empty-state"><i data-lucide="shield-check"></i><h3>No frameworks registered</h3><p class="text-muted">Nothing has been registered. A registered framework is a starting position for mapping, not a claim of certification.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
