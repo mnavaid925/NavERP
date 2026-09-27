@@ -371,10 +371,20 @@ class SecurityThreat(TenantConsistentMixin, models.Model):
 
     def clean(self):
         super().clean()
-        if self.status == "resolved" and self.resolved_at is None:
-            raise ValidationError({"resolved_at": "A resolved threat needs the moment it was resolved."})
-        if self.status == "resolved" and self.resolved_by_id is None:
-            raise ValidationError({"resolved_by": "A resolved threat needs who resolved it."})
+        # L22 keeps `resolved_at` and `resolved_by` OFF every form and off the admin, so they
+        # cannot be a `ValidationError` key here: Django's `ModelForm._post_clean` calls
+        # `add_error()`, which RAISES `ValueError` for a key that is not a field on the form,
+        # turning a validation message into a 500. Proven, not predicted — 240 of the 241
+        # choices-value combinations across the four 0.18 forms are clean, and this one was the
+        # crash, reached by an analyst picking "Resolved" on `core:securitythreat_create`.
+        #
+        # So the rule is keyed on `status`, which IS a form field, and says what the operator
+        # actually needs to know: a finding is resolved by the POST-only `securitythreat_resolve`
+        # action — the one writer that sets the moment, the person and the note together.
+        if self.status == "resolved" and (self.resolved_at is None or self.resolved_by_id is None):
+            raise ValidationError({"status": "A finding is recorded as resolved by the Resolve "
+                                             "action, not by choosing this status here - that "
+                                             "action writes who resolved it and when."})
         if self.resolved_at and self.status != "resolved":
             raise ValidationError({"status": "This threat is stamped resolved but its status says "
                                              "%(status)s.", "params": {"status": self.get_status_display()}})
