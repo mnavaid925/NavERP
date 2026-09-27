@@ -270,4 +270,50 @@ urlpatterns = (
         path("security/incidents/<int:pk>/notify-authority/", views.securityincident_notify_authority, name="securityincident_notify_authority"),
         path("security/incidents/<int:pk>/notify-subjects/", views.securityincident_notify_subjects, name="securityincident_notify_subjects"),
     ]
+    # ===================== 0.20 Admin Console & System Operations =====================
+    # **Order is behaviour.** Django is first-match-wins, so the four LITERAL board segments are
+    # declared FIRST — a board path like `ops/board/` sits under the `ops/` prefix, and a greedy
+    # `<int:pk>` route declared ahead of a sibling literal would permanently shadow it. Then the
+    # `crud()` groups, then the POST-only verbs AFTER the group that owns them, for the same reason
+    # the 0.17 and 0.18 blocks above do it: a verb route declared before its own `add/` would win.
+    + [
+        path("ops/board/", views.admin_board, name="admin_board"),
+        path("ops/support/", views.support_board, name="support_board"),
+        path("ops/bulk/", views.bulk_board, name="bulk_board"),
+        path("ops/audit/", views.ops_audit_trail, name="ops_audit_trail"),
+        # `bulk/preview` is a literal sibling of `bulk/`, so it must precede nothing here — it
+        # matches no `<int:pk>` — but it is declared with the other literals so the whole POST-only
+        # surface reads together.
+        path("ops/bulk/preview/", views.bulk_preview, name="bulk_preview"),
+    ]
+    + crud("ops/jobs", "jobdefinition")
+    + crud("ops/maintenance-windows", "maintenancewindow")
+    + crud("ops/changes", "changerequest")
+    + crud("ops/rollouts", "featurerollout")
+    + [
+        # **`jobrun` is the ONE entity that does not use the `crud()` factory**, and deliberately so.
+        # A `JobRun` is written by the `run_now` verb and by the seeder, never by a person filling in
+        # a form — so there is no create route at all. `crud()` would generate all five, and the
+        # extra one would be a reachable page offering to invent a run (which is exactly the claim
+        # this sub-module refuses to make: a run that nothing executed). The four it does need are
+        # written out here instead, in the same order the factory would have used.
+        path("ops/job-runs/", views.jobrun_list, name="jobrun_list"),
+        path("ops/job-runs/<int:pk>/", views.jobrun_detail, name="jobrun_detail"),
+        path("ops/job-runs/<int:pk>/edit/", views.jobrun_edit, name="jobrun_edit"),
+        path("ops/job-runs/<int:pk>/delete/", views.jobrun_delete, name="jobrun_delete"),
+    ]
+    + [
+        # POST-only verbs, declared AFTER the group that owns them so a greedy `<int:pk>` declared
+        # first cannot shadow the literal sibling.
+        path("ops/jobs/<int:pk>/run-now/", views.jobdefinition_run_now,
+             name="jobdefinition_run_now"),
+        path("ops/maintenance-windows/<int:pk>/end-now/", views.maintenance_window_end_now,
+             name="maintenance_window_end_now"),
+        path("ops/changes/<int:pk>/submit/", views.change_request_submit,
+             name="change_request_submit"),
+        path("ops/changes/<int:pk>/approve/", views.change_request_approve,
+             name="change_request_approve"),
+        path("ops/changes/<int:pk>/rollback/", views.change_request_rollback,
+             name="change_request_rollback"),
+    ]
 )
