@@ -270,3 +270,54 @@ class TestNoPageOverclaims:
         """Decline #1, asserted on the page rather than in a module docstring."""
         html = client_a.get(reverse("tenants:entitlementfeature_list")).content.decode("utf-8", "replace")
         assert "enforce" in html.lower()
+
+    # ------------------------------------------------------------------ M3 / M4 closed by a shared partial
+    _LICENSING_019_PAGES = [
+        "templates/tenants/entitlementfeature/list.html",
+        "templates/tenants/planentitlement/list.html",
+        "templates/tenants/usagequota/list.html",
+        "templates/tenants/licenseassignment/list.html",
+        "templates/tenants/quota_board.html",
+        "templates/tenants/renewal_board.html",
+    ]
+
+    def _licensing_root(self):
+        from pathlib import Path
+        return Path(__file__).resolve().parents[3]
+
+    @pytest.mark.parametrize("template", _LICENSING_019_PAGES)
+    def test_licensing_every_icon_only_button_has_an_accessible_name(self, template):
+        """M4. An icon-only control whose only label is `title` has a fallback accessible name at
+        best; `aria-label` is the robust one. Asserted per file so a new icon button cannot be added
+        without one."""
+        text = (self._licensing_root() / template).read_text(encoding="utf-8")
+        for line in text.splitlines():
+            if 'class="btn-icon' in line:
+                assert "aria-label" in line, f"{template} has an icon-only button with no accessible name"
+
+    @pytest.mark.parametrize("template", _LICENSING_019_PAGES)
+    def test_licensing_no_page_hand_rolls_its_own_confirm_form(self, template):
+        """M3. The seven-line POST+confirm form was duplicated across six call sites, which is how
+        the two copies drifted. They now all include the shared partial."""
+        text = (self._licensing_root() / template).read_text(encoding="utf-8")
+        assert 'method="post"' not in text, f"{template} hand-rolls a POST form; use partials/confirm_button.html"
+        assert "onsubmit=" not in text, f"{template} hand-rolls a confirm dialog"
+
+    def test_licensing_every_confirm_comes_from_the_shared_partial(self):
+        """...and the partial really is where they come from, so the count is honest."""
+        text = (self._licensing_root() / "templates/tenants/entitlementfeature/list.html").read_text(
+            encoding="utf-8")
+        assert 'partials/confirm_button.html' in text
+
+    @pytest.mark.parametrize("template", _LICENSING_019_PAGES)
+    def test_licensing_no_confirm_message_contains_a_raw_apostrophe(self, template):
+        """L42. A literal `'` in a confirm message is HTML-escaped to `&#39;`, which the browser
+        DECODES BACK to a bare quote before JavaScript parses the string — so the dialog stops
+        guarding anything. `partials/confirm_button.html` cannot escape this from inside a template,
+        so the rule is enforced here instead of being trusted to review."""
+        import re
+        root = self._licensing_root()
+        for path in (root / template, root / "templates/partials/confirm_button.html"):
+            for message in re.findall(r'confirm_message="([^"]*)"', path.read_text(encoding="utf-8")):
+                assert "'" not in message, f"{path.name} confirm message contains a raw apostrophe (L42)"
+                assert "\\" not in message, f"{path.name} confirm message contains a backslash (L42)"
