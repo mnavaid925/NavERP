@@ -233,12 +233,19 @@ the role check; cross-tenant → 404.
 
 > ### ✅ FIXER REPORT — every finding closed
 >
-> **1 Critical, 16 Important, 6 Minor — 3 fixed, 3 deliberately skipped with the reason recorded.**
-> 34 commits, one file each. The three skips are M3 (the four duplicated Delete links follow the
-> house pattern and are recorded in code), M4 (icon-only buttons inherit the house pattern; worth an
-> app-wide sweep) and M6 (the seeder's ~94 queries are inherent to the app-wide `next_number`-inside-
-> `save()` design, not a 0.19 per-request path). "Skipped" means declined **on the record with a
-> reason**, not overlooked — so this reads as 3 fixed / 3 justified, NOT "all resolved".
+> **1 Critical, 16 Important, 6 Minor — 6 Minor fixed, 0 skipped** (M1–M6 all closed; see the note
+> below on M3/M4/M6, which were re-opened and fixed after Phase 6 rather than left as skips).
+>
+> The three original skips were **wrong, and re-examining them said so**:
+> * **M3** was skipped for lack of a shared partial, when writing one is one new file plus a mechanical
+>   swap — and there were **six** duplicated forms, not four.
+> * **M4** was recorded against the *detail* pages, which were never icon-only (they have visible text
+>   labels). The real gap was the *list* pages. The finding pointed at the wrong place.
+> * **M6** quoted "~94 queries". The measured figure is **178**. A finding that guesses its own number
+>   is not a finding; it is now a budget with a test behind it.
+>
+> Two things remain open and are **not** claimed as done: the app-wide `aria-label` sweep beyond 0.19,
+> and moving `next_number()` out of `Model.save()` so `bulk_create` becomes usable.
 > Gates after the last fix: `manage.py check` clean · `makemigrations --check` "No changes detected" ·
 > `audit_integrity.py` **6/6** (still `module 0: 2 catalogued but NOT built -> 0.20, 0.21`) ·
 > `seed_tenants` idempotent · **post-fixer regression: 16/16 pages 200 with content, cross-tenant IDOR
@@ -337,21 +344,32 @@ that raised it. **No security Critical/High/Medium exists; the only Critical is 
 - **M2** `[x] fixed` (pass 1) — `seed_tenants` now prints the tenant-admin logins and the
   "the superuser `admin` has **no tenant**, so every module page is empty for it by design" warning.
   Verified on a real run.
-- **M3** `[~] skipped — deliberately, with the reason recorded in code.** The four duplicated Delete
-  blocks stay hand-rolled: the house `partials/pagination.html` shows there is **no** shared
-  delete-confirm partial to reuse, so extracting one would mean authoring a new shared partial for four
-  call sites — a wider change than the review asked for, in a file shared with every other module.
-- **M4** `[~] skipped — deferred as cosmetic polish.** The icon-only buttons inherit the house pattern's
-  missing `aria-label`; **0.19's filter bars are already better than that pattern** (every `<select>`
-  and search input carries a descriptive label — the frontend pass singled this out as the one thing it
-  most wants kept). Adding labels only to 0.19's detail pages would make 0.19 *diverge* from every
-  sibling detail page. Worth doing as an app-wide sweep, not inside this sub-module.
+- **M3** `[x] fixed (revisited after Phase 6)`. It was first skipped as out-of-scope because there was no shared
+  delete-confirm partial to reuse. On a second look that reasoning was thin: the fix is **one new file plus a
+  mechanical replacement**, and 0.19 had **six** copies, not four (the two verbs had drifted too).
+  `templates/partials/confirm_button.html` now owns the POST + confirm + csrf + icon button, and all six
+  call sites include it. A regression asserts no 0.19 page may hand-roll a `POST` form or an `onsubmit`
+  confirm, so the copies cannot come back.
+- **M4** `[x] fixed for 0.19 (revisited after Phase 6)`. The original record was **wrong about where this
+  lives**: it claimed the 0.19 *detail pages* had icon-only buttons, but they use `btn` with **visible text**
+  ("Edit", "Delete") and were never icon-only. The real gap was the *list* pages' `btn-icon` controls, which
+  carried only a `title`. All of 0.19 now has `aria-label` as well. **The app-wide sweep across 0.1 and the
+  other modules is still open** and is not claimed as done here — 0.1's own list templates still rely on
+  `title` alone.
 - **M5** `[x] fixed` (pass 2, E4) — the four detail views' use of `render()` with a hand-set `obj` is now
   the documented, verified contract (they call `crud_detail`, which `views/_common.py` does **not**
   export — that was the Phase 3.5 500). Pinned for Phase 6.
-- **M6** `[~] skipped — not actionable here.** The seeder's ~94 queries are inherent to the app-wide
-  numbering design (`next_number` mints inside `save()`, which `bulk_create` bypasses); rewriting that is
-  a numbering decision out of scope for 0.19. Recorded so it is not mistaken for a per-request hot path.
+- **M6** `[x] closed as a measured budget (revisited after Phase 6)`. The *fix* really is out of scope — moving
+  `next_number()` out of `Model.save()` is an app-wide numbering decision that would touch all 14 modules — but
+  that is an argument against rewriting the numbering, **not** against knowing the number. The finding had
+  quoted "~94 queries"; Phase 6 **measured** it at **178** for one tenant, so the estimate was wrong by nearly
+  half. Now pinned by tests: a budget of 200 (above the measurement on purpose — a budget re-asserting today's
+  exact count every run would be a tripwire, not a guard), a cheap second-run no-op, an assertion that no view
+  module imports the seeder (which is precisely the "not a per-request hot path" claim, now argued with a test
+  rather than with prose), and a guard that all four models mint through the one shared `next_number` so the
+  retry-on-collision handling cannot be forked into a private copy.
+  **Still genuinely open:** moving number minting out of `save()` so `bulk_create` becomes usable. That is a
+  separate, app-wide piece of work and is not claimed as done.
 
 **Query-count regression guards requested by pass 4, for Phase 6:**
 `planentitlement_detail` → 3 (I7) · `licenseassignment_detail` → 2 (I9) · `quota_board` → 2 and
