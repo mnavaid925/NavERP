@@ -58,7 +58,7 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 
 | # | Module | Django app(s) | Status |
 |---|--------|---------------|--------|
-| 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | 🟦 18 of 21 built — 0.1–0.18 (3 remain: 0.19–0.21) |
+| 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | 🟦 19 of 21 built — 0.1–0.19 (2 remain: 0.20–0.21) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built |
 | 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built |
 | 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1–3.41 built — all 41 sub-modules |
@@ -96,15 +96,24 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 > **Implementation status (this repo).** Module 0 is realized by four Django apps — `core` (tenant spine,
 > middleware, navigation, audit, shared CRUD), `accounts` (users, RBAC, auth, invites), `tenants` (sub-module
 > **0.1**), and `dashboard` (KPIs). Sub-module **0.1 Tenant & Subscription Management is fully built**
-> (subscriptions + Stripe billing, branding, encryption keys, health monitoring, onboarding). **18 of the 21
-> sub-modules have a `LIVE_LINKS` entry: 0.1–0.18.** Nine of them — 0.1, 0.2, 0.4, 0.6, 0.8, 0.10, 0.11,
+> (subscriptions + Stripe billing, branding, encryption keys, health monitoring, onboarding), and
+> **sub-module 0.19 License & Subscription Administration** was added on 2026-09-27 (the entitlement
+> feature catalog, plan grants and subscription overrides, the usage **ceiling**, the seat register, and
+> two renewal columns on `Subscription`). **19 of the 21 sub-modules have a `LIVE_LINKS` entry:
+> 0.1–0.19.** Nine of them — 0.1, 0.2, 0.4, 0.6, 0.8, 0.10, 0.11,
 > 0.12 and 0.13 — were reconciled and closed out on 2026-09-19/21, which added the missing models and
 > surfaces and recorded what is deliberately *not* built on the pages themselves.
 >
-> The remaining **3** sub-modules (0.19–0.21) are unbuilt. Several of the live ones still surface only part
+> The remaining **2** sub-modules (0.20–0.21) are unbuilt. Several of the live ones still surface only part
 > of their own bullet lists — **0.3 maps 1 of 5, 0.4 maps 4 of 5, 0.5 maps 2 of 5, 0.7 maps 1 of 5, 0.9
-> maps 1 of 5 and 0.14 maps 1 of 5** — and the reconcile has classified every one of those gaps, so each is
-> a known build rather than an unknown. Two of those counts need a caveat: **0.4's single gap is
+> maps 1 of 5, 0.14 maps 1 of 5 and 0.19 maps 4 of 5** — and the reconcile has classified every one of those
+> gaps, so each is
+> a known build rather than an unknown. **0.19's single gap is bullet 4, "Billing & Invoicing
+> Integration", which is served entirely by 0.1's `SubscriptionInvoice` and its signature-verified
+> `stripe_webhook`: 0.19 adds no invoice table and no money arithmetic (proration is declined — it
+> would be a second money path, and `accounting` owns the money, L29), so `LIVE_LINKS["0.19"]` bullet 4
+> points at 0.1's invoice register rather than at a page 0.19 built.** Two of those counts need a
+> caveat: **0.4's single gap is
 > `SSO & Federation`, deliberately left unmapped** because SAML/OIDC need an IdP library and a configured
 > provider, so the bullet renders as the roadmap pill it actually is; and **0.9's `User Activity Tracking`
 > is realized and surfaced** as the `Activities` register, so it is a label mismatch rather than a gap.
