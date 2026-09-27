@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% comment %}
+  0.19 — one catalog feature and the grants that reference it.
+  Backing view: entitlementfeature_detail.
+
+  Context, and ONLY this:
+    obj          the EntitlementFeature
+    entitlements obj.plan_entitlements.select_related("subscription"), capped at 50
+                 in the VIEW (a feature granted on every plan across many subscriptions
+                 would otherwise render an unbounded page)
+
+  No `page_obj` and no `q` on this page — those belong to the list.
+{% endcomment %}
+{% block title %}{{ obj.code }} · Entitlement feature{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title"><span class="mono">{{ obj.code }}</span> — {{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">&rsaquo;</span><a href="{% url 'tenants:entitlementfeature_list' %}">Entitlement features</a><span class="sep">&rsaquo;</span><span>{{ obj.code }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:entitlementfeature_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% comment %}Fixed confirm string — obj.code and obj.name are user-typed (L42).{% endcomment %}
+      <form method="post" action="{% url 'tenants:entitlementfeature_delete' obj.pk %}" onsubmit="return confirm('Delete this feature and every grant that references it? Set its status to Archived instead if you only want to retire it.');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+      <a href="{% url 'tenants:entitlementfeature_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All features</a>
+    </div>
+  </div>
+
+  <div class="layout-2col">
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">The feature as written</h2>
+          {% if obj.status == "active" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% elif obj.status == "draft" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+          {% elif obj.status == "archived" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+        </div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Code</dt><dd class="mono fw-600">{{ obj.code }}</dd></div>
+            <div class="detail-item"><dt>Number</dt><dd class="mono">{{ obj.number }}</dd></div>
+            <div class="detail-item"><dt>Privilege type</dt><dd>{{ obj.get_privilege_type_display }}</dd></div>
+            <div class="detail-item"><dt>Pricing</dt><dd>
+              {% if obj.is_add_on %}<span class="badge badge-amber">Add-on</span>
+              {% else %}<span class="badge badge-slate">Included in plan</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Listed</dt><dd>
+              {% if obj.is_active %}<span class="badge badge-info">Listed</span>{% else %}<span class="badge badge-muted">Not listed</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Recorded</dt><dd>{{ obj.created_at|date:"M d, Y" }}</dd></div>
+            {% if obj.privilege_type == "select" %}
+              <div class="detail-item"><dt>Select options</dt><dd>{{ obj.select_options|linebreaksbr }}</dd></div>
+            {% endif %}
+          </dl>
+          {% if obj.description %}
+            <div class="detail-item" style="margin-top:1rem;"><dt>Description</dt><dd>{{ obj.description|linebreaksbr }}</dd></div>
+          {% endif %}
+          {% if obj.notes %}
+            <div class="detail-item" style="margin-top:1rem;"><dt>Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+          {% endif %}
+          {% if obj.privilege_type == "select" %}
+            <p class="form-help" style="margin-top:1rem;">A grant against a Select privilege must name one of
+              these options exactly, or the form refuses it. That check is the only typing this privilege has.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Grants of this feature</h2>
+          <span class="badge badge-slate">{{ entitlements|length }} shown{% if entitlements|length >= 50 %} (capped at 50){% endif %}</span>
+        </div>
+        <div class="card-body">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Plan</th><th>Scope</th><th>Privilege value</th><th>Enabled</th><th>Window</th></tr></thead>
+              <tbody>
+                {% for grant in entitlements %}
+                  <tr>
+                    <td class="fw-600">{{ grant.get_plan_display }}</td>
+                    <td>
+                      {% comment %}
+                        subscription is a NULLABLE FK (SET_NULL), so the whole expression goes
+                        inside the if — a `grant.subscription.get_plan_display|default:…` is a
+                        filter ARGUMENT walk on a None and raises (L10).
+                      {% endcomment %}
+                      {% if grant.subscription %}
+                        <a href="{% url 'tenants:subscription_detail' grant.subscription.pk %}">{{ grant.subscription.get_plan_display }}</a>
+                        <span class="badge badge-info">Override</span>
+                      {% else %}
+                        <span class="badge badge-slate">Plan-level</span>
+                      {% endif %}
+                    </td>
+                    <td>{% if grant.privilege_value %}<span class="mono">{{ grant.privilege_value }}</span>{% else %}<span class="muted">not granted</span>{% endif %}</td>
+                    <td>{% if grant.is_enabled %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-muted">Disabled</span>{% endif %}</td>
+                    <td class="text-muted nowrap">
+                      {% if grant.effective_from %}{{ grant.effective_from|date:"M d, Y" }}{% else %}<span class="muted">From start</span>{% endif %} –
+                      {% if grant.effective_to %}{{ grant.effective_to|date:"M d, Y" }}{% else %}<span class="muted">Forever</span>{% endif %}
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="5"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No grants yet</h3><p>Nothing grants this feature to any plan. Record a plan entitlement to say so.</p></div></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <p class="form-help" style="margin-top:1rem;">A row with no subscription is the plan-level grant every
+            customer on that plan receives; a row with one is a single subscription&rsquo;s override. Nothing in
+            NavERP resolves that precedence at request time.</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Actions</h2></div>
+        <div class="card-body">
+          <a href="{% url 'tenants:entitlementfeature_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          {% comment %}Fixed confirm string (L42).{% endcomment %}
+          <form method="post" action="{% url 'tenants:entitlementfeature_delete' obj.pk %}" onsubmit="return confirm('Delete this feature and every grant that references it? Set its status to Archived instead if you only want to retire it.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+          <a href="{% url 'tenants:planentitlement_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Grant this feature</a>
+          <a href="{% url 'tenants:entitlementfeature_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">What this page does not do</h2></div>
+        <div class="card-body">
+          <p class="text-muted"><strong>NavERP records commercial terms somebody wrote down. It does not enforce them.</strong></p>
+          <p class="text-muted">The grants listed are a <strong>record, not a gate</strong>. Nothing consults this
+            feature, or any <a href="{% url 'tenants:planentitlement_list' %}">plan entitlement</a>, when a request is
+            made &mdash; entitlement enforcement is declined by this sub-module. Writing
+            <span class="mono">privilege_value = 500</span> here does not give a customer 500 of anything.</p>
+          <p class="text-muted">Deleting this row deletes the grants that reference it. To retire a feature without
+            losing that history, set its status to <strong>Archived</strong> instead.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
