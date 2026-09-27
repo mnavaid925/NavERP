@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Compliance Posture{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Compliance Posture</h1>
+      <div class="breadcrumb"><span>Compliance</span><span class="sep">&rsaquo;</span><span>Overview</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:controlframework_list' %}" class="btn btn-outline"><i data-lucide="shield-check"></i> Frameworks</a>
+      <a href="{% url 'core:compliancecontrol_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Controls</a>
+      <a href="{% url 'core:corporatepolicy_list' %}" class="btn btn-outline"><i data-lucide="scroll-text"></i> Policies</a>
+      <a href="{% url 'core:riskregister_list' %}" class="btn btn-outline"><i data-lucide="triangle-alert"></i> Risks</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Read every number below as a
+      record, not a verdict.</strong> This application enforces no control, certifies nothing, pins no
+      data to a region, and reminds nobody about anything &mdash; there is no scheduler and no mail
+      dispatcher. The figures count what people have written down.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">At a glance</h2></div>
+    <div class="card-body">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-value">{{ framework_count }}</div>
+          <div class="stat-label">Frameworks registered</div>
+          <div class="text-muted">Certification programmes in scope. A registered framework is not an
+            adopted one and certifies nothing.</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ control_count }}</div>
+          <div class="stat-label">Controls recorded</div>
+          <div class="text-muted">{{ effective_count }} marked effective. Each is a statement a person
+            made &mdash; nothing tests them.</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ published_policies }}</div>
+          <div class="stat-label">Policies published</div>
+          <div class="text-muted">Publication is a record. No permission or workflow anywhere reads it.</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ open_risks }}</div>
+          <div class="stat-label">Open risks</div>
+          <div class="text-muted">{{ critical_risks }} in the critical band, on a calculated 1&ndash;25
+            scale. Separate from project risk (module 9).</div>
+        </div>
+      </div>
+      {% if overdue_reviews %}
+        <p class="text-warn" style="margin-top:1rem;"><i data-lucide="alert-triangle"></i>
+          <strong>{{ overdue_reviews }}</strong> control{{ overdue_reviews|pluralize }} or risk{{ overdue_reviews|pluralize }}
+          {{ overdue_reviews|pluralize:"is,are" }} past a recorded review date. This page does not
+          notify anybody about them &mdash; there is nothing in this application that would.</p>
+      {% endif %}
+    </div>
+  </div>
+
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Frameworks</h2></div>
+    <div class="card-body">
+      {% if frameworks %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Framework</th><th>Type</th><th>Authority</th><th>Adopted</th></tr></thead>
+            <tbody>
+              {% for fw in frameworks %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'core:controlframework_detail' fw.pk %}">{{ fw.name }}</a>
+                    <div class="text-muted">{{ fw.number }} &middot; {{ fw.code }}</div></td>
+                  <td>{{ fw.get_framework_type_display }}</td>
+                  <td>{% if fw.authority %}{{ fw.authority }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                  <td>{% if fw.adopted_on %}{{ fw.adopted_on|date:"d M Y" }}{% else %}<span class="text-muted">Registered only</span>{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="shield-check"></i><h3>No frameworks registered</h3><p class="text-muted">Nothing is in scope. That is a fact about this workspace, not a judgement about it.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Highest-scored risks</h2></div>
+    <div class="card-body">
+      {% if risks %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Score</th><th>Risk</th><th>Treatment</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for risk in risks %}
+                <tr>
+                  <td><strong>{{ risk.inherent_score }}</strong>
+                    {% if risk.score_label == "critical" %}<span class="badge badge-red">Critical</span>
+                    {% elif risk.score_label == "high" %}<span class="badge badge-amber">High</span>
+                    {% else %}<span class="badge badge-blue">{{ risk.score_label|title }}</span>{% endif %}</td>
+                  <td class="fw-600"><a href="{% url 'core:riskregister_detail' risk.pk %}">{{ risk.title }}</a>
+                    <div class="text-muted">{{ risk.code }}</div></td>
+                  <td>{{ risk.get_treatment_display }}</td>
+                  <td>{{ risk.get_status_display }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="triangle-alert"></i><h3>No risks recorded</h3><p class="text-muted">The register is empty because nobody has filled it in &mdash; not because a scan found nothing, because no scan exists.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Not built yet</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Two of this sub-module's five bullets are deferred to a second pass, and
+        they are named here rather than quietly omitted:</p>
+      <ul class="text-muted">
+        <li><strong>Audit &amp; Certification Support</strong> &mdash; engagement records, evidence
+          collection, auditor access and control attestation. The evidence collectors every vendor
+          sells require a runtime that does not exist here, so nothing is stubbed to look present.</li>
+        <li><strong>Data Residency &amp; Sovereignty</strong> &mdash; region-pinned storage and
+          jurisdiction-specific controls. NavERP is a single-region application with one database; it
+          cannot pin storage, so a page claiming it would be the exact false claim the rest of this
+          sub-module refuses.</li>
+      </ul>
+      <p class="text-muted">The obligations of the privacy regimes themselves &mdash; DSAR clocks,
+        consent, retention &mdash; are already built in <code>core</code> 0.8 and are not repeated here.</p>
+    </div>
+  </div>
+{% endblock %}
