@@ -119,7 +119,16 @@
           </div>
           {% if not can_edit %}
             <p class="text-muted" style="margin-top:.5rem;">
-              Only {{ obj.owner.get_full_name|default:obj.owner.username|default:"its owner" }} or a workspace administrator can change this board. Every tile on it still reads for you.
+              {% comment %}
+                The guard is load-bearing, not tidiness: `default` cannot rescue a failure raised by its
+                OWN argument, so `obj.owner.username` on a null owner is a 500 rather than a fallback.
+                A shared workspace template (the seeder's PDB-00002) has no owner at all.
+              {% endcomment %}
+              {% if obj.owner %}
+                Only {{ obj.owner.get_full_name|default:obj.owner.username }} or a workspace administrator can change this board. Every tile on it still reads for you.
+              {% else %}
+                Only a workspace administrator can change this board — it is a shared template with no owner. Every tile on it still reads for you.
+              {% endif %}
             </p>
           {% endif %}
         </div>
