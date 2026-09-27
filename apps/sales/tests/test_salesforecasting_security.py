@@ -321,3 +321,232 @@ def test_salesforecasting_revert_refuses_a_post_without_a_reason(
     )
     salesforecasting_adjustment_a.refresh_from_db()
     assert salesforecasting_adjustment_a.is_reverted is False
+
+
+# ------------------------------------------- "you cannot adjust a level above you"
+# The 8.4 plan calls this rule out by name -- "you cannot adjust a level above
+# you (Microsoft, security-sensitive)" -- and the rule is IMPLEMENTED, in
+# ForecastAdjustments._adjusts_above_acting_level(): it resolves the acting user's
+# org node through sales.OpportunityTeamMember.org_unit and refuses a submission
+# sitting on a strict ancestor, walking core.OrgUnit.parent. It had no test at all.
+#
+# Writing one exposed a defect: the view it guards is @tenant_admin_required, and
+# _adjusts_above_acting_level() returns False immediately for a tenant admin. So
+# the only users who reach the call are the ones it exempts, and the
+# PermissionDenied it raises is UNREACHABLE. The rule is dead code today.
+#
+# These tests pin two separate things: the rule's own logic, tested directly on
+# the helper so it cannot silently rot, and the view's real gate, so the
+# dead-code shape stays visible rather than assumed away. Fixing it means
+# deciding who may override whom, which is a product decision -- recorded in
+# review-sales-8.4.md as C1, not silently changed here.
+
+def _salesforecasting_level_membership(tenant, opportunity, user, org_unit=None):
+    from apps.sales.models import OpportunityTeamMember
+
+    return OpportunityTeamMember.objects.create(
+        tenant=tenant, opportunity=opportunity, user=user,
+        org_unit=org_unit, role="sales_support", is_active=True,
+    )
+
+
+def test_salesforecasting_the_level_rule_refuses_a_strict_ancestor(
+    salesforecasting_tenant_a,
+    salesforecasting_rep_a,
+    salesforecasting_org_unit_parent_a,
+    salesforecasting_org_unit_child_a,
+    salesforecasting_period_a,
+):
+    """The rule itself: a user at the CHILD node faces a submission on the
+    PARENT node. This is the case the plan means."""
+    from apps.crm.models import Opportunity
+    from apps.sales.models import ForecastSubmission
+    from apps.sales.views.SalesForecasting.ForecastAdjustments import _adjusts_above_acting_level
+
+    opportunity = Opportunity.objects.create(tenant=salesforecasting_tenant_a, name="Level probe")
+    _salesforecasting_level_membership(
+        salesforecasting_tenant_a, opportunity, salesforecasting_rep_a,
+        org_unit=salesforecasting_org_unit_child_a,
+    )
+    parent_submission = ForecastSubmission.objects.create(
+        tenant=salesforecasting_tenant_a, period=salesforecasting_period_a,
+        org_unit=salesforecasting_org_unit_parent_a,
+    )
+    assert _adjusts_above_acting_level(salesforecasting_rep_a, parent_submission) is True
+
+
+def test_salesforecasting_the_level_rule_allows_your_own_node(
+    salesforecasting_tenant_a,
+    salesforecasting_rep_a,
+    salesforecasting_org_unit_child_a,
+    salesforecasting_period_a,
+):
+    """A node is not a strict ancestor of itself. Without this the guard would
+    make the feature unusable for its intended user."""
+    from apps.crm.models import Opportunity
+    from apps.sales.models import ForecastSubmission
+    from apps.sales.views.SalesForecasting.ForecastAdjustments import _adjusts_above_acting_level
+
+    opportunity = Opportunity.objects.create(tenant=salesforecasting_tenant_a, name="Own node")
+    _salesforecasting_level_membership(
+        salesforecasting_tenant_a, opportunity, salesforecasting_rep_a,
+        org_unit=salesforecasting_org_unit_child_a,
+    )
+    own = ForecastSubmission.objects.create(
+        tenant=salesforecasting_tenant_a, period=salesforecasting_period_a,
+        org_unit=salesforecasting_org_unit_child_a,
+    )
+    assert _adjusts_above_acting_level(salesforecasting_rep_a, own) is False
+
+
+def test_salesforecasting_the_level_rule_allows_a_descendant(
+    salesforecasting_tenant_a,
+    salesforecasting_rep_a,
+    salesforecasting_org_unit_parent_a,
+    salesforecasting_period_a,
+):
+    """The rule is one-directional: a manager may always adjust below them. Only
+    ABOVE is a violation, so a submission on a descendant is fine."""
+    from apps.crm.models import Opportunity
+    from apps.core.models import OrgUnit
+    from apps.sales.models import ForecastSubmission
+    from apps.sales.views.SalesForecasting.ForecastAdjustments import _adjusts_above_acting_level
+
+    root = OrgUnit.objects.create(
+        tenant=salesforecasting_tenant_a, name="Level root", kind="department",
+        parent=salesforecasting_org_unit_parent_a,
+    )
+    opportunity = Opportunity.objects.create(tenant=salesforecasting_tenant_a, name="Below me")
+    _salesforecasting_level_membership(
+        salesforecasting_tenant_a, opportunity, salesforecasting_rep_a,
+        org_unit=salesforecasting_org_unit_parent_a,
+    )
+    below = ForecastSubmission.objects.create(
+        tenant=salesforecasting_tenant_a, period=salesforecasting_period_a, org_unit=root,
+    )
+    assert _adjusts_above_acting_level(salesforecasting_rep_a, below) is False
+
+
+
+def test_salesforecasting_the_level_rule_ignores_a_sibling_branch(
+    salesforecasting_tenant_a,
+    salesforecasting_rep_a,
+    salesforecasting_period_a,
+):
+    """A peer under a shared parent is not an ancestor of the acting node."""
+    from apps.crm.models import Opportunity
+    from apps.core.models import OrgUnit
+    from apps.sales.models import ForecastSubmission
+    from apps.sales.views.SalesForecasting.ForecastAdjustments import _adjusts_above_acting_level
+
+    root = OrgUnit.objects.create(tenant=salesforecasting_tenant_a, name="Peer root", kind="department")
+    mine = OrgUnit.objects.create(tenant=salesforecasting_tenant_a, name="Mine", kind="department", parent=root)
+    peer = OrgUnit.objects.create(tenant=salesforecasting_tenant_a, name="Peer", kind="department", parent=root)
+    opportunity = Opportunity.objects.create(tenant=salesforecasting_tenant_a, name="Peers")
+    _salesforecasting_level_membership(
+        salesforecasting_tenant_a, opportunity, salesforecasting_rep_a, org_unit=mine,
+    )
+    peer_submission = ForecastSubmission.objects.create(
+        tenant=salesforecasting_tenant_a, period=salesforecasting_period_a, org_unit=peer,
+    )
+    assert _adjusts_above_acting_level(salesforecasting_rep_a, peer_submission) is False
+
+
+def test_salesforecasting_the_level_rule_fails_open_without_provable_nesting(
+    salesforecasting_tenant_a,
+    salesforecasting_rep_a,
+    salesforecasting_period_a,
+):
+    """No membership, or no org unit on either side, means no level to compare --
+    so no violation is claimed. Pinned because a fail-CLOSED reading of the same
+    code would lock every user out of the feature."""
+    from apps.sales.models import ForecastSubmission
+    from apps.sales.views.SalesForecasting.ForecastAdjustments import _adjusts_above_acting_level
+
+    submission = ForecastSubmission.objects.create(
+        tenant=salesforecasting_tenant_a, period=salesforecasting_period_a,
+    )
+    assert _adjusts_above_acting_level(salesforecasting_rep_a, submission) is False
+
+
+def test_salesforecasting_the_level_rule_exempts_a_tenant_admin(
+    salesforecasting_tenant_a,
+    salesforecasting_admin_a,
+    salesforecasting_org_unit_parent_a,
+    salesforecasting_period_a,
+):
+    """A tenant admin passes unconditionally -- the director may always correct a
+    rep's number. This exemption is WHY the rule is currently unreachable."""
+    from apps.sales.models import ForecastSubmission
+    from apps.sales.views.SalesForecasting.ForecastAdjustments import _adjusts_above_acting_level
+
+    root_submission = ForecastSubmission.objects.create(
+        tenant=salesforecasting_tenant_a, period=salesforecasting_period_a,
+        org_unit=salesforecasting_org_unit_parent_a,
+    )
+    assert _adjusts_above_acting_level(salesforecasting_admin_a, root_submission) is False
+
+
+def _salesforecasting_adjust_post(submission, note="gate probe"):
+    # Mirrors _adjustment_form_data in the forms lane exactly: a `category`
+    # target takes a CATEGORY, and leaving adjusted_value populated fails the
+    # form's own coherence check in clean().
+    return {
+        "submission": str(submission.pk),
+        "opportunity": "",
+        "placement": "",
+        "adjustment_kind": "direct",
+        "target_field": "category",
+        "adjusted_value": "",
+        "adjusted_category": "commit",
+        "reason_code": "manager_judgement",
+        "note": note,
+    }
+
+
+def test_salesforecasting_the_adjust_create_view_is_tenant_admin_gated(
+    salesforecasting_tenant_a,
+    salesforecasting_client_rep_a,
+    salesforecasting_period_a,
+):
+    """The gate the level rule sits behind. A non-admin is refused by the
+    DECORATOR, which is why _adjusts_above_acting_level never runs for the user
+    it was written for. Pinned deliberately: if that gate ever changes, this test
+    is what will say so."""
+    from apps.sales.models import ForecastAdjustment, ForecastSubmission
+
+    submission = ForecastSubmission.objects.create(
+        tenant=salesforecasting_tenant_a, period=salesforecasting_period_a,
+        commit_amount=Decimal("100.00"),
+    )
+    response = salesforecasting_client_rep_a.post(
+        reverse("sales:forecast_adjustment_create"),
+        _salesforecasting_adjust_post(submission, "rep gate probe"),
+    )
+    assert response.status_code == 403
+    assert not ForecastAdjustment.objects.filter(
+        tenant=salesforecasting_tenant_a, submission=submission
+    ).exists()
+
+
+def test_salesforecasting_a_tenant_admin_may_create_an_adjustment(
+    salesforecasting_tenant_a,
+    salesforecasting_client_a,
+    salesforecasting_period_a,
+):
+    """The happy path the admin-only gate leaves working today."""
+    from apps.sales.models import ForecastAdjustment, ForecastSubmission
+
+    submission = ForecastSubmission.objects.create(
+        tenant=salesforecasting_tenant_a, period=salesforecasting_period_a,
+        commit_amount=Decimal("100.00"),
+    )
+    response = salesforecasting_client_a.post(
+        reverse("sales:forecast_adjustment_create"),
+        _salesforecasting_adjust_post(submission, "admin override"),
+    )
+    assert response.status_code == 302
+    assert ForecastAdjustment.objects.filter(
+        tenant=salesforecasting_tenant_a, submission=submission
+    ).exists()
+
