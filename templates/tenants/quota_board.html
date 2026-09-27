@@ -1,6 +1,6 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% comment %}
-  0.19 â€” the quota-vs-consumption board. Backing view: quota_board (views/Boards.py).
+  0.19 &mdash; the quota-vs-consumption board. Backing view: quota_board (views/Boards.py).
 
   Context, and ONLY these six keys, every one of them produced by the VIEW:
     quota_rows       list of row dicts, ordered by -pct_used then metric_label
@@ -103,7 +103,7 @@
               <td class="nowrap">
                 {% comment %}
                   The percentage is printed ONLY when the row is metered. An unmetered
-                  row shows the word and no number â€” "0%" against a limit of zero would
+                  row shows the word and no number &mdash; "0%" against a limit of zero would
                   read as "nothing used", which is a different claim from "not measured".
                 {% endcomment %}
                 {% if row.limit == 0 %}
@@ -120,7 +120,7 @@
                   <span class="badge badge-green">0</span>
                 {% endif %}
               </td>
-              <td><span class="badge badge-slate" title="Recorded policy only â€” nothing acts on this value">{{ row.action_on_breach }}</span></td>
+              <td><span class="badge badge-slate" title="Recorded policy only &mdash; nothing acts on this value">{{ row.action_on_breach }}</span></td>
               <td class="nowrap">
                 {% comment %}
                   `breached_at` is read inside this branch, never through a |default: filter
@@ -166,7 +166,7 @@
         are entered by hand or by 0.1&rsquo;s flow. <strong>There is no event pipeline feeding this board</strong>,
         so the meter only moves when somebody records a row &mdash; it is not a live tap on product activity.</p>
       <p class="text-muted"><i data-lucide="layers"></i>
-        <strong>L36 â€” which rows are 0.1&rsquo;s.</strong> This board is new in 0.19, but the rows underneath it are
+        <strong>L36 &mdash; which rows are 0.1&rsquo;s.</strong> This board is new in 0.19, but the rows underneath it are
         not: <code>UsageRecord</code> was built by sub-module 0.1 and is <strong>extended here, never
         re-declared</strong>. A quota reaches it by foreign key and reads the meter; the usage rows themselves belong
         to 0.1. If you are looking for a second usage table, there is none &mdash; reporting a duplicate-billing bug
