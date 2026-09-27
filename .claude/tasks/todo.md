@@ -10,6 +10,31 @@
 
 # Build Plan — Module 0 0.19 License & Subscription Administration
 
+> **Build status 2026-09-27 — Phases 0-3 COMPLETE, tree clean, 46 commits on `44c7de31..HEAD`.**
+> 4 models (13/12/12/12 fields) + 2 `Subscription` columns · 4 forms + 1 surgical form edit ·
+> 24 views / 24 routes (all reversing) · 14 templates · migration `tenants.0005` applied ·
+> `seed_tenants` idempotent (verified by COUNT, not by stdout) · `manage.py check` clean ·
+> `makemigrations --check` "No changes detected" · **Phase 3.5 smoke: 16/16 pages 200 with real
+> content, cross-tenant IDOR 404, zero comment leaks** · `temp/audit_integrity.py` **6/6**, now
+> reporting `module 0: 2 catalogued but NOT built -> 0.20, 0.21`.
+>
+> **Three defects the phases caught, each fixed rather than built around:**
+> 1. **All four detail pages were 500s** (`NameError: crud_detail`) — the helper exists in
+>    `apps/core/crud.py` but `views/_common.py` never imported it. Found ONLY by the content
+>    smoke; `manage.py check` was clean throughout, which is exactly the L8 point. Fixed to the
+>    one-fetch + `render` house pattern, which also removed a redundant second query per page.
+> 2. **RULING 11 — the contract contradicted itself** on `LicenseAssignment.notes` (§1.4 omitted
+>    it, §2.4/§3.5 named it → `FieldError` at class-definition, every seat page 500). The MODEL
+>    was ruled wrong and the column added; the model is 13 fields, not 12.
+> 3. **`LIC-` was already taken** by `scm.TradeLicense`, and `NumberingScheme` is unique per
+>    `(tenant, prefix)` — the seat register mints **`SEAT-`**. Caught by the contract, not the build.
+>
+> **The number of declines is TEN, not nine** — the miscount had already propagated into the
+> research, this plan and the nav comment; say ten from here on.
+>
+> **NEXT: Phase 4 (six reviewers, one at a time, over `44c7de31...HEAD`), Phase 5 (`code-fixer`),
+> Phase 6 (tests), Phase 7 (SKILL.md + README).** Nothing below is done yet.
+
 Source of truth: `.claude/tasks/research-tenants-0.19.md` (committed `44c7de31`). **Phase 2 is planning
 only** — this edit adds no application code, generates no migration, and pushes nothing.
 App: `tenants` (Module 0 foundation — **flat, no sub-module level**, backend rule 9: `tenants` has no
