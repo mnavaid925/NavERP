@@ -84,6 +84,24 @@ def licenseassignment_detail(request, pk):
 
 @tenant_admin_required
 def licenseassignment_edit(request, pk):
+    """A NON-ACTIVE seat cannot be edited, and the VIEW enforces it — not the template.
+
+    I6: the detail template hides Edit for a non-active seat, but hiding a button does not stop
+    a direct POST to this URL, and a seat's `status` is the SOLE writer's field
+    (`licenseassignment_reclaim`). Editing a reclaimed seat would rewrite its `module_slug`,
+    `notes` or `subscription` after the fact — the audit trail would show a reclaimed seat whose
+    commercial terms were edited afterwards, which is precisely what the one-writer discipline
+    exists to prevent.
+
+    The guard runs on BOTH methods, and before `crud_edit` fetches anything, so a GET on a
+    non-active seat is refused the same way a POST is. It redirects rather than 403s: the caller
+    is a tenant admin who followed a stale link, not an attacker, and the detail page states
+    why the seat is frozen.
+    """
+    obj = get_object_or_404(LicenseAssignment, pk=pk, tenant=request.tenant)
+    if not obj.is_reclaimable:
+        messages.info(request, "That seat is not active, so it cannot be edited.")
+        return redirect("tenants:licenseassignment_detail", pk=obj.pk)
     return crud_edit(request, model=LicenseAssignment, pk=pk, form_class=LicenseAssignmentForm,
                      template="tenants/licenseassignment/form.html",
                      success_url="tenants:licenseassignment_list")
