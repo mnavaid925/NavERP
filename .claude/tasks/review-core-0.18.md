@@ -461,3 +461,43 @@ Two contributing factors, both worth recording for whoever fixes 0.17:
 **Left alone deliberately.** These belong to 0.17, not to this sub-module's sequence, and the
 house rule is minimal impact: fixing another sub-module's tests from inside 0.18 would put 0.18
 findings in files 0.17 owns. Recorded here, and handed to the next session that works on 0.17.
+
+---
+
+# Phase 7 - docs close-out
+
+**Module 0 is 18 of 21. The remaining work is 0.19, 0.20 and 0.21.**
+
+## What each document now says
+
+| Document | State |
+|---|---|
+| `.claude/skills/core/SKILL.md` | 0.18 section COMPLETE: models with per-model field counts and the 105 total, the 0.17 seam, the rate-limit seam, the NIST-vs-0.17 status distinction, routes, templates, **admin**, **tests**, the two severity lists, the derived 72h clock, the L52 seeder ruling, the honest-prose constant, and the M2M admin-path limitation. As-built header reads 18 of 21, live list ends at 0.18, migrations to `core.0016`. |
+| `README.md` | Module-0 row: `18 of 21 (0.1-0.18)` **plus a description of what 0.18 built**, matching the detail level the other six module rows carry. |
+| `NavERP.md` | Status row 18 of 21; the reconcile note corrected from a long-stale `14 of 21 (0.1-0.14)`, and the reconciled nine now distinguished from the five individual builds that followed. |
+| `.claude/tasks/todo.md` | 0.18 close-out note, with the two contract defects found and the field count corrected to 105. |
+| `plan-remaining-INDEX.md` / `plan-remaining-1-...md` | Both moved to 0.19-0.21; 0.18 marked built; the audit quote refreshed. |
+| `contract-core-0.18.md` | Totals corrected 103 -> 105 with the counting rule stated. |
+
+## Two numbers corrected rather than repeated
+
+- **103 -> 105 model fields.** The contract was frozen before `SecurityThreat.resolution_note` and
+  `SecurityIncident.affected_services` were added. Both documents now state the counting rule
+  (`concrete non-pk fields + m2m`) so the figure is reproducible.
+- **`14 of 21` -> `18 of 21`** in `NavERP.md`s reconcile note. That figure was already stale before
+  0.18 began - it predated 0.14 through 0.18 - and was only found by sweeping for the old ranges.
+
+## Verification
+
+`manage.py check` **0 issues** - `makemigrations --check --dry-run` **"No changes detected"** -
+`temp/audit_integrity.py` **6/6 PASS** reporting `core: 18 live sub-modules` and
+`module 0: 3 catalogued but NOT built -> 0.19, 0.20, 0.21` - all four 0.18 test lanes green (126
+cases) - smoke clean on every page. **Nothing pushed**; the user pushes.
+
+## Not done here, and why
+
+- **P2** (the uncapped reverse-FK table on `ipaccessrule_detail`) and the wording-polish items stay
+  deferred for the reasons recorded under Phase 5.
+- **0.17s 37 pre-existing test failures** are NOT 0.18s to fix; they are proven pre-existing and
+  handed over. A concurrent session has since begun editing
+  `apps/core/tests/test_monitoring_models.py` - that file is **not** 0.18s and was not touched here.
