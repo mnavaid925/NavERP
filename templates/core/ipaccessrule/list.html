@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% comment %}
   The allow/deny register. Written down; nothing evaluates it. Context: object_list, page_obj,
   q, direction_choices, action_choices, scope_choices, source_choices, services, notes.
@@ -81,7 +81,7 @@
               {% elif obj.direction == "allow" %}<span class="badge badge-slate">{{ obj.get_direction_display }}</span>
               {% else %}<span class="badge badge-muted">{{ obj.get_direction_display }}</span>{% endif %}
             </td>
-            <td>{{ obj.get_action_display }}</td>
+            <td>{{ obj.action_display }}</td>
             <td>{{ obj.get_scope_display }}</td>
             <td>{{ obj.get_source_display }}</td>
             <td>{% if obj.expires_at %}{{ obj.expires_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">permanent</span>{% endif %}</td>
