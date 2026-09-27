@@ -230,3 +230,8 @@ staticfiles/
 # hook recreates it automatically, so nothing depends on it being in the repo.
 .claude/tasks/build-state.json
 .claude/tasks/build-state.json.tmp
+
+# The cached test database, only present when NAVERP_TEST_DB is set (see config/settings_test.py).
+# A build artifact of the suite, never source: it is recreated on demand, and it can be tens of
+# megabytes. Deleting it just makes the next run pay the migration cost again.
+nav_erp_test.sqlite3
