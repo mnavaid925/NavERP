@@ -1,0 +1,406 @@
+# Review — Sub-module 0.19: License & Subscription Administration (`apps/tenants`)
+
+Range under review: `44c7de31...HEAD` (40 files, +5577/-5, 46 commits).
+Reviewers run **one at a time**; each section below is that agent's verdict, appended on report. The
+working tree was clean at review time (four untracked tool dirs are not part of the change), so
+`git diff HEAD` is empty and every reviewer was pointed at the base commit.
+
+---
+
+## Pass 1 — `code-reviewer`
+
+**Verdict: commit after fixing the Important band.** Tenant scoping, one-writer discipline,
+decorator order and the L10 nullable-FK discipline are all correct, but the seeder ships a broken
+context key, the numbering-reconciliation wiring the contract made mandatory was never done, three
+board context keys are dead, and the seeder's per-entity guards collapsed to one.
+
+### Important
+
+- **I1 · `apps/tenants/views/UsageQuota.py:68` — the `consumption` context key is provably always
+  `{}`.** `_consumption_by_subscription` keys its result by the **tuple** `(subscription_id, metric)`
+  (`Boards.py:52-55`), so the bare-`subscription_id` lookup at line 68 can never match. Contract
+  §3.4 pinned a `{metric: Decimal}` map for *this* subscription. The template documents the mismatch
+  instead of fixing it, and a key nothing reads is a defect in its own right.
+  **Fix:** `{m: t for (sid, m), t in _consumption_by_subscription(tenant).items() if sid == obj.subscription_id}`.
+  **Verified by the reviewer and independently re-confirmed by the main session.**
+
+- **I2 · `apps/core/settings_engine.py:159` — `LITERAL_PREFIX_MODELS` never gained the four new
+  prefixes.** It still holds only `{"SINV": [...]}`. The contract made this "part of 0.19's
+  wire-up, **not optional**", and all four model docstrings (`EntitlementFeature.py:66-67`,
+  `PlanEntitlement.py:50`, `UsageQuota.py:70`, `LicenseAssignment.py:55`) cite that dict as the
+  reason their prefix is discoverable. As shipped, `prefix_usage()` reports all four as
+  `model_only` and never names the models — **the docstrings point at wiring that does not exist.**
+  **Confirmed by the main session** (`settings_engine.py:159-161`). Flagged by the build agent and
+  missed by the main session as single writer — an omission, not a defect in the build.
+  **Fix:** append `"ENT"`, `"PE"`, `"UQ"`, `"SEAT"` entries.
+
+- **I3 · `apps/tenants/views/Boards.py:156-157, 209` — three dead context keys.** `metric_choices`
+  and `action_choices` (quota board) and `plan_choices` (renewal board) are passed but read by **no**
+  template; neither board has a filter bar. That is the both-directions violation the same
+  sub-module names as a defect. **Fix:** drop the three keys, or add the filter bar.
+
+- **I4 · `apps/tenants/management/commands/seed_tenants.py:160` — one guard for all four entities,
+  not four independent per-entity guards.** Contract §6.6 pinned four so "a partially-seeded tenant
+  self-heals instead of being skipped wholesale". A tenant with features but no quotas/seats never
+  self-heals, and the `grace_ends_on` backfill at `:163` is unreachable for it. The docstring at
+### Minor
+
+- **M1** — the `PlanEntitlement` docstring overstates enforcement: it says the duplicate guard fires
+  "at the only place a user can create one", but `PlanEntitlementForm.clean()` (which reads
+  `self.tenant`) is the real UI-path guard and the model's `clean()` short-circuits on the form path.
+  The rule *is* enforced — the sentence is what overclaims. **Clone sweep:** same shape in
+  `forms/EntitlementFeature.py:31`, `forms/UsageQuota.py:28`, `forms/LicenseAssignment.py:38`.
+
+- **M2** — `seed_tenants.py:63` still ends at "tenants seed complete." with no tenant-admin login
+  instructions and no "the superuser has no tenant" warning. Pre-existing from 0.1 and out of scope
+  as a bug, flagged only because 0.19 added two more seeded surfaces and did not extend it.
+
+### Done well
+
+The nullable-FK discipline is exact, not approximate: every read of `PlanEntitlement.subscription` and
+`LicenseAssignment.subscription` sits inside an `{% if %}` branch rather than a `|default:` filter
+argument, and the reason is written at each site — exactly the L10 trap that shipped in 0.18, avoided
+here. The one-writer discipline holds end to end: `breached_at`, `status`, `reclaimed_on` and
+`reclaim_reason` are off every form, written only by their verb with an explicit `update_fields`,
+and `readonly` in admin, with the verb name in `changes=` rather than the varchar(10) `action` (L41).
+
+### Routing
+
+- **performance-reviewer:** `UsageQuota.py:68` runs a whole-tenant grouped aggregate to produce a
+  value that is always `{}`; `Boards.py:180-200` loads every tenant subscription unpaginated and
+  loops in Python; `_seat_summary` runs three queries where the contract says one;
+  `PlanEntitlement.Meta.ordering` includes `feature__code`, forcing a join on every ordered query.
+- **security-reviewer:** nothing outstanding — all 24 views filter `tenant=request.tenant`, all four
+  forms inherit `TenantModelForm` and its FK scoping covers `feature`/`subscription`/`user`, and the
+  nullable-`User.tenant` paths are narrowed in the list filter, the board and the seeder. One item for
+## Pass 2 — `explorer`
+
+**Headline: the honesty band is CLEAN and stronger than the contract asked.** All 14 templates were
+grepped for `automatic|renews|charge|blocks|throttl|email|notify|versioning|grandfather|enforce|
+consult`; **every hit is a negation or a correctly-derived state.** No template claims a declined
+capability. All ten declines land in visible prose exactly where contract §5.4 put them.
+
+**Bullet coverage: 4 of 5, not 5 of 5.** Bullets 1/2/3/5 each get a 0.19-built page. **Bullet 4 is
+served entirely by 0.1's tables** (`SubscriptionInvoice` + `stripe_webhook`) with **proration declined**
+— the only decline among the five.
+
+### Findings
+
+- **E3 · `apps/tenants/models/Subscription.py:30` — `auto_renew = BooleanField(default=True)` is a
+  data-honesty defect, and the most important finding from this pass.** Every pre-existing
+  subscription is silently stamped "auto-renews" by the migration, an intent it never expressed. The
+  renewal board then renders a decision nobody made. This is the L52 failure class (a confident state
+  that was fabricated) arriving through a column default.
+  **Fix:** default `False`, or `null=True` + backfill, so absence stays absence.
+
+- **E1 · `LicenseAssignment.module_slug` is unvalidated free text.** `EntitlementFeature.code` has a
+  `CODE_VALIDATOR` pinning its case; `module_slug` has nothing, so `"Accounting"` and `"accounting"`
+  are two different values for one module, and the register quietly stops matching
+  `core.ModuleAccessScope.module_slug` — the consistency `models/LicenseAssignment.py:62-63` claims.
+  **Fix:** normalise in `clean()` and offer a `<select>` of the real slugs on the form.
+
+- **E2 · `templates/tenants/subscription/form.html` is missing the proration decline.** 0.19 added
+  `auto_renew`/`grace_ends_on` to that very form, so it is 0.19's own page to be honest on, and the
+  one-line decline is absent.
+
+- **E5 · the seat count is recorded THREE ways with no page stating how they relate** —
+  `Subscription.seats` (10, `seed_tenants.py:69`, shown in the renewal board's Seats column), the
+## Pass 3 — `frontend-reviewer`
+
+**Clean bands (verified by grepping `theme.css`, not by eye): L33 badges, L2 comment leaks, L10
+nullable-FK reads, filter bars on all four lists, and no invented theme classes.** Zero `{#` occurrences
+in all 14 files. All six badge modifiers used exist; no semantic `-success/-warning/-danger` anywhere.
+All three pk filters use `|stringformat:"d"`, none uses `|slugify`. Every `{% empty %}` colspan matches
+its real column count.
+
+### Critical
+
+- **C1 · UTF-8 mojibake renders as visible garbage on 3 of the 14 pages, corrupting pinned honesty
+  prose.** `licenseassignment/detail.html:19,122,130` · `quota_board.html:123,169` ·
+  `renewal_board.html:142,181`. The byte sequence `E2 80 94` (em dash) was decoded as cp1252 and
+  re-encoded, producing `â€"`.
+  **Confirmed by the main session at the byte level** — `quota_board.html` begins with a UTF-8 BOM
+  (`EF BB BF`) and the string `â€"` is present, so line 169 renders as
+  *"<strong>L36 â€" which rows are 0.1's.</strong>"*. That is **the L36 honesty note itself**, garbled
+  in a browser. Two more sites sit inside JS `confirm()` strings and two inside `title=` tooltips.
+  The BOM does not 500 today (it becomes a leading TextNode `{% extends %}` never renders) — a latent
+  trap, not a live bug — but it is the fingerprint of the same bad write.
+  **Fix:** use entities, which the surrounding prose in the same files already does and which is
+  encoding-proof: `â€"` → `&mdash;`, `anyoneâ€™s` → `anyone&rsquo;s`, `Â·` → `&middot;`; strip the BOM
+  from all three files. 6 more instances sit inside `{% comment %}` blocks — invisible today, but a
+  reader grepping the file for `—` finds nothing. No other file in the 40-file changeset has a
+  non-ASCII byte.
+
+### Important
+
+- **I1 (the routed decision) · DROP the three dead context keys. Do NOT build the filter bars.**
+  Both boards already document the decision in their own `{% comment %}` headers
+  (`quota_board.html:24-25`, `renewal_board.html:22-23`): *"No filter bar, deliberately: this is a
+  whole-tenant roll-up, and a filter that silently changes what '3 breached' means is worse than no
+  filter at all."* The author made the call and wrote it down; the view simply did not follow through.
+  A filter would be **actively wrong** here, not merely absent: all headline numbers are computed over
+  the **unfiltered** set, so `?metric=api` would still print "2 marked as breached" above a table
+  containing zero breached rows — and the board's value is that the number and the row are the same
+  fact. Doing it honestly is a rewrite, not a template change.
+  **Fix:** delete the three keys in `Boards.py:156-157, 209`.
+
+- **I2 · four duplicated hand-rolled Delete blocks across the detail/board templates** should use the
+## Pass 4 — `performance-reviewer`
+
+**All four routed items verified real.** Bands: Critical 1 · Important 6 · Minor 4.
+
+### Critical
+
+- **C1 · `apps/tenants/views/PlanEntitlement.py:58-60` — N+1 on the grant detail page.** The
+  `overrides` queryset has no `select_related`, while `planentitlement/detail.html:130` reads
+  `grant.subscription.pk` and `.get_plan_display` **once per row**. The queryset filters
+  `subscription__isnull=False`, so every row is *guaranteed* to have a subscription and *guaranteed*
+  to fire a query — this is an N+1 on any page with ≥1 override, not a possible one. At the page's own
+  50-row cap that is **51 queries where 3 suffice**, so the worst case is the designed case.
+  **Fix:** add `.select_related("subscription")` (a LEFT OUTER JOIN on a nullable FK, free here).
+  The same view already does this correctly twice — `obj` is `select_related("feature","subscription")`
+  (`:51`) and `entitlementfeature_detail:54` selects `subscription` on its grants — which is what makes
+  this a defect rather than a style choice. `plan_grants` needs nothing: its row loop touches only local
+  columns. **Regression guard:** `django_assert_max_num_queries(3)` on `planentitlement_detail`.
+
+### Important
+
+- **I1 · `Boards.py:180-200` — the renewal board is unpaginated and its headline counts derive from the
+  rows it loads.** Query count is a clean 1 (not an N+1), but the row count is unbounded and
+  `Subscription` only ever grows. **The correction to the obvious fix is the valuable part:** capping at
+  `[:200]` and leaving the counts as Python `len()` would be *worse* — the tiles would silently start
+  reporting the cap instead of the workspace, which is the exact "confident lie" pass 3 ruled out for
+  filter bars. The counts must move off the row list (aggregates), and the cap must be stated on the page.
+- **I2 / I7 · `licenseassignment_detail` runs 6 queries where 2 suffice**; two aggregates are
+  recomputed per page that the board helper already computes.
+- **I6 · `usagequota_detail` runs 3 where 1 suffices** (two avoidable).
+- Remaining Important items cover the seeder's per-tenant cost and the dropdown querysets.
+
+### Minor
+
+M1 (the seat list is over-selected — harmless), M3 (the one drop-in seeder query win), M4 (two unbounded
+*dropdown* querysets), plus two more the reviewer enumerated.
+
+### Verified clean — the N+1 sweep, with evidence
+
+**All four list views are correct.** Each row loop was compared against its `select_related`:
+
+| View | Row loop reads | Verdict |
+## Pass 5 — `qa-smoke-tester` (runtime; report-only, no fixes applied)
+
+**Verdict: 348 checks across 8 probe passes, 0 failures. No Critical, no Important.** 0.19 holds up
+under runtime exercise; the one-writer discipline is real and the empty-state boards do not crash.
+Probes ran against the **MySQL** dev DB through the in-process test client with a
+`got_request_exception` signal attached, so **zero** page 500'd silently behind a 200.
+
+| Pass | Scope | Checks | Fail |
+|---|---|---|---|
+| A1–A4 | four entities' full create→detail→edit→verb→delete lifecycle | 91 | 0 |
+| B | the two POST-only verbs + one-writer discipline | 35 | 0 |
+| C | form POST **cannot** forge the one-writer fields | 16 | 0 |
+| D | the three duplicate guards, create **and** edit | 25 | 0 |
+| E | junk params, page 2, both boards, empty workspace | 57 | 0 |
+| F | cross-tenant IDOR on all 24 routes, GET **and** POST | 69 | 0 |
+| G/H | subscription form columns, the dead `consumption` key, seeder, nav | 72 | 0 |
+
+**Every lifecycle step asserted the DATABASE, not the status code** — a full concrete-field snapshot
+before and after plus a set-diff, so an edit that changed *more* than intended would have failed. Edits
+changed exactly the intended fields and `number` never moved. `GET` on a delete URL was confirmed
+**not** to have deleted.
+
+**One-writer discipline proven by forged POSTs against the real endpoints** (the part that matters —
+a guard that 500s or silently no-ops would look identical on a naive check):
+- `POST breached_at=2020-01-01` to `usagequota_edit` → **302, other fields saved** (`quota_limit`
+  100→999, `action_on_breach`→`block`), `breached_at` still `NULL`.
+- `POST status=revoked` at an **active** seat → still `active`; stamps still `NULL`/`''`.
+- The reverse attack the form docstring names: `POST status=active` at a **reclaimed** seat → still
+  `reclaimed`, and the seeded evidence stamps survived intact.
+- The four fields are **absent from every rendered form** — asserted on the HTML, not inferred from
+  `Meta.fields`.
+
+**Verb gates all hold, in the right order.** GET → 405; non-admin POST → 403; **non-admin GET → 405,
+not 403** — that is the decorator order working, `@require_POST` outermost so the method check precedes
+the role check; cross-tenant → 404.
+
+### Minor
+
+- **M8/M9 · the seeder cannot self-heal a row it already created** (the pass-1 I4 guard, now with
+  runtime evidence): delete a tenant's `UsageQuota` and re-run, and the seeder creates nothing
+  because it still sees features. This is the exact self-heal property contract §6.6 asked for.
+- One new minor observation on the seeder's output and the acme row restored by hand.
+
+## Consolidated finding list (deduped, Critical → Important → Minor)
+
+IDs assigned for the `code-fixer`. Cross-references kept so a fix can be checked against the pass
+that raised it. **No security Critical/High/Medium exists; the only Critical is the encoding one.**
+
+### Critical
+
+- **C1** (pass 3, confirmed byte-level by the main session; pass 6 S2 agrees) — **UTF-8 mojibake + BOM
+  in 3 of 14 templates**, corrupting 7 visible sites including the L36 honesty note on both boards and
+  two JS `confirm()` strings: `licenseassignment/detail.html`, `quota_board.html`, `renewal_board.html`.
+  **Fix:** entities (`&mdash;`, `&rsquo;`, `&middot;`) + strip the BOM. 6 more sites in `{% comment %}`.
+
+### Important
+
+- **I1** (pass 1; **confirmed at runtime by pass 5**) — `views/UsageQuota.py:68`: `consumption` is
+  **always `{}`** because `_consumption_by_subscription` keys by the tuple `(subscription_id, metric)`.
+  A whole-tenant aggregate spent on a dead value. **Fix:** build the per-metric map the contract pinned.
+- **I2** (pass 1; pass 5 confirms still unwired) — `apps/core/settings_engine.py:159`:
+  `LITERAL_PREFIX_MODELS` never gained `ENT`/`PE`/`UQ`/`SEAT`, so `prefix_usage()` reports all four as
+  `model_only` while four model docstrings cite that dict as the reason their prefix is discoverable.
+  **Fix:** append the four entries. **Flagged by the build agent and missed by the main session.**
+- **I3** (pass 1; decision from pass 3; pass 5 confirms dead) — **DROP** `metric_choices`,
+  `action_choices`, `plan_choices` from `Boards.py:156-157, 209`. Both boards deliberately have no filter
+  bar and say so; adding one would split the stat cards from the rows beneath them.
+- **I4** (pass 1; **pass 5 gives it runtime evidence**) — `seed_tenants.py:160`: one guard for all four
+  entities, not four per-entity guards, so a tenant with features but no quotas/seats never self-heals.
+- **I5** (pass 1; pass 6 notes the admin is the reachable path) — `Boards.py:79-85`: `user__tenant`
+  applied to the `active` count only; the other four numbers omit it, so the five rendered side by side
+  disagree for a null-tenant user. **Fix:** carry the clause on all of them.
+- **I6** (pass 1; pass 5 verified at runtime) — `views/LicenseAssignment.py:85-89`:
+  `licenseassignment_edit` has no view-level guard while the template hides Edit for a non-active seat.
+- **I7** (pass 4, raised as its Critical) — `views/PlanEntitlement.py:58-60`: **N+1 on the grant detail
+  page**; `overrides` lacks `select_related("subscription")` while the template reads it per row. 51
+  queries where 3 suffice. **Fix:** one line. Guard with `django_assert_max_num_queries(3)`.
+- **I8** (pass 4) — `Boards.py:180-200`: the renewal board is unpaginated and its headline counts derive
+  from the rows it loads. **Fix:** move the counts to aggregates and state the cap on the page. Do NOT
+  cap the queryset and leave `len()` — that makes the tiles report the cap instead of the workspace.
+- **I9** (pass 4) — `licenseassignment_detail` runs 6 queries where 2 suffice; `usagequota_detail` 3
+  where 1 suffices.
+- **I10** (pass 2) — `models/Subscription.py:30`: **`auto_renew` defaults to `True`**, so the migration
+  silently stamps every pre-existing subscription with an auto-renew intent it never expressed, and the
+  renewal board renders a decision nobody made — the L52 class arriving through a column default.
+  **Fix:** default `False`, or `null=True` + backfill.
+- **I11** (pass 2) — `LicenseAssignment.module_slug` is unvalidated free text, so `"Accounting"` and
+  `"accounting"` are two values for one module, quietly breaking the consistency the docstring claims.
+- **I12** (pass 2) — `templates/tenants/subscription/form.html` is missing the proration decline, on the
+  very page 0.19 added `auto_renew`/`grace_ends_on` to.
+- **I13** (pass 2) — `NavERP.md:100-106` (the repo's L36 per-bullet record) has no 0.19 line. Its real
+  verdict is **4 of 5** (bullet 4 served by 0.1's tables, proration declined).
+- **I14** (pass 2) — `NavERP-ERD.md:596-604` omits the four new models and `Subscription`'s two new
+  columns, on a section `NavERP.md:111-113` names as the schema authority.
+- **I15** (pass 6, S1) — no `clean()` guard that `subscription.tenant_id == self.tenant_id`; the unscoped
+  admin can pair tenants, and `UsageQuota.subscription` is CASCADE so a bad pair is a cross-tenant delete.
+- **I16** (pass 2) — the seat count is recorded **three ways** (`Subscription.seats`=10, the `seats`
+  entitlement at 3/10/50/500 with a 75 override, and the 5 active register rows) with no page stating
+  how they relate.
+
+### Minor
+
+- **M1** (pass 1) — the `PlanEntitlement` docstring overstates where the duplicate guard fires.
+- **M2** (pass 1) — `seed_tenants` still lacks login instructions and the no-tenant superuser warning.
+- **M3** (pass 3) — four duplicated hand-rolled Delete blocks should use the shared partial.
+- **M4** (pass 3) — aria-labels on icon-only action buttons; `usagequota/detail.html` omits Back-to-list.
+- **M5** (pass 2, E4) — add a ruling recording that `views/_common.py` exports no `crud_detail` and the
+  four detail views use `render()` with a hand-set `obj`, so Phase 6 pins the real context names.
+- **M6** (pass 4) — the seeder's query cost is inherent to `next_number` minting in `save()`; only the one
+  drop-in win applies. Recorded so it is not mistaken for a hot path.
+
+**Query-count regression guards requested by pass 4, for Phase 6:**
+`planentitlement_detail` → 3 (I7) · `licenseassignment_detail` → 2 (I9) · `quota_board` → 2 and
+`renewal_board` → 2 (I8), pinning the constant-query property.
+
+### Confirms I2 and I3 stand (not fixed by anything)
+
+`LITERAL_PREFIX_MODELS` is still unwired, so `prefix_usage()` still reports all four prefixes as
+`model_only` — **I2 stands unverified at runtime** (it is a `core` settings surface, not a 0.19 route).
+The three dead board context keys are **confirmed dead**: the rendered HTML contains **no `<select>`
+element at all** on either board.
+
+### What it could NOT verify (stated, so a clean report does not overstate itself)
+
+MySQL only (no SQLite, so the NULL-distinct claim in `PlanEntitlement`'s docstring is taken on the
+author's word — though the *consequence*, that the form guard is load-bearing, was confirmed); no live
+socket; `DEBUG=False`; no concurrency (the `save()` retry loops were never triggered); no mail path;
+**Django admin not exercised — and the admin is not tenant-scoped, so pass-1 I5's null-tenant-user
+concern is reachable there**; no money surface by design; seeded content swept for acme plus one
+purpose-built empty tenant, not all ten workspaces.
+
+---
+
+|---|---|---|
+| `entitlementfeature_list:20` | local columns only — **no FK** | 2 queries, none needed |
+| `planentitlement_list:22` | `obj.feature.*`, `obj.subscription.*` | covered |
+| `usagequota_list:19` | `obj.subscription.*` | covered |
+| `licenseassignment_list:33` | `obj.user` (local `email`), two local-field properties | covered (over-selected) |
+
+- **Pagination:** all four lists go through `crud_list` at `per_page=15`; filters and search are applied
+  **before** `paginate()` (`crud.py:132-180`); nothing is `list()`-ed to count or slice;
+  `get_page()` handles an out-of-range `?page=`. **Page 2 is safe on all four.**
+- **Decimal arithmetic — clean, no float coercion anywhere.** Both `quantity` and `quota_limit` are
+  `DecimalField`; `Sum()` returns `Decimal`; `consumed / limit * 100` is Decimal÷Decimal and is
+  `int()`-truncated and capped before reaching a template. **The quota board's arithmetic is the best
+  code in the change.**
+- **Derived-property discipline holds:** `is_expired`/`is_reclaimable` are cheap local-field facts, the
+  seat *count* is correctly kept out of the model, and `overridden_features` is a dict comprehension
+  over an already-fetched list rather than a per-row `.filter()`.
+- **The seeder's ~94 queries are inherent to the app-wide numbering design** (`next_number` mints in
+  `save()`, which `bulk_create` bypasses), not to 0.19. A re-run costs 2 queries/tenant because the
+  guard short-circuits. Recorded so it is not mistaken for a per-request hot path.
+
+---
+
+  shared partial the house uses rather than four copies.
+
+### Minor (M1–M5)
+
+Polish: aria-labels on the icon-only action buttons (the house pattern has the same gap);
+`usagequota/detail.html` header omits Back-to-list that the other three detail pages carry; and
+further small consistency items the reviewer enumerated.
+
+### Done well — and the standard to keep
+
+The filter-bar accessibility work beats the house pattern **without being asked**: every `<select>` in
+all four new list templates carries a descriptive `aria-label` (`"Metric"`, `"Action on breach"`,
+`"Breach state"`, `"Privilege type"`, `"Holder"`, `"Module"`) and the search inputs carry
+`aria-label="Search"`. The `usagerecord` reference has **zero** labelling on all five of its controls.
+Four filter bars, nineteen controls, all named, done consistently — the standard the next sub-module
+should be measured against.
+
+---
+
+  `seats` `EntitlementFeature` granted 3/10/50/500 per plan with a **75** subscription override, and
+  the 5 active rows in the seat register. Nothing asserts they agree and nothing says they are
+  unrelated; the seat register's `subscription` FK puts the two registers one click apart. A coverage
+  gap rather than an overclaim — but a reader will assume they agree.
+
+- **E6 · `NavERP-ERD.md:596-604` is now wrong about the model 0.19 edited** — omits the four new
+  models and `Subscription`'s two new columns, on a section `NavERP.md:111-113` names as the schema
+  authority. Pre-existing (0.1's `UsageRecord` is already missing), but 0.19 widened the gap.
+
+- **E7 · `NavERP.md:100-106` has no 0.19 line.** That paragraph is the repo's L36 record of how many
+  of 5 bullets each *built* sub-module maps. 0.19 has a `LIVE_LINKS` entry and is absent from it. Its
+  real verdict is **4 of 5** (bullet 4 served by 0.1, proration declined) — `navigation.py:301-306`
+  already says this in code; the document a reader opens does not.
+
+- **E4 · the contract has no ruling recording that `views/_common.py` exports no `crud_detail`** and
+  that the four 0.19 detail views therefore use `render()` with a hand-set `obj`. Phase 6 must pin
+  the real context names, not the helper's.
+
+**Phase 7 close-out is correctly outstanding** (`.claude/skills/tenants/SKILL.md` does not exist —
+Module 0 has no per-app skill; `README.md:173-181` and `NavERP.md:61` still read *0.19–0.21 unbuilt*).
+That is Phase 7's job, not a finding. Only **E6** and **E7** misstate something a reader would act on.
+
+---
+
+  its own eye: `LicenseAssignment.subscription` is a tenant-scoped form field but the model row is not
+  tenant-consistent at the DB level, so a cross-tenant pairing is constructible through unscoped admin.
+- **frontend-reviewer:** the two boards have no filter bar, which is what makes I3 either a delete or
+  a build — the call is a UX one.
+
+---
+
+  `:145` and the module docstring at `:3` both claim "per-entity guards" — the prose overstates the
+  code. **Fix:** guard each of the four blocks independently, or correct the prose.
+
+- **I5 · `apps/tenants/views/Boards.py:79-85` — `_seat_summary` applies `user__tenant=tenant` to the
+  `active` count only.** `expired`, `reclaimed`/`revoked` and `total` omit it, so the five numbers
+  rendered side by side on the seat detail page stop agreeing when a row holds a null-tenant user
+  (reachable via Django admin, which is not tenant-scoped). The helper's docstring calls the clause
+  "REQUIRED, not defensive". **Fix:** carry the clause on all four numbers, or restate it.
+
+- **I6 · `apps/tenants/views/LicenseAssignment.py:85-89` — `licenseassignment_edit` has no
+  view-level guard** while the detail template hides the edit control for a non-active seat. Hiding
+  a button does not stop a direct POST. **Fix:** enforce the same rule in the view.
+
