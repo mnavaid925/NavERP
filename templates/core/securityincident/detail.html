@@ -169,13 +169,18 @@
             hand-made POST is refused there and leaves no write and no audit row.
             NavERP contained, eradicated, recovered, closed, filed and notified nothing.
           {% endcomment %}
-          {% if obj.status == "detected" or obj.contained_at %}
+          {% if obj.status != "detected" and not obj.contained_at and obj.status != "closed" and obj.status != "false_positive" %}
             <form method="post" action="{% url 'core:securityincident_contain' obj.pk %}" onsubmit="return confirm('Record that somebody says this was contained? NavERP blocked no traffic.');">
               {% csrf_token %}
               <button class="btn btn-outline" type="submit"><i data-lucide="shield"></i> Record containment</button>
             </form>
           {% else %}
-            <p class="text-muted">Containment cannot be recorded yet: an incident is not contained before somebody has assessed it, and one was already recorded.</p>
+            <p class="text-muted">
+              {% if obj.status == "detected" %}Containment cannot be recorded yet: triage it first - an incident is not contained before somebody has assessed it.
+              {% elif obj.contained_at %}Containment is already recorded.
+              {% else %}This incident is {{ obj.get_status_display|lower }}, which is a decision somebody recorded.
+              {% endif %}
+            </p>
           {% endif %}
 
           {% if obj.contained_at and not obj.eradicated_at %}
