@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% comment %}
+  The 0.18 landing page. COMPUTED and stores nothing.
+  Context: threat_count, open_threat_count, new_threat_count, ip_rule_count, active_deny_count,
+  vulnerability_count, open_vulnerability_count, overdue_vulnerability_count, incident_count,
+  open_incident_count, breach_undecided_count, window_hours, notes.
+  Every figure is a count over a real column, so a 0 is a legitimate figure here. What a 0 does
+  NOT mean is "secure": the seeder writes no rows on purpose, so a fresh workspace is full of
+  zeros because nobody has written anything down.
+{% endcomment %}
+{% block title %}Security{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Security</h1>
+      <div class="breadcrumb"><span>Security</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:threat_board' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Threat board</a>
+      <a href="{% url 'core:vulnerability_board' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Vulnerability board</a>
+      <a href="{% url 'core:breach_clock_board' %}" class="btn btn-outline"><i data-lucide="timer"></i> Breach clock</a>
+      <a href="{% url 'core:brute_force_board' %}" class="btn btn-outline"><i data-lucide="key-round"></i> Brute-force board</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>These are registers of claims a person wrote.</strong>
+      NavERP has no IDS/IPS agent, no scanner, no WAF, no SIEM client and no scheduler, so nothing here detects,
+      blocks, scans, enforces or notifies anything. A zero below means nobody has written a row down.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-value">{{ open_threat_count }}</div><div class="stat-label">Threats not yet settled</div></div>
+    <div class="stat-card"><div class="stat-value">{{ new_threat_count }}</div><div class="stat-label">Threats still marked new</div></div>
+    <div class="stat-card"><div class="stat-value">{{ active_deny_count }}</div><div class="stat-label">Active deny policies recorded</div></div>
+    <div class="stat-card"><div class="stat-value">{{ open_vulnerability_count }}</div><div class="stat-label">Findings still open</div></div>
+    <div class="stat-card"><div class="stat-value">{{ overdue_vulnerability_count }}</div><div class="stat-label">Open findings past their deadline</div></div>
+    <div class="stat-card"><div class="stat-value">{{ breach_undecided_count }}</div><div class="stat-label">Open breaches with no notifiability decision</div></div>
+  </div>
+  <p class="text-muted"><i data-lucide="info"></i> "Deny policies recorded" counts rows somebody wrote. It is not a count of
+    addresses blocked, because nothing in NavERP blocks an address. Every incident on this sub-module is judged against a
+    {{ window_hours }}-hour notification window that nothing here will chase.</p>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The registers</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Register</th><th>Rows recorded</th><th>Needing attention</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:securitythreat_list' %}">Threats</a>
+                <div class="text-muted">Declared findings a person reported</div></td>
+              <td>{{ threat_count }}</td>
+              <td>{{ open_threat_count }} not settled, {{ new_threat_count }} still new</td>
+              <td><div class="table-actions">
+                <a href="{% url 'core:securitythreat_list' %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:securitythreat_create' %}" class="btn-icon" title="Record a threat"><i data-lucide="plus"></i></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:ipaccessrule_list' %}">IP access rules</a>
+                <div class="text-muted">Allow/deny policies nobody evaluates</div></td>
+              <td>{{ ip_rule_count }}</td>
+              <td>{{ active_deny_count }} active deny policies recorded</td>
+              <td><div class="table-actions">
+                <a href="{% url 'core:ipaccessrule_list' %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:ipaccessrule_create' %}" class="btn-icon" title="Record a rule"><i data-lucide="plus"></i></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:vulnerabilityfinding_list' %}">Vulnerability findings</a>
+                <div class="text-muted">Published advisories entered by hand</div></td>
+              <td>{{ vulnerability_count }}</td>
+              <td>{{ open_vulnerability_count }} open, {{ overdue_vulnerability_count }} past the deadline</td>
+              <td><div class="table-actions">
+                <a href="{% url 'core:vulnerabilityfinding_list' %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:vulnerabilityfinding_create' %}" class="btn-icon" title="Record a finding"><i data-lucide="plus"></i></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:securityincident_list' %}">Security incidents</a>
+                <div class="text-muted">Response records with the Art. 33 clock displayed</div></td>
+              <td>{{ incident_count }}</td>
+              <td>{{ open_incident_count }} open, {{ breach_undecided_count }} with no notifiability decision</td>
+              <td><div class="table-actions">
+                <a href="{% url 'core:securityincident_list' %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:securityincident_create' %}" class="btn-icon" title="Record an incident"><i data-lucide="plus"></i></a>
+              </div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The boards</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Each board is a different question asked of the same registers. None of them measures
+        anything about the systems this application runs.</p>
+      <div class="form-actions">
+        <a href="{% url 'core:threat_board' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Declared findings</a>
+        <a href="{% url 'core:vulnerability_board' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Aging and overdue</a>
+        <a href="{% url 'core:breach_clock_board' %}" class="btn btn-outline"><i data-lucide="timer"></i> Art. 33 clock</a>
+        <a href="{% url 'core:brute_force_board' %}" class="btn btn-outline"><i data-lucide="key-round"></i> Failed sign-ins</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
