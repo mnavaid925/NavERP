@@ -824,7 +824,13 @@ standalone pages flat at `templates/core/`. Test subslug: `security`.
 - [ ] **Finally, run the FULL UNFILTERED `core` suite and fix it green.** Never a `-k` filtered run - a filter excludes
       exactly the tests a shared-file change can break, because the damage lands outside the filter (L47). Tests run on
       SQLite in-memory.
-- [ ] **Phase 7 - docs, one file per commit.** `NavERP.md`: mark 0.18 built (module table "17 of 21" -> "18 of 21", and
+- [x] **Phase 7 - docs, one file per commit — DONE 2026-09-27.** `NavERP.md` marked (17 -> 18, plus a long-stale
+      `14 of 21` note in the reconcile paragraph corrected to 18); `NavERP-ERD.md` L36 reconciled in BOTH
+      directions (Module 0 row gained 0.16/0.17/0.18 with the extends-by-FK note; Module 6 row records that
+      `procurement.AuditSeal` stays the one tamper-evidence mechanism while 0.18s `forensic_log` is narrative
+      only); `README.md` marks it complete AND describes what it built; `.claude/skills/core/SKILL.md` gained
+      the Admin and Tests rows it was missing plus the per-model field counts. Superseded original text:
+      - [ ] **Phase 7 - docs, one file per commit.** `NavERP.md`: mark 0.18 built (module table "17 of 21" -> "18 of 21", and
       the 0.18 section's status line). `NavERP-ERD.md`: **L36 section 2 - reconcile BOTH rows in the same pass** - 0.18's
       row gains the four models and states that it *extends* `core.RateLimitPolicy`, `core.AlertRule`, `core.AlertEvent`,
       `core.Incident` and `accounts.LoginAttempt` by FK, and procurement 6.17's row notes that the `AuditSeal` is the
@@ -1129,8 +1135,8 @@ as-built — `event_totals` aggregate, `type_choices`, `component_total`/`rule_t
       and `module 0: 4 catalogued but NOT built -> 0.18, 0.19, 0.20, 0.21`.
 - [x] Docs corrected in one sweep 2026-09-26 — **0.17 had landed with no docs close-out at all**, so
       `plan-remaining-INDEX.md`, `plan-remaining-1-module0-submodules.md`, `README.md`, `NavERP.md`,
-      `.claude/skills/core/SKILL.md` and this file all undercounted it. All now read **17 of 21 built
-      (0.1–0.17), 4 remaining (0.18–0.21)**.
+      `.claude/skills/core/SKILL.md` and this file all undercounted it. All read **17 of 21 built
+      (0.1–0.17), 4 remaining (0.18–0.21)** at that date. 0.18 has since landed: the figure is now 18 of 21 (0.1–0.18) with 3 remaining (0.19–0.21).
 
 ### Module 0 0.16 — Backup, Recovery & Data Lifecycle (close-out 2026-09-25)
 
@@ -10186,7 +10192,7 @@ two registries are global) and `_seed_localization(tenant)` with **per-entity** 
 Five models in `apps/core/models/Localization.py`: `Language` and `TimeZone` (**global**, no `tenant` FK —
 the `accounting.Currency` precedent), `LocaleProfile` (tenant `OneToOne` singleton), `UserLocalePreference`
 (per-user singleton), `StatutoryRule`. 3 forms, 11 views, 11 routes, 9 templates, 5 admin registrations.
-**`core` is now 17 of 21; 4 remain (0.18–0.21).** *(This line read "15 of 21; 6 remain (0.16–0.21)" until
+**`core` was 17 of 21 with 4 remaining (0.18–0.21) as of 0.17s close-out; it is now 18 of 21 with 3 remaining (0.19–0.21).** *(This line read "15 of 21; 6 remain (0.16–0.21)" until
 the 2026-09-26 docs sweep — 0.16 and 0.17 had both landed without updating it.)*
 
 **L36 ownership call.** Bullets 2 and 4 are already half-built by `accounting`: `Currency` (2.2),
