@@ -292,6 +292,45 @@ LIVE_LINKS = {
         "Vulnerability Board": "core:vulnerability_board",                    # extra (CVSS-band + SLA roll-up)
         "Breach Clock (72h)": "core:breach_clock_board",                      # extra (Art. 33 clock)
     },
+    # 0.19 License & Subscription Administration. The five bullet keys below are copied
+    # BYTE-IDENTICALLY from `NavERP.md`; `parse_catalog()` matches them by exact string, so a
+    # one-character drift renders a fully built page as a "soon" roadmap pill with no error anywhere.
+    # 5 bullets over 5 DISTINCT targets — asserted programmatically before this block is considered
+    # wired, because two labels over one page highlight it twice and make "which page is this?"
+    # unanswerable.
+    #
+    # **Bullet 4 is served by 0.1's tables, not by a second billing engine.** `SubscriptionInvoice`
+    # plus the signature-verified `stripe_webhook` ARE the subscription-billing and
+    # payment-gateway sync, and 0.19 adds no invoice table and no money arithmetic. Bullet 3 is the
+    # mirror image in the other direction: 0.19 owns the commercial CEILING, so it points at the
+    # quota board 0.19 built rather than at 0.1's consumption rows. This is the L36 reconciliation:
+    # 0.1's row stays true, 0.19's row says what it extends and what it points at.
+    #
+    # **TEN declines, not nine** (the number was a miscount that had already propagated). None of
+    # these is enforced, sent, scheduled or integrated by anything in this repo:
+    #   1. entitlement ENFORCEMENT - nothing consults PlanEntitlement at request time
+    #   2. quota enforcement/throttling - `action_on_breach` is a recorded policy with no interceptor
+    #   3. seat auto-deprovisioning - reclaiming a seat disables nobody's login (no identity sync)
+    #   4. metered event ingestion - no event pipeline writes UsageRecord
+    #   5. proration - no money arithmetic (L29)
+    #   6. prepaid credit grants - would be a second money store (L29)
+    #   7. rate cards / tiered / multi-currency pricing - a monetization engine, out of scope
+    #   8. plan versioning & grandfathering
+    #   9. automatic renewal EXECUTION - `auto_renew` records an intent; there is no scheduler (0.20)
+    #  10. expiry email DELIVERY - there is no mail dispatcher in `tenants` (0.20/0.21)
+    #
+    # 7 labels over 7 DISTINCT targets.
+    "0.19": {
+        "License Allocation & Seats": "tenants:licenseassignment_list",        # bullet 1 (the seat register)
+        "Plan & Entitlement Management": "tenants:entitlementfeature_list",     # bullet 2 (the feature catalog)
+        "Usage Metering & Quotas": "tenants:quota_board",                      # bullet 3 (0.19's CEILING board; the consumption rows are 0.1's)
+        "Billing & Invoicing Integration": "tenants:subscriptioninvoice_list", # bullet 4 (0.1's invoice register + webhook — 0.19 adds no billing engine)
+        "Renewal & Expiry Management": "tenants:renewal_board",                 # bullet 5 (the renewal/grace board 0.19 built)
+        # Extra built pages that are NOT NavERP.md bullets, so they read as operational leaves
+        # rather than as more promised features.
+        "Quota Register": "tenants:usagequota_list",                           # extra (the ceilings themselves)
+        "Plan Grants & Overrides": "tenants:planentitlement_list",             # extra (plan vs subscription precedence)
+    },
     # ========================= Module 1 — Customer Relationship Management (CRM)
     # 1.1 Core Data Management — Accounts/Contacts are core.Party lenses; Leads are CRM-owned.
     "1.1": {
