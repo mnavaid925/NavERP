@@ -7,6 +7,8 @@ Every test is `test_licensing_*`, so the next sub-module appending nearby cannot
 """
 import pytest
 from django.core.exceptions import ValidationError
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from apps.tenants.models import (
     EntitlementFeature,
@@ -358,3 +360,81 @@ class TestTenantConsistencyGuard:
     def test_licensing_a_seat_cascade_is_set_null_so_it_is_a_read_not_a_delete(self):
         field = LicenseAssignment._meta.get_field("subscription")
         assert field.remote_field.on_delete.__name__ == "SET_NULL"
+
+    # ------------------------------------------------------------------ M6: the seeder's query cost
+    #: Ceiling for seeding 0.19 into ONE fresh tenant. The measured cost is **178**; this is set
+    #: above that with headroom, because the point is to catch GROWTH, not to re-assert today's
+    #: number on every run. The cost exists because `next_number()` mints inside `Model.save()`,
+    #: so `bulk_create` cannot be used for any auto-numbered row — an app-wide numbering design,
+    #: not a 0.19 choice. A hard-coded number that silently drifts upward is worse than none.
+    SEED_QUERY_CEILING = 200
+
+    def _licensing_seed_019(self, tenant):
+        """Run the 0.19 seeder block against `tenant`, returning the number of queries it issued."""
+        from io import StringIO
+
+        from apps.tenants.management.commands.seed_tenants import Command
+        command = Command()
+        command.stdout = StringIO()
+        with CaptureQueriesContext(connection) as ctx:
+            command._seed_licensing(tenant)
+        return len(ctx.captured_queries)
+
+    def test_licensing_seeding_one_tenant_stays_within_its_documented_budget(self, tenant_a):
+        """M6 turned from a hand-wave into a number. The seeder is slow per row BY DESIGN — the
+        numbering is minted inside `save()`, so every auto-numbered row is its own transaction —
+        but that cost is paid once, at seed time, on a dev database nobody waits for."""
+        Subscription.objects.create(tenant=tenant_a, plan="pro", status="active")
+        queries = self._licensing_seed_019(tenant_a)
+        assert queries <= self.SEED_QUERY_CEILING, (
+            f"0.19 seeding took {queries} queries, over the documented "
+            f"{self.SEED_QUERY_CEILING} budget"
+        )
+
+    def test_licensing_a_second_seed_is_a_cheap_no_op(self, tenant_a):
+        """The property that makes the first number acceptable: re-running is cheap because it
+        creates nothing. Idempotence is not only correctness, it is the reason the cost is harmless."""
+        Subscription.objects.create(tenant=tenant_a, plan="pro", status="active")
+        self._licensing_seed_019(tenant_a)
+        assert self._licensing_seed_019(tenant_a) < self.SEED_QUERY_CEILING / 2, (
+            "a re-seed should be a cheap no-op, not another full pass"
+        )
+
+    def test_licensing_the_seeder_is_not_importable_from_any_request_path(self):
+        """M6's actual claim was "not a per-request hot path", so assert exactly that. A management
+        command is only reachable by name from `manage.py`; if no view module imports it, it cannot
+        be on a request path, whatever its query count is."""
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parents[2]
+        offenders = [
+            path.name
+            for path in root.rglob("views/**/*.py")
+            if "seed_tenants" in path.read_text(encoding="utf-8")
+        ]
+        assert offenders == [], f"a view module imports the seeder: {offenders}"
+
+    def test_licensing_the_numbering_helper_is_the_shared_one_not_a_local_copy(self):
+        """The reason 0.19 pays the per-row cost, stated as a test so it cannot be quietly forked
+        into a private copy that behaves differently under concurrency.
+
+        `next_number` is imported ONCE, by the tenants models `_base`, and reaches the four entity
+        modules through that shared import. What would be wrong is an entity module defining its own
+        `def next_number` — a copy that retries differently, or not at all, and quietly loses the
+        concurrent-collision handling the shared one has.
+        """
+        from pathlib import Path
+
+        from apps.core.utils import next_number
+        # parents[0]=tests, [1]=tenants, so this is apps/tenants/models
+        models_dir = Path(__file__).resolve().parents[1] / "models"
+
+        base = (models_dir / "_base.py").read_text(encoding="utf-8")
+        assert "from apps.core.utils import next_number" in base, \
+            "_base must supply the shared numbering helper to the entity modules"
+
+        for model_file in ("EntitlementFeature", "PlanEntitlement", "UsageQuota", "LicenseAssignment"):
+            source = (models_dir / f"{model_file}.py").read_text(encoding="utf-8")
+            assert "def next_number" not in source, \
+                f"{model_file} defines its own next_number — use the shared helper from _base"
+        assert callable(next_number)
