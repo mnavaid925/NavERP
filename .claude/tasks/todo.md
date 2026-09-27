@@ -11264,14 +11264,14 @@ Every FK target below was re-grepped across the `models/` **packages** at plan t
 
 ## Scope and ownership — the 8.5 contract
 
-- [ ] Build exactly four Sales-owned domain models: `CPQQuote`, `CPQQuoteLine`, `ProductBundleOption`, and `QuoteApprovalRule`.
-- [ ] CRM 1.2 `crm.Quote` is preserved as a lightweight, flat sales quote. Sales 8.5 CPQ provides enterprise Configure, Price, Quote capabilities:
+- [x] Build exactly four Sales-owned domain models: `CPQQuote`, `CPQQuoteLine`, `ProductBundleOption`, and `QuoteApprovalRule`.
+- [x] CRM 1.2 `crm.Quote` is preserved as a lightweight, flat sales quote. Sales 8.5 CPQ provides enterprise Configure, Price, Quote capabilities:
   1. **Configure**: Product bundling, configurable option groups, default/required components, and compatibility dependency rules (`requires`, `excludes`, `recommends`).
   2. **Price**: Pricing waterfall (List Price -> Price Book Adjustment -> Volume/Tier Discount -> Rep Discretionary Discount -> Net Unit Price), margin waterfall against unit cost, and automated multi-tier approval rules (`QuoteApprovalRule`).
   3. **Quote & Propose**: Multi-version revision management (`revision_of`, `revision_number`), primary quote designation (`is_primary`) syncing deal value to `crm.Opportunity.amount`, side-by-side diff comparison, and branded web proposal generation with e-signature tokens.
   4. **Convert**: Seamless automated order generation into `scm.SalesOrder`, linking directly to `scm.Item` and automatically triggering soft inventory reservations (`scm.SalesOrderAllocation`).
-- [ ] Bridge CRM Products and SCM Inventory Items: `CPQQuoteLine` maps both `product` (`crm.Product`) and `item` (`scm.Item`). When converting to `scm.SalesOrderLine`, this eliminates the draft order item picking gap documented in `scm.SalesOrderLine`.
-- [ ] Reusable platform context: `accounting.Currency` is global (no tenant FK); `core.Party` represents accounts and contacts; `crm.DocTemplate` powers proposal rendering; `scm.Location` fulfills inventory allocations.
+- [x] Bridge CRM Products and SCM Inventory Items: `CPQQuoteLine` maps both `product` (`crm.Product`) and `item` (`scm.Item`). When converting to `scm.SalesOrderLine`, this eliminates the draft order item picking gap documented in `scm.SalesOrderLine`.
+- [x] Reusable platform context: `accounting.Currency` is global (no tenant FK); `core.Party` represents accounts and contacts; `crm.DocTemplate` powers proposal rendering; `scm.Location` fulfills inventory allocations.
 
 ---
 
@@ -11422,29 +11422,29 @@ Base classes from `apps/sales/models/_base.py`: `TenantNumbered` (`NUMBER_PREFIX
 
 Build entity by entity, one at a time — all four backend files for an entity, then its templates, then move to the next.
 
-- [ ] `models/QuoteProposalCPQ/__init__.py` (package init)
-- [ ] `models/QuoteProposalCPQ/QuoteApprovalRules.py` — `QuoteApprovalRule`
-- [ ] `models/QuoteProposalCPQ/ProductBundles.py` — `ProductBundleOption`
-- [ ] `models/QuoteProposalCPQ/CPQQuotes.py` — `CPQQuote`
-- [ ] `models/QuoteProposalCPQ/CPQQuoteLines.py` — `CPQQuoteLine`
-- [ ] `forms/QuoteProposalCPQ/__init__.py`
-- [ ] `forms/QuoteProposalCPQ/QuoteApprovalRules.py` — `QuoteApprovalRuleForm`
-- [ ] `forms/QuoteProposalCPQ/ProductBundles.py` — `ProductBundleOptionForm`
-- [ ] `forms/QuoteProposalCPQ/CPQQuotes.py` — `CPQQuoteForm`, `CPQQuoteApprovalForm`, `CPQQuoteRevisionForm`, `CPQQuoteProposalGenerateForm`, `CPQQuoteSignForm`
-- [ ] `forms/QuoteProposalCPQ/CPQQuoteLines.py` — `CPQQuoteLineForm`, `CPQQuoteAddBundleForm`
-- [ ] `views/QuoteProposalCPQ/__init__.py`
-- [ ] `views/QuoteProposalCPQ/QuoteApprovalRules.py` — `quote_approval_rule_list`, `quote_approval_rule_create`, `quote_approval_rule_detail`, `quote_approval_rule_edit`, `quote_approval_rule_delete`, `quote_approval_queue`
-- [ ] `views/QuoteProposalCPQ/ProductBundles.py` — `product_bundle_option_list`, `product_bundle_option_create`, `product_bundle_option_detail`, `product_bundle_option_edit`, `product_bundle_option_delete`, `product_bundle_guided_selling`
-- [ ] `views/QuoteProposalCPQ/CPQQuotes.py` — `cpq_quote_list`, `cpq_quote_create`, `cpq_quote_detail`, `cpq_quote_edit`, `cpq_quote_delete`, `cpq_quote_submit_approval`, `cpq_quote_approve`, `cpq_quote_reject`, `cpq_quote_present`, `cpq_quote_make_primary`, `cpq_quote_create_revision`
-- [ ] `views/QuoteProposalCPQ/CPQQuoteLines.py` — `cpq_quote_line_create`, `cpq_quote_line_edit`, `cpq_quote_line_delete`, `cpq_quote_line_toggle_select`, `cpq_quote_add_bundle`
-- [ ] `views/QuoteProposalCPQ/CPQOperations.py` — `quote_proposal_preview`, `quote_portal_view`, `quote_version_list`, `quote_version_compare`, `quote_conversion_board`, `quote_convert_to_order`
-- [ ] `urls/QuoteProposalCPQ/__init__.py`
-- [ ] `urls/QuoteProposalCPQ/QuoteApprovalRules.py`
-- [ ] `urls/QuoteProposalCPQ/ProductBundles.py`
-- [ ] `urls/QuoteProposalCPQ/CPQQuotes.py`
-- [ ] `urls/QuoteProposalCPQ/CPQQuoteLines.py`
-- [ ] `urls/QuoteProposalCPQ/CPQOperations.py`
-- [ ] Dedicated service module: `apps/sales/cpq_services.py`
+- [x] `models/QuoteProposalCPQ/__init__.py` (package init)
+- [x] `models/QuoteProposalCPQ/QuoteApprovalRules.py` — `QuoteApprovalRule`
+- [x] `models/QuoteProposalCPQ/ProductBundles.py` — `ProductBundleOption`
+- [x] `models/QuoteProposalCPQ/CPQQuotes.py` — `CPQQuote`
+- [x] `models/QuoteProposalCPQ/CPQQuoteLines.py` — `CPQQuoteLine`
+- [x] `forms/QuoteProposalCPQ/__init__.py`
+- [x] `forms/QuoteProposalCPQ/QuoteApprovalRules.py` — `QuoteApprovalRuleForm`
+- [x] `forms/QuoteProposalCPQ/ProductBundles.py` — `ProductBundleOptionForm`
+- [x] `forms/QuoteProposalCPQ/CPQQuotes.py` — `CPQQuoteForm`, `CPQQuoteApprovalActionForm`, `CPQPortalSignForm`. **Names consolidated from the plan:** the plan listed five forms here; the build shipped three, because `CPQQuoteRevisionForm`, `CPQQuoteProposalGenerateForm` and `CPQQuoteSignForm` each had exactly one consumer and are POST bodies handled inside the owning view (`quote_create_revision`, `quote_generate_proposal`, `quote_portal_sign`) rather than a `ModelForm` that could be opened independently. `CPQQuoteApprovalForm` became `CPQQuoteApprovalActionForm` to say it is a plain action form, not a model form.
+- [x] `forms/QuoteProposalCPQ/CPQQuoteLines.py` — `CPQQuoteLineForm`. **`CPQQuoteAddBundleForm` was not built and is not needed:** the guided-selling wizard and `cpq_quote_line_create` both construct bundle lines through `CPQQuoteLineForm` plus the `ProductBundleOption` queryset, so a second form would have had no validation the first one lacks.
+- [x] `views/QuoteProposalCPQ/__init__.py`
+- [x] `views/QuoteProposalCPQ/QuoteApprovalRules.py` — `quote_approval_rule_list`, `_create`, `_detail`, `_edit`, `_delete`. **`quote_approval_queue` moved to `QuoteOperations.py`:** it is a workflow over quotes, not a CRUD view over a rule, and keeping it beside the rule CRUD would have put an operational board in an entity module.
+- [x] `views/QuoteProposalCPQ/ProductBundles.py` — `product_bundle_list`, `_create`, `_detail`, `_edit`, `_delete`. **Renamed from the plan's `product_bundle_option_*`:** the model is `ProductBundleOption` but the whole group is "bundles", and the longer name was spelled six times in URLs, templates and navigation for no gain. `product_bundle_guided_selling` became `cpq_guided_selling` in `QuoteOperations.py`, because guided selling builds a quote and is not a CRUD verb on a bundle option.
+- [x] `views/QuoteProposalCPQ/CPQQuotes.py` — `cpq_quote_list`, `_create`, `_detail`, `_edit`, `_delete`. **The plan's separate `approve` / `reject` / `present` / `make_primary` verbs were consolidated** into `quote_approval_action` (approve and reject are one form with an `action` choice) and into `quote_submit_approval` + `quote_generate_proposal`. A `present` verb in particular would have been a status write with no gate behind it, which is exactly the class of defect the review caught.
+- [x] `views/QuoteProposalCPQ/CPQQuoteLines.py` — `cpq_quote_line_list`, `_create`, `_detail`, `_edit`, `_delete`. **The plan's `cpq_quote_line_toggle_select` and `cpq_quote_add_bundle` are not staff views:** a line is selected or deselected from the customer portal (`quote_portal_toggle_line`, where the customer actually is) and through the line form, not from a staff-only toggle that could disagree with the portal.
+- [x] `views/QuoteProposalCPQ/QuoteOperations.py` — **the plan called this module `CPQOperations.py`; the build renamed it to `QuoteOperations.py`** to match the sibling entity modules' `Entity.py` naming and because it holds no model. Views are `quote_submit_approval`, `quote_approval_queue`, `quote_approval_action`, `quote_create_revision`, `quote_compare_versions`, `quote_version_list`, `quote_proposal_board`, `quote_generate_proposal`, `quote_portal_view`, `quote_portal_sign`, `quote_portal_toggle_line`, `quote_conversion_board`, `quote_convert_to_order`, `cpq_guided_selling`. `quote_proposal_preview` became `quote_generate_proposal` and `quote_version_compare` became `quote_compare_versions`; the plan also omitted the three portal routes, which are the largest part of this module.
+- [x] `urls/QuoteProposalCPQ/__init__.py`
+- [x] `urls/QuoteProposalCPQ/QuoteApprovalRules.py`
+- [x] `urls/QuoteProposalCPQ/ProductBundles.py`
+- [x] `urls/QuoteProposalCPQ/CPQQuotes.py`
+- [x] `urls/QuoteProposalCPQ/CPQQuoteLines.py`
+- [x] `urls/QuoteProposalCPQ/CPQOperations.py`
+- [x] Dedicated service module: `apps/sales/cpq_services.py`
   - `cpq_recalc_quote_totals(quote)`: computes list subtotal, discounts, net subtotal, tax, grand total, cost, margin %.
   - `cpq_evaluate_approval(quote)`: evaluates active `QuoteApprovalRule` records by priority.
   - `cpq_create_revision(quote, notes)`: clones quote and line items under same `quote_group_id`, increments `revision_number`.
@@ -11456,46 +11456,46 @@ Build entity by entity, one at a time — all four backend files for an entity, 
 
 ## CRUD completeness (every model, no exceptions)
 
-- [ ] `CPQQuote`: full CRUD + lifecycle actions (`submit_approval`, `approve`, `reject`, `present`, `make_primary`, `create_revision`, `convert_order`).
-- [ ] `CPQQuoteLine`: full CRUD (create, edit, delete with confirm/csrf, toggle select, add bundle).
-- [ ] `ProductBundleOption`: full CRUD (list with filters, detail, create, edit, delete POST-only).
-- [ ] `QuoteApprovalRule`: full CRUD (list with filters, detail, create, edit, delete POST-only).
-- [ ] Actions column on every list page (view, edit, delete).
-- [ ] Actions sidebar on every detail page.
-- [ ] Status-guarded actions: editing lines or quote details restricted when quote is `converted`, `expired`, or locked in review.
+- [x] `CPQQuote`: full CRUD + lifecycle actions (`submit_approval`, `approve`, `reject`, `present`, `make_primary`, `create_revision`, `convert_order`).
+- [x] `CPQQuoteLine`: full CRUD (create, edit, delete with confirm/csrf, toggle select, add bundle).
+- [x] `ProductBundleOption`: full CRUD (list with filters, detail, create, edit, delete POST-only).
+- [x] `QuoteApprovalRule`: full CRUD (list with filters, detail, create, edit, delete POST-only).
+- [x] Actions column on every list page (view, edit, delete).
+- [x] Actions sidebar on every detail page.
+- [x] Status-guarded actions: editing lines or quote details restricted when quote is `converted`, `expired`, or locked in review.
 
 ---
 
 ## Filters (mandatory on every list page)
 
-- [ ] `CPQQuote` list: filters by `status`, `approval_status`, `opportunity`, `account`, `owner`, `is_primary`, `currency`, plus search query `q`.
-- [ ] `CPQQuoteLine` list: filters by `quote`, `line_type`, `product`, `item`, `is_optional`, `is_selected`.
-- [ ] `ProductBundleOption` list: filters by `bundle_product`, `component_product`, `option_group`, `option_type`, `compatibility_rule`, `is_active`, plus search query `q`.
-- [ ] `QuoteApprovalRule` list: filters by `rule_type`, `required_role`, `is_active`, plus search query `q`.
-- [ ] Pass every choice list and FK queryset to template context: `status_choices`, `approval_status_choices`, `rule_type_choices`, `option_type_choices`, `compatibility_rule_choices`, `accounts`, `opportunities`, `products`, `price_books`, `currencies`.
-- [ ] Filter preservation in pagination via `request.GET`.
-- [ ] PK comparisons in templates using `|stringformat:"d"`.
-- [ ] Colour-named badge classes only: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+- [x] `CPQQuote` list: filters by `status`, `approval_status`, `opportunity`, `account`, `owner`, `is_primary`, `currency`, plus search query `q`.
+- [x] `CPQQuoteLine` list: filters by `quote`, `line_type`, `product`, `item`, `is_optional`, `is_selected`.
+- [x] `ProductBundleOption` list: filters by `bundle_product`, `component_product`, `option_group`, `option_type`, `compatibility_rule`, `is_active`, plus search query `q`.
+- [x] `QuoteApprovalRule` list: filters by `rule_type`, `required_role`, `is_active`, plus search query `q`.
+- [x] Pass every choice list and FK queryset to template context: `status_choices`, `approval_status_choices`, `rule_type_choices`, `option_type_choices`, `compatibility_rule_choices`, `accounts`, `opportunities`, `products`, `price_books`, `currencies`.
+- [x] Filter preservation in pagination via `request.GET`.
+- [x] PK comparisons in templates using `|stringformat:"d"`.
+- [x] Colour-named badge classes only: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
 
 ---
 
 ## Integrate (single-writer pass — verify every expected file landed BEFORE wiring anything)
 
-- [ ] Re-export all four models in `apps/sales/models/__init__.py` and add to `__all__`: `CPQQuote`, `CPQQuoteLine`, `ProductBundleOption`, `QuoteApprovalRule`.
-- [ ] Re-export forms in `apps/sales/forms/__init__.py`.
-- [ ] Re-export views in `apps/sales/views/__init__.py`.
-- [ ] Re-export and include URL patterns in `apps/sales/urls/__init__.py` (literal routes before `<int:pk>`).
-- [ ] Register all 4 models in `apps/sales/admin.py`.
-- [ ] Extend `apps/sales/management/commands/seed_sales.py` idempotently with:
+- [x] Re-export all four models in `apps/sales/models/__init__.py` and add to `__all__`: `CPQQuote`, `CPQQuoteLine`, `ProductBundleOption`, `QuoteApprovalRule`.
+- [x] Re-export forms in `apps/sales/forms/__init__.py`.
+- [x] Re-export views in `apps/sales/views/__init__.py`.
+- [x] Re-export and include URL patterns in `apps/sales/urls/__init__.py` (literal routes before `<int:pk>`).
+- [x] Register all 4 models in `apps/sales/admin.py`.
+- [x] Extend `apps/sales/management/commands/seed_sales.py` idempotently with:
   - Product bundle options configured for existing `crm.Product` records with `scm.Item` linkage.
   - Multi-tier quote approval rules (`discount_threshold`, `margin_floor`, `amount_ceiling`).
   - CPQ quotes across lifecycle stages (`draft`, `in_review`, `approved`, `presented`, `accepted`, `converted`).
   - Hierarchical quote lines demonstrating bundle packages, components, optional add-ons, and margin calculations.
   - Converted quote showcasing `scm.SalesOrder` and `scm.SalesOrderAllocation` soft reservation.
-- [ ] Run `makemigrations sales` (claims `0008`).
-- [ ] Run `migrate` and verify `0008` applies cleanly.
-- [ ] Run `seed_sales` twice to prove idempotence (zero duplicate key or integrity errors).
-- [ ] Run `python manage.py check` with 0 issues.
+- [x] Run `makemigrations sales` (claims `0008`).
+- [x] Run `migrate` and verify `0008` applies cleanly.
+- [x] Run `seed_sales` twice to prove idempotence (zero duplicate key or integrity errors).
+- [x] Run `python manage.py check` with 0 issues.
 
 ---
 
@@ -11585,6 +11585,24 @@ Build entity by entity, one at a time — all four backend files for an entity, 
 - **Quote numbers restart per tenant, so `CPQ-00001` exists in every workspace.** Two security-lane tests initially used a quote number as a cross-tenant marker and produced false failures; they now brand the record by name. Recorded here because the next sub-module will hit the same trap.
 - **One test is skipped by design under `--no-migrations`**: the schema-drift check calls `makemigrations`, which that flag disables outright via an empty `MIGRATION_MODULES` map. It is a real check in a normal run and a skip in fast-iteration mode, not a weakened assertion.
 - `cpq_render_proposal_html` still writes `proposal_rendered_content` and `updated_at` on every call, so previewing a proposal remains a write on an HTTP GET. That is a denormalised HTML snapshot meant to track the quote, and I15 named the *status transition* specifically, so it was left in place and recorded as a decision rather than silently widened. Making GET strictly read-only needs a `persist=False` flag - a call for the user, not a drive-by.
+
+### Contract gaps found and closed after the review
+
+The Phase 4 review and the Phase 6 test lanes both passed while three contract requirements were still unimplemented. They were invisible to a reviewer reading a diff, and invisible to a test written from the code rather than from the contract, because the code was internally consistent - it just did less than the plan promised. All three are now built and covered.
+
+- **ATP soft reservation on conversion.** `todo.md` line 11391 and the verify list both required `scm.SalesOrderAllocation` rows in `reserved` status; the research rates the feature table-stakes. `cpq_convert_to_sales_order` created the order and its lines and nothing else. Now every converted line carrying a `scm.Item` is soft-reserved. No `StockMove` is posted - on-hand is untouched and only availability-to-promise drops, which is the allocation model's own stated contract, and inventing a second path for physical movement is the parallel-correction bug SCM 4.4's review found.
+  - **`scm.Location` has no `is_default` flag**, so the warehouse is resolved rather than flagged: an active, pickable `location_type="warehouse"`, preferring the lowest `pick_sequence` (that column already means "reserve from me first") then the lowest code for determinism. Adding a second way to say "the default" was rejected as forking the model.
+  - **A line that cannot be reserved is never silently dropped.** A service line with no `scm.Item` has no stock behind it, and a tenant with no warehouse configured has nowhere to reserve; both are counted and written onto the order as an ATP note, and the conversion message states how many lines were and were not reserved. Silent success would have been the same defect wearing a different hat.
+- **`sales.OpportunityOutcome` never recorded on conversion.** The verify list required it; the old code set `stage = "closed_won"` and stopped, so a closed deal carried no win/loss evidence and 8.4's accuracy report had no ground truth. The append-only outcome is now recorded, taking its reason from the tenant's own configured win catalog and creating one system reason only when none exists. It is recorded **once per opportunity** - two quotes converting onto the same deal must not double-count the win.
+- **Nine list filters named in the plan were never wired up**: `account`, `owner` and `currency` on the quote list (with a `none` bucket, since `owner` is a nullable FK), `line_type`, `product`, `item`, `is_optional` and `is_selected` on the line list, and `component_product` on the bundle list. Every FK id is `isdigit()`-guarded, every dropdown is tenant-scoped, and the Reset condition plus both pagination links carry the new parameters so filtering then paging does not drop the filter.
+
+### Why the review missed all three, and what that says about the sequence
+
+All three were *absent features*, not *broken features*. A reviewer reading `BASE...HEAD` diff cannot see code that was never written, and a test written from the code cannot fail on behaviour the code never had. The checks that would have caught them are the ones that read the **contract** rather than the implementation: the verify list at the end of this plan, and a smoke pass that asserts each contract bullet is *demonstrated* rather than each route merely *reachable*.
+
+### The 8.4 close-out is still unticked
+
+Lines 11156-11184 (8.4's Verify and Close-out) were found in the same sweep and left alone: 8.4 is built and green, but its boxes were never ticked either, and that is a separate module's bookkeeping. It is flagged here rather than silently ticked, because ticking a module's close-out from outside that module's own build is how a checklist stops meaning anything.
 
 ---
 
