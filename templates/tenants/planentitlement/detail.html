@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% comment %}
+  0.19 — one plan grant or override, and its siblings on the same feature.
+  Backing view: planentitlement_detail.
+
+  Context, and ONLY this:
+    obj                  the PlanEntitlement, with feature + subscription joined
+    plan_grants          the same-feature PLAN-LEVEL rows (subscription__isnull=True),
+                         .order_by("plan")[:50] — the cap is in the VIEW
+    overrides            the same-feature SUBSCRIPTION-LEVEL rows,
+                         .order_by("subscription_id")[:50] — also capped in the VIEW
+    overridden_features  a dict {feature_id: plan-grant privilege_value} built in the
+                         view as a dict comprehension over the ALREADY-FETCHED
+                         plan_grants list — never a per-row .filter(). A real derived
+                         value, and the reason the read order below is visible.
+
+  `subscription` is a NULLABLE FK: every read of it is inside an {% if %} branch, never
+  through a |default: FILTER ARGUMENT (L10).
+{% endcomment %}
+{% block title %}{{ obj.feature.code }} on {{ obj.get_plan_display }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {% if obj.is_override %}<span class="badge badge-info">Override</span>{% else %}<span class="badge badge-slate">Plan grant</span>{% endif %}
+        {{ obj.feature.code }} on {{ obj.get_plan_display }}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">&rsaquo;</span><a href="{% url 'tenants:planentitlement_list' %}">Plan entitlements</a><span class="sep">&rsaquo;</span><span>{{ obj.feature.code }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:planentitlement_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% comment %}Fixed confirm string — every field on this row is user-typed (L42).{% endcomment %}
+      <form method="post" action="{% url 'tenants:planentitlement_delete' obj.pk %}" onsubmit="return confirm('Delete this grant? A plan-level grant and a subscription override are deleted by this button alike.');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+      <a href="{% url 'tenants:planentitlement_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All grants</a>
+    </div>
+  </div>
+
+  <div class="layout-2col">
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">The grant as written</h2>
+          {% if obj.is_enabled %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-muted">Disabled</span>{% endif %}
+        </div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Feature</dt><dd>
+              <a href="{% url 'tenants:entitlementfeature_detail' obj.feature.pk %}" class="mono fw-600">{{ obj.feature.code }}</a>
+              <div class="text-muted">{{ obj.feature.name }} &middot; {{ obj.feature.get_privilege_type_display }}</div>
+            </dd></div>
+            <div class="detail-item"><dt>Plan</dt><dd>{{ obj.get_plan_display }}</dd></div>
+            <div class="detail-item"><dt>Scope</dt><dd>
+              {% comment %}Nullable FK read whole inside the branch (L10).{% endcomment %}
+              {% if obj.subscription %}
+                <a href="{% url 'tenants:subscription_detail' obj.subscription.pk %}">{{ obj.subscription.get_plan_display }}</a>
+                <div class="text-muted">This one subscription only</div>
+              {% else %}
+                <span class="badge badge-slate">Every subscription on this plan</span>
+              {% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Privilege value</dt><dd>
+              {% if obj.privilege_value %}<span class="mono">{{ obj.privilege_value }}</span>
+              {% else %}<span class="muted">blank &mdash; the row&rsquo;s existence is the statement</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Pricing</dt><dd>
+              {% if obj.is_add_on %}<span class="badge badge-amber">Add-on</span>{% else %}<span class="badge badge-slate">Included in plan</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Number</dt><dd class="mono">{{ obj.number }}</dd></div>
+            <div class="detail-item"><dt>Effective from</dt><dd>
+              {% if obj.effective_from %}{{ obj.effective_from|date:"M d, Y" }}{% else %}<span class="muted">From start</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Effective to</dt><dd>
+              {% if obj.effective_to %}{{ obj.effective_to|date:"M d, Y" }}{% else %}<span class="muted">Forever</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Recorded</dt><dd>{{ obj.created_at|date:"M d, Y" }}</dd></div>
+          </dl>
+          {% if obj.notes %}
+            <div class="detail-item" style="margin-top:1rem;"><dt>Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+          {% endif %}
+          <p class="form-help" style="margin-top:1rem;">A blank effective window means <strong>Forever</strong>, not
+            unset &mdash; an end date is a negotiated commercial term, not an absence of one.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Plan grants for {{ obj.feature.code }}</h2>
+          <span class="badge badge-slate">{{ plan_grants|length }} shown{% if plan_grants|length >= 50 %} (capped at 50){% endif %}</span>
+        </div>
+        <div class="card-body">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Plan</th><th>Privilege value</th><th>Pricing</th><th>State</th><th>Window</th></tr></thead>
+              <tbody>
+                {% for grant in plan_grants %}
+                  <tr{% if grant.pk == obj.pk %} style="font-weight:600"{% endif %}>
+                    <td>{{ grant.get_plan_display }}{% if grant.pk == obj.pk %} <span class="badge badge-info">This row</span>{% endif %}</td>
+                    <td>{% if grant.privilege_value %}<span class="mono">{{ grant.privilege_value }}</span>{% else %}<span class="muted">not granted</span>{% endif %}</td>
+                    <td>{% if grant.is_add_on %}<span class="badge badge-amber">Add-on</span>{% else %}<span class="badge badge-slate">Included</span>{% endif %}</td>
+                    <td>{% if grant.is_enabled %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-muted">Disabled</span>{% endif %}</td>
+                    <td class="text-muted nowrap">
+                      {% if grant.effective_from %}{{ grant.effective_from|date:"M d, Y" }}{% else %}<span class="muted">From start</span>{% endif %} –
+                      {% if grant.effective_to %}{{ grant.effective_to|date:"M d, Y" }}{% else %}<span class="muted">Forever</span>{% endif %}
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="5"><div class="empty-state"><i data-lucide="layers"></i><h3>No plan-level grant</h3><p>No plan grants this feature outright. Every row on this page is a single subscription&rsquo;s override.</p></div></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Subscription overrides for {{ obj.feature.code }}</h2>
+          <span class="badge badge-slate">{{ overrides|length }} shown{% if overrides|length >= 50 %} (capped at 50){% endif %}</span>
+        </div>
+        <div class="card-body">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Subscription</th><th>Privilege value</th><th>State</th><th>Window</th></tr></thead>
+              <tbody>
+                {% for grant in overrides %}
+                  <tr{% if grant.pk == obj.pk %} style="font-weight:600"{% endif %}>
+                    <td>{% if grant.subscription %}<a href="{% url 'tenants:subscription_detail' grant.subscription.pk %}">{{ grant.subscription.get_plan_display }}</a>{% else %}<span class="muted">—</span>{% endif %}
+                      {% if grant.pk == obj.pk %} <span class="badge badge-info">This row</span>{% endif %}</td>
+                    <td>{% if grant.privilege_value %}<span class="mono">{{ grant.privilege_value }}</span>{% else %}<span class="muted">not granted</span>{% endif %}</td>
+                    <td>{% if grant.is_enabled %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-muted">Disabled</span>{% endif %}</td>
+                    <td class="text-muted nowrap">
+                      {% if grant.effective_from %}{{ grant.effective_from|date:"M d, Y" }}{% else %}<span class="muted">From start</span>{% endif %} –
+                      {% if grant.effective_to %}{{ grant.effective_to|date:"M d, Y" }}{% else %}<span class="muted">Forever</span>{% endif %}
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="4"><div class="empty-state"><i data-lucide="users"></i><h3>No overrides</h3><p>No single subscription differs from its plan on this feature.</p></div></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Read order</h2></div>
+        <div class="card-body">
+          <p class="text-muted">A human resolves this feature in one order, and the page is laid out in it:</p>
+          <ol class="text-muted" style="padding-left:1.1rem; margin:.5rem 0 0;">
+            <li><strong>This row</strong> &mdash; the subscription override, if there is one.</li>
+            <li><strong>Otherwise the plan grant</strong> listed in the table above.</li>
+            <li><strong>Otherwise nothing is granted</strong> &mdash; a blank value and no row both land here.</li>
+          </ol>
+          <div class="table-wrap" style="margin-top:1rem;">
+            <table class="table">
+              <thead><tr><th>Feature</th><th>Plan grant of record</th></tr></thead>
+              <tbody>
+                {% comment %}
+                  overridden_features is the view's dict {feature_id: plan-grant value},
+                  built from the already-fetched plan_grants — one row, not a query per
+                  row. Every entry is this feature by construction, so the key is echoed
+                  as the feature code rather than a bare id.
+                {% endcomment %}
+                {% for feature_id, plan_value in overridden_features.items %}
+                  <tr>
+                    <td class="mono">{{ obj.feature.code }}</td>
+                    <td>{% if plan_value %}<span class="mono">{{ plan_value }}</span>{% else %}<span class="muted">not granted</span>{% endif %}</td>
+                  </tr>
+                {% empty %}
+                  <tr><td class="mono">{{ obj.feature.code }}</td><td><span class="muted">no plan-level grant exists</span></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Actions</h2></div>
+        <div class="card-body">
+          <a href="{% url 'tenants:planentitlement_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          {% comment %}Fixed confirm string (L42).{% endcomment %}
+          <form method="post" action="{% url 'tenants:planentitlement_delete' obj.pk %}" onsubmit="return confirm('Delete this grant? A plan-level grant and a subscription override are deleted by this button alike.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+          <a href="{% url 'tenants:planentitlement_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">What this page does not do</h2></div>
+        <div class="card-body">
+          <p class="text-warn"><i data-lucide="shield-check"></i>
+            <strong>NavERP records commercial terms somebody wrote down. It does not enforce them.</strong></p>
+          <p class="text-muted">The read order above is <strong>how a human reads this page</strong> &mdash; it is not a
+            rule NavERP applies. No code consults a <code>PlanEntitlement</code> at request time, so the override does
+            not override anything: entitlement enforcement is declined by this sub-module, and a grant is a
+            <strong>record, not a gate</strong>. Writing <span class="mono">privilege_value = true</span> here grants a
+            customer no capability by itself.</p>
+          <p class="text-muted">There is also no plan versioning and no grandfathering: a plan is a
+            <code>core.Tenant.PLAN_CHOICES</code> value with no version, so a price change is an edit to these rows
+            rather than a new plan tier that past subscriptions keep.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
