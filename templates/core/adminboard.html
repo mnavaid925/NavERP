@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Admin Console{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Admin Console</h1>
+      <div class="breadcrumb"><span>Admin Console</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:support_board' %}" class="btn btn-outline"><i data-lucide="life-buoy"></i> Support</a>
+      <a href="{% url 'core:bulk_board' %}" class="btn btn-outline"><i data-lucide="database"></i> Data tools</a>
+      <a href="{% url 'core:ops_audit_trail' %}" class="btn btn-outline"><i data-lucide="history"></i> Audit trail</a>
+    </div>
+  </div>
+
+  {% comment %}
+    This page REPLACES NOTHING. Every tile counts a table some earlier sub-module already owns and links
+    to that sub-module's own board. It re-derives no health, no security, no backup and no config logic,
+    so it cannot drift from the pages that own those answers. Its only job is to let an operator see what
+    needs attention without opening six pages.
+  {% endcomment %}
+  <div class="card"><div class="card-body">
+    <p class="text-muted">One screen over the whole workspace. Every tile below is a live count and a link &mdash;
+      nothing here is stored, recalculated on a schedule, or a second source of truth for the board it links to.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+  </div></div>
+
+  {% if needs_attention %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Needs attention</h2></div>
+      <div class="card-body">
+        <div class="stat-grid">
+          {% for item in needs_attention %}
+            <a href="{% url item.url %}" class="stat-card">
+              <div class="stat-value">{{ item.value }}</div>
+              <div class="stat-label">{{ item.label }}</div>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">At a glance</h2></div>
+    <div class="card-body">
+      <div class="stat-grid">
+        {% for tile in tiles %}
+          <a href="{% url tile.url %}" class="stat-card">
+            <div class="stat-icon {{ tile.tone }}"><i data-lucide="{{ tile.icon }}"></i></div>
+            <div>
+              <div class="stat-value">{{ tile.value }}</div>
+              <div class="stat-label">{{ tile.label }}</div>
+              <div class="text-muted">{{ tile.hint }}</div>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Go to the board that owns the answer</h2></div>
+    <div class="card-body">
+      <div class="badge-group">
+        {% for board in boards %}
+          <a href="{% url board.url %}" class="btn btn-outline"><i data-lucide="{{ board.icon }}"></i> {{ board.label }}</a>
+        {% endfor %}
+      </div>
+      <p class="text-muted">Each of these is an existing sub-module's own page. This console does not replace or
+        recompute any of them.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent activity</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th></tr></thead>
+        <tbody>
+          {% for row in recent_activity %}
+            <tr>
+              <td>{{ row.created_at|date:"M d, Y H:i" }}</td>
+              <td>{% if row.user %}{{ row.user }}{% else %}<span class="text-muted">system</span>{% endif %}</td>
+              <td><span class="badge badge-slate">{{ row.action }}</span></td>
+              <td>{{ row.target|truncatechars:56 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="history"></i><h3>No activity recorded</h3><p class="text-muted">Nothing has been changed in this workspace yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body"><a href="{% url 'core:ops_audit_trail' %}" class="btn btn-outline">Full audit trail <i data-lucide="arrow-right"></i></a></div>
+  </div>
+{% endblock %}
