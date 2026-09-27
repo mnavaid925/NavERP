@@ -184,6 +184,25 @@ LITERAL_PREFIX_MODELS = {
     "RUN": ["core.JobRun"],
     "MNTW": ["core.MaintenanceWindow"],
     "CHG": ["core.ChangeRequest"],
+    # 0.21 Compliance, Governance & Risk is the fourth such case. `ControlFramework`,
+    # `ComplianceControl`, `CorporatePolicy` and `RiskRegister` all mint their prefix in `save()`
+    # through a hardcoded literal, so the `NUMBER_PREFIX` scan above cannot see any of them, and each
+    # model's docstring says so and points HERE as the reason its prefix is discoverable. Without the
+    # entries below, four more docstrings would cite wiring that did not exist and `prefix_usage()`
+    # would report all four as `model_only` without ever naming the models that mint them — the same
+    # false negative, four more times. `ControlFrameworkMapping` and `PolicyAcknowledgement` are
+    # deliberately absent: both are child rows with no number column at all, exactly as
+    # `FeatureRollout` above.
+    #
+    # **`GRC` is NOT `RSK`.** `RSK` is already `projects.ProjectRisk`, verified by enumerating every
+    # `NUMBER_PREFIX` in the repository. `next_number()` scopes by `(tenant, prefix)`, so the
+    # collision would have been silent — and an operator holding `RSK-00001` would have had no way
+    # to tell a risk register row from a project risk row. That is precisely the failure this
+    # reconciliation board exists to catch, so the prefix is recorded here as it actually is.
+    "CFW": ["core.ControlFramework"],
+    "CTL": ["core.ComplianceControl"],
+    "CPOL": ["core.CorporatePolicy"],
+    "GRC": ["core.RiskRegister"],
 }
 
 
