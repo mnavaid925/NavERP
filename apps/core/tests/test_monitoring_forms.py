@@ -84,6 +84,7 @@ def test_monitoring_alert_rule_service_is_required(tenant_a):
 
 def test_monitoring_alert_event_rule_rejects_another_tenants_pk(tenant_a, tenant_b):
     from decimal import Decimal
+
     def _rule(tenant, name):
         return AlertRule.objects.create(
             tenant=tenant, name=name, service=None, metric_key="cpu_pct", comparator="gte",
@@ -120,38 +121,48 @@ def test_monitoring_incident_m2m_rejects_another_tenants_pk(tenant_a, tenant_b, 
 
 
 # ------------------------------------------------------------------ the two save() overrides
+#
+# **`tenant` is set by the VIEW, not the form.** `crud_create` does `form.save(commit=False)` then
+# `obj.tenant = request.tenant`, and `tenant` is deliberately not a form field (see the L22 block
+# above). So any test that calls `form.save()` directly must set the tenant itself or it will hit
+# `NOT NULL constraint failed: <table>.tenant_id` — which is the database correctly refusing an
+# orphan row, not a form defect.
+
+
+def _monitoring_save(form_class, data, tenant):
+    """Validate, then save the way `crud_create` does: commit=False, assign tenant, save."""
+    form = form_class(data=data, tenant=tenant)
+    assert form.is_valid(), form.errors
+    obj = form.save(commit=False)
+    obj.tenant = tenant
+    obj.save()
+    form.save_m2m()
+    return obj
+
 
 def test_monitoring_service_form_stamps_last_status_at_when_the_status_changes(tenant_a,
                                                                               mon_component_payload):
     """Nobody probes this component, so the honest reading of 'last status change' is the last edit."""
-    svc = ServiceComponentForm(data=mon_component_payload, tenant=tenant_a)
-    assert svc.is_valid(), svc.errors
-    created = svc.save()
+    created = _monitoring_save(ServiceComponentForm, mon_component_payload, tenant_a)
     assert created.last_status_at is not None
+    first_stamp = created.last_status_at
 
-    unchanged = ServiceComponentForm(data=mon_component_payload, instance=created, tenant=tenant_a)
-    assert unchanged.is_valid(), unchanged.errors
-    kept = unchanged.save()
-    kept.refresh_from_db()
-    assert kept.last_status_at == created.last_status_at, "an unrelated edit re-stamped the status"
+    unchanged = _monitoring_save(ServiceComponentForm, mon_component_payload, created.tenant)
+    assert unchanged.last_status_at == first_stamp, "an unrelated edit re-stamped the status"
 
-    changed = ServiceComponentForm(
-        data={**mon_component_payload, "current_status": "degraded"}, instance=created,
-        tenant=tenant_a)
-    assert changed.is_valid(), changed.errors
-    moved = changed.save()
-    moved.refresh_from_db()
-    assert moved.last_status_at > kept.last_status_at
+    changed = _monitoring_save(ServiceComponentForm,
+                               {**mon_component_payload, "current_status": "degraded"},
+                               created.tenant)
+    assert changed.last_status_at > first_stamp
 
 
 def test_monitoring_alert_event_form_snapshots_the_service_name(tenant_a, _mon_svc, _mon_event,
                                                                mon_rule_two_tier_a):
     """`service_label` is written by the FORM, not the view, so the admin path gets it too."""
     svc = _mon_svc()
-    form = AlertEventForm(data=_monitoring_event_data(rule=mon_rule_two_tier_a.pk, service=svc.pk),
-                          tenant=tenant_a)
-    assert form.is_valid(), form.errors
-    event = form.save()
+    event = _monitoring_save(AlertEventForm,
+                             _monitoring_event_data(rule=mon_rule_two_tier_a.pk, service=svc.pk),
+                             tenant_a)
     assert event.service_label == svc.name
 
 
@@ -196,12 +207,17 @@ def test_monitoring_first_seen_at_is_backfilled_only_once(tenant_a, _mon_svc, _m
     assert form2.save().first_seen_at == first
 
 
-# ------------------------------------------------------------------ the honest-claim help text
+# ------------------------------------------------------------------ the honest-claim wording
 
-def test_monitoring_mute_help_text_says_nothing_enforces_it(tenant_a):
-    """A user must not read a recorded mute as a suppression that is actually in force."""
-    text = AlertEventForm.base_fields["muted_until"].help_text or ""
-    assert "nothing enforces" in text.lower() or "recorded" in text.lower()
+def test_monitoring_the_mute_label_says_nothing_enforces_it(tenant_a):
+    """A user must not read a recorded mute as a suppression that is actually in force.
+
+    The wording lives in `Meta.labels`, not `help_text` — the field has no `help_text` at all, so an
+    assertion on `help_text` reads an empty string and passes/fails for the wrong reason.
+    """
+    label = AlertEventForm.base_fields["muted_until"].label or ""
+    lowered = label.lower()
+    assert "nothing enforces" in lowered, f"the mute label does not disclaim enforcement: {label!r}"
 
 
 def test_monitoring_frequency_help_text_says_nothing_runs_it(tenant_a):
