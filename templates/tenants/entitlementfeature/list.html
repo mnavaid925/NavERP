@@ -92,20 +92,19 @@
               </td>
               <td>
                 <div class="table-actions">
-                  <a href="{% url 'tenants:entitlementfeature_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'tenants:entitlementfeature_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <a href="{% url 'tenants:entitlementfeature_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'tenants:entitlementfeature_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
                   {% comment %}
-                    @require_POST, so a real form and not a link. The confirm is a FIXED
-                    string: obj.code and obj.name are user-typed, and an apostrophe in
-                    either escapes to &#39;, which HTML decodes back to a bare quote
-                    before JavaScript parses the attribute and the dialog stops guarding
-                    anything (L42). It also names the non-destructive retirement path,
-                    because deleting a catalog row cascades away its grants.
+                    A real form, not a link, because the endpoint is @require_POST. The confirm
+                    names the NON-DESTRUCTIVE retirement path, because deleting a catalog row
+                    cascades away every grant that references it. The message is a fixed literal
+                    with no ASCII apostrophe - see partials/confirm_button.html for why (L42).
                   {% endcomment %}
-                  <form method="post" action="{% url 'tenants:entitlementfeature_delete' obj.pk %}" onsubmit="return confirm('Delete this feature and every grant that references it? To retire a feature without deleting its grants, set its status to Archived instead.');">
-                    {% csrf_token %}
-                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% url 'tenants:entitlementfeature_delete' obj.pk as delete_url %}
+                  {% include "partials/confirm_button.html" with
+                      action=delete_url
+                      confirm_message="Delete this feature and every grant that references it? To retire a feature without deleting its grants, set its status to Archived instead."
+                      label="Delete" icon="trash-2" variant="danger" %}
                 </div>
               </td>
             </tr>
