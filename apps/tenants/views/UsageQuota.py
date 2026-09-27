@@ -54,7 +54,13 @@ def usagequota_create(request):
 
 @tenant_admin_required
 def usagequota_detail(request, pk):
-    obj = get_object_or_404(UsageQuota, pk=pk, tenant=request.tenant)
+    # I9: `select_related("subscription")` because the template reads
+    # `obj.subscription.pk` and `obj.subscription.get_plan_display` in the Subscription row. The
+    # FK is NOT nullable, so the walk is guaranteed to fire a query without it - this page ran 3
+    # queries where 2 suffice. The list view already does this (line 19); the detail view did not.
+    obj = get_object_or_404(
+        UsageQuota.objects.select_related("subscription"), pk=pk, tenant=request.tenant,
+    )
     # `consumption` is the {metric: Decimal} map for THIS subscription, taken from the board helper
     # rather than re-queried here — a row-dict contract is a second contract: read the PRODUCER of
     # the rows, not the view that forwards them.
