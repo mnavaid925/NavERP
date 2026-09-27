@@ -16,8 +16,12 @@ no longer exists. Derived from the FK it cannot lie.
 NULLs as distinct inside a unique index, so `(tenant, plan, feature, subscription)` does not stop two
 plan-level grants for the same triple — both are accepted, every time. The tuple is kept because it
 IS correct and load-bearing for the override case (two identical overrides should collide), and the
-invariant that actually matters is enforced in `clean()` below, at the only place a user can create
-one. The database is not asked to do what it cannot do.
+invariant that actually matters is enforced in `clean()` below AND, for the user-reachable path, in
+`PlanEntitlementForm.clean()` — which reads `self.tenant`, the one the model cannot see on a form
+instance. The model's `clean()` short-circuits its duplicate branch on the form path (it only fires for
+a plan-level grant with no subscription, and the form guards that case first), so the sentence this
+used to carry — that the rule fires "at the only place a user can create one" — was an overclaim: the
+FORM is that place. The database is not asked to do what it cannot do.
 
 **Ownership:** 0.19 owns the COMMERCIAL limit only. The abuse bound is `core.IpAccessRule` (0.18)
 and operational thresholds are `core.AlertRule` (0.17); neither is re-declared here. `EntitlementFeature`
