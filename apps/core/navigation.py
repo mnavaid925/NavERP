@@ -331,6 +331,53 @@ LIVE_LINKS = {
         "Quota Register": "tenants:usagequota_list",                           # extra (the ceilings themselves)
         "Plan Grants & Overrides": "tenants:planentitlement_list",             # extra (plan vs subscription precedence)
     },
+    # 0.20 Admin Console & System Operations. The five bullet keys below are copied
+    # BYTE-IDENTICALLY from `NavERP.md` lines 267-271; `parse_catalog()` matches them by exact string, so
+    # a one-character drift renders a fully built page as a "soon" roadmap pill with no error anywhere.
+    # 9 labels over 9 DISTINCT targets — asserted before this block is considered wired, because two
+    # labels over one page highlight it twice and make "which page is this?" unanswerable.
+    #
+    # **Bullet 1 REPLACES NOTHING.** `admin_board` counts tables 0.16/0.17/0.18 already own and LINKS to
+    # their boards; it re-derives no health, security, backup or config logic, so it cannot drift from the
+    # pages that own those answers. This is the L36 shape 0.19 used, pointed the other way: 0.20 extends
+    # and aggregates rather than declaring a parallel health or security store.
+    #
+    # **Bullet 5 DECLARES NO TICKET TABLE AND NO KNOWLEDGE BASE.** `crm.Case` + `crm.KnowledgeArticle`
+    # (+ `crm.KbCategory`) and `hrm.HelpdeskTicket` + `hrm.KnowledgeArticle` (+ `hrm.HelpdeskCategory`)
+    # ALL already exist. `support_board` reads both queues and both knowledge bases and links to their
+    # own pages; a third ticket table or a third knowledge base would be the duplicate-schema bug L29
+    # forbids. (Note for the next pass: there is no `KnowledgeBase` CLASS anywhere — the crm file of that
+    # name defines `KnowledgeArticle`.)
+    #
+    # **Bullet 4 BUILDS NO EXECUTOR.** `bulk_board` counts what a tool would touch and writes nothing.
+    #
+    # **Bullet 3's target is the WINDOW register, not the change register** — the change register is an
+    # *extra* leaf, not the reverse. A PagerDuty window and a Freshservice change are different artefacts
+    # and both need a home; the window is the one the NavERP.md bullet names first.
+    #
+    # **NINE declines, none of them enforced, sent, scheduled, executed or integrated by anything here:**
+    #   1. scheduler EXECUTION - a JobDefinition is a declaration; `handler_path` is never imported
+    #   2. queue and worker pool - `pool_name`/`pool_slots` are recorded; no pool reserves a slot
+    #   3. run/queue monitoring - `JobRun` is a register of what was asked for, not worker telemetry
+    #   4. maintenance-window ENFORCEMENT - nothing reads a window's suppressed rules or write-lock flag
+    #   5. change deployment - approving a change records a decision; there is no build pipeline
+    #   6. phase rollout APPLICATION - a FeatureRollout declares a reach; no cohort is ever selected
+    #   7. rollback EXECUTION - a recorded rollback reverts no system
+    #   8. bulk execution - `bulk_preview` counts rows and changes nothing
+    #   9. in-app help delivery - no chat widget, no search-as-you-type, no ticket intake of our own
+    "0.20": {
+        "Unified Admin Dashboard": "core:admin_board",                # bullet 1 (the roll-up command centre)
+        "Job Scheduler & Background Tasks": "core:jobdefinition_list",  # bullet 2 (the job register)
+        "Maintenance & Release Management": "core:maintenancewindow_list",  # bullet 3 (the window register)
+        "Bulk Operations & Data Tools": "core:bulk_board",             # bullet 4 (preview only; no executor)
+        "Self-Service Support & Help Center": "core:support_board",    # bullet 5 (links CRM 1.4 + HRM 3.x)
+        # Extra built pages that are NOT NavERP.md bullets, so they read as operational leaves rather than
+        # as more promised features.
+        "Job Run History": "core:jobrun_list",                         # extra (the run register)
+        "Change Register": "core:changerequest_list",                  # extra (0.17's change record)
+        "Feature Rollouts": "core:featurerollout_list",                # extra (phased rollout stages)
+        "Operations Audit Trail": "core:ops_audit_trail",              # extra (read-only over 0.9 AuditLog)
+    },
     # ========================= Module 1 — Customer Relationship Management (CRM)
     # 1.1 Core Data Management — Accounts/Contacts are core.Party lenses; Leads are CRM-owned.
     "1.1": {
