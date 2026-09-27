@@ -27,12 +27,13 @@ reference for a foundation app with flat entity files. Read them before inventin
 `0.10` System Configuration & Settings · `0.11` Workflow & Approval Administration ·
 `0.12` Notification & Communication · `0.13` Integration & API Management · `0.14` Master Data &
 Reference Configuration · `0.15` Localization & Regional Settings ·
-`0.16` Backup, Recovery & Data Lifecycle · `0.17` Monitoring, Logging & Observability.
+`0.16` Backup, Recovery & Data Lifecycle · `0.17` Monitoring, Logging & Observability ·
+`0.18` Threat Protection & Security Operations.
 
 **Unbuilt: `0.19`–`0.21`** (License Administration, Admin Console,
 Compliance & Governance). They render as roadmap pills.
 
-Migrations: `core.0005`–`core.0015`, `accounts.0003`–`accounts.0004`, `tenants.0004`.
+Migrations: `core.0005`–`core.0016`, `accounts.0003`–`accounts.0004`, `tenants.0004`.
 
 ## App layout — FOUNDATION apps keep entity files FLAT
 
@@ -260,6 +261,14 @@ zero of them is correct, not broken.
 **Honest prose is enforced, not optional.** `SECURITY_NOTES` in `views/Security.py` is printed
 verbatim by the overview, all four boards and all sixteen register pages, so a page and its board can
 never disagree about what this application can and cannot do.
+
+**Known, accepted limitation — do not fix here (0.18's counterpart to 0.17's).**
+`SecurityIncident.affected_services` is an **M2M**, and `TenantConsistentMixin` walks `ForeignKey` and
+`OneToOneField` only, so it is **not** tenant-checked on the **admin** save path. `TenantModelForm`
+narrows M2M querysets, so the form path is covered. Same posture as 0.17's `Incident.affected_services`
+and 0.16's escalated C7. **Do not change `TenantModelForm`** — it would break committed tests in
+three apps. If a fix is ever wanted, scope it to
+`SecurityIncidentAdmin.formfield_for_foreignkey` for this one field.
 
 ## Multi-tenancy (mandatory)
 
