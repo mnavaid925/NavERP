@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Support &amp; Help Center{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Support &amp; Help Center</h1>
+      <div class="breadcrumb"><a href="{% url 'core:admin_board' %}">Admin Console</a><span class="sep">&rsaquo;</span><span>Support</span></div>
+    </div>
+  </div>
+
+  {% comment %}
+    This page declares NO ticket table and NO knowledge base. Both already exist in two different apps,
+    and a third copy of either would be exactly the parallel-schema bug L29 forbids. It reads
+    crm.Case + crm.KbCategory + crm.KnowledgeArticle and hrm.HelpdeskTicket + hrm.HelpdeskCategory +
+    hrm.KnowledgeArticle, and links to each of their own pages. Note there is no `KnowledgeBase` CLASS
+    anywhere in this repository - the file of that name in crm defines a class called KnowledgeArticle.
+  {% endcomment %}
+  <div class="card"><div class="card-body">
+    <p class="text-muted">One view over the two support desks this workspace already has: the customer queue in
+      CRM and the internal employee desk in HRM. This page creates nothing, and it does not open, route, merge
+      or escalate a ticket &mdash; a ticket belongs in the queue that owns it, and the links below go there.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Queues</h2></div>
+    <div class="card-body">
+      <div class="stat-grid">
+        <a href="{% url 'crm:case_list' %}" class="stat-card">
+          <div class="stat-icon blue"><i data-lucide="life-buoy"></i></div>
+          <div><div class="stat-value">{{ counts.crm_open_cases }}</div><div class="stat-label">Open customer cases</div>
+          <div class="text-muted">CRM 1.4 &mdash; new, open, in progress or waiting</div></div>
+        </a>
+        <a href="{% url 'hrm:ticket_list' %}" class="stat-card">
+          <div class="stat-icon purple"><i data-lucide="ticket"></i></div>
+          <div><div class="stat-value">{{ counts.hrm_open_tickets }}</div><div class="stat-label">Open internal tickets</div>
+          <div class="text-muted">HRM helpdesk &mdash; new, open, in progress or waiting</div></div>
+        </a>
+        <div class="stat-card">
+          <div class="stat-icon green"><i data-lucide="book-open"></i></div>
+          <div><div class="stat-value">{{ counts.crm_articles_published }}</div><div class="stat-label">Published customer articles</div>
+          <div class="text-muted">{{ counts.crm_articles_draft }} still in draft</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green"><i data-lucide="library"></i></div>
+          <div><div class="stat-value">{{ counts.hrm_articles_published }}</div><div class="stat-label">Published internal articles</div>
+          <div class="text-muted">{{ counts.hrm_articles_draft }} still in draft</div></div>
+        </div>
+      </div>
+      <p class="text-muted">Open counts exclude resolved and closed. Counting them would tell an operator their
+        queue is fuller than it is, which is the same false pressure an over-broad severity list creates.</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Open work</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Queue</th><th>Reference</th><th>Subject</th><th>Priority</th><th>Status</th><th>Updated</th></tr></thead>
+        <tbody>
+          {% for c in crm_cases %}
+            <tr>
+              <td><span class="badge badge-info">Customer</span></td>
+              <td class="fw-600"><a href="{% url 'crm:case_detail' c.pk %}">{{ c.number }}</a></td>
+              <td>{{ c.subject|truncatechars:48 }}</td>
+              <td>{{ c.get_priority_display }}</td>
+              <td>{% if c.status == "waiting" %}<span class="badge badge-amber">{{ c.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ c.get_status_display }}</span>{% endif %}</td>
+              <td>{{ c.updated_at|date:"M d, Y H:i" }}</td>
+            </tr>
+          {% endfor %}
+          {% for t in hrm_tickets %}
+            <tr>
+              <td><span class="badge badge-slate">Internal</span></td>
+              <td class="fw-600"><a href="{% url 'hrm:ticket_detail' t.pk %}">{{ t.number }}</a></td>
+              <td>{{ t.subject|truncatechars:48 }}</td>
+              <td>{{ t.get_priority_display }}</td>
+              <td>{% if t.status == "waiting" %}<span class="badge badge-amber">{{ t.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ t.get_status_display }}</span>{% endif %}</td>
+              <td>{{ t.updated_at|date:"M d, Y H:i" }}</td>
+            </tr>
+          {% endfor %}
+          {% if not crm_cases and not hrm_tickets %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="inbox"></i><h3>No open work</h3><p class="text-muted">Both queues are empty. A zero here is a real count over both tables, not a queue this page failed to read.</p></div></td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Knowledge bases</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Base</th><th>Article</th><th>Category</th><th>Status</th><th>Helpful</th></tr></thead>
+        <tbody>
+          {% for a in crm_articles %}
+            <tr>
+              <td><span class="badge badge-info">Customer</span></td>
+              <td class="fw-600"><a href="{% url 'crm:knowledgearticle_detail' a.pk %}">{{ a.title|truncatechars:48 }}</a></td>
+              <td>{% if a.kb_category %}{{ a.kb_category.name }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>{% if a.status == "published" %}<span class="badge badge-green">{{ a.get_status_display }}</span>{% elif a.status == "draft" %}<span class="badge badge-amber">{{ a.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ a.get_status_display }}</span>{% endif %}</td>
+              <td>{{ a.helpful_count }}</td>
+            </tr>
+          {% endfor %}
+          {% for a in hrm_articles %}
+            <tr>
+              <td><span class="badge badge-slate">Internal</span></td>
+              <td class="fw-600"><a href="{% url 'hrm:knowledgearticle_detail' a.pk %}">{{ a.title|truncatechars:48 }}</a></td>
+              <td>{% if a.category %}{{ a.category.name }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>{% if a.status == "published" %}<span class="badge badge-green">{{ a.get_status_display }}</span>{% elif a.status == "draft" %}<span class="badge badge-amber">{{ a.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ a.get_status_display }}</span>{% endif %}</td>
+              <td>{{ a.helpful_count }}</td>
+            </tr>
+          {% endfor %}
+          {% if not crm_articles and not hrm_articles %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="book-open"></i><h3>No articles yet</h3><p class="text-muted">Neither knowledge base has an article. Write one in the app that owns it.</p></div></td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Go to the queue that owns the work</h2></div>
+    <div class="card-body">
+      <div class="badge-group">
+        {% for link in links %}
+          <a href="{% url link.url %}" class="btn btn-outline"><i data-lucide="{{ link.icon }}"></i> {{ link.label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+{% endblock %}
