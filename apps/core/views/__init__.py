@@ -6,6 +6,49 @@ at the package root. This __init__ re-exports every symbol, so
 """
 from ._common import *  # noqa: F401,F403
 from ._common import _parties  # noqa: F401
+# 0.20 — Admin Console & System Operations. Flat at the package root (rule 9: core is a Module 0
+# foundation app with no NavERP sub-modules). The three boards live here in VIEWS ONLY — they own no
+# model, so there is no model file and no form file for any of them.
+from .AdminConsole import (  # noqa: F401
+    # --- the job register (bullet 2)
+    jobdefinition_list,
+    jobdefinition_create,
+    jobdefinition_detail,
+    jobdefinition_edit,
+    jobdefinition_delete,
+    jobrun_list,
+    jobrun_detail,
+    jobrun_edit,
+    jobrun_delete,
+    # --- maintenance windows + the change register + rollouts (bullet 3)
+    maintenancewindow_list,
+    maintenancewindow_create,
+    maintenancewindow_detail,
+    maintenancewindow_edit,
+    maintenancewindow_delete,
+    changerequest_list,
+    changerequest_create,
+    changerequest_detail,
+    changerequest_edit,
+    changerequest_delete,
+    featurerollout_list,
+    featurerollout_create,
+    featurerollout_detail,
+    featurerollout_edit,
+    featurerollout_delete,
+    # --- the three boards + the read-only trail (bullets 1, 4, 5)
+    admin_board,
+    support_board,
+    bulk_board,
+    ops_audit_trail,
+    # --- the six POST-only actions. Each guard lives in the view, not only in a hidden button.
+    jobdefinition_run_now,
+    maintenance_window_end_now,
+    change_request_submit,
+    change_request_approve,
+    change_request_rollback,
+    bulk_preview,
+)
 from .OrgUnit import (
     orgunit_list,
     orgunit_create,
