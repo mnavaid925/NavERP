@@ -5,16 +5,17 @@
   Context, and ONLY this:
     obj         the UsageQuota (subscription is NOT nullable — a ceiling with no
                 subscription has nothing to bound)
-    consumption _consumption_by_subscription(tenant).get(obj.subscription_id, {})
+    consumption {metric: Decimal} — this subscription's UNBILLED consumption per
+                metric, filtered down from the board helper's whole-tenant
+                {(subscription_id, metric)} map by the view (I1). Empty means no
+                unbilled usage rows exist for this subscription, NOT "not measured".
 
-  !! KEY MISMATCH, REPORTED NOT WORKED AROUND: contract §3.4 describes `consumption` as a
-  {metric: Decimal} map for this subscription, but the view actually forwards
-  `_consumption_by_subscription(tenant).get(obj.subscription_id, {})` — and THAT helper keys
-  its result by the TUPLE (subscription_id, metric), not by metric. A template cannot build
-  a tuple key, so anything read from `consumption` here would print a dict repr or nothing.
-  This page therefore does NOT read `consumption`; it links to the quota board, which can
-  show quota-vs-consumption correctly because the board builds per-row dicts. This is a VIEW
-  fix (pass a {metric: Decimal} map), not a template fix.
+  `consumption` is unbilled usage ONLY, the same `is_billed=False` lens the 0.1 usage
+  list and the quota board use, so "consumed" means the same thing on all three pages.
+  It is NOT a percentage of the limit and NOT a breach test — the ceiling as written is
+  in the card above, the comparison is the quota board's job, and this panel exists so an
+  operator opening one quota can see the raw numbers it would be measured against
+  without leaving the page.
 {% endcomment %}
 {% block title %}{{ obj.get_metric_display }} quota{% endblock %}
 {% block content %}
@@ -69,6 +70,51 @@
           </dl>
           {% if obj.notes %}
             <div class="detail-item" style="margin-top:1rem;"><dt>Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Unbilled consumption on this subscription</h2>
+          <span class="badge badge-slate">0.1&rsquo;s usage rows, read only</span>
+        </div>
+        <div class="card-body">
+          {% comment %}
+            The per-metric map the view hands over. `obj.metric` is one entry of it and is
+            highlighted, because "how close is THIS ceiling" is the question the page was
+            opened to answer. The comparison itself is deliberately NOT done here: the
+            quota board owns quota-vs-consumption, and repeating that arithmetic on the
+            detail page would give two pages two chances to disagree.
+          {% endcomment %}
+          {% if consumption %}
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th class="text-right">Unbilled consumed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for metric, total in consumption.items %}
+                  <tr>
+                    <td>
+                      {{ metric }}
+                      {% if metric == obj.metric %}<span class="badge badge-info">This quota</span>{% endif %}
+                    </td>
+                    <td class="text-right mono">{{ total }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <p class="text-muted">Unbilled usage only &mdash; the same lens the
+              <a href="{% url 'tenants:quota_board' %}">quota board</a> and the
+              <a href="{% url 'tenants:usagerecord_list' %}">usage register</a> use. Quota-versus-consumption
+              is the board&rsquo;s job; these are the raw numbers it compares.</p>
+          {% else %}
+            <p class="text-muted">No unbilled usage rows exist for this subscription. That is an
+              absence of recorded consumption, <strong>not</strong> a measurement of zero &mdash; usage rows
+              are entered by hand or by 0.1&rsquo;s flow, and there is no event pipeline.</p>
           {% endif %}
         </div>
       </div>
