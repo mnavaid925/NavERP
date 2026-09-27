@@ -1,0 +1,39 @@
+{% comment %}
+  POST-only action button with a confirmation dialog — the shared form for every "confirm first"
+  control in a list table's Actions column. Authored for 0.19 (finding M3), which had the identical
+  seven-line form hand-copied across six call sites.
+
+  Usage:
+      {% include "partials/confirm_button.html" with
+          action=delete_url confirm_message="Delete this seat?" label="Delete" icon="trash-2" %}
+
+  Params:
+      action           REQUIRED — the resolved URL to POST to.
+      confirm_message  REQUIRED — see the apostrophe rule below. This is what makes the dialog
+                        honest, so write the real consequence, including what it does NOT do.
+      label            Button label, used for BOTH `title` and `aria-label` (finding M4: an
+                        icon-only button needs a real accessible name, and `title` alone is only a
+                        fallback). Defaults to "Confirm".
+      icon             A lucide icon name. Defaults to "trash-2".
+      variant          "" (default), or "danger" for the destructive styling.
+
+  **The apostrophe rule — L42, and this partial cannot fix it for you.**
+  The message lands inside a JavaScript single-quoted string. Django autoescapes a literal `'`
+  to `&#39;`, which the BROWSER DECODES BACK to a bare quote before JavaScript parses it — so the
+  string terminates early and the dialog silently stops guarding anything. An apostrophe is not a
+  cosmetic problem here; it is a deleted row with no confirmation.
+
+  There is no way to escape this from inside a Django template. So: `confirm_message` must be a
+  FIXED literal written in the source, and it must contain no ASCII `'` and no backslash. Use the
+  typographic apostrophe `’` (U+2019) when you need one, exactly as 0.19's own copy does
+  ("anyone’s"). Never build the message from row data.
+
+  `method` is fixed to POST because every endpoint that uses this is `@require_POST`: a GET on
+  them is a 405 by design (see the decorator-order note in the 0.19 skill), so a link would not
+  work anyway.
+{% endcomment %}
+<form method="post" action="{{ action }}" onsubmit="return confirm('{{ confirm_message }}');">
+  {% csrf_token %}
+  <button class="btn-icon{% if variant %} {{ variant }}{% endif %}" type="submit"
+          title="{{ label }}" aria-label="{{ label }}"><i data-lucide="{{ icon }}"></i></button>
+</form>
