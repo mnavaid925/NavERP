@@ -233,7 +233,12 @@ the role check; cross-tenant → 404.
 
 > ### ✅ FIXER REPORT — every finding closed
 >
-> **1 Critical, 16 Important, 6 Minor — all resolved; nothing left open.** 34 commits, one file each.
+> **1 Critical, 16 Important, 6 Minor — 3 fixed, 3 deliberately skipped with the reason recorded.**
+> 34 commits, one file each. The three skips are M3 (the four duplicated Delete links follow the
+> house pattern and are recorded in code), M4 (icon-only buttons inherit the house pattern; worth an
+> app-wide sweep) and M6 (the seeder's ~94 queries are inherent to the app-wide `next_number`-inside-
+> `save()` design, not a 0.19 per-request path). "Skipped" means declined **on the record with a
+> reason**, not overlooked — so this reads as 3 fixed / 3 justified, NOT "all resolved".
 > Gates after the last fix: `manage.py check` clean · `makemigrations --check` "No changes detected" ·
 > `audit_integrity.py` **6/6** (still `module 0: 2 catalogued but NOT built -> 0.20, 0.21`) ·
 > `seed_tenants` idempotent · **post-fixer regression: 16/16 pages 200 with content, cross-tenant IDOR
