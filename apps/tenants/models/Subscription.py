@@ -28,7 +28,28 @@ class Subscription(models.Model):
     # window. Both are negotiated commercial terms an operator sets by hand, so unlike
     # `UsageQuota.breached_at` they are NOT evidence stamps and belong on the form. NavERP has no
     # scheduler, so nothing acts on `auto_renew` yet; that is 0.20.
-    auto_renew = models.BooleanField(default=True)
+    #
+    # **THREE STATES, NOT TWO (I10).** `null=True` is the point, and `default=False` would have
+    # been the wrong fix rather than a cheaper one. This field shipped as `BooleanField(default=
+    # True)`, which meant the 0.19 migration stamped EVERY pre-existing subscription "auto-renews"
+    # — a decision nobody made, which the renewal board then rendered as a fact. That is the L52
+    # failure class (a confident state that was fabricated) arriving through a column default.
+    #
+    # Changing the default to `False` fixes the direction of the lie but not the lie: it stamps
+    # every one of those rows with the OPPOSITE decision, equally unexpressed. And there is no
+    # "safe" default to fall back to, because nothing in NavERP reads this value — there is no
+    # scheduler, so `True` and `False` are equally arbitrary and only "nobody has said" is a true
+    # statement. Hence NULL:
+    #
+    #   True  - somebody flagged this subscription to auto-renew.
+    #   False - somebody explicitly declined it.
+    #   None  - nobody has expressed an intent. NOT a synonym for False.
+    #
+    # Every reader must therefore distinguish None from False. `Boards.renewal_board` counts only
+    # `True` and renders all three; the form uses a tri-state widget so a POST cannot silently
+    # collapse an unanswered question into a declined one.
+    auto_renew = models.BooleanField(default=None, null=True, blank=True)
+
     grace_ends_on = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
