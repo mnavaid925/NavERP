@@ -104,9 +104,9 @@
             <dt>Kind</dt><dd><span class="badge badge-slate">{{ report.get_report_type_display|default:"—" }}</span></dd>
             <dt>As of</dt><dd>{{ obj.as_of|date:"d M Y" }}</dd>
             <dt>Period</dt><dd>{% if obj.period_from and obj.period_to %}{{ obj.period_from }} → {{ obj.period_to }}{% else %}—{% endif %}</dd>
-            <dt>Frozen</dt><dd>{{ obj.generated_at|date:"M d, Y H:i" }} · {{ obj.generated_by.get_full_name|default:obj.generated_by.username|default:"system" }}</dd>
+            <dt>Frozen</dt><dd>{{ obj.generated_at|date:"M d, Y H:i" }} · {% if obj.generated_by %}{{ obj.generated_by.get_full_name|default:obj.generated_by.username }}{% else %}system{% endif %}</dd>
             <dt>Last change</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd>
-            <dt>Issued</dt><dd>{% if obj.issued_at %}{{ obj.issued_at|date:"M d, Y H:i" }} · {{ obj.issued_by.get_full_name|default:obj.issued_by.username }}{% else %}<span class="text-muted">not issued</span>{% endif %}</dd>
+            <dt>Issued</dt><dd>{% if obj.issued_at %}{{ obj.issued_at|date:"M d, Y H:i" }} · {% if obj.issued_by %}{{ obj.issued_by.get_full_name|default:obj.issued_by.username }}{% else %}system{% endif %}{% else %}<span class="text-muted">not issued</span>{% endif %}</dd>
             <dt>Filed against</dt><dd>{% if document %}{{ document.name }} <span class="text-muted">(filed in the document repository, 7.10)</span>{% else %}—{% endif %}</dd>
           </dl>
         </div>
