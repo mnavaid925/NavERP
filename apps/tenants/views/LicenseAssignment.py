@@ -74,10 +74,11 @@ def licenseassignment_detail(request, pk):
     # tautological total. Reused from `Boards` rather than re-queried here (read the PRODUCER of the
     # rows, not the view that forwards them).
     from apps.tenants.views.Boards import _seat_summary
-    return crud_detail(
-        request, model=LicenseAssignment, pk=pk,
-        template="tenants/licenseassignment/detail.html",
-        extra_context={"seat_summary": _seat_summary(request.tenant)},
+    # ONE fetch, then render — the `usagerecord_detail` house pattern, not `crud_detail` (which
+    # re-fetches the row by pk, costing a second query for one page).
+    return render(
+        request, "tenants/licenseassignment/detail.html",
+        {"obj": obj, "seat_summary": _seat_summary(request.tenant)},
     )
 
 
