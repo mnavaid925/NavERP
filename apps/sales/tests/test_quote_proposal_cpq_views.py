@@ -1571,3 +1571,195 @@ def test_quoteproposalcpq_the_win_is_not_recorded_twice_across_two_quotes():
 
     assert OpportunityOutcome.objects.filter(tenant=tenant, opportunity=opportunity, result="won").count() == 1
 
+
+# ---------------------------------------------------------------------------
+# The three quote-list filters the plan named and the build never wired up
+# ---------------------------------------------------------------------------
+
+def test_quoteproposalcpq_quote_list_account_filter_narrows(db, tenant_a):
+    admin = _quoteproposalcpq_admin(tenant_a)
+    currency = _quoteproposalcpq_currency()
+    acme_account = _quoteproposalcpq_party(tenant_a, name="Acme Holdings")
+    other_account = _quoteproposalcpq_party(tenant_a, name="Acme Subsidiary")
+    wanted = _quoteproposalcpq_quote(tenant_a, currency, name="For Holdings", account=acme_account)
+    _quoteproposalcpq_quote(tenant_a, currency, name="For Subsidiary", account=other_account)
+    body = _quoteproposalcpq_client(admin).get(
+        reverse("sales:cpq_quote_list"), {"account": str(acme_account.pk)}
+    ).content.decode()
+    assert wanted.number in body
+    assert "For Subsidiary" not in body
+
+
+def test_quoteproposalcpq_quote_list_owner_filter_narrows(db, tenant_a):
+    admin = _quoteproposalcpq_admin(tenant_a)
+    currency = _quoteproposalcpq_currency()
+    other = _quoteproposalcpq_user(tenant_a, "colleague")
+    _quoteproposalcpq_quote(tenant_a, currency, name="Owned by admin", owner=admin)
+    _quoteproposalcpq_quote(tenant_a, currency, name="Owned by colleague", owner=other)
+    body = _quoteproposalcpq_client(admin).get(
+        reverse("sales:cpq_quote_list"), {"owner": str(other.pk)}
+    ).content.decode()
+    assert "Owned by colleague" in body
+    assert "Owned by admin" not in body
+
+
+def test_quoteproposalcpq_quote_list_owner_filter_finds_unassigned(db, tenant_a):
+    """owner is a nullable FK, so "nobody owns it" is a real bucket to filter on."""
+    admin = _quoteproposalcpq_admin(tenant_a)
+    currency = _quoteproposalcpq_currency()
+    _quoteproposalcpq_quote(tenant_a, currency, name="Owned by admin", owner=admin)
+    _quoteproposalcpq_quote(tenant_a, currency, name="Nobody owns this", owner=None)
+    body = _quoteproposalcpq_client(admin).get(
+        reverse("sales:cpq_quote_list"), {"owner": "none"}
+    ).content.decode()
+    assert "Nobody owns this" in body
+    assert "Owned by admin" not in body
+
+
+def test_quoteproposalcpq_quote_list_currency_filter_narrows(db, tenant_a):
+    admin = _quoteproposalcpq_admin(tenant_a)
+    usd = _quoteproposalcpq_currency(code="USD")
+    eur = _quoteproposalcpq_currency(code="EUR", name="Euro")
+    _quoteproposalcpq_quote(tenant_a, usd, name="Dollar deal")
+    _quoteproposalcpq_quote(tenant_a, eur, name="Euro deal")
+    body = _quoteproposalcpq_client(admin).get(
+        reverse("sales:cpq_quote_list"), {"currency": str(eur.pk)}
+    ).content.decode()
+    assert "Euro deal" in body
+    assert "Dollar deal" not in body
+
+
+@pytest.mark.parametrize("param", ["account", "owner", "currency"])
+def test_quoteproposalcpq_new_quote_filters_survive_junk_values(db, tenant_a, param):
+    admin = _quoteproposalcpq_admin(tenant_a)
+    response = _quoteproposalcpq_client(admin).get(reverse("sales:cpq_quote_list"), {param: "abc"})
+    assert response.status_code == 200
+
+
+def test_quoteproposalcpq_quote_list_exposes_the_new_filter_dropdowns(db, tenant_a):
+    admin = _quoteproposalcpq_admin(tenant_a)
+    currency = _quoteproposalcpq_currency()
+    account = _quoteproposalcpq_party(tenant_a, name="Dropdown Account")
+    _quoteproposalcpq_quote(tenant_a, currency, name="Owned", account=account, owner=admin)
+    response = _quoteproposalcpq_client(admin).get(reverse("sales:cpq_quote_list"))
+    for key in ("accounts", "owners", "currencies"):
+        assert key in response.context, key
+    body = response.content.decode()
+    assert "Dropdown Account" in body
+    assert 'name="account"' in body
+    assert 'name="owner"' in body
+    assert 'name="currency"' in body
+
+
+
+# ---------------------------------------------------------------------------
+# The five line-list filters the plan named and the build never wired up
+# ---------------------------------------------------------------------------
+
+def test_quoteproposalcpq_line_list_line_type_filter_narrows(db, tenant_a):
+    admin = _quoteproposalcpq_admin(tenant_a)
+    currency = _quoteproposalcpq_currency()
+    quote = _quoteproposalcpq_quote(tenant_a, currency)
+    _quoteproposalcpq_line(tenant_a, quote, description="A plain line", line_type="standard", sequence=10)
+    _quoteproposalcpq_line(tenant_a, quote, description="An add-on", line_type="optional_addon", sequence=20)
+    body = _quoteproposalcpq_client(admin).get(
+        reverse("sales:cpq_quote_line_list", args=[quote.pk]), {"line_type": "optional_addon"}
+    ).content.decode()
+    assert "An add-on" in body
+    assert "A plain line" not in body
+
+
+def test_quoteproposalcpq_line_list_product_and_item_filters_narrow(db, tenant_a):
+    admin = _quoteproposalcpq_admin(tenant_a)
+    currency = _quoteproposalcpq_currency()
+    quote = _quoteproposalcpq_quote(tenant_a, currency)
+    product = _quoteproposalcpq_product(tenant_a, "Filterable widget")
+    item = _quoteproposalcpq_item(tenant_a, "Filterable SKU")
+    _quoteproposalcpq_line(tenant_a, quote, description="On the product", product=product, sequence=10)
+    _quoteproposalcpq_line(tenant_a, quote, description="On the item", item=item, sequence=20)
+    _quoteproposalcpq_line(tenant_a, quote, description="Neither", sequence=30)
+    client = _quoteproposalcpq_client(admin)
+    by_product = client.get(
+        reverse("sales:cpq_quote_line_list", args=[quote.pk]), {"product": str(product.pk)}
+    ).content.decode()
+    assert "On the product" in by_product
+    assert "Neither" not in by_product
+    by_item = client.get(
+        reverse("sales:cpq_quote_line_list", args=[quote.pk]), {"item": str(item.pk)}
+    ).content.decode()
+    assert "On the item" in by_item
+    assert "Neither" not in by_item
+
+
+def test_quoteproposalcpq_line_list_optional_and_selected_filters_narrow(db, tenant_a):
+    admin = _quoteproposalcpq_admin(tenant_a)
+    currency = _quoteproposalcpq_currency()
+    quote = _quoteproposalcpq_quote(tenant_a, currency)
+    _quoteproposalcpq_line(tenant_a, quote, description="Optional included", is_optional=True, is_selected=True, sequence=10)
+    _quoteproposalcpq_line(tenant_a, quote, description="Optional declined", is_optional=True, is_selected=False, sequence=20)
+    _quoteproposalcpq_line(tenant_a, quote, description="Required line", is_optional=False, is_selected=True, sequence=30)
+    client = _quoteproposalcpq_client(admin)
+    declined = client.get(
+        reverse("sales:cpq_quote_line_list", args=[quote.pk]), {"is_selected": "0"}
+    ).content.decode()
+    assert "Optional declined" in declined
+    assert "Required line" not in declined
+    required = client.get(
+        reverse("sales:cpq_quote_line_list", args=[quote.pk]), {"is_optional": "0"}
+    ).content.decode()
+    assert "Required line" in required
+    assert "Optional declined" not in required
+
+
+def test_quoteproposalcpq_line_list_search_narrows(db, tenant_a):
+    admin = _quoteproposalcpq_admin(tenant_a)
+    currency = _quoteproposalcpq_currency()
+    quote = _quoteproposalcpq_quote(tenant_a, currency)
+    _quoteproposalcpq_line(tenant_a, quote, description="Managed support retainer", sequence=10)
+    _quoteproposalcpq_line(tenant_a, quote, description="Onsite installation", sequence=20)
+    body = _quoteproposalcpq_client(admin).get(
+        reverse("sales:cpq_quote_line_list", args=[quote.pk]), {"q": "retainer"}
+    ).content.decode()
+    assert "Managed support retainer" in body
+    assert "Onsite installation" not in body
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"line_type": "nope"},
+        {"product": "abc"},
+        {"item": "abc"},
+        {"is_optional": "maybe"},
+        {"is_selected": "maybe"},
+        {"q": ""},
+    ],
+)
+def test_quoteproposalcpq_line_list_survives_junk_parameters(db, tenant_a, params):
+    admin = _quoteproposalcpq_admin(tenant_a)
+    currency = _quoteproposalcpq_currency()
+    quote = _quoteproposalcpq_quote(tenant_a, currency)
+    _quoteproposalcpq_line(tenant_a, quote)
+    response = _quoteproposalcpq_client(admin).get(
+        reverse("sales:cpq_quote_line_list", args=[quote.pk]), params
+    )
+    assert response.status_code == 200
+
+
+def test_quoteproposalcpq_line_list_dropdowns_are_scoped_to_this_quote(db, tenant_a):
+    """A dropdown offering another quote's product is a disclosure, so the
+    queryset is the boundary -- not just the filter."""
+    admin = _quoteproposalcpq_admin(tenant_a)
+    currency = _quoteproposalcpq_currency()
+    quote = _quoteproposalcpq_quote(tenant_a, currency)
+    other_quote = _quoteproposalcpq_quote(tenant_a, currency)
+    mine = _quoteproposalcpq_product(tenant_a, "Mine on this quote")
+    theirs = _quoteproposalcpq_product(tenant_a, "Theirs on another quote")
+    _quoteproposalcpq_line(tenant_a, quote, description="Mine", product=mine, sequence=10)
+    _quoteproposalcpq_line(tenant_a, other_quote, description="Theirs", product=theirs, sequence=10)
+    response = _quoteproposalcpq_client(admin).get(reverse("sales:cpq_quote_line_list", args=[quote.pk]))
+    assert "Mine on this quote" in response.content.decode()
+    assert "Theirs on another quote" not in response.content.decode()
+    assert [p.pk for p in response.context["products"]] == [mine.pk]
+
+
