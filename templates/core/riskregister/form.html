@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit risk{% else %}Record a risk{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit risk{% else %}Record a risk{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:riskregister_list' %}">Risks</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>The score is not on this
+      form.</strong> It is the product of the likelihood and impact you choose, and the model
+      recalculates it on every save &mdash; so it can never be a number somebody typed. Choose the two
+      inputs and the score follows.</p>
+    <p class="text-muted"><strong>Two rules the form will enforce:</strong> a residual score may not
+      exceed the inherent score (treatment cannot make a risk worse), and a risk cannot be
+      <em>Closed</em> without somebody having reviewed it on a date.</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What the risk is</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.code %}
+          {% include "partials/form_field.html" with field=form.title %}
+          {% include "partials/form_field.html" with field=form.risk_statement %}
+          {% include "partials/form_field.html" with field=form.description %}
+          {% include "partials/form_field.html" with field=form.category %}
+        </div>
+        <p class="text-muted">Write the statement as <em>"if &lt;event&gt;, then
+          &lt;consequence&gt;"</em>. A risk with only a title is a worry; the statement is the sentence a
+          treatment plan is written against.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Scoring</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.likelihood %}
+          {% include "partials/form_field.html" with field=form.impact %}
+          {% include "partials/form_field.html" with field=form.residual_score %}
+        </div>
+        <p class="text-muted">The inherent score is calculated as likelihood &times; impact on a
+          five-by-five scale (1&ndash;25) and is saved with the row so the register can be sorted by it.
+          Leave the residual empty if the risk has not been treated yet &mdash; "not assessed" and
+          "assessed as zero" are different statements.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Treatment &amp; ownership</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.treatment %}
+          {% include "partials/form_field.html" with field=form.status %}
+          {% include "partials/form_field.html" with field=form.owner %}
+          {% include "partials/form_field.html" with field=form.treatment_plan %}
+        </div>
+        <p class="text-muted"><strong>Accept</strong> is a real answer: declining to act is a decision
+          that has to be recorded somewhere. Nothing in this application carries a treatment out.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Review cycle</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.reviewed_on %}
+          {% include "partials/form_field.html" with field=form.next_review_on %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="page-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="save"></i> {% if is_edit %}Save changes{% else %}Record risk{% endif %}</button>
+      <a href="{% url 'core:riskregister_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
