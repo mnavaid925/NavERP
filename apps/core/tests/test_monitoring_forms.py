@@ -82,15 +82,19 @@ def test_monitoring_alert_rule_service_is_required(tenant_a):
     assert "service" in form.errors
 
 
-def test_monitoring_alert_event_rule_rejects_another_tenants_pk(tenant_a, tenant_b):
+def test_monitoring_alert_event_rule_rejects_another_tenants_pk(tenant_a, tenant_b, _mon_svc):
     from decimal import Decimal
 
-    def _rule(tenant, name):
+    # `AlertRule.service` is NOT NULL (`null=False, blank=False`) - a rule always guards a named
+    # component, so each tenant needs its own component to hang the rule off.
+    def _rule(tenant, service, name):
         return AlertRule.objects.create(
-            tenant=tenant, name=name, service=None, metric_key="cpu_pct", comparator="gte",
+            tenant=tenant, service=service, name=name, metric_key="cpu_pct", comparator="gte",
             warning_threshold=Decimal("90"), frequency="hourly", severity="warning",
             category="capacity", no_data_action="ignore")
-    theirs, mine = _rule(tenant_b, "Globex rule"), _rule(tenant_a, "Acme rule")
+    theirs = _rule(tenant_b, ServiceComponent.objects.create(
+        tenant=tenant_b, name="Globex svc", code="gs", kind="api"), "Globex rule")
+    mine = _rule(tenant_a, _mon_svc(), "Acme rule")
 
     hostile = AlertEventForm(data=_monitoring_event_data(rule=theirs.pk), tenant=tenant_a)
     assert not hostile.is_valid()
