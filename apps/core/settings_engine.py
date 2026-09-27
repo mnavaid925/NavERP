@@ -156,8 +156,23 @@ def validate_custom_value(definition, raw):
 #: calls `next_number(SubscriptionInvoice, self.tenant, "SINV")` directly. Found by probing the
 #: reconciliation board rather than trusting it — the board was reporting SINV as "configured but
 #: nothing mints it", which was a FALSE NEGATIVE.
+#:
+#: The four 0.19 licensing models are the second case. `EntitlementFeature`, `PlanEntitlement`,
+#: `UsageQuota` and `LicenseAssignment` all mint their prefix in `save()` through a hardcoded
+#: literal, so the `NUMBER_PREFIX` scan above cannot see them, and each model's docstring says so
+#: and points HERE as the reason its prefix is discoverable. Without the entries below those four
+#: docstrings cited wiring that did not exist and `prefix_usage()` reported all four prefixes as
+#: `model_only` without ever naming the models that mint them — the same false negative the SINV
+#: comment above describes, four more times.
+#:
+#: The label is the `app_label.ModelName` string `prefix_usage()` prints on the reconciliation
+#: board, so it must match `model._meta.app_label` + `model.__name__` exactly.
 LITERAL_PREFIX_MODELS = {
     "SINV": ["tenants.SubscriptionInvoice"],
+    "ENT": ["tenants.EntitlementFeature"],
+    "PE": ["tenants.PlanEntitlement"],
+    "UQ": ["tenants.UsageQuota"],
+    "SEAT": ["tenants.LicenseAssignment"],
 }
 
 
