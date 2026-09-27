@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Record an acknowledgement{% endblock %}
+{% block content %}
+  {% comment %}
+    The back-fill page, for the rare case where an acknowledgement has to be recorded for somebody
+    who is not at a keyboard. The two pickers below are PLAIN selects rendered by this template, not
+    bound model fields, so a crafted POST still cannot write a `policy_version` of its own choosing:
+    the view always snapshots `policy.version` and always names the person in the audit row it writes.
+    The normal path is the Acknowledge button on the policy's own page.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Record an acknowledgement</h1>
+      <div class="breadcrumb"><a href="{% url 'core:policyacknowledgement_list' %}">Acknowledgements</a><span class="sep">&rsaquo;</span><span>New</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This records an acknowledgement on
+      somebody else's behalf.</strong> The audit trail names both who recorded it and who it was for, and
+      the success message repeats the person &mdash; so a back-filled row is never mistaken for one the
+      person themselves made.</p>
+    <p class="text-muted"><strong>Usually you do not need this page.</strong> Each person acknowledges
+      their own policies from the policy page, which stamps them as the actor automatically.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Who acknowledged what</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="policy">Policy</label>
+            <select name="policy" id="policy" class="form-select" required>
+              <option value="">Choose a policy&hellip;</option>
+              {% for policy in policies %}<option value="{{ policy.pk }}">{{ policy.code }} &mdash; {{ policy.title }} (v{{ policy.version }})</option>{% endfor %}
+            </select>
+            <small class="form-hint">The version is snapshotted from the policy at the moment of recording.</small>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="user">Person</label>
+            <select name="user" id="user" class="form-select" required>
+              <option value="">Choose a person&hellip;</option>
+              {% for person in people %}<option value="{{ person.pk }}">{{ person.get_username }}</option>{% endfor %}
+            </select>
+            <small class="form-hint">Active users of this workspace only.</small>
+          </div>
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="page-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="save"></i> Record acknowledgement</button>
+      <a href="{% url 'core:policyacknowledgement_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
