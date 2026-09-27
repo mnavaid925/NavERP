@@ -11095,7 +11095,7 @@ move to the next. Do **not** interleave entities, and do **not** touch shared fi
 - [x] `urls/SalesForecasting/__init__.py` + the four entity url modules
 - [x] Reports shipped **on top of** the four models, **no new model** (research "Reports / views"): forecast board, attainment board, accuracy & bias report, forecast call view → `apps/sales/views/SalesForecasting/ForecastBoards.py` + `apps/sales/urls/SalesForecasting/ForecastBoards.py`
 - [x] **Rollup axis (the single most likely place for a bad FK — build it explicitly):** walk `core.OrgUnit.parent` to move rep→manager→director. There is **no `User.manager`**. `sales.OpportunityTeamMember.org_unit` already attaches a user to an org unit and is the read path for resolving a user's node. Never FK a non-existent `User.manager`.
-- [~] **"You cannot adjust a level above you" (Microsoft, security-sensitive) - IMPLEMENTED BUT UNREACHABLE, so this box stays open.** `ForecastAdjustments._adjusts_above_acting_level()` is a correct implementation of the rule, and it can never fire: the view it guards (`forecast_adjustment_create`, line 341) is `@tenant_admin_required`, and the helper's first statement exempts exactly the users that decorator lets through. A rep is refused by the decorator before the rule is consulted, so the `raise PermissionDenied` on line 353 is dead. Left unticked deliberately rather than ticked as "done" - a box ticked for a security rule that does nothing is worse than an open one. Recorded as **C2** in `.claude/tasks/review-sales-8.4.md` with three options and a recommendation; fixing it means deciding who may override whom, which opens a tenant-admin-gated write path and is the user's call, not a drive-by. The helper's logic is now pinned by six direct tests so it cannot rot, and the gate that makes it dead is pinned by a seventh.
+- [x] **"You cannot adjust a level above you" (Microsoft, security-sensitive).** Implemented, then found DEAD: `forecast_adjustment_create` was `@tenant_admin_required` and the helper exempted exactly the users that decorator let through, so the rule could never fire (C5 in `review-sales-8.4.md`). Now the create view is `@login_required` and `_adjustment_scope()` is the real guard — a tenant admin, the call's owner, or a user at or above the call's org unit may file an override; a level above you and a sibling branch are both refused, and unprovable nesting fails closed. Edit / delete / revert stay admin-only, because correcting a filed override rewrites the audit trail. 12 tests cover it: seven on the scope rule and five driving it through the view.
 - [x] **Audit:** the standard CRUD views get it free from `crud_*` in `apps/core/crud.py`, but the **hand-rolled save paths — submit, review/approve/reject, override/adjust, revert, scenario-apply, period lock — must call `write_audit_log(...)` from `apps/core/utils.py` themselves.** Do not rely on the CRUD helpers for these.
 - [x] **AI eligibility gate (buildable now):** count `sales.OpportunityOutcome` rows and enforce **≥40 won AND ≥40 lost**; when the gate fails the board renders the gate message and **no prediction is shown** — an unexplained opaque score is worse than none.
 - [x] **FX:** read `accounting.ExchangeRate` `(tenant, currency, rate_date)`; never silently default to USD and never sum unlike currencies (8.2's settled rule). No second currency ledger (L29).
@@ -11217,9 +11217,9 @@ move to the next. Do **not** interleave entities, and do **not** touch shared fi
 
 ### Close-out reconciliation (2026-09-27)
 
-Every box above is now resolved. 58 were ticked after verifying the work against the code; the
-"you cannot adjust a level above you" box is marked `[~]` and stays open because the rule is
-**implemented but unreachable** (see its own line, and C2 in `review-sales-8.4.md`); and the 8.2
+Every box above is now resolved. 58 were ticked after verifying the work against the code, and the
+"you cannot adjust a level above you" box was ticked after the rule it names was actually FIXED — it had
+been implemented but unreachable, and the 8.2 carry-forward note was rewritten because it had gone stale.
 carry-forward note was rewritten because it had gone stale.
 
 **Auditing 8.4 against its own verify list found one real defect, and it is the same class of thing
