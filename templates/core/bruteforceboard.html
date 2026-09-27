@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% comment %}
+  A QUERY over accounts.LoginAttempt. This board declares no 0.18 table and writes no
+  accounts row: 0.4 owns identity and login-attempt recording, and re-recording attempts here
+  would be a second copy of the same evidence. It also adds NO lockout - nothing on this page
+  blocks an address, challenges an identifier or expires a session.
+  Context: failed_addresses (list of {ip, failures, identifiers, max_risk, last_seen}),
+  failed_total (UNTRUNCATED), step_up_threshold, mfa_challenged_total, notes.
+  LoginAttempt.tenant is NULLABLE, so attempts against an unknown identifier carry no tenant
+  and are excluded from every figure here. A 0 means "no attributable failures recorded",
+  NOT "no attacks" - which is why the figure is labelled rather than dressed up.
+{% endcomment %}
+{% block title %}Brute-force board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Brute-force board</h1>
+      <div class="breadcrumb"><a href="{% url 'core:security_overview' %}">Security</a><span class="sep">&rsaquo;</span><span>Brute-force board</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:threat_board' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Threat board</a>
+      <a href="{% url 'core:securitythreat_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Declared findings</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This board reads <code>accounts.LoginAttempt</code> and
+      adds no 0.18 table and no lockout.</strong> Nothing here blocks an address, challenges an identifier or expires a
+      session. Grouping and counting happen in the database, so this is a read of what 0.4 recorded.</p>
+    <p class="text-muted"><i data-lucide="info"></i> <strong>Attempts against an unknown identifier are excluded.</strong>
+      <code>LoginAttempt.tenant</code> is nullable, so an attempt that cannot be attributed to a workspace is not counted
+      anywhere below. A 0 here means <em>no attributable failures recorded</em> &mdash; never "no attacks".</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-value">{{ failed_total }}</div><div class="stat-label">Attributable failed sign-ins recorded</div></div>
+    <div class="stat-card"><div class="stat-value">{{ mfa_challenged_total }}</div><div class="stat-label">Attempts that reached an MFA challenge</div></div>
+    <div class="stat-card"><div class="stat-value">{{ step_up_threshold }}</div><div class="stat-label">0.4's step-up risk threshold</div></div>
+  </div>
+  <p class="text-muted"><i data-lucide="info"></i> The MFA figure is the closest thing on this page to a countermeasure,
+    and it is still 0.4's doing &mdash; nothing here issued a challenge. The step-up threshold is read from
+    <code>accounts.security</code>, not re-declared: a second copy would drift the moment 0.4 changes it.</p>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Address</th><th>Failed attempts</th><th>Distinct identifiers tried</th><th>Highest risk score</th><th>Most recent</th></tr></thead>
+      <tbody>
+        {% for row in failed_addresses %}
+          <tr>
+            <td class="fw-600"><code>{{ row.ip }}</code></td>
+            <td>{{ row.failures }}</td>
+            <td>{{ row.identifiers }}
+              <div class="text-muted">What separates one stubborn user from a spray across many accounts</div></td>
+            <td>{% if row.max_risk is not None %}{{ row.max_risk }}{% else %}<span class="text-muted">&mdash; nobody scored it</span>{% endif %}</td>
+            <td>{{ row.last_seen|date:"M d, Y H:i" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5"><div class="empty-state"><i data-lucide="key-round"></i><h3>No attributable failed sign-ins</h3>
+            <p class="text-muted">Nothing to rank. This is <strong>not</strong> evidence that nobody is trying to sign in:
+              attempts against an unknown identifier carry no tenant and are excluded, and NavERP adds no lockout and issues no
+              challenge of its own, so it takes no countermeasure here whatever this table shows.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What to do with this</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Nothing on this page acts. If a row here concerns you, the response is a recorded finding in the
+        threat register and a written allow/deny policy &mdash; and even the policy is a policy nobody evaluates until a gateway
+        somewhere else reads it.</p>
+      <div class="form-actions">
+        <a href="{% url 'core:securitythreat_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Record a threat</a>
+        <a href="{% url 'core:ipaccessrule_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Record an access rule</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
