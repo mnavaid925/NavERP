@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% comment %}
+  Create and edit share this template. Context: form, notes, and obj + is_edit on edit.
+  The lifecycle stamps (contained_at, eradicated_at, recovered_at, closed_at,
+  authority_notified_at, subjects_notified) are NOT on this form: they are written by the
+  POST-only verbs, each guarded on its legal predecessor.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit incident{% else %}Record a security incident{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit incident{% else %}Record a security incident{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:security_overview' %}">Security</a><span class="sep">&rsaquo;</span><a href="{% url 'core:securityincident_list' %}">Incidents</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This form records a response, it does not start one.</strong>
+      NavERP has no SIEM client, no scheduler, no mailer and no regulator integration, so nothing here detects the
+      incident, notifies an authority or tells a data subject.</p>
+    <p class="text-muted"><i data-lucide="info"></i> <strong>Leaving the notifiability decision blank is a real state.</strong>
+      Art. 33 does not let a closed record leave the question open, so decide it before closing &mdash; and "not yet
+      decided" is not the same answer as "no".</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The incident</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.title %}
+          {% include "partials/form_field.html" with field=form.incident_class %}
+          {% include "partials/form_field.html" with field=form.status %}
+          {% include "partials/form_field.html" with field=form.severity %}
+          {% include "partials/form_field.html" with field=form.discovered_at %}
+          {% include "partials/form_field.html" with field=form.owner %}
+          {% include "partials/form_field.html" with field=form.affected_services %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The seams with 0.17 and 0.18</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.incident %}
+          {% include "partials/form_field.html" with field=form.primary_threat %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The Art. 33 notification decision</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.is_notifiable %}
+          {% include "partials/form_field.html" with field=form.notifiable_reason %}
+          {% include "partials/form_field.html" with field=form.authority_reference %}
+          {% include "partials/form_field.html" with field=form.subject_exemption %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The Art. 33(3) content</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.data_subjects_affected %}
+          {% include "partials/form_field.html" with field=form.records_affected %}
+          {% include "partials/form_field.html" with field=form.dpo_contact %}
+          {% include "partials/form_field.html" with field=form.likely_consequences %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The response, as recorded</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.measures_taken %}
+          {% include "partials/form_field.html" with field=form.measures_proposed %}
+          {% include "partials/form_field.html" with field=form.forensic_log %}
+          {% include "partials/form_field.html" with field=form.root_cause %}
+          {% include "partials/form_field.html" with field=form.lessons_learned %}
+          {% include "partials/form_field.html" with field=form.evidence %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'core:securityincident_detail' obj.pk %}{% else %}{% url 'core:securityincident_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted"><i data-lucide="info"></i> <strong>NavERP files nothing with any authority and tells no data
+      subject anything.</strong> There is no regulator integration, no mailer, no SMS gateway and no webhook in this
+      repository, so a reference or a notification stamp records that somebody says it happened.</p>
+  </div></div>
+{% endblock %}
