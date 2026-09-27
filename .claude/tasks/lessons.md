@@ -1570,58 +1570,17 @@ See [[next-builds-one-submodule]], L36, L29.
 
 ---
 
-## L49 ï¿½ a `Model.clean()` guard keyed on `self.tenant_id` is a NO-OP on the form path
+## L49 — a `Model.clean()` guard keyed on `self.tenant_id` is a NO-OP on the form path
 
-**The trap.** `TenantModelForm.__init__` stores `tenant` on the FORM (`self.tenant`) and never on the instance. `ModelForm._post_clean()` then calls `instance.full_clean()` during `is_valid()` ï¿½ which runs BEFORE the view does `obj.tenant = request.tenant`. So at validation time `self.tenant_id` is still `None`, and any model guard written as `if self.tenant_id and self.subscription_id: ...` silently does nothing. The model looks protected; the form is the only place the tenant is known while the row is validated.
+**The trap.** `TenantModelForm.__init__` stores `tenant` on the FORM (`self.tenant`) and never on the instance. `ModelForm._post_clean()` then calls `instance.full_clean()` during `is_valid()` — which runs BEFORE the view does `obj.tenant = request.tenant`. So at validation time `self.tenant_id` is still `None`, and any model guard written as `if self.tenant_id and self.subscription_id: ...` silently does nothing. The model looks protected; the form is the only place the tenant is known while the row is validated.
 
-**It bit 0.19 for real.** Six review passes read `LicenseAssignment.clean()` and saw the duplicate guard. The model docstring even explained the normalisation in detail. But the [RULING] 8 duplicate guard that actually runs is the one in `LicenseAssignmentForm.clean()` ï¿½ and it compared the RAW posted slug, so `module_slug="ACCOUNTING"` found no clash against a stored `"accounting"`, validated fine, normalised on save, and raised `IntegrityError` ? HTTP 500 on a duplicate POST.
+**It bit 0.19 for real.** Six review passes read `LicenseAssignment.clean()` and saw the duplicate guard. The model docstring even explained the normalisation in detail. But the [RULING] 8 duplicate guard that actually runs is the one in `LicenseAssignmentForm.clean()` — and it compared the RAW posted slug, so `module_slug="ACCOUNTING"` found no clash against a stored `"accounting"`, validated fine, normalised on save, and raised `IntegrityError` ? HTTP 500 on a duplicate POST.
 
 **Rules.**
-1. If a form must compare a value against what the database holds, normalise it in the FORM too ï¿½ not only in `Model.save()`. Same transformation, same place, or the two disagree.
+1. If a form must compare a value against what the database holds, normalise it in the FORM too — not only in `Model.save()`. Same transformation, same place, or the two disagree.
 2. Do not assume a `Model.clean()` guard runs on the form path. If it depends on `self.tenant_id`, verify it actually fires before relying on it.
-3. **A docstring asserting a fix is not a fix.** The 0.19 model docstring described the normalisation as already done "so `clean()` ï¿½ which is what the form calls ï¿½ compares the same string the database will hold". It read as reassurance and it was wrong about its own reach. Docstrings are claims; tests are evidence.
+3. **A docstring asserting a fix is not a fix.** The 0.19 model docstring described the normalisation as already done "so `clean()` — which is what the form calls — compares the same string the database will hold". It read as reassurance and it was wrong about its own reach. Docstrings are claims; tests are evidence.
 
 **Why six reviews missed it:** every reviewer read the code instead of driving it. A reviewer asking "does a duplicate POST 500?" and *posting one* would have found this in under a minute. Reach for the cheapest test whenever a guard is claimed to hold.
-
-
----
-
-## L50 â€” a CONCURRENT session in the same checkout can break the build you did not cause
-
-**This happened for real during the 0.20 build.** A second session was building sub-module **0.21**
-in the same working tree, committing every 1-2 minutes and interleaving with mine. Its commit
-`516a14e6` added `apps/core/models/Compliance.py`, which fails to compile:
-
-```
-File "apps/core/models/Compliance.py", line 130
-    """How many ACTIVE users a tenant has â€” the denominator ...
-SyntaxError: invalid character 'â€”' (U+2014)
-```
-
-The file is valid UTF-8 with no BOM, and `tokenize` handles it â€” but `compile()` fails, because the
-em-dash lands **outside a string literal**: the preceding docstring's `"""` count is odd, so Python
-is reading source, not text. `manage.py check`, `makemigrations --check`, and every 0.20 verification
-script then fail with an error that points at someone else's file. `manage.py check` had been clean
-minutes earlier and the 0.20 code had not changed at all.
-
-**Rules.**
-
-1. **A build failure in a file you did not write is not your bug â€” but it still blocks your
-   verification.** Diagnose it, report it, and do NOT fix it. That file is another session's live work.
-2. **Never `git checkout`, `git stash`, or `git reset` a path another session is editing.** Doing so
-   silently destroys their in-progress work. I stashed `Compliance.py` mid-diagnosis and had to
-   `git stash pop` immediately; the safe move is to read, not to move.
-3. **Verify in ISOLATION rather than in the shared tree.** `git worktree add --detach <dir> <my-sha>`
-   gives you a pristine copy of your own commit with none of their breakage. That is what proved 0.20
-   green (37 smoke checks, `check` clean, no pending migrations) while the main tree was unusable.
-   Prefer this over trying to make the shared tree work.
-4. **L43 already anticipated this** ("if another session is building in this same checkout, agree the
-   migration number before generating one") â€” but it understates the blast radius. Extend it: a
-   concurrent session can also make `manage.py check` fail for you. Pin the migration number, and
-   verify by worktree.
-5. **A third worktree/clone existing is itself a signal** â€” `git worktree list` will show it. Check
-   it early; it explains a `git status` that is not yours.
-
-See [[next-builds-one-submodule]], L43, L45, L8.
 
 See [[next-builds-one-submodule]], L22, L47.
