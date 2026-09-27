@@ -41,13 +41,16 @@ def entitlementfeature_create(request):
 
 @tenant_admin_required
 def entitlementfeature_detail(request, pk):
+    # ONE fetch, then render — the `usagerecord_detail` house pattern. This deliberately does NOT
+    # use `crud_detail`: that helper re-fetches the row by pk, and the embedded grant list below
+    # needs the object first, so the helper version costs two queries for one page.
     obj = get_object_or_404(EntitlementFeature, pk=pk, tenant=request.tenant)
-    return crud_detail(
-        request, model=EntitlementFeature, pk=pk,
-        template="tenants/entitlementfeature/detail.html",
-        # CAPPED AT 50, the `subscription_detail` embedded-list precedent: a feature granted on
-        # every plan across many subscriptions would otherwise render an unbounded page.
-        extra_context={
+    return render(
+        request, "tenants/entitlementfeature/detail.html",
+        {
+            "obj": obj,
+            # CAPPED AT 50, the `subscription_detail` embedded-list precedent: a feature granted on
+            # every plan across many subscriptions would otherwise render an unbounded page.
             "entitlements": obj.plan_entitlements.select_related("subscription")
                                          .order_by("plan", "feature__code")[:50],
         },
