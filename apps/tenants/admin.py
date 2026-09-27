@@ -65,6 +65,28 @@ class UsageRecordAdmin(admin.ModelAdmin):
 # IpAccessRuleAdmin gap).
 
 
+class TenantScopedSubscriptionMixin:
+    """Scope the `subscription` picker to the row's own workspace (I15).
+
+    The Django admin is **not** tenant-scoped, and the admin path is the one way past the form's
+    `TenantModelForm` FK scoping. Without this a superuser can pair a tenant-A row with a tenant-B
+    subscription. Each model now also refuses the pair in `clean()`, so this is the first of two
+    independent defences rather than the only one.
+
+    Deliberately NOT a `clean()` on the ModelAdmin: the models already own that rule, and a second
+    copy is exactly the duplicated-guard pattern the reviews flagged elsewhere in 0.19.
+    """
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "subscription" and "tenant" in {
+            f.name for f in db_field.related_model._meta.fields
+        }:
+            kwargs["queryset"] = db_field.related_model.objects.filter(
+                tenant_id=getattr(request, "tenant", None)
+            ) if getattr(request, "tenant", None) is not None else db_field.related_model.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
 @admin.register(EntitlementFeature)
 class EntitlementFeatureAdmin(admin.ModelAdmin):
     list_display = ["number", "code", "name", "privilege_type", "status", "is_add_on",
@@ -76,7 +98,7 @@ class EntitlementFeatureAdmin(admin.ModelAdmin):
 
 
 @admin.register(PlanEntitlement)
-class PlanEntitlementAdmin(admin.ModelAdmin):
+class PlanEntitlementAdmin(TenantScopedSubscriptionMixin, admin.ModelAdmin):
     list_display = ["number", "plan", "feature", "privilege_value", "subscription",
                     "effective_to", "is_enabled", "tenant"]
     list_filter = ["plan", "is_add_on", "is_enabled", "tenant"]
@@ -86,7 +108,7 @@ class PlanEntitlementAdmin(admin.ModelAdmin):
 
 
 @admin.register(UsageQuota)
-class UsageQuotaAdmin(admin.ModelAdmin):
+class UsageQuotaAdmin(TenantScopedSubscriptionMixin, admin.ModelAdmin):
     list_display = ["number", "subscription", "metric", "quota_limit", "warn_at_pct",
                     "action_on_breach", "is_fair_use", "breached_at", "tenant"]
     list_filter = ["metric", "action_on_breach", "period", "is_fair_use", "tenant"]
@@ -97,7 +119,7 @@ class UsageQuotaAdmin(admin.ModelAdmin):
 
 
 @admin.register(LicenseAssignment)
-class LicenseAssignmentAdmin(admin.ModelAdmin):
+class LicenseAssignmentAdmin(TenantScopedSubscriptionMixin, admin.ModelAdmin):
     list_display = ["number", "user", "module_slug", "status", "assignment_source",
                     "subscription", "expires_on", "reclaimed_on", "tenant"]
     list_filter = ["status", "assignment_source", "tenant"]
