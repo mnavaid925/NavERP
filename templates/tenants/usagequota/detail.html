@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% comment %}
+  0.19 — one commercial ceiling. Backing view: usagequota_detail.
+
+  Context, and ONLY this:
+    obj         the UsageQuota (subscription is NOT nullable — a ceiling with no
+                subscription has nothing to bound)
+    consumption _consumption_by_subscription(tenant).get(obj.subscription_id, {})
+
+  !! KEY MISMATCH, REPORTED NOT WORKED AROUND: contract §3.4 describes `consumption` as a
+  {metric: Decimal} map for this subscription, but the view actually forwards
+  `_consumption_by_subscription(tenant).get(obj.subscription_id, {})` — and THAT helper keys
+  its result by the TUPLE (subscription_id, metric), not by metric. A template cannot build
+  a tuple key, so anything read from `consumption` here would print a dict repr or nothing.
+  This page therefore does NOT read `consumption`; it links to the quota board, which can
+  show quota-vs-consumption correctly because the board builds per-row dicts. This is a VIEW
+  fix (pass a {metric: Decimal} map), not a template fix.
+{% endcomment %}
+{% block title %}{{ obj.get_metric_display }} quota{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.get_metric_display }} quota &mdash; {{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">&rsaquo;</span><a href="{% url 'tenants:usagequota_list' %}">Usage quotas</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:usagequota_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'tenants:usagequota_delete' obj.pk %}" onsubmit="return confirm('Delete this quota? The recorded ceiling is removed; the usage already consumed is not.');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="layout-2col">
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">The ceiling as written</h2>
+          {% if obj.breached_at %}
+            <span class="badge badge-red">Breached</span>
+          {% elif obj.quota_limit == 0 %}
+            <span class="badge badge-slate">Unmetered</span>
+          {% else %}
+            <span class="badge badge-green">Within limit</span>
+          {% endif %}
+        </div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Number</dt><dd class="mono">{{ obj.number }}</dd></div>
+            <div class="detail-item"><dt>Subscription</dt><dd>
+              <a href="{% url 'tenants:subscription_detail' obj.subscription.pk %}">{{ obj.subscription.get_plan_display }}</a>
+            </dd></div>
+            <div class="detail-item"><dt>Metric</dt><dd>{{ obj.get_metric_display }}</dd></div>
+            <div class="detail-item"><dt>Limit</dt><dd>
+              {% if obj.quota_limit == 0 %}
+                <span class="badge badge-slate">Unmetered</span>
+                <div class="text-muted">0 means unmetered, not zero permitted</div>
+              {% else %}
+                <span class="mono">{{ obj.quota_limit }}</span>
+              {% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Warn at</dt><dd>
+              {% if obj.quota_limit == 0 %}<span class="muted">&mdash;</span>{% else %}{{ obj.warn_at_pct }}%{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Period</dt><dd>{{ obj.get_period_display }}</dd></div>
+            <div class="detail-item"><dt>Fair use</dt><dd>{% if obj.is_fair_use %}<span class="badge badge-info">Fair use</span>{% else %}<span class="badge badge-slate">Hard ceiling</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Recorded</dt><dd>{{ obj.created_at|date:"M d, Y" }}</dd></div>
+          </dl>
+          {% if obj.notes %}
+            <div class="detail-item" style="margin-top:1rem;"><dt>Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Policy on breach</h2>
+          <span class="badge badge-slate">Recorded, never carried out</span>
+        </div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Action on breach</dt><dd>
+              {% if obj.action_on_breach == "block" %}<span class="badge badge-red">{{ obj.get_action_on_breach_display }}</span>
+              {% elif obj.action_on_breach == "charge" %}<span class="badge badge-amber">{{ obj.get_action_on_breach_display }}</span>
+              {% else %}<span class="badge badge-info">{{ obj.get_action_on_breach_display }}</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Breached at</dt><dd>
+              {% if obj.breached_at %}
+                <span class="badge badge-red">{{ obj.breached_at|date:"M d, Y H:i" }}</span>
+              {% else %}
+                <span class="muted">Not marked as breached</span>
+              {% endif %}
+            </dd></div>
+          </dl>
+          <p class="text-warn" style="margin-top:1rem;"><i data-lucide="alert-triangle"></i>
+            <code>action_on_breach</code> is a <strong>recorded policy with no interceptor</strong>. The value above is
+            what somebody agreed to &mdash; it is <strong>not</strong> what NavERP will do. Marking this quota
+            breached writes a timestamp and an audit row and <strong>nothing else happens</strong>: no alert is
+            raised, no charge is computed, and no request is blocked by this row.</p>
+          <p class="text-muted">Marking a breach does not require any consumption to exist. It is the operator
+            recording a commercial fact, not a system measuring one.</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Actions</h2></div>
+        <div class="card-body">
+          <a href="{% url 'tenants:usagequota_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          {% comment %}
+            POST-only, and shown ONLY when breached_at is null, so the control is never a
+            button that bounces off the view's idempotence guard.
+          {% endcomment %}
+          {% if not obj.breached_at %}
+            <form method="post" action="{% url 'tenants:usagequota_mark_breached' obj.pk %}" onsubmit="return confirm('Mark this quota as breached? This writes a timestamp and an audit row. It does NOT alert anyone, compute any charge, or block any request.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="alert-triangle"></i> Mark breached</button>
+            </form>
+          {% endif %}
+          <a href="{% url 'tenants:quota_board' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Quota board</a>
+          <a href="{% url 'tenants:usagequota_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">What this page does not do</h2></div>
+        <div class="card-body">
+          <p class="text-muted"><strong>NavERP records commercial terms somebody wrote down. It does not enforce them.</strong></p>
+          <p class="text-warn"><strong>Quota enforcement and throttling are declined.</strong> This row is a ceiling on
+            paper. Nothing throttles a user, computes an overage charge, or blocks a request because of it, and the
+            policy on breach is a recorded intent with no interceptor behind it.</p>
+          <p class="text-muted">Consumption is <a href="{% url 'tenants:usagerecord_list' %}">0.1&rsquo;s usage
+            register</a>, joined on this same subscription &mdash; the
+            <a href="{% url 'tenants:quota_board' %}">quota board</a> is where the two are compared. There is no
+            event pipeline: usage rows are entered by hand or by 0.1&rsquo;s flow, so the meter only moves when
+            somebody records a row.</p>
+          <p class="text-muted">A limit of <strong>0 means unmetered</strong>, not &ldquo;zero permitted&rdquo;.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
