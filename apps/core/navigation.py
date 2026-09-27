@@ -378,6 +378,26 @@ LIVE_LINKS = {
         "Feature Rollouts": "core:featurerollout_list",                # extra (phased rollout stages)
         "Operations Audit Trail": "core:ops_audit_trail",              # extra (read-only over 0.9 AuditLog)
     },
+    # 0.21 Compliance, Governance & Risk. The five bullet keys are copied BYTE-IDENTICALLY from
+    # `NavERP.md`; `parse_catalog()` matches by exact string, so a one-character drift renders a
+    # fully built page as a "soon" roadmap pill with no error anywhere.
+    # **Bullets 4 and 5 are NOT linked here, and that is deliberate rather than an omission.**
+    # "Audit & Certification Support" and "Data Residency & Sovereignty" are deferred to a second
+    # 0.21 pass (research-core-0.21.md section 5.2), so they are left absent from LIVE_LINKS and
+    # keep rendering as roadmap pills — which is the honest state. Pointing them at the 0.8 privacy
+    # registers instead would be exactly the false claim this sub-module refuses: 0.8 owns the
+    # GDPR *obligations*, not evidence collection or auditor access.
+    "0.21": {
+        "Compliance Frameworks": "core:controlframework_list",   # bullet 1 (SOC 2 / ISO 27001 / PCI-DSS)
+        "Policy Management": "core:corporatepolicy_list",       # bullet 2 (authoring + acknowledgements)
+        "Risk Register & Assessment": "core:riskregister_list",  # bullet 3 (scored, with a treatment)
+        # Extra built pages that are NOT NavERP.md bullets, so they read as operational leaves rather
+        # than as more promised features.
+        "Compliance Posture": "core:grc_overview",                        # extra (the computed board)
+        "Controls": "core:compliancecontrol_list",                       # extra (the control catalogue)
+        "Control-to-Framework Mapping": "core:controlframeworkmapping_list",  # extra (the many-to-many)
+        "Policy Acknowledgements": "core:policyacknowledgement_list",     # extra (the attestation log)
+    },
     # ========================= Module 1 — Customer Relationship Management (CRM)
     # 1.1 Core Data Management — Accounts/Contacts are core.Party lenses; Leads are CRM-owned.
     "1.1": {
