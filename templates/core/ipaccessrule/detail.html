@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% comment %}
   One allow/deny policy, and the threats somebody says it mitigates.
   Context: obj, mitigated_threat_count, is_expired, expires_display, notes.
@@ -37,7 +37,7 @@
               {% elif obj.direction == "allow" %}<span class="badge badge-slate">{{ obj.get_direction_display }}</span>
               {% else %}<span class="badge badge-muted">{{ obj.get_direction_display }}</span>{% endif %}
             </dd></div>
-            <div class="detail-item"><dt>Action</dt><dd>{{ obj.get_action_display }}
+            <div class="detail-item"><dt>Action</dt><dd>{{ obj.action_display }}
               <div class="text-muted">
                 {% if obj.action == "block" %}NavERP would block this address if a gateway read this table. Nothing does.
                 {% elif obj.action == "allow" %}NavERP would allow this address past a gateway. Nothing does.
