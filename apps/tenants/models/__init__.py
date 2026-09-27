@@ -24,3 +24,17 @@ from .UsageRecord import (
     UsageRecord,
     PLAN_ALLOWANCES,
 )  # noqa: F401
+# 0.19 "License & Subscription Administration". Flat at the package root like every other entity
+# here (tenants is a Module 0 foundation app — no sub-module level).
+from .EntitlementFeature import (
+    EntitlementFeature,
+)  # noqa: F401
+from .PlanEntitlement import (
+    PlanEntitlement,
+)  # noqa: F401
+from .UsageQuota import (
+    UsageQuota,
+)  # noqa: F401
+from .LicenseAssignment import (
+    LicenseAssignment,
+)  # noqa: F401
