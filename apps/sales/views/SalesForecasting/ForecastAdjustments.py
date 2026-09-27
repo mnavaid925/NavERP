@@ -51,7 +51,7 @@ def _acting_org_unit(user, tenant):
 
     There is no `User.manager` to read, so the membership row is the only link between a
     person and the org hierarchy. `None` when the user holds no active membership, which the
-    level check treats as "cannot prove a violation" rather than as a denial.
+    scope check treats as "nesting not provable" rather than as a grant.
     """
     if tenant is None or user is None or not getattr(user, "pk", None):
         return None
@@ -66,22 +66,58 @@ def _acting_org_unit(user, tenant):
     return membership.org_unit if membership is not None else None
 
 
-def _adjusts_above_acting_level(user, submission):
-    """True when the acting user is overriding a node **above** their own.
+def _adjustment_scope(user, submission):
+    """``(allowed, reason)`` -- may ``user`` file an override against ``submission``?
 
-    Microsoft's rule: "you cannot adjust a level above you". A submission whose org unit is
-    a strict ancestor of the acting user's own node is a violation; the user's own node and
-    any branch that is not an ancestor are both fine. This is a **business rule over a role
-    check, not a record ACL** (contract 8) -- a tenant admin passes it unconditionally.
+    This is the "you cannot adjust a level above you" rule, and it is a **business rule over
+    the org hierarchy, not a record ACL**: it compares the acting user's node against the
+    submission's, it does not ask "do you own this row".
+
+    A user may file an override when they are
+
+    1. a tenant administrator -- the director may always correct anyone's number;
+    2. the owner of the forecast call -- a rep managing their own call is not an override of
+       somebody else's plan, and refusing it would make the feature unusable for the person
+       who enters the data;
+    3. positioned **at or above** the call's org unit -- the manager case the rule exists for.
+
+    Everything else is refused, which is deliberately *stricter* than the first draft of this
+    rule. That draft blocked only "a strict ancestor of me", which left a sibling branch
+    adjustable: a rep in one department could have rewritten a peer's number. "At or above"
+    is the correct manager-override semantic and closes that hole.
+
+    When nesting cannot be established -- no active membership, or no org unit on either side
+    -- the answer is **refused** for a non-owner. Failing closed is right here because the
+    alternative would let any user who declines to declare an org node adjust anyone's plan;
+    the owner case above is what keeps the ordinary rep path working.
     """
     if _is_tenant_admin(user):
-        return False
+        return True, "tenant administrator"
+    if submission.owner_id and submission.owner_id == getattr(user, "pk", None):
+        return True, "own forecast call"
+
     acting = _acting_org_unit(user, submission.tenant_id)
     target = submission.org_unit
-    if acting is None or target is None or acting.pk == target.pk:
-        return False
-    ancestor_pks = {node.pk for node in forecast_org_unit_chain(acting)}
-    return target.pk in ancestor_pks
+    if acting is None or target is None:
+        return False, "your org position could not be established"
+
+    # Direction matters and is easy to get backwards. `forecast_org_unit_chain(node)` is
+    # that node's own chain -- it CONTAINS the node itself, then its ancestors.
+    #
+    #   * acting in chain(target)  -> the acting node is an ancestor of the call, so the
+    #     user is ABOVE it. This is the manager case: allowed.
+    #   * target in chain(acting)  -> the call is at or above the acting node. This is
+    #     the violation, and it is the "you cannot adjust a level above you" rule.
+    #   * neither                    -> a sibling or unrelated branch, which is NOT a
+    #     reporting line. Refused, which is stricter than the first draft of this rule
+    #     and closes the hole where a rep could rewrite a peer's number.
+    acting_chain = {node.pk for node in forecast_org_unit_chain(acting)}
+    target_chain = {node.pk for node in forecast_org_unit_chain(target)}
+    if acting.pk in target_chain:
+        return True, "at or above the call's org unit"
+    if target.pk in acting_chain:
+        return False, "you cannot adjust a forecast call above your own level"
+    return False, "that call sits outside your reporting line"
 
 
 
@@ -338,8 +374,18 @@ def _attach_save_error(form, exc):
     )
 
 
-@tenant_admin_required
+@login_required
 def forecast_adjustment_create(request):
+    """File a manager override against a forecast call.
+
+    Open to any signed-in user, because the "you cannot adjust a level above you" rule is
+    the real guard and a decorator above it made that rule dead (review-sales-8.4.md C2).
+    `_adjustment_scope` decides: a tenant admin, the call's owner, or a user at or above the
+    call's org unit. Anyone else is refused with the reason.
+
+    Edit / delete / revert stay tenant-admin only. Creating an override is a manager act;
+    *correcting* a filed one rewrites the audit trail, which is an administrator's.
+    """
     if request.tenant is None:
         messages.error(request, "Select a tenant workspace before creating records.")
         return redirect("dashboard:home")
@@ -347,10 +393,10 @@ def forecast_adjustment_create(request):
         form = ForecastAdjustmentForm(request.POST, tenant=request.tenant, user=request.user)
         if form.is_valid():
             submission = form.cleaned_data.get("submission")
-            # "You cannot adjust a level above you" -- a business rule over a role check, not
-            # a record ACL, so a tenant admin passes it. Refused here, server-side.
-            if submission is not None and _adjusts_above_acting_level(request.user, submission):
-                raise PermissionDenied("You cannot adjust a forecast call above your own level.")
+            if submission is not None:
+                allowed, reason = _adjustment_scope(request.user, submission)
+                if not allowed:
+                    raise PermissionDenied(f"Forecast adjustment refused: {reason}.")
             try:
                 with transaction.atomic():
                     obj = form.save(commit=False)
