@@ -104,3 +104,14 @@ from .Security import (
     VulnerabilityFindingForm,
     SecurityIncidentForm,
 )  # noqa: F401
+
+
+# 0.20 — Admin Console & System Operations. Flat at the package root (rule 9: core is a Module 0
+# foundation app with no NavERP sub-modules, so its entity files sit at the package root).
+from .AdminConsole import (
+    JobDefinitionForm,
+    JobRunForm,
+    MaintenanceWindowForm,
+    ChangeRequestForm,
+    FeatureRolloutForm,
+)  # noqa: F401
