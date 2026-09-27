@@ -16,11 +16,58 @@ def cpq_quote_line_list(request, quote_pk):
     """List lines for a specific quote."""
     tenant = request.tenant
     quote = get_object_or_404(CPQQuote, pk=quote_pk, tenant=tenant)
-    lines = quote.lines.select_related("product", "item", "uom", "parent_line").order_by("sequence", "id")
+    qs = quote.lines.select_related("product", "item", "uom", "parent_line").order_by("sequence", "id")
+
+    # Filters the plan named for this page. Every FK id is isdigit()-guarded so a
+    # crafted value narrows nothing instead of raising inside filter().
+    from apps.crm.models import Product
+    from apps.scm.models.InventoryManagement.Items import Item
+
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(description__icontains=q)
+
+    line_type = request.GET.get("line_type", "").strip()
+    if line_type:
+        qs = qs.filter(line_type=line_type)
+
+    product_id = request.GET.get("product", "").strip()
+    if product_id and product_id.isdigit():
+        qs = qs.filter(product_id=int(product_id))
+
+    item_id = request.GET.get("item", "").strip()
+    if item_id and item_id.isdigit():
+        qs = qs.filter(item_id=int(item_id))
+
+    is_optional = request.GET.get("is_optional", "").strip()
+    if is_optional in ["true", "1"]:
+        qs = qs.filter(is_optional=True)
+    elif is_optional in ["false", "0"]:
+        qs = qs.filter(is_optional=False)
+
+    is_selected = request.GET.get("is_selected", "").strip()
+    if is_selected in ["true", "1"]:
+        qs = qs.filter(is_selected=True)
+    elif is_selected in ["false", "0"]:
+        qs = qs.filter(is_selected=False)
+
+    lines = qs
+
+    # Scoped to this quote's own lines, so the dropdown cannot offer a product or
+    # SKU from another workspace (or one not on this quote at all).
+    products = Product.objects.filter(
+        tenant=tenant, cpq_quote_lines__quote=quote
+    ).distinct().order_by("name")
+    items = Item.objects.filter(
+        tenant=tenant, cpq_quote_lines__quote=quote
+    ).distinct().order_by("name")
 
     return render(request, "sales/quote_proposal_cpq/cpqquoteline/list.html", {
         "quote": quote,
         "lines": lines,
+        "line_type_choices": CPQQuoteLine.LINE_TYPE_CHOICES,
+        "products": products,
+        "items": items,
     })
 
 
