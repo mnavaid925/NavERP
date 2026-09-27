@@ -42,13 +42,27 @@ class LicenseAssignmentForm(TenantModelForm):
         500. It is reachable by an ordinary user because both `user` and `module_slug` are on this
         form. A blank `module_slug` is the tenant-wide seat and normalises to `""`, never NULL, so
         two tenant-wide seats for one user collide correctly.
+
+        This guard — not `LicenseAssignment.clean()` — is what actually runs on the form path, and
+        that ordering is not accidental. `TenantModelForm` stores `tenant` on the FORM, never on the
+        instance, and `ModelForm._post_clean()` calls `instance.full_clean()` during `is_valid()` —
+        which is BEFORE the view assigns `obj.tenant`. So `self.tenant_id` is still None at that
+        moment and the model's own guard short-circuits. The form is the only place the tenant is
+        known while the row is being validated.
+
+        For exactly that reason the slug is normalised HERE, identically to `Model.save()`:
+        comparing the raw `"ACCOUNTING"` against a stored `"accounting"` finds no clash, the form
+        then saves the normalised value, and the `unique_together` raises `IntegrityError` — a 500
+        on a duplicate POST, which is the exact defect [RULING] 8 exists to prevent.
         """
         super().clean()
         user = self.cleaned_data.get("user")
         tenant = getattr(self, "tenant", None)
         if user is None or tenant is None:
             return self.cleaned_data
-        slug = self.cleaned_data.get("module_slug") or ""
+        # (I11) Same normalisation as `Model.save()` — the comparison has to be against the string
+        # the database will actually hold, not the string the browser posted.
+        slug = (self.cleaned_data.get("module_slug") or "").strip().lower()
         clash = LicenseAssignment.objects.filter(tenant=tenant, user=user, module_slug=slug)
         if self.instance and self.instance.pk:
             clash = clash.exclude(pk=self.instance.pk)
