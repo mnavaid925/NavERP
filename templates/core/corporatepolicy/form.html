@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit policy{% else %}Add a policy{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit policy{% else %}Add a policy{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:corporatepolicy_list' %}">Policies</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Publishing a policy does not
+      enforce it.</strong> No permission, workflow or access check anywhere in this application reads
+      this row, and there is no mail dispatcher, so an unacknowledged policy is never chased.</p>
+    <p class="text-muted"><strong>One rule the form will enforce:</strong> a policy cannot be marked
+      <em>Published</em> without the date it takes effect &mdash; otherwise "when did this come into
+      force?" has no answer at all.</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What the policy is</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.code %}
+          {% include "partials/form_field.html" with field=form.title %}
+          {% include "partials/form_field.html" with field=form.policy_type %}
+          {% include "partials/form_field.html" with field=form.summary %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Standing</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.version %}
+          {% include "partials/form_field.html" with field=form.status %}
+          {% include "partials/form_field.html" with field=form.owner %}
+          {% include "partials/form_field.html" with field=form.effective_on %}
+          {% include "partials/form_field.html" with field=form.review_due_on %}
+          {% include "partials/form_field.html" with field=form.requires_acknowledgement %}
+        </div>
+        <p class="text-muted"><strong>Status</strong> is yours to set &mdash; it is a lifecycle a person
+          owns, not a workflow a verb drives. <strong>Version</strong> is the value acknowledgements
+          snapshot, so bumping it starts a fresh acknowledgement round without rewriting the old rows.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The document</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.body %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="page-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="save"></i> {% if is_edit %}Save changes{% else %}Record policy{% endif %}</button>
+      <a href="{% url 'core:corporatepolicy_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
