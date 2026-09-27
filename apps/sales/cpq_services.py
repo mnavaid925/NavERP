@@ -305,6 +305,16 @@ def cpq_compare_quote_versions(quote_a, quote_b):
         la = lines_a.get(key)
         lb = lines_b.get(key)
 
+        # Two lines that share a POSITION but not a DESCRIPTION are not the same
+        # line. Slotting a replacement into the same place is the ordinary way a
+        # revision is edited, and pairing them as one row reported it as
+        # "unchanged" -- hiding a removal and an addition inside a zero delta.
+        # So a description change splits into a removal and an addition.
+        if la and lb and la.description != lb.description:
+            line_diffs.append(_quoteproposalcpq_diff_row(key, la, None, "removed"))
+            line_diffs.append(_quoteproposalcpq_diff_row(key, None, lb, "added"))
+            continue
+
         status = "unchanged"
         qty_delta = Decimal("0")
         price_delta = Decimal("0")
@@ -321,18 +331,8 @@ def cpq_compare_quote_versions(quote_a, quote_b):
             if qty_delta != 0 or price_delta != 0 or la.discount_pct != lb.discount_pct:
                 status = "modified"
 
-        line_diffs.append({
-            # Prefer the newer revision's wording, falling back to the older one.
-            "description": (lb or la).description,
-            "sequence": key[0],
-            "status": status,
-            "line_a": la,
-            "line_b": lb,
-            "qty_delta": qty_delta,
-            "price_delta": price_delta,
-            "total_delta": total_line_delta,
-        })
-        
+        line_diffs.append(_quoteproposalcpq_diff_row(key, la, lb, status, qty_delta, price_delta, total_line_delta))
+
     return {
         "quote_a": quote_a,
         "quote_b": quote_b,
@@ -340,6 +340,23 @@ def cpq_compare_quote_versions(quote_a, quote_b):
         "total_delta": total_delta,
         "margin_delta": margin_delta,
         "line_diffs": line_diffs,
+    }
+
+
+def _quoteproposalcpq_diff_row(key, la, lb, status, qty_delta=None, price_delta=None, total_delta=None):
+    """One rendered comparison row. Deltas are zero for a row that exists on
+    only one side -- there is no counterparty to differ from."""
+    zero = Decimal("0")
+    return {
+        # Prefer the newer revision's wording, falling back to the older one.
+        "description": (lb or la).description,
+        "sequence": key[0],
+        "status": status,
+        "line_a": la,
+        "line_b": lb,
+        "qty_delta": zero if qty_delta is None else qty_delta,
+        "price_delta": zero if price_delta is None else price_delta,
+        "total_delta": zero if total_delta is None else total_delta,
     }
 
 
