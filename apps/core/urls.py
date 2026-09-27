@@ -242,4 +242,32 @@ urlpatterns = (
     + [
         path("monitoring/incidents/<int:pk>/notify/", views.incident_notify, name="incident_notify"),
     ]
+    # ===================== 0.18 Threat Protection & Security Operations =====================
+    # Literal segments BEFORE the `crud()` groups below, and the POST-only action routes AFTER the
+    # group that owns them — the 0.17 ordering, for the same reason. Django is first-match-wins,
+    # so a greedy route declared ahead of `add/` would shadow it.
+    + [
+        path("security/", views.security_overview, name="security_overview"),
+        path("security/board/threats/", views.threat_board, name="threat_board"),
+        path("security/board/vulnerabilities/", views.vulnerability_board, name="vulnerability_board"),
+        path("security/board/breach-clock/", views.breach_clock_board, name="breach_clock_board"),
+        path("security/board/brute-force/", views.brute_force_board, name="brute_force_board"),
+    ]
+    + crud("security/ip-rules", "ipaccessrule")
+    + crud("security/threats", "securitythreat")
+    + [
+        # POST-only verbs, declared after the literal `add/` route above so it cannot shadow it.
+        path("security/threats/<int:pk>/triage/", views.securitythreat_triage, name="securitythreat_triage"),
+        path("security/threats/<int:pk>/resolve/", views.securitythreat_resolve, name="securitythreat_resolve"),
+    ]
+    + crud("security/vulnerabilities", "vulnerabilityfinding")
+    + crud("security/incidents", "securityincident")
+    + [
+        path("security/incidents/<int:pk>/contain/", views.securityincident_contain, name="securityincident_contain"),
+        path("security/incidents/<int:pk>/eradicate/", views.securityincident_eradicate, name="securityincident_eradicate"),
+        path("security/incidents/<int:pk>/recover/", views.securityincident_recover, name="securityincident_recover"),
+        path("security/incidents/<int:pk>/close/", views.securityincident_close, name="securityincident_close"),
+        path("security/incidents/<int:pk>/notify-authority/", views.securityincident_notify_authority, name="securityincident_notify_authority"),
+        path("security/incidents/<int:pk>/notify-subjects/", views.securityincident_notify_subjects, name="securityincident_notify_subjects"),
+    ]
 )
