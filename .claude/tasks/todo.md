@@ -12005,5 +12005,461 @@ Lines 11156-11184 (8.4's Verify and Close-out) were found in the same sweep and 
 
 ## Review notes
 (filled in at the end)
+---
 
+# Sub-module 0.20 — Admin Console & System Operations (Module 0: Core / Foundation, `core`) — plan from research-core-0.20.md (2026-09-28)
+
+> **This plan EXTENDS an existing app.** `apps/core/` is already live with 0.1 through 0.19.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.** `core` is already in
+> `INSTALLED_APPS` and already mounted at `core/` in the root URLconf.
+> `BASE` for the Phase 4 review range: **`463f7a06`**.
+> Migration: **`core.0017_*`** (leaf verified at plan time: `0016_security_threat_protection.py`).
+
+Source of truth: `.claude/tasks/research-core-0.20.md` (committed `a589ebe6`). **Phase 2 is planning
+only** — this edit adds no application code, generates no migration, and pushes nothing.
+
+## Scope — the five `NavERP.md` bullets, verbatim (lines 267–271), and nothing else
+
+1. **Unified Admin Dashboard** — Central command center for users, security, health, and configuration.
+2. **Job Scheduler & Background Tasks** — Cron jobs, queue management, and batch-process monitoring.
+3. **Maintenance & Release Management** — Maintenance windows, phased feature rollout, and change management.
+4. **Bulk Operations & Data Tools** — Mass updates, recalculations, and data-fix utilities.
+5. **Self-Service Support & Help Center** — In-app help, knowledge base, and support-ticket integration.
+
+## The four non-negotiable reconciliations this plan is built on
+
+**(a) The scheduler is a REGISTER of intentions, not a runner. No dependency is added.**
+`requirements.txt` holds `Django`, `PyMySQL`, `python-dotenv`, `stripe`, `Pillow`, `cryptography`,
+`pdfplumber`, `pytest`, `pytest-django`, `python-barcode`, `qrcode`. There is no Celery, RQ,
+APScheduler, huey, django-q or dramatiq, and no worker app in `INSTALLED_APPS`. `core.SyncSchedule`'s
+docstring (`Integration.py:220`) reads verbatim *"A recorded sync intention. **Nothing runs it** — the
+repo has no scheduler."* The same posture is already committed on `AlertRule.frequency`,
+`BackupJob.frequency` and `VulnerabilityFinding.due_on`.
+**So: `JobDefinition` is a declaration, `JobRun` is a row somebody wrote, "Run now" writes a `JobRun`
+and executes nothing, and `next_run_at` is a value a person typed.** Every one of these four models'
+docstrings must say so in the register-honest tone 0.16/0.17/0.18 already use, and every success
+message says **"recorded"** — never "scheduled", "queued", "executed", "dispatched".
+**This plan proposes no new package in `requirements.txt`. That is a separate, explicit decision.**
+
+**(b) `core.Incident` (0.17) already names 0.20 as the change-record owner — FK it, do not copy it.**
+`Incident.INCIDENT_TYPE_CHOICES` already carries `scheduled_maintenance` with `scheduled_for` /
+`scheduled_until`, and `Incident`'s own docstring says a maintenance notice is *"a communication about
+a window somebody else owns"*. `MaintenanceWindow` therefore carries `FK incident → core.Incident`
+(SET_NULL) and **no reverse accessor is created**; the notice window is not duplicated onto the window
+row. 0.17 owns the communication, 0.20 owns the change.
+
+
+## Repo state re-verified by the todo agent (2026-09-28) — L28, the grep is the truth
+
+Models are **packages**, so every check below was a recursive grep over `apps\*\models\`, never a
+read of a doc.
+
+| FK target | Verified location (re-grepped at plan time) | Verdict | Role in 0.20 |
+|---|---|---|---|
+| `core.SyncSchedule` | `apps/core/models/Integration.py:219` | EXISTS | `JobDefinition.sync_schedule` — 0.13's schedule is **referenced**, not re-declared (L29/L36). Its docstring is the "nothing runs it" precedent. |
+| `core.ServiceComponent` | `apps/core/models/Monitoring.py:98` | EXISTS | `MaintenanceWindow.affected_services` M2M — "what is down". |
+| `core.Incident` | `apps/core/models/Monitoring.py:545` | EXISTS | `MaintenanceWindow.incident` — 0.17's outward notice, linked not copied. |
+| `core.EnvironmentInstance` | `apps/core/models/Backup.py:511` | EXISTS | `JobDefinition.environment`, `MaintenanceWindow.environment`, `ChangeRequest.environment` — 0.16's dev/test/staging/sandbox vocabulary. |
+| `core.FeatureFlag` | `apps/core/models/FeatureFlag.py:14` | EXISTS | `FeatureRollout.feature_flag` — 0.10's per-tenant toggle. 0.20 records the *plan*, never a second targeting engine. |
+| `core.AlertRule` | `apps/core/models/Monitoring.py:203` | EXISTS | `MaintenanceWindow.suppressed_alert_rules` M2M (Grafana mute timings). |
+| `core.NotificationRule` | `apps/core/models/Notification.py:92` | EXISTS | `MaintenanceWindow.suppressed_notification_rules` M2M. **0.12 owns delivery; nothing consults either M2M.** |
+| `core.TenantConsistentMixin` | `apps/core/models/Backup.py:53` | EXISTS | Abstract base all four models inherit. |
+| `core.NumberingScheme` | `apps/core/models/NumberingScheme.py:15` | EXISTS | Per-`(tenant, prefix)` auto-number registry; unique on that pair. |
+| `core.Tenant` | `apps/core/models/Tenant.py:17` | EXISTS | The `tenant` FK every 0.20 model carries. |
+| `core.AuditLog` | `apps/core/models/AuditLog.py:5` | EXISTS | The **read-only** self-service audit view; 0.20's own writes flow into it. |
+| `core.SettingDefinition` / `SettingValue` | `apps/core/models/Setting.py:16` / `:52` | EXIST | `adminboard` config-drift tile. |
+| `crm.Case` / `CaseComment` | `apps/crm/models/CustomerService/Cases.py:5` / `:120` | EXIST | `supportboard` reads; never writes. |
+| `crm.KbCategory` | `apps/crm/models/CustomerService/KbCategories.py:5` | EXISTS | `supportboard` reads. |
+| `crm.KnowledgeArticle` | `apps/crm/models/CustomerService/KnowledgeBase.py:5` | EXISTS | `supportboard` reads. **The class is `KnowledgeArticle`; the FILE is `KnowledgeBase.py`.** |
+| `crm.SlaPolicy` | `apps/crm/models/CustomerService/SlaPolicies.py:10` | EXISTS | `supportboard` reads. |
+| `hrm.HelpdeskTicket` | `apps/hrm/models/Helpdesk/Helpdeskticket.py:7` | EXISTS | `supportboard` reads. |
+| `hrm.HelpdeskCategory` | `apps/hrm/models/Helpdesk/Helpdeskcategory.py:5` | EXISTS | `supportboard` reads. |
+| `hrm.KnowledgeArticle` | `apps/hrm/models/Helpdesk/Knowledgearticle.py:5` | EXISTS | A **second, distinct** `KnowledgeArticle` in a different `app_label` (`crm` vs `hrm`). Both are read; neither is aliased. |
+| `hrm.HelpdeskSLAPolicy` | `apps/hrm/models/Helpdesk/Helpdeskslapolicy.py:18` | EXISTS | `supportboard` reads. |
+
+## Number-prefix registry — every collision checked, because 0.19 hit one (`LIC-` → `SEAT-`)
+
+**`core` has NO `TenantNumbered` base.** Confirmed by grep: the class exists only in `accounting`,
+`crm`, `hrm`, `inventory`, `procurement`, `projects`, `sales` and `scm` `_base.py` — **not** in
+`core`, and not in `tenants` either (0.19 minted literals for the same reason). So the convention for
+a numbered 0.20 model is the 0.19 licensing pattern, pinned exactly from
+`apps/tenants/models/EntitlementFeature.py:60-106`:
+
+```python
+#: JOB-##### — minted in save() with a hardcoded literal rather than declared via NUMBER_PREFIX,
+#: which is why `settings_engine.LITERAL_PREFIX_MODELS` has to name this model.
+number = models.CharField(max_length=20, editable=False)
+
+def save(self, *args, **kwargs):
+    if self.number:
+        return super().save(*args, **kwargs)      # never re-mint an existing row
+    for _ in range(5):                            # retry the rare concurrent collision
+        self.number = next_number(JobDefinition, self.tenant, "JOB")
+        try:
+            with transaction.atomic():
+                return super().save(*args, **kwargs)
+        except IntegrityError:
+            self.number = ""
+    return super().save(*args, **kwargs)
+```
+
+where `next_number(model, tenant, prefix, width=5, field="number")` is `apps/core/utils.py:34`.
+Imports needed in each model file: `from django.db import IntegrityError, transaction` and
+`from apps.core.utils import next_number`.
+
+**The `LITERAL_PREFIX_MODELS` entry is mandatory, not optional.** `prefix_usage()`
+(`apps/core/settings_engine.py:179`) scans only the `NUMBER_PREFIX` class attribute, so without an
+entry `core:numbering_board` reports `JOB` / `RUN` / `MNTW` / `CHG` as `model_only` with **no model
+named** — the exact false-negative the `SINV` comment and the four 0.19 entries describe. The label
+is the `app_label.ModelName` string, so it must read `core.JobDefinition` and match exactly.
+
+| Prefix | Model | Verdict |
+|---|---|---|
+| `JOB` | `JobDefinition` | **FREE** — absent from all 300+ `NUMBER_PREFIX = "…"` declarations, from all 5 `next_number(..., "…")` literals (`SINV` `ENT` `PE` `UQ` `SEAT`), from `LITERAL_PREFIX_MODELS`, and from every seeded `NumberingScheme` row (`PO` `PRQ` `SINV` `JE` `ZZZ`). |
+| `RUN` | `JobRun` | **FREE** — same five sweeps. |
+| `MNTW` | `MaintenanceWindow` | **FREE** — same five sweeps. (`MNT` is also free; `MNTW` is the unambiguous choice and a bare `MNT-` reads like a status code.) |
+| `CHG` | `ChangeRequest` | **FREE** — same five sweeps. (Watch `CHM`, `CHN`, `CASE`, `CAT` — all taken, all *different strings*.) |
+| — | `FeatureRollout` | **No prefix and no `number` column** — it is a child of `ChangeRequest`; a fifth prefix would mint a number no operator ever looks up. |
+
+**Explicitly avoided:** `REL`, `OPS` (0.19 already uses `evidence="OPS-1041"` as a free-text ops
+ticket, so `OPS-` reads as somebody else's number), `SYNC` (0.13's word — invites a second-sync-table
+reading), `SCR` (four models already collide on it), `TASK`, `TSK`, `TRC`, `LIC` (taken by
+`scm.TradeLicense` — the 0.19 defect).
+
+## Layout decisions (amendments to the research, with reasons)
+
+The research proposed `apps/core/models/SystemOps.py` as one combined file. **Amended to three
+entity files**, because backend rule 2 says an entity file owns its primary model plus its children
+and the four layers must line up one-to-one, and because a single 5-model file would leave
+`forms/`, `views/` with no matching module to point at:
+
+- `apps/core/models/JobScheduler.py` — `JobDefinition` + `JobRun` (parent + child, one file).
+- `apps/core/models/Maintenance.py` — `MaintenanceWindow`.
+- `apps/core/models/Change.py` — `ChangeRequest` + `FeatureRollout` (parent + child, one file).
+- Boards with no model (`adminboard`, `supportboard`, `bulkboard`) go in **views only** — no model
+  file, no form file. `apps/core/views/SystemOps.py` holds all board views plus the
+  `bulk_preview` POST action.
+
+**Four models, five classes** — `FeatureRollout` is a child class of `ChangeRequest` in the same file,
+so the 1–4-model cap is respected at four *entities* while the researched child still ships.
+
+| `tenants.LicenseAssignment` / `UsageQuota` | `apps/tenants/models/LicenseAssignment.py`, `UsageQuota.py` | EXIST | `adminboard` seat/quota tiles only. |
+| `settings.AUTH_USER_MODEL` | `apps/accounts/models/User.py` | EXISTS | `JobRun.triggered_by`, `ChangeRequest.requested_by` / `.approved_by`. |
+| `crm:case_list` / `crm:knowledgearticle_list` / `crm:kbcategory_list` | `apps/crm/urls/CustomerService/{Cases,KnowledgeBase,KbCategories}.py` | REVERSE OK | `supportboard`'s outbound links. |
+| `hrm:ticket_list` / `hrm:knowledgearticle_list` / `hrm:helpdeskcategory_list` | `apps/hrm/urls/Helpdesk/{Helpdeskticket,Knowledgearticle,Helpdeskcategory}.py` | REVERSE OK | Note the ticket url name is **`ticket_list`**, NOT `helpdesk_ticket_list` — a `NoReverseMatch` waiting to happen. |
+
+**Verified ABSENT** (so a plan item naming them would be a hopeful FK): no class anywhere is named
+`JobDefinition`, `JobRun`, `MaintenanceWindow`, `ChangeRequest`, `FeatureRollout`, `BulkOperation`,
+`SupportRoute`, `HelpTopic`, `AdminTask` or `CommandLog`. `User` / `Role` / `Permission` live in
+`apps/accounts/models.py` (a flat module), **not** in `apps/core/models/` — import as
+`settings.AUTH_USER_MODEL` / `"accounts.Role"`.
+
+**(c) Bullet 5: two ticket tables and two knowledge bases ALREADY EXIST. Build no third of either.**
+`crm.Case` / `crm.CaseComment` / `crm.SlaPolicy` / `crm.KbCategory` / `crm.KnowledgeArticle` (CRM 1.4)
+and `hrm.HelpdeskTicket` / `hrm.HelpdeskCategory` / `hrm.KnowledgeArticle` / `hrm.HelpdeskSLAPolicy`
+(HRM 3.x) are all built. Note `apps/crm/models/CustomerService/KnowledgeBase.py` defines the class
+**`KnowledgeArticle`** — there is **no `KnowledgeBase` class anywhere**, so a plan or comment that
+says "reuse `core.KnowledgeBase`" is referring to nothing. Bullet 5 ships as a **computed board that
+reads the four existing tables and links to their existing list/detail pages.** `core.HelpArticle`,
+`core.SupportTicket` and `core.KnowledgeBase` are all explicitly declined.
+
+**(d) Bullet 1's dashboard is a NEW roll-up that LINKS the existing boards. It replaces none of them.**
+`templates/core/` already holds `configoverview.html`, `securityoverview.html`, `healthboard.html`,
+`monitoringoverview.html`, `backupboard.html`, `threatboard.html`, `vulnerabilityboard.html`,
+`breachclock.html`, `bruteforceboard.html`, `capacityboard.html`, `firingboard.html`,
+`deliveryboard.html`, `integrationboard.html`, `integrationoverview.html`, `settingsoverview.html`,
+`numberingboard.html`, `retentionboard.html`, `localizationboard.html`, `calendarboard.html`,
+`workflowoverview.html`, `notificationoverview.html`, `privacyoverview.html`, `consentmatrix.html`,
+`accessmatrix.html`. `adminboard.html` **aggregates and links** them and re-derives no health, no
+security, no backup and no config logic. Every existing board keeps its own url name and its own
+`LIVE_LINKS` row.
+
+## Models (from research — 4 tenant-scoped models, 5 classes)
+
+Every one: `class X(TenantConsistentMixin, models.Model)`, a `tenant = models.ForeignKey("core.Tenant",
+on_delete=models.CASCADE, related_name="…", db_index=True)`, an auto-`number` minted in `save()`, a
+`Meta.ordering`, and a `(tenant, <status>)` index. Every docstring repeats reconciliation (a).
+
+### 1. `JobDefinition` [`JOB-`] — `apps/core/models/JobScheduler.py`
+
+*Drivers: the job-definition register · a schedule expression + a handler target · queue/pool declaration · deadline detection · the pointer at 0.13's `SyncSchedule`.*
+
+- [ ] `number` (`editable=False`, `next_number(JobDefinition, self.tenant, "JOB")`, 5-attempt `IntegrityError` retry) + `LITERAL_PREFIX_MODELS["JOB"] = ["core.JobDefinition"]`
+- [ ] `name` (150), `module_slug` (60) — which module owns the work
+- [ ] `job_type` ∈ `scheduled_task`, `integration_sync`, `bulk_operation`, `report`, `cleanup`, `maintenance`; default `scheduled_task`
+- [ ] `description` (text, blank)
+- [ ] `schedule_kind` — **`choices=SyncSchedule.FREQUENCY_CHOICES` BY REFERENCE** (L36: assign the object; never paste a second list, never mutate it. `Monitoring.py:84` and `Security.py:74` already do exactly this; `Backup.py:45` is the counter-example that pasted a copy and is called out as drift). Paired free-text `cron_expression` (60) and `interval_minutes` (null int) so a cron string stays recordable without a second vocabulary.
+- [ ] `handler_path` (200) — the DECLARED target. `help_text` says nothing imports or calls it.
+- [ ] `FK sync_schedule → core.SyncSchedule` (SET_NULL, null, blank, `related_name="job_definitions"`) — **0.13's schedule is referenced, not re-declared**
+- [ ] `FK environment → core.EnvironmentInstance` (SET_NULL, null, blank, `related_name="job_definitions"`)
+- [ ] `is_active` (bool, default True), `priority` (small int, default 100 — lower runs first, as a *recorded* order)
+- [ ] `timeout_seconds` (null int), `max_active_runs` (small int, default 1)
+- [ ] `pool_name` (60, blank), `pool_slots` (small int, default 1) — Airflow Pools **as a declaration**
+- [ ] `max_consecutive_failures` (small int, default 3), `auto_pause_after` (small int, default 10) — a recorded policy, **not** an auto-pause
+- [ ] `last_run_at`, `next_run_at` (null DateTimeField) — **recorded intent; nothing advances them**
+- [ ] `is_muted` (bool, default False) — a maintenance window silences a job (Datadog downtime scope)
+- [ ] `notes` (text, blank), `created_at` (`auto_now_add`)
+- [ ] **Form excludes:** `tenant`, `number`, `created_at`, `last_run_at`, `next_run_at` (system-stamped, L22). If `pool_name`/`pool_slots` stay editable, the form `help_text` must say "recorded, not enforced".
+
+### 2. `JobRun` [`RUN-`] — same file, child of `JobDefinition`
+
+*Drivers: the run register (Airflow `DagRun` — an instantiation of the DAG in time) · trigger kind · status lifecycle · backfill as a declared range · the outcome record.*
+
+- [ ] `number` + `LITERAL_PREFIX_MODELS["RUN"] = ["core.JobRun"]`
+- [ ] `FK job → JobDefinition` (CASCADE, `related_name="runs"`)
+
+### 3. `MaintenanceWindow` [`MNTW-`] — `apps/core/models/Maintenance.py`
+
+*Drivers: maintenance windows with explicit start AND end (PagerDuty) · planned silence / mute scope (Datadog downtimes, Grafana mute timings) · the outward notice linked, not copied (Datadog Status Pages).*
+
+- [ ] `number` + `LITERAL_PREFIX_MODELS["MNTW"] = ["core.MaintenanceWindow"]`
+- [ ] `title` (200), `purpose` (text, blank) — PagerDuty windows have a scheduled purpose
+- [ ] `starts_at`, `ends_at` (DateTimeField), `recurrence` ∈ `once`, `daily`, `weekly`, `monthly`; default `once`; `timezone_label` (60, blank)
+- [ ] **`clean()` requires BOTH ends and `ends_at >= starts_at`** — a one-ended window is not a window. Precedent: `core.Incident`'s own `window_valid` rule. Enforced on the form, the admin AND the seeder because `_post_clean()` calls `full_clean()`.
+- [ ] `M2M affected_services → core.ServiceComponent` (blank, `related_name="maintenance_windows"`)
+- [ ] `M2M suppressed_alert_rules → core.AlertRule` (blank, `related_name="maintenance_windows"`), `M2M suppressed_notification_rules → core.NotificationRule` (blank, `related_name="maintenance_windows"`) — **the page states nothing consults these**; 0.17's `Incident(scheduled_maintenance)` stays the outward notice and 0.12 stays the delivery owner
+- [ ] `FK incident → core.Incident` (SET_NULL, null, blank, **`related_name="+"` — no reverse accessor, per reconciliation (b)**)
+- [ ] `FK environment → core.EnvironmentInstance` (SET_NULL, null, blank, `related_name="maintenance_windows"`)
+- [ ] `FK change_request → ChangeRequest` (SET_NULL, null, blank, `related_name="maintenance_windows"`) — one change, one window
+- [ ] `status` ∈ `draft`, `scheduled`, `active`, `ended_early`, `completed`, `cancelled`; default `draft`; `ended_at` (null DateTimeField) — PagerDuty "End Now"; **past windows are kept as history and only future ones are deletable**
+- [ ] `suppresses_jobs` (bool, default False), `blocks_admin_writes` (bool, default False) — the two consequences an operator must be able to *state*. **Recorded, not enforced** (0.19's tenant-suspension lockout stays parked here as a flag)
+- [ ] `notes` (text, blank), `created_at` (`auto_now_add`)
+- [ ] **Form excludes:** `tenant`, `number`, `created_at`, `ended_at`.
+
+### 4. `ChangeRequest` [`CHG-`] — `apps/core/models/Change.py`, with `FeatureRollout` as its child class in the same file
+
+*Drivers: the change advisory / change register (Freshservice, Jira Service Management) · risk & impact · approvals · phased feature rollout (LaunchDarkly) · environment promotion (Freshservice sandbox) · post-implementation review.*
+
+- [ ] `number` + `LITERAL_PREFIX_MODELS["CHG"] = ["core.ChangeRequest"]`
+- [ ] `title` (200), `summary` (text, blank)
+- [ ] `change_type` ∈ `standard`, `normal`, `emergency`; default `normal`
+- [ ] `risk_level` ∈ `low`, `medium`, `high`; default `medium` — `impact_level` ∈ `minor`, `moderate`, `major`; default `minor`
+- [ ] `FK environment → core.EnvironmentInstance` (SET_NULL, null, blank, `related_name="change_requests"`) — the promotion target
+- [ ] `FK maintenance_window → MaintenanceWindow` (SET_NULL, null, blank, `related_name="change_requests"`)
+- [ ] `FK feature_flag → core.FeatureFlag` (SET_NULL, null, blank, `related_name="change_requests"`) — the toggle being flipped
+- [ ] `status` ∈ `draft`, `submitted`, `approved`, `rejected`, `scheduled`, `in_progress`, `verifying`, `completed`, `rolled_back`, `closed`; default `draft` — the union of the CAB lifecycle and the maintenance lifecycle 0.17 already had to union for `Incident`
+- [ ] `FK requested_by` / `FK approved_by → settings.AUTH_USER_MODEL` (SET_NULL, null, blank) — the approver is a person, not a flag
+- [ ] `approval_required` (bool, default True), `change_note` (text, blank), `confirmed_at` (null DateTimeField) — LaunchDarkly required comments + required confirmation
+- [ ] `rollback_plan` (text, blank), `rollback_at` (null DateTimeField) — a recorded plan, **not** an automatic rollback
+- [ ] `post_review_notes` (text, blank), `success_rating` (small int, null) — Freshservice change success rate / PIR
+- [ ] `notes` (text, blank), `created_at` (`auto_now_add`)
+- [ ] **Form excludes:** `tenant`, `number`, `created_at`, `confirmed_at`, `rollback_at`, `post_review_notes`, `success_rating`.
+
+- [ ] `FK triggered_by → settings.AUTH_USER_MODEL` (SET_NULL, null, blank) — who pressed Run now
+- [ ] `trigger_kind` ∈ `scheduled`, `manual`, `backfill`, `retry`; default `manual`
+- [ ] `status` ∈ `queued`, `running`, `success`, `failed`, `skipped`, `cancelled`; default `queued`
+- [ ] `started_at`, `finished_at` (null DateTimeField), `duration_seconds` (null int)
+- [ ] `rows_affected` (null int) — the number a batch process is judged on
+- [ ] `error_text` (text, blank), `log_reference` (200, blank) — free text; the register does NOT own logs (0.17 declined a log store)
+- [ ] `reprocess_behaviour` ∈ `missing_only`, `missing_and_failed`, `all`; `backfill_from`, `backfill_to` (null DateField) — **recorded, never executed**
+- [ ] `is_dry_run` (bool, default True) — Airflow backfill dry run / Datadog "Preview affected monitors"
+- [ ] `notes` (text, blank), `created_at` (`auto_now_add`)
+- [ ] **Form excludes:** `tenant`, `number`, `created_at`, `started_at`, `finished_at`, `duration_seconds`, `rows_affected`, `error_text` (written by the action that records the run, not typed by an operator).
+- [ ] **CRUD shape:** `JobRun` is created by the `jobdefinition_run_now` POST action, not by a form. It still gets `list` + `detail` (+ `edit`/`delete` for CRUD completeness) but **no `create_view`** — a hand-typed run is the exact lie the register posture forbids. Say so in the view docstring.
+
+**`FeatureRollout` child class, same file** — *LaunchDarkly percentage / progressive / guarded rollouts and experiments:*
+
+- [ ] `FK change_request → ChangeRequest` (CASCADE, `related_name="rollouts"`)
+- [ ] `FK feature_flag → core.FeatureFlag` (SET_NULL, null, blank, `related_name="feature_rollouts"`) — **`core.FeatureFlag` already resolves per-tenant / per-plan / per-role, so 0.20 records the PLAN and never builds a second targeting engine** (L29/L36)
+- [ ] `rollout_kind` ∈ `percentage`, `cohort`, `progressive`, `experiment`; default `percentage`
+- [ ] `rollout_pct` (small int, default 0), `cohort_label` (120, blank)
+- [ ] `planned_start_at`, `planned_end_at` (null DateTimeField) — **nothing fires them; no scheduler**
+- [ ] `rollback_metric` (200, blank) — a guarded rollout's *intent to watch*, free text. No metric pipeline exists.
+- [ ] `FK approved_by → settings.AUTH_USER_MODEL` (SET_NULL, null, blank)
+- [ ] `tenant` FK (the mixin's edge still walks it), `created_at` (`auto_now_add`)
+- [ ] **No `number` column, no prefix, no `LITERAL_PREFIX_MODELS` entry** — it is a child of `CHG-`.
+- [ ] **Form excludes:** `tenant`, `created_at`, and `planned_start_at` if an operator must not back-date a rollout (decide at contract time and PIN the decision — an unpinned name is a blank region).
+
+## Explicitly DECLINED (these are plan items too — do not build them)
+
+- **A real scheduler runtime** (Celery beat / APScheduler / RQ / django-q). No dependency is added by this pass; `next_run_at` stays a recorded intent.
+- **A queue broker table, a `QueueDepth` time series, or a worker/agent fleet table.** There is no broker and no worker process to register; a depth table would be permanently empty (L52 — a permanently-empty field is a lie by omission).
+- **A mass-update / bulk executor.** `core.BusinessRule`'s own docstring already rejects one in this exact app: reaching across 71 approval engines to mutate their rows *"is the L36 mistake at the largest scale"*. 0.20 records the intent; the calling module acts and reports back.
+- **A third ticket table / a third knowledge base / a `SupportRoute` register.** Bullet 5 links the two that exist.
+- **A build/deploy pipeline, an artifact store, or environment promotion automation.** NavERP ships no build artifacts; a deployment pipeline would be a table of nothing.
+- **Automatic flag flipping at a scheduled time, and automatic rollback on a metric regression.** No scheduler, no metric pipeline. `FeatureRollout` records the plan.
+- **A new SLA / escalation / macro library.** `core.SlaRule` (0.11), `crm.SlaPolicy` and `hrm.HelpdeskSLAPolicy` already own that vocabulary.
+- **A second approval engine.** `core.WorkflowDefinition` / `core.ApprovalLimit` (0.11) own approvals; 0.20 records the decision and the approver.
+- **A `BulkOperation` model.** That is the *next* 0.20 pass (see Deferred). Bullet 4 ships THIS pass as the board + the JSON-filter preview action, in the `core.BusinessRuleLog` posture.
+
+## Backend — `apps/core/` is FLAT (backend rule 9)
+
+`core` is a Module-0 foundation app with **no NavERP sub-module level**. Entity files sit at the
+package root. **`apps/core/models/JobScheduler/…` is WRONG — no `<SubModule>/` folder anywhere.**
+
+- [ ] `apps/core/models/JobScheduler.py` — `JobDefinition` + `JobRun`
+- [ ] `apps/core/models/Maintenance.py` — `MaintenanceWindow`
+- [ ] `apps/core/models/Change.py` — `ChangeRequest` + `FeatureRollout`
+- [ ] `apps/core/forms/JobScheduler.py` — `JobDefinitionForm`, `JobRunForm` (both `TenantModelForm`)
+- [ ] `apps/core/forms/Maintenance.py` — `MaintenanceWindowForm`
+- [ ] `apps/core/forms/Change.py` — `ChangeRequestForm`, `FeatureRolloutForm`
+- [ ] `apps/core/views/JobScheduler.py` — `job_definition_list/_create/_detail/_edit/_delete`, `job_run_list/_detail/_edit/_delete`, `jobdefinition_run_now`
+- [ ] `apps/core/views/Maintenance.py` — `maintenance_window_list/_create/_detail/_edit/_delete`, `maintenance_window_end_now`
+- [ ] `apps/core/views/Change.py` — `change_request_list/_create/_detail/_edit/_delete`, `featurerollout_list/_create/_detail/_edit/_delete`, `change_request_submit`, `change_request_approve`, `change_request_rollback`
+- [ ] `apps/core/views/SystemOps.py` — `admin_board`, `support_board`, `bulk_board`, `bulk_preview`, `ops_audit_trail` (**no model file, no form file** — these are computed boards)
+
+**Re-export blocks — omitting one is an `ImportError`/`AttributeError` at runtime, not a style nit:**
+
+- [ ] `apps/core/models/__init__.py` — add `from .JobScheduler import (JobDefinition, JobRun)`, `from .Maintenance import (MaintenanceWindow)`, `from .Change import (ChangeRequest, FeatureRollout)`
+- [ ] `apps/core/forms/__init__.py` — add the five form classes
+- [ ] `apps/core/views/__init__.py` — add all view callables, and **check that `crud_detail` is actually imported** (0.19's 500-on-every-detail-page defect: `apps/core/crud.py` defines it, `views/_common.py` did not import it — verify before writing)
+- [ ] `apps/core/admin.py` — register all five classes; `list_display` / `list_filter` / `search_fields` per model; `TenantConsistentMixin.clean()` runs in the admin, so the tenant guard is enforced there too
+- [ ] `apps/core/settings_engine.py` — add the four `LITERAL_PREFIX_MODELS` entries (**surgical edit**, another session may be in this file — L43)
+
+**Views — the standard every one of these takes (0.16/0.17/0.18 posture):**
+
+- [ ] Function-based, `@login_required`; privileged writes (`_create`, `_edit`, `_delete`, and every action) `@tenant_admin_required`
+- [ ] `@require_POST` **above** the role gate on every action and every delete — decorators apply bottom-up, so a role-gate-outermost view would answer a GET with 403 where the house standard is 405
+- [ ] Every queryset filtered `tenant=request.tenant`; `request.tenant is None` (the superuser) returns empty **by design**
+- [ ] Full CRUD per model via the `crud_*` helpers in `apps/core/crud.py`; audit via `write_audit_log` (`apps/core/utils.py`) — the `crud_*` helpers call it automatically, **any hand-rolled save path must call it itself**. `AuditLog.action` is `varchar(10)`, so a long verb goes in `changes`
+- [ ] Every action's guard lives in the **VIEW**, not only in a hidden button, so a hand-made POST cannot reach it and the audit row is not written either
+- [ ] `jobdefinition_run_now` writes ONE `JobRun` (`trigger_kind="manual"`, `is_dry_run=True`, `triggered_by=request.user`), calls `write_audit_log`, and its success message says **"Run recorded — no job was executed; this repository has no scheduler."** It imports and calls nothing.
+- [ ] `maintenance_window_end_now` sets `status="ended_early"` + `ended_at` (PagerDuty "End Now"). Past windows stay as history; **only a future window is deletable** — guard it in the view AND reflect it in the template's Actions column.
+- [ ] Absolute imports only (`from apps.core.models import …`); entity modules pull the toolkit via `from apps.core.views._common import *` / `from apps.core.forms._common import *`.
+
+**Urls — `apps/core/urls.py` is a deliberately FLAT module. Do NOT expand it into per-entity `urlpatterns` lists.** It is a 5-line `crud(slug, name)` factory (rule 10); expanding it would replace a good abstraction with ~25 duplicated `path()` lines. **Use the factory, as 0.16/0.17/0.18 did:**
+
+- [ ] `+ crud("ops/jobs", "jobdefinition")` → `core:jobdefinition_list/_create/_detail/_edit/_delete`
+- [ ] `+ crud("ops/job-runs", "jobrun")` → `core:jobrun_*` (list/detail/edit/delete; **no create route**)
+- [ ] `+ crud("ops/maintenance-windows", "maintenancewindow")` → `core:maintenancewindow_*`
+- [ ] `+ crud("ops/changes", "changerequest")` → `core:changerequest_*`
+- [ ] `+ crud("ops/rollouts", "featurerollout")` → `core:featurerollout_*`
+- [ ] literal `path("ops/board/", views.admin_board, name="admin_board")` **BEFORE** the `crud()` groups
+- [ ] literal `path("ops/support/", views.support_board, name="support_board")` and `path("ops/bulk/", views.bulk_board, name="bulk_board")` — also BEFORE
+- [ ] POST-only action routes **AFTER** the group that owns them, so a greedy `<int:pk>` cannot shadow `add/`: `jobdefinition_run_now`, `maintenance_window_end_now`, `change_request_submit`, `change_request_approve`, `change_request_rollback`, `bulk_preview`
+- [ ] Django is **first-match-wins, so order is behaviour** — check each new literal route against the WHOLE concatenated list, not just its own block.
+
+## Wire-up
+
+- [ ] **`apps/core/navigation.py` — one new `LIVE_LINKS["0.20"]` block.** No `settings.py` edit, no root `urls.py` edit (the app is already mounted). Pin the five bullet keys **BYTE-IDENTICALLY** from `NavERP.md` lines 267-271 — `parse_catalog()` matches by exact string, and a one-character drift renders a fully built page as a "soon" roadmap pill **with no error anywhere**. Copy-paste; do not retype. The 0.19 block's comment says the same and is the precedent.
+- [ ] **The five bullet labels plus every extra must resolve to DISTINCT pages.** Two labels over one target highlight it twice and make "which page is this?" unanswerable. **Assert it programmatically before calling the block wired** (`len(set(links.values())) == len(links)`) — the same assertion 0.17/0.18/0.19 carry as a comment.
+- [ ] 0.20 block content (9 labels over 9 distinct targets):
+
+| NavERP.md key (verbatim) | Target | Note |
+|---|---|---|
+| `Unified Admin Dashboard` | `core:admin_board` | bullet 1 |
+| `Job Scheduler & Background Tasks` | `core:jobdefinition_list` | bullet 2 |
+| `Maintenance & Release Management` | `core:maintenancewindow_list` | bullet 3 (the window register) |
+| `Bulk Operations & Data Tools` | `core:bulk_board` | bullet 4 — 0.20 builds NO executor |
+| `Self-Service Support & Help Center` | `core:support_board` | bullet 5 — links CRM 1.4 + HRM 3.x |
+| `Job Run History` | `core:jobrun_list` | extra |
+| `Change Register` | `core:changerequest_list` | extra |
+| `Feature Rollouts` | `core:featurerollout_list` | extra |
+| `Operations Audit Trail` | `core:ops_audit_trail` | extra (read-only over `core.AuditLog`) |
+
+  Note bullet 3 resolves to the **maintenance-window** register and the change register is an
+  *extra* leaf — not the reverse. Freshservice's change calendar and PagerDuty's window list are
+  different artefacts and both need a home; the window is the one the NavERP.md bullet names first.
+- [ ] Sidebar must show **0.20 Live**; 0.21 (Compliance) must still read as a roadmap pill.
+
+## Templates (template rule 4 — `core` is flat, no sub-module level)
+
+**One folder per entity at the app root; the page is the bare filename.**
+`templates/core/jobdefinition/list.html` — **never** `templates/core/ops/jobdefinition_list.html`
+and **never** a flat `<entity>_<page>.html`.
+
+- [ ] `templates/core/jobdefinition/{list,detail,form}.html`
+- [ ] `templates/core/jobrun/{list,detail,form}.html`
+- [ ] `templates/core/maintenancewindow/{list,detail,form}.html`
+- [ ] `templates/core/changerequest/{list,detail,form}.html`
+- [ ] `templates/core/featurerollout/{list,detail,form}.html`
+- [ ] **Boards are standalone pages at the app root** (rule 6 — a board is not an entity's CRUD page): `templates/core/adminboard.html`, `templates/core/supportboard.html`, `templates/core/bulkboard.html`, `templates/core/opstrail.html`
+- [ ] Every `{% extends "base.html" %}`; shared partials stay at the templates root. **No `{#` and no `{% comment` leaks** — assert it in the smoke sweep.
+
+**Every list template must have:**
+
+- [ ] A **filter bar reflecting `request.GET`**: free-text `q`, plus a status dropdown (`status_choices` from `Model.STATUS_CHOICES`, passed by the view), plus FK dropdowns whose querysets the **view** passes. FK/pk comparison uses `{% if request.GET.x == obj.pk|stringformat:"d" %}selected{% endif %}` — **never `|slugify` on a pk.** A template must never assume data the view did not pass (a mismatched context var returns **200 and renders blank**, L8).
+- [ ] Filters applied to the queryset **before** pagination. Search uses `request.GET.get('q', '').strip()` with `Q()` lookups over an explicit field list.
+- [ ] An **Actions column**: View (eye) · Edit (pencil) · Delete (bin, POST form + `{% csrf_token %}` + `onclick="return confirm('…')"`), wrapped in `{% if %}` where status-dependent (a completed window is not deletable; a `JobRun` is not editable).
+- [ ] Pagination with `has_previous` / `has_next` guards (L9) and a real empty state.
+- [ ] Badges use the **colour-named** theme.css classes `badge-green` / `badge-red` / `badge-amber` / `badge-info` / `badge-muted` / `badge-slate` (L33 — the semantic `-success` / `-danger` names **do not exist**), every badge condition matching the model's exact CHOICES value, with an `{% else %}` falling back to `{{ obj.get_field_display }}`.
+- [ ] Detail templates get an Actions sidebar: Edit · Delete (POST + confirm) · Back to List, each status-conditional.
+
+
+**Board templates:**
+
+- [ ] `adminboard.html` — five tiles (health · security · jobs · changes · config), **every tile a link** to the board that already owns that answer (`core:health_board`, `core:security_overview`, `core:threat_board`, `core:vulnerability_board`, `core:breach_clock_board`, `core:brute_force_board`, `core:capacity_board`, `core:firing_board`, `core:backup_board`, `core:config_overview`, `core:settings_overview`, `core:monitoring_overview`, `core:integration_board`, `core:integration_overview`, `core:notification_overview`, `core:retention_board`, `core:numbering_board`, plus `tenants:quota_board` / `tenants:renewal_board`). Plus an **"everything needs attention" count strip** (open alerts, overdue vulnerabilities, breached SLAs, failing jobs, upcoming windows, seats over quota) and a config-drift summary reusing `settings_engine.prefix_usage()`. **It re-derives no health, no security, no backup and no config logic, and replaces no existing board.**
+- [ ] `supportboard.html` — reads `crm.Case`, `hrm.HelpdeskTicket`, `crm.KnowledgeArticle`, `hrm.KnowledgeArticle`, `crm.KbCategory`, `hrm.HelpdeskCategory`, `crm.SlaPolicy`, `hrm.HelpdeskSLAPolicy`; open counts by status/priority/age; **every row links out to the owning app's existing list/detail page** (`crm:case_list`, `hrm:ticket_list`, `crm:knowledgearticle_list`, `hrm:knowledgearticle_list`, …). Writes nothing. A one-line banner states that CRM and HRM each own a ticket queue and a knowledge base and 0.20 owns neither.
+- [ ] `bulkboard.html` — the declared-operation surface in the `core.BusinessRule` posture: the operator states a target, a JSON filter (reusing the `{"all": [{"field", "op", "value"}]}` predicate shape of `core.BusinessRule.condition`) and an intended change; `bulk_preview` **evaluates the filter, reports a matching count and a sample, and writes NOTHING**; the caller acts and reports back in `core.BusinessRuleLog.action_taken` free text. **No executor, no mass update, no saved `BulkOperation` table this pass.**
+- [ ] `opstrail.html` — read-only over `core.AuditLog` (which already carries `content_type` + `GenericForeignKey` + `changes` JSON + `user` + `at`). **No new audit table.**
+
+## Seeder — extend `apps/core/management/commands/seed_core.py` (never a new command)
+
+- [ ] Add the five classes to the existing `from apps.core.models import (…)` block, keeping the existing ordering style.
+- [ ] **Idempotent by default.** For the four numbered models use `get_or_create(tenant=tenant, name="…", defaults={…})` — `JobDefinition`, `MaintenanceWindow` and `ChangeRequest` all have a stable unique natural key; **`JobRun` and `FeatureRollout` have none, so gate them behind `if JobRun.objects.filter(tenant=tenant).exists(): skip`** rather than `.create()` (the "check existence before creating" rule for auto-numbered rows).
+- [ ] Every `MaintenanceWindow` seeded with **both** `starts_at` and `ends_at` and `ends_at > starts_at`, or `clean()` rejects it — the seeder goes through `full_clean()`, and this is the easiest way to trip the rule.
+- [ ] Reuse the rows the seeder already creates: `SyncSchedule` (for a `JobDefinition.sync_schedule`), `ServiceComponent` (for `MaintenanceWindow.affected_services`), `Incident` (one of type `scheduled_maintenance`), `EnvironmentInstance` (**check 0.16 seeds one before assuming**), `FeatureFlag` (the four seeded flags, e.g. `core.custom_fields`).
+- [ ] Add the four `NumberingScheme` rows (`JOB`, `RUN`, `MNTW`, `CHG`) to the existing `schemes` list at `seed_core.py:350`, via the same `NumberingScheme.objects.get_or_create(tenant=tenant, prefix=prefix, defaults={…})` loop. **Keep the `ZZZ` "configured but nothing mints it" row** — the reconciliation board's `configured_only` branch needs its demonstration row, and 0.20's four `LITERAL_PREFIX_MODELS` entries do not replace it.
+- [ ] **No `SecurityThreat`-style zero rows here either.** Nothing in 0.20 *detects* anything, so a seeded `JobRun` with `status="success"` is a recorded event that did not happen (L52) — seed a **`queued` / `is_dry_run=True`** run and a `skipped` one, never a green success. Each seeded row's `notes`/`evidence` must say in plain words that no scheduler produced it.
+- [ ] Print the tenant-admin login hint, and the standing warning that the superuser `admin` has `tenant=None` so module data will not appear when logged in as `admin`.
+- [ ] Leave the `--flush` behaviour and the existing early-return guard (`if <spine>.objects.filter(tenant=tenant).exists()`) intact.
+
+## Verify
+
+- [ ] `python manage.py makemigrations core` → **`core/migrations/0017_*.py`**. Re-list `apps/core/migrations/` immediately before generating (L43 — the leaf was `0016_security_threat_protection.py` at plan time).
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py makemigrations --check` → **"No changes detected"** (the models sit deeper in the package but Django still derives `app_label` from the app config, so a correct split needs no second migration).
+- [ ] `python manage.py seed_core` **×2**, then **verify idempotency by COUNT, not by stdout** — `JobDefinition`, `JobRun`, `MaintenanceWindow`, `ChangeRequest`, `FeatureRollout` and the new `NumberingScheme` rows must be identical across both runs.
+- [ ] `python manage.py check` clean.
+- [ ] `temp/` smoke sweep as **`admin_acme` / `password`** — every new `core:*` URL returns 200 (or 302 for a POST-only action) **with content assertions, not just a status code**: page title present, a seeded record's name/number visible, **no `{#` and no `{% comment` leaks**, no blank region from a mismatched context var (L8). Plus a junk-param list, page 2, and **cross-tenant IDOR → 404** on all five models.
+- [ ] Assert **`core:bulk_preview` writes nothing** — count the rows before and after a preview POST.
+- [ ] Assert **`jobdefinition_run_now` writes exactly one `JobRun` and executes no handler** — count before/after, and confirm `handler_path` is never imported (a grep of the diff for the seeded handler string is the cheap check).
+- [ ] Confirm the four `LITERAL_PREFIX_MODELS` entries appear on **`core:numbering_board`** as `used`, not `model_only`.
+- [ ] Confirm every `LIVE_LINKS["0.20"]` value reverses, and that the distinct-target assertion holds.
+- [ ] Run `venv\Scripts\python.exe temp\audit_integrity.py` — module 0 should go from "2 catalogued but NOT built" to **1 (0.21)**.
+- [ ] Sidebar shows **0.20 Live**.
+
+## Commit discipline
+
+- [ ] **ONE FILE PER COMMIT, every time, with an explicit path.** `git add '<path>'; git commit -m '<specific message about that one file>'` — PowerShell-safe, `;` as the separator, **never `&&`**. A 40-file build is 40 commits; length is fine, bundling is not. This includes every `__init__.py` touch, every `settings_engine.py` / `navigation.py` / `seed_core.py` surgical edit, and every one of the 19 templates.
+- [ ] **Never `git push` at any step.**
+- [ ] Shared files (`settings_engine.py`, `navigation.py`, `seed_core.py`, `admin.py`, the three `__init__.py`, `urls.py`) get **surgical `Edit` calls only** — never a full rewrite from an agent. Another session may be building a different sub-module in this same checkout (L43).
+
+## Close-out (the remaining Module Creation Sequence, strictly serial)
+
+- [ ] Phase 0 already done: `BASE = 463f7a06`, `git status` checked, migration number agreed.
+- [ ] Phase 1 already done: `research-core-0.20.md` committed `a589ebe6`.
+- [ ] Phase 2 (this plan) committed as its own file.
+- [ ] Phase 3: contract first (`contract-core-0.20.md` — every field, every CHOICES value, every form `Meta.fields` + exclusions, every url name, and **every view context key**: the list var, the detail/edit object var, every `*_choices`, every FK filter queryset. A name left unpinned is a silently blank region or a `NoReverseMatch`, L7/L8), then build **entity by entity, one at a time**, one commit per file.
+- [ ] Phase 3.5 smoke (`qa-smoke-tester`): render every new page as `admin_acme` and assert **content**, not just status.
+- [ ] Phase 4: the six reviewers, **one at a time in this order**, each over `463f7a06...HEAD`, each result appended to `review-core-0.20.md` before the next starts — `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`. Dedupe, sort Critical → Important → Minor, assign `C1`/`I3`/`M7`, commit the file. **The main session does not apply findings itself.**
+- [ ] Phase 5: `code-fixer` agent, findings in ID order, one commit per file, ticking each `[x] fixed` / `[~] skipped — reason` in the file.
+- [ ] Phase 6: one agent pins the test contract + writes `tests/__init__.py` and `conftest.py`; then a `test-writer` per file, **one after another**: `test_core_020_models.py` → `test_core_020_forms.py` → `test_core_020_views.py` → `test_core_020_security.py`; then the **full unfiltered** app suite green — never `-k` filtered, because a filter excludes exactly the tests a shared-file change can break (L47).
+- [ ] Phase 7: **update `.claude/skills/core/SKILL.md`** with 0.20's models/routes/templates/seeder rows and the `LIVE_LINKS` entries, and mark 0.20 complete in `README.md`. Each file its own commit.
+
+## Later passes / deferred
+
+**Deferred to a later 0.20 pass (not built now):**
+- **`BulkOperation` itself** — bullet 4 ships this pass as the board + the JSON-filter preview + the `BusinessRuleLog` posture. The saved `BulkOperation` table (target model, JSON filter, fields to set, dry-run flag, estimated/actual count, `reverses` self-FK, `is_reversible`, approval threshold) is the **next** 0.20 pass, so this pass does not carry five new models.
+- **`SupportRoute`** — the thin routing register (which system owns which kind of request, and the category/SLA each routes to) that bullet 5 could justify, carrying FKs to `crm.KbCategory` / `hrm.HelpdeskCategory` / `crm.SlaPolicy` / `hrm.HelpdeskSLAPolicy`. Deferred so this pass stays at four models.
+- **A notification dispatcher** — 0.20 records *that a notice is due*; 0.12 owns delivery and **there is still no dispatcher**.
+
+**Declined outright (with the reason, so it is not re-litigated):**
+- **A real scheduler runtime** (Celery beat / APScheduler / cron). No dependency is added by this pass; `next_run_at` stays a recorded intent. Revisit only as an explicit, separate decision.
+- **A queue broker / worker fleet / `QueueDepth` table** — no broker exists; a depth table would be permanently empty (L52).
+- **An actual bulk-update executor** — refused on purpose, matching `core.BusinessRule`'s own documented stance.
+- **A build/deploy pipeline, artifact store, or environment promotion automation** — recorded as a change plan; nothing promotes anything.
+- **Import/export data tools** — a CSV importer is a data-model question, not an admin-console one; it belongs with whichever module owns the target entity.
+
+**Parked to sibling sub-modules (carried from the research, nothing lost):**
+- Real health/availability computation, uptime %, SLOs → **0.17** (`core:health_board` owns it).
+- Alert thresholds, recorded firings, incident lifecycle, the `scheduled_maintenance` **notice** → **0.17** (`core.AlertRule` / `AlertEvent` / `Incident`).
+- Threat / brute-force / IP rules, vulnerability findings, `due_on` remediation dates, security incidents → **0.18**.
+- Seat allocation, plan entitlements, quotas, renewal & expiry → **0.19** (`tenants:LicenseAssignment`, `PlanEntitlement`, `UsageQuota`, `tenants:renewal_board`).
+- Backup, restore, drills, archives, legal holds, sandbox/environment provisioning → **0.16** (`core.BackupJob`, `RestoreRecord`, `RecoveryDrill`, `DataArchive`, `LegalHold`, `EnvironmentInstance`).
+- Notification **delivery**, channels, templates, dispatch → **0.12** — 0.20 records the intent only.
+- Escalation ladders, approval thresholds → **0.11** (`core.SlaRule`, `ApprovalLimit`, `BusinessRule`).
+- Configuration & setting definitions, numbering schemes, feature flags → **0.10**.
+- Control frameworks, policy authoring, risk register, audit evidence, data residency → **0.21**.
+- **Genuine tenant suspension / read-only lockout** on a lapsed subscription (parked by `research-tenants-0.19.md:126`): 0.20 records the *intent* as `MaintenanceWindow.blocks_admin_writes`; the **enforcement** is 0.21's territory and is **not** built here.
+- Customer-facing ticket lifecycle, KB authoring, SLA policy authoring → **CRM 1.4** / **HRM 3.x** — 0.20 only links.
+- **The real scheduler / worker runtime** → **nobody in NavERP**. No dependency is being added.
+
+**Integration-tier (out of scope for this pass):**
+- A ticket ↔ article deflection join — needs a link table between `crm.Case` / `hrm.HelpdeskTicket` and the two `KnowledgeArticle` classes that neither app owns. Deferred rather than invented; the board shows view counts as a number, not a join.
+- A unified cross-app support inbox with a single ticket identity — genuinely desirable, genuinely a cross-module refactor of CRM 1.4 + HRM 3.x. Deferred to a dedicated reconciliation pass, not smuggled into 0.20.
+- Community forums, suggested-article ML, AI triage (Freshservice's differentiators).
+
+## Review notes
+(filled in at the end)
 
