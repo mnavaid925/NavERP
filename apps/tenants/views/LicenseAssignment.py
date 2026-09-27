@@ -69,10 +69,19 @@ def licenseassignment_create(request):
 
 @tenant_admin_required
 def licenseassignment_detail(request, pk):
-    obj = get_object_or_404(LicenseAssignment, pk=pk, tenant=request.tenant)
-    # The board's seat roll-up for THIS tenant — a real roll-up off one grouped query, not a
+    # I9: `select_related("user", "subscription")` because the template walks BOTH FKs - the
+    # Holder row renders `obj.user` and the subscription row renders `obj.subscription.pk` and
+    # `obj.subscription.get_plan_display` inside an {% if %} branch. The list view already does
+    # this; the detail view did not, so it ran 5 queries where 2 suffice.
+    # `subscription` is NULLABLE, so this is a LEFT OUTER JOIN and costs nothing extra.
+    obj = get_object_or_404(
+        LicenseAssignment.objects.select_related("user", "subscription"),
+        pk=pk, tenant=request.tenant,
+    )
+    # The board's seat roll-up for THIS tenant - a real roll-up off grouped queries, not a
     # tautological total. Reused from `Boards` rather than re-queried here (read the PRODUCER of the
-    # rows, not the view that forwards them).
+    # rows, not the view that forwards them). I5 narrowed it to `user__tenant` on ONE queryset,
+    # which also took it from three queries to two.
     from apps.tenants.views.Boards import _seat_summary
     # ONE fetch, then render — the `usagerecord_detail` house pattern, not `crud_detail` (which
     # re-fetches the row by pk, costing a second query for one page).
