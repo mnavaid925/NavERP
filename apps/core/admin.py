@@ -34,6 +34,12 @@ from .models import (
     MaintenanceWindow,
     ChangeRequest,
     FeatureRollout,
+    ControlFramework,
+    ComplianceControl,
+    ControlFrameworkMapping,
+    CorporatePolicy,
+    PolicyAcknowledgement,
+    RiskRegister,
     WorkflowDefinition,
     WorkflowStep,
     ApprovalLimit,
@@ -798,4 +804,88 @@ class FeatureRolloutAdmin(admin.ModelAdmin):
     # No `number`: a rollout is a child row and deliberately has none. `started_at`/`completed_at`
     # belong to the action that moves the stage.
     readonly_fields = ["started_at", "completed_at"]
+
+
+# ------------------------------------------------------------------ 0.21 Compliance, Governance & Risk
+# The same rule 0.20 states above applies, and here it is the WHOLE point of the registrations:
+# every actor field and every evidence stamp on these models has exactly ONE writer — a POST-only
+# action on the 0.21 pages — and the admin is not that action. A `readonly_fields` list that omits
+# an actor would let the admin record an acknowledgement, an approval or an attestation in
+# somebody else's name, which for a compliance register is the one forgery that matters.
+@admin.register(ControlFramework)
+class ControlFrameworkAdmin(admin.ModelAdmin):
+    list_display = ["number", "code", "name", "framework_type", "version", "authority",
+                    "is_active", "adopted_on", "tenant"]
+    list_filter = ["framework_type", "is_active", "tenant"]
+    search_fields = ["number", "code", "name", "authority", "description", "notes"]
+    list_select_related = ["tenant"]
+    # `number` is minted in save(). `adopted_on` is NOT readonly on purpose: adoption is a decision
+    # a person makes and records, and unlike `inherent_score` below nothing recomputes it.
+    readonly_fields = ["number", "created_at"]
+
+
+@admin.register(ComplianceControl)
+class ComplianceControlAdmin(admin.ModelAdmin):
+    list_display = ["number", "code", "title", "status", "category", "owner", "frequency",
+                    "next_review_on", "tenant"]
+    list_filter = ["status", "category", "frequency", "tenant"]
+    search_fields = ["number", "code", "title", "description", "evidence_reference", "notes"]
+    list_select_related = ["owner", "tenant"]
+    # `owner` IS editable: assigning a control to a person is an ownership decision, not evidence.
+    # The model's `clean()` still refuses `effective` with no `last_reviewed_on`, so the admin
+    # cannot manufacture an effective control out of a bare status change.
+    readonly_fields = ["number", "created_at"]
+
+
+@admin.register(ControlFrameworkMapping)
+class ControlFrameworkMappingAdmin(admin.ModelAdmin):
+    list_display = ["framework", "control", "clause_reference", "coverage", "tenant"]
+    list_filter = ["coverage", "framework", "tenant"]
+    search_fields = ["framework__code", "control__code", "clause_reference", "notes"]
+    list_select_related = ["framework", "control", "tenant"]
+    # No `number`: a mapping is a child row and deliberately has none. `coverage` IS editable —
+    # recording that a control covers a clause is the human act this table exists to hold. The
+    # model's `clean()` refuses `not_applicable` without a written reason.
+    readonly_fields = []
+
+
+@admin.register(CorporatePolicy)
+class CorporatePolicyAdmin(admin.ModelAdmin):
+    list_display = ["number", "code", "title", "policy_type", "version", "status", "owner",
+                    "effective_on", "review_due_on", "tenant"]
+    list_filter = ["status", "policy_type", "requires_acknowledgement", "tenant"]
+    search_fields = ["number", "code", "title", "summary", "body", "notes"]
+    list_select_related = ["owner", "tenant"]
+    # `status` is NOT readonly — it is a lifecycle a person owns (contrast 0.20's verb-driven
+    # `ChangeRequest.status`). The model's `clean()` still refuses `published` with no
+    # `effective_on`, so publishing is a dated act rather than a flag.
+    readonly_fields = ["number", "created_at", "updated_at"]
+
+
+@admin.register(PolicyAcknowledgement)
+class PolicyAcknowledgementAdmin(admin.ModelAdmin):
+    list_display = ["policy", "user", "policy_version", "acknowledged_at", "tenant"]
+    list_filter = ["policy", "policy_version", "tenant"]
+    search_fields = ["policy__code", "policy__title", "user__username", "notes"]
+    list_select_related = ["policy", "user", "tenant"]
+    # EVERY field is readonly except `notes`. `user` is the actor and `policy_version` is the
+    # evidence stamp, and both have exactly one writer — the `policy_acknowledge` view. An admin
+    # that could set either would let an acknowledgement be recorded in somebody else's name, or
+    # would let "I agreed to v2.0" be written onto a v1 row. `acknowledged_at` is `auto_now_add`.
+    readonly_fields = ["tenant", "policy", "user", "policy_version", "acknowledged_at"]
+
+
+@admin.register(RiskRegister)
+class RiskRegisterAdmin(admin.ModelAdmin):
+    list_display = ["number", "code", "title", "inherent_score", "likelihood", "impact",
+                    "residual_score", "treatment", "status", "owner", "tenant"]
+    list_filter = ["status", "treatment", "likelihood", "impact", "category", "tenant"]
+    search_fields = ["number", "code", "title", "risk_statement", "description", "treatment_plan",
+                     "notes"]
+    list_select_related = ["owner", "tenant"]
+    # **`inherent_score` is readonly because the model RECOMPUTES it in `clean()`** from
+    # likelihood x impact. It is not readonly merely to be tidy: it is a derived number, and an
+    # admin that could type it would be asserting a figure nothing calculated. `residual_score` IS
+    # editable — that is the human judgement — but `clean()` refuses one above the inherent score.
+    readonly_fields = ["number", "inherent_score", "created_at"]
 
