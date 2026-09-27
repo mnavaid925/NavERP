@@ -214,9 +214,11 @@ recorded intention nothing runs, so 0.20 will add a `schedule` FK alongside it o
 
 ## 0.18 — Threat Protection & Security Operations
 
-Migration **core.0016**. Four models in **`models/Security.py`** — `IpAccessRule`, `SecurityThreat`,
-`VulnerabilityFinding`, `SecurityIncident`, each `TenantConsistentMixin`. Seeder block
-`seed_core._seed_security(tenant)`.
+Migration **core.0016** (four `CreateModel`s, **zero `AddField`**). Four models in
+**`models/Security.py`** — `IpAccessRule` (17), `SecurityThreat` (28), `VulnerabilityFinding` (25),
+`SecurityIncident` (35), each `TenantConsistentMixin`; **105 fields**, declared in dependency order
+because `SecurityThreat.mitigated_by` and `SecurityIncident.primary_threat` are FKs between them.
+Seeder block `seed_core._seed_security(tenant)`.
 
 **The 0.18 seam, and it is one enum value.** `AlertRule.CATEGORY_CHOICES` already carried
 `("security", "Security")` when 0.17 shipped, and `apps/core/tests/test_monitoring_models.py::
@@ -225,6 +227,11 @@ test_monitoring_security_is_the_018_seam` names it as the 0.18 seam. So **no new
 `AlertEvent` / `Incident` / `ServiceComponent`), **no `SecurityAlert` table**, **no second incident
 lifecycle** and **no second board**. Bullet 5 is served by *writing into* 0.17's tables. Migration
 `0016` is four `CreateModel`s and **zero `AddField`** — the schema-level proof of the same thing.
+
+**One place a second incident lifecycle is deliberately ABSENT.** `SecurityIncident.status` is the
+NIST SP 800-61r2 union and is **not** 0.17's `Incident.status` union, which carries `scheduled` and
+`monitoring` — values a breach never passes through. The two are joined by an FK, so one incident
+can carry both faces. Forcing them together would be the L36 bug pointed the other way.
 
 **The rate-limit seam.** `core.RateLimitPolicy` (0.13) keeps the limit; 0.18 FKs it
 (`SecurityThreat.rate_limit_policy`, `IpAccessRule.rate_limit_policy`) and **never edits
@@ -235,9 +242,25 @@ lifecycle** and **no second board**. Bullet 5 is served by *writing into* 0.17's
 **`core:rate_limit_detail` DOES NOT EXIST** — link a policy with `core:rate_limit_edit` + pk. That is
 a hard 500, not a soft link break.
 
-**Templates** — `templates/core/<entity>/{list,detail,form}.html` for the four entities, plus five
-standalone pages flat at the app root: `securityoverview.html`, `threatboard.html`,
-`vulnerabilityboard.html`, `breachclock.html`, `bruteforceboard.html`.
+**Templates** — 17 files. `templates/core/<entity>/{list,detail,form}.html` for the four entities
+(12), plus five standalone pages flat at the app root: `securityoverview.html`, `threatboard.html`,
+`vulnerabilityboard.html`, `breachclock.html`, `bruteforceboard.html`. Foundation rule 4 — the
+entity folder sits at the app root, not under a sub-module folder.
+
+**Admin** — four `ModelAdmin`s in `apps/core/admin.py`. Every system-set stamp is in
+`readonly_fields` so the admin cannot bypass the one-writer rule, and the IP-rule changelist renders
+`action_display` ("would block"), never a bare "Block" that reads as a working control.
+**`SecurityThreatAdmin.list_filter` deliberately omits `is_active`** — a threat has no such field, and
+a filter naming a field the model lacks is an `admin.E116` crash on load.
+
+**Tests** — `apps/core/tests/test_security_{models,forms,views,security}.py` — **52 test functions
+expanding to 126 cases** (19 / 14 / 82 / 11; the views and forms lanes are heavily parametrised),
+with fixtures appended to `apps/core/tests/conftest.py` under a **`sec_*`** prefix. The prefix is
+not cosmetic: `apps/core/tests/test_security.py` already exists as a **pre-existing 0.9-era generic
+CSRF/IDOR file** unrelated to 0.18, and `test_security_security.py` lands right beside it. The
+centrepiece is `test_security_forms_every_choices_value_is_a_clean_error_or_a_pass`, the permanent
+form of the sweep that found the C1 500 — a `ValidationError` keyed on a field the form does not
+have makes Django *raise*, so this asserts every error is keyed on a real field.
 
 **Two severity lists, and only the second is a duplication bug.** `SecurityThreat` and
 `SecurityIncident` reuse `AlertRule.SEVERITY_CHOICES` **by reference** — identity, not equality; the
