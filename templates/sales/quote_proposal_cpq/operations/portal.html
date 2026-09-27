@@ -170,6 +170,7 @@
                             Signed by <strong>{{ quote.signer_name }}</strong> ({{ quote.signer_title }}) on {{ quote.signed_at|date:"F d, Y H:i:s T" }}.
                         </p>
                         <p class="text-xs text-emerald-600 mt-1">Signer Email: {{ quote.signer_email }} · Digital Signature: <em>{{ quote.signature_data }}</em></p>
+                        <p class="text-xs text-emerald-600 mt-0.5">Accepted from: <span class="font-mono">{{ quote.signer_ip_address|default:"address not recorded" }}</span></p>
                     </div>
                 {% elif quote.is_expired %}
                     <div class="p-6 bg-red-50 rounded-xl border border-red-200 text-center">
