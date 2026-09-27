@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% comment %}
+  The declared-findings board. THE ZERO RULE IS THE WHOLE POINT OF THIS PAGE.
+  Context: open_threats (list of {threat, age_days, mitigation, source_ip_display}),
+  open_count, open_total, state_rows / state_counts, severity_rows / severity_counts,
+  type_rows / type_counts (each a list of (value, label, count)), top_source_ips,
+  unmitigated_count, correlated_alert_count, notes.
+  No green badge appears anywhere on this board, and that is deliberate rather than an
+  omission: a green "0 open" would be the precise false all-clear this module refuses.
+{% endcomment %}
+{% block title %}Threat board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Threat board</h1>
+      <div class="breadcrumb"><a href="{% url 'core:security_overview' %}">Security</a><span class="sep">&rsaquo;</span><span>Threat board</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:securitythreat_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All findings</a>
+      <a href="{% url 'core:brute_force_board' %}" class="btn btn-outline"><i data-lucide="key-round"></i> Brute-force board</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    {% if open_count == 0 %}
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>No unsettled finding has been recorded.</strong>
+        NavERP has no IDS/IPS agent, no packet capture and no anomaly engine, so nothing here could have detected
+        anything. A quiet board means <strong>nobody has written anything down</strong>, not that nothing is happening.</p>
+    {% else %}
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>{{ open_count }} unsettled finding{{ open_count|pluralize }} recorded by hand.</strong>
+        NavERP did not detect these; somebody reported them, and recording one does not make it true.</p>
+    {% endif %}
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-value">{{ open_total }}</div><div class="stat-label">Findings not settled</div></div>
+    <div class="stat-card"><div class="stat-value">{{ unmitigated_count }}</div><div class="stat-label">With no allow/deny rule recorded</div></div>
+    <div class="stat-card"><div class="stat-value">{{ correlated_alert_count }}</div><div class="stat-label">Raised against a 0.17 firing</div></div>
+  </div>
+  <p class="text-muted"><i data-lucide="info"></i> "No allow/deny rule recorded" counts gaps in the register, not attacks
+    that got through &mdash; nothing here is watching traffic, so there is no such thing to count.</p>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How the register breaks down</h2></div>
+    <div class="card-body">
+      <p class="text-muted">By state: {% for value, label, count in state_rows %}{{ label }} {{ count }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}</p>
+      <p class="text-muted">By severity: {% for value, label, count in severity_rows %}{{ label }} {{ count }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}</p>
+      <p class="text-muted">By type: {% for value, label, count in type_rows %}{{ label }} {{ count }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}</p>
+      {% if open_total > open_count %}
+        <p class="text-warn"><i data-lucide="alert-triangle"></i> Showing the {{ open_count }} most recent of
+          {{ open_total }} unsettled findings. This is a truncated view, not a complete one.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Finding</th><th>Type</th><th>Severity</th><th>State</th><th>Source IP</th><th>Age</th><th>Mitigation</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for row in open_threats %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:securitythreat_detail' row.threat.pk %}">{{ row.threat.title|truncatechars:60 }}</a></td>
+            <td>{{ row.threat.get_threat_type_display }}</td>
+            <td>
+              {% if row.threat.severity == "info" %}<span class="badge badge-info">{{ row.threat.get_severity_display }}</span>
+              {% elif row.threat.severity == "warning" %}<span class="badge badge-amber">{{ row.threat.get_severity_display }}</span>
+              {% elif row.threat.severity == "critical" %}<span class="badge badge-red">{{ row.threat.get_severity_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ row.threat.get_severity_display }}</span>{% endif %}
+            </td>
+            <td>
+              {% if row.threat.status == "new" %}<span class="badge badge-red">{{ row.threat.get_status_display }}</span>
+              {% elif row.threat.status == "triaged" or row.threat.status == "investigating" %}<span class="badge badge-amber">{{ row.threat.get_status_display }}</span>
+              {% elif row.threat.status == "contained" %}<span class="badge badge-info">{{ row.threat.get_status_display }}</span>
+              {% elif row.threat.status == "false_positive" or row.threat.status == "ignored" %}<span class="badge badge-muted">{{ row.threat.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ row.threat.get_status_display }}</span>{% endif %}
+            </td>
+            <td>{% if row.threat.source_ip %}<code>{{ row.threat.source_ip }}</code>{% else %}<span class="text-muted">{{ row.source_ip_display }}</span>{% endif %}</td>
+            <td>{% if row.age_days is not None %}{{ row.age_days }}d{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>{% if row.mitigation %}<a href="{% url 'core:ipaccessrule_detail' row.mitigation %}">rule #{{ row.mitigation }}</a>{% else %}<span class="text-muted">none recorded</span>{% endif %}</td>
+            <td><div class="table-actions">
+              <a href="{% url 'core:securitythreat_detail' row.threat.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+            </div></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8"><div class="empty-state"><i data-lucide="shield-off"></i><h3>No open findings</h3>
+            <p class="text-muted">Nothing has been reported. NavERP has no IDS/IPS agent and no anomaly engine, so this
+              board cannot tell you whether there is a problem &mdash; only that nobody has written one down.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Source addresses in the register</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Grouped and counted in the register itself. Findings with no address recorded are left out
+        entirely rather than bucketed under a blank key: "no address recorded" is not an address, and a pseudo-bucket
+        would imply one.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Address</th><th>Findings recorded</th><th>Most recent</th></tr></thead>
+          <tbody>
+            {% for row in top_source_ips %}
+              <tr>
+                <td class="fw-600"><code>{{ row.source_ip }}</code></td>
+                <td>{{ row.threats }}</td>
+                <td>{{ row.last_seen|date:"M d, Y H:i" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3"><div class="empty-state"><i data-lucide="map-pin-off"></i><h3>No source addresses recorded</h3>
+                <p class="text-muted">No finding on this workspace carries a source address, so there is nothing to rank.
+                  NavERP captures no packets, so it could not have filled this in by itself.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endblock %}
