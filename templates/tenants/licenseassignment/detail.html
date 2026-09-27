@@ -1,0 +1,178 @@
+﻿{% extends "base.html" %}
+{% comment %}
+  0.19 â€” one seat. Backing view: licenseassignment_detail.
+
+  Context, and ONLY this:
+    obj          the LicenseAssignment (user joined; `subscription` is NULLABLE)
+    seat_summary the board's {active, reclaimed, revoked, expired, total} roll-up for THIS
+                 tenant, computed in Boards._seat_summary off ONE grouped query and reused
+                 here rather than re-queried. `expired` counts rows whose expires_on is
+                 past AND whose status == "active" â€” the DISPLAYED state, never a stored one,
+                 which is why it cannot come from a .values("status") group alone.
+
+  `subscription` is a nullable FK: every read is inside an {% if %} branch (L10).
+
+  `status`, `reclaimed_on` and `reclaim_reason` are OFF the form. The only writer is the
+  licenseassignment_reclaim verb â€” a form carrying `status` would let a member POST
+  status=active and silently re-activate a reclaimed seat, undoing the one-writer discipline.
+{% endcomment %}
+{% block title %}{{ obj.number }} Â· Seat{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.user }} &mdash; {{ obj.module_slug|default:"all modules" }}</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">&rsaquo;</span><a href="{% url 'tenants:licenseassignment_list' %}">Seats</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:licenseassignment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All seats</a>
+    </div>
+  </div>
+
+  <div class="layout-2col">
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">The seat as written</h2>
+          {% if obj.status == "active" %}<span class="badge badge-green">Active</span>
+          {% elif obj.status == "reclaimed" %}<span class="badge badge-amber">Reclaimed</span>
+          {% elif obj.status == "revoked" %}<span class="badge badge-red">Revoked</span>
+          {% elif obj.status == "expired" %}<span class="badge badge-slate">Expired</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+        </div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Number</dt><dd class="mono">{{ obj.number }}</dd></div>
+            <div class="detail-item"><dt>Holder</dt><dd>{{ obj.user }}</dd></div>
+            <div class="detail-item"><dt>Module</dt><dd>
+              {% if obj.module_slug %}<span class="mono">{{ obj.module_slug }}</span>
+              {% else %}<span class="badge badge-info">All modules</span>
+              <div class="text-muted">A tenant-wide seat</div>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Source</dt><dd>{{ obj.get_assignment_source_display }}</dd></div>
+            <div class="detail-item"><dt>Assigned from</dt><dd>
+              {% if obj.assigned_from %}{{ obj.assigned_from|date:"M d, Y" }}{% else %}<span class="muted">Not recorded</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Expires on</dt><dd>
+              {% if obj.expires_on %}
+                {{ obj.expires_on|date:"M d, Y" }}
+                {% if obj.is_expired %}
+                  <span class="badge badge-slate">Expired</span>
+                  <div class="text-muted">Derived from this date &mdash; not a stored status</div>
+                {% endif %}
+              {% else %}
+                <span class="muted">No end date</span>
+              {% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Recorded</dt><dd>{{ obj.created_at|date:"M d, Y" }}</dd></div>
+          </dl>
+          {% comment %}
+            Nullable FK read whole inside the branch, never as a |default: filter
+            ARGUMENT on a None FK (L10).
+          {% endcomment %}
+          <div class="detail-item" style="margin-top:1rem;"><dt>Subscription</dt><dd>
+            {% if obj.subscription %}
+              <a href="{% url 'tenants:subscription_detail' obj.subscription.pk %}">{{ obj.subscription.get_plan_display }}</a>
+              <div class="text-muted">Billing link only &mdash; it is not part of seat identity.</div>
+            {% else %}
+              <span class="muted">No subscription linked</span>
+            {% endif %}
+          </dd></div>
+          {% if obj.notes %}
+            <div class="detail-item" style="margin-top:1rem;"><dt>Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Reclaim evidence</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Reclaimed on</dt><dd>
+              {% if obj.reclaimed_on %}
+                <span class="badge badge-amber">{{ obj.reclaimed_on|date:"M d, Y H:i" }}</span>
+              {% else %}
+                <span class="muted">Never reclaimed</span>
+              {% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Reason</dt><dd>
+              {% if obj.reclaim_reason %}{{ obj.reclaim_reason }}
+              {% else %}<span class="muted">&mdash;</span>{% endif %}
+            </dd></div>
+          </dl>
+          <p class="text-muted" style="margin-top:1rem;">These two stamps are written by the reclaim action and by
+            nothing else &mdash; they are deliberately not editable, so the record of an act cannot be quietly
+            rewritten after the fact.</p>
+        </div>
+      </div>
+    </div>
+
+
+
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Actions</h2></div>
+        <div class="card-body">
+          {% comment %}
+            Edit is hidden on a non-active seat: the verb is the sole writer of `status`,
+            so an edit form on a reclaimed row invites a member to resurrect it. The
+            operator may still correct identity fields, but the status is not theirs.
+          {% endcomment %}
+          {% if obj.is_reclaimable %}
+            <a href="{% url 'tenants:licenseassignment_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+            <form method="post" action="{% url 'tenants:licenseassignment_reclaim' obj.pk %}" onsubmit="return confirm('Reclaim this seat? It records a commercial fact only â€” it does NOT disable anyoneâ€™s login. There is no identity sync in NavERP.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="user-minus"></i> Reclaim seat</button>
+            </form>
+          {% else %}
+            <p class="text-muted" style="margin-bottom:.5rem;">This seat is no longer active, so it cannot be edited
+              or reclaimed. Its status is written by the reclaim action alone.</p>
+          {% endif %}
+          <form method="post" action="{% url 'tenants:licenseassignment_delete' obj.pk %}" onsubmit="return confirm('Delete this seat record? The holder keeps their login either way â€” this only removes the register row.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+          <a href="{% url 'tenants:licenseassignment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Seats in this workspace</h2></div>
+        <div class="card-body">
+          {% comment %}
+            seat_summary is the board's own roll-up for this tenant, reused rather than
+            re-queried. `expired` is the DERIVED count (expires_on past AND status still
+            active), so it is deliberately NOT the same as a status group and can overlap
+            the active figure.
+          {% endcomment %}
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Active</dt><dd>{{ seat_summary.active }}</dd></div>
+            <div class="detail-item"><dt>Reclaimed</dt><dd>{{ seat_summary.reclaimed }}</dd></div>
+            <div class="detail-item"><dt>Revoked</dt><dd>{{ seat_summary.revoked }}</dd></div>
+            <div class="detail-item"><dt>Past end date</dt><dd>{{ seat_summary.expired }}</dd></div>
+            <div class="detail-item"><dt>Total</dt><dd>{{ seat_summary.total }}</dd></div>
+          </dl>
+          <p class="form-help" style="margin-top:1rem;">&ldquo;Past end date&rdquo; is counted from
+            <code>expires_on</code> among seats still marked active, so it is a derived number and can overlap
+            &ldquo;Active&rdquo; rather than partitioning the register.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">What this page does not do</h2></div>
+        <div class="card-body">
+          <p class="text-muted"><strong>NavERP records commercial terms somebody wrote down. It does not enforce them.</strong></p>
+          <p class="text-warn"><i data-lucide="user-x"></i>
+            <strong>Seat auto-deprovisioning is declined.</strong> Reclaiming this seat
+            <strong>does not disable the login</strong> of the person who held it. There is no identity sync in
+            NavERP, so the account, the password and access to every other module stay exactly as they are. The
+            button records a commercial fact and stamps two evidence fields &mdash; that is all it does.</p>
+          <p class="text-muted">The converse also holds: this seat does not <em>grant</em> access. Nothing consults
+            it when a request is made, so recording a seat does not open a module to anybody.</p>
+          <p class="text-muted"><strong>Expired</strong> is <strong>derived from <code>expires_on</code></strong>,
+            never stored &mdash; no code writes <span class="mono">status="expired"</span>, which is why a seat can
+            read <em>Active</em> and still be past its end date.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
