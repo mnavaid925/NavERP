@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% comment %}
+  Create and edit share this template. Context: form, notes, and obj + is_edit on edit.
+  `added_by` / `added_by_label` are deliberately absent from the form: a person typing
+  "I added this" would be inventing provenance, so the view stamps them on create.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit access rule{% else %}Record an access rule{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit access rule{% else %}Record an access rule{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:security_overview' %}">Security</a><span class="sep">&rsaquo;</span><a href="{% url 'core:ipaccessrule_list' %}">IP access rules</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This form records a policy nobody evaluates.</strong>
+      NavERP runs no WAF, no reverse proxy and no gateway, so saving a deny rule does not block a single address.</p>
+    <p class="text-muted"><i data-lucide="info"></i> <strong>Give the rule a reason.</strong> An unexplained allow or deny
+      is the first thing an auditor asks about, and nothing else on this page can explain it for you.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The rule</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.cidr %}
+          {% include "partials/form_field.html" with field=form.direction %}
+          {% include "partials/form_field.html" with field=form.action %}
+          {% include "partials/form_field.html" with field=form.scope %}
+          {% include "partials/form_field.html" with field=form.source %}
+          {% include "partials/form_field.html" with field=form.expires_at %}
+          {% include "partials/form_field.html" with field=form.is_active %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What it applies to</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.service %}
+          {% include "partials/form_field.html" with field=form.credential %}
+          {% include "partials/form_field.html" with field=form.rate_limit_policy %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The account somebody gave</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.reason %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'core:ipaccessrule_detail' obj.pk %}{% else %}{% url 'core:ipaccessrule_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted"><i data-lucide="info"></i> <strong>Leaving the expiry blank means permanent, not "later".</strong>
+      An allow-list entry with a real expiry is a temporary one, and a defaulted expiry is an expiry nobody chose.</p>
+  </div></div>
+{% endblock %}
