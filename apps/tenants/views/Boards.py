@@ -67,28 +67,34 @@ def _seat_summary(tenant):
 
     Reused by `licenseassignment_detail`, which forwards the same numbers rather than re-querying.
 
-    The `user__tenant` clause on the ACTIVE count is REQUIRED, not defensive: `accounts.User.tenant`
-    is nullable (the superuser `admin` has tenant=None by design). Without it a row holding the
-    superuser would be counted on the board but absent from the register, and the page would
-    contradict itself.
+    **The `user__tenant` clause is on ONE queryset, and every number comes off it** (I5). It is
+    REQUIRED, not defensive: `accounts.User.tenant` is nullable (the superuser `admin` has
+    tenant=None by design) and the Django admin is NOT tenant-scoped, so a row holding a
+    null-tenant user is constructible. The shipped code applied the clause to the `active` count
+    ONLY, so for such a row the five numbers rendered side by side on the seat detail page
+    disagreed with each other: `total` counted the row, `active` did not, and the register the
+    page links to did show it. Ninety-nine percent of workspaces never see this, which is exactly
+    why it needed saying rather than leaving to chance.
+
+    Two queries, both off the same narrowed base: ONE grouped query produces the three status
+    counts and the total, one filtered count produces `expired`. The old three-query version had
+    to repeat the clause by hand four times, which is how it came to be applied once.
 
     `expired` counts rows whose `expires_on` is past AND whose `status == "active"` — the DISPLAYED
     state, never a stored one. Nothing ever writes `status="expired"` ([RULING] 5), so a
     `values("status")` group alone cannot produce it.
     """
     today = timezone.localdate()
+    seats = LicenseAssignment.objects.filter(tenant=tenant, user__tenant=tenant)
     by_status = {
         row["status"]: row["n"]
-        for row in LicenseAssignment.objects.filter(tenant=tenant)
-                                         .values("status").annotate(n=Count("id"))
+        for row in seats.values("status").annotate(n=Count("id"))
     }
     return {
-        "active": LicenseAssignment.objects.filter(
-            tenant=tenant, status="active", user__tenant=tenant).count(),
+        "active": by_status.get("active", 0),
         "reclaimed": by_status.get("reclaimed", 0),
         "revoked": by_status.get("revoked", 0),
-        "expired": LicenseAssignment.objects.filter(
-            tenant=tenant, status="active", expires_on__lt=today).count(),
+        "expired": seats.filter(status="active", expires_on__lt=today).count(),
         "total": sum(by_status.values()),
     }
 
