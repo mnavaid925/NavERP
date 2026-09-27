@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:grc_overview' %}">Compliance</a><span class="sep">&rsaquo;</span><a href="{% url 'core:riskregister_list' %}">Risks</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:riskregister_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:riskregister_delete' obj.pk %}" onsubmit="return confirm('Delete this risk?');">
+        {% csrf_token %}
+        <button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>The score below is calculated, not
+      typed.</strong> It is the product of the likelihood and impact scales, recomputed on every save, so
+      it cannot be forged by a form post. The <em>treatment</em> and the treatment plan are yours: they
+      record a decision, and nothing in this application acts on it.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The risk</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Code</dt><dd>{{ obj.code }}</dd></div>
+        <div class="detail-item"><dt>Inherent score</dt><dd><strong>{{ obj.inherent_score }}</strong> &middot; {{ obj.score_label|title }}
+          <div class="text-muted">{{ obj.get_likelihood_display }} ({{ obj.likelihood }}) &times; {{ obj.get_impact_display }} ({{ obj.impact }})</div></dd></div>
+        <div class="detail-item"><dt>Residual score</dt><dd>{% if obj.residual_score is not None %}{{ obj.residual_score }}{% else %}<span class="text-muted">Not assessed</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Treatment</dt><dd>{{ obj.get_treatment_display }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{{ obj.get_status_display }}</dd></div>
+        <div class="detail-item"><dt>Category</dt><dd>{% if obj.category %}{{ obj.category }}{% else %}&mdash;{% endif %}</dd></div>
+        <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Reviewed</dt><dd>{% if obj.reviewed_on %}{{ obj.reviewed_on|date:"d M Y" }}{% else %}&mdash;{% endif %}</dd></div>
+        <div class="detail-item"><dt>Next review</dt><dd>{% if obj.next_review_on %}{{ obj.next_review_on|date:"d M Y" }}{% if obj.is_overdue_review %} <span class="badge badge-amber">Overdue</span>{% endif %}{% else %}&mdash;{% endif %}</dd></div>
+      </dl>
+      <p><strong>Risk statement.</strong> {{ obj.risk_statement }}</p>
+      {% if obj.description %}<p class="text-muted">{{ obj.description|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Treatment plan</h2></div>
+    <div class="card-body">
+      {% comment %}
+        The plan is a written intention, exactly like 0.20's job handler path. "Transfer" and "avoid"
+        name a decision a person made; neither is carried out by anything in this application.
+      {% endcomment %}
+      {% if obj.treatment_plan %}<p>{{ obj.treatment_plan|linebreaksbr }}</p>
+      {% else %}<div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No treatment plan recorded</h3><p class="text-muted">A risk with a treatment chosen but no plan is a decision nobody wrote down.</p></div>{% endif %}
+      {% if obj.notes %}<p class="text-muted"><strong>Notes.</strong> {{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+{% endblock %}
