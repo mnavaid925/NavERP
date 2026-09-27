@@ -443,7 +443,27 @@ def quote_convert_to_order(request, pk):
     try:
         order = cpq_convert_to_sales_order(quote, user=request.user)
         write_audit_log(request.user, quote, "convert_order", {"action": "convert_order", "sales_order": order.number}, tenant=tenant)
-        messages.success(request, f"Quote {quote.number} successfully converted to Sales Order {order.number}!")
+        # Report the ATP outcome rather than leaving it buried in the order notes:
+        # "converted" and "converted with stock spoken for" are different promises.
+        lines = list(order.lines.all())
+        reserved = 0
+        locations = []
+        for line in lines:
+            for allocation in line.allocations.filter(status="reserved"):
+                reserved += 1
+                if allocation.location:
+                    locations.append(allocation.location.code)
+        unreserved = len(lines) - reserved
+        message = f"Quote {quote.number} successfully converted to Sales Order {order.number}!"
+        if reserved:
+            where = ", ".join(sorted(set(locations))) or "the default warehouse"
+            message += f" {reserved} line(s) soft-reserved at {where}."
+        messages.success(request, message)
+        if unreserved:
+            messages.warning(
+                request,
+                f"{unreserved} line(s) have no stock reserved — see the ATP note on order {order.number}.",
+            )
         return redirect("sales:cpq_quote_detail", pk=quote.pk)
     except Exception as exc:
         messages.error(request, f"Order conversion failed: {str(exc)}")
