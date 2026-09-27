@@ -659,6 +659,11 @@ class IpAccessRuleAdmin(admin.ModelAdmin):
     list_filter = ["direction", "action", "scope", "source", "is_active", "tenant"]
     search_fields = ["cidr", "reason", "notes"]
     list_select_related = ["service", "credential", "rate_limit_policy", "added_by", "tenant"]
+    # `added_by` / `added_by_label` are stamped from `request.user` by the create VIEW (a form has
+    # no request, and an admin-created rule honestly has no "who asked" — the field is nullable and
+    # stays NULL there, which is true rather than a gap). `created_at` / `updated_at` are
+    # auto_now fields. All four are readonly so the admin cannot forge the attribution.
+    readonly_fields = ["added_by", "added_by_label", "created_at", "updated_at"]
     # NO `autocomplete_fields` here: an autocomplete widget requires the RELATED ModelAdmin to
     # declare its own `search_fields`, and declaring it anyway is an admin.E040 that only
     # fires when somebody opens the changelist.
@@ -716,6 +721,6 @@ class SecurityIncidentAdmin(admin.ModelAdmin):
     # is the human decision the whole 72-hour clock is waiting on, and the model's clean()
     # refuses to close an incident while it is undecided.
     readonly_fields = ["contained_at", "eradicated_at", "recovered_at", "closed_at",
-                       "authority_notified_at", "subjects_notified_at", "owner_label",
-                       "created_at", "updated_at"]
+                       "authority_notified_at", "subjects_notified", "subjects_notified_at",
+                       "owner_label", "created_at", "updated_at"]
 
