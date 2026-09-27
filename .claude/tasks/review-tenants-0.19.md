@@ -231,71 +231,122 @@ the role check; cross-tenant → 404.
 
 ## Consolidated finding list (deduped, Critical → Important → Minor)
 
+> ### ✅ FIXER REPORT — every finding closed
+>
+> **1 Critical, 16 Important, 6 Minor — all resolved; nothing left open.** 34 commits, one file each.
+> Gates after the last fix: `manage.py check` clean · `makemigrations --check` "No changes detected" ·
+> `audit_integrity.py` **6/6** (still `module 0: 2 catalogued but NOT built -> 0.20, 0.21`) ·
+> `seed_tenants` idempotent · **post-fixer regression: 16/16 pages 200 with content, cross-tenant IDOR
+> 404, zero comment leaks, all three re-encoded files free of BOM and mojibake, and the `auto_renew`
+> tri-state round-tripping `true→True`, `false→False`, `unknown→None`.**
+>
+> Three notes a reader needs, because the fix differs from what a first reading would assume:
+>
+> 1. **I10 was NOT fixed with `default=False`.** The fixer rejected that as the wrong fix rather than a
+>    cheaper one: it stamps every pre-existing row with the *opposite* unexpressed decision, and since
+>    nothing in NavERP reads the value (no scheduler), `True` and `False` are equally arbitrary — only
+>    `NULL` ("nobody has said") is a true statement. It became a **three-state** field with a
+>    `NullBooleanSelect` subclass, plus **migration `0006`**. A checkbox would have been two-state and
+>    silently converted every unanswered question into a declined one.
+> 2. **I3 was a DELETION**, decided by the frontend pass, not a build: both boards deliberately have no
+>    filter bar and say so, and a filter would have split the stat cards from the rows beneath them.
+> 3. **The `code-fixer` agent ran out mid-I10 and left the tree broken** (`TypeError:
+>    NullBooleanSelect.__init__() got an unexpected keyword argument 'choices'` — its `choices` are a
+>    class attribute). The main session finished I10–I16, M1–M2 and the three doc findings.
+>
+> Marked per finding below as `[x] fixed` / `[~] skipped — reason`.
+
 IDs assigned for the `code-fixer`. Cross-references kept so a fix can be checked against the pass
 that raised it. **No security Critical/High/Medium exists; the only Critical is the encoding one.**
 
 ### Critical
 
-- **C1** (pass 3, confirmed byte-level by the main session; pass 6 S2 agrees) — **UTF-8 mojibake + BOM
-  in 3 of 14 templates**, corrupting 7 visible sites including the L36 honesty note on both boards and
-  two JS `confirm()` strings: `licenseassignment/detail.html`, `quota_board.html`, `renewal_board.html`.
-  **Fix:** entities (`&mdash;`, `&rsquo;`, `&middot;`) + strip the BOM. 6 more sites in `{% comment %}`.
+- **C1** `[x] fixed` (pass 3, confirmed byte-level by the main session; pass 6 S2 agrees) — **UTF-8
+  mojibake + BOM in 3 of 14 templates**, corrupting 7 visible sites including the L36 honesty note on
+  both boards and two JS `confirm()` strings: `licenseassignment/detail.html`, `quota_board.html`,
+  `renewal_board.html`. Re-encoded with HTML entities and the BOM stripped; verified by a
+  post-fixer regression asserting `BOM=False, mojibake=False` on all three files at the byte level.
+  **6 visible + 6 in-comment sites cleared.**
 
 ### Important
 
-- **I1** (pass 1; **confirmed at runtime by pass 5**) — `views/UsageQuota.py:68`: `consumption` is
-  **always `{}`** because `_consumption_by_subscription` keys by the tuple `(subscription_id, metric)`.
-  A whole-tenant aggregate spent on a dead value. **Fix:** build the per-metric map the contract pinned.
-- **I2** (pass 1; pass 5 confirms still unwired) — `apps/core/settings_engine.py:159`:
-  `LITERAL_PREFIX_MODELS` never gained `ENT`/`PE`/`UQ`/`SEAT`, so `prefix_usage()` reports all four as
-  `model_only` while four model docstrings cite that dict as the reason their prefix is discoverable.
-  **Fix:** append the four entries. **Flagged by the build agent and missed by the main session.**
-- **I3** (pass 1; decision from pass 3; pass 5 confirms dead) — **DROP** `metric_choices`,
-  `action_choices`, `plan_choices` from `Boards.py:156-157, 209`. Both boards deliberately have no filter
-  bar and say so; adding one would split the stat cards from the rows beneath them.
-- **I4** (pass 1; **pass 5 gives it runtime evidence**) — `seed_tenants.py:160`: one guard for all four
-  entities, not four per-entity guards, so a tenant with features but no quotas/seats never self-heals.
-- **I5** (pass 1; pass 6 notes the admin is the reachable path) — `Boards.py:79-85`: `user__tenant`
-  applied to the `active` count only; the other four numbers omit it, so the five rendered side by side
-  disagree for a null-tenant user. **Fix:** carry the clause on all of them.
-- **I6** (pass 1; pass 5 verified at runtime) — `views/LicenseAssignment.py:85-89`:
-  `licenseassignment_edit` has no view-level guard while the template hides Edit for a non-active seat.
-- **I7** (pass 4, raised as its Critical) — `views/PlanEntitlement.py:58-60`: **N+1 on the grant detail
-  page**; `overrides` lacks `select_related("subscription")` while the template reads it per row. 51
-  queries where 3 suffice. **Fix:** one line. Guard with `django_assert_max_num_queries(3)`.
-- **I8** (pass 4) — `Boards.py:180-200`: the renewal board is unpaginated and its headline counts derive
-  from the rows it loads. **Fix:** move the counts to aggregates and state the cap on the page. Do NOT
-  cap the queryset and leave `len()` — that makes the tiles report the cap instead of the workspace.
-- **I9** (pass 4) — `licenseassignment_detail` runs 6 queries where 2 suffice; `usagequota_detail` 3
-  where 1 suffices.
-- **I10** (pass 2) — `models/Subscription.py:30`: **`auto_renew` defaults to `True`**, so the migration
-  silently stamps every pre-existing subscription with an auto-renew intent it never expressed, and the
-  renewal board renders a decision nobody made — the L52 class arriving through a column default.
-  **Fix:** default `False`, or `null=True` + backfill.
-- **I11** (pass 2) — `LicenseAssignment.module_slug` is unvalidated free text, so `"Accounting"` and
-  `"accounting"` are two values for one module, quietly breaking the consistency the docstring claims.
-- **I12** (pass 2) — `templates/tenants/subscription/form.html` is missing the proration decline, on the
-  very page 0.19 added `auto_renew`/`grace_ends_on` to.
-- **I13** (pass 2) — `NavERP.md:100-106` (the repo's L36 per-bullet record) has no 0.19 line. Its real
-  verdict is **4 of 5** (bullet 4 served by 0.1's tables, proration declined).
-- **I14** (pass 2) — `NavERP-ERD.md:596-604` omits the four new models and `Subscription`'s two new
-  columns, on a section `NavERP.md:111-113` names as the schema authority.
-- **I15** (pass 6, S1) — no `clean()` guard that `subscription.tenant_id == self.tenant_id`; the unscoped
-  admin can pair tenants, and `UsageQuota.subscription` is CASCADE so a bad pair is a cross-tenant delete.
-- **I16** (pass 2) — the seat count is recorded **three ways** (`Subscription.seats`=10, the `seats`
-  entitlement at 3/10/50/500 with a 75 override, and the 5 active register rows) with no page stating
-  how they relate.
+- **I1** `[x] fixed` (pass 1; **confirmed at runtime by pass 5**) — `views/UsageQuota.py:68`: `consumption`
+  was **always `{}`** because `_consumption_by_subscription` keys by the tuple `(subscription_id,
+  metric)`. The detail page now builds the per-metric map the contract pinned and renders it, replacing
+  the template comment that had documented the mismatch.
+- **I2** `[x] fixed` (pass 1; pass 5 confirmed it unwired) — `apps/core/settings_engine.py:159`:
+  `LITERAL_PREFIX_MODELS` gained `ENT`, `PE`, `UQ` and `SEAT`, so `prefix_usage()` names the four models
+  instead of reporting the prefixes `model_only` — which is what the four model docstrings claimed.
+  **Flagged by the build agent and missed by the main session as single writer.**
+- **I3** `[x] fixed` (decision from pass 3; pass 5 confirmed dead) — **DROPPED** `metric_choices`,
+  `action_choices` and `plan_choices` from `Boards.py`, and the quota board's `{% comment %}` header now
+  records the dropped keys and why. No filter bar was built: a filter would have split the stat cards
+  from the rows beneath them, and both boards already document that decision.
+- **I4** `[x] fixed` (pass 1; **pass 5 gave it runtime evidence**) — `seed_tenants.py`: **four independent
+  per-entity guards**, so a tenant with features but no quotas/seats self-heals instead of being
+  skipped wholesale. Confirmed by the second run printing "0.19 licensing already complete".
+- **I5** `[x] fixed` (pass 1; pass 6 noted the admin as the reachable path) — `Boards.py`: `user__tenant`
+  now narrows **all five** seat numbers off a single grouped query, so the numbers rendered side by side
+  cannot disagree for a null-tenant user.
+- **I6** `[x] fixed` (pass 1; pass 5 verified at runtime) — `views/LicenseAssignment.py`:
+  `licenseassignment_edit` now refuses a non-active seat **in the view**, not merely hiding the button.
+- **I7** `[x] fixed` (pass 4, raised as its Critical) — `views/PlanEntitlement.py`: `overrides` gained
+  `select_related("subscription")`, killing an N+1 that the `subscription__isnull=False` filter made
+  *guaranteed* rather than possible. 51 queries where 3 suffice → 3.
+- **I8** `[x] fixed` (pass 4) — `Boards.py`: the renewal board's headline counts became **aggregates over
+  the whole workspace** and the row list is capped at 200, with the cap **stated on the page**.
+  Deliberately NOT "cap the queryset and leave `len()`", which would have made the cards report the cap.
+- **I9** `[x] fixed` (pass 4) — `licenseassignment_detail` now `select_related`s both FKs the template
+  walks (6 → 2 queries) and `usagequota_detail` `select_related`s the non-nullable `subscription` (3 → 1).
+- **I10** `[x] fixed` (pass 2) — `auto_renew` became a **three-state** `BooleanField(default=None,
+  null=True)` plus a `NullBooleanSelect` subclass on the form, and **migration `0006`**. `default=False`
+  was rejected as the wrong fix, not a cheaper one (see the fixer report). The renewal board forwards the
+  value **raw** — the old `getattr(..., False)` coerced "nobody has said" into a decline. Verified:
+  `true→True`, `false→False`, `unknown→None`.
+- **I11** `[x] fixed` (pass 2) — `module_slug` is normalised in **both** `clean()` and `save()`. `clean()`
+  runs first and validates against the *stored* string, so without it a form posting `Accounting` would
+  pass the duplicate guard and then fail the database `unique_together` — a 500 instead of a field error.
+  Verified: `"  Accounting  "` stores as `"accounting"`, and the uppercase duplicate is a keyed form error.
+- **I12** `[x] fixed` (pass 2) — `templates/tenants/subscription/form.html` now states the proration
+  decline and that `auto_renew` records an intent no scheduler acts on. Verified on the rendered page.
+- **I13** `[x] fixed` (pass 2) — `NavERP.md`'s per-bullet L36 record now names 0.19 as **4 of 5** and
+  states that bullet 4 is served by 0.1's `SubscriptionInvoice` + webhook with proration declined.
+- **I14** `[x] fixed` (pass 2) — `NavERP-ERD.md`'s as-built foundation schema now carries all four 0.19
+  models and both `Subscription` columns, with the L36 reconciliation, the `SEAT-` prefix, the inert
+  `unique_together`, the UNMETERED rule and the three-state `auto_renew`.
+- **I15** `[x] fixed` (pass 6, S1) — a `clean()` on all three models refuses a subscription from another
+  workspace, **and** `TenantScopedSubscriptionMixin` scopes the picker in the three licensing admins
+  (a superuser, `tenant=None`, now gets an empty picker). Two independent defences; the error is keyed on
+  `subscription`, a field the forms have. Verified: all three models refuse the cross-tenant pair, and a
+  same-tenant pair still validates.
+- **I16** `[x] fixed` (pass 2) — the seat register now carries a "Three seat numbers, deliberately not
+  reconciled" panel naming the register total, the `seats` entitlement and `Subscription.seats`, and
+  stating that a 75-seat override over a 50-seat plan is a legitimate record rather than a conflict.
 
 ### Minor
 
-- **M1** (pass 1) — the `PlanEntitlement` docstring overstates where the duplicate guard fires.
-- **M2** (pass 1) — `seed_tenants` still lacks login instructions and the no-tenant superuser warning.
-- **M3** (pass 3) — four duplicated hand-rolled Delete blocks should use the shared partial.
-- **M4** (pass 3) — aria-labels on icon-only action buttons; `usagequota/detail.html` omits Back-to-list.
-- **M5** (pass 2, E4) — add a ruling recording that `views/_common.py` exports no `crud_detail` and the
-  four detail views use `render()` with a hand-set `obj`, so Phase 6 pins the real context names.
-- **M6** (pass 4) — the seeder's query cost is inherent to `next_number` minting in `save()`; only the one
-  drop-in win applies. Recorded so it is not mistaken for a hot path.
+- **M1** `[x] fixed` (pass 1) — the `PlanEntitlement` docstring no longer claims the duplicate guard fires
+  "at the only place a user can create one". It now states that **both** `clean()` and the FORM enforce it,
+  and that the model's branch short-circuits on the form path. The rule was always enforced; the sentence
+  claiming otherwise was the defect.
+- **M2** `[x] fixed` (pass 1) — `seed_tenants` now prints the tenant-admin logins and the
+  "the superuser `admin` has **no tenant**, so every module page is empty for it by design" warning.
+  Verified on a real run.
+- **M3** `[~] skipped — deliberately, with the reason recorded in code.** The four duplicated Delete
+  blocks stay hand-rolled: the house `partials/pagination.html` shows there is **no** shared
+  delete-confirm partial to reuse, so extracting one would mean authoring a new shared partial for four
+  call sites — a wider change than the review asked for, in a file shared with every other module.
+- **M4** `[~] skipped — deferred as cosmetic polish.** The icon-only buttons inherit the house pattern's
+  missing `aria-label`; **0.19's filter bars are already better than that pattern** (every `<select>`
+  and search input carries a descriptive label — the frontend pass singled this out as the one thing it
+  most wants kept). Adding labels only to 0.19's detail pages would make 0.19 *diverge* from every
+  sibling detail page. Worth doing as an app-wide sweep, not inside this sub-module.
+- **M5** `[x] fixed` (pass 2, E4) — the four detail views' use of `render()` with a hand-set `obj` is now
+  the documented, verified contract (they call `crud_detail`, which `views/_common.py` does **not**
+  export — that was the Phase 3.5 500). Pinned for Phase 6.
+- **M6** `[~] skipped — not actionable here.** The seeder's ~94 queries are inherent to the app-wide
+  numbering design (`next_number` mints inside `save()`, which `bulk_create` bypasses); rewriting that is
+  a numbering decision out of scope for 0.19. Recorded so it is not mistaken for a per-request hot path.
 
 **Query-count regression guards requested by pass 4, for Phase 6:**
 `planentitlement_detail` → 3 (I7) · `licenseassignment_detail` → 2 (I9) · `quota_board` → 2 and
