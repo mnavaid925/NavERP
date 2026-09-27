@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% comment %}
+  0.19 — create/edit form for a seat.
+  Backing views: licenseassignment_create / licenseassignment_edit.
+  Context: form, is_edit (and obj on edit only). The field loop is the house shape, so the
+  form's Meta.fields is the single source of truth for what renders.
+
+  `status`, `reclaimed_on` and `reclaim_reason` are deliberately OFF the form and written by
+  exactly one piece of code, the licenseassignment_reclaim verb. A form carrying `status`
+  would let a member POST status=active and silently re-activate a revoked or reclaimed seat.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Seat{% else %}New Seat{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Seat{% else %}New Seat{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'tenants:licenseassignment_list' %}">Seats</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <p class="text-muted">Leave the <strong>module</strong> blank for a tenant-wide seat. A seat is identified by
+        this workspace, this person and this module, so the same person cannot hold two seats for one module here.
+        A <strong>source</strong> is vocabulary an operator records by hand &mdash; nothing in NavERP assigns a seat
+        from a group or a rule, so <span class="mono">direct</span> is the only value the system writes itself.</p>
+      <p class="text-muted">A <strong>subscription</strong> is the billing link, not part of seat identity. Leaving it
+        empty is fine; deleting a subscription later will not delete anybody&rsquo;s seat history.</p>
+      <p class="text-warn"><i data-lucide="user-x"></i>
+        <strong>NavERP records commercial terms somebody wrote down. It does not enforce them.</strong>
+        <strong>Seat auto-deprovisioning is declined</strong> &mdash; there is no identity sync, so reclaiming a seat
+        <strong>does not disable the login</strong> of the person who held it. And a seat recorded here grants no
+        access by itself: nothing consults it at request time. It is a register entry saying who holds what.</p>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        <a href="{% if is_edit %}{% url 'tenants:licenseassignment_detail' obj.pk %}{% else %}{% url 'tenants:licenseassignment_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
