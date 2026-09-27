@@ -62,6 +62,17 @@ class Command(BaseCommand):
             self._seed_licensing(tenant)
 
         self.stdout.write(self.style.SUCCESS("tenants seed complete."))
+        # M2. Pre-existing from 0.1, extended here because 0.19 added two more seeded surfaces and
+        # the two facts below are the ones an operator trips over FIRST: they seed, log in as the
+        # `admin` superuser, and see nothing, because that account has tenant=None by design.
+        self.stdout.write("")
+        self.stdout.write("Log in as a TENANT ADMIN to see this data, e.g.:")
+        for tenant in Tenant.objects.all().order_by("name")[:5]:
+            self.stdout.write(f"    admin_{tenant.slug}  /  password")
+        self.stdout.write(self.style.WARNING(
+            "The superuser 'admin' has NO tenant, so every module page is empty for it by design "
+            "- that is not a failed seed."
+        ))
 
     def _seed_subscription(self, tenant):
         amount = PLAN_AMOUNT.get(tenant.plan, Decimal("49"))
