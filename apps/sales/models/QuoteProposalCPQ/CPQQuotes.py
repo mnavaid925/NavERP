@@ -137,6 +137,17 @@ class CPQQuote(TenantNumbered):
     signer_email = models.EmailField(blank=True)
     signed_at = models.DateTimeField(null=True, blank=True)
     signature_data = models.TextField(blank=True, help_text="Typed signature or SVG data")
+    # SECURITY — read this before "improving" it. Populated from request.META["REMOTE_ADDR"]
+    # and from NOTHING ELSE. X-Forwarded-For (and X-Real-IP, and every other forwarding header)
+    # is supplied by the caller: any client can send `X-Forwarded-For: 8.8.8.8`, and with no
+    # trusted-proxy list in this repo there is no way to tell a genuine hop from a lie. Trusting
+    # the header would write an ATTACKER-CHOSEN string into the evidentiary record of a
+    # legally-binding acceptance — the one record whose entire job is to be believable in a
+    # dispute. REMOTE_ADDR is set by the WSGI server from the socket, so behind a reverse proxy
+    # it records the proxy rather than the signer; a deliberately less precise value that is
+    # TRUE beats a precise one that is forgeable. If a trusted-proxy chain is ever configured,
+    # THAT is the change to make — not a header read here.
+    signer_ip_address = models.GenericIPAddressField(null=True, blank=True, editable=False)
 
     # Order conversion handoff
     converted_order = models.ForeignKey(
