@@ -649,3 +649,98 @@ def test_quoteproposalcpq_no_cpq_template_uses_an_undefined_badge_colour(db):
         text = path.read_text(encoding="utf-8")
         assert semantic.search(text) is None, f"{path.name} uses a non-colour-named badge class"
 
+
+
+# ---------------------------------------------------------------------------
+# The signing address is evidence, so it is captured honestly
+# ---------------------------------------------------------------------------
+
+def _quoteproposalcpq_sign(quote, remote_addr=None, client=None, **overrides):
+    """Post a portal signature. REMOTE_ADDR is set on the *client* (as WSGI
+    would), never as a form field -- a form field would prove nothing."""
+    from django.test import Client
+
+    data = {
+        "signer_name": "Dana Okafor",
+        "signer_title": "VP Procurement",
+        "signer_email": "dana@example.com",
+        "signature_data": "Dana Okafor",
+        "agree_terms": "on",
+    }
+    data.update(overrides)
+    if client is None:
+        client = Client(REMOTE_ADDR=remote_addr) if remote_addr else Client()
+    return client.post(reverse("sales:quote_portal_sign", args=[quote.signing_token]), data)
+
+
+def test_quoteproposalcpq_signing_records_the_signer_ip(db, tenant_a):
+    """The plan's verify list requires the acceptance to capture the IP: it is
+    the evidence a dispute over "who accepted this" actually turns on."""
+    currency = _quoteproposalcpq_currency()
+    quote = _quoteproposalcpq_quote(tenant_a, currency, name="IP probe", status="presented")
+    _quoteproposalcpq_sign(quote, remote_addr="203.0.113.42")
+    quote.refresh_from_db()
+    assert quote.status == "accepted"
+    assert quote.signer_ip_address == "203.0.113.42"
+
+
+def test_quoteproposalcpq_signing_ignores_a_spoofed_forwarded_header(db, tenant_a):
+    """X-Forwarded-For is caller-supplied. This repo has no trusted-proxy list,
+    so honouring it would write an attacker-chosen string into the record of a
+    binding acceptance. A less precise value that is TRUE beats a precise one
+    that is forgeable."""
+    from django.test import Client
+
+    currency = _quoteproposalcpq_currency()
+    quote = _quoteproposalcpq_quote(tenant_a, currency, name="Spoof probe", status="presented")
+    _quoteproposalcpq_sign(quote, remote_addr="198.51.100.7", client=Client(
+        REMOTE_ADDR="198.51.100.7",
+        HTTP_X_FORWARDED_FOR="8.8.8.8",
+    ))
+    quote.refresh_from_db()
+    assert quote.signer_ip_address == "198.51.100.7"
+    assert quote.signer_ip_address != "8.8.8.8"
+
+
+def test_quoteproposalcpq_the_signer_ip_is_not_user_settable(db, tenant_a):
+    """A user must not be able to type their own signing address."""
+    from apps.sales.forms.QuoteProposalCPQ.CPQQuotes import CPQQuoteForm
+    from apps.sales.models.QuoteProposalCPQ.CPQQuotes import CPQQuote
+
+    assert "signer_ip_address" not in CPQQuoteForm.Meta.fields
+    assert CPQQuote._meta.get_field("signer_ip_address").editable is False
+
+
+def test_quoteproposalcpq_an_unsigned_quote_has_no_signing_ip(db, tenant_a):
+    from apps.sales.models.QuoteProposalCPQ.CPQQuotes import CPQQuote
+
+    quote = CPQQuote.objects.create(tenant=tenant_a, name="Fresh", currency=_quoteproposalcpq_currency())
+    assert quote.signer_ip_address is None
+    assert quote.signed_at is None
+
+
+def test_quoteproposalcpq_the_signed_document_prints_the_acceptance_ip(db, tenant_a):
+    """The address belongs on the artefact the customer holds, not only in the
+    database row behind it."""
+    from apps.sales.cpq_services import cpq_render_proposal_html
+
+    currency = _quoteproposalcpq_currency()
+    quote = _quoteproposalcpq_quote(tenant_a, currency, name="Artefact", status="presented")
+    _quoteproposalcpq_sign(quote, remote_addr="203.0.113.9")
+    quote.refresh_from_db()
+    # quote_portal_sign re-renders the snapshot, so it already carries the address
+    assert "203.0.113.9" in quote.proposal_rendered_content
+    assert "Accepted from IP" in cpq_render_proposal_html(quote)
+
+
+def test_quoteproposalcpq_a_signed_quote_with_no_ip_says_so_rather_than_lying(db, tenant_a):
+    from django.utils import timezone
+
+    from apps.sales.cpq_services import cpq_render_proposal_html
+
+    currency = _quoteproposalcpq_currency()
+    quote = _quoteproposalcpq_quote(tenant_a, currency, name="No address", status="accepted", signer_name="Dana")
+    quote.signed_at = timezone.now()
+    quote.save(update_fields=["signed_at", "updated_at"])
+    assert "not recorded" in cpq_render_proposal_html(quote)
+
