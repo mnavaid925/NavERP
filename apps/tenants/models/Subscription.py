@@ -24,6 +24,12 @@ class Subscription(models.Model):
     # Stripe linkage — set by the webhook, excluded from forms.
     stripe_customer_id = models.CharField(max_length=120, blank=True)
     stripe_subscription_id = models.CharField(max_length=120, blank=True, db_index=True)
+    # 0.19 adds `auto_renew` and `grace_ends_on` — the recorded auto-renew INTENT and the grace
+    # window. Both are negotiated commercial terms an operator sets by hand, so unlike
+    # `UsageQuota.breached_at` they are NOT evidence stamps and belong on the form. NavERP has no
+    # scheduler, so nothing acts on `auto_renew` yet; that is 0.20.
+    auto_renew = models.BooleanField(default=True)
+    grace_ends_on = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
