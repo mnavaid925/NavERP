@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% comment %}
+  The GDPR Art. 33 clock board - the most useful page in this sub-module, precisely because
+  nothing will chase the deadline.
+  Context: open_incidents (list of {incident, hours_remaining, deadline, overdue}), undecided
+  (the is_notifiable is None subset of the same dicts), undecided_count, overdue_count,
+  notifiable_count, not_notifiable_count, notified_authority_count, subjects_notified_count,
+  window_hours, open_total, notes.
+  `hours_remaining` is None when discovered_at is NULL, a third state distinct from 0 and
+  from a negative number: a clock that never started has not been missed.
+{% endcomment %}
+{% block title %}Breach clock{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Breach clock</h1>
+      <div class="breadcrumb"><a href="{% url 'core:security_overview' %}">Security</a><span class="sep">&rsaquo;</span><span>Breach clock</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:securityincident_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All incidents</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>NavERP files nothing with any authority and tells
+      no data subject anything.</strong> There is no regulator integration, no mailer, no SMS gateway and no webhook in
+      this repository. The rows below display a legal deadline; they do not discharge one, and nothing here will chase it.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-value">{{ undecided_count }}</div><div class="stat-label">Open breaches with no notifiability decision</div></div>
+    <div class="stat-card"><div class="stat-value">{{ overdue_count }}</div><div class="stat-label">Open and past the {{ window_hours }}-hour window</div></div>
+    <div class="stat-card"><div class="stat-value">{{ notifiable_count }}</div><div class="stat-label">Decided notifiable</div></div>
+    <div class="stat-card"><div class="stat-value">{{ not_notifiable_count }}</div><div class="stat-label">Decided not notifiable</div></div>
+    <div class="stat-card"><div class="stat-value">{{ notified_authority_count }}</div><div class="stat-label">Authority notification recorded</div></div>
+    <div class="stat-card"><div class="stat-value">{{ subjects_notified_count }}</div><div class="stat-label">Data subjects recorded as told</div></div>
+  </div>
+  <p class="text-muted"><i data-lucide="info"></i> An open breach nobody has decided about is a running deadline with nobody
+    watching it, which is why the undecided figure leads. A recorded notification says only that somebody says a filing or a
+    notification happened; NavERP sent nothing.</p>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Open incidents and their clocks</h2></div>
+    <div class="card-body">
+      {% if open_total > open_incidents|length %}
+        <p class="text-warn"><i data-lucide="alert-triangle"></i> Showing the {{ open_incidents|length }} most recent of
+          {{ open_total }} open incidents. This is a truncated view, not a complete one; the figures above are untruncated.</p>
+      {% endif %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Incident</th><th>Class</th><th>Discovered</th><th>Deadline</th><th>Time remaining</th><th>Notifiable</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for row in open_incidents %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'core:securityincident_detail' row.incident.pk %}">{{ row.incident.title|truncatechars:55 }}</a></td>
+                <td>{{ row.incident.get_incident_class_display }}</td>
+                <td>{% if row.incident.discovered_at %}{{ row.incident.discovered_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                <td>{{ row.deadline }}</td>
+                <td>{% if row.hours_remaining is None %}<span class="text-muted">clock not started</span>
+                    {% elif row.overdue %}<span class="badge badge-red">{{ row.hours_remaining|floatformat:1 }}h overdue</span>
+                    {% else %}<span class="badge badge-amber">{{ row.hours_remaining|floatformat:1 }}h left</span>{% endif %}</td>
+                <td>{% if row.incident.is_notifiable is None %}<span class="badge badge-amber">Not decided</span>
+                    {% elif row.incident.is_notifiable %}<span class="badge badge-red">Notifiable</span>
+                    {% else %}<span class="badge badge-slate">Not notifiable</span>{% endif %}</td>
+                <td><div class="table-actions">
+                  <a href="{% url 'core:securityincident_detail' row.incident.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                </div></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7"><div class="empty-state"><i data-lucide="shield-off"></i><h3>No open incidents</h3>
+                <p class="text-muted">No clock is running because no incident has been recorded as open. That is not an
+                  all-clear: NavERP has no SIEM client and detects nothing, so an empty register means nobody wrote one down.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Nobody has decided these</h2></div>
+    <div class="card-body">
+      <p class="text-muted">The <code>is_notifiable</code> blank is a real third state, not a missing value. Art. 33 does
+        not let a closed record leave the question open, so these are the rows that need a decision from a person.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Incident</th><th>Deadline</th><th>Time remaining</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for row in undecided %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'core:securityincident_detail' row.incident.pk %}">{{ row.incident.title|truncatechars:55 }}</a></td>
+                <td>{{ row.deadline }}</td>
+                <td>{% if row.hours_remaining is None %}<span class="text-muted">clock not started</span>
+                    {% elif row.overdue %}<span class="badge badge-red">{{ row.hours_remaining|floatformat:1 }}h overdue</span>
+                    {% else %}<span class="badge badge-amber">{{ row.hours_remaining|floatformat:1 }}h left</span>{% endif %}</td>
+                <td><div class="table-actions">
+                  <a href="{% url 'core:securityincident_detail' row.incident.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                </div></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="check-circle"></i><h3>Every open incident has a decision recorded</h3>
+                <p class="text-muted">No open incident is sitting undecided. That is a statement about this register, not about
+                  any breach: NavERP detects nothing, so it cannot tell you whether a decision is still owed on something nobody recorded.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endblock %}
