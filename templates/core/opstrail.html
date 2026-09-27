@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Operations Audit Trail{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Operations Audit Trail</h1>
+      <div class="breadcrumb"><a href="{% url 'core:admin_board' %}">Admin Console</a><span class="sep">&rsaquo;</span><span>Audit trail</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:auditlog_list' %}" class="btn btn-outline"><i data-lucide="archive"></i> Full audit log (0.9)</a>
+    </div>
+  </div>
+
+  {% comment %}
+    READ-ONLY BY CONSTRUCTION. This page has no create, edit or delete route, no form and no POST
+    handler — an audit trail that can be edited through the UI is not an audit trail. It reuses 0.9's
+    core.AuditLog rather than declaring a second one (L29).
+  {% endcomment %}
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Every administrative action in this workspace, newest first: creations, edits,
+      deletions, and the 0.20 verbs &mdash; run now, end now, submit, approve, rollback and preview. The page is
+      read-only and has no edit affordance, because an audit trail that can be edited is not one.</p>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search target, user, action&hellip;">
+      </div>
+      <div class="form-group">
+        <select name="action" class="form-select" aria-label="Action">
+          <option value="">Any action</option>
+          {% for a in action_choices %}<option value="{{ a }}" {% if request.GET.action == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:ops_audit_trail' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
+      <tbody>
+        {% for row in object_list %}
+          <tr>
+            <td>{{ row.created_at|date:"M d, Y H:i" }}</td>
+            <td>{% if row.user %}{{ row.user }}{% else %}<span class="text-muted">system</span>{% endif %}</td>
+            <td><span class="badge badge-slate">{{ row.action }}</span></td>
+            <td>{{ row.target|truncatechars:44 }}</td>
+            <td class="text-muted">{% if row.changes %}{{ row.changes|truncatechars:60 }}{% else %}&mdash;{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5"><div class="empty-state"><i data-lucide="history"></i><h3>Nothing recorded</h3><p class="text-muted">No administrative action has been taken in this workspace yet.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
