@@ -26,3 +26,16 @@ from .UsageRecord import (
 from .Onboarding import (
     OnboardingForm,
 )  # noqa: F401
+# 0.19 "License & Subscription Administration".
+from .EntitlementFeature import (
+    EntitlementFeatureForm,
+)  # noqa: F401
+from .PlanEntitlement import (
+    PlanEntitlementForm,
+)  # noqa: F401
+from .UsageQuota import (
+    UsageQuotaForm,
+)  # noqa: F401
+from .LicenseAssignment import (
+    LicenseAssignmentForm,
+)  # noqa: F401
