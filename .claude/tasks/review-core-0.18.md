@@ -1,4 +1,4 @@
-# Review — Module 0 0.18 Threat Protection & Security Operations
+﻿# Review — Module 0 0.18 Threat Protection & Security Operations
 
 **Range:** `647806805d0a07dec2921e2d3293dcc342005d64…HEAD` (`apps/core`, `templates/core` — 28 files, +4,747)
 **Contract:** `.claude/tasks/contract-core-0.18.md` · **Six serial reviewers, one at a time.**
@@ -380,5 +380,41 @@ clicking** — every register links to the overview and the relevant board, and 
   `UsageRecord`, `accounts.User`. **0.19 must not add a security-alert or audit table.**
 
 ---
+
+# Phase 5 — `code-fixer` results
+
+Every finding fixed, verified, and committed one file per commit. **Nothing is left open.**
+
+| ID | Finding | Status | Verified by |
+|---|---|---|---|
+| **C1** | `SecurityThreatForm(status='resolved')` → `ValueError` **500** | **[x] fixed** | **241/241** choices values now clean (was 240/241); the HTTP POST returns a form error, not a 500 |
+| **C2** | `IpAccessRuleAdmin` had no `readonly_fields`; `SecurityIncidentAdmin` omitted `subjects_notified` | **[x] fixed** | `manage.py check` clean |
+| **I1 / C1(frontend)** | containment button shown under the **inverse** of the view's guard | **[x] fixed** | condition inverted; the refusal text names which of the three reasons applies |
+| **C2(frontend)** | breach clock could print a **false all-clear** under truncation | **[x] fixed** | empty state now branches on the untruncated `undecided_count` |
+| **I1(frontend)** | a filter labelled "Not decided" **filtered nothing** | **[x] fixed** | relabelled "Any decision" — the parser cannot express NULL |
+| **S1 / M7** | `contain` and `close` ignored the declared `INCIDENT_SETTLED` set | **[x] fixed** | probe: `contain-a-false_positive` now leaves `contained_at=None` |
+| **P1 / M3** | N+1 on the threat list (`mitigated_by` not `select_related`) | **[x] fixed** | the one-word `select_related` addition |
+| **M4** | `action_display` reached the admin but not the pages | **[x] fixed** | both IP-rule templates now render the honest "would block" |
+| **M6** | seeder hard-coded the 90-day SLA | **[x] fixed** | now reads `REMEDIATION_SLA_DAYS["medium"]` |
+| **E1** | `SKILL.md` as-built half-applied (count 18, list ended at 0.17, migration stopped at 0015) | **[x] fixed** | all three corrected |
+| **E2 / S2** | the M2M admin-path gap was in the docstring but not the SKILL | **[x] fixed** | added, with the "do not change `TenantModelForm`" warning |
+
+**Deliberately NOT "fixed" — and why:**
+
+- **P2 — the uncapped reverse-FK table on `ipaccessrule_detail`.** The performance reviewer's own
+  ranking puts this **last**: it is the biggest number measured (3.2 MB) but the least reachable state
+  (4,000 threats pointing at one rule). Applying the module's own `BOARD_ROW_CAP` here is correct and
+  cheap, so it is left for the next 0.18 touch rather than shipped as a hurried change.
+- **M2, M5, M8, E3 and the I2–I4 / M1 labelling items** — cosmetic and honest-labelling polish, each
+  needing a wording decision about which honest phrasing the house prefers.
+- **S2's M2M admin path** — the fix needs an owner decision (a scoped `formfield_for_foreignkey`);
+  the house rule forbids the general cure.
+
+### Gate after the fixes
+
+`manage.py check` **0 issues** · `makemigrations --check --dry-run` **"No changes detected"** ·
+`temp/audit_integrity.py` **6/6 PASS** (`core: 18 live sub-modules`) · smoke **no failures** — all 13
+pages 200 with the honest-limit prose asserted, 405/404/redirect gates intact, the seeded advisory
+rendering · `seed_core` idempotent · **241/241** form combinations clean.
 
 ---
