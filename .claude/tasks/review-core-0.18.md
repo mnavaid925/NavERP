@@ -150,3 +150,133 @@ zero CSRF gaps, zero secret exposure, and the illegal-transition guards hold for
 **No Critical security finding.** S1 is the one item to fix before ship.
 
 ---
+
+## Pass 3 — `performance-reviewer`
+
+**Method:** static read **plus real measurement** in a throwaway MariaDB database
+(`nav_erp_perfprobe`, migrated `core.0001`–`0016`, seeded to 4,000 threats / 2,000 findings / 1,500
+incidents / 500 rules / 400 alert events, then **dropped**). Query counts via `connection.queries`,
+index behaviour via `EXPLAIN`. The live `nav_erp` was read-only throughout and verified unchanged
+afterwards (0 threats / 2 findings / 0 incidents / 0 rules).
+
+### Critical
+
+- **P1 — N+1 on the threat list: `mitigated_by` is not `select_related`. Measured.**
+  `templates/core/securitythreat/list.html:79` reads `{{ obj.mitigated_by.cidr }}` inside the row loop,
+  but the list queryset (`views/Security.py:260-261`) selects only `service`, `alert_event`,
+  `rate_limit_policy`. **Measured 10 queries → 25 queries (+15 = exactly one per rendered row)** once
+  rows have a mitigation. The 15 extra are `SELECT … FROM core_ipaccessrule WHERE id = ?` — the same
+  shape 0.17 measured at 201 queries. *Fix:* add `"mitigated_by"` to the existing `select_related`.
+  Caveat stated by the reviewer: ~5 ms at current volumes — Critical because it is an unambiguous
+  N+1 on the sub-module's most-visited page, not because of its cost today.
+
+- **P2 — `ipaccessrule_detail` renders an uncapped, unpaginated reverse-FK table. Measured.**
+  `templates/core/ipaccessrule/detail.html:81` loops `obj.mitigated_threats.all` with no cap, ordering,
+  pagination or "showing N of M" line, while the view correctly passes only the `mitigated_threat_count`.
+  **Measured: 11 queries flat (so NOT an N+1) but 634 KB → 3.2 MB of HTML and a 0.28 s query at 4,000
+  linked rows.** It is the one place 0.18 ignores the module's own `BOARD_ROW_CAP = 200` + `open_total`
+  convention, which it applies correctly in three other places.
+
+### Important
+
+- **P4 — the breach-clock board re-scans the open-incident set with ~7 count round-trips on every
+  page load.** The reviewer ranks it the item whose cost actually **grows with the business**, since
+  the set grows with every incident recorded — and the cheapest to fix.
+
+### Verified clean (measured, not assumed)
+
+- **No Python-side aggregates.** `_grouped_counts`, `_choice_rows`, `top_source_ips` and
+  `failed_addresses` (with `Count(distinct=True, filter=…)`) all group and count in SQL. **The 0.17
+  rule-detail defect is genuinely not repeated.**
+- **All 12 indexes in `core.0016` are used, and no ordered list/board query filesorts.** `EXPLAIN` on 15
+  hot querysets shows `Using where` / `Using index condition` throughout; the ASC "oldest" query reads
+  `vulfind_tenant_firstseen_idx` backwards. **No index is missing that a hot queryset needs.**
+- **No other FK-dropdown N+1.** `SecurityThreatForm.alert_event` carries `select_related("rule")[:200]`
+  and is the only reachable FK-dereferencing `__str__` in the sub-module. Every other `__str__` an 0.18
+  dropdown can reach reads only its own row.
+- **Pagination present** on all four registers via `crud_list` → `paginate(per_page=15)`; page 2 clean.
+- **The M2M is correctly tenant-scoped** — the reviewer initially suspected `ModelMultipleChoiceField`
+  escaped `TenantModelForm`'s scoping loop, then checked the compiled SQL:
+  `WHERE core_servicecomponent.tenant_id = 1`. Recorded as a decision, not a defect.
+
+### Reviewer judgement — proportionality stated, not inflated
+
+The largest single number measured anywhere in 0.18 is **0.28 s**, and it sits on P2's unreachable
+state. At 4,000 threats a normal register page is **10 queries / ~16 ms of SQL**. **None of this is a
+crisis.** Ranked by what will actually bite: **fix P1 regardless** (one word, cheap correctness);
+**P4 is the one whose cost grows with the business**; **P2 is the biggest number but the least
+reachable** — guard it with the module's own cap and forget it.
+
+---
+
+## Pass 4 — `frontend-reviewer`
+
+**Verified clean (checked, not assumed):** `badge-green` **zero occurrences across all 17 files** — the
+zero rule holds on every board and every register row. No `badge-warning`/`badge-danger`/`badge-purple`;
+only the six classes that actually exist in `theme.css:245-416`. No `|slugify`; all three FK dropdowns
+use `|stringformat:"d"`. All 5 `{# … #}` comments single-line (L2 clean). **Every context variable in
+all 17 templates cross-checks against a real view context key — no L7/L8 blank regions.** All 38 URL
+names reverse. Every badge ladder keys off the stored value with an `{% else %}` fallback. NULL
+discipline is exemplary. CRUD complete on all four registers. The "recorded/declared/written down"
+vocabulary is applied consistently.
+
+### Critical
+
+- **C1 — the "Record containment" button is shown under the exact INVERSE of the view's guard.**
+  `securityincident/detail.html:172` → `{% if obj.status == "detected" or obj.contained_at %}`, but
+  `securityincident_contain` (`views/Security.py:738-747`) **refuses** when `status == "detected"`
+  ("Triage it first") and refuses when `contained_at is not None`. It accepts only in the template's
+  `{% else %}` branch. Every case is inverted: `detected`+no-stamp shows the button and is refused;
+  `triaged`+no-stamp hides it and would be accepted; `contained`+stamped shows it and is refused. The
+  template's own comment at lines 167-169 claims each button appears only when the view would accept —
+  false for this one. **Consequence: the first step of the NIST response lifecycle cannot be recorded
+  through the UI at all, and the page asserts "one was already recorded" about an incident that was
+  never contained.** This duplicates the code-reviewer's **I1** — same defect, one ID. The other five
+  lifecycle buttons were each checked against their guards and are **correct**; this is the sole
+  inversion.
+
+- **C2 — the breach clock can print a false all-clear directly beneath its own counter.**
+  `breachclock.html:90-104` builds `undecided` from `clocks`, which comes from
+  `open_incidents = list(open_qs...)[:BOARD_ROW_CAP]`. When the open set exceeds the 200-row cap, the
+  undecided table is computed over the **truncated** list, so the page can say *"Every open incident has
+  a decision recorded"* immediately under a counter reading 50. On the one board whose entire purpose is
+  the undecided state, that is a confident, wrong statement about a security record. **Fix:** compute
+  `undecided`/`undecided_count` over the **untruncated** queryset (as the count already is) and print
+  the cap/truncation the way the other three boards do.
+
+### Important
+
+- **I1 — a filter labelled "Not decided" filters nothing.** Same root cause as C2: the blank option
+  means "no filter" while the label reads as "show me the undecided ones". A third route to the same
+  false all-clear. **Fix:** either relabel the blank option "Any", or make the view express the NULL
+  case it currently cannot.
+- **I2–I4 — honest-labelling repairs**, not broken behaviour: labels that read as enforcement rather
+  than as recorded intent, and one empty-state that does not repeat "this is not an all-clear".
+- **M1 —** `breachclock.html` has a resolved-status branch the list ladder has and the board lacks.
+
+### Minor
+
+- **M2 — the SLA badges print raw dict KEYS instead of display labels** (`vulnerabilityfinding/list.html:73-76`,
+  `vulnerabilityboard.html:59-62`): they read `none — no SLA for this band`, `low — 180 days`, where
+  every other vocabulary in the module renders its `get_*_display()`. `none` next to `critical` reads
+  oddly.
+- **M3 —** the same `mitigated_by` N+1 as the performance pass's **P1** (template-side observation).
+- **M4 —** the list's "Observed" column header lacks the "declared by hand" qualifier the detail page
+  gives the same value. Cosmetic — but the header is what is read without the banner.
+
+### Reviewer verdict
+
+**On the central requirement, this module passes convincingly.** All 17 pages open with a banner
+stating in plain language that NavERP detects, blocks, scans, enforces and notifies nothing; every
+empty state says "This is not an all-clear" and explains that emptiness means *nobody wrote anything
+down* rather than *nothing is wrong*; the zero rule holds without exception; the vocabulary is
+"record", "declare", "write down" everywhere, never "detect" or "block". **A tenant admin would get an
+accurate picture: a set of registers somebody keeps by hand.** That discipline is the hardest part of
+this build and it is done properly.
+
+**But an admin working the incident register would be actively misled in three places** — C1 (the
+inverted button), C2 (truncation → false all-clear) and I1 (a filter that promises what it cannot do).
+Each produces a *confident, wrong statement about the state of a security record*, which is the one
+failure mode this module must not have.
+
+---
