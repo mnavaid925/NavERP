@@ -29,6 +29,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.core.views._common import *  # noqa: F401,F403
+from apps.core.crud import paginate
 from apps.core.utils import write_audit_log
 from apps.core.models import (
     AlertEvent,
@@ -537,12 +538,18 @@ def featurerollout_delete(request, pk):
 #: no health, no security, no backup and no config logic, so none of these pages can drift from the
 #: one that owns the answer. Each target is a distinct page — two labels over one page would make
 #: "which page is this?" unanswerable and light the sidebar highlight twice.
+#:
+#: **`settings_overview` has an UNDERSCORE.** The template file is `settingsoverview.html` and the
+#: sidebar label reads "Settings overview", so `settingsoverview` is the natural thing to type — and
+#: it is not a route. It was a `NoReverseMatch` at render time, i.e. a 500 on the command centre, and
+#: `manage.py check` stayed clean throughout: caught only by the content smoke, which is the L8
+#: point exactly. Every name below is one `apps/core/urls.py` actually declares.
 ADMIN_BOARD_LINKS = [
     ("System health", "core:health_board", "activity"),
     ("Security overview", "core:security_overview", "shield"),
     ("Monitoring overview", "core:monitoring_overview", "gauge"),
     ("Backup & recovery", "core:backup_overview", "database-backup"),
-    ("Settings overview", "core:settingsoverview", "settings"),
+    ("Settings overview", "core:settings_overview", "settings"),
     ("Integrations", "core:integration_overview", "plug"),
     ("Vulnerabilities", "core:vulnerability_board", "bug"),
     ("Capacity", "core:capacity_board", "trending-up"),
@@ -601,12 +608,16 @@ def admin_board(request):
     open_vulns = VulnerabilityFinding.objects.filter(tenant=tenant, status="open").count()
     setting_count = SettingValue.objects.filter(tenant=tenant).count()
 
+    # **The `tone` values are the stat-icon palette, verified against theme.css: blue, green, orange,
+    # purple, slate and red. There is no `amber` and no `yellow`** — a tone outside that set renders an
+    # unstyled square rather than an error, so the list is kept to the six that exist. `orange` carries
+    # the warn colour, which is the nearest honest match for an "open runs" tile.
     tiles = [
         _tile("jobs", "Declared jobs", job_total,
               "%d never run" % job_unrun if job_unrun else "all have a recorded run",
               "core:jobdefinition_list", "calendar-clock", "blue"),
         _tile("runs", "Open runs", open_runs,
-              "queued or running — nothing executes them", "core:jobrun_list", "play", "amber"),
+              "queued or running — nothing executes them", "core:jobrun_list", "play", "orange"),
         _tile("maintenance", "Live windows", window_live,
               "%d scheduled ahead" % window_scheduled,
               "core:maintenancewindow_list", "wrench", "orange"),
@@ -618,9 +629,9 @@ def admin_board(request):
         _tile("incidents", "Open incidents", open_incidents, "unresolved",
               "core:incident_list", "siren", "red"),
         _tile("vulns", "Open vulnerabilities", open_vulns, "status open",
-              "core:vulnerabilityfinding_list", "bug", "amber"),
+              "core:vulnerabilityfinding_list", "bug", "orange"),
         _tile("settings", "Configured settings", setting_count, "per-tenant overrides",
-              "core:settingsoverview", "settings", "slate"),
+              "core:settings_overview", "settings", "slate"),
     ]
 
     # ---- the attention strip: the numbers an admin opens this page for, in one place.
