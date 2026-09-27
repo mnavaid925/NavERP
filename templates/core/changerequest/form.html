@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Raise a change{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit change{% else %}Raise a change{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:changerequest_list' %}">Changes</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This form records a change; it does not
+      schedule, build, deploy or roll back one.</strong> Submitting it asks for a decision. Approving it records
+      that a decision was made. Neither touches a running system, because this repository has no pipeline.</p>
+    <p class="text-muted"><strong>What is deliberately not on this form:</strong>
+      <code>requestor</code>, <code>approved_by</code>, <code>requested_at</code>, <code>approved_at</code>,
+      <code>implemented_at</code>, <code>rollback_reason</code> and <code>rollback_at</code>. The first two are
+      stamped from the acting user by the Submit and Approve actions, so a change can never be raised or
+      approved in somebody else's name &mdash; and an approval is precisely the act an audit exists to
+      attribute. The rest are evidence stamps written by the action that performs the transition.</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What is changing</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.title %}
+          {% include "partials/form_field.html" with field=form.summary %}
+          {% include "partials/form_field.html" with field=form.change_type %}
+          {% include "partials/form_field.html" with field=form.environment %}
+        </div>
+        <p class="text-muted">The environment is 0.16's provisioned instance, referenced rather than re-declared:
+          dev, test, staging and the Freshservice-style sandbox all live there.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Risk, impact &amp; flow</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.risk_level %}
+          {% include "partials/form_field.html" with field=form.impact_level %}
+          {% include "partials/form_field.html" with field=form.status %}
+          {% include "partials/form_field.html" with field=form.requested_at %}
+          {% include "partials/form_field.html" with field=form.downtime_required %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <p class="text-muted">Risk and impact are two questions, not one severity: risk is how likely this is to
+          go wrong, impact is what it does to users if it does. This vocabulary is deliberately NOT the alert
+          severity list &mdash; a firing severity and an assessed change risk are different facts that happen to
+          share three words.</p>
+        <p class="text-muted">Leave <code>status</code> at Draft. Submitting is a separate action on the change's
+          own page, and it is what stamps the requestor and the request time.</p>
+      </div>
+    </div>
+
+    <div class="page-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="save"></i> {% if is_edit %}Save changes{% else %}Record change{% endif %}</button>
+      <a href="{% url 'core:changerequest_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
