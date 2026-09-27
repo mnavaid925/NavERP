@@ -123,8 +123,8 @@
               </td>
               <td>
                 <div class="table-actions">
-                  <a href="{% url 'tenants:usagequota_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'tenants:usagequota_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <a href="{% url 'tenants:usagequota_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'tenants:usagequota_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
                   {% comment %}
                     @require_POST, so a real form. Shown ONLY when it would actually do
                     something — the verb's idempotence guard refuses a quota that already
@@ -132,15 +132,17 @@
                     that bounces. The confirm says the recorded policy is NOT carried out.
                   {% endcomment %}
                   {% if not obj.breached_at %}
-                    <form method="post" action="{% url 'tenants:usagequota_mark_breached' obj.pk %}" onsubmit="return confirm('Mark this quota as breached? This writes a timestamp and an audit row. It does NOT alert anyone, compute any charge, or block any request.');">
-                      {% csrf_token %}
-                      <button class="btn-icon" title="Mark breached"><i data-lucide="alert-triangle"></i></button>
-                    </form>
+                    {% url 'tenants:usagequota_mark_breached' obj.pk as breach_url %}
+                    {% include "partials/confirm_button.html" with
+                        action=breach_url
+                        confirm_message="Mark this quota as breached? This writes a timestamp and an audit row. It does NOT alert anyone, compute any charge, or block any request."
+                        label="Mark breached" icon="alert-triangle" %}
                   {% endif %}
-                  <form method="post" action="{% url 'tenants:usagequota_delete' obj.pk %}" onsubmit="return confirm('Delete this quota? The recorded ceiling is removed; the usage already consumed is not.');">
-                    {% csrf_token %}
-                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% url 'tenants:usagequota_delete' obj.pk as delete_url %}
+                  {% include "partials/confirm_button.html" with
+                      action=delete_url
+                      confirm_message="Delete this quota? The recorded ceiling is removed; the usage already consumed is not."
+                      label="Delete" icon="trash-2" variant="danger" %}
                 </div>
               </td>
             </tr>
