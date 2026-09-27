@@ -773,3 +773,127 @@ def mon_rule_payload():
         "category": "capacity", "no_data_action": "ignore", "service": "",
         "notification_rule": "", "notes": "", "is_active": "on",
     }
+
+
+# ================= 0.18 Threat Protection fixtures (appended 2026-09-27) =================
+# APPEND-ONLY, per the L43 discipline. Everything above this line belongs to 0.9-0.17 and is
+# never rewritten.
+#
+# `sec_*` prefix, NOT `security_*`: `apps/core/tests/test_security.py` already exists and is a
+# PRE-EXISTING generic CSRF/IDOR file from the 0.9 era, unrelated to this sub-module. A
+# `security_` prefix would read as belonging to it.
+#
+# The seeder creates ZERO SecurityThreat / SecurityIncident / IpAccessRule rows (the L52 ruling),
+# so every fixture here creates exactly what it needs, explicitly.
+
+
+@pytest.fixture
+def sec_rule_a(db, tenant_a):
+    """A tenant-A allow/deny rule. `reason` is required by the model's clean()."""
+    from apps.core.models import IpAccessRule
+    return IpAccessRule.objects.create(
+        tenant=tenant_a, cidr="203.0.113.0/24", direction="deny", action="block",
+        scope="workspace", reason="Scanning activity seen from this block",
+        source="manual", is_active=True)
+
+
+@pytest.fixture
+def sec_rule_b(db, tenant_b):
+    """A tenant-B rule, for the cross-tenant lane."""
+    from apps.core.models import IpAccessRule
+    return IpAccessRule.objects.create(
+        tenant=tenant_b, cidr="198.51.100.7", direction="allow", reason="Corp egress",
+        source="manual")
+
+
+@pytest.fixture
+def sec_threat_new_a(db, tenant_a, sec_rule_a):
+    """An OPEN tenant-A finding in its initial `new` state, ready for the triage action."""
+    from apps.core.models import SecurityThreat
+    return SecurityThreat.objects.create(
+        tenant=tenant_a, title="Brute force against the admin account",
+        threat_type="brute_force", status="new", severity="warning",
+        source_ip="203.0.113.7", occurrence_count=1, mitigated_by=sec_rule_a,
+        summary="Several hundred failures from one address.")
+
+
+@pytest.fixture
+def sec_threat_b(db, tenant_b):
+    """A tenant-B finding, for the cross-tenant lane."""
+    from apps.core.models import SecurityThreat
+    return SecurityThreat.objects.create(
+        tenant=tenant_b, title="Globex-only finding", threat_type="phishing", status="new")
+
+
+@pytest.fixture
+def sec_finding_a(db, tenant_a):
+    """An OPEN tenant-A advisory WITH a fix, so `fixed` is a legal transition."""
+    from apps.core.models import VulnerabilityFinding
+    from django.utils import timezone
+    return VulnerabilityFinding.objects.create(
+        tenant=tenant_a, title="Example dependency advisory", advisory_id="EXAMPLE-TEST-1",
+        finding_source="dependency", package_name="example", installed_version="1.0.0",
+        severity="high", cvss_score="7.5", fix_available="yes", fixed_in_version="1.0.1",
+        status="open", first_seen_at=timezone.now())
+
+
+@pytest.fixture
+def sec_finding_no_fix_a(db, tenant_a):
+    """An advisory with NO fix — the fixture that makes the `fixed` refusal provable."""
+    from apps.core.models import VulnerabilityFinding
+    from django.utils import timezone
+    return VulnerabilityFinding.objects.create(
+        tenant=tenant_a, title="No fix published", advisory_id="EXAMPLE-TEST-2",
+        finding_source="application", severity="low", fix_available="no", status="open",
+        first_seen_at=timezone.now())
+
+
+@pytest.fixture
+def sec_incident_open_a(db, tenant_a):
+    """An OPEN tenant-A incident with notifiability UNDECIDED — the state the 72h clock exists
+    to pressure, and the one `close` must refuse."""
+    from apps.core.models import SecurityIncident
+    from django.utils import timezone
+    return SecurityIncident.objects.create(
+        tenant=tenant_a, title="Possible unauthorised export", incident_class="data_breach",
+        status="triaged", severity="critical", is_notifiable=None,
+        subject_exemption="none", discovered_at=timezone.now())
+
+
+@pytest.fixture
+def sec_incident_b(db, tenant_b):
+    """A tenant-B incident, for the cross-tenant lane."""
+    from apps.core.models import SecurityIncident
+    from django.utils import timezone
+    return SecurityIncident.objects.create(
+        tenant=tenant_b, title="Globex-only incident", status="triage", is_notifiable=True,
+        subject_exemption="none", discovered_at=timezone.now())
+
+
+@pytest.fixture
+def sec_threat_payload():
+    """A minimal VALID create payload for `SecurityThreatForm`."""
+    from django.utils import timezone
+    return {
+        "title": "Suspicious API activity", "threat_type": "suspicious_api_activity",
+        "severity": "warning", "status": "new", "occurrence_count": 1,
+        "detected_at": timezone.now().strftime("%Y-%m-%dT%H:%M"),
+        "mitre_technique": "", "mitre_tactic": "", "rule_reference": "", "waf_action": "",
+        "defense_mode": "", "source_ip": "", "summary": "", "detail": "", "evidence": "",
+        "notes": "",
+    }
+
+
+@pytest.fixture
+def sec_incident_payload():
+    """A minimal VALID create payload for `SecurityIncidentForm`."""
+    from django.utils import timezone
+    return {
+        "title": "Credential stuffing wave", "incident_class": "security_incident",
+        "status": "detected", "severity": "warning", "is_notifiable": "unknown",
+        "subject_exemption": "none", "discovered_at": timezone.now().strftime("%Y-%m-%dT%H:%M"),
+        "notifiable_reason": "", "authority_reference": "", "dpo_contact": "",
+        "likely_consequences": "", "measures_taken": "", "measures_proposed": "",
+        "forensic_log": "", "root_cause": "", "lessons_learned": "", "evidence": "", "notes": "",
+    }
+
