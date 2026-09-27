@@ -107,6 +107,22 @@ class PlanEntitlement(models.Model):
         privilege" is shippable.
         """
         super().clean()
+        # (d) Tenant consistency on the override. The form scopes the `subscription` dropdown, so a
+        # crafted POST is already rejected; this closes the UNSCOPED Django admin, which is the only
+        # remaining path. It matters here because the detail page's whole read-order argument
+        # ([RULING] 3) assumes an override's subscription lives in the same workspace as the grant.
+        #
+        # `Subscription` is referenced through the models PACKAGE, not imported from
+        # `apps.tenants.models.Subscription`: both are in the same package, and `_base` does not
+        # re-export it, so the name is genuinely out of scope here.
+        if self.tenant_id and self.subscription_id:
+            from apps.tenants.models import Subscription as _Subscription
+            if not _Subscription.objects.filter(
+                pk=self.subscription_id, tenant_id=self.tenant_id
+            ).exists():
+                raise ValidationError({
+                    "subscription": "That subscription belongs to another workspace.",
+                })
         if self.subscription_id is None and self.tenant_id and self.plan and self.feature_id:
             clash = PlanEntitlement.objects.filter(
                 tenant_id=self.tenant_id, plan=self.plan, feature_id=self.feature_id,
