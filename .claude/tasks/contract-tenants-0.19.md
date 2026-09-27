@@ -192,6 +192,30 @@ automatic renewal execution · expiry email delivery = **10**. The research's "N
 "nine" into shipped prose is the exact confident-prose failure L52 exists to stop. All ten are pinned
 verbatim in §5.4 so the pages cannot drift apart.
 
+### [RULING] 11 — §1.4 is WRONG about `LicenseAssignment.notes`; the MODEL gains the column.
+
+Found by the build agent, which reported it rather than building around it (the right call). This
+contract contradicts **itself**: §1.4's field table gives `LicenseAssignment` **no `notes` column**,
+while §2.4 pins `Meta.fields = [..., "subscription", "notes"]` and §3.5 pins
+`search_fields=["module_slug", "notes"]`. That is not cosmetic — a `ModelForm` naming an undeclared
+field raises `FieldError: Unknown field(s) (notes)` at **class-definition time**, so every
+licenseassignment page would fail at import, and `apply_search` would raise on the list.
+
+**Ruling: the MODEL was the thing that was wrong; the column is added.** Three independent reasons:
+
+1. Both upstream documents list it — `research-tenants-0.19.md:114` and `todo.md:85` both name `notes`
+   for `LicenseAssignment`. §1.4 dropped it to keep a tidy **"4 × 12 = 48 columns"** total, and a
+   column count is not a schema reason.
+2. The other three 0.19 models **all** carry `notes`. A seat register is the row an operator most needs
+   to annotate ("this seat is shared with the Acme pilot"), and it would be the only one without it.
+3. The alternative — stripping `notes` from the form and the search — makes §2.4 and §3.5 wrong instead,
+   and silently drops a field two upstream documents asked for.
+
+**Consequence:** `LicenseAssignment` is **13 declared fields (14 concrete, with `id`)**, not 12, and the
+"4 × 12 = 48" total becomes **49 declared columns + 4 implicit `id`s**. The `status` / `reclaimed_on` /
+`reclaim_reason` exclusions are unaffected — those are separate columns with separate reasons. **This
+ruling is binding on the migration, the tests and the review.**
+
 ### Checked and CLEARED (do not re-litigate)
 
 - **`max_length` vs the longest CHOICES value** — the `fields.E009` class of bug that blocked 0.18's
