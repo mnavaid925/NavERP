@@ -342,6 +342,11 @@ class SecurityThreat(TenantConsistentMixin, models.Model):
     resolved_at = models.DateTimeField(null=True, blank=True)
     resolved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
                                     blank=True, related_name="+")
+    #: The analyst's closing words, written by the POST-only `_resolve` action (never a form field).
+    #: The 255 width is deliberate and NOT a truncation accident: the action truncates to it
+    #: before writing, because an over-long value raises `DataError` inside the driver and the
+    #: operator sees a 500 for a write that already half-happened.
+    resolution_note = models.CharField(max_length=255, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -599,7 +604,12 @@ class SecurityIncident(TenantConsistentMixin, models.Model):
     title = models.CharField(max_length=200)
     incident_class = models.CharField(max_length=20, choices=INCIDENT_CLASS_CHOICES,
                                       default="security_incident")
-    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="detected")
+    #: 14, not the 12 the contract originally pinned: `STATUS_CHOICES` carries `"false_positive"`,
+    #: which is 14 characters, and a `max_length` shorter than the longest choice value is
+    #: `fields.E009` — it blocks `manage.py check` and every migration, and it would truncate
+    #: the one status that means "we decided this was not an incident". `SecurityThreat.status`
+    #: is 14 for exactly the same reason.
+    status = models.CharField(max_length=14, choices=STATUS_CHOICES, default="detected")
     severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default="warning")
     #: The anchor for every legal clock on this row. A **form field**, because awareness
     #: genuinely is a human judgement and a discovered date that silently moves is worse
