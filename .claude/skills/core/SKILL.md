@@ -19,7 +19,7 @@ reference for a foundation app with flat entity files. Read them before inventin
 
 ## As-built
 
-**17 of 21 sub-modules are live** (`LIVE_LINKS` in `apps/core/navigation.py` is the source of truth):
+**18 of 21 sub-modules are live** (`LIVE_LINKS` in `apps/core/navigation.py` is the source of truth):
 
 `0.1` Tenant & Subscription · `0.2` Identity & Access Management · `0.3` RBAC & Permissions ·
 `0.4` Authentication & SSO · `0.5` User & Organization · `0.6` Module Administration & Access Scope ·
@@ -29,7 +29,7 @@ reference for a foundation app with flat entity files. Read them before inventin
 Reference Configuration · `0.15` Localization & Regional Settings ·
 `0.16` Backup, Recovery & Data Lifecycle · `0.17` Monitoring, Logging & Observability.
 
-**Unbuilt: `0.18`–`0.21`** (Threat Protection, License Administration, Admin Console,
+**Unbuilt: `0.19`–`0.21`** (License Administration, Admin Console,
 Compliance & Governance). They render as roadmap pills.
 
 Migrations: `core.0005`–`core.0015`, `accounts.0003`–`accounts.0004`, `tenants.0004`.
@@ -208,11 +208,58 @@ changing the shared base would put committed tests in three other apps at risk.
 path**. `TenantModelForm` narrows M2M querysets, so the form path is covered. Same posture as 0.16's
 escalated C7. **Do not change `TenantModelForm`** — it would break committed tests in three apps.
 
-**Flags for the next sub-modules.** **0.18** grows through exactly one value, `AlertRule.category ==
-"security"`, and must **not** add category-scoped columns to `AlertRule` (`threat_level`, `ip_address`,
-`cvss_score`) — those belong on 0.18 models that FK `AlertRule`/`ServiceComponent` if they want
-correlation. **0.20** owns scheduling: `AlertRule.frequency` reuses the 0.13 vocabulary and is a
+**Flags for the next sub-modules.** **0.20** owns scheduling: `AlertRule.frequency` reuses the 0.13 vocabulary and is a
 recorded intention nothing runs, so 0.20 will add a `schedule` FK alongside it or migrate the column.
+
+## 0.18 — Threat Protection & Security Operations
+
+Migration **core.0016**. Four models in **`models/Security.py`** — `IpAccessRule`, `SecurityThreat`,
+`VulnerabilityFinding`, `SecurityIncident`, each `TenantConsistentMixin`. Seeder block
+`seed_core._seed_security(tenant)`.
+
+**The 0.18 seam, and it is one enum value.** `AlertRule.CATEGORY_CHOICES` already carried
+`("security", "Security")` when 0.17 shipped, and `apps/core/tests/test_monitoring_models.py::
+test_monitoring_security_is_the_018_seam` names it as the 0.18 seam. So **no new column on any
+0.17 model** (no `threat_level`, `ip_address`, `cvss_score`, `mitre_technique` on `AlertRule` /
+`AlertEvent` / `Incident` / `ServiceComponent`), **no `SecurityAlert` table**, **no second incident
+lifecycle** and **no second board**. Bullet 5 is served by *writing into* 0.17's tables. Migration
+`0016` is four `CreateModel`s and **zero `AddField`** — the schema-level proof of the same thing.
+
+**The rate-limit seam.** `core.RateLimitPolicy` (0.13) keeps the limit; 0.18 FKs it
+(`SecurityThreat.rate_limit_policy`, `IpAccessRule.rate_limit_policy`) and **never edits
+`Integration.py`**. `rule = configuration, event = occurrence` — the split 0.17 already made.
+
+**Routes** — 33 `core:` names: five literal boards/overview first (first-match-wins), then four
+`crud()` groups, then the eight POST-only action paths declared after the group that owns them.
+**`core:rate_limit_detail` DOES NOT EXIST** — link a policy with `core:rate_limit_edit` + pk. That is
+a hard 500, not a soft link break.
+
+**Templates** — `templates/core/<entity>/{list,detail,form}.html` for the four entities, plus five
+standalone pages flat at the app root: `securityoverview.html`, `threatboard.html`,
+`vulnerabilityboard.html`, `breachclock.html`, `bruteforceboard.html`.
+
+**Two severity lists, and only the second is a duplication bug.** `SecurityThreat` and
+`SecurityIncident` reuse `AlertRule.SEVERITY_CHOICES` **by reference** — identity, not equality; the
+tests assert `is`. `VulnerabilityFinding.severity` is a **CVSS band** and deliberately is NOT that
+list: a firing severity and a CVSS band are different facts. Do not "fix" it by pointing the finding
+at the alert vocabulary.
+
+**`SecurityIncident.regulatory_deadline` is a `@property`, never a column** — GDPR Art. 33(1)'s
+72 hours derived from `discovered_at`, so the anchor and the deadline cannot drift. Displayed, never
+acted on: no scheduler, and NavERP files nothing with any authority.
+
+**The L52 seeder ruling is total and must not be "fixed".** `_seed_security` seeds exactly ONE row
+(a `VulnerabilityFinding`, whose `evidence` states NavERP ran no scanner) and creates **zero**
+`SecurityThreat`, `SecurityIncident` and `IpAccessRule` rows. A seeded incident would start a live
+72-hour Art. 33 clock against a breach that never happened, and a past `discovered_at` renders as
+**overdue** on first load — a demo database accusing its own operator of an unreported breach. All
+three are in `temp/audit_integrity.py`'s `KNOWN_OK` with that reason printed. The empty registers and
+their boards are the truth about a system that detects, blocks and files nothing; a test that finds
+zero of them is correct, not broken.
+
+**Honest prose is enforced, not optional.** `SECURITY_NOTES` in `views/Security.py` is printed
+verbatim by the overview, all four boards and all sixteen register pages, so a page and its board can
+never disagree about what this application can and cannot do.
 
 ## Multi-tenancy (mandatory)
 
