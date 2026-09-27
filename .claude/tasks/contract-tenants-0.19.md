@@ -700,9 +700,18 @@ is literal `True`/`False` per [RULING] 6, and the template tests
 `entitlementfeature_create` → `crud_create(request, form_class=EntitlementFeatureForm,
 template="tenants/entitlementfeature/form.html", success_url="tenants:entitlementfeature_list")`.
 
-`entitlementfeature_detail(request, pk)` → `crud_detail(request, model=EntitlementFeature, pk=pk,
-template="tenants/entitlementfeature/detail.html", extra_context={"entitlements": …})` where
-`entitlements` is `obj.plan_entitlements.select_related("subscription").order_by("plan", "feature__code")[:50]`
+> **[RULING] 10 (Phase 4, M5) — the four `_detail` views call `render()` DIRECTLY; they do NOT
+> use `crud_detail`.** This supersedes the `crud_detail(...)` shape written into the first draft of
+> this contract at the four `*_detail` lines below. `crud_detail` re-fetches the row by pk, and each of
+> these four pages must fetch the row exactly ONCE and reuse that instance for the page header, the
+> embedded list and the aggregate — that is the `usagerecord_detail` house pattern. `crud_detail` is
+> also **not exported by `views/_common.py`**; calling it raised `AttributeError`, which was the
+> Phase 3.5 500 the smoke test caught. The `crud_create` / `crud_edit` / `crud_delete` lines in this
+> contract are unaffected and still stand.
+
+`entitlementfeature_detail(request, pk)` → **`render(request, "tenants/entitlementfeature/detail.html", …)`**
+after one `get_object_or_404(EntitlementFeature, pk=pk, tenant=request.tenant)`, with
+`entitlements` = `obj.plan_entitlements.select_related("subscription").order_by("plan", "feature__code")[:50]`
 — **capped at 50**, the `subscription_detail` embedded-list precedent (`views/Subscription.py:37`,
 *"cap embedded list"*). Without the cap a feature granted on every plan across many subscriptions
 renders an unbounded page.
@@ -753,7 +762,8 @@ emptying the register (L11). Note `_is_pk_lookup("feature_id")` is `True` (it en
 `planentitlement_create` → `crud_create(…, form_class=PlanEntitlementForm, template=
 "tenants/planentitlement/form.html", success_url="tenants:planentitlement_list")`.
 
-`planentitlement_detail(request, pk)` → `crud_detail(…, extra_context={…})` with:
+`planentitlement_detail(request, pk)` → **direct `render()`** (see **[RULING] 10**) after ONE
+`get_object_or_404`, with:
 `"plan_grants"` = the same-feature plan-level rows (`subscription__isnull=True`, `.order_by("plan")[:50]`),
 `"overrides"` = the same-feature subscription-level rows (`.order_by("subscription_id")[:50]`), and
 `"overridden_features"` = a **single** dict of `feature_id → plan-grant value` built in the view. All
@@ -814,7 +824,8 @@ into the filter spec and silently break the dropdown.
 
 `usagequota_create` / `usagequota_edit` → `crud_create` / `crud_edit` on `UsageQuotaForm`, template
 `tenants/usagequota/form.html`, success `tenants:usagequota_list`.
-`usagequota_detail` → `crud_detail(…, extra_context={"consumption": …})` where `consumption` is the
+`usagequota_detail` → **direct `render()`** (see **[RULING] 10**) after ONE `get_object_or_404`,
+with `consumption` = the
 `{metric: Decimal}` map for **this** subscription, taken from `_quota_board` (§3.7) — reuse the helper,
 do not re-query. **Do not** add a `quota_board_url` key unless the template renders it; a key nothing
 reads is a defect (0.18 [RULING] 3).
@@ -875,8 +886,9 @@ second per-module switch — keep it derived and say why in the comment.)
 
 `licenseassignment_create` / `licenseassignment_edit` → `crud_create` / `crud_edit` on
 `LicenseAssignmentForm`, template `tenants/licenseassignment/form.html`, success
-`tenants:licenseassignment_list`. `licenseassignment_detail` → `crud_detail(…, extra_context={"seat_summary": …})`
-where `seat_summary` is the board's `{active, reclaimed, revoked, expired, total}` dict for **this
+`tenants:licenseassignment_list`. `licenseassignment_detail` → **direct `render()`** (see
+**[RULING] 10**) after ONE `get_object_or_404`, with `seat_summary` = the board's
+`{active, reclaimed, revoked, expired, total}` dict for **this
 tenant** (§3.7) — a real roll-up, not a tautological total.
 
 ### 3.6 The two verbs (both honest, both POST-only, both audited)
