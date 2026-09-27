@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% comment %}
+  0.19 — the seat register. Backing view: licenseassignment_list.
+
+  Context, and ONLY this: object_list, page_obj, q (crud_list) plus status_choices,
+  source_choices, user_choices, module_choices.
+
+  `user_choices` is a User QUERYSET (this tenant's users only — the superuser has
+  tenant=None by design and must never be offered as a seat holder), so the test is
+  `request.GET.user == u.pk|stringformat:"d"` — never |slugify.
+
+  `module_choices` is a ValuesListQuerySet, NOT objects: `module_slug` is a plain CharField,
+  so there is no object to render and the loop variable is the bare slug.
+
+  EXPIRED IS DERIVED, NOT STORED. `obj.is_expired` is a @property over `expires_on`; nothing
+  ever writes status="expired". The table therefore shows the stored status AND, separately,
+  a derived Expired marker — two different facts, deliberately not conflated.
+{% endcomment %}
+{% block title %}Seats{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Seats</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">&rsaquo;</span><span>Licensing</span><span class="sep">&rsaquo;</span><span>Seats</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:renewal_board' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Renewal board</a>
+      <a href="{% url 'tenants:licenseassignment_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Seat</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Who holds what</h2>
+      <span class="badge badge-info">A register, not a switch</span>
+    </div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search module, notes&hellip;">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" class="form-select" aria-label="Source">
+            <option value="">Any source</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="user" class="form-select" aria-label="Holder">
+            <option value="">All holders</option>
+            {% for u in user_choices %}
+              <option value="{{ u.pk }}" {% if request.GET.user == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="module" class="form-select" aria-label="Module">
+            <option value="">All modules</option>
+            {% for slug in module_choices %}
+              <option value="{{ slug }}" {% if request.GET.module == slug %}selected{% endif %}>{{ slug }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'tenants:licenseassignment_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Seat</th><th>Holder</th><th>Module</th><th>Status</th><th>Derived</th><th>Source</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'tenants:licenseassignment_detail' obj.pk %}" class="mono fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.user }}</td>
+              <td>{% if obj.module_slug %}<span class="mono">{{ obj.module_slug }}</span>{% else %}<span class="badge badge-info">All modules</span>{% endif %}</td>
+              <td>
+                {% if obj.status == "active" %}<span class="badge badge-green">Active</span>
+                {% elif obj.status == "reclaimed" %}<span class="badge badge-amber">Reclaimed</span>
+                {% elif obj.status == "revoked" %}<span class="badge badge-red">Revoked</span>
+                {% elif obj.status == "expired" %}<span class="badge badge-slate">Expired</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  DERIVED, and deliberately a separate column from the stored status.
+                  `is_expired` is a @property over expires_on; nothing writes
+                  status="expired", so a row can read "Active" and still be expired.
+                {% endcomment %}
+                {% if obj.is_expired %}
+                  <span class="badge badge-slate" title="Derived from expires_on — not a stored status">Expired</span>
+                  <div class="text-muted">{{ obj.expires_on|date:"M d, Y" }}</div>
+                {% elif obj.expires_on %}
+                  <span class="text-muted">to {{ obj.expires_on|date:"M d, Y" }}</span>
+                {% else %}
+                  <span class="muted">no end date</span>
+                {% endif %}
+              </td>
+              <td>{{ obj.get_assignment_source_display }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'tenants:licenseassignment_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_reclaimable %}
+                    <a href="{% url 'tenants:licenseassignment_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% comment %}
+                    POST-only, shown ONLY while the seat is reclaimable, so it is never a
+                    button that bounces off the verb's idempotence guard. The confirm
+                    states the decline in words: nobody's login is disabled.
+                  {% endcomment %}
+                  {% if obj.is_reclaimable %}
+                    <form method="post" action="{% url 'tenants:licenseassignment_reclaim' obj.pk %}" onsubmit="return confirm('Reclaim this seat? It records a commercial fact only — it does NOT disable anyone’s login. There is no identity sync in NavERP.');">
+                      {% csrf_token %}
+                      <button class="btn-icon" title="Reclaim seat"><i data-lucide="user-minus"></i></button>
+                    </form>
+                  {% endif %}
+                  <form method="post" action="{% url 'tenants:licenseassignment_delete' obj.pk %}" onsubmit="return confirm('Delete this seat record? The holder keeps their login either way — this only removes the register row.');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="armchair"></i><h3>No seats recorded</h3><p>Record a seat to say who holds which module in this workspace. A blank module means a tenant-wide seat.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this page does not do</h2></div>
+    <div class="card-body">
+      <p class="text-muted"><i data-lucide="shield-check"></i>
+        <strong>NavERP records commercial terms somebody wrote down. It does not enforce them.</strong></p>
+      <p class="text-warn"><i data-lucide="user-x"></i>
+        <strong>Seat auto-deprovisioning is declined.</strong> There is no identity sync in NavERP, so
+        <strong>reclaiming a seat does not disable the login</strong> of the person who held it &mdash; it records a
+        commercial fact and nothing more. Their account, their password and their access to every other module are
+        untouched. If you need a person removed, that is an accounts task, not a seat task.</p>
+      <p class="text-muted">A seat here does not grant access either: it is a register entry saying who holds what,
+        not a permission that any code consults. A blank <strong>module</strong> is a tenant-wide seat, a real value
+        rather than &ldquo;any module&rdquo; chosen implicitly.</p>
+      <p class="text-muted"><strong>Expired</strong> in the Derived column is <strong>computed from
+        <code>expires_on</code></strong>, not a stored status &mdash; nothing in NavERP writes
+        <span class="mono">status="expired"</span>, so a row can show <em>Active</em> and still be past its end date.
+        The two columns are separate on purpose.</p>
+      <p class="text-muted">The <strong>source</strong> column is vocabulary somebody records by hand. Nothing in
+        NavERP assigns a seat from a group or a rule; <span class="mono">direct</span> is the only value the system
+        itself ever writes.</p>
+    </div>
+  </div>
+{% endblock %}
