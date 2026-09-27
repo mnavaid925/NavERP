@@ -59,13 +59,20 @@ def usagequota_detail(request, pk):
     # rather than re-queried here — a row-dict contract is a second contract: read the PRODUCER of
     # the rows, not the view that forwards them.
     from apps.tenants.views.Boards import _consumption_by_subscription
+    # I1: the helper keys by the TUPLE `(subscription_id, metric)`, so the bare `subscription_id`
+    # lookup this page used could never match and the key was provably always `{}` — a whole-tenant
+    # grouped aggregate spent producing a dead value. The board's own lookup is the precedent for
+    # the correct call: `consumption.get((quota.subscription_id, quota.metric), 0)`.
+    consumption = _consumption_by_subscription(request.tenant)
+    this_subscription = {metric: total for (sid, metric), total in consumption.items()
+                         if sid == obj.subscription_id}
     # ONE fetch, then render — the `usagerecord_detail` house pattern, not `crud_detail` (which
     # re-fetches the row by pk, costing a second query for one page).
     return render(
         request, "tenants/usagequota/detail.html",
         {
             "obj": obj,
-            "consumption": _consumption_by_subscription(request.tenant).get(obj.subscription_id, {}),
+            "consumption": this_subscription,
         },
     )
 
