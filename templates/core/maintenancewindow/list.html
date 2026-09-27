@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Maintenance Windows{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Maintenance Windows</h1>
+      <div class="breadcrumb"><a href="{% url 'core:admin_board' %}">Admin Console</a><span class="sep">&rsaquo;</span><span>Windows</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:changerequest_list' %}" class="btn btn-outline"><i data-lucide="git-pull-request"></i> Change register</a>
+      <a href="{% url 'core:maintenancewindow_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Declare a window</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>A window here silences nothing.</strong>
+      The services, alert rules and notification rules a window names are <em>recorded scope</em>: no alert engine,
+      notification rule or permission check in this application reads them. Declaring that an outage is expected
+      is a statement you make here; making it actually quiet is out of band.</p>
+    <p class="text-muted">A window needs both a start and an end &mdash; a one-ended window is a notice, and
+      0.17's incidents already own notices. Windows that have run are kept as history: an incident review a week
+      later is exactly what needs them, so only a window that has not started can be deleted.</p>
+    {% if current_count %}<p class="text-warn"><i data-lucide="clock"></i> <strong>{{ current_count }}</strong>
+      window{{ current_count|pluralize }} in progress right now.</p>{% endif %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search title, number, purpose&hellip;">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="recurrence" class="form-select" aria-label="Recurrence">
+          <option value="">Any recurrence</option>
+          {% for value, label in recurrence_choices %}<option value="{{ value }}" {% if request.GET.recurrence == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="environment" class="form-select" aria-label="Environment">
+          <option value="">Any environment</option>
+          {% for env in environments %}<option value="{{ env.pk }}" {% if request.GET.environment == env.pk|stringformat:"d" %}selected{% endif %}>{{ env.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:maintenancewindow_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Window</th><th>Starts</th><th>Ends</th><th>Length</th><th>Recurrence</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:maintenancewindow_detail' obj.pk %}">{{ obj.title }}</a>
+              <div class="text-muted">{{ obj.number }}{% if obj.environment %} &middot; {{ obj.environment.name }}{% endif %}</div></td>
+            <td>{{ obj.starts_at|date:"M d, Y H:i" }}</td>
+            <td>{{ obj.ends_at|date:"M d, Y H:i" }}</td>
+            <td>{{ obj.duration_human }}</td>
+            <td>{{ obj.get_recurrence_display }}</td>
+            <td>
+              {% if obj.is_current %}<span class="badge badge-amber">In progress</span>
+              {% elif obj.status == "ended_early" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "draft" or obj.status == "scheduled" %}{% if obj.is_future %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:maintenancewindow_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:maintenancewindow_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                {% comment %}
+                  Delete is offered ONLY for a window that has not started. A window that ran is evidence an
+                  incident review may need, so it is kept. The view refuses it too - hiding the button is not
+                  the guard, because a hand-made POST must not reach the action either.
+                {% endcomment %}
+                {% if obj.is_future %}
+                  <form method="post" action="{% url 'core:maintenancewindow_delete' obj.pk %}" onsubmit="return confirm('Delete this scheduled window? It has not started, so nothing is lost.');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="wrench"></i><h3>No windows declared</h3><p class="text-muted">Nothing has been scheduled. Declaring a window records an intention; it silences nothing.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
