@@ -50,7 +50,7 @@
       <div class="form-group">
         {# The blank option means NO filter, not "filter to NULL". #}
         <select name="notifiable" class="form-select" aria-label="Notifiable decision">
-          <option value="">Not decided</option>
+          <option value="">Any decision</option>
           <option value="True" {% if request.GET.notifiable == "True" %}selected{% endif %}>Decided notifiable</option>
           <option value="False" {% if request.GET.notifiable == "False" %}selected{% endif %}>Decided not notifiable</option>
         </select>
