@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% comment %}
+  One incident, with the Art. 33 clock DISPLAYED.
+  Context: obj, deadline_display, hours_remaining, is_overdue, window_hours, notes.
+  `hours_remaining` is None when there is no anchor, which is a third state distinct from 0
+  and from a negative number: a clock that never started has not been missed.
+{% endcomment %}
+{% block title %}{{ obj.title|truncatechars:60 }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title|truncatechars:90 }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:security_overview' %}">Security</a><span class="sep">&rsaquo;</span><a href="{% url 'core:securityincident_list' %}">Incidents</a><span class="sep">&rsaquo;</span><span>{{ obj.title|truncatechars:40 }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:securityincident_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'core:breach_clock_board' %}" class="btn btn-outline"><i data-lucide="timer"></i> Breach clock</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>NavERP files nothing and tells nobody.</strong>
+      There is no regulator integration, no mailer, no SMS gateway and no webhook in this repository, so this page
+      displays a legal deadline and records what somebody says was done. It does not discharge the deadline.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The Art. 33 clock</h2></div>
+    <div class="card-body">
+      <div class="badge-group">
+        <span class="badge badge-slate">Window: {{ window_hours }} hours</span>
+        {% if hours_remaining is None %}<span class="badge badge-muted">Clock not started &mdash; no date recorded</span>
+        {% elif is_overdue %}<span class="badge badge-red">Past the deadline</span>
+        {% else %}<span class="badge badge-amber">Running</span>{% endif %}
+      </div>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Became aware</dt><dd>{% if obj.discovered_at %}{{ obj.discovered_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">&mdash; not recorded</span>{% endif %}
+          <div class="text-muted">The {{ window_hours }}-hour window runs from this moment</div></dd></div>
+        <div class="detail-item"><dt>Deadline</dt><dd>{{ deadline_display }}
+          {% if not obj.discovered_at %}<div class="text-muted">An em dash, never "due today": there is no anchor to count from</div>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Time remaining</dt><dd>{% if hours_remaining is None %}<span class="text-muted">&mdash;</span>
+          {% elif hours_remaining < 0 %}<span class="text-danger">{{ hours_remaining|floatformat:1 }} hours (overdue)</span>
+          {% else %}{{ hours_remaining|floatformat:1 }} hours{% endif %}</dd></div>
+      </dl>
+      <p class="text-muted"><i data-lucide="info"></i> This clock is arithmetic, not a reminder. Nothing in NavERP will
+        wake anybody when it runs out, and a clock with no recorded start has not been missed &mdash; it was never given.</p>
+    </div>
+  </div>
+
+  <div class="layout-2col">
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">The incident</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Class</dt><dd>{{ obj.get_incident_class_display }}</dd></div>
+            <div class="detail-item"><dt>Severity</dt><dd>
+              {% if obj.severity == "info" %}<span class="badge badge-info">{{ obj.get_severity_display }}</span>
+              {% elif obj.severity == "warning" %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>
+              {% elif obj.severity == "critical" %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Status</dt><dd>
+              {% if obj.status == "detected" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "triage" or obj.status == "investigating" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "contained" or obj.status == "eradicated" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "recovered" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "closed" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "false_positive" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner_label %}{{ obj.owner_label }}{% elif obj.owner %}{{ obj.owner.get_username }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Affected services</dt><dd>
+              {% for s in obj.affected_services.all %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="text-muted">&mdash;</span>{% endfor %}
+            </dd></div>
+            <div class="detail-item"><dt>Contained</dt><dd>{% if obj.contained_at %}{{ obj.contained_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">&mdash; not recorded</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Eradicated</dt><dd>{% if obj.eradicated_at %}{{ obj.eradicated_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">&mdash; not recorded</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Recovered</dt><dd>{% if obj.recovered_at %}{{ obj.recovered_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">&mdash; not recorded</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Closed</dt><dd>{% if obj.closed_at %}{{ obj.closed_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">&mdash; still open</span>{% endif %}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">The Art. 33(3) content and the Art. 34 decision</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Notifiable</dt><dd>{% if obj.is_notifiable is None %}<span class="badge badge-amber">Not decided</span>
+              {% elif obj.is_notifiable %}<span class="badge badge-red">Notifiable</span>
+              {% else %}<span class="badge badge-slate">Not notifiable</span>{% endif %}
+              <div class="text-muted">"Not yet decided" is not the same answer as "no"</div></dd></div>
+            <div class="detail-item"><dt>Reason</dt><dd>{% if obj.notifiable_reason %}{{ obj.notifiable_reason|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Authority notified</dt><dd>{% if obj.authority_notified_at %}{{ obj.authority_notified_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">&mdash; nothing was filed</span>{% endif %}
+              {% if obj.authority_reference %}<div class="text-muted">Reference: {{ obj.authority_reference }}</div>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Data subjects notified</dt><dd>{% if obj.subjects_notified is None %}<span class="text-muted">&mdash; not decided</span>
+              {% elif obj.subjects_notified %}<span class="badge badge-info">Told on {{ obj.subjects_notified_at|date:"M d, Y" }}</span>
+              {% else %}<span class="badge badge-slate">Not told</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Art. 34(3) exemption</dt><dd>{{ obj.get_subject_exemption_display }}</dd></div>
+            <div class="detail-item"><dt>Data subjects affected</dt><dd>{% if obj.data_subjects_affected is not None %}{{ obj.data_subjects_affected }}{% else %}<span class="text-muted">&mdash; nobody determined it</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Personal data records affected</dt><dd>{% if obj.records_affected is not None %}{{ obj.records_affected }}{% else %}<span class="text-muted">&mdash; nobody determined it</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>DPO contact</dt><dd>{% if obj.dpo_contact %}{{ obj.dpo_contact }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+          </dl>
+          <p class="text-muted"><i data-lucide="info"></i> NavERP told no data subject anything. It has no mailer, no SMS
+            gateway and no webhook, so a recorded notification says only that somebody says it happened.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">The response, as recorded</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Likely consequences</dt><dd>{% if obj.likely_consequences %}{{ obj.likely_consequences|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Measures taken</dt><dd>{% if obj.measures_taken %}{{ obj.measures_taken|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Measures proposed</dt><dd>{% if obj.measures_proposed %}{{ obj.measures_proposed|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Forensic narrative</dt><dd>{% if obj.forensic_log %}{{ obj.forensic_log|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Root cause</dt><dd>{% if obj.root_cause %}{{ obj.root_cause|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Lessons learned</dt><dd>{% if obj.lessons_learned %}{{ obj.lessons_learned|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Evidence</dt><dd>{% if obj.evidence %}{{ obj.evidence|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Notes</dt><dd>{% if obj.notes %}{{ obj.notes|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+          </dl>
+          <p class="text-muted"><i data-lucide="info"></i> There is no log pipeline, no SIEM client and no packet capture
+            here, so the forensic narrative is prose somebody wrote. NavERP preserved nothing for you.</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Actions</h2></div>
+        <div class="card-body">
+          <div class="form-actions">
+            <a href="{% url 'core:securityincident_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit this record</a>
+          </div>
+          <form method="post" action="{% url 'core:securityincident_delete' obj.pk %}" onsubmit="return confirm('Delete this incident record? It deletes the response record, not what happened.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete this record</button>
+          </form>
+          <div class="form-actions">
+            <a href="{% url 'core:securityincident_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to incidents</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">The seams with 0.17 and 0.18</h2></div>
+        <div class="card-body">
+          {% if obj.incident %}
+            <p class="text-muted">0.17 owns incident communication; this row holds the GDPR response record and points at it.</p>
+            <p><a href="{% url 'core:incident_detail' obj.incident.pk %}">{{ obj.incident.title|truncatechars:60 }}</a></p>
+          {% else %}
+            <p class="text-muted">No 0.17 incident is linked. Nothing about communication status is recorded here.</p>
+          {% endif %}
+          {% if obj.primary_threat %}
+            <p class="text-muted">Primary threat finding:</p>
+            <p><a href="{% url 'core:securitythreat_detail' obj.primary_threat.pk %}">{{ obj.primary_threat.title|truncatechars:60 }}</a></p>
+          {% else %}
+            <p class="text-muted">No primary threat is linked, so nobody recorded which finding this response came from.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Record a response step</h2></div>
+        <div class="card-body">
+          {% comment %}
+            Each button appears only when the guard in the VIEW would accept the POST, but that
+            is a convenience and not the enforcement: the guard lives in the view, so a
+            hand-made POST is refused there and leaves no write and no audit row.
+            NavERP contained, eradicated, recovered, closed, filed and notified nothing.
+          {% endcomment %}
+          {% if obj.status == "detected" or obj.contained_at %}
+            <form method="post" action="{% url 'core:securityincident_contain' obj.pk %}" onsubmit="return confirm('Record that somebody says this was contained? NavERP blocked no traffic.');">
+              {% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="shield"></i> Record containment</button>
+            </form>
+          {% else %}
+            <p class="text-muted">Containment cannot be recorded yet: an incident is not contained before somebody has assessed it, and one was already recorded.</p>
+          {% endif %}
+
+          {% if obj.contained_at and not obj.eradicated_at %}
+            <form method="post" action="{% url 'core:securityincident_eradicate' obj.pk %}" onsubmit="return confirm('Record that somebody says the cause was removed? NavERP patched nothing and closed no port.');">
+              {% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="wrench"></i> Record eradication</button>
+            </form>
+          {% else %}
+            <p class="text-muted">Eradication follows containment, and only once. Eradicating before containment would be a claim about a root cause nobody established.</p>
+          {% endif %}
+
+          {% if obj.eradicated_at and not obj.recovered_at %}
+            <form method="post" action="{% url 'core:securityincident_recover' obj.pk %}" onsubmit="return confirm('Record that somebody says service was restored? NavERP restored nothing.');">
+              {% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="activity"></i> Record recovery</button>
+            </form>
+          {% else %}
+            <p class="text-muted">Recovery follows eradication. Recovering before the cause was removed is how an incident returns.</p>
+          {% endif %}
+
+          {% if obj.recovered_at and obj.closed_at is None %}
+            {% if obj.is_notifiable is None %}
+              <p class="text-muted">This incident cannot be closed until the notifiability decision is made. "Not yet decided" is not the same answer as "no".</p>
+            {% else %}
+              <form method="post" action="{% url 'core:securityincident_close' obj.pk %}" onsubmit="return confirm('Record that somebody closed this incident?');">
+                {% csrf_token %}
+                <button class="btn btn-outline" type="submit"><i data-lucide="check"></i> Record closure</button>
+              </form>
+            {% endif %}
+          {% else %}
+            <p class="text-muted">An incident is not closed while it is still running, and a second closure would overwrite the first one.</p>
+          {% endif %}
+
+          {% if obj.is_notifiable %}
+            {% if obj.authority_notified_at %}
+              <p class="text-muted">An authority notification was already recorded. A second POST would imply a second filing of the same breach.</p>
+            {% else %}
+              <form method="post" action="{% url 'core:securityincident_notify_authority' obj.pk %}" onsubmit="return confirm('Record that somebody says a filing was made? NavERP sends nothing to any authority.');">
+                {% csrf_token %}
+                <button class="btn btn-outline" type="submit"><i data-lucide="landmark"></i> Record authority notification</button>
+              </form>
+            {% endif %}
+          {% else %}
+            <p class="text-muted">No authority notification can be recorded against a decision that this incident is not notifiable. Mark it notifiable first, with a reason.</p>
+          {% endif %}
+
+          {% if obj.subject_exemption == "none" %}
+            {% if obj.subjects_notified %}
+              <p class="text-muted">The data subjects were already recorded as told. A second POST would imply a second notification.</p>
+            {% else %}
+              <form method="post" action="{% url 'core:securityincident_notify_subjects' obj.pk %}" onsubmit="return confirm('Record that somebody says the data subjects were told? NavERP notified nobody.');">
+                {% csrf_token %}
+                <button class="btn btn-outline" type="submit"><i data-lucide="users"></i> Record subject notification</button>
+              </form>
+            {% endif %}
+          {% else %}
+            <p class="text-muted">An Art. 34(3) exemption is claimed, and an exemption is the reason you did <em>not</em> notify. Claiming one and recording a notification would contradict each other.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
