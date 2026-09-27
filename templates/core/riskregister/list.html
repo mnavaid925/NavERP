@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Risk Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Risk Register</h1>
+      <div class="breadcrumb"><a href="{% url 'core:grc_overview' %}">Compliance</a><span class="sep">&rsaquo;</span><span>Risks</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:riskregister_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record a risk</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Enterprise risks, scored on a five-by-five likelihood-and-impact scale and
+      given a recorded treatment. <strong>This is not
+      <code>projects.ProjectRisk</code></strong> (module 9), which is a delivery risk on one project;
+      the two are separate registers and neither rolls up into the other.</p>
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>The score is calculated, never
+      typed.</strong> <code>inherent_score</code> is recomputed from the likelihood and impact you pick, so
+      the number on every row is the product of the two scales rather than a figure somebody asserted.
+      Nothing in this application measures your risk appetite or warns you when a review is overdue.</p>
+    <p class="text-muted"><strong>{{ open_count }}</strong> open risk{{ open_count|pluralize }},
+      {{ critical_count }} in the critical band.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search code, title, statement&hellip;">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="treatment" class="form-select" aria-label="Treatment">
+          <option value="">Any treatment</option>
+          {% for value, label in treatment_choices %}<option value="{{ value }}" {% if request.GET.treatment == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="likelihood" class="form-select" aria-label="Likelihood">
+          <option value="">Any likelihood</option>
+          {% for value, label in likelihood_choices %}<option value="{{ value }}" {% if request.GET.likelihood == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:riskregister_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Score</th><th>Risk</th><th>Category</th><th>Treatment</th><th>Status</th><th>Owner</th><th>Next review</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td>
+              <span class="fw-600">{{ obj.inherent_score }}</span>
+              {% if obj.score_label == "critical" %}<span class="badge badge-red">Critical</span>
+              {% elif obj.score_label == "high" %}<span class="badge badge-amber">High</span>
+              {% elif obj.score_label == "medium" %}<span class="badge badge-blue">Medium</span>
+              {% else %}<span class="badge badge-green">Low</span>{% endif %}
+              <div class="text-muted">{{ obj.get_likelihood_display }} &times; {{ obj.get_impact_display }}</div>
+            </td>
+            <td class="fw-600"><a href="{% url 'core:riskregister_detail' obj.pk %}">{{ obj.title }}</a>
+              <div class="text-muted">{{ obj.number }} &middot; {{ obj.code }}</div></td>
+            <td>{% if obj.category %}{{ obj.category }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>{{ obj.get_treatment_display }}</td>
+            <td>
+              {% if obj.status == "closed" %}<span class="badge badge-slate">Closed</span>
+              {% else %}<span class="badge badge-blue">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>{% if obj.owner %}{{ obj.owner.get_username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+            <td>{% if obj.next_review_on %}{{ obj.next_review_on|date:"d M Y" }}
+              {% if obj.is_overdue_review %}<span class="badge badge-amber">Overdue</span>{% endif %}
+              {% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:riskregister_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:riskregister_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:riskregister_delete' obj.pk %}" onsubmit="return confirm('Delete this risk?');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8"><div class="empty-state"><i data-lucide="triangle-alert"></i><h3>No risks recorded</h3><p class="text-muted">Nothing has been entered. The register is empty because nobody has filled it in, not because a scan found nothing.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
