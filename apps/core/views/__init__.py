@@ -49,6 +49,44 @@ from .AdminConsole import (  # noqa: F401
     change_request_rollback,
     bulk_preview,
 )
+# 0.21 — Compliance, Governance & Risk. Flat at the package root (rule 9: core is a Module 0
+# foundation app with no NavERP sub-modules). The board lives here in VIEWS ONLY — it owns no
+# model, so there is no model file and no form file for it, exactly as 0.20's three boards.
+from .Compliance import (  # noqa: F401
+    # --- bullet 1: control frameworks, controls, and the mapping between them
+    controlframework_list,
+    controlframework_create,
+    controlframework_detail,
+    controlframework_edit,
+    controlframework_delete,
+    compliancecontrol_list,
+    compliancecontrol_create,
+    compliancecontrol_detail,
+    compliancecontrol_edit,
+    compliancecontrol_delete,
+    controlframeworkmapping_list,
+    controlframeworkmapping_create,
+    controlframeworkmapping_delete,
+    # --- bullet 2: policies and their acknowledgements
+    corporatepolicy_list,
+    corporatepolicy_create,
+    corporatepolicy_detail,
+    corporatepolicy_edit,
+    corporatepolicy_delete,
+    policyacknowledgement_list,
+    policyacknowledgement_create,
+    policyacknowledgement_delete,
+    # --- bullet 3: the risk register
+    riskregister_list,
+    riskregister_create,
+    riskregister_detail,
+    riskregister_edit,
+    riskregister_delete,
+    # --- the board + the two actions. Each guard lives in the view, not only in a hidden button.
+    grc_overview,
+    policy_acknowledge,
+    controlframeworkmapping_add,
+)
 from .OrgUnit import (
     orgunit_list,
     orgunit_create,
