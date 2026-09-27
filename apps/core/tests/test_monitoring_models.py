@@ -192,9 +192,15 @@ def test_monitoring_alert_rule_str_uses_the_metric_key_accessor(tenant_a, mon_se
 
 
 def test_monitoring_status_note_is_a_property_so_a_template_guard_is_real(mon_service_unreported_a):
-    """As a method, `{% if obj.status_note %}` would be always-true (a bound method is truthy)."""
-    assert not callable(ServiceComponent.status_note.fget)
-    assert isinstance(ServiceComponent.status_note.fget(mon_service_unreported_a), str)
+    """As a method, `{% if obj.status_note %}` would be always-true (a bound method is truthy).
+
+    A `property` object has an `fget`; a plain method does not. So the assertion is that `fget` IS
+    callable and that it is NOT a `function` wrapper — i.e. that access goes through the descriptor.
+    """
+    descriptor = ServiceComponent.__dict__["status_note"]
+    assert isinstance(descriptor, property), "status_note is not a property"
+    assert callable(descriptor.fget)
+    assert isinstance(descriptor.fget(mon_service_unreported_a), str)
 
 
 def test_monitoring_incident_is_scheduled_distinguishes_a_notice_from_an_outage(
@@ -210,15 +216,19 @@ def test_monitoring_maintenance_window_needs_both_ends(mon_incident_maintenance_
 # ------------------------------------------------- every declared index reached the migration
 
 def test_monitoring_declared_indexes_are_all_present_in_the_migration_file():
-    """A model index that never reaches a migration is a silent full scan (the 7.10 failure mode)."""
+    """A model index that never reaches a migration is a silent full scan (the 7.10 failure mode).
+
+    Read the migration source only. The test DB here is SQLite `:memory:`, which has no
+    `django_migrations` table in the same shape as MariaDB, so a live query would fail for a reason
+    that has nothing to do with the assertion.
+    """
     import io
-    from django.db import connection
-    with connection.cursor() as cur:
-        cur.execute("SELECT name FROM django_migrations WHERE app='core' AND name LIKE '0015%'")
-        assert cur.fetchall(), "migration 0015 is not applied - run migrate before the suite"
-    text = io.open(
-        "apps/core/migrations/0015_alertrule_alertevent_servicecomponent_incident_and_more.py",
-        encoding="utf-8").read()
+    from pathlib import Path
+    path = Path("apps/core/migrations")
+    assert path.is_dir(), "the core migrations directory is missing"
+    files = sorted(path.glob("0015_*.py"))
+    assert files, "migration 0015 (the four monitoring models) is not on disk"
+    text = files[-1].read_text(encoding="utf-8")
     for model in (AlertRule, AlertEvent, Incident, ServiceComponent):
         for index in model._meta.indexes:
             assert index.name in text, f"{model.__name__}.{index.name} is not in migration 0015"
