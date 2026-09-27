@@ -169,3 +169,42 @@ from .Change import (
     ROLLOUT_STAGE_CHOICES,
     ROLLOUT_STATUS_CHOICES,
 )  # noqa: F401
+from .Change import (
+    ChangeRequest,
+    FeatureRollout,
+    CHANGE_TYPE_CHOICES,
+    RISK_LEVEL_CHOICES,
+    IMPACT_LEVEL_CHOICES,
+    CHANGE_STATUS_CHOICES,
+    ROLLOUT_STAGE_CHOICES,
+    ROLLOUT_STATUS_CHOICES,
+)  # noqa: F401
+# 0.21 — Compliance, Governance & Risk. Flat at the package root (rule 9: core is a Module 0
+# foundation app with no NavERP sub-modules), so the entity file sits beside every other one.
+#
+# **There is deliberately no `ComplianceFramework` here.** 0.8's `RegulatoryFramework` (Privacy.py)
+# already owns "which regimes is this workspace under", and a second framework class listing GDPR
+# and HIPAA would give one workspace two answers to the same question. 0.21's `ControlFramework`
+# is the certification programme instead — read the module docstring before renaming anything.
+#
+# The two `*_VALUES` dicts are re-exported alongside the CHOICES lists because the risk score is
+# arithmetic over them and a view or a board that reads one without the other would be guessing.
+from .Compliance import (
+    ComplianceControl,
+    ControlFramework,
+    ControlFrameworkMapping,
+    CorporatePolicy,
+    PolicyAcknowledgement,
+    RiskRegister,
+    FRAMEWORK_TYPE_CHOICES,
+    CONTROL_STATUS_CHOICES,
+    COVERAGE_CHOICES,
+    POLICY_TYPE_CHOICES,
+    POLICY_STATUS_CHOICES,
+    LIKELIHOOD_CHOICES,
+    LIKELIHOOD_VALUES,
+    RISK_IMPACT_CHOICES,
+    RISK_IMPACT_VALUES,
+    TREATMENT_CHOICES,
+    RISK_STATUS_CHOICES,
+)  # noqa: F401
