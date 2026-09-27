@@ -127,6 +127,7 @@ class Command(BaseCommand):
             self._seed_localization(tenant)
             self._seed_backup(tenant)
             self._seed_monitoring(tenant)
+        self._seed_security(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
@@ -1143,4 +1144,75 @@ class Command(BaseCommand):
             self.stdout.write(f"  {tenant.name}: seeded 3 alert rule(s)")
         # No line is printed for AlertEvent or Incident. The ABSENCE of them is deliberate, and a count
         # of zero here would read as an all-clear on exactly the board that must never show one.
+
+    def _seed_security(self, tenant):
+        """0.18: the vulnerability register, and nothing else.
+
+        **SEEDED:** `VulnerabilityFinding` — and only that one. A published advisory somebody
+        entered by hand is a true statement about a weakness that exists in the world
+        independently of this application, and the seeded row says in its own `evidence` that
+        **NavERP ran no scanner** to find it. That is the same basis 0.15 seeds a `Language`
+        registry and 0.16 seeds a `RecoveryPosture` target on, and the same honesty
+        `DisposalRecord` (0.8) is seeded for.
+
+        **NOT SEEDED — the L52 ruling, and it is total.** `SecurityThreat`, `SecurityIncident`
+        and `IpAccessRule` are created **ZERO** times:
+
+        * a **threat** is a claim that an adversary did something. Seeding one fabricates an
+          attack that never happened, and its `evidence` / `source_ip` / `occurrence_count`
+          would be a lie told in the register's own voice — exactly the 0.17 `AlertEvent`
+          ruling, one layer up.
+        * a **security incident** is worse than a fabricated threat: it is a response record
+          with a live GDPR Art. 33 clock hanging off it. Seeding one starts a 72-hour legal
+          countdown against a breach that never occurred, and a `discovered_at` in the past
+          would render as **overdue** on first load — a demo database accusing its own operator
+          of an unreported breach. All three are exempt in `temp/audit_integrity.py`'s
+          `KNOWN_OK`, with that reason printed, because an unexplained exemption is
+          indistinguishable from an oversight.
+        * an **IP allow/deny rule** is a policy somebody evaluated at an edge. Nothing in this
+          repository evaluates one, so seeding a `deny` row would put a fake control on the
+          page and a `source="manual"` value that nobody wrote.
+
+        **The consequence is intended and must NOT be "fixed".** A fresh seed leaves the threat,
+        incident and IP registers empty, so their boards and lists render their honest
+        "nothing has been recorded" states. That is the truth about a system that detects,
+        blocks and files nothing. A smoke run that needs rows must create them through the ORM
+        and delete them in a `finally` — the same discipline 0.17's seeder docstring records.
+
+        **PER-ENTITY guard, never a tenant-wide one** — the documented defect that left
+        everything added to this command after the fact unreachable in workspaces that already
+        existed.
+        """
+        from apps.core.models import VulnerabilityFinding
+
+        if not VulnerabilityFinding.objects.filter(tenant=tenant).exists():
+            VulnerabilityFinding.objects.create(
+                tenant=tenant,
+                title="Example: a known weakness in a third-party dependency",
+                advisory_id="EXAMPLE-2026-0001",
+                finding_source="dependency",
+                package_name="example-package",
+                installed_version="1.0.0",
+                severity="medium",
+                cvss_score=Decimal("5.3"),
+                fix_available="yes",
+                fixed_in_version="1.0.1",
+                status="open",
+                first_seen_at=timezone.now() - datetime.timedelta(days=3),
+                due_on=(timezone.now() - datetime.timedelta(days=3)).date()
+                + datetime.timedelta(days=90),
+                scan_frequency="manual",
+                evidence="Seeded as an EXAMPLE of how a hand-entered advisory is recorded. "
+                         "NavERP ran no scanner and performed no dependency audit to produce "
+                         "this row - it is a placeholder so the register and its board have "
+                         "something to render.",
+                notes="Seeded starting position, not a measurement. No scanner exists in this "
+                      "application, so nothing here is a statement about this deployment's real "
+                      "exposure.",
+            )
+            self.stdout.write(f"  {tenant.name}: seeded 1 vulnerability finding (advisory register)")
+        # No line is printed for SecurityThreat, SecurityIncident or IpAccessRule. The ABSENCE
+        # of them is deliberate, and a count of zero here would read as an all-clear on exactly
+        # the registers that must never show one.
+
 
