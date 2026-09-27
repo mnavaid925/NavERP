@@ -11501,7 +11501,7 @@ Build entity by entity, one at a time — all four backend files for an entity, 
 
 ## Wire-up
 
-- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["8.5"]` mapping all 5 exact NavERP.md §8.5 bullet titles to staff-accessible management routes:
+- [x] `apps/core/navigation.py`: Add `LIVE_LINKS["8.5"]` mapping all 5 exact NavERP.md §8.5 bullet titles to staff-accessible management routes:
   ```python
   "8.5": {
       "Quote Configuration (CPQ)": "sales:cpq_quote_list",
@@ -11520,32 +11520,44 @@ Build entity by entity, one at a time — all four backend files for an entity, 
 
 ## Templates (`templates/sales/quote_proposal_cpq/`)
 
-- [ ] `cpqquote/list.html` — searchable, filterable quote table, status badges, grand totals, margin %, action buttons.
-- [ ] `cpqquote/detail.html` — header overview, pricing waterfall totals, approval banner, hierarchical line item tree, action sidebar.
-- [ ] `cpqquote/form.html` — create/edit quote header with account, opportunity, currency, price book, validity date.
-- [ ] `cpqquoteline/list.html` — line item table with parent/child bundle indicators.
-- [ ] `cpqquoteline/detail.html` — line detail showing cost, list price, discount, net price, margin, SCM item mapping.
-- [ ] `cpqquoteline/form.html` — add/edit quote line with bundle selection, quantity, discount %, and tax.
-- [ ] `productbundleoption/list.html` — bundle rules list with option groups, component products, compatibility rules.
-- [ ] `productbundleoption/detail.html` — bundle configuration rule details.
-- [ ] `productbundleoption/form.html` — create/edit bundle option with dependency rule.
-- [ ] `quoteapprovalrule/list.html` — approval rules table ordered by priority.
-- [ ] `quoteapprovalrule/detail.html` — rule parameters and threshold inspection.
-- [ ] `quoteapprovalrule/form.html` — create/edit approval rule with discount ceiling, margin floor, required role.
-- [ ] `operations/proposal_preview.html` — branded proposal view with document layout, customer details, itemized pricing tables, terms.
-- [ ] `operations/portal.html` — customer-facing web quote portal: toggle optional add-ons, live pricing updates, e-signature acceptance form.
-- [ ] `operations/compare.html` — side-by-side quote revision comparison view: line-by-line diff, quantity changes, price delta, margin swings.
-- [ ] `operations/approval_queue.html` — dedicated manager queue for pending quotes, with quick approve/reject and audit comment modal.
-- [ ] `operations/conversion_board.html` — quote-to-order pipeline view with 1-click conversion to `scm.SalesOrder` and ATP reservation status.
-- [ ] `operations/guided_selling.html` — interactive guided selling playbook modal/wizard recommending bundles based on deal parameters.
+- [x] `cpqquote/list.html` — searchable, filterable quote table, status badges, grand totals, margin %, action buttons.
+- [x] `cpqquote/detail.html` — header overview, pricing waterfall totals, approval banner, hierarchical line item tree, action sidebar.
+- [x] `cpqquote/form.html` — create/edit quote header with account, opportunity, currency, price book, validity date.
+- [x] `cpqquoteline/list.html` — line item table with parent/child bundle indicators.
+- [x] `cpqquoteline/detail.html` — line detail showing cost, list price, discount, net price, margin, SCM item mapping.
+- [x] `cpqquoteline/form.html` — add/edit quote line with bundle selection, quantity, discount %, and tax.
+- [x] `productbundleoption/list.html` — bundle rules list with option groups, component products, compatibility rules.
+- [x] `productbundleoption/detail.html` — bundle configuration rule details.
+- [x] `productbundleoption/form.html` — create/edit bundle option with dependency rule.
+- [x] `quoteapprovalrule/list.html` — approval rules table ordered by priority.
+- [x] `quoteapprovalrule/detail.html` — rule parameters and threshold inspection.
+- [x] `quoteapprovalrule/form.html` — create/edit approval rule with discount ceiling, margin floor, required role.
+- [x] `operations/proposal_preview.html` — branded proposal view with document layout, customer details, itemized pricing tables, terms.
+- [x] `operations/portal.html` — customer-facing web quote portal: toggle optional add-ons, live pricing updates, e-signature acceptance form.
+- [x] `operations/compare.html` — side-by-side quote revision comparison view: line-by-line diff, quantity changes, price delta, margin swings.
+- [x] `operations/approval_queue.html` — dedicated manager queue for pending quotes, with quick approve/reject and audit comment modal.
+- [x] `operations/conversion_board.html` — quote-to-order pipeline view with 1-click conversion to `scm.SalesOrder` and ATP reservation status.
+- [x] `operations/guided_selling.html` — interactive guided selling playbook modal/wizard recommending bundles based on deal parameters.
 
 ---
 
 ## Verify
 
-- [ ] `migrate` clean; `seed_sales` run twice with zero duplicate errors on second run.
-- [ ] `python manage.py check` clean.
-- [ ] Smoke sweep script in `temp/` executed as `admin_acme` / `password`:
+- [x] `migrate` clean; `seed_sales` run twice with zero duplicate errors on second run.
+- [x] `python manage.py check` clean.
+- [x] Smoke sweep as **`admin_acme`** (tenant admin; the `admin` superuser has `tenant=None` and sees nothing by design). **Executed as four committed pytest lanes rather than a throwaway `temp/` script, so the sweep is re-runnable and cannot rot.** Item-by-item:
+  - Every new `sales:*` URL returns 200/302 — `test_quote_proposal_cpq_views.py`, one case per contract route, plus the junk-parameter and out-of-range-page cases.
+  - Content assertions (L8): a 200 does not prove a context var resolved, so every page asserts the quote number, the line description, the rule name or the product name actually appears in the HTML.
+  - Public portal without a session — `test_quoteproposalcpq_portal_is_public_and_renders`, and `..._portal_404s_on_an_unknown_token`.
+  - E-signature captures signer name, timestamp, **IP** and moves the quote to `accepted` — `test_quoteproposalcpq_portal_sign_accepts_and_transitions` plus the six acceptance-address cases in the security lane. **The IP half of this bullet was a real gap and is now built** (migration `0011`); see the contract-gaps section below.
+  - Approval rule gates discount and margin — `test_quoteproposalcpq_rule_*` in the models lane, and `test_quoteproposalcpq_submit_approval_*` in the views lane including the auto-reject branch.
+  - Revision creation clones and increments while preserving the original — `test_quoteproposalcpq_create_revision_clones_and_supersedes`.
+  - Comparison highlights added/removed lines and the price delta — `test_quoteproposalcpq_compare_*`. **The added/removed half of this bullet was a real gap and is now fixed**: a replaced line was reported as `unchanged`, hiding a removal and an addition inside a zero delta.
+  - Conversion creates the `scm.SalesOrder`, mapped lines, and `reserved` allocations — `test_quoteproposalcpq_convert_to_order_creates_a_sales_order` and the five ATP cases. **The allocation half was a real gap and is now built.**
+  - Opportunity advances to `closed_won` with a `sales.OpportunityOutcome` recorded — `test_quoteproposalcpq_conversion_records_the_won_outcome` and the two de-duplication cases. **The outcome half was a real gap and is now built.**
+  - Cross-tenant IDOR returns 404 for foreign quotes, lines, rules and bundles — the whole `test_quote_proposal_cpq_security.py` lane, object route by object route, including the POST-only workflow verbs.
+  - Mutations reject GET with 405 and CSRF is active — `test_quoteproposalcpq_..._is_post_only` on every verb, and `test_quoteproposalcpq_mutating_routes_enforce_csrf` with `enforce_csrf_checks=True`.
+  - No template comment leaks — `test_quoteproposalcpq_no_cpq_template_leaks_a_raw_django_comment`, which also pins the on-disk template count so a new template cannot be added without being inventoried.
   - All new `sales:*` URLs return 200 or 302.
   - Content assertions: quote number (`CPQ-`), title, customer name, margin %, line items present in rendered HTML.
   - Public quote portal route `/sales/quotes/portal/<token>/` accessible without authentication and displays proposal.
@@ -11558,7 +11570,7 @@ Build entity by entity, one at a time — all four backend files for an entity, 
   - Cross-tenant IDOR returns 404 for foreign tenant quotes, lines, rules, and bundle options.
   - POST-only mutation guards reject GET with 405; CSRF protection active.
   - No template comment leaks (`{#` or `{% comment`).
-- [ ] Sidebar verification: `8.5` Live indicator active, all 5 bullet links functional.
+- [x] Sidebar verification: `8.5` Live indicator active, all 5 bullet links functional.
 
 ---
 
@@ -11599,6 +11611,17 @@ The Phase 4 review and the Phase 6 test lanes both passed while three contract r
 ### Why the review missed all three, and what that says about the sequence
 
 All three were *absent features*, not *broken features*. A reviewer reading `BASE...HEAD` diff cannot see code that was never written, and a test written from the code cannot fail on behaviour the code never had. The checks that would have caught them are the ones that read the **contract** rather than the implementation: the verify list at the end of this plan, and a smoke pass that asserts each contract bullet is *demonstrated* rather than each route merely *reachable*.
+
+### Two more gaps found while reconciling the verify list
+
+Reconciling this section's own verify list against the code turned up two further misses, both in the same class as the three above: a requirement stated in the plan that was never implemented, so no reviewer and no test had anything to fail against.
+
+- **The e-signature captured no IP.** The verify list says an acceptance records the signer name, timestamp, **IP** and moves the quote to `accepted`. The first, second and fourth all happened; the third did not — `CPQQuote` had no field for it and `quote_portal_sign` recorded nothing. For a legally-binding acceptance that address is the evidence a dispute over "who accepted this" actually turns on, so this was the least cosmetic of the misses.
+  - `signer_ip_address` is a `GenericIPAddressField`, `null`, `blank`, `editable=False`, populated from `request.META["REMOTE_ADDR"]` **and nothing else**. `X-Forwarded-For` is caller-supplied and this repo has no trusted-proxy list, so honouring it would write an attacker-chosen string into the evidentiary record of a binding acceptance. The field carries the same warning as `scm.PortalActivity.ip_address`, which is the same class of evidence, and both the quote workspace and the signed document say plainly that behind a proxy it is the proxy. The address is printed **on the signed artefact** as well as stored, because evidence the customer holds is worth more than evidence in a row.
+  - `apps/sales/migrations/0011_cpqquote_signer_ip_address.py`, one `AddField`, no index and no data migration — it is written once at signing and never queried as a set.
+- **The version comparison reported a replaced line as unchanged.** `cpq_compare_quote_versions` keys on line *position*, which is right (a quote may carry two lines with the same description, and pk is useless because revisions clone rows). But a matched position was always treated as the same line, so replacing the line in slot 20 — the ordinary way a revision is edited — paired the old line with the new one, found identical quantity and price, and reported `unchanged`. The comparison claimed nothing had moved while a removal and an addition were both hiding inside a zero delta. A description change at a shared position now splits into two rows.
+
+The second one is the argument for the first lesson in this section, restated: **the added/removed case was named in the plan's own verify list and no test covered it**, because the tests had been written from the code. A test written *from the verify list* failed on the first run and found the bug in one pass.
 
 ### The 8.4 close-out is still unticked
 
