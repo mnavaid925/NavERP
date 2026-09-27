@@ -2,13 +2,11 @@
 {% comment %}
   0.19 &mdash; the quota-vs-consumption board. Backing view: quota_board (views/Boards.py).
 
-  Context, and ONLY these six keys, every one of them produced by the VIEW:
+  Context, and ONLY these four keys, every one of them produced by the VIEW:
     quota_rows       list of row dicts, ordered by -pct_used then metric_label
     warned_count     len([r for r in rows if r["is_warned"]])
     breached_count   len([r for r in rows if r["is_breached"]])
     unmetered_count  len([r for r in rows if r["limit"] == 0])
-    metric_choices   UsageQuota.METRIC_CHOICES (the SAME OBJECT as UsageRecord's)
-    action_choices   UsageQuota.ACTION_CHOICES
 
   Row dict keys, and the ONLY ones this template may read:
     quota, subscription, metric, metric_label, limit, consumed, pct_used, overage,
@@ -22,7 +20,11 @@
   row is excluded from warned_count and breached_count.
 
   No filter bar, deliberately: this is a whole-tenant roll-up, and a filter that silently
-  changes what "3 breached" means is worse than no filter at all.
+  changes what "3 breached" means is worse than no filter at all. Every count above is
+  computed over the UNFILTERED row set, so a `?metric=api` filter would still print "2 marked
+  as breached" above a table holding zero breached rows. The board's value is that the number
+  and the row are the same fact. `metric_choices` and `action_choices` were DROPPED from the
+  view for exactly this reason rather than left here as dead keys.
 {% endcomment %}
 {% block title %}Quota Board{% endblock %}
 {% block content %}
