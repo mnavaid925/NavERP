@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit framework{% else %}Register a framework{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit framework{% else %}Register a framework{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:controlframework_list' %}">Frameworks</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This form registers a programme; it
+      does not certify anything.</strong> Leave <code>adopted_on</code> empty until a real decision has
+      been made by a person. A framework a seeder or a demo created is <em>registered</em>, not
+      adopted.</p>
+    <p class="text-muted"><strong>Not on this form:</strong> <code>number</code> is minted by the system on
+      first save. <code>adopted_on</code> <em>is</em> yours to set &mdash; it is a decision, not a
+      measurement, and nothing recomputes it.</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Which programme</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.code %}
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.framework_type %}
+          {% include "partials/form_field.html" with field=form.version %}
+          {% include "partials/form_field.html" with field=form.authority %}
+          {% include "partials/form_field.html" with field=form.description %}
+        </div>
+        <p class="text-muted">An <strong>attestation</strong> programme (SOC 2, ISO 27001, PCI-DSS) is
+          something you get certified against. A <strong>regulatory</strong> row here is only a
+          cross-link to a regime whose obligations already live on
+          <code>core.RegulatoryFramework</code> (0.8) &mdash; it does not restate them.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Standing</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.is_active %}
+          {% include "partials/form_field.html" with field=form.adopted_on %}
+          {% include "partials/form_field.html" with field=form.review_due_on %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <p class="text-muted">Deactivating a framework does not remove a single mapped control, and
+          activating one does not create a task for anybody. Both are recorded decisions.</p>
+      </div>
+    </div>
+
+    <div class="page-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="save"></i> {% if is_edit %}Save changes{% else %}Register framework{% endif %}</button>
+      <a href="{% url 'core:controlframework_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
