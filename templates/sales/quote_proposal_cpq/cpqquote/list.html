@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Quotes &amp; Proposals (CPQ) — NavERP Sales{% endblock %}
+{% block title %}Quotes &amp; Proposals (CPQ) â€” NavERP Sales{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
@@ -99,10 +99,35 @@
                         <option value="1" {% if request.GET.is_primary == '1' %}selected{% endif %}>Primary Only</option>
                     </select>
                 </div>
+                <div>
+                    <select name="account" class="form-select text-sm">
+                        <option value="">All Accounts</option>
+                        {% for acct in accounts %}
+                            <option value="{{ acct.pk }}" {% if request.GET.account == acct.pk|stringformat:"d" %}selected{% endif %}>{{ acct.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <select name="owner" class="form-select text-sm">
+                        <option value="">All Owners</option>
+                        {% for u in owners %}
+                            <option value="{{ u.pk }}" {% if request.GET.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.email }}</option>
+                        {% endfor %}
+                        <option value="none" {% if request.GET.owner == 'none' %}selected{% endif %}>Unassigned</option>
+                    </select>
+                </div>
+                <div>
+                    <select name="currency" class="form-select text-sm">
+                        <option value="">All Currencies</option>
+                        {% for cur in currencies %}
+                            <option value="{{ cur.pk }}" {% if request.GET.currency == cur.pk|stringformat:"d" %}selected{% endif %}>{{ cur.code }} &mdash; {{ cur.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <button type="submit" class="btn btn-outline py-2 px-3 text-sm">
                     <i data-lucide="filter" class="w-4 h-4 mr-1"></i> Filter
                 </button>
-                {% if request.GET.q or request.GET.status or request.GET.approval_status or request.GET.opportunity or request.GET.is_primary %}
+                {% if request.GET.q or request.GET.status or request.GET.approval_status or request.GET.opportunity or request.GET.is_primary or request.GET.account or request.GET.owner or request.GET.currency %}
                     <a href="{% url 'sales:cpq_quote_list' %}" class="text-sm text-slate-500 hover:text-slate-800 ml-1">Reset</a>
                 {% endif %}
             </form>
@@ -135,11 +160,11 @@
                                     {% endif %}
                                 </div>
                                 <div class="text-xs text-slate-400 font-mono mt-0.5">
-                                    {{ q.number }} · Rev {{ q.revision_number }}
+                                    {{ q.number }} Â· Rev {{ q.revision_number }}
                                 </div>
                             </td>
                             <td>
-                                <div class="text-sm font-medium text-slate-800">{{ q.account.name|default:"—" }}</div>
+                                <div class="text-sm font-medium text-slate-800">{{ q.account.name|default:"â€”" }}</div>
                                 {% if q.opportunity %}
                                     <div class="text-xs text-slate-500">{{ q.opportunity.name }}</div>
                                 {% endif %}
@@ -182,7 +207,7 @@
                                 {% endif %}
                             </td>
                             <td class="text-xs text-slate-600">
-                                {% if q.owner %}{{ q.owner.get_full_name|default:q.owner.username }}{% else %}—{% endif %}
+                                {% if q.owner %}{{ q.owner.get_full_name|default:q.owner.username }}{% else %}â€”{% endif %}
                             </td>
                             <td class="table-actions text-right">
                                 <a href="{% url 'sales:cpq_quote_detail' q.pk %}" class="btn-icon" title="View Workspace">
@@ -231,11 +256,11 @@
                 </div>
                 <div class="pagination flex items-center space-x-2">
                     {% if quotes.has_previous %}
-                        <a href="?page={{ quotes.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.approval_status %}&approval_status={{ request.GET.approval_status }}{% endif %}{% if request.GET.opportunity %}&opportunity={{ request.GET.opportunity }}{% endif %}{% if request.GET.is_primary %}&is_primary={{ request.GET.is_primary }}{% endif %}" class="btn btn-outline py-1 px-3 text-sm">Previous</a>
+                        <a href="?page={{ quotes.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.approval_status %}&approval_status={{ request.GET.approval_status }}{% endif %}{% if request.GET.opportunity %}&opportunity={{ request.GET.opportunity }}{% endif %}{% if request.GET.is_primary %}&is_primary={{ request.GET.is_primary }}{% endif %}{% if request.GET.account %}&account={{ request.GET.account }}{% endif %}{% if request.GET.owner %}&owner={{ request.GET.owner }}{% endif %}{% if request.GET.currency %}&currency={{ request.GET.currency }}{% endif %}" class="btn btn-outline py-1 px-3 text-sm">Previous</a>
                     {% endif %}
                     <span class="text-sm font-medium text-slate-700">Page {{ quotes.number }} of {{ quotes.paginator.num_pages }}</span>
                     {% if quotes.has_next %}
-                        <a href="?page={{ quotes.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.approval_status %}&approval_status={{ request.GET.approval_status }}{% endif %}{% if request.GET.opportunity %}&opportunity={{ request.GET.opportunity }}{% endif %}{% if request.GET.is_primary %}&is_primary={{ request.GET.is_primary }}{% endif %}" class="btn btn-outline py-1 px-3 text-sm">Next</a>
+                        <a href="?page={{ quotes.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.approval_status %}&approval_status={{ request.GET.approval_status }}{% endif %}{% if request.GET.opportunity %}&opportunity={{ request.GET.opportunity }}{% endif %}{% if request.GET.is_primary %}&is_primary={{ request.GET.is_primary }}{% endif %}{% if request.GET.account %}&account={{ request.GET.account }}{% endif %}{% if request.GET.owner %}&owner={{ request.GET.owner }}{% endif %}{% if request.GET.currency %}&currency={{ request.GET.currency }}{% endif %}" class="btn btn-outline py-1 px-3 text-sm">Next</a>
                     {% endif %}
                 </div>
             </div>
