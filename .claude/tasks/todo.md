@@ -12463,3 +12463,40 @@ and **never** a flat `<entity>_<page>.html`.
 ## Review notes
 (filled in at the end)
 
+
+
+---
+
+## Follow-up pass (after Phase 7) — the two open items, both now closed
+
+### 1. The migration-backed suite could not be run
+
+It was true that a fresh test-DB build never finished (killed at 27 min). The cause was not the migrations themselves:
+
+- `pytest.ini` has carried `addopts = --reuse-db` from the start and it was a **silent no-op**. For SQLite, Django reads only `DATABASES["default"]["TEST"]["NAME"]` for the TEST database and ignores `NAME`; with nothing set it fell back to a shared in-memory DB, discarded at exit, so **every run re-applied all ~270 migrations**.
+- SQLite fsyncs on every commit by default, and migrations commit thousands of times.
+
+Fixed by `config/settings_test.py` (`NAVERP_TEST_DB` -> `TEST["NAME"]`, bare filename) and a `connection_created` receiver in `root/conftest.py` that sets `synchronous=OFF` / `journal_mode=MEMORY` on the test DB, guarded on the engine.
+
+**Measured: first migration-backed run 38 min; every run after it 28 s.** 398 tests, 0 failures, with real migrations applied. Two traps are documented in the settings file because both were wrong on the first attempt: the knob is `TEST["NAME"]` and not `NAME`, and the value must be a bare filename because Django uses it verbatim.
+
+### 2. M3, M4 and M6 were re-opened — all three skips were wrong
+
+| Finding | Why the skip was wrong | What was done |
+|---|---|---|
+| M3 | "No shared partial to reuse" is not a reason — writing one is a new file plus a mechanical swap. And there were **six** copies, not four: the two verbs had drifted too. | `templates/partials/confirm_button.html` owns POST + confirm + csrf + icon; all six call sites include it. A test fails if any 0.19 page hand-rolls `method="post"` or `onsubmit=`. |
+| M4 | Recorded against the **detail** pages, which were never icon-only — they use `btn` with visible text. The real gap was the **list** pages. | All 0.19 `btn-icon` controls now carry `aria-label`, asserted per line. |
+| M6 | Out of scope to **fix** the numbering, but not out of scope to **know** the cost. The finding quoted "~94 queries"; measured, it is **178**. | Pinned by a 200-query budget, a cheap re-seed assertion, and a test that no view module imports the seeder — which is the "not a hot path" claim itself, now argued with a test. |
+
+**Still genuinely open, and not claimed as done:** the app-wide `aria-label` sweep beyond 0.19, and moving `next_number()` out of `Model.save()` so `bulk_create` becomes usable.
+
+### A note on two repo-wide gates, and who owns them
+
+At the time of this pass a **second session is mid-build of `core/0.20` in this same checkout** (L43). Two repo-wide gates therefore report on ITS work, not on 0.19:
+
+| Gate | Now reports | Owner |
+|---|---|---|
+| `makemigrations --check` | pending `core.0017` (5 new models) | the 0.20 session — **`makemigrations tenants --check` is "No changes detected"** |
+| `temp/audit_integrity.py` | check 6 fails: 5 unseeded models — `JobDefinition`, `JobRun`, `MaintenanceWindow`, `ChangeRequest`, `FeatureRollout` | the 0.20 session — none of 0.19's four models is listed, and every other app reports 0 |
+
+Both were 6/6 and "No changes detected" when 0.19 closed. Nothing here was touched or reverted, and no migration number was claimed.
