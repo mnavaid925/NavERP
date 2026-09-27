@@ -52,12 +52,20 @@ def planentitlement_detail(request, pk):
         pk=pk, tenant=request.tenant,
     )
     # All three lists CAPPED AT 50, the embedded-list precedent from 0.1.
+    # `select_related("subscription")` on `overrides` is NOT optional (I7). `planentitlement/detail.html`
+    # reads `grant.subscription.pk` and `grant.subscription.get_plan_display` once per row, and this
+    # queryset filters `subscription__isnull=False` - so every row is GUARANTEED to have a
+    # subscription and therefore guaranteed to fire a query. At the page's own 50-row cap that is
+    # 51 queries where 3 suffice, and the worst case is the designed case. It is a LEFT OUTER
+    # JOIN on a nullable FK, so it is free here. The same view already does this correctly twice
+    # (`obj` below and `entitlementfeature_detail:54`), which is what makes it a defect rather
+    # than a style choice.
     plan_grants = (PlanEntitlement.objects.filter(tenant=request.tenant, feature_id=obj.feature_id,
                                                   subscription__isnull=True)
                    .order_by("plan")[:50])
     overrides = (PlanEntitlement.objects.filter(tenant=request.tenant, feature_id=obj.feature_id,
                                                 subscription__isnull=False)
-                 .order_by("subscription_id")[:50])
+                 .select_related("subscription").order_by("subscription_id")[:50])
     # A REAL derived value, not a tautology, and it is what makes [RULING] 3's read-order rule
     # visible. Built as a dict comprehension over the ALREADY-FETCHED list — never a per-row
     # `.filter()`, which re-queries on every render (the `_usage_summary` docstring, verbatim).
