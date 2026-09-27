@@ -12467,7 +12467,7 @@ and **never** a flat `<entity>_<page>.html`.
 
 ---
 
-## Follow-up pass (after Phase 7) � the two open items, both now closed
+## Follow-up pass (after Phase 7) � the two open items, both now closed
 
 ### 1. The migration-backed suite could not be run
 
@@ -12480,13 +12480,13 @@ Fixed by `config/settings_test.py` (`NAVERP_TEST_DB` -> `TEST["NAME"]`, bare fil
 
 **Measured: first migration-backed run 38 min; every run after it 28 s.** 398 tests, 0 failures, with real migrations applied. Two traps are documented in the settings file because both were wrong on the first attempt: the knob is `TEST["NAME"]` and not `NAME`, and the value must be a bare filename because Django uses it verbatim.
 
-### 2. M3, M4 and M6 were re-opened � all three skips were wrong
+### 2. M3, M4 and M6 were re-opened � all three skips were wrong
 
 | Finding | Why the skip was wrong | What was done |
 |---|---|---|
-| M3 | "No shared partial to reuse" is not a reason � writing one is a new file plus a mechanical swap. And there were **six** copies, not four: the two verbs had drifted too. | `templates/partials/confirm_button.html` owns POST + confirm + csrf + icon; all six call sites include it. A test fails if any 0.19 page hand-rolls `method="post"` or `onsubmit=`. |
-| M4 | Recorded against the **detail** pages, which were never icon-only � they use `btn` with visible text. The real gap was the **list** pages. | All 0.19 `btn-icon` controls now carry `aria-label`, asserted per line. |
-| M6 | Out of scope to **fix** the numbering, but not out of scope to **know** the cost. The finding quoted "~94 queries"; measured, it is **178**. | Pinned by a 200-query budget, a cheap re-seed assertion, and a test that no view module imports the seeder � which is the "not a hot path" claim itself, now argued with a test. |
+| M3 | "No shared partial to reuse" is not a reason � writing one is a new file plus a mechanical swap. And there were **six** copies, not four: the two verbs had drifted too. | `templates/partials/confirm_button.html` owns POST + confirm + csrf + icon; all six call sites include it. A test fails if any 0.19 page hand-rolls `method="post"` or `onsubmit=`. |
+| M4 | Recorded against the **detail** pages, which were never icon-only � they use `btn` with visible text. The real gap was the **list** pages. | All 0.19 `btn-icon` controls now carry `aria-label`, asserted per line. |
+| M6 | Out of scope to **fix** the numbering, but not out of scope to **know** the cost. The finding quoted "~94 queries"; measured, it is **178**. | Pinned by a 200-query budget, a cheap re-seed assertion, and a test that no view module imports the seeder � which is the "not a hot path" claim itself, now argued with a test. |
 
 **Still genuinely open, and not claimed as done:** the app-wide `aria-label` sweep beyond 0.19, and moving `next_number()` out of `Model.save()` so `bulk_create` becomes usable.
 
@@ -12496,7 +12496,108 @@ At the time of this pass a **second session is mid-build of `core/0.20` in this 
 
 | Gate | Now reports | Owner |
 |---|---|---|
-| `makemigrations --check` | pending `core.0017` (5 new models) | the 0.20 session � **`makemigrations tenants --check` is "No changes detected"** |
-| `temp/audit_integrity.py` | check 6 fails: 5 unseeded models � `JobDefinition`, `JobRun`, `MaintenanceWindow`, `ChangeRequest`, `FeatureRollout` | the 0.20 session � none of 0.19's four models is listed, and every other app reports 0 |
+| `makemigrations --check` | pending `core.0017` (5 new models) | the 0.20 session � **`makemigrations tenants --check` is "No changes detected"** |
+| `temp/audit_integrity.py` | check 6 fails: 5 unseeded models � `JobDefinition`, `JobRun`, `MaintenanceWindow`, `ChangeRequest`, `FeatureRollout` | the 0.20 session � none of 0.19's four models is listed, and every other app reports 0 |
 
 Both were 6/6 and "No changes detected" when 0.19 closed. Nothing here was touched or reverted, and no migration number was claimed.
+
+---
+
+# Sub-module 0.21 — Compliance, Governance & Risk (Module 0: Core / Foundation, `core`)
+
+> **Plan from `research-core-0.21.md` (`2929520f`) and the frozen `contract-core-0.21.md` (`7d96c406`).**
+> **This plan EXTENDS an existing app.** `apps/core/` is already live with 0.1 through 0.20.
+> **NO scaffold. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> `BASE` for the Phase 4 review range: **`5ab1c305`**.
+> Migration: **`core.0018_*`** — the leaf was `0016` at plan time, but a concurrent session
+> committed 0.20's `0017` (`8c8c40a1`) while this section was being written.
+> **Re-read `apps/core/migrations/` immediately before generating; never hand-write the number.**
+>
+> **Phase 1 ran inline, not via the `research` agent** — the subagent hit a 429 daily quota.
+> The reconciliation in research §3 is the load-bearing evidence, not the web search.
+
+## Scope — bullets 1–3 of the five `NavERP.md` bullets (lines 274–276)
+
+1. **Compliance Frameworks** — SOC 2, ISO 27001, GDPR, HIPAA, and PCI-DSS control mapping.
+2. **Policy Management** — Security policy authoring, acknowledgment tracking, and enforcement.
+3. **Risk Register & Assessment** — Risk identification, scoring, treatment plans, and monitoring.
+
+**Bullets 4 and 5 (audit/certification, data residency) are DEFERRED to a second 0.21 pass** with
+their own contract — see research §5.2. The inherited plan proposed 8 models; this pass ships 4.
+
+## The four non-negotiable reconciliations this plan is built on
+
+**(a) There is no class called `ComplianceFramework`, and that is the point.** 0.8's
+`core.RegulatoryFramework` (`apps/core/models/Privacy.py:72`) already answers "which regimes is this
+workspace under" and already carries `dsar_window_days` + `data_residency_region`. A second
+framework table listing GDPR and HIPAA would give one workspace two answers to the same question at
+audit time. **0.21 ships `ControlFramework`** — certification programmes (SOC 2, ISO 27001,
+PCI-DSS) — and leaves `RegulatoryFramework` untouched. Rejected alternative and full reasoning:
+
+## Checkable build plan
+
+- [ ] **M1** `apps/core/models/Compliance.py` — `ControlFramework` (CFW), `ComplianceControl`
+      (CTL), `ControlFrameworkMapping` (join, no number), `CorporatePolicy` (CPOL),
+      `PolicyAcknowledgement` (child, no number), `RiskRegister` (GRC). Every field, choice value,
+      index name and `clean()` rule exactly as contract §1. Literal `save()` mint via
+      `apps.core.utils.next_number`.
+- [ ] **M2** Re-export all six classes + 11 CHOICES/VALUES constants from
+      `apps/core/models/__init__.py`. *(Single-writer file — re-check `git status` first.)*
+- [ ] **M3** `apps/core/management/commands/seed_core.py` — 4 `NumberingScheme` rows + the guarded
+      demo blocks (3 frameworks / 4 controls / 5 mappings / 2 policies / 2 acknowledgements /
+      3 risks). No row may claim certification. *(Single-writer — re-check first.)*
+- [ ] **M4** `apps/core/settings_engine.py` — add `CFW`/`CTL`/`CPOL`/`GRC` to
+      `LITERAL_PREFIX_MODELS`. *(Single-writer — re-check first.)*
+- [ ] **`makemigrations core` → `migrate core`**, then `seed_core` **twice** (idempotency proof),
+      then `manage.py check` clean. Confirm `makemigrations --check` says "No changes detected".
+- [ ] **F1** `apps/core/forms/Compliance.py` — 6 forms, `Meta.fields` exactly as contract §2.
+- [ ] **V1** `apps/core/views/Compliance.py` — 28 views + 2 actions, `GRC_NOTES`, every
+      `extra_context` key from contract §3.
+- [ ] **U1** `apps/core/urls.py` — the 0.21 block from contract §4, literals before `<int:pk>`.
+- [ ] **R1** `apps/core/views/__init__.py` + `apps/core/forms/__init__.py` re-exports.
+- [ ] **T1** `templates/core/controlframework/{list,detail,form}.html`
+- [ ] **T2** `templates/core/compliancecontrol/{list,detail,form}.html`
+- [ ] **T3** `templates/core/corporatepolicy/{list,detail,form}.html`
+- [ ] **T4** `templates/core/riskregister/{list,detail,form}.html`
+- [ ] **T5** `templates/core/controlframeworkmapping/{list,form}.html` — **no detail.html**
+- [ ] **T6** `templates/core/policyacknowledgement/{list,form}.html` — **no detail.html**
+- [ ] **T7** `templates/core/grcoverview.html` — the standalone posture board
+- [ ] **N1** `apps/core/navigation.py` — `LIVE_LINKS["0.21"]`, 7 items. *(Single-writer.)*
+- [ ] **A1** `apps/core/admin.py` — register the four top-level models. *(Single-writer.)*
+- [ ] **Smoke** `qa-smoke-tester` pass: every new page renders as `admin_acme` **with asserted
+      content, not just a 200**; junk-param lists fall back; page 2 renders; cross-tenant pk → 404.
+- [ ] **Phase 4** six reviewers, one after another, findings into
+      `.claude/tasks/review-core-0.21.md`
+- [ ] **Phase 5** `code-fixer` burns the findings down, one commit per file
+- [ ] **Phase 6** contract+`conftest.py` → `test_compliance_models` → `_forms` → `_views` →
+      `_security`, then the **full unfiltered** `apps/core` suite green
+- [ ] **Phase 7** `.claude/skills/core/SKILL.md` + `README.md` mark 0.21 complete
+
+## Declined, with reasons (so it is not re-litigated)
+
+- **Control enforcement** / **auditor access granting** / **geofenced data residency** /
+  **acknowledgement reminders** — see (c).
+- **A `NotificationDispatcher`** — 0.12 owns templates and rules; there is still no dispatcher.
+- **A 200-row seeded control library** — would be the "compliance lie" `regulatory_sync` refuses.
+- **Risk → control FK and cross-module risk rollup** (`projects.ProjectRisk`) — a reconciliation
+  between two apps' risk models is a cross-module project, not a 0.21 side effect.
+- **Risk snapshots / KRIs / RCSA campaigns** — P2, parked in research §1.3.
+
+## Review notes
+(filled in at the end)
+
+research §3.
+
+**(b) `RiskRegister` is `GRC-`, not `RSK-`.** The inherited plan listed `RSK` as collision-free.
+**It is not**: `RSK` is `projects.ProjectRisk`, verified by enumerating every `NUMBER_PREFIX` in the
+repo. Two `RSK-00001`s in one tenant are indistinguishable to an operator, which is the exact
+failure `prefix_usage()` exists to catch. `GRC-` is verified free.
+
+**(c) A register, not a runtime.** NavERP is single-region Django, one database, no mail
+dispatcher, no worker. Nothing here enforces a control, grants auditor access, pins data to a
+region, or reminds anyone to acknowledge a policy. `GRC_NOTES` prints this on every 0.21 page and
+every success message says **"recorded"**, never "enforced"/"granted"/"reminded"/"verified".
+
+**(d) `core` is a foundation app: flat entity files, flat `urls.py`, flat templates.** Backend
+rule 9, template rule 4. All six classes live in one file `apps/core/models/Compliance.py`; no
+`<SubModule>/` folder; no `*_advanced.py`.
