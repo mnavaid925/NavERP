@@ -59,3 +59,40 @@ from .Onboarding import (
 from .Isolation import (
     isolation_overview,
 )  # noqa: F401
+# 0.19 "License & Subscription Administration" — 24 views: 22 CRUD across four entities, the two
+# POST-only verbs, and the two computed boards. Every one re-exported here, because a view wired
+# into urls.py but missing from this block is an AttributeError at import (L7).
+from .EntitlementFeature import (
+    entitlementfeature_list,
+    entitlementfeature_create,
+    entitlementfeature_detail,
+    entitlementfeature_edit,
+    entitlementfeature_delete,
+)  # noqa: F401
+from .PlanEntitlement import (
+    planentitlement_list,
+    planentitlement_create,
+    planentitlement_detail,
+    planentitlement_edit,
+    planentitlement_delete,
+)  # noqa: F401
+from .UsageQuota import (
+    usagequota_list,
+    usagequota_create,
+    usagequota_detail,
+    usagequota_edit,
+    usagequota_delete,
+    usagequota_mark_breached,
+)  # noqa: F401
+from .LicenseAssignment import (
+    licenseassignment_list,
+    licenseassignment_create,
+    licenseassignment_detail,
+    licenseassignment_edit,
+    licenseassignment_delete,
+    licenseassignment_reclaim,
+)  # noqa: F401
+from .Boards import (
+    quota_board,
+    renewal_board,
+)  # noqa: F401
