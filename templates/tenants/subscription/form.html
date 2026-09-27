@@ -28,4 +28,32 @@
       </div>
     </form>
   </div></div>
+
+  {% comment %}
+    0.19 added `auto_renew` and `grace_ends_on` to THIS form, so this is 0.19's own page to be
+    honest on, and the two limits that touch these fields are stated here rather than left for
+    the reader to assume:
+
+    1. `auto_renew` is THREE-state and `null` means "nobody has said". It is not a promise. No
+       scheduler in NavERP acts on it - the renewal RUN is 0.20 - so recording True changes no
+       behaviour today. A checkbox would have made this field two-state and silently converted
+       every unanswered question into a declined one, which is why it is a select.
+    2. PRORATION is DECLINED. This form computes no money: a mid-term upgrade or downgrade is
+       not split, prorated, or charged here, and the invoice register (0.1's
+       `SubscriptionInvoice`, bullet 4 of 0.19) is not written from this form either. Proration
+       would be a second money-arithmetic path, and `accounting` owns the money (L29).
+  {% endcomment %}
+  <div class="card mt-3"><div class="card-body">
+    <p class="text-muted mb-0">
+      <strong>Auto-renewal records an intent only.</strong> Nothing in NavERP acts on it yet
+      &mdash; there is no scheduler, so the renewal itself is <strong>0.20</strong>'s work. An
+      unanswered <code>auto_renew</code> stays unanswered; it is never read as &ldquo;no&rdquo;.
+    </p>
+    <p class="text-muted mt-2 mb-0">
+      <strong>No proration.</strong> Changing the plan or the seats mid-term does not split,
+      prorate, or charge anything here, and this form writes no invoice. The subscription
+      invoice register is 0.1's; subscription revenue posts to the ledger through
+      <code>accounting</code>.
+    </p>
+  </div></div>
 {% endblock %}
