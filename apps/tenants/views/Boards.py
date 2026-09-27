@@ -67,35 +67,41 @@ def _seat_summary(tenant):
 
     Reused by `licenseassignment_detail`, which forwards the same numbers rather than re-querying.
 
-    **The `user__tenant` clause is on ONE queryset, and every number comes off it** (I5). It is
-    REQUIRED, not defensive: `accounts.User.tenant` is nullable (the superuser `admin` has
-    tenant=None by design) and the Django admin is NOT tenant-scoped, so a row holding a
-    null-tenant user is constructible. The shipped code applied the clause to the `active` count
-    ONLY, so for such a row the five numbers rendered side by side on the seat detail page
+    Two queries become ONE (I9): a single `values("status")` group carries the three status
+    counts, the total and `expired` as a filtered aggregate. `expired` is `status == "active"`
+    AND `expires_on` in the past, so it lives naturally inside the `active` group's row — nothing
+    ever writes `status="expired"` ([RULING] 5), which is exactly why a bare status group cannot
+    produce it, and why the DISPLAYED state has to be counted rather than grouped.
+
+    The `user__tenant` clause lives on ONE queryset, so it cannot be applied to one number and
+    forgotten on another. The shipped code applied it to the ACTIVE count only, so for a row
+    holding a null-tenant user the five numbers rendered side by side on the seat detail page
     disagreed with each other: `total` counted the row, `active` did not, and the register the
-    page links to did show it. Ninety-nine percent of workspaces never see this, which is exactly
-    why it needed saying rather than leaving to chance.
-
-    Two queries, both off the same narrowed base: ONE grouped query produces the three status
-    counts and the total, one filtered count produces `expired`. The old three-query version had
-    to repeat the clause by hand four times, which is how it came to be applied once.
-
-    `expired` counts rows whose `expires_on` is past AND whose `status == "active"` — the DISPLAYED
-    state, never a stored one. Nothing ever writes `status="expired"` ([RULING] 5), so a
-    `values("status")` group alone cannot produce it.
+    page links to did show it. `accounts.User.tenant` is nullable (the superuser has tenant=None
+    by design) and the Django admin is not tenant-scoped, so that row is constructible. Ninety-nine
+    percent of workspaces never see it, which is exactly why it needed saying.
     """
     today = timezone.localdate()
-    seats = LicenseAssignment.objects.filter(tenant=tenant, user__tenant=tenant)
     by_status = {
-        row["status"]: row["n"]
-        for row in seats.values("status").annotate(n=Count("id"))
+        row["status"]: row
+        for row in LicenseAssignment.objects.filter(tenant=tenant, user__tenant=tenant)
+                                     .values("status")
+                                     .annotate(
+                                         n=Count("id"),
+                                         expired=Count(
+                                             "id",
+                                             filter=Q(expires_on__lt=today),
+                                         ),
+                                     )
     }
+    active = by_status.get("active", {"n": 0, "expired": 0})
     return {
-        "active": by_status.get("active", 0),
-        "reclaimed": by_status.get("reclaimed", 0),
-        "revoked": by_status.get("revoked", 0),
-        "expired": seats.filter(status="active", expires_on__lt=today).count(),
-        "total": sum(by_status.values()),
+        "active": active["n"],
+        "reclaimed": by_status.get("reclaimed", {}).get("n", 0),
+        "revoked": by_status.get("revoked", {}).get("n", 0),
+        # Inside the `active` group, so every row counted here is a row `active` counts too.
+        "expired": active["expired"],
+        "total": sum(row["n"] for row in by_status.values()),
     }
 
 
