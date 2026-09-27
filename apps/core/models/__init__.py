@@ -140,3 +140,32 @@ from .Security import (
     SEVERITY_CHOICES,
     SCAN_FREQUENCY_CHOICES,
 )  # noqa: F401
+# 0.20 — Admin Console & System Operations. Flat at the package root (rule 9: core is a Module 0
+# foundation app with no NavERP sub-modules), so the entity files sit beside every other one.
+# The module-level CHOICES constants are re-exported too, because the seeder and the boards need
+# JOB_TYPE_CHOICES / WINDOW_STATUS_CHOICES / CHANGE_STATUS_CHOICES without importing the entity
+# modules directly.
+from .JobScheduler import (
+    JobDefinition,
+    JobRun,
+    JOB_TYPE_CHOICES,
+    TRIGGER_KIND_CHOICES,
+    JOB_RUN_STATUS_CHOICES,
+    SCHEDULE_KIND_CHOICES,
+)  # noqa: F401
+from .Maintenance import (
+    MaintenanceWindow,
+    RECURRENCE_CHOICES,
+    WINDOW_STATUS_CHOICES,
+    FUTURE_STATUSES,
+)  # noqa: F401
+from .Change import (
+    ChangeRequest,
+    FeatureRollout,
+    CHANGE_TYPE_CHOICES,
+    RISK_LEVEL_CHOICES,
+    IMPACT_LEVEL_CHOICES,
+    CHANGE_STATUS_CHOICES,
+    ROLLOUT_STAGE_CHOICES,
+    ROLLOUT_STATUS_CHOICES,
+)  # noqa: F401
