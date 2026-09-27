@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Rollout {{ obj.change.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.get_stage_display }} &mdash; {{ obj.feature_flag.key }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:featurerollout_list' %}">Rollouts</a><span class="sep">&rsaquo;</span><a href="{% url 'core:changerequest_detail' obj.change.pk %}">{{ obj.change.number }}</a><span class="sep">&rsaquo;</span><span>{{ obj.get_stage_display }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:featurerollout_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:featurerollout_delete' obj.pk %}" onsubmit="return confirm('Delete this rollout stage?');">
+        {% csrf_token %}
+        <button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This stage changes nothing.</strong>
+      No cohort is selected and <code>FeatureFlag.is_enabled</code> is not written by this page. The
+      {{ obj.percentage }}% below is what the rollout was <em>declared</em> to reach, recorded so a change can be
+      read back honestly later.</p>
+    <p class="text-muted">The ladder is exact: internal only is 0%, general availability is 100%, and partial sits
+      strictly between them. The model refuses a contradictory pair &mdash; a general-availability stage at 40% is not
+      a record of anything.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The stage</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Change request</dt><dd><a href="{% url 'core:changerequest_detail' obj.change.pk %}">{{ obj.change.number }}</a> &mdash; {{ obj.change.title|truncatechars:48 }}</dd></div>
+        <div class="detail-item"><dt>Feature flag</dt><dd>{{ obj.feature_flag.key }} <span class="text-muted">(0.10 owns the toggle)</span></dd></div>
+        <div class="detail-item"><dt>Flag currently</dt><dd>{% if obj.feature_flag.is_enabled %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-slate">Disabled</span>{% endif %} <span class="text-muted">&mdash; this page never changes it</span></dd></div>
+        <div class="detail-item"><dt>Stage</dt><dd>{{ obj.get_stage_display }}</dd></div>
+        <div class="detail-item"><dt>Declared reach</dt><dd>{{ obj.percentage }}%</dd></div>
+        <div class="detail-item"><dt>Cohort</dt><dd>{{ obj.cohort_label|default:"&mdash;" }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{% if obj.status == "completed" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == "running" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == "rolled_back" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Scheduled</dt><dd>{{ obj.scheduled_at|date:"M d, Y H:i"|default:"&mdash;" }} <span class="text-muted">(declaration; no scheduler acts on it)</span></dd></div>
+        <div class="detail-item"><dt>Started</dt><dd>{{ obj.started_at|date:"M d, Y H:i"|default:"&mdash;" }}</dd></div>
+        <div class="detail-item"><dt>Completed</dt><dd>{{ obj.completed_at|date:"M d, Y H:i"|default:"&mdash;" }}</dd></div>
+      </dl>
+      {% if obj.notes %}<p class="text-muted">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+{% endblock %}
