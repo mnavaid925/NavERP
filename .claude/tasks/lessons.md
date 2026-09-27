@@ -1566,3 +1566,21 @@ domain questions and are intentionally parallel (same shape as L36's two coexist
 row** â€” `ProjectSyncRun.status = "simulated"` is the honest status.
 
 See [[next-builds-one-submodule]], L36, L29.
+
+
+---
+
+## L49 — a `Model.clean()` guard keyed on `self.tenant_id` is a NO-OP on the form path
+
+**The trap.** `TenantModelForm.__init__` stores `tenant` on the FORM (`self.tenant`) and never on the instance. `ModelForm._post_clean()` then calls `instance.full_clean()` during `is_valid()` — which runs BEFORE the view does `obj.tenant = request.tenant`. So at validation time `self.tenant_id` is still `None`, and any model guard written as `if self.tenant_id and self.subscription_id: ...` silently does nothing. The model looks protected; the form is the only place the tenant is known while the row is validated.
+
+**It bit 0.19 for real.** Six review passes read `LicenseAssignment.clean()` and saw the duplicate guard. The model docstring even explained the normalisation in detail. But the [RULING] 8 duplicate guard that actually runs is the one in `LicenseAssignmentForm.clean()` — and it compared the RAW posted slug, so `module_slug="ACCOUNTING"` found no clash against a stored `"accounting"`, validated fine, normalised on save, and raised `IntegrityError` ? HTTP 500 on a duplicate POST.
+
+**Rules.**
+1. If a form must compare a value against what the database holds, normalise it in the FORM too — not only in `Model.save()`. Same transformation, same place, or the two disagree.
+2. Do not assume a `Model.clean()` guard runs on the form path. If it depends on `self.tenant_id`, verify it actually fires before relying on it.
+3. **A docstring asserting a fix is not a fix.** The 0.19 model docstring described the normalisation as already done "so `clean()` — which is what the form calls — compares the same string the database will hold". It read as reassurance and it was wrong about its own reach. Docstrings are claims; tests are evidence.
+
+**Why six reviews missed it:** every reviewer read the code instead of driving it. A reviewer asking "does a duplicate POST 500?" and *posting one* would have found this in under a minute. Reach for the cheapest test whenever a guard is claimed to hold.
+
+See [[next-builds-one-submodule]], L22, L47.
