@@ -110,12 +110,29 @@ class UsageQuota(models.Model):
         return super().save(*args, **kwargs)
 
     def clean(self):
-        """One rule: the [RULING] 8 duplicate guard on the unique tuple.
+        """Two rules: the [RULING] 8 duplicate guard, and the tenant-consistency guard.
 
-        No cross-field rule: `quota_limit` and `warn_at_pct` are independent, and in particular a
-        limit of 0 is a legitimate UNMETERED quota, not a missing value.
+        The second rule exists because nothing at the DATABASE level makes this row tenant-consistent.
+        The FORM scopes the `subscription` dropdown to the tenant, so a crafted POST is rejected — but
+        the Django admin is not tenant-scoped, so a superuser could pair a tenant-A quota with a
+        tenant-B subscription. That matters more here than on the other two models because
+        `subscription` is **CASCADE and non-nullable**: a bad pair does not merely read across, it
+        deletes another workspace's subscription. The error is keyed on `subscription`, a field all
+        three forms actually have (a ValidationError keyed on a missing field raises ValueError — a
+        500 — which is the 0.18 trap).
         """
         super().clean()
+        # Tenant consistency (I15). Referenced through the models package: `Subscription` is a
+        # sibling module in this same package and `_base` does not re-export it, so the bare name is
+        # out of scope here.
+        if self.tenant_id and self.subscription_id:
+            from apps.tenants.models import Subscription as _Subscription
+            if not _Subscription.objects.filter(
+                pk=self.subscription_id, tenant_id=self.tenant_id
+            ).exists():
+                raise ValidationError({
+                    "subscription": "That subscription belongs to another workspace.",
+                })
         if self.tenant_id and self.subscription_id and self.metric and self.period:
             clash = UsageQuota.objects.filter(
                 tenant_id=self.tenant_id, subscription_id=self.subscription_id,
