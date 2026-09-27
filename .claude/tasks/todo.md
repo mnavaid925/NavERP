@@ -7,6 +7,68 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 
+### Module 0 0.18 — Threat Protection & Security Operations (close-out 2026-09-27)
+
+**Status: 0.18 is built, migrated, seeded, documented and passing all six integrity checks.** Four
+models in `apps/core/models/Security.py` — `IpAccessRule`, `SecurityThreat`, `VulnerabilityFinding`,
+`SecurityIncident` (103 fields, declared in dependency order because `SecurityThreat.mitigated_by`
+and `SecurityIncident.primary_threat` are FKs between them). Migration **`core.0016`**: four
+`CreateModel`s and **zero `AddField`** — the schema-level proof that 0.18 grew alongside 0.17 rather
+than modifying it. 33 views, 33 routes (all reverse), 17 templates, 4 admin registrations.
+
+**The seam that shaped the whole build.** `AlertRule.CATEGORY_CHOICES` already carried
+`("security", "Security")` when 0.17 shipped, and a **committed test**
+(`test_monitoring_models.py::test_monitoring_security_is_the_018_seam`) names that value as the 0.18
+seam. So there is **no `SecurityAlert` table, no second incident lifecycle, no second board, and no
+new column on any 0.17 model** — bullet 5 is served by *writing into* 0.17's tables. Likewise
+`core.RateLimitPolicy` (0.13) keeps the limit and is extended by string FK only; `Integration.py`
+was never touched.
+
+**Two contract defects found and fixed rather than built around:**
+
+- **`core:rate_limit_detail` does not exist.** The Phase 2 plan pinned the threat detail to link it;
+  `apps/core/urls.py` registers only `_list`/`_create`/`_edit`/`_delete`. Proven by a shell `reverse()`
+  raising `NoReverseMatch`. Left as planned it would have been a hard 500 on the threat detail page.
+  Replaced with `core:rate_limit_edit` + pk, and the link is *not* a new 0.18 detail view.
+- **`SecurityIncident.status` was pinned at `max_length=12` while `STATUS_CHOICES` contains
+  `"false_positive"` (14 chars).** That is `fields.E009`: it blocked `manage.py check` and every
+  migration, and it would have truncated the one status that means "we decided this was not an
+  incident". Corrected to 14. `SecurityThreat.resolution_note` was added as a real 255-char column so
+  the resolve action writes a field the schema knows about.
+
+**The L52 seeder ruling, and it is total.** `_seed_security` seeds exactly **one** row — a
+`VulnerabilityFinding` whose `evidence` states plainly that **NavERP ran no scanner** — and creates
+**zero** `SecurityThreat`, `SecurityIncident` and `IpAccessRule` rows. A seeded incident would start
+a live GDPR Art. 33 72-hour clock against a breach that never happened, and a past `discovered_at`
+renders as **overdue** on first load: a demo database accusing its own operator of an unreported
+breach. All three are exempted in `temp/audit_integrity.py`'s `KNOWN_OK` with that reason printed,
+because an unexplained exemption is indistinguishable from an oversight. **A test that finds zero of
+them is correct, not broken.**
+
+**`SecurityIncident.regulatory_deadline` is a `@property`, never a column** — Art. 33(1)'s 72 hours
+derived from `discovered_at`, so the anchor and the deadline cannot drift. Displayed, never acted on.
+
+**Two severity lists, and only the second is duplication.** `SecurityThreat` and `SecurityIncident`
+reuse `AlertRule.SEVERITY_CHOICES` **by reference** (identity asserted with `is`, not `==`).
+`VulnerabilityFinding.severity` is a **CVSS band** and deliberately is not that list — a firing
+severity and a CVSS band are different facts.
+
+**`SECURITY_NOTES`** is printed verbatim by the overview, all four boards and all sixteen register
+pages, so a page and its board can never disagree about what this application can and cannot do.
+
+- [x] Phase 1 research `dacf5027` → Phase 2 plan → Phase 3.1 contract `e69e3a02` → models, forms, views,
+      urls, admin, seeder, navigation, `LIVE_LINKS` → 17 templates.
+- [x] `manage.py check` clean; `makemigrations --check --dry-run` → "No changes detected"; `core.0016`
+      applied; `seed_core` run **twice** (second run idempotent — it seeded nothing).
+- [x] `temp/audit_integrity.py` passes **6/6** and independently reports `core: 18 live sub-modules`
+      and `module 0: 3 catalogued but NOT built -> 0.19, 0.20, 0.21`.
+- [x] `LIVE_LINKS["0.18"]`: 9 labels over **9 distinct targets**, the five NavERP.md bullets diffed
+      **byte-identical** against the catalog itself, every target reverses.
+- [x] Docs: `README.md`, `NavERP.md` and `.claude/skills/core/SKILL.md` corrected to **18 of 21**.
+
+**Module 0 is now 18 of 21. The remaining work is 0.19 (License & Subscription Administration),
+0.20 (Admin Console & System Operations) and 0.21 (Compliance, Governance & Risk).**
+
 # Build Plan — Module 0 0.18 Threat Protection & Security Operations
 
 Source of truth: `.claude/tasks/research-core-0.18.md` (committed `dacf5027`). **Phase 2 is planning only** — this
