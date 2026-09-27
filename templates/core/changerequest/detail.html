@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:changerequest_list' %}">Changes</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == "draft" %}
+        <form method="post" action="{% url 'core:change_request_submit' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit for approval</button>
+        </form>
+      {% elif obj.status == "submitted" %}
+        <form method="post" action="{% url 'core:change_request_approve' obj.pk %}" onsubmit="return confirm('Record your approval of this change? It records the decision - nothing is deployed.');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'core:changerequest_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:changerequest_delete' obj.pk %}" onsubmit="return confirm('Delete this change record?');">
+        {% csrf_token %}
+        <button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  {% comment %}
+    Submit and Approve are POST-only verbs, not form fields. `requestor` and `approved_by` are stamped
+    from the acting user by the view, so a change can never be submitted or approved in somebody
+    else's name - and the approval is precisely the act an audit exists to attribute.
+  {% endcomment %}
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Approving this change deploys nothing.</strong>
+      NavERP has no build pipeline and no deployment. An approval here is a recorded decision &mdash; a change
+      register that implied a deploy had happened would be the most dangerous page in this sub-module.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The change</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{% if obj.status == "approved" or obj.status == "completed" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == "submitted" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == "rejected" or obj.status == "rolled_back" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_change_type_display }}</dd></div>
+        <div class="detail-item"><dt>Risk</dt><dd>{{ obj.get_risk_level_display }} <span class="text-muted">(assessed for this change; not an alert severity)</span></dd></div>
+        <div class="detail-item"><dt>Impact</dt><dd>{{ obj.get_impact_level_display }}</dd></div>
+        <div class="detail-item"><dt>Environment</dt><dd>{% if obj.environment %}{{ obj.environment.name }}{% else %}<span class="text-muted">any</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Downtime required</dt><dd>{% if obj.downtime_required %}<span class="badge badge-amber">Yes</span>{% else %}<span class="badge badge-slate">No</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Requestor</dt><dd>{% if obj.requestor %}{{ obj.requestor }}{% else %}<span class="text-muted">not submitted yet</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Requested</dt><dd>{{ obj.requested_at|date:"M d, Y H:i"|default:"&mdash;" }}</dd></div>
+        <div class="detail-item"><dt>Approved by</dt><dd>{% if obj.approved_by %}{{ obj.approved_by }}{% else %}<span class="text-muted">not approved</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Approved</dt><dd>{{ obj.approved_at|date:"M d, Y H:i"|default:"&mdash;" }}</dd></div>
+        <div class="detail-item"><dt>Implemented</dt><dd>{{ obj.implemented_at|date:"M d, Y H:i"|default:"&mdash;" }}</dd></div>
+        <div class="detail-item"><dt>Rollout stages</dt><dd>{{ obj.rollout_count }}</dd></div>
+      </dl>
+      {% if obj.summary %}<p class="text-muted">{{ obj.summary|linebreaksbr }}</p>{% endif %}
+      {% if obj.notes %}<p class="text-muted">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+  {% if obj.status == "rolled_back" %}
+    <div class="card"><div class="card-body">
+      <p class="text-warn"><i data-lucide="undo-2"></i> <strong>Rolled back {{ obj.rollback_at|date:"M d, Y H:i" }}.</strong>
+        {{ obj.rollback_reason }} <span class="text-muted">&mdash; recorded; no system was reverted.</span></p>
+    </div></div>
+  {% elif obj.status == "completed" %}
+    <div class="card"><div class="card-body">
+      <form method="post" action="{% url 'core:change_request_rollback' obj.pk %}" onsubmit="return confirm('Record this change as rolled back? You will be asked for a reason.');">
+        {% csrf_token %}
+        <input type="text" name="rollback_reason" class="form-input" placeholder="Why is it being rolled back? (required)" required style="max-width:420px; display:inline-block; margin-right:8px;">
+        <button class="btn btn-outline danger" type="submit"><i data-lucide="undo-2"></i> Record a rollback</button>
+      </form>
+      <p class="text-muted">A rollback with no stated reason is refused by the view, not just by this field &mdash;
+        an unexplained reversal is exactly what a change register exists to prevent.</p>
+    </div></div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Rollout stages ({{ rollouts|length }})</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Stage</th><th>Feature flag</th><th>Reach</th><th>Cohort</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for r in rollouts %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:featurerollout_detail' r.pk %}">{{ r.get_stage_display }}</a></td>
+              <td>{{ r.feature_flag.key }}</td>
+              <td>{{ r.percentage }}%</td>
+              <td>{% if r.cohort_label %}{{ r.cohort_label }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>{% if r.status == "completed" %}<span class="badge badge-green">{{ r.get_status_display }}</span>{% elif r.status == "running" %}<span class="badge badge-amber">{{ r.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ r.get_status_display }}</span>{% endif %}</td>
+              <td><div class="table-actions"><a href="{% url 'core:featurerollout_detail' r.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a></div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="rocket"></i><h3>No rollout stages</h3><p class="text-muted">This change stages no feature flags. A rollout is a declaration; nothing applies a percentage to a cohort.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if windows %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Linked maintenance windows</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Window</th><th>Opens</th><th>Closes</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for w in windows %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'core:maintenancewindow_detail' w.pk %}">{{ w.title }}</a> <span class="text-muted">{{ w.number }}</span></td>
+                <td>{{ w.starts_at|date:"M d, Y H:i" }}</td>
+                <td>{{ w.ends_at|date:"M d, Y H:i" }}</td>
+                <td><span class="badge badge-slate">{{ w.get_status_display }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.post_review %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Post-implementation review</h2></div>
+      <div class="card-body"><p>{{ obj.post_review|linebreaksbr }}</p></div>
+    </div>
+  {% endif %}
+{% endblock %}
