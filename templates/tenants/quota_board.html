@@ -1,0 +1,179 @@
+﻿{% extends "base.html" %}
+{% comment %}
+  0.19 â€” the quota-vs-consumption board. Backing view: quota_board (views/Boards.py).
+
+  Context, and ONLY these six keys, every one of them produced by the VIEW:
+    quota_rows       list of row dicts, ordered by -pct_used then metric_label
+    warned_count     len([r for r in rows if r["is_warned"]])
+    breached_count   len([r for r in rows if r["is_breached"]])
+    unmetered_count  len([r for r in rows if r["limit"] == 0])
+    metric_choices   UsageQuota.METRIC_CHOICES (the SAME OBJECT as UsageRecord's)
+    action_choices   UsageQuota.ACTION_CHOICES
+
+  Row dict keys, and the ONLY ones this template may read:
+    quota, subscription, metric, metric_label, limit, consumed, pct_used, overage,
+    warn_at_pct, is_warned, is_breached, breached_at, action_on_breach (label resolved in
+    the view), is_fair_use.
+
+  `breached_at` is read inside an {% if %} branch, never through a |default: filter
+  ARGUMENT (L10). `limit`, `consumed` and `pct_used` are NEVER None: the view coerces.
+
+  A limit of 0 is UNMETERED: pct_used 0, no percentage printed, no breach state, and the
+  row is excluded from warned_count and breached_count.
+
+  No filter bar, deliberately: this is a whole-tenant roll-up, and a filter that silently
+  changes what "3 breached" means is worse than no filter at all.
+{% endcomment %}
+{% block title %}Quota Board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Quota Board</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">&rsaquo;</span><span>Licensing</span><span class="sep">&rsaquo;</span><span>Quota board</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:usagequota_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Quota register</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <p class="text-muted"><i data-lucide="info"></i>
+        <strong>NavERP records commercial terms somebody wrote down. It does not enforce them.</strong></p>
+      <p class="text-warn"><i data-lucide="alert-triangle"></i>
+        <strong>Quota enforcement and throttling are declined.</strong> The
+        <strong>action on breach</strong> column is a <strong>recorded policy with no interceptor</strong>: a row
+        marked breached carries a timestamp somebody wrote and an audit row, and <strong>nothing else happens</strong>
+        &mdash; no alert is raised, no charge is computed, no request is blocked, nothing is throttled.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-icon orange"><i data-lucide="triangle-alert"></i></span>
+          <span class="stat-value">{{ warned_count }}</span>
+          <span class="stat-label">At or past the warning threshold</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon red"><i data-lucide="octagon-alert"></i></span>
+          <span class="stat-value">{{ breached_count }}</span>
+          <span class="stat-label">Marked as breached</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon slate"><i data-lucide="gauge"></i></span>
+          <span class="stat-value">{{ unmetered_count }}</span>
+          <span class="stat-label">Unmetered (limit of 0)</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon blue"><i data-lucide="list"></i></span>
+          <span class="stat-value">{{ quota_rows|length }}</span>
+          <span class="stat-label">Quotas on this board</span>
+        </div>
+      </div>
+      <p class="form-help" style="margin-top:1rem;">Unmetered rows are excluded from the warned and breached
+        counts, so a plan with no ceiling never inflates them. &ldquo;Marked as breached&rdquo; counts the recorded
+        stamp, not a recomputation &mdash; a quota nobody marked never appears here even if consumption passed the
+        limit.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Quotas against consumption</h2>
+      <span class="badge badge-slate">Unbilled usage only</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Subscription</th><th>Metric</th><th>Limit</th><th>Consumed</th><th>Used</th><th>Overage</th><th>On breach</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for row in quota_rows %}
+            <tr>
+              <td><a href="{% url 'tenants:subscription_detail' row.subscription.pk %}">{{ row.subscription.get_plan_display }}</a></td>
+              <td class="fw-600">{{ row.metric_label }}</td>
+              <td>
+                {% if row.limit == 0 %}
+                  <span class="badge badge-slate">Unmetered</span>
+                {% else %}
+                  <span class="mono">{{ row.limit }}</span>
+                {% endif %}
+              </td>
+              <td class="mono">{{ row.consumed }}</td>
+              <td class="nowrap">
+                {% comment %}
+                  The percentage is printed ONLY when the row is metered. An unmetered
+                  row shows the word and no number â€” "0%" against a limit of zero would
+                  read as "nothing used", which is a different claim from "not measured".
+                {% endcomment %}
+                {% if row.limit == 0 %}
+                  <span class="muted">not measured</span>
+                {% else %}
+                  <div class="progress"><div class="progress-bar" style="width: {{ row.pct_used }}%;"></div></div>
+                  <div class="text-muted">{{ row.pct_used }}% &middot; warns at {{ row.warn_at_pct }}%</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.overage > 0 %}
+                  <span class="badge badge-red mono">{{ row.overage }}</span>
+                {% else %}
+                  <span class="badge badge-green">0</span>
+                {% endif %}
+              </td>
+              <td><span class="badge badge-slate" title="Recorded policy only â€” nothing acts on this value">{{ row.action_on_breach }}</span></td>
+              <td class="nowrap">
+                {% comment %}
+                  `breached_at` is read inside this branch, never through a |default: filter
+                  argument (L10). An unmetered row has no breach state to show.
+                {% endcomment %}
+                {% if row.limit == 0 %}
+                  <span class="muted">&mdash;</span>
+                {% elif row.is_breached %}
+                  <span class="badge badge-red">Breached</span>
+                  <div class="text-muted">{{ row.breached_at|date:"M d, Y H:i" }}</div>
+                {% elif row.is_warned %}
+                  <span class="badge badge-amber">Warning</span>
+                {% else %}
+                  <span class="badge badge-green">Within limit</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'tenants:usagequota_detail' row.quota.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="gauge"></i><h3>No quotas to measure</h3><p>Nothing on this board because no ceiling has been recorded. Add a quota against a subscription and a metric and it will appear here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this board does not do</h2></div>
+    <div class="card-body">
+      <p class="text-warn"><i data-lucide="gauge"></i>
+        <strong>Quota enforcement and throttling are declined.</strong> A quota crossing its ceiling here changes
+        nothing about the product: <code>action_on_breach</code> is a <strong>recorded policy with no
+        interceptor</strong>, so the value in the <em>On breach</em> column is what somebody agreed to, not an
+        instruction NavERP acts on. Nothing is throttled, nothing is charged, no request is blocked, and no alert is
+        raised by crossing a line on this page.</p>
+      <p class="text-muted"><i data-lucide="plug-zap"></i>
+        <strong>Metered event ingestion is declined.</strong> The consumption column is
+        <a href="{% url 'tenants:usagerecord_list' %}">0.1&rsquo;s <code>UsageRecord</code> register</a>, and its rows
+        are entered by hand or by 0.1&rsquo;s flow. <strong>There is no event pipeline feeding this board</strong>,
+        so the meter only moves when somebody records a row &mdash; it is not a live tap on product activity.</p>
+      <p class="text-muted"><i data-lucide="layers"></i>
+        <strong>L36 â€” which rows are 0.1&rsquo;s.</strong> This board is new in 0.19, but the rows underneath it are
+        not: <code>UsageRecord</code> was built by sub-module 0.1 and is <strong>extended here, never
+        re-declared</strong>. A quota reaches it by foreign key and reads the meter; the usage rows themselves belong
+        to 0.1. If you are looking for a second usage table, there is none &mdash; reporting a duplicate-billing bug
+        here would file it against the wrong sub-module.</p>
+      <p class="text-muted">Prepaid credit grants and rate-card, tiered or multi-currency pricing are declined
+        app-wide: the overage column is <em>consumption past a recorded number</em>, and it is not priced by anything.
+        Proration is declined too &mdash; no money arithmetic happens anywhere in this sub-module.</p>
+    </div>
+  </div>
+{% endblock %}
