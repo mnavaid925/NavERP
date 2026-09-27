@@ -110,9 +110,9 @@
               <td>{{ obj.get_assignment_source_display }}</td>
               <td>
                 <div class="table-actions">
-                  <a href="{% url 'tenants:licenseassignment_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'tenants:licenseassignment_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
                   {% if obj.is_reclaimable %}
-                    <a href="{% url 'tenants:licenseassignment_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <a href="{% url 'tenants:licenseassignment_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
                   {% endif %}
                   {% comment %}
                     POST-only, shown ONLY while the seat is reclaimable, so it is never a
@@ -120,15 +120,17 @@
                     states the decline in words: nobody's login is disabled.
                   {% endcomment %}
                   {% if obj.is_reclaimable %}
-                    <form method="post" action="{% url 'tenants:licenseassignment_reclaim' obj.pk %}" onsubmit="return confirm('Reclaim this seat? It records a commercial fact only — it does NOT disable anyone’s login. There is no identity sync in NavERP.');">
-                      {% csrf_token %}
-                      <button class="btn-icon" title="Reclaim seat"><i data-lucide="user-minus"></i></button>
-                    </form>
+                    {% url 'tenants:licenseassignment_reclaim' obj.pk as reclaim_url %}
+                    {% include "partials/confirm_button.html" with
+                        action=reclaim_url
+                        confirm_message="Reclaim this seat? It records a commercial fact only — it does NOT disable anyone’s login. There is no identity sync in NavERP."
+                        label="Reclaim seat" icon="user-minus" %}
                   {% endif %}
-                  <form method="post" action="{% url 'tenants:licenseassignment_delete' obj.pk %}" onsubmit="return confirm('Delete this seat record? The holder keeps their login either way — this only removes the register row.');">
-                    {% csrf_token %}
-                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% url 'tenants:licenseassignment_delete' obj.pk as delete_url %}
+                  {% include "partials/confirm_button.html" with
+                      action=delete_url
+                      confirm_message="Delete this seat record? The holder keeps their login either way — this only removes the register row."
+                      label="Delete" icon="trash-2" variant="danger" %}
                 </div>
               </td>
             </tr>
