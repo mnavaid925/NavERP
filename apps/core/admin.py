@@ -43,6 +43,11 @@ from .models import (
     ApiCredential,
     RateLimitPolicy,
     ConnectorDefinition,
+    # 0.18 — Threat Protection & Security Operations.
+    IpAccessRule,
+    SecurityThreat,
+    VulnerabilityFinding,
+    SecurityIncident,
     MappingTemplate,
     SyncSchedule,
     Language,
@@ -637,4 +642,80 @@ class IncidentAdmin(admin.ModelAdmin):
     # admin type it would create a row whose own stamp contradicts its own status - the inversion 0.16
     # found with `backup_job_verify` on a failed backup. `notified_at` belongs to the notify action.
     readonly_fields = ["resolved_at", "notified_at", "created_at", "updated_at"]
+
+
+# ===================== 0.18 Threat Protection & Security Operations =====================
+# Every 0.18 admin honours the same posture the pages carry: these are registers of what a
+# person wrote, and the admin is a second write path the pages cannot constrain, so the
+# system-set stamps are `readonly_fields` here for the same reason 0.16 and 0.17 do it.
+# A model `clean()` still runs on every admin save, so the refusals the pages rely on are
+# enforced on this path too — which is precisely why they live on the model and not the form.
+
+
+@admin.register(IpAccessRule)
+class IpAccessRuleAdmin(admin.ModelAdmin):
+    list_display = ["cidr", "direction", "action_display_col", "scope", "is_active",
+                    "expires_at", "tenant"]
+    list_filter = ["direction", "action", "scope", "source", "is_active", "tenant"]
+    search_fields = ["cidr", "reason", "notes"]
+    list_select_related = ["service", "credential", "rate_limit_policy", "added_by", "tenant"]
+    # NO `autocomplete_fields` here: an autocomplete widget requires the RELATED ModelAdmin to
+    # declare its own `search_fields`, and declaring it anyway is an admin.E040 that only
+    # fires when somebody opens the changelist.
+
+    @admin.display(description="Action")
+    def action_display_col(self, obj):
+        # "Would block", never a bare "Block" — a rule that claims to block when nothing in
+        # this repository evaluates it reads back to an auditor as a working control.
+        return obj.action_display
+
+
+@admin.register(SecurityThreat)
+class SecurityThreatAdmin(admin.ModelAdmin):
+    # No `is_active` in `list_filter`: a threat has no such field. A threat's lifecycle is
+    # `status`, and a filter on a field the model does not have is an admin.E116 crash on
+    # load — so the field list is the model's real one.
+    list_display = ["title", "threat_type", "severity", "status", "detected_at",
+                    "occurrence_count", "tenant"]
+    list_filter = ["threat_type", "severity", "status", "defense_mode", "waf_action", "tenant"]
+    search_fields = ["title", "summary", "detail", "evidence", "mitre_technique", "notes"]
+    list_select_related = ["alert_event", "rate_limit_policy", "service", "target_user",
+                           "target_credential", "mitigated_by", "resolved_by", "tenant"]
+    autocomplete_fields = ["service", "mitigated_by"]
+    readonly_fields = ["service_label", "resolved_at", "resolved_by", "resolution_note",
+                       "created_at"]
+
+
+@admin.register(VulnerabilityFinding)
+class VulnerabilityFindingAdmin(admin.ModelAdmin):
+    list_display = ["advisory_id", "title", "finding_source", "severity", "status",
+                    "fix_available", "due_on", "tenant"]
+    list_filter = ["finding_source", "severity", "status", "fix_available",
+                   "scan_frequency", "tenant"]
+    search_fields = ["advisory_id", "title", "package_name", "remediation_note", "evidence"]
+    list_select_related = ["component", "accepted_by", "tenant"]
+    # `accepted_at` is readonly: the FORM back-fills it once, when `accepted_by` is first set,
+    # so a later edit cannot rewrite when the risk was accepted. An admin that could type it
+    # would let a record claim a risk was accepted on a date nobody chose.
+    readonly_fields = ["accepted_at", "created_at", "updated_at"]
+
+
+@admin.register(SecurityIncident)
+class SecurityIncidentAdmin(admin.ModelAdmin):
+    list_display = ["title", "incident_class", "status", "severity", "discovered_at",
+                    "is_notifiable", "tenant"]
+    list_filter = ["incident_class", "status", "severity", "is_notifiable",
+                   "subject_exemption", "tenant"]
+    search_fields = ["title", "notifiable_reason", "authority_reference", "root_cause",
+                     "lessons_learned", "notes"]
+    list_select_related = ["incident", "primary_threat", "owner", "tenant"]
+    filter_horizontal = ["affected_services"]
+    # The six lifecycle/notification stamps each have exactly ONE writer — a POST-only action
+    # on the pages. They are readonly here so the admin cannot stamp one without the guard
+    # that refuses the illegal predecessor. `is_notifiable` is deliberately NOT readonly: it
+    # is the human decision the whole 72-hour clock is waiting on, and the model's clean()
+    # refuses to close an incident while it is undecided.
+    readonly_fields = ["contained_at", "eradicated_at", "recovered_at", "closed_at",
+                       "authority_notified_at", "subjects_notified_at", "owner_label",
+                       "created_at", "updated_at"]
 
