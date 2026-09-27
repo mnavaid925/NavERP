@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Feature Rollouts{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Feature Rollouts</h1>
+      <div class="breadcrumb"><a href="{% url 'core:admin_board' %}">Admin Console</a><span class="sep">&rsaquo;</span><a href="{% url 'core:changerequest_list' %}">Changes</a><span class="sep">&rsaquo;</span><span>Rollouts</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:featurerollout_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Stage a rollout</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>A rollout stage here is a declaration, not a
+      control.</strong> Nothing selects a cohort, and 0.10's <code>FeatureFlag.is_enabled</code> is never written by
+      this page. The stage and percentage say what a rollout was <em>planned</em> to reach, so a change record can be
+      read back honestly.</p>
+    <p class="text-muted">A stage is a child of the change that owns it, which is why it has no number of its own:
+      there is no <code>ROLL-</code> to look up, only the change request. The ladder is exact &mdash; internal only
+      means 0%, general availability means 100%, and partial sits between them &mdash; because a contradictory
+      declaration is not a record of anything.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search cohort, change, flag&hellip;">
+      </div>
+      <div class="form-group">
+        <select name="stage" class="form-select" aria-label="Stage">
+          <option value="">Any stage</option>
+          {% for value, label in stage_choices %}<option value="{{ value }}" {% if request.GET.stage == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="change" class="form-select" aria-label="Change">
+          <option value="">Any change</option>
+          {% for c in changes %}<option value="{{ c.pk }}" {% if request.GET.change == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} &mdash; {{ c.title|truncatechars:36 }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:featurerollout_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Change</th><th>Feature flag</th><th>Stage</th><th>Reach</th><th>Cohort</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:featurerollout_detail' obj.pk %}">{{ obj.change.number }}</a>
+              <div class="text-muted">{{ obj.change.title|truncatechars:40 }}</div></td>
+            <td>{{ obj.feature_flag.key }}</td>
+            <td>{% if obj.stage == "general" %}<span class="badge badge-green">{{ obj.get_stage_display }}</span>{% elif obj.stage == "partial" %}<span class="badge badge-amber">{{ obj.get_stage_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_stage_display }}</span>{% endif %}</td>
+            <td>{{ obj.percentage }}%</td>
+            <td>{% if obj.cohort_label %}{{ obj.cohort_label }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>{% if obj.status == "completed" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == "running" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == "rolled_back" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:featurerollout_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:featurerollout_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:featurerollout_delete' obj.pk %}" onsubmit="return confirm('Delete this rollout stage?');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="rocket"></i><h3>No rollout stages</h3><p class="text-muted">No change has staged a feature flag. Staging one records a plan; it does not enable anything.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
