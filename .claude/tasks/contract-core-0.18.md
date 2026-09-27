@@ -17,7 +17,13 @@ something the plan left open or got wrong.
 exactly one file: `.claude/tasks/contract-core-0.18.md`. No application code was touched, no migration was
 generated, nothing was pushed.
 
-**Totals: 103 model fields (17 + 27 + 25 + 34) · 33 view functions · 33 route names · 17 template files.**
+**Totals: 105 model fields (17 + 28 + 25 + 35) · 33 view functions · 33 route names · 17 template files.**
+
+> **The frozen count of 103 was stale.** The contract was frozen at 103 (17 + 27 + 25 + 34) and
+> then two fields were added during the build: `SecurityThreat.resolution_note` and
+> `SecurityIncident.affected_services`. **As-built is 105.** Counting rule, so this is reproducible
+> rather than a number nobody can check:
+> `len([f for f in M._meta.concrete_fields if not f.primary_key]) + len(M._meta.many_to_many)`.
 See [RULING] 2 — two of those counts are misstated in the Phase 2 plan.
 
 ---
@@ -86,7 +92,7 @@ add their own parsing, and the gate asserts the *unfiltered* row count, not mere
 
 ---
 
-## 1. Model contract — `apps/core/models/Security.py` (ONE flat file, four models, **103 fields**)
+## 1. Model contract — `apps/core/models/Security.py` (ONE flat file, four models, **105 fields**)
 
 **Header (binding).** The file docstring states the posture in `RateLimitPolicy`'s and `Monitoring.py`'s
 voice: *a row here is a report that something was observed, or a policy somebody wrote.* NavERP has **no
