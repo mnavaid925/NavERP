@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Policy Acknowledgements{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Policy Acknowledgements</h1>
+      <div class="breadcrumb"><a href="{% url 'core:grc_overview' %}">Compliance</a><span class="sep">&rsaquo;</span><span>Acknowledgements</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:corporatepolicy_list' %}" class="btn btn-outline"><i data-lucide="scroll-text"></i> Policies</a>
+      <a href="{% url 'core:policyacknowledgement_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record one</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">One row per person, per policy, per version. The version is a
+      <strong>snapshot</strong> taken when the acknowledgement was recorded &mdash; re-versioning a
+      policy starts a fresh round without rewriting what the old rows claim somebody agreed to.</p>
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>These rows are evidence of a
+      click, nothing more.</strong> There is no mail dispatcher in this application, so nobody is
+      reminded, chased or escalated.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search policy or person&hellip;">
+      </div>
+      <div class="form-group">
+        <select name="policy" class="form-select" aria-label="Policy">
+          <option value="">Any policy</option>
+          {% for policy in policies %}<option value="{{ policy.pk }}" {% if request.GET.policy == policy.pk|stringformat:"d" %}selected{% endif %}>{{ policy.code }} &mdash; {{ policy.title }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:policyacknowledgement_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Person</th><th>Policy</th><th>Version</th><th>When</th><th>Note</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">{{ obj.user.get_username }}</td>
+            <td class="fw-600"><a href="{% url 'core:corporatepolicy_detail' obj.policy.pk %}">{{ obj.policy.code }}</a>
+              <div class="text-muted">{{ obj.policy.title }}</div></td>
+            <td><code>v{{ obj.policy_version }}</code>{% if obj.policy_version != obj.policy.version %} <span class="badge badge-slate">superseded</span>{% endif %}</td>
+            <td>{{ obj.acknowledged_at|date:"d M Y H:i" }}</td>
+            <td>{% if obj.notes %}{{ obj.notes|truncatechars:60 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                {% comment %}
+                  Delete only, and deliberately. An acknowledgement is immutable evidence: there is
+                  no edit page, so a row can never be quietly rewritten to claim somebody agreed to
+                  something they did not. Removing one is itself audited.
+                {% endcomment %}
+                <form method="post" action="{% url 'core:policyacknowledgement_delete' obj.pk %}" onsubmit="return confirm('Delete this acknowledgement record? It is evidence that it happened.');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6"><div class="empty-state"><i data-lucide="check-check"></i><h3>No acknowledgements recorded</h3><p class="text-muted">Nobody has acknowledged a policy. People acknowledge from the policy's own page.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
