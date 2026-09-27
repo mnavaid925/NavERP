@@ -1,5 +1,158 @@
 """Core app test fixtures."""
 import pytest
+
+
+@pytest.fixture
+def party_a(db, tenant_a):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_a, name="Acme Party", kind="organization")
+
+
+@pytest.fixture
+def party_b(db, tenant_b):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_b, name="Globex Party", kind="organization")
+
+
+# ==================================================================== 0.21 Compliance
+# APPEND-ONLY (L43): the fixtures above are never rewritten; everything below is added.
+#
+# **PREFIX RULE (the house convention):** everything here is `cml021_`-prefixed and every test
+# function that uses it is `test_compliance_*`. The rule exists for one reason — the next sub-module
+# appending nearby must not be able to shadow a name and silently take a fixture with it.
+#
+# The prefix is `cml021_` and not a bare `cml_` because a short prefix is one a later author is
+# likely to reuse a name inside, and the 0.19 precedent in `apps/tenants/tests/conftest.py` is
+# already the `lic019_` shape for exactly that reason.
+
+
+# ------------------------------------------------------------------ the entities
+@pytest.fixture
+def cml021_framework(db, tenant_a):
+    """One registered control framework, NOT adopted — the honest seeded starting state."""
+    from apps.core.models import ControlFramework
+
+    return ControlFramework.objects.create(
+        tenant=tenant_a, code="SOC2", name="SOC 2 Trust Services Criteria",
+        framework_type="attestation", version="2017", authority="AICPA",
+        description="Security (CC) category.", is_active=True,
+    )
+
+
+@pytest.fixture
+def cml021_framework_b(db, tenant_b):
+    """A framework in the OTHER tenant — the IDOR target. It must never be reachable from tenant_a."""
+    from apps.core.models import ControlFramework
+
+    return ControlFramework.objects.create(
+        tenant=tenant_b, code="SOC2B", name="Globex SOC 2", framework_type="attestation",
+    )
+
+
+@pytest.fixture
+def cml021_control(db, tenant_a):
+    """An in-progress control. Deliberately NOT `effective`: that status needs a review date, and a
+    test that wanted one would have to earn it — the same rule the model enforces."""
+    from apps.core.models import ComplianceControl
+
+    return ComplianceControl.objects.create(
+        tenant=tenant_a, code="CC6.1", title="Logical access security",
+        category="access_control", status="in_progress", frequency="quarterly",
+    )
+
+
+@pytest.fixture
+def cml021_control_b(db, tenant_b):
+    from apps.core.models import ComplianceControl
+
+    return ComplianceControl.objects.create(
+        tenant=tenant_b, code="CC6.1B", title="Globex logical access", status="not_started",
+    )
+
+
+@pytest.fixture
+def cml021_mapping(db, tenant_a, cml021_framework, cml021_control):
+    from apps.core.models import ControlFrameworkMapping
+
+    return ControlFrameworkMapping.objects.create(
+        tenant=tenant_a, framework=cml021_framework, control=cml021_control,
+        clause_reference="CC6.1", coverage="partial",
+    )
+
+
+@pytest.fixture
+def cml021_policy(db, tenant_a, admin_user):
+    """A PUBLISHED policy with an effective date — the only status the acknowledge action accepts."""
+    import datetime
+
+    from django.utils import timezone
+
+    from apps.core.models import CorporatePolicy
+
+    return CorporatePolicy.objects.create(
+        tenant=tenant_a, code="SEC-001", title="Information Security Policy",
+        policy_type="security", version="1.0", status="published", owner=admin_user,
+        effective_on=timezone.localdate() - datetime.timedelta(days=30),
+        requires_acknowledgement=True, body="The umbrella policy.",
+    )
+
+
+@pytest.fixture
+def cml021_policy_draft(db, tenant_a):
+    """A DRAFT — the target the acknowledge refusal must reject."""
+    from apps.core.models import CorporatePolicy
+
+    return CorporatePolicy.objects.create(
+        tenant=tenant_a, code="AUP-002", title="Acceptable Use Policy",
+        policy_type="acceptable_use", version="0.1", status="draft",
+    )
+
+
+@pytest.fixture
+def cml021_policy_b(db, tenant_b):
+    from apps.core.models import CorporatePolicy
+
+    return CorporatePolicy.objects.create(
+        tenant=tenant_b, code="SEC-B", title="Globex security policy", status="published",
+        effective_on="2026-01-01",
+    )
+
+
+@pytest.fixture
+def cml021_risk(db, tenant_a, admin_user):
+    """`likely`(4) x `severe`(5) = 20, which lands in the CRITICAL band."""
+    from apps.core.models import RiskRegister
+
+    return RiskRegister.objects.create(
+        tenant=tenant_a, code="RSK-01", title="Single region of operation",
+        risk_statement="If the primary region is unavailable, then services are unavailable.",
+        category="operational", likelihood="likely", impact="severe",
+        treatment="mitigate", treatment_plan="Run a second environment.", status="treating",
+        owner=admin_user,
+    )
+
+
+@pytest.fixture
+def cml021_risk_b(db, tenant_b):
+    from apps.core.models import RiskRegister
+
+    return RiskRegister.objects.create(
+        tenant=tenant_b, code="RSK-B", title="Globex risk",
+        risk_statement="If X, then Y.", status="identified",
+    )
+
+
+@pytest.fixture
+def cml021_ack(db, tenant_a, cml021_policy, admin_user):
+    """One acknowledgement by the tenant admin, carrying the version SNAPSHOT."""
+    from apps.core.models import PolicyAcknowledgement
+
+    return PolicyAcknowledgement.objects.create(
+        tenant=tenant_a, policy=cml021_policy, user=admin_user,
+        policy_version=cml021_policy.version,
+    )
+
+import pytest
 from django.test import Client
 
 
