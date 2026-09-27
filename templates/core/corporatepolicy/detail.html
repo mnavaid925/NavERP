@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:grc_overview' %}">Compliance</a><span class="sep">&rsaquo;</span><a href="{% url 'core:corporatepolicy_list' %}">Policies</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% comment %}
+        The acknowledge action is POST-only and its button is the ONLY place it appears. The guard
+        lives in the view, not here: a hand-made POST to a draft or retired policy is refused before
+        anything is written, so hiding this button is presentation, not security.
+      {% endcomment %}
+      {% if obj.status == "published" %}
+        <form method="post" action="{% url 'core:policy_acknowledge' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Acknowledge v{{ obj.version }}</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'core:corporatepolicy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:corporatepolicy_delete' obj.pk %}" onsubmit="return confirm('Delete this policy? Its acknowledgements are deleted with it.');">
+        {% csrf_token %}
+        <button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Acknowledging records that you
+      pressed save. It does not notify, escalate or enforce anything.</strong> There is no mail
+      dispatcher in this application, so an unacknowledged policy produces no reminder to anyone.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The policy</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Code</dt><dd>{{ obj.code }}</dd></div>
+        <div class="detail-item"><dt>Version</dt><dd>{{ obj.version }}</dd></div>
+        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_policy_type_display }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{{ obj.get_status_display }}</dd></div>
+        <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Effective</dt><dd>{% if obj.effective_on %}{{ obj.effective_on|date:"d M Y" }}{% else %}<span class="text-muted">Not in force</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Review due</dt><dd>{% if obj.review_due_on %}{{ obj.review_due_on|date:"d M Y" }}{% else %}&mdash;{% endif %}</dd></div>
+        <div class="detail-item"><dt>Acknowledgement</dt><dd>
+          {% if not obj.requires_acknowledgement %}Not required
+          {% elif acknowledgement_rate is None %}<span class="text-muted">Not measurable</span>
+          {% else %}{{ obj.acknowledged_count }} recorded{% endif %}
+        </dd></div>
+      </dl>
+      {% if obj.summary %}<p class="text-muted">{{ obj.summary|linebreaksbr }}</p>{% endif %}
+      {% if obj.notes %}<p class="text-muted"><strong>Notes.</strong> {{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  {% if obj.body %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Policy text</h2></div>
+      <div class="card-body"><p>{{ obj.body|linebreaksbr }}</p></div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Acknowledgements</h2></div>
+    <div class="card-body">
+      {% comment %}
+        `policy_version` is a SNAPSHOT, shown beside every row on purpose. If it read through to the
+        policy's current version, re-versioning would silently rewrite what each of these rows claims
+        somebody agreed to.
+      {% endcomment %}
+      {% if acknowledgements %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Person</th><th>Version acknowledged</th><th>When</th><th>Note</th></tr></thead>
+            <tbody>
+              {% for ack in acknowledgements %}
+                <tr>
+                  <td class="fw-600">{{ ack.user.get_username }}</td>
+                  <td><code>v{{ ack.policy_version }}</code>{% if ack.policy_version != obj.version %} <span class="badge badge-slate">superseded</span>{% endif %}</td>
+                  <td>{{ ack.acknowledged_at|date:"d M Y H:i" }}</td>
+                  <td>{% if ack.notes %}{{ ack.notes|truncatechars:80 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="check-check"></i><h3>Nobody has acknowledged this yet</h3><p class="text-muted">That is a record, not an alert. Nothing in this application will chase anybody about it.</p></div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
