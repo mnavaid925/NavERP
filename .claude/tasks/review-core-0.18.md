@@ -280,3 +280,105 @@ Each produces a *confident, wrong statement about the state of a security record
 failure mode this module must not have.
 
 ---
+
+## Pass 5 — `qa-smoke-tester`
+
+> **Run in the MAIN SESSION, not by a sub-agent** — the `qa-smoke-tester` agent failed on an auth
+> error. The highest-value check (the C1 sweep) was run as an executable probe,
+> `temp/probe_018_formsweep.py`.
+
+### A. Every choices value on every form — 241 combinations, **1 crash**
+
+This is the check that matters most, because Django's `ModelForm._post_clean` **raises** when a
+`ValidationError` is keyed on a field the form does not have, so a mis-keyed rule is a 500 and not a
+validation message.
+
+| Result | Detail |
+|---|---|
+| 241 choices values exercised across all 4 forms | — |
+| **241 − 1 clean** | `IpAccessRuleForm`, `VulnerabilityFindingForm`, `SecurityIncidentForm` are clean on **every** value |
+| **1 crash** | `SecurityThreatForm`, field `status`, value `'resolved'` → `ValueError: 'SecurityThreatForm' has no field named 'resolved_at'` |
+
+**Confirmed end-to-end through the real view**, not just the form class: a
+`POST /core/security/threats/add/` carrying `status=resolved` raises an **uncaught** `ValueError` from
+`django/forms/forms.py:292 add_error`. The traceback is real; the operator sees a 500 on a write that
+never started. **This is the single blocking defect in the sub-module and the one thing that must be
+fixed before ship.** It confirms the code-reviewer's **C1** by independent execution.
+
+### B. The rest of the gate
+
+Verified earlier in this session and re-confirmed here, all green:
+
+- `manage.py check` → 0 issues · `makemigrations --check --dry-run` → "No changes detected"
+- `core.0016` applied · `seed_core` idempotent
+- `temp/audit_integrity.py` → **6/6 PASS** (`core: 18 live sub-modules`)
+- 13 board/register/form pages render 200 **with the `SECURITY_NOTES` prose asserted present** and no
+  template-comment leak
+- junk params / `page=2` / `page=99999` → 200 on all four registers
+- 12 destructive verbs → **405 on GET** (not 403)
+- 4 missing-pk → 404; anonymous → login redirect
+
+### QA verdict
+
+**Do not ship until C1 is fixed.** One confirmed 500 on the sub-module's own primary create form is a
+blocking defect regardless of how good everything else is — and the sub-module whose job is recording
+security state cannot itself crash when an analyst records a finding. Everything else on the gate is
+green, and the empty threat/incident/IP registers are the **L52 ruling working as designed**, not a
+smoke failure.
+
+## Pass 6 — `explorer`
+
+> The sixth and final Phase 4 pass. Judged navigability and correct wiring, not defects — it
+> deliberately did not re-report the other five passes' findings.
+
+**No Critical findings.** Nothing here would make the next sub-module unsafe to build on.
+
+### Verified clean by execution
+
+`manage.py check` 0 issues; **`apps/core/models/Integration.py` genuinely untouched** (`git diff --stat`
+on that one path is empty — the L36 rate-limit seam holds at the FILE level, not just in prose);
+4 models + 4 forms re-exported; 48 functions in `views/Security.py`, 15 private, **all 33 public ones
+exported** and the set matches the 33 registered route names exactly; `core.0016` = 4 `CreateModel`,
+0 `AddField`; `Security.py` sits flat beside `Backup.py` and `Monitoring.py` in all three layers
+(backend rule 9); 17 template paths all match the `render()`/`crud_*` `template=` arguments;
+`LIVE_LINKS` 9 labels / 9 distinct targets / 5 bullet keys exact; and the sub-module is **navigable by
+clicking** — every register links to the overview and the relevant board, and the boards link back.
+
+### Important
+
+- **E1 — `SKILL.md`'s "As-built" section now contradicts itself; the update was half-applied.**
+  `SKILL.md:22-35`: the count became `18 of 21` and the unbuilt range became `0.19–0.21`, but the
+  **enumerated live list still ends at `0.17`** and **`Migrations: core.0005–core.0015` omits
+  `0016`**. The count and the list now disagree two lines apart, and the newest migration in the app
+  is absent from the one file whose whole job is "what is as-built". `NavERP.md` and `README.md` were
+  updated correctly — the skill is the stale copy. *This one is mine, from the Phase 7 docs commit.*
+
+- **E2 — the M2M admin-path gap is documented for 0.17 but not carried forward to 0.18**, while the
+  security pass's **S2** asserts it is documented "in the model docstring **and the SKILL**". Only the
+  docstring half is true. An agent following the Per-Module Skill rule reads the 0.18 section and learns
+  nothing about it.
+
+- **E3 — `models/Security.py` drops the `core — ` docstring prefix** that the sibling files carry.
+
+### Handover to 0.19 (recorded so the next run inherits it, not rediscovers it)
+
+- **`core.0017`** is the next migration number — re-list the directory immediately before generating (L43).
+- **`seed_core.py:137`** — append `self._seed_license(tenant)` after `self._seed_security(tenant)`,
+  **indented with the loop**; the comment at 130-136 records that the first attempt at this exact call
+  site was dedented and ran invisibly for one tenant only.
+- **Per-entity seeder guards, never a tenant-wide one.**
+- **`LIVE_LINKS["0.19"]`** goes after the 0.18 block, before the Module 1 divider, with byte-exact
+  `NavERP.md` bullet keys (`resolve_nav` silently drops a mismatch).
+- **Update all three docs** (`NavERP.md`, `README.md`, `SKILL.md` As-built) — and note E1: the skill's
+  live list and migration line are the two that get missed.
+- **A `test_security.py` collision exists**: `apps/core/tests/test_security.py` is a **pre-existing
+  generic CSRF/IDOR file** from 0.9-era, unrelated to 0.18. Phase 6's `test_security_security.py` lands
+  next to it. `apps/core/tests/conftest.py` also has **zero 0.18 fixtures** today, so step 1 must add
+  `sec_threat_a` / `sec_rule_a` / `sec_finding_a` / `sec_incident_a`.
+- **Reuse, never re-declare (L36):** `core.FeatureFlag` (0.10), `core.ModuleAccessScope` (0.6),
+  `core.SettingDefinition`/`SettingValue` (0.10), `tenants.Subscription`/`SubscriptionInvoice`/
+  `UsageRecord`, `accounts.User`. **0.19 must not add a security-alert or audit table.**
+
+---
+
+---
