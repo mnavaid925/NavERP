@@ -97,6 +97,13 @@ class LicenseAssignment(models.Model):
         ]
 
     def save(self, *args, **kwargs):
+        # Normalise the slug BEFORE the number/insert, so the stored value and the unique_together
+        # both see the same string (I11). `EntitlementFeature.code` has had a `CODE_VALIDATOR` pinning
+        # its case since 0.19 landed; `module_slug` had nothing, so "Accounting" and "accounting" were
+        # two rows for one module and quietly stopped matching `core.ModuleAccessScope.module_slug`
+        # — the consistency this field's own docstring claims. Blank stays blank: "" is the
+        # tenant-wide seat, a VALUE here and never NULL.
+        self.module_slug = (self.module_slug or "").strip().lower()
         if self.number:
             return super().save(*args, **kwargs)
         # Assign SEAT-#####; retry on the rare concurrent-collision (unique_together).
@@ -121,6 +128,12 @@ class LicenseAssignment(models.Model):
         models package: it is a sibling module and `_base` does not re-export it.
         """
         super().clean()
+        # (I11) The slug is normalised in `save()` so the STORED value and the unique_together agree.
+        # Normalise here too, so `clean()` — which runs before `save()` and is what the form calls —
+        # compares the same string the database will hold. Without this, a form posting
+        # "Accounting" is validated against "accounting" and the duplicate slips through the form but
+        # not the database, which is a 500 instead of a field error.
+        self.module_slug = (self.module_slug or "").strip().lower()
         if self.tenant_id and self.subscription_id:
             from apps.tenants.models import Subscription as _Subscription
             if not _Subscription.objects.filter(
