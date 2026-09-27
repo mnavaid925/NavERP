@@ -6,6 +6,234 @@
 > 6.9 is shipped, in `LIVE_LINKS` and closed out in prose. For ground truth on what is built, read
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
+---
+
+# Build Plan — Module 0 0.19 License & Subscription Administration
+
+Source of truth: `.claude/tasks/research-tenants-0.19.md` (committed `44c7de31`). **Phase 2 is planning
+only** — this edit adds no application code, generates no migration, and pushes nothing.
+App: `tenants` (Module 0 foundation — **flat, no sub-module level**, backend rule 9: `tenants` has no
+NavERP sub-modules, so entity files sit FLAT at the package root and templates are
+`templates/tenants/<entity>/{list,detail,form}.html`).
+`BASE` for the Phase 4 review range: `44c7de31`.
+Migration: **`tenants.0005_*`** (re-list `apps/tenants/migrations/` immediately before generating — L43;
+the last is `0004_usagerecord.py`).
+`LIVE_LINKS["0.19"]` keys, **byte-identical to `NavERP.md` lines 251-255** (one character of drift renders
+a fully built page as a "soon" roadmap pill with no error anywhere): `License Allocation & Seats`,
+`Plan & Entitlement Management`, `Usage Metering & Quotas`, `Billing & Invoicing Integration`,
+`Renewal & Expiry Management`.
+
+## The two facts that shape the whole build
+
+**1. Bullets 3 and 4 are largely ALREADY BUILT by 0.1.** `UsageRecord` is the consumption half
+(per-metric per-period rows, `PLAN_ALLOWANCES`, DERIVED `included_allowance`/`overage_quantity`), and
+`SubscriptionInvoice` + the signature-verified `stripe_webhook` are the billing half. So 0.19 **extends**
+them (a quota the meter can be read against; a renewal/grace record on the subscription) and **declines to
+re-declare either**. `LIVE_LINKS["0.19"]` bullets 3 and 4 point at the *new* 0.19 surface — the quota
+board and the renewal board — never at 0.1's pages, and carry a comment saying the underlying rows are
+0.1's. This is the L36 discipline applied to 0.1/0.19.
+
+**2. Nine capabilities are DECLINED, not partially faked** (research §"Not built"). Each must be honoured
+in the **prose on the page**, not only in a docstring, and named at the point of use in the
+`LIVE_LINKS` comment: entitlement enforcement (no interceptor — `PlanEntitlement` is a grant, nothing
+consults it at request time) · quota enforcement/throttling (`action_on_breach` is a **recorded policy
+with no interceptor**) · seat auto-deprovisioning (no identity sync) · metered event ingestion (no event
+pipeline) · proration (no money arithmetic; **L29**) · prepaid credit grants (second money store; **L29**)
+· rate cards / tiered / multi-currency pricing (a monetization engine) · plan versioning & grandfathering ·
+automatic renewal execution (no scheduler — that is **0.20**) · expiry **email delivery** (no sender in
+`tenants` — **0.20**/**0.21**).
+## Models (from research — 4, plus one column pair)
+
+- [ ] **`EntitlementFeature`** [`ENT-`] — the feature catalog. Fields: `code`, `name`, `description`,
+      `privilege_type` (boolean/integer/select — *typed privileges*, the survey's most reusable idea:
+      Lago `value_type`, OpenMeter Metered/Static/Boolean), `select_options`, `status`
+      (draft/active/archived — Chargebee's lifecycle; **archival, not deletion**, so retiring a feature
+      cannot rewrite what past subscriptions were entitled to), `is_add_on`, `is_active`, `notes`,
+      `created_at`. FK: `tenant` → `core.Tenant` (verified). `number` is `editable=False`, minted in
+      `save()` via `next_number(..., "ENT")` on the `SubscriptionInvoice` precedent, retrying on
+      `IntegrityError`. **Deliberately NOT FK'd to `core.FeatureFlag`** — that is a runtime on/off switch
+      with `applies_to_plan`/`exempt_roles`; this is the commercial catalog a plan grants. Reusing it
+      would merge two different facts. `PLAN_CHOICES` stays `core.Tenant.PLAN_CHOICES` (verified) — **no
+      `PlanTier` table** (Zuora-scale, and out of scope).
+
+- [ ] **`PlanEntitlement`** [`PE-`] — the grant: plan tier × feature × privilege value. Fields: `plan`
+      (choices = `core.Tenant.PLAN_CHOICES`, the verified vocabulary), `feature` FK, `privilege_value`
+      (char — holds `true` / `10` / `okta`), `is_add_on` (*add-ons*: Lago fixed charges, Chargebee
+      addons), `subscription` (nullable FK, `SET_NULL`) + `is_override` — **subscription-level override
+      PRECEDES the plan grant** (Chargebee: *"entitlements assigned at the subscription level take
+      precedence over entitlements assigned at the product catalog level"*; Lago's "overridden
+      subscription"), `effective_from` / `effective_to` (Chargebee `Forever` vs `Until <date>`),
+      `is_enabled`, `notes`. FKs: `tenant`, `feature` → `tenants.EntitlementFeature`, `subscription` →
+      `tenants.Subscription` (all verified). `unique_together = (tenant, plan, feature, subscription)` so a
+      plan-level grant and an override coexist instead of colliding.
+
+- [ ] **`UsageQuota`** [`UQ-`] — the commercial ceiling per metric. Fields: `subscription` FK, `metric`
+      (**aligned to the verified `UsageRecord.METRIC_CHOICES` vocabulary** — a second metric list is the
+      exact duplication the research rejects), `quota_limit`, `warn_at_pct`, `action_on_breach`
+      (alert/charge/block — **recorded policy, NOT enforced**), `is_fair_use` (*fair-use limits*), `period`
+      (monthly/yearly), `breached_at` (nullable, `editable=False`, written only by a verb — the
+      `UsageRecord.is_billed` evidence-stamp precedent), `notes`. FKs: `tenant`, `subscription`. The board
+      joins on the **same subscription** as `UsageRecord.subscription`, or the two pages disagree.
+
+- [ ] **`LicenseAssignment`** [`LIC-`] — the seat register (bullet 1). Fields: `user` FK →
+      **`accounts.User`** (verified; `User.tenant` is **NULLABLE** — the superuser `admin` has
+      `tenant=None`, so a null-tenant user must be filtered out of seat counts or the count is a lie),
+      `module_slug` (**char, not a FK** — no module master exists; it matches the verified
+      `core.ModuleAccessScope.module_slug`, so 0.19 builds **no second per-module switch table**; blank =
+      tenant-wide), `status` (active/reclaimed/revoked/expired), `assignment_source` (direct/group/rule),
+      `assigned_from`, `expires_on`, `reclaimed_on`, `reclaim_reason` (*reclamation*), `subscription` FK,
+      `notes`. Seat counts and `is_reclaimable` stay **`@property`**, never columns. FKs: `tenant`,
+      `user` → `accounts.User`, `subscription` → `tenants.Subscription`.
+
+- [ ] **Column pair on the EXISTING `Subscription`** (no 5th model — a renewal commitment is a property of
+      the subscription; a table for two fields is over-modelling): `auto_renew` (Boolean, default True —
+      the **recorded** intent, with no scheduler behind it) and `grace_ends_on` (DateField, null — the
+## Backend — `apps/tenants/`, FLAT (no `<SubModule>/` folder)
+
+- [ ] `models/EntitlementFeature.py` · `models/PlanEntitlement.py` · `models/UsageQuota.py` ·
+      `models/LicenseAssignment.py` — each `from apps.tenants.models._base import *` (the verified
+      foundation pattern) and declares its own `*_CHOICES` locally. **Nothing is written to `accounts`,
+      `core` or `accounting`** — the 0.19 boundary: it owns the *commercial* limit, 0.18 owns the abuse
+      bound, 0.17 owns operational thresholds, and no `JournalEntry` is ever created (**L29**).
+- [ ] `models/Subscription.py` — **surgical edit**: add only `auto_renew` + `grace_ends_on`. Re-read the
+      file immediately before editing; it is shared with 0.1 (L43).
+- [ ] `models/__init__.py` — add all four models to the re-export block. **Adding a model without the
+      re-export is a bug** (L7: silent `ImportError`/`AttributeError` at runtime).
+- [ ] `forms/EntitlementFeature.py` · `forms/PlanEntitlement.py` · `forms/UsageQuota.py` ·
+      `forms/LicenseAssignment.py` — each a `TenantModelForm` (from `forms/_common.py`).
+      **Exclusions:** `UsageQuota.breached_at` (evidence, `editable=False`, one-writer verb — the
+      `UsageRecordForm.is_billed` precedent); `LicenseAssignment.reclaimed_on` + `reclaim_reason` (written
+      only by the reclaim verb, never by a form — L22, no system stamp is user-editable).
+- [ ] `forms/Subscription.py` — extend `Meta.fields` with `auto_renew` + `grace_ends_on` (surgical).
+- [ ] `forms/__init__.py` — re-export the four new form classes.
+- [ ] `views/EntitlementFeature.py` · `views/PlanEntitlement.py` · `views/UsageQuota.py` ·
+      `views/LicenseAssignment.py` — **full CRUD each** (list w/ search+filters+pagination, create, detail,
+      edit, POST-only delete) via the `crud_*` helpers, every one `@tenant_admin_required` and every
+      queryset `filter(tenant=request.tenant)`. `require_POST` sits **ABOVE** the role gate on the
+      destructive verbs (the `usagerecord_mark_billed` order note; the older `tenants` verbs still carry
+      the pre-7.7 order and must not be copied).
+- [ ] **Two verbs, both honest:** `licenseassignment_reclaim` (POST-only; the only writer of
+      `status`/`reclaimed_on`/`reclaim_reason`, audited via `write_audit_log` with the verb in `changes`
+      — `AuditLog.action` is varchar(10), **L41**) and `usagequota_mark_breached` (POST-only; the only
+      writer of `breached_at`).
+- [ ] **Two computed boards, no model** (the 0.17/0.18 precedent): the **quota-vs-consumption** board
+      (metric, consumed, included, overage, % of quota, warning crossed) and the **renewal & expiry** board
+      (subscription, plan, days to renewal, `auto_renew`, grace state). Computed in the **view** off one
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — add exactly one `LIVE_LINKS["0.19"]` block. The five bullet keys must be
+      **byte-identical** to `NavERP.md` 251-255, verified with the repo's own `parse_catalog()`, not by eye.
+      Each bullet points at a **distinct** target: `len(set(LIVE_LINKS["0.19"].values())) == len(...)` — two
+      labels on one page light the active-link highlight twice. Bullets 3 and 4 point at the **new** quota
+      and renewal **boards**, with a comment saying the underlying rows are 0.1's. The comment also states
+      the nine declines. **Surgical edit adjacent to `LIVE_LINKS["0.18"]`** — re-read the file immediately
+      before editing; another session may be working nearby.
+
+## Templates — `templates/tenants/<entity>/{list,detail,form}.html`
+
+- [ ] 4 × `list.html` (filter bar reflecting `request.GET` + Actions column with view/edit/delete
+      POST+confirm+csrf + pagination with `has_previous`/`has_next` guards (**L9**) + empty-state),
+      4 × `detail.html` (Actions sidebar, edit/delete, back-to-list), 4 × `form.html`.
+- [ ] 2 × board pages, at the sub-module root (not entity folders — they are computed, no model):
+      `templates/tenants/quota_board.html` and `templates/tenants/renewal_board.html`.
+- [ ] **Filters must be wired end-to-end**: every dropdown's data is passed by the view (`status_choices`,
+      the `metric` queryset, `plan_choices`, the `feature` queryset). A template filter with no view
+      context is a blank region that still returns 200 (**L8**). pk comparisons use `|stringformat:"d"`,
+      **never `|slugify`**.
+- [ ] **Nullable-FK discipline (L10)**: `PlanEntitlement.subscription`, `LicenseAssignment.subscription`,
+      `User.tenant` and `UsageQuota.breached_at` are read **inside an `{% if %}` branch, never through a
+      `|default:` filter argument** — a `None` FK inside a filter ARGUMENT raises `VariableDoesNotExist`
+      and 500s where a bare lookup would print nothing. (Proven on this repo's Django: the projects/7.16
+      reporting pages 500'd on exactly this shape.)
+- [ ] Badges are **colour-named only** — `badge-green/red/amber/info/muted/slate`. The semantic
+      `-success/-warning/-danger` names **do not exist** and render unstyled (**L33**, shipped 3× already).
+- [ ] Every page's prose states what this application does **not** do, per the nine declines — a page must
+      never imply NavERP enforced, sent, scheduled or integrated anything (**L7/L8** honesty).
+
+## Seeder — `apps/tenants/management/commands/seed_tenants.py`
+
+- [ ] `_seed_licensing(tenant)` with a **per-entity guard** (never a tenant-wide one — the 0.18 ruling):
+      a few `EntitlementFeature` rows, `PlanEntitlement` grants, `UsageQuota` ceilings, and a small number
+      of `LicenseAssignment` seats. **No `Subscription` is created here** (0.1 owns those); extend the
+      existing subscription's two new fields instead.
+## Verify
+
+- [ ] `makemigrations tenants` → `migrate` → `seed_tenants` **×2** → `manage.py check` clean.
+- [ ] `makemigrations --check --dry-run` → "No changes detected" after the migration lands.
+- [ ] `temp/` smoke as **`admin_acme` / `password`**: every new `tenants:*` url 200/302, **content**
+      assertions (a seeded record's number present, the page title correct, **no** `{#` / `{% comment`
+      leakage — **L3**: a 200 proves nothing about a blank region), a junk-param list, page 2, and a
+      **cross-tenant IDOR → 404**.
+- [ ] **Nav distinctness gate:** `len(set(LIVE_LINKS["0.19"].values())) == 5`, all five reverse, and the
+      five keys diff **byte-identical** against `parse_catalog()`.
+- [ ] `venv\Scripts\python.exe temp\audit_integrity.py` passes, and independently reports
+      `module 0: 2 catalogued but NOT built -> 0.20, 0.21`. Any new model left unseeded and unexplained is
+      a failure — an unexplained exemption is indistinguishable from an oversight.
+- [ ] Sidebar shows `0.19` **Live**, not a "soon" roadmap pill.
+
+## Close-out
+
+- [ ] Phase 4 review, six agents **one after another** (`code-reviewer` → `explorer` →
+      `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`) over
+      `44c7de31...HEAD`, findings appended to `.claude/tasks/review-tenants-0.19.md`.
+- [ ] Phase 5 `code-fixer` burns the findings down in ID order, one file per commit.
+- [ ] Phase 6 tests: contract + `conftest.py`, then `test_licensing_models.py` → `_forms` → `_views` →
+      `_security`, each function named `test_licensing_*` / helper `_<subslug>_*` so the next sub-module
+      cannot shadow them. Run the **full unfiltered** `tenants` suite green (**L47** — a `-k` filter
+      excludes exactly the tests a shared-file change breaks).
+- [ ] **Docs, in one sweep (L36 §2 — editing only 0.19's row leaves the doc contradicting the code):**
+      `README.md` (mark 0.19 complete, 19 of 21), `NavERP.md`, `.claude/skills/tenants/SKILL.md`
+      (**update** the existing skill — 0.19 is not a brand-new app), and the 0.1/0.18 boundary noted for
+      **both** sides.
+
+## Later passes / deferred
+
+- Entitlement enforcement at request time (a middleware/decorator reading `PlanEntitlement`) — valuable but
+  it changes runtime behaviour across every module; its own pass, not a rider on CRUD.
+- Prepaid credit / committed-use grants — a later 0.19 follow-up, subject to the **L29** money ruling.
+- SCIM / directory-sync seat provisioning (Microsoft 365's group model implies it).
+- A second payment gateway behind a `PaymentGateway` connector table (home: the verified
+  `core.ConnectorDefinition`).
+- Seat over-allocation warnings; reconciling seat counts against a real order form → **0.21**.
+- Price book / rate card / tiered-unit pricing → parked wholesale; a monetization engine.
+- Scheduler-driven renewal, the notification dispatcher, bulk job management → **0.20**.
+- GL / journal entries for subscription revenue → **`accounting`** (**L29**). No `JournalEntry` from 0.19.
+
+## Commit discipline (the whole build)
+
+One file per commit, explicit paths, PowerShell `;` separators, never `&&`, and **never `git push`**. Every
+message names what that one file does and why. Never stage the untracked `.commandcode/`, `.gemini/`,
+`.workbuddy-ai/`, `.zcode/` tool directories (**L45** — a dirty tree at session start is not yours).
+
+## Review notes
+
+(filled in at the end)
+
+
+- [ ] Idempotent by construction: `get_or_create` on the unique tuples, and existence-checks for every
+      auto-numbered row. `seed_tenants` run **twice** must seed nothing the second time.
+
+
+      grouped query, following the verified `_usage_summary()` pattern in `views/UsageRecord.py` — a
+      derived property calling `.filter()` bypasses the prefetch cache and re-queries per render.
+- [ ] `views/__init__.py` — re-export every new view.
+- [ ] `urls.py` — 4 × 5 CRUD routes + 2 verbs + 2 boards, **literal routes BEFORE the `<int:pk>` ones**
+      (Django is first-match-wins; the file already carries this note). The file is a flat hand-written
+      `urlpatterns` list, **not** a `crud()` factory — extend it in place.
+- [ ] `admin.py` — register all four models with honest `list_display`; the evidence stamps go in
+      `readonly_fields` so a staff user cannot forge attribution (the 0.18 `IpAccessRuleAdmin` precedent).
+- [ ] **Migration `tenants.0005_*`** — generated **last**, after all four model files exist and are
+      re-exported. Re-list `apps/tenants/migrations/` immediately before running `makemigrations` (**L43**
+      — another session may have taken `0005`). Expect `CreateModel` × 4 **plus `AddField` × 2 on
+      `Subscription`**; the two `AddField`s are correct and expected (unlike 0.18's zero, because 0.19
+      genuinely extends 0.1's `Subscription`).
+
+
+      grace window).
+
+
+
+
 
 ### Module 0 0.18 — Threat Protection & Security Operations (close-out 2026-09-27)
 
