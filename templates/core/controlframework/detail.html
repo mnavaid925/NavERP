@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:grc_overview' %}">Compliance</a><span class="sep">&rsaquo;</span><a href="{% url 'core:controlframework_list' %}">Frameworks</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:controlframeworkmapping_add' obj.pk %}" class="btn btn-primary"><i data-lucide="link"></i> Add controls</a>
+      <a href="{% url 'core:controlframework_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:controlframework_delete' obj.pk %}" onsubmit="return confirm('Delete this framework? Every control mapping under it is deleted too.');">
+        {% csrf_token %}
+        <button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Registering a framework certifies
+      nothing.</strong> This row records that a programme is in scope. No audit has been performed, no
+      evidence has been tested, and no code path in this application reads this record to gate an
+      action.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The framework</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Code</dt><dd>{{ obj.code }}</dd></div>
+        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_framework_type_display }}</dd></div>
+        <div class="detail-item"><dt>Edition</dt><dd>{% if obj.version %}{{ obj.version }}{% else %}&mdash;{% endif %}</dd></div>
+        <div class="detail-item"><dt>Authority</dt><dd>{% if obj.authority %}{{ obj.authority }}{% else %}&mdash;{% endif %}</dd></div>
+        <div class="detail-item"><dt>State</dt><dd>{% if obj.is_active %}Active{% else %}Inactive{% endif %}</dd></div>
+        <div class="detail-item"><dt>Adopted</dt><dd>{% if obj.adopted_on %}{{ obj.adopted_on|date:"d M Y" }}{% else %}<span class="text-muted">Not adopted &mdash; registered only</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Review due</dt><dd>{% if obj.review_due_on %}{{ obj.review_due_on|date:"d M Y" }}{% if obj.is_overdue_review %} <span class="badge badge-amber">Overdue</span>{% endif %}{% else %}&mdash;{% endif %}</dd></div>
+        <div class="detail-item"><dt>Controls mapped</dt><dd>{{ control_count }}</dd></div>
+      </dl>
+      {% if obj.description %}<p class="text-muted">{{ obj.description|linebreaksbr }}</p>{% endif %}
+      {% if obj.notes %}<p class="text-muted"><strong>Notes.</strong> {{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Mapped controls</h2></div>
+    <div class="card-body">
+      {% comment %}
+        A control is framework-agnostic and appears under every framework it is mapped into — that
+        many-to-many is Drata's explicit best practice, and it is why this list is the only place
+        the relationship is visible. `coverage` is what a person recorded; nothing tests it.
+      {% endcomment %}
+      {% if mappings %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Control</th><th>Clause</th><th>Coverage (recorded)</th><th class="table-actions">Actions</th></tr></thead>
+            <tbody>
+              {% for mapping in mappings %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'core:compliancecontrol_detail' mapping.control.pk %}">{{ mapping.control.code }}</a>
+                    <div class="text-muted">{{ mapping.control.title }}</div></td>
+                  <td>{% if mapping.clause_reference %}<code>{{ mapping.clause_reference }}</code>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                  <td>
+                    {% if mapping.coverage == "covered" %}<span class="badge badge-green">Covered</span>
+                    {% elif mapping.coverage == "partial" %}<span class="badge badge-amber">Partial</span>
+                    {% elif mapping.coverage == "not_applicable" %}<span class="badge badge-slate">Not applicable</span>
+                    {% else %}<span class="badge badge-slate">Not started</span>{% endif %}
+                  </td>
+                  <td>
+                    <div class="table-actions">
+                      <form method="post" action="{% url 'core:controlframeworkmapping_delete' mapping.pk %}" onsubmit="return confirm('Remove this control from the framework? The control itself is not deleted.');">
+                        {% csrf_token %}
+                        <button class="btn-icon danger" type="submit" title="Remove mapping"><i data-lucide="unlink"></i></button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="unlink"></i><h3>No controls mapped</h3><p class="text-muted">A framework with no controls under it is a list, not a programme. Use <strong>Add controls</strong> to map this workspace's controls into it.</p></div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
