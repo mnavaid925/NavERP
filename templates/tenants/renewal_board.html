@@ -2,13 +2,15 @@
 {% comment %}
   0.19 &mdash; renewal & expiry board. Backing view: renewal_board (views/Boards.py).
 
-  Context, and ONLY these six keys:
-    renewal_rows     list of row dicts, ordered by renews_on then id
-    expiring_count   days_left is not None and 0 <= days_left <= 30
-    in_grace_count   len([r for r in rows if r["in_grace"]])
-    expired_count    len([r for r in rows if r["is_expired"]])
-    auto_renew_count len([r for r in rows if r["auto_renew"]])
-    plan_choices     Tenant.PLAN_CHOICES
+  Context, and ONLY these eight keys:
+    renewal_rows     list of row dicts, ordered by renews_on then id, CAPPED at `row_cap`
+    expiring_count   AGGREGATE: renews_on between today and today+30
+    in_grace_count   AGGREGATE: grace_ends_on is set and >= today
+    expired_count    AGGREGATE: renews_on < today
+    auto_renew_count AGGREGATE: auto_renew is true
+    renewal_total    AGGREGATE: every subscription in this workspace, uncapped
+    row_cap          RENEWAL_BOARD_ROW_CAP, the number of rows the table actually renders
+    rows_truncated   True when renewal_total > the rendered row count
 
   Row dict keys, and the ONLY ones this template may read:
     subscription, plan, plan_label, status, status_label, days_left, auto_renew,
@@ -19,8 +21,15 @@
   word "None" on screen. `grace_ends_on` is nullable and is likewise only read inside a
   branch (L10). `is_expired` is a COMPUTED state from renews_on, never a stored status.
 
+  THE CAP, STATED ON THE PAGE. The four stat cards count the WHOLE workspace; the table below
+  renders at most `row_cap` rows. Capping the queryset and leaving `len()` in place would have
+  made the tiles report the cap instead of the workspace - so the tiles are aggregates and the
+  page says, in prose, whenever the two numbers legitimately differ. The board is a roll-up, not
+  a register: the paginated register is `subscription_list`, and the cap note links to it.
+
   No filter bar, deliberately: a whole-tenant roll-up whose headline numbers would quietly
-  change meaning under a filter is worse than no filter at all.
+  change meaning under a filter is worse than no filter at all. `plan_choices` was DROPPED from
+  the view for the same reason, not left as a dead key.
 {% endcomment %}
 {% block title %}Renewal Board{% endblock %}
 {% block content %}
@@ -75,6 +84,24 @@
       <p class="form-help" style="margin-top:1rem;">Every figure above is computed from dates somebody recorded.
         &ldquo;Flagged auto-renew&rdquo; counts an intent, not a future event: no scheduler reads it, and
         &ldquo;Past the renewal date&rdquo; is derived from <code>renews_on</code> rather than stored as a status.</p>
+      {% comment %}
+        I8, honesty half. The four tiles above are AGGREGATES over every subscription in this
+        workspace; the table below renders at most `row_cap` rows. Those are different sets, so
+        when the workspace is larger than the cap the page has to say so - otherwise a reader
+        counts 200 rows against a tile reading 214 and concludes the board is broken. Silently
+        capping the queryset and leaving `len()` in place would have been the alternative, and it
+        is the one that lies: the tiles would have started reporting the cap.
+      {% endcomment %}
+      {% if rows_truncated %}
+        <p class="text-warn" style="margin-top:.5rem;"><i data-lucide="triangle-alert"></i>
+          <strong>This workspace has {{ renewal_total }} subscriptions; the table below shows the
+          first {{ row_cap }}, soonest renewal first.</strong> The four figures above count
+          <strong>all {{ renewal_total }}</strong> &mdash; they are not computed from the rows on screen, so
+          they can legitimately be larger than the number of rows you can see. This board is a
+          roll-up, not a register: the
+          <a href="{% url 'tenants:subscription_list' %}">subscription register</a> paginates the
+          complete list.</p>
+      {% endif %}
     </div>
   </div>
 
