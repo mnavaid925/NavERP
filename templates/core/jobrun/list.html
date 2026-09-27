@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Job Run History{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Job Run History</h1>
+      <div class="breadcrumb"><a href="{% url 'core:admin_board' %}">Admin Console</a><span class="sep">&rsaquo;</span><a href="{% url 'core:jobdefinition_list' %}">Jobs</a><span class="sep">&rsaquo;</span><span>Runs</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:jobdefinition_list' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Declared jobs</a>
+    </div>
+  </div>
+
+  {% comment %}
+    There is deliberately NO "Add run" button and no create route. A run is written by the job's Run now
+    action or by the seeder, never by a person filling in a form: a run somebody typed in is a claim that
+    a dispatch happened, and this repository has no dispatcher. An edit form exists only to correct a
+    recorded outcome, which is why `triggered_at` and `triggered_by` are off it.
+  {% endcomment %}
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Every run here is a record that a run was <em>asked for</em>, not evidence that work
+      happened. NavERP has no scheduler, so every row written by this build is a dry run.</p>
+    {% if open_count %}
+      <p class="text-warn"><i data-lucide="clock"></i> <strong>{{ open_count }} run{{ open_count|pluralize }}</strong>
+        still queued or running. Nothing will ever advance them &mdash; no scheduler exists to pick them up.</p>
+    {% endif %}
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, error, notes&hellip;">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="trigger_kind" class="form-select" aria-label="Trigger">
+          <option value="">Any trigger</option>
+          {% for value, label in trigger_choices %}<option value="{{ value }}" {% if request.GET.trigger_kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="job" class="form-select" aria-label="Job">
+          <option value="">Any job</option>
+          {% for j in jobs %}<option value="{{ j.pk }}" {% if request.GET.job == j.pk|stringformat:"d" %}selected{% endif %}>{{ j.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:jobrun_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Run</th><th>Job</th><th>Triggered</th><th>Trigger</th><th>Status</th><th>Duration</th><th>By</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:jobrun_detail' obj.pk %}">{{ obj.number }}</a>
+              {% if obj.is_dry_run %}<span class="badge badge-info">Dry run</span>{% endif %}</td>
+            <td><a href="{% url 'core:jobdefinition_detail' obj.job.pk %}">{{ obj.job.name }}</a></td>
+            <td>{{ obj.triggered_at|date:"M d, Y H:i" }}</td>
+            <td>{{ obj.get_trigger_kind_display }}</td>
+            <td>
+              {% if obj.status == "success" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "failed" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+              {% elif obj.is_open %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>{{ obj.duration_display }}</td>
+            <td>{% if obj.triggered_by %}{{ obj.triggered_by }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:jobrun_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:jobrun_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:jobrun_delete' obj.pk %}" onsubmit="return confirm('Delete this run record?');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8"><div class="empty-state"><i data-lucide="history"></i><h3>No runs recorded</h3><p class="text-muted">No job has been asked to run. Use a job's <em>Run now</em> action to record one.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
