@@ -29,6 +29,11 @@ from .models import (
     Holiday,
     CustomFieldDefinition,
     CustomFieldValue,
+    JobDefinition,
+    JobRun,
+    MaintenanceWindow,
+    ChangeRequest,
+    FeatureRollout,
     WorkflowDefinition,
     WorkflowStep,
     ApprovalLimit,
@@ -723,4 +728,74 @@ class SecurityIncidentAdmin(admin.ModelAdmin):
     readonly_fields = ["contained_at", "eradicated_at", "recovered_at", "closed_at",
                        "authority_notified_at", "subjects_notified", "subjects_notified_at",
                        "owner_label", "created_at", "updated_at"]
+
+
+# --------------------------------------------------------------------------- 0.20 Admin Console
+# The admin is where a `Model.clean()` guard is easiest to bypass, so the read-only lists below
+# matter more here than the list_display tuning: every evidence stamp and every actor field has
+# exactly ONE writer, a POST-only action on the pages, and the admin is not that action.
+@admin.register(JobDefinition)
+class JobDefinitionAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "module_slug", "job_type", "schedule_kind", "is_active",
+                    "is_muted", "tenant"]
+    list_filter = ["job_type", "schedule_kind", "is_active", "is_muted", "tenant"]
+    search_fields = ["number", "name", "module_slug", "handler_path", "description", "notes"]
+    list_select_related = ["sync_schedule", "environment", "tenant"]
+    # `last_run_at`/`next_run_at` are recorded intent that no scheduler advances, and `number` is
+    # minted in save(). Neither may be typed: the first would invent a cadence observation and the
+    # second would collide with the minting loop.
+    readonly_fields = ["number", "last_run_at", "next_run_at", "created_at"]
+
+
+@admin.register(JobRun)
+class JobRunAdmin(admin.ModelAdmin):
+    list_display = ["number", "job", "status", "trigger_kind", "is_dry_run", "triggered_at",
+                    "triggered_by", "tenant"]
+    list_filter = ["status", "trigger_kind", "is_dry_run", "tenant"]
+    search_fields = ["number", "error_message", "notes"]
+    list_select_related = ["job", "triggered_by", "tenant"]
+    # `triggered_at` and `triggered_by` are stamped by the run_now verb; `is_dry_run` is readonly
+    # because nothing in this repository can legitimately clear it - only a real dispatcher could.
+    readonly_fields = ["number", "triggered_at", "triggered_by", "is_dry_run"]
+
+
+@admin.register(MaintenanceWindow)
+class MaintenanceWindowAdmin(admin.ModelAdmin):
+    list_display = ["number", "title", "status", "starts_at", "ends_at", "recurrence",
+                    "environment", "tenant"]
+    list_filter = ["status", "recurrence", "suppresses_jobs", "blocks_admin_writes", "tenant"]
+    search_fields = ["number", "title", "purpose", "notes"]
+    list_select_related = ["incident", "environment", "change_request", "tenant"]
+    filter_horizontal = ["affected_services", "suppressed_alert_rules",
+                         "suppressed_notification_rules"]
+    # `ended_at` is written ONLY by the end_now verb, which refuses a window that never started and
+    # one already ended. An admin that could type it would let a record claim an ending nobody
+    # performed - the same reason 0.16 makes `integrity_verified_at` readonly.
+    readonly_fields = ["number", "ended_at", "created_at"]
+
+
+@admin.register(ChangeRequest)
+class ChangeRequestAdmin(admin.ModelAdmin):
+    list_display = ["number", "title", "status", "change_type", "risk_level", "impact_level",
+                    "requestor", "approved_by", "tenant"]
+    list_filter = ["status", "change_type", "risk_level", "impact_level", "downtime_required",
+                   "tenant"]
+    search_fields = ["number", "title", "summary", "rollback_reason", "post_review", "notes"]
+    list_select_related = ["environment", "requestor", "approved_by", "tenant"]
+    # Every actor field and every transition stamp has exactly one writer: the submit, approve and
+    # rollback verbs. `approved_by` in particular is the act an audit exists to attribute, so an
+    # admin that could set it would let an approval be recorded in somebody else's name.
+    readonly_fields = ["number", "requestor", "approved_by", "requested_at", "approved_at",
+                       "implemented_at", "rollback_at", "created_at"]
+
+
+@admin.register(FeatureRollout)
+class FeatureRolloutAdmin(admin.ModelAdmin):
+    list_display = ["change", "feature_flag", "stage", "percentage", "status", "tenant"]
+    list_filter = ["stage", "status", "tenant"]
+    search_fields = ["change__title", "feature_flag__key", "cohort_label", "notes"]
+    list_select_related = ["change", "feature_flag", "tenant"]
+    # No `number`: a rollout is a child row and deliberately has none. `started_at`/`completed_at`
+    # belong to the action that moves the stage.
+    readonly_fields = ["started_at", "completed_at"]
 
