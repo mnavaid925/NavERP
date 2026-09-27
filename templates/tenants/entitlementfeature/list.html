@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% comment %}
+  0.19 — the commercial feature catalog. Backing view: entitlementfeature_list.
+
+  Context, and ONLY this: object_list, page_obj, q (crud_list) plus status_choices,
+  privilege_type_choices, addon_choices. One dropdown per key, in both directions.
+
+  `addon_choices` carries the LITERAL strings "True"/"False" because that is all
+  crud_list maps for a boolean; the tests below match those literals, never "yes".
+
+  A feature row is a price-list entry somebody wrote down. Nothing consults it at
+  request time — see the honesty card at the foot of the page.
+{% endcomment %}
+{% block title %}Entitlement Features{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Entitlement Features</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">&rsaquo;</span><span>Licensing</span><span class="sep">&rsaquo;</span><span>Entitlement features</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:quota_board' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Quota board</a>
+      <a href="{% url 'tenants:planentitlement_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Grants</a>
+      <a href="{% url 'tenants:entitlementfeature_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Feature</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The catalog</h2>
+      <span class="badge badge-info">Sellable vocabulary, not a switch</span>
+    </div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search code, name, description…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="privilege_type" class="form-select" aria-label="Privilege type">
+            <option value="">All privilege types</option>
+            {% for val, label in privilege_type_choices %}
+              <option value="{{ val }}" {% if request.GET.privilege_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="addon" class="form-select" aria-label="Add-on">
+            <option value="">Add-on and included</option>
+            {% for val, label in addon_choices %}
+              <option value="{{ val }}" {% if request.GET.addon == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'tenants:entitlementfeature_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Feature</th><th>Privilege</th><th>Options</th><th>Pricing</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'tenants:entitlementfeature_detail' obj.pk %}" class="fw-600 mono">{{ obj.code }}</a>
+                <div class="text-muted">{{ obj.name }}</div>
+              </td>
+              <td>
+                {% if obj.privilege_type == "boolean" %}<span class="badge badge-info">Boolean</span>
+                {% elif obj.privilege_type == "integer" %}<span class="badge badge-info">Integer</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_privilege_type_display }}</span>{% endif %}
+              </td>
+              <td class="text-muted">
+                {% if obj.privilege_type == "select" %}{{ obj.select_options|truncatechars:60 }}
+                {% else %}<span class="muted">—</span>{% endif %}
+              </td>
+              <td>{% if obj.is_add_on %}<span class="badge badge-amber">Add-on</span>{% else %}<span class="badge badge-slate">Included in plan</span>{% endif %}</td>
+              <td>
+                {% if obj.status == "active" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "draft" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "archived" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'tenants:entitlementfeature_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'tenants:entitlementfeature_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    @require_POST, so a real form and not a link. The confirm is a FIXED
+                    string: obj.code and obj.name are user-typed, and an apostrophe in
+                    either escapes to &#39;, which HTML decodes back to a bare quote
+                    before JavaScript parses the attribute and the dialog stops guarding
+                    anything (L42). It also names the non-destructive retirement path,
+                    because deleting a catalog row cascades away its grants.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'tenants:entitlementfeature_delete' obj.pk %}" onsubmit="return confirm('Delete this feature and every grant that references it? To retire a feature without deleting its grants, set its status to Archived instead.');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="key-round"></i><h3>No features in the catalog</h3><p>Add a feature so a plan can be granted it, or reset the filter bar above.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this page does not do</h2></div>
+    <div class="card-body">
+      <p class="text-muted"><i data-lucide="shield-check"></i>
+        <strong>NavERP records commercial terms somebody wrote down. It does not enforce them.</strong></p>
+      <p class="text-muted">Nothing in NavERP consults this catalog, or a
+        <a href="{% url 'tenants:planentitlement_list' %}">plan entitlement</a>, at request time. A grant is a
+        <strong>record, not a gate</strong>: writing a row here grants a customer nothing by itself, and no feature
+        is switched on or off as a result. Entitlement enforcement is declined by this sub-module; the
+        <code>code</code> column exists so a future consumer would have a stable key to join on, and there is no
+        such consumer today.</p>
+      <p class="text-muted">These rows are also deliberately not the same thing as <code>core.FeatureFlag</code>,
+        which is a runtime on/off switch. A price-list entry and a kill switch are two different facts, and merging
+        them would mean switching a feature off rewrote what past subscriptions were entitled to.</p>
+    </div>
+  </div>
+{% endblock %}
