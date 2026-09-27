@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% comment %}
+  The allow/deny register. Written down; nothing evaluates it. Context: object_list, page_obj,
+  q, direction_choices, action_choices, scope_choices, source_choices, services, notes.
+  `?active=` maps to is_active and takes the literal strings "True" / "False".
+{% endcomment %}
+{% block title %}IP access rules{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">IP access rules</h1>
+      <div class="breadcrumb"><a href="{% url 'core:security_overview' %}">Security</a><span class="sep">&rsaquo;</span><span>IP access rules</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:securitythreat_list' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Threats</a>
+      <a href="{% url 'core:ipaccessrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record a rule</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>These rules are not enforced.</strong>
+      NavERP runs no WAF, no reverse proxy and no gateway, so nothing reads this table. A "deny" row here
+      is a decision somebody wrote down, not an address that was blocked.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search address, reason, source, notes&hellip;">
+      </div>
+      <div class="form-group">
+        <select name="direction" class="form-select" aria-label="Direction">
+          <option value="">Any direction</option>
+          {% for value, label in direction_choices %}<option value="{{ value }}" {% if request.GET.direction == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="action" class="form-select" aria-label="Action">
+          <option value="">Any action</option>
+          {% for value, label in action_choices %}<option value="{{ value }}" {% if request.GET.action == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="scope" class="form-select" aria-label="Scope">
+          <option value="">Any scope</option>
+          {% for value, label in scope_choices %}<option value="{{ value }}" {% if request.GET.scope == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="source" class="form-select" aria-label="Source">
+          <option value="">Any source</option>
+          {% for value, label in source_choices %}<option value="{{ value }}" {% if request.GET.source == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="service" class="form-select" aria-label="Component">
+          <option value="">Any component</option>
+          {% for s in services %}<option value="{{ s.pk }}" {% if request.GET.service == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="active" class="form-select" aria-label="Active">
+          <option value="">Active and inactive</option>
+          <option value="True" {% if request.GET.active == "True" %}selected{% endif %}>Active only</option>
+          <option value="False" {% if request.GET.active == "False" %}selected{% endif %}>Inactive only</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:ipaccessrule_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Address</th><th>Direction</th><th>Action</th><th>Scope</th><th>Source</th><th>Expires</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:ipaccessrule_detail' obj.pk %}"><code>{{ obj.cidr }}</code></a>
+              {% if obj.reason %}<div class="text-muted">{{ obj.reason|truncatechars:70 }}</div>{% endif %}</td>
+            <td>
+              {% if obj.direction == "deny" %}<span class="badge badge-red">{{ obj.get_direction_display }}</span>
+              {% elif obj.direction == "allow" %}<span class="badge badge-slate">{{ obj.get_direction_display }}</span>
+              {% else %}<span class="badge badge-muted">{{ obj.get_direction_display }}</span>{% endif %}
+            </td>
+            <td>{{ obj.get_action_display }}</td>
+            <td>{{ obj.get_scope_display }}</td>
+            <td>{{ obj.get_source_display }}</td>
+            <td>{% if obj.expires_at %}{{ obj.expires_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">permanent</span>{% endif %}</td>
+            <td>{% if obj.is_active %}<span class="badge badge-info">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:ipaccessrule_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:ipaccessrule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:ipaccessrule_delete' obj.pk %}" onsubmit="return confirm('Delete this rule record? Nothing was ever blocked by it, so this deletes only the written decision.');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8"><div class="empty-state"><i data-lucide="list-x"></i><h3>No access rules have been recorded</h3>
+            <p class="text-muted">This is not an all-clear. NavERP evaluates no allow/deny list, so an empty register means
+              <strong>nobody has written a policy down</strong> &mdash; it cannot tell you whether any address is being challenged or let through.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
