@@ -264,6 +264,34 @@ LIVE_LINKS = {
         "Firing Board": "core:firing_board",                               # extra (the zero rule)
         "Monitoring Overview": "core:monitoring_overview",                 # extra (landing page)
     },
+    # 0.18 Threat Protection & Security Operations. The five bullet keys below are copied
+    # BYTE-IDENTICALLY from `NavERP.md`; `parse_catalog()` matches them by exact string, so a
+    # one-character drift renders a fully built page as a "soon" roadmap pill with no error anywhere.
+    #
+    # Every label points at a DISTINCT page. Two labels over one page make the sidebar highlight
+    # both at once and make "which page is this?" unanswerable, so the split below is 9 labels
+    # over 9 targets — asserted programmatically before this block is considered wired.
+    #
+    # **Bullet 5 is served by 0.17's tables, not a second engine.** `AlertRule.CATEGORY_CHOICES`
+    # already carries ("security", "Security") and a committed test names that value the 0.18 seam,
+    # so a security alert is an `AlertRule`/`AlertEvent` pair: this sub-module adds no alert table.
+    "0.18": {
+        # Bullet 1 names anomaly detection AND brute-force protection AND the IP lists. The board
+        # that answers it is the brute-force one; the IP allow/deny half is bullet 4's page, which
+        # is where the rules themselves live. Pointing bullet 1 at the threat board instead would
+        # have made two labels share one target — the defect the comment above warns about.
+        "Intrusion Detection & Prevention": "core:brute_force_board",         # bullet 1 (anomaly + brute force)
+        "Vulnerability & Patch Management": "core:vulnerabilityfinding_list",  # bullet 2 (the register)
+        "Security Incident Response": "core:securityincident_list",           # bullet 3 (the register)
+        "Bot & Abuse Protection": "core:ipaccessrule_list",                   # bullet 4 (CAPTCHA/rate/WAF posture + the rules)
+        "Security Alerting & SIEM": "core:securitythreat_list",                # bullet 5 (the register)
+        # Extra built pages that are NOT NavERP.md bullets. `resolve_nav` appends these AFTER the
+        # bullets, so they read as operational leaves rather than as more promised features.
+        "Security Overview": "core:security_overview",                         # extra (landing page)
+        "Threat Board": "core:threat_board",                                  # extra (state/severity/type roll-up)
+        "Vulnerability Board": "core:vulnerability_board",                    # extra (CVSS-band + SLA roll-up)
+        "Breach Clock (72h)": "core:breach_clock_board",                      # extra (Art. 33 clock)
+    },
     # ========================= Module 1 — Customer Relationship Management (CRM)
     # 1.1 Core Data Management — Accounts/Contacts are core.Party lenses; Leads are CRM-owned.
     "1.1": {
