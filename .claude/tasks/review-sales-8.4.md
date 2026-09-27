@@ -411,3 +411,47 @@ gated: `board.html:8,10,11`, `call.html:7`, `forecastsubmission/detail.html:15,1
   re-read. Add a regression test asserting that editing `period_year`/`period_number` changes
   `start_date`/`end_date` on the saved row. `forecast_period_create` (lines 276-278) is **not**
   affected — there `form.instance` is the row that is saved.
+
+---
+
+## Found during the close-out reconciliation (not by the six reviewers)
+
+- [~] skipped - needs a decision. **C2. "You cannot adjust a level above you" is dead code.**
+  `apps/sales/views/SalesForecasting/ForecastAdjustments.py:69` `_adjusts_above_acting_level()` is a
+  correct implementation of the rule the plan calls out by name ("Microsoft, security-sensitive"): it
+  resolves the acting user's node through `sales.OpportunityTeamMember.org_unit` and refuses a
+  submission whose org unit is a strict ancestor, walking `core.OrgUnit.parent`. It is correct, and it
+  **can never fire**.
+
+  The view that calls it, `forecast_adjustment_create` (line 341), is `@tenant_admin_required`.
+  `_is_tenant_admin()` (line 77) is the same test the decorator uses, and it is the *first* thing the
+  helper does. So the only users who reach line 352 are the ones the helper exempts, and the
+  `raise PermissionDenied` on line 353 is unreachable. A rep - the user the rule was written for - is
+  refused by the decorator before the rule is ever consulted.
+
+  The six reviewers missed it because it is not a defect *in* the diff: the rule is fully written and
+  reads correctly. It was found by writing the test the plan's verify list asks for and the security
+  lane never had. `test_salesforecasting_the_level_rule_*` now pins the helper's logic directly
+  (ancestor refused, own node and descendant allowed, sibling ignored, fail-open without provable
+  nesting, admin exempt) so the rule cannot rot, and
+  `test_salesforecasting_the_adjust_create_view_is_tenant_admin_gated` pins the gate that makes it
+  dead - so if that gate ever changes, the change is announced by a test rather than discovered in
+  production.
+
+  **Not fixed here, because the fix is a product decision about who may override whom, and it opens a
+  tenant-admin-gated write path.** Three coherent options:
+
+  1. **Open the view to `@login_required` and let the level check be the real guard.** This is what
+     the plan describes - a manager overriding a call. It also needs the check *strengthened*: as
+     written it blocks only "above your level", which would let a rep rewrite a **peer's** number
+     (the sibling-branch case is currently allowed). "At or above the submission" is the correct
+     manager-override semantic and closes that hole.
+  2. **Keep the view admin-only and delete the rule.** Honest - the real product decision today is
+     "only an admin overrides" - but it contradicts the plan and discards working code.
+  3. **Keep the rule, add a separate non-admin manager URL** rather than relaxing the existing one.
+     More surface, no change to today's behaviour.
+
+  Recommendation: **option 1 with the strengthened check**, because the plan, the module's own
+  description ("manager override audit trail") and the existing helper all assume it, and the
+  alternative is shipping a security rule that does nothing while the code claims otherwise. This
+  needs a decision on who counts as a manager, and is left open rather than assumed.
