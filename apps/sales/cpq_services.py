@@ -520,15 +520,156 @@ def cpq_convert_to_sales_order(quote, user=None):
     ]
     if so_lines:
         SalesOrderLine.objects.bulk_create(so_lines)
-        
+
+    # --- ATP soft reservation -------------------------------------------------
+    # SalesOrderAllocation is a *soft* claim: on-hand does NOT drop, only
+    # availability-to-promise does, and no StockMove is posted. That is
+    # deliberate (see the model docstring) -- physical stock only ever moves
+    # through SCM 4.4's PickTask confirm, and inventing a second path for it is
+    # exactly the parallel-correction bug that module's review found.
+    reserved, unreserved = cpq_reserve_atp(so_lines, quote.tenant)
+
+    if unreserved:
+        # Never silently skip a reservation. If the tenant has no resolvable
+        # warehouse the order still converts -- it is the customer's commitment
+        # that matters -- but the gap is written onto the order so the warehouse
+        # team can see it instead of discovering missing ATP later.
+        order.notes = (
+            f"{order.notes}\n\nATP note: {len(unreserved)} converted line(s) could not be "
+            f"reserved because no active pickable warehouse is configured for this "
+            f"workspace. Set one up and reserve them before promising a ship date."
+        ).strip()
+        order.save(update_fields=["notes", "updated_at"])
+
     quote.converted_order = order
     quote.status = "converted"
     quote.save(update_fields=["converted_order", "status", "updated_at"])
-    
-    # If quote was linked to CRM opportunity, advance opportunity stage if possible
+
+    # If quote was linked to CRM opportunity, advance it and record the win.
     if quote.opportunity_id:
         opp = quote.opportunity
-        opp.stage = "closed_won"
-        opp.save(update_fields=["stage", "updated_at"])
-        
+        if opp.stage != "closed_won":
+            opp.stage = "closed_won"
+            opp.save(update_fields=["stage", "updated_at"])
+        # OpportunityOutcome is APPEND-ONLY and carries the win/loss evidence
+        # (reason, competitor, notes). Setting the stage alone leaves the closed
+        # deal with no recorded outcome, so the forecast has nothing to learn
+        # from and 8.4's accuracy report has no ground truth.
+        cpq_record_won_outcome(opp, quote, user)
+
     return order
+
+
+def _default_fulfillment_location(tenant):
+    """The tenant's default fulfillment warehouse, or ``None``.
+
+    ``scm.Location`` deliberately carries no ``is_default`` flag, so this resolves
+    the documented fallback rather than adding a second way to say the same
+    thing: an active, pickable ``location_type="warehouse"``, preferring the one
+    that already declares a pick sequence (that column exists to express
+    "reserve from me first"), then the lowest code for determinism.
+    """
+    from apps.scm.models.InventoryManagement.Locations import Location
+
+    base = Location.objects.filter(
+        tenant=tenant, location_type="warehouse", is_active=True, is_pickable=True
+    )
+    return (
+        base.exclude(pick_sequence__isnull=True).order_by("pick_sequence", "code").first()
+        or base.filter(pick_sequence__isnull=True).order_by("code").first()
+    )
+
+
+def cpq_reserve_atp(so_lines, tenant):
+    """Soft-reserve each converted line against the default warehouse.
+
+    Returns ``(allocations, unreserved)``. ``unreserved`` holds the lines that
+    could not be claimed: no resolvable warehouse, or a line with no ``scm.Item``.
+    """
+    from apps.scm.models.OrderManagement.SalesOrderAllocations import SalesOrderAllocation
+
+    lines = [line for line in so_lines if line.pk]
+    if not lines:
+        return [], []
+
+    reservable = [line for line in lines if line.item_id]
+    # A line with no item is a service or a not-yet-mapped product. There is no
+    # stock behind it, so it is reported as unreserved rather than silently done.
+    unreserved = [line for line in lines if not line.item_id]
+
+    if not reservable:
+        return [], unreserved
+
+    location = _default_fulfillment_location(tenant)
+    if location is None:
+        return [], unreserved + reservable
+
+    allocations = [
+        SalesOrderAllocation(
+            tenant=tenant,
+            sales_order_line=line,
+            location=location,
+            quantity=line.quantity_ordered,
+            status="reserved",
+            notes="Reserved automatically on CPQ quote conversion.",
+        )
+        for line in reservable
+    ]
+    SalesOrderAllocation.objects.bulk_create(allocations)
+    return allocations, unreserved
+
+
+def cpq_record_won_outcome(opportunity, quote, user=None):
+    """Record the append-only ``OpportunityOutcome`` for a converted deal.
+
+    ``OpportunityOutcome.reason`` is a non-null PROTECT FK, so a reason has to
+    resolve. It is taken from the tenant's own configured win reasons when one
+    exists; otherwise a single system reason is created on demand. Creating that
+    one row is the lesser evil versus silently dropping the win, because an
+    outcome with no reason loses the evidence the 8.4 accuracy report is built
+    on -- and a reason row is tenant-owned configuration, not a system table.
+
+    Returns the outcome, or ``None`` when the opportunity already has a recorded
+    win (a deal is won once; a second row would double-count it).
+    """
+    from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import (
+        OpportunityOutcome,
+        WinLossReason,
+    )
+
+    if OpportunityOutcome.objects.filter(
+        tenant=opportunity.tenant, opportunity=opportunity, result="won"
+    ).exists():
+        return None
+
+    reason = (
+        WinLossReason.objects.filter(
+            tenant=opportunity.tenant, is_active=True, result__in=["won", "both"]
+        )
+        .order_by("sequence", "code")
+        .first()
+    )
+    if reason is None:
+        reason, _created = WinLossReason.objects.get_or_create(
+            tenant=opportunity.tenant,
+            code="converted_to_order",
+            defaults={
+                "name": "Converted to Order",
+                "description": "Quote converted to a sales order without a separately recorded reason.",
+                "sequence": 90,
+                "result": "won",
+                "category": "other",
+                "is_active": True,
+            },
+        )
+
+    return OpportunityOutcome.objects.create(
+        tenant=opportunity.tenant,
+        opportunity=opportunity,
+        result="won",
+        reason=reason,
+        notes=f"Won via CPQ quote {quote.number} (Rev {quote.revision_number}), converted to order.",
+        recorded_by=user,
+    )
+
+
