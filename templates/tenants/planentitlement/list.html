@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% comment %}
+  0.19 — plan grants + subscription-level overrides. Backing view: planentitlement_list.
+
+  Context, and ONLY this: object_list, page_obj, q (crud_list) plus plan_choices,
+  feature_choices (a QUERYSET of EntitlementFeature), enabled_choices, addon_choices.
+
+  `feature_choices` is objects, not a values list, so the select-when test is
+  `request.GET.feature == f.pk|stringformat:"d"` — NEVER |slugify: a pk is not a slug,
+  and that mistake has already shipped once. The view declares the filter as
+  ("feature", "feature_id", True), so ?feature=abc and ?feature=0 are both skipped
+  rather than silently emptying the register (L11).
+
+  enabled_choices / addon_choices are the LITERAL "True"/"False" strings, which is
+  all crud_list maps for a boolean field.
+{% endcomment %}
+{% block title %}Plan Entitlements{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Plan Entitlements</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">&rsaquo;</span><span>Licensing</span><span class="sep">&rsaquo;</span><span>Plan entitlements</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:entitlementfeature_list' %}" class="btn btn-outline"><i data-lucide="key-round"></i> Feature catalog</a>
+      <a href="{% url 'tenants:planentitlement_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Grant</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Grants and overrides</h2>
+      <span class="badge badge-info">Recorded, not enforced</span>
+    </div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search privilege value, notes…">
+        </div>
+        <div class="form-group">
+          <select name="plan" class="form-select" aria-label="Plan">
+            <option value="">All plans</option>
+            {% for val, label in plan_choices %}
+              <option value="{{ val }}" {% if request.GET.plan == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="feature" class="form-select" aria-label="Feature">
+            <option value="">All features</option>
+            {% for f in feature_choices %}
+              <option value="{{ f.pk }}" {% if request.GET.feature == f.pk|stringformat:"d" %}selected{% endif %}>{{ f.code }} — {{ f.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="enabled" class="form-select" aria-label="Enabled">
+            <option value="">Enabled and disabled</option>
+            {% for val, label in enabled_choices %}
+              <option value="{{ val }}" {% if request.GET.enabled == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="addon" class="form-select" aria-label="Add-on">
+            <option value="">Add-on and included</option>
+            {% for val, label in addon_choices %}
+              <option value="{{ val }}" {% if request.GET.addon == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'tenants:planentitlement_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Feature</th><th>Plan</th><th>Scope</th><th>Privilege value</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'tenants:planentitlement_detail' obj.pk %}" class="fw-600 mono">{{ obj.feature.code }}</a>
+                <div class="text-muted">{{ obj.feature.name }}</div>
+              </td>
+              <td>{{ obj.get_plan_display }}{% if obj.is_add_on %} <span class="badge badge-amber">Add-on</span>{% endif %}</td>
+              <td>
+                {% comment %}
+                  subscription is NULLABLE — the whole expression lives inside the if,
+                  never as a |default: filter ARGUMENT on a None FK (L10).
+                {% endcomment %}
+                {% if obj.subscription %}
+                  <a href="{% url 'tenants:subscription_detail' obj.subscription.pk %}">{{ obj.subscription.get_plan_display }}</a>
+                  <span class="badge badge-info">Override</span>
+                {% else %}
+                  <span class="badge badge-slate">Plan-level</span>
+                {% endif %}
+              </td>
+              <td>{% if obj.privilege_value %}<span class="mono">{{ obj.privilege_value }}</span>{% else %}<span class="muted">not granted</span>{% endif %}</td>
+              <td>
+                {% if obj.is_enabled %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-muted">Disabled</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'tenants:planentitlement_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'tenants:planentitlement_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}Fixed confirm string — every field here is user-typed (L42).{% endcomment %}
+                  <form method="post" action="{% url 'tenants:planentitlement_delete' obj.pk %}" onsubmit="return confirm('Delete this grant? A plan-level grant and a subscription override are deleted by this button alike.');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No grants recorded</h3><p>Record a plan-level grant, or a single subscription&rsquo;s override of one.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How to read this register</h2></div>
+    <div class="card-body">
+      <p class="text-muted">A row with <strong>no subscription</strong> is the plan-level grant every customer on
+        that plan receives. A row <strong>with</strong> one subscription is that single subscription&rsquo;s
+        <strong>override</strong> &mdash; the one that differs. Where both exist, the override is what a human reads
+        first; the <a href="{% url 'tenants:planentitlement_list' %}">detail page</a> shows it in that order.</p>
+      <p class="text-warn"><i data-lucide="shield-check"></i>
+        <strong>NavERP records commercial terms somebody wrote down. It does not enforce them.</strong>
+        Nothing consults a <code>PlanEntitlement</code> at request time. A grant is a <strong>record, not a gate</strong>,
+        and the override precedence described above is a reading convention, not an implemented rule &mdash;
+        entitlement enforcement is declined by this sub-module. A blank <code>privilege_value</code> means
+        &ldquo;this plan is not granted the feature&rdquo;, which is a real answer; it is not the same as having no row.</p>
+    </div>
+  </div>
+{% endblock %}
