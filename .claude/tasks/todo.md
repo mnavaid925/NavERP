@@ -11,7 +11,7 @@
 
 **Status: 0.18 is built, migrated, seeded, documented and passing all six integrity checks.** Four
 models in `apps/core/models/Security.py` — `IpAccessRule`, `SecurityThreat`, `VulnerabilityFinding`,
-`SecurityIncident` (103 fields, declared in dependency order because `SecurityThreat.mitigated_by`
+`SecurityIncident` (**105 fields**, declared in dependency order because `SecurityThreat.mitigated_by`
 and `SecurityIncident.primary_threat` are FKs between them). Migration **`core.0016`**: four
 `CreateModel`s and **zero `AddField`** — the schema-level proof that 0.18 grew alongside 0.17 rather
 than modifying it. 33 views, 33 routes (all reverse), 17 templates, 4 admin registrations.
