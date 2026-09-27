@@ -51,6 +51,27 @@ def cpq_quote_list(request):
     elif is_primary in ["false", "0"]:
         qs = qs.filter(is_primary=False)
 
+    # account / owner / currency are the three the plan named that were never
+    # wired up. A FK id is only trusted after isdigit(), so a crafted value
+    # narrows nothing rather than raising ValueError inside filter().
+    from apps.accounts.models import User
+    from apps.accounting.models import Currency
+    from apps.core.models import Party
+
+    account_id = request.GET.get("account", "").strip()
+    if account_id and account_id.isdigit():
+        qs = qs.filter(account_id=int(account_id))
+
+    owner_id = request.GET.get("owner", "").strip()
+    if owner_id and owner_id.isdigit():
+        qs = qs.filter(owner_id=int(owner_id))
+    elif owner_id in ["none", "unassigned"]:
+        qs = qs.filter(owner__isnull=True)
+
+    currency_id = request.GET.get("currency", "").strip()
+    if currency_id and currency_id.isdigit():
+        qs = qs.filter(currency_id=int(currency_id))
+
     stats = CPQQuote.objects.filter(tenant=tenant).aggregate(
         total=Count("id"),
         draft=Count("id", filter=Q(status="draft")),
@@ -70,11 +91,27 @@ def cpq_quote_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
+    # The filter dropdowns are the tenant boundary as much as the queryset is:
+    # a dropdown that offers another workspace's account is a disclosure even
+    # though submitting its pk would be rejected.
+    accounts = Party.objects.filter(
+        tenant=tenant, cpq_quotes__isnull=False
+    ).distinct().order_by("name")
+    owners = User.objects.filter(
+        tenant=tenant, is_active=True, cpq_owned_quotes__isnull=False
+    ).distinct().order_by("email")
+    currencies = Currency.objects.filter(
+        cpq_quotes__isnull=False
+    ).distinct().order_by("code")
+
     context = {
         "quotes": page_obj,
         "status_choices": CPQQuote.STATUS_CHOICES,
         "approval_status_choices": CPQQuote.APPROVAL_STATUS_CHOICES,
         "opportunities": opportunities,
+        "accounts": accounts,
+        "owners": owners,
+        "currencies": currencies,
         "stats": stats,
     }
     return render(request, "sales/quote_proposal_cpq/cpqquote/list.html", context)
