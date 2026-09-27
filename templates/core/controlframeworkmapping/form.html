@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Map a control{% endblock %}
+{% block content %}
+  {% comment %}
+    This ONE template serves two views, which is why it branches on `available_controls`:
+
+      * `controlframeworkmapping_create`  — the generic Add page. Renders the bound
+        `ControlFrameworkMappingForm`, so the operator picks BOTH parents.
+      * `controlframeworkmapping_add`     — reached from a framework's "Add controls" button. The
+        framework is already known, so only the control is chosen, and the page lists what is
+        already mapped and what remains.
+
+    The two are kept in one file rather than duplicated because the shared warning below is the
+    point of the page, and a second copy of it would eventually drift.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if framework %}Add controls to {{ framework.code }}{% else %}Map a control to a framework{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'core:grc_overview' %}">Compliance</a><span class="sep">&rsaquo;</span>
+        <a href="{% url 'core:controlframeworkmapping_list' %}">Mapping</a><span class="sep">&rsaquo;</span><span>New</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Mapping a control does not
+      cover a clause.</strong> Every row created here starts at <em>Not started</em> coverage, because
+      nothing is covered the moment a row appears. Recording coverage is a separate, deliberate act.</p>
+    <p class="text-muted">A control may be mapped into as many frameworks as it answers, and several
+      controls may map to one requirement &mdash; that is normal practice, not duplication.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+  </div></div>
+
+  {% if available_controls is not None %}
+    {# ---- reached from a framework: only the control is chosen ---- #}
+    {% if mapped_controls %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Already mapped</h2></div>
+        <div class="card-body">
+          <ul>
+            {% for mapping in mapped_controls %}
+              <li><a href="{% url 'core:compliancecontrol_detail' mapping.control.pk %}">{{ mapping.control.code }}</a> &mdash; {{ mapping.control.title }}
+                {% if mapping.clause_reference %}<code>{{ mapping.clause_reference }}</code>{% endif %}
+                <span class="badge badge-slate">{{ mapping.get_coverage_display }}</span></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Controls not yet mapped</h2></div>
+      <div class="card-body">
+        {% if available_controls %}
+          <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="control_id">Control</label>
+              <select name="control_id" id="control_id" class="form-select" required>
+                <option value="">Choose a control&hellip;</option>
+                {% for ctl in available_controls %}<option value="{{ ctl.pk }}">{{ ctl.code }} &mdash; {{ ctl.title }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="page-actions">
+              <button class="btn btn-primary" type="submit"><i data-lucide="link"></i> Record mapping</button>
+              <a href="{% url 'core:controlframework_detail' framework.pk %}" class="btn btn-outline">Cancel</a>
+            </div>
+          </form>
+        {% else %}
+          <div class="empty-state"><i data-lucide="check-check"></i><h3>Every control is already mapped</h3><p class="text-muted">This workspace has no further controls to add. Create one on the <a href="{% url 'core:compliancecontrol_list' %}">Controls</a> page first.</p></div>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    {# ---- the generic Add page: both parents are chosen ---- #}
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">The relationship</h2></div>
+        <div class="card-body">
+          <div class="form-grid">
+            {% include "partials/form_field.html" with field=form.framework %}
+            {% include "partials/form_field.html" with field=form.control %}
+            {% include "partials/form_field.html" with field=form.clause_reference %}
+            {% include "partials/form_field.html" with field=form.coverage %}
+            {% include "partials/form_field.html" with field=form.notes %}
+          </div>
+          <p class="text-muted">Both pickers list only this workspace's own frameworks and controls.
+            A framework and a control from different workspaces is refused as well as unselectable.</p>
+        </div>
+      </div>
+
+      <div class="page-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="save"></i> Record mapping</button>
+        <a href="{% url 'core:controlframeworkmapping_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  {% endif %}
+{% endblock %}
