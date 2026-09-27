@@ -10,7 +10,7 @@ Five plans, one per remaining item. Each is self-contained — read only the one
 >
 > | # | Plan | Status 2026-09-26 |
 > |---|------|-------------------|
-> | 1 | [`plan-remaining-1-module0-submodules.md`](plan-remaining-1-module0-submodules.md) | 🟨 **OPEN** — **0.18–0.21 (4 sub-modules)**; the only real work left |
+> | 1 | [`plan-remaining-1-module0-submodules.md`](plan-remaining-1-module0-submodules.md) | 🟨 **OPEN** — **0.19–0.21 (4 sub-modules)**; the only real work left |
 > | 2 | [`plan-remaining-2-land-fixed-defects.md`](plan-remaining-2-land-fixed-defects.md) | ✅ **COMPLETE** |
 > | 3 | [`plan-remaining-3-readme-module6-row.md`](plan-remaining-3-readme-module6-row.md) | ✅ **COMPLETE** |
 > | 4 | [`plan-remaining-4-docs-closeout-sweep.md`](plan-remaining-4-docs-closeout-sweep.md) | ✅ **COMPLETE** |
@@ -25,13 +25,13 @@ Five plans, one per remaining item. Each is self-contained — read only the one
 >
 > **Progress since the 2026-09-22 re-verification:** Module 0 gained **0.16 — Backup, Recovery & Data
 > Lifecycle** and then **0.17 — Monitoring, Logging & Observability** (migration `core.0015`, four models,
-> `LIVE_LINKS["0.17"]`), so the remaining Module 0 work is **4 sub-modules (0.18–0.21), not 6**. 0.17 landed
+> `LIVE_LINKS["0.17"]`), so the remaining Module 0 work is **3 sub-modules (0.19–0.21), not 6**. 0.18 landed
 > without a docs close-out, so this file, `plan-remaining-1`, `README.md`, `NavERP.md`, `core/SKILL.md` and
 > `todo.md` all undercounted it; corrected in one sweep.
 
 | # | Plan | Item | Size | Recommended order |
 |---|------|------|------|-------------------|
-| 1 | [`plan-remaining-1-module0-submodules.md`](plan-remaining-1-module0-submodules.md) | Module 0: **4 unbuilt sub-modules (0.18–0.21)** + `SKILL.md` (**now written**) | **Large** — 4 full build runs | 4th (biggest, do it when you have a long stretch) |
+| 1 | [`plan-remaining-1-module0-submodules.md`](plan-remaining-1-module0-submodules.md) | Module 0: **3 unbuilt sub-modules (0.19–0.21)** + `SKILL.md` (**now written**) | **Large** — 4 full build runs | 4th (biggest, do it when you have a long stretch) |
 | 2 | [`plan-remaining-2-land-fixed-defects.md`](plan-remaining-2-land-fixed-defects.md) | 3 defect fixes sitting uncommitted in the tree | Small | ✅ done |
 | 3 | [`plan-remaining-3-readme-module6-row.md`](plan-remaining-3-readme-module6-row.md) | `README.md:1199` — Module 6's row lost its leading cells | Tiny | ✅ done |
 | 4 | [`plan-remaining-4-docs-closeout-sweep.md`](plan-remaining-4-docs-closeout-sweep.md) | Stale status claims **+ 7.15's skipped Phase-7 close-out** | Medium | ✅ done |
@@ -54,7 +54,7 @@ targets resolve, and every model is referenced by its seeder (except three that 
 `core.AuditLog`, `crm.HealthScore`, `procurement.WidgetPreference`).
 
 **The only material gap in the range was Module 0 — 7 of 21 sub-modules built at authoring. It is now
-17 of 21 (0.1–0.17); the remaining 4 are 0.18–0.21.** Everything else in these five plans was defects,
+18 of 21 (0.1–0.18); the remaining 3 are 0.19–0.21.** Everything else in these five plans was defects,
 stale documentation, or housekeeping — and **all five plans have now landed.**
 
 **Integrity audit re-run 2026-09-26 — all six checks PASS** at the current HEAD: every migration
@@ -62,7 +62,7 @@ applied, **3,748** route names reverse, **2,275** template references exist on d
 sidebar targets resolve, and **0 models unseeded and unexplained** in every app (each exception is
 documented in the audit output — e.g. `SettingValue` and `BusinessRuleLog` are deliberately absent
 because absence *is* their designed starting state). Check 1 reports
-`module 0: 4 catalogued but NOT built -> 0.18, 0.19, 0.20, 0.21`; check 6 reports
+`module 0: 3 catalogued but NOT built -> 0.19, 0.20, 0.21`; check 6 reports
 `core: 17 live sub-modules`.
 
 **Two newly discovered items not in the original five:**
