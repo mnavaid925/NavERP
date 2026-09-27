@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Bulk Operations &amp; Data Tools{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Bulk Operations &amp; Data Tools</h1>
+      <div class="breadcrumb"><a href="{% url 'core:admin_board' %}">Admin Console</a><span class="sep">&rsaquo;</span><span>Data tools</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>There is no Apply button, and that is the
+      design, not an omission.</strong> NavERP has no bulk executor, no queryset builder and no background
+      worker, so this page can count what a tool would touch and nothing more. An operator who believed 4,000
+      rows had been recalculated when none were would have been actively misled &mdash; which is a worse outcome
+      than not offering the tool at all.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What is in scope</h2></div>
+    <div class="card-body">
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-value">{{ counts.jobs }}</div><div class="stat-label">Declared jobs</div></div>
+        <div class="stat-card"><div class="stat-value">{{ counts.job_runs }}</div><div class="stat-label">Recorded runs</div></div>
+        <div class="stat-card"><div class="stat-value">{{ counts.maintenance_windows }}</div><div class="stat-label">Maintenance windows</div></div>
+        <div class="stat-card"><div class="stat-value">{{ counts.changes }}</div><div class="stat-label">Change records</div></div>
+        <div class="stat-card"><div class="stat-value">{{ counts.rollouts }}</div><div class="stat-label">Rollout stages</div></div>
+        <div class="stat-card">
+          <div class="stat-value">{{ counts.numbered_unnumbered }}</div>
+          <div class="stat-label">Rows with no number</div>
+          <div class="text-muted">the rows a backfill would touch</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Preview a tool</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Pick a tool and it will tell you how many rows it would affect. It counts and returns.</p>
+      <form method="post" action="{% url 'core:bulk_preview' %}">
+        {% csrf_token %}
+        <div class="form-group" style="max-width:420px;">
+          <select name="tool" class="form-select" aria-label="Tool" required>
+            <option value="">Choose a tool…</option>
+            {% for tool in tool_choices %}<option value="{{ tool.value }}">{{ tool.label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="eye"></i> Preview (changes nothing)</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Available tools</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tool</th><th>What it would do</th><th>Executable here</th></tr></thead>
+        <tbody>
+          {% for tool in tool_choices %}
+            <tr>
+              <td class="fw-600">{{ tool.label }}</td>
+              <td>{{ tool.description }}</td>
+              <td><span class="badge badge-amber">Preview only</span></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this application will not do</h2></div>
+    <div class="card-body">
+      {% comment %}
+        A DECLINE LIST, printed in full on every visit rather than summarised. A reader who lands here
+        needs to see exactly which capabilities are absent, in the same words each time.
+      {% endcomment %}
+      <ul>
+        {% for decline in declines %}<li>{{ decline }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+{% endblock %}
