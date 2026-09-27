@@ -316,4 +316,47 @@ urlpatterns = (
         path("ops/changes/<int:pk>/rollback/", views.change_request_rollback,
              name="change_request_rollback"),
     ]
+    # ===================== 0.21 Compliance, Governance & Risk =====================
+    # **Order is behaviour** (Django is first-match-wins), the same rule the 0.17/0.18/0.20 blocks
+    # above follow: the LITERAL board segment first, then the `crud()` groups, then the longhand
+    # child-row blocks, then the actions AFTER the group that owns them so a greedy `<int:pk>`
+    # declared earlier can never shadow a literal sibling.
+    #
+    # No route in this block uses a converter in its FIRST path component — every first segment is
+    # the literal `compliance/` — so nothing outside this block can shadow it, and nothing here can
+    # shadow anything else. The two child-row groups carry NO `<int:pk>/<pk>/` detail route at all
+    # (and the mapping carries no `edit` either): a mapping and an acknowledgement are only ever
+    # read through their parents, so a route and a template for them would be a blank region
+    # waiting for a link that reverses (L7).
+    + [
+        path("compliance/", views.grc_overview, name="grc_overview"),
+    ]
+    + crud("compliance/frameworks", "controlframework")
+    + crud("compliance/controls", "compliancecontrol")
+    + crud("compliance/policies", "corporatepolicy")
+    + crud("compliance/risks", "riskregister")
+    + [
+        # Child rows: list / add / delete only, and no `edit` on either. A mapping's two FKs and
+        # its coverage are all it is, and correcting one is delete + recreate; an acknowledgement
+        # is immutable evidence and is likewise never edited in place.
+        path("compliance/mappings/", views.controlframeworkmapping_list,
+             name="controlframeworkmapping_list"),
+        path("compliance/mappings/add/", views.controlframeworkmapping_create,
+             name="controlframeworkmapping_create"),
+        path("compliance/mappings/<int:pk>/delete/", views.controlframeworkmapping_delete,
+             name="controlframeworkmapping_delete"),
+        path("compliance/acknowledgements/", views.policyacknowledgement_list,
+             name="policyacknowledgement_list"),
+        path("compliance/acknowledgements/add/", views.policyacknowledgement_create,
+             name="policyacknowledgement_create"),
+        path("compliance/acknowledgements/<int:pk>/delete/", views.policyacknowledgement_delete,
+             name="policyacknowledgement_delete"),
+    ]
+    + [
+        # The two actions, declared AFTER the groups that own them.
+        path("compliance/policies/<int:pk>/acknowledge/", views.policy_acknowledge,
+             name="policy_acknowledge"),
+        path("compliance/frameworks/<int:pk>/add-controls/", views.controlframeworkmapping_add,
+             name="controlframeworkmapping_add"),
+    ]
 )
