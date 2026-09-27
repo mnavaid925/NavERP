@@ -258,7 +258,10 @@ def securitythreat_list(request):
     return crud_list(
         request,
         SecurityThreat.objects.filter(tenant=request.tenant).select_related(
-            "service", "alert_event", "rate_limit_policy"),
+            # `mitigated_by` was missing and the list template reads `obj.mitigated_by.cidr` inside
+            # the row loop — measured 10 queries -> 25 (+1 per rendered row) once rows had a
+            # mitigation, the same N+1 shape 0.17 fixed on its incident create page.
+            "service", "alert_event", "rate_limit_policy", "mitigated_by"),
         "core/securitythreat/list.html",
         search_fields=["title", "mitre_technique", "mitre_tactic", "source_ip", "summary",
                        "evidence", "notes"],
@@ -735,6 +738,14 @@ def securityincident_contain(request, pk):
     the first containment's timestamp and imply the incident came back and was handled twice.
     """
     obj = get_object_or_404(SecurityIncident, pk=pk, tenant=request.tenant)
+    if obj.status in INCIDENT_SETTLED:
+        # `INCIDENT_SETTLED` is consulted for the first time. The guard used to test only
+        # `status == "detected"`, so a `false_positive` — a DECISION somebody made, and the whole
+        # reason this set is declared — could still be stamped contained. Probed, not predicted.
+        return _incident_refuse(
+            request, obj,
+            "This incident is %s, which is a decision somebody recorded. Stamping a containment on "
+            "it would rewrite that decision." % obj.get_status_display().lower())
     if obj.status == "detected":
         return _incident_refuse(
             request, obj,
@@ -826,6 +837,14 @@ def securityincident_close(request, pk):
     `closed_at` unset, so a second POST cannot rewrite the closure.
     """
     obj = get_object_or_404(SecurityIncident, pk=pk, tenant=request.tenant)
+    if obj.status in INCIDENT_SETTLED:
+        # Checked BEFORE the legal-predecessor test, for the same reason `contain` does it: a
+        # `false_positive` is a decision, and closing it would overwrite that decision with
+        # "closed". The probe found `close` already refused here, but only incidentally.
+        return _incident_refuse(
+            request, obj,
+            "This incident is %s, which is a decision somebody recorded. Closing it would rewrite "
+            "that decision." % obj.get_status_display().lower())
     if obj.recovered_at is None:
         return _incident_refuse(
             request, obj,
