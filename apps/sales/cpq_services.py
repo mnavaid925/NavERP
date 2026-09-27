@@ -389,6 +389,10 @@ def cpq_render_proposal_html(quote):
     signer_name = escape(quote.signer_name) if quote.signer_name else ''
     signer_title = escape(quote.signer_title) if quote.signer_title else ''
     signed_date = escape(quote.signed_at.strftime('%Y-%m-%d %H:%M:%S UTC') if quote.signed_at else '')
+    # The signing address is part of the acceptance EVIDENCE, so it is printed
+    # on the signed document itself rather than only in the database row. Behind
+    # a proxy this is the proxy -- see the security note on the model field.
+    signed_ip = escape(quote.signer_ip_address or "not recorded")
         
     proposal_html = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #0f172a; padding: 24px; line-height: 1.5;">
@@ -464,6 +468,7 @@ def cpq_render_proposal_html(quote):
         {f'''<div style="border: 2px dashed #10b981; background: #ecfdf5; border-radius: 8px; padding: 16px; margin-top: 24px;">
             <p style="margin: 0; font-size: 14px; color: #065f46; font-weight: 600;">✓ Digitally Accepted & Signed</p>
             <p style="margin: 4px 0 0 0; font-size: 12px; color: #047857;">Signed by: {signer_name} ({signer_title}) on {signed_date}</p>
+            <p style="margin: 2px 0 0 0; font-size: 11px; color: #047857;">Accepted from IP: {signed_ip}</p>
         </div>''' if quote.signed_at else ''}
     </div>
     """
