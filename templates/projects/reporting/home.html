@@ -93,11 +93,11 @@
         <tbody>
           {% for r in object_list %}
             <tr>
-              <td class="fw-600"><a href="{% url 'projects:rep_detail' r.pk %}">{{ r.name }}</a></td>
+              <td class="fw-600"><a href="{% url 'projects:rep_detail' r.pk %}">{{ r.number }} · {{ r.name }}</a></td>
               <td>{{ r.get_report_type_display }}</td>
               <td class="text-muted">{{ r.scope_label }}</td>
               <td>{{ r.last_run_at|date:"d M Y H:i"|default:"never" }}</td>
-              <td>{{ r.owner.get_full_name|default:r.owner.username|default:"—" }}</td>
+              <td>{% if r.owner %}{{ r.owner.get_full_name|default:r.owner.username }}{% else %}<span class="text-muted">un-owned</span>{% endif %}</td>
               <td class="table-actions">
                 <a href="{% url 'projects:rep_detail' r.pk %}" class="btn btn-outline"><i data-lucide="eye"></i> View</a>
               </td>
@@ -160,7 +160,7 @@
                 {% endif %}
               </td>
               <td>{{ run.row_count }}</td>
-              <td class="text-muted">{{ run.generated_at|date:"d M Y H:i" }} · {{ run.generated_by.get_full_name|default:run.generated_by.username }}</td>
+              <td class="text-muted">{{ run.generated_at|date:"d M Y H:i" }} · {% if run.generated_by %}{{ run.generated_by.get_full_name|default:run.generated_by.username }}{% else %}system{% endif %}</td>
               <td class="table-actions">
                 <a href="{% url 'projects:run_detail' run.pk %}" class="btn btn-outline"><i data-lucide="eye"></i> View</a>
               </td>
