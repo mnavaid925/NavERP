@@ -1763,3 +1763,26 @@ def test_quoteproposalcpq_line_list_dropdowns_are_scoped_to_this_quote(db, tenan
     assert [p.pk for p in response.context["products"]] == [mine.pk]
 
 
+
+
+
+def test_quoteproposalcpq_bundle_list_component_product_filter_narrows(db, tenant_a):
+    admin = _quoteproposalcpq_admin(tenant_a)
+    bundle = _quoteproposalcpq_product(tenant_a, "Enterprise Rack")
+    wanted_component = _quoteproposalcpq_product(tenant_a, "Blade Server")
+    other_component = _quoteproposalcpq_product(tenant_a, "Rack Switch")
+    wanted = _quoteproposalcpq_bundle(tenant_a, bundle, wanted_component, name="Blade option")
+    _quoteproposalcpq_bundle(tenant_a, bundle, other_component, name="Switch option")
+    body = _quoteproposalcpq_client(admin).get(
+        reverse("sales:product_bundle_list"), {"component_product": str(wanted_component.pk)}
+    ).content.decode()
+    assert wanted.name in body
+    assert "Switch option" not in body
+    assert 'name="component_product"' in body
+
+
+def test_quoteproposalcpq_bundle_list_component_filter_survives_junk(db, tenant_a):
+    admin = _quoteproposalcpq_admin(tenant_a)
+    assert _quoteproposalcpq_client(admin).get(
+        reverse("sales:product_bundle_list"), {"component_product": "abc"}
+    ).status_code == 200
