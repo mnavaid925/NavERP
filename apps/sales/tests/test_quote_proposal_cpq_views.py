@@ -1359,3 +1359,215 @@ def test_quoteproposalcpq_guided_selling_rejects_a_non_finite_quantity(db, tenan
     assert child is not None
     assert child.quantity == Decimal("2")
 
+
+# ---------------------------------------------------------------------------
+# ATP soft reservation on conversion
+# ---------------------------------------------------------------------------
+
+def _quoteproposalcpq_location(tenant, code="WH1", **overrides):
+    from apps.scm.models.InventoryManagement.Locations import Location
+
+    fields = {
+        "tenant": tenant,
+        "code": code,
+        "name": f"Warehouse {code}",
+        "location_type": "warehouse",
+        "is_active": True,
+        "is_pickable": True,
+    }
+    fields.update(overrides)
+    return Location.objects.create(**fields)
+
+
+def _quoteproposalcpq_fresh_tenant(slug, username):
+    from apps.accounts.models import User
+    from apps.core.models import Tenant
+
+    tenant = Tenant.objects.create(name=f"{slug.title()} Corp", slug=slug)
+    admin = User.objects.create_user(
+        email=f"{slug}_admin@example.com",
+        username=username,
+        password="password",
+        tenant=tenant,
+        is_tenant_admin=True,
+    )
+    return tenant, admin
+
+
+def test_quoteproposalcpq_conversion_soft_reserves_stock_at_the_default_warehouse():
+    """A converted line with a scm.Item must come back with a `reserved`
+    allocation. The research rates ATP table-stakes and the contract's verify
+    list requires it; nothing created one before."""
+    from apps.scm.models.OrderManagement.SalesOrderAllocations import SalesOrderAllocation
+
+    from apps.sales.cpq_services import cpq_convert_to_sales_order
+
+    tenant, admin = _quoteproposalcpq_fresh_tenant("atp", "atp_admin")
+    currency = _quoteproposalcpq_currency()
+    account = _quoteproposalcpq_party(tenant, name="ATP Buyer")
+    warehouse = _quoteproposalcpq_location(tenant, code="WH-MAIN")
+    item = _quoteproposalcpq_item(tenant, "Reservable SKU")
+    quote = _quoteproposalcpq_quote(tenant, currency, name="Reserve me", status="approved", account=account)
+    _quoteproposalcpq_line(
+        tenant, quote, description="Blade", quantity=Decimal("3.00"), unit_price=Decimal("100.00"), item=item
+    )
+
+    order = cpq_convert_to_sales_order(quote, user=admin)
+    allocations = SalesOrderAllocation.objects.filter(sales_order_line__sales_order=order)
+    assert allocations.count() == 1
+    allocation = allocations.first()
+    assert allocation.status == "reserved"
+    assert allocation.location_id == warehouse.pk
+    assert allocation.quantity == Decimal("3.00")
+    # A soft reservation must NOT claim a warehouse gap it did not have.
+    assert "ATP note" not in (order.notes or "")
+    assert quote.status == "converted"
+
+
+def test_quoteproposalcpq_a_service_line_with_no_item_is_reported_not_silently_skipped():
+    from apps.sales.cpq_services import cpq_convert_to_sales_order
+    from apps.scm.models.OrderManagement.SalesOrderAllocations import SalesOrderAllocation
+
+    tenant, admin = _quoteproposalcpq_fresh_tenant("svc", "svc_admin")
+    currency = _quoteproposalcpq_currency()
+    account = _quoteproposalcpq_party(tenant, name="Svc Buyer")
+    _quoteproposalcpq_location(tenant, code="WH-SVC")
+    quote = _quoteproposalcpq_quote(tenant, currency, name="Services only", status="approved", account=account)
+    _quoteproposalcpq_line(tenant, quote, description="Consulting", quantity=Decimal("2.00"), unit_price=Decimal("50.00"))
+
+    order = cpq_convert_to_sales_order(quote, user=admin)
+    assert SalesOrderAllocation.objects.filter(sales_order_line__sales_order=order).count() == 0
+    assert "ATP note" in (order.notes or "")
+
+
+def test_quoteproposalcpq_no_warehouse_configured_is_reported_on_the_order():
+    from apps.sales.cpq_services import cpq_convert_to_sales_order
+
+    tenant, admin = _quoteproposalcpq_fresh_tenant("nowh", "nowh_admin")
+    currency = _quoteproposalcpq_currency()
+    account = _quoteproposalcpq_party(tenant, name="NoWH Buyer")
+    item = _quoteproposalcpq_item(tenant, "SKU with nowhere to live")
+    quote = _quoteproposalcpq_quote(tenant, currency, name="No warehouse", status="approved", account=account)
+    _quoteproposalcpq_line(tenant, quote, description="Widget", quantity=Decimal("1.00"), unit_price=Decimal("10.00"), item=item)
+
+    order = cpq_convert_to_sales_order(quote, user=admin)
+    assert "ATP note" in (order.notes or "")
+    assert "no active pickable warehouse" in order.notes
+
+
+def test_quoteproposalcpq_default_warehouse_prefers_the_lowest_pick_sequence():
+    from apps.sales.cpq_services import _default_fulfillment_location
+
+    tenant, _admin = _quoteproposalcpq_fresh_tenant("seq", "seq_admin")
+    _quoteproposalcpq_location(tenant, code="WH-AAA", pick_sequence=90)
+    preferred = _quoteproposalcpq_location(tenant, code="WH-ZZZ", pick_sequence=10)
+    _quoteproposalcpq_location(tenant, code="WH-BIN", location_type="bin")
+    assert _default_fulfillment_location(tenant).pk == preferred.pk
+
+
+def test_quoteproposalcpq_an_inactive_warehouse_is_not_chosen():
+    from apps.sales.cpq_services import _default_fulfillment_location
+
+    tenant, _admin = _quoteproposalcpq_fresh_tenant("inact", "inact_admin")
+    _quoteproposalcpq_location(tenant, code="WH-OFF", is_active=False)
+    assert _default_fulfillment_location(tenant) is None
+
+
+
+
+# ---------------------------------------------------------------------------
+# The win is recorded, once, on conversion
+# ---------------------------------------------------------------------------
+
+def test_quoteproposalcpq_conversion_records_the_won_outcome():
+    """A deal moved to closed_won with no OpportunityOutcome leaves 8.4's
+    accuracy report with no ground truth to learn from."""
+    from apps.sales.cpq_services import cpq_convert_to_sales_order
+    from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import OpportunityOutcome
+
+    tenant, admin = _quoteproposalcpq_fresh_tenant("win", "win_admin")
+    currency = _quoteproposalcpq_currency()
+    account = _quoteproposalcpq_party(tenant, name="Win Buyer")
+    _quoteproposalcpq_location(tenant, code="WH-WIN")
+    opportunity = _quoteproposalcpq_opportunity(tenant, account=account, stage="negotiation")
+    quote = _quoteproposalcpq_quote(
+        tenant, currency, name="Closed won", status="approved", account=account, opportunity=opportunity
+    )
+    _quoteproposalcpq_line(tenant, quote, quantity=Decimal("1.00"), unit_price=Decimal("100.00"))
+
+    cpq_convert_to_sales_order(quote, user=admin)
+    opportunity.refresh_from_db()
+    assert opportunity.stage == "closed_won"
+    outcomes = OpportunityOutcome.objects.filter(tenant=tenant, opportunity=opportunity, result="won")
+    assert outcomes.count() == 1
+    outcome = outcomes.first()
+    assert outcome.reason is not None
+    assert outcome.recorded_by_id == admin.pk
+    assert quote.number in outcome.notes
+    assert outcome.number.startswith("OUT-")
+
+
+def test_quoteproposalcpq_the_win_is_recorded_only_once():
+    """OpportunityOutcome is append-only and a deal is won once, so a second
+    row would double-count it in every forecast that reads outcomes."""
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    from apps.sales.cpq_services import cpq_convert_to_sales_order, cpq_record_won_outcome
+    from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import OpportunityOutcome
+
+    tenant, admin = _quoteproposalcpq_fresh_tenant("once", "once_admin")
+    currency = _quoteproposalcpq_currency()
+    account = _quoteproposalcpq_party(tenant, name="Once Buyer")
+    _quoteproposalcpq_location(tenant, code="WH-ONCE")
+    opportunity = _quoteproposalcpq_opportunity(tenant, account=account, stage="negotiation")
+    quote = _quoteproposalcpq_quote(
+        tenant, currency, name="Convert once", status="approved", account=account, opportunity=opportunity
+    )
+    _quoteproposalcpq_line(tenant, quote, quantity=Decimal("1.00"), unit_price=Decimal("100.00"))
+
+    cpq_convert_to_sales_order(quote, user=admin)
+    assert cpq_record_won_outcome(opportunity, quote, admin) is None
+    assert OpportunityOutcome.objects.filter(tenant=tenant, opportunity=opportunity, result="won").count() == 1
+    # and the one-way door still holds
+    with pytest.raises(DjangoValidationError):
+        cpq_convert_to_sales_order(quote, user=admin)
+
+
+def test_quoteproposalcpq_the_win_reason_reuses_the_tenants_configured_catalog():
+    from apps.sales.cpq_services import cpq_record_won_outcome
+    from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import OpportunityOutcome, WinLossReason
+
+    tenant, admin = _quoteproposalcpq_fresh_tenant("cat", "cat_admin")
+    configured = WinLossReason.objects.create(
+        tenant=tenant, code="exec_sponsor", name="Executive Sponsor",
+        sequence=5, result="won", category="relationship",
+    )
+    opportunity = _quoteproposalcpq_opportunity(tenant, stage="negotiation")
+    quote = _quoteproposalcpq_quote(tenant, _quoteproposalcpq_currency(), name="Reason reuse")
+    outcome = cpq_record_won_outcome(opportunity, quote, admin)
+    assert outcome.reason_id == configured.pk
+    # no extra reason row invented when the tenant already configured one
+    assert WinLossReason.objects.filter(tenant=tenant).count() == 1
+    assert OpportunityOutcome.objects.filter(tenant=tenant, opportunity=opportunity).count() == 1
+
+
+def test_quoteproposalcpq_the_win_is_not_recorded_twice_across_two_quotes():
+    """Two quotes on one opportunity is a real CRM state; the win belongs to the
+    opportunity, not to each conversion."""
+    from apps.sales.cpq_services import cpq_convert_to_sales_order
+    from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import OpportunityOutcome
+
+    tenant, admin = _quoteproposalcpq_fresh_tenant("twoq", "twoq_admin")
+    currency = _quoteproposalcpq_currency()
+    account = _quoteproposalcpq_party(tenant, name="TwoQ Buyer")
+    _quoteproposalcpq_location(tenant, code="WH-TWOQ")
+    opportunity = _quoteproposalcpq_opportunity(tenant, account=account, stage="negotiation")
+    for label in ("First quote", "Second quote"):
+        quote = _quoteproposalcpq_quote(
+            tenant, currency, name=label, status="approved", account=account, opportunity=opportunity
+        )
+        _quoteproposalcpq_line(tenant, quote, quantity=Decimal("1.00"), unit_price=Decimal("10.00"))
+        cpq_convert_to_sales_order(quote, user=admin)
+
+    assert OpportunityOutcome.objects.filter(tenant=tenant, opportunity=opportunity, result="won").count() == 1
+
