@@ -127,7 +127,14 @@ class Command(BaseCommand):
             self._seed_localization(tenant)
             self._seed_backup(tenant)
             self._seed_monitoring(tenant)
-        self._seed_security(tenant)
+            # INDENTED with the rest, deliberately. The first version of this line sat one level
+            # out — dedented past the `for tenant in ...` loop — so it ran exactly ONCE, for
+            # whichever tenant happened to be last, and every other workspace silently got no
+            # seeded advisory. The per-entity guard inside cannot catch that: the block simply
+            # never ran. This is the same failure the 0.6 comment above records (a `continue`
+            # that skipped whole tenants), and it is invisible in the output because the block
+            # only writes a line when it creates something.
+            self._seed_security(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
