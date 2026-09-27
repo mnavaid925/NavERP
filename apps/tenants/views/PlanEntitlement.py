@@ -62,10 +62,13 @@ def planentitlement_detail(request, pk):
     # visible. Built as a dict comprehension over the ALREADY-FETCHED list — never a per-row
     # `.filter()`, which re-queries on every render (the `_usage_summary` docstring, verbatim).
     overridden_features = {grant.feature_id: grant.privilege_value for grant in plan_grants}
-    return crud_detail(
-        request, model=PlanEntitlement, pk=pk,
-        template="tenants/planentitlement/detail.html",
-        extra_context={
+    # ONE fetch, then render — the `usagerecord_detail` house pattern. `crud_detail` is not used
+    # here: it re-fetches the row by pk, and the three capped lists above need `obj` first, so the
+    # helper version would cost two queries for one page.
+    return render(
+        request, "tenants/planentitlement/detail.html",
+        {
+            "obj": obj,
             "plan_grants": plan_grants,
             "overrides": overrides,
             "overridden_features": overridden_features,
