@@ -17,7 +17,9 @@ Neither board is a control. `quota_board` measures consumption against a recorde
 `action_on_breach` / `auto_renew` columns they display are recorded intent with no interceptor
 behind them.
 """
-from django.db.models import Count, Sum
+from datetime import timedelta
+
+from django.db.models import Count, Q, Sum
 
 from apps.tenants.views._common import *  # noqa: F401,F403
 from apps.tenants.models import (
@@ -27,6 +29,11 @@ from apps.tenants.models import (
     UsageQuota,
     UsageRecord,
 )
+
+#: How many rows `renewal_board` RENDERS. The board is a roll-up, not a register — the paginated
+#: register is `subscription_list`. The cap is here so the view and the page prose quote the same
+#: number, and so it is one edit if the number is wrong.
+RENEWAL_BOARD_ROW_CAP = 200
 
 
 # ================================================================= helpers shared with the detail views
@@ -153,31 +160,62 @@ def quota_board(request):
         "warned_count": len([r for r in rows if r["is_warned"]]),
         "breached_count": len([r for r in rows if r["is_breached"]]),
         "unmetered_count": len([r for r in rows if r["limit"] == Decimal("0.00")]),
-        "metric_choices": UsageQuota.METRIC_CHOICES,
-        "action_choices": UsageQuota.ACTION_CHOICES,
+        # I3: `metric_choices` and `action_choices` are GONE, not unused. The board has no filter
+        # bar, and every headline number above is computed over the UNFILTERED row set, so a
+        # filter would print "2 marked as breached" above a table holding zero breached rows. The
+        # board's value is that the number and the row are the same fact. The decision is written
+        # down in the template's own header comment.
     })
 
 
 
 @tenant_admin_required
 def renewal_board(request):
-    """Renewal & expiry, one query — `Subscription.days_left()` is PREFERRED over re-deriving the
-    arithmetic in the view (it is a pure method on an already-loaded row).
+    """Renewal & expiry: ONE aggregate query for the headline numbers, one capped fetch for the rows.
 
-    `days_left()` returns `None` when `renews_on` is unset, so the template must guard it with
-    `{% if renewal.days_left is not None %}`; a bare `{{ renewal.days_left }}` would print `None`
-    on screen.
+    `Subscription.days_left()` is still PREFERRED over re-deriving the arithmetic in the view for
+    the ROWS (it is a pure method on an already-loaded row), but the four stat cards are database
+    AGGREGATES, not `len()` of what was rendered. `days_left()` returns `None` when `renews_on` is
+    unset, so the template must guard it with `{% if row.days_left is not None %}`; a bare
+    `{{ row.days_left }}` would print `None` on screen.
+
+    **The cap and the counts are two different facts, and the page says so.** The table renders at
+    most `RENEWAL_BOARD_ROW_CAP` rows; the tiles count every subscription in the workspace. That is
+    deliberate — deriving the tiles from the visible rows would make them report the cap, which is
+    the confident lie this project refuses to ship — but it is only honest while the reader is
+    told, so `rows_truncated` is passed and the template states the cap whenever it is true.
 
     `auto_renew` and `grace_ends_on` are RECORDED commercial terms with nothing behind them: no
     scheduler exists (0.20 owns it), no renewal is executed, no card is charged, and no expiry
-    email is sent. Both are read with `getattr(..., default)` so this board renders against a
-    `Subscription` that does not yet carry the two columns rather than raising AttributeError.
+    email is sent. Both are read with `getattr(..., default)` in the row loop so this board renders
+    against a `Subscription` that does not yet carry the two columns rather than raising
+    AttributeError.
     """
     today = timezone.localdate()
     plan_labels = dict(Tenant.PLAN_CHOICES)
     status_labels = dict(Subscription.STATUS_CHOICES)
 
-    subscriptions = Subscription.objects.filter(tenant=request.tenant).order_by("renews_on", "id")
+    base = Subscription.objects.filter(tenant=request.tenant)
+    # I8: the four headline counts are AGGREGATES over the whole workspace, NOT `len()` of the
+    # rows this page happens to render. Capping the rows and leaving `len()` in place would be
+    # worse than doing nothing: the stat cards would quietly start reporting the cap instead of
+    # the workspace, which is the confident lie this project refuses to ship. The count and the
+    # row must be the same fact, so a subscription past its date counts as expired whether or not
+    # it made it into the first 200 rows - and the page says the cap out loud.
+    counts = base.aggregate(
+        # 0 <= days_left <= 30, i.e. renews_on between today and today+30. NULL renews_on is
+        # excluded by the comparison, matching the row loop's `days_left is not None` guard.
+        expiring=Count("id", filter=Q(renews_on__gte=today, renews_on__lte=today + timedelta(days=30))),
+        expired=Count("id", filter=Q(renews_on__lt=today)),
+        in_grace=Count("id", filter=Q(grace_ends_on__isnull=False, grace_ends_on__gte=today)),
+        auto_renew=Count("id", filter=Q(auto_renew=True)),
+        # The untruncated size of the workspace, so the page can state the cap honestly.
+        total=Count("id"),
+    )
+
+    # The rows themselves ARE capped, because `Subscription` only ever grows and this board is
+    # a roll-up, not a register - the register is `subscription_list`, which paginates.
+    subscriptions = base.order_by("renews_on", "id")[:RENEWAL_BOARD_ROW_CAP]
     rows = []
     for subscription in subscriptions:
         days_left = subscription.days_left()
@@ -201,11 +239,20 @@ def renewal_board(request):
 
     return render(request, "tenants/renewal_board.html", {
         "renewal_rows": rows,
-        "expiring_count": len([r for r in rows
-                               if r["days_left"] is not None and 0 <= r["days_left"] <= 30]),
-        "in_grace_count": len([r for r in rows if r["in_grace"]]),
-        "expired_count": len([r for r in rows if r["is_expired"]]),
-        "auto_renew_count": len([r for r in rows if r["auto_renew"]]),
-        "plan_choices": Tenant.PLAN_CHOICES,
+        "expiring_count": counts["expiring"],
+        "in_grace_count": counts["in_grace"],
+        "expired_count": counts["expired"],
+        "auto_renew_count": counts["auto_renew"],
+        # I8, honesty half: the stat cards are computed over the WHOLE workspace, the table is
+        # capped. The page must therefore say so, or a reader counts 200 rows against a tile
+        # reading 214 and concludes the board is broken. `rows_truncated` is the one condition
+        # under which the two numbers legitimately differ, and the template only mentions the
+        # cap when it is true.
+        "renewal_total": counts["total"],
+        "row_cap": RENEWAL_BOARD_ROW_CAP,
+        "rows_truncated": counts["total"] > len(rows),
+        # I3: `plan_choices` is GONE, not unused. The board has no filter bar, and every headline
+        # number is computed over the UNFILTERED set, so a filter would split the stat cards from
+        # the rows beneath them. The decision is written down in the template's header comment.
     })
 
