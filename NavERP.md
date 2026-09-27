@@ -58,7 +58,7 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 
 | # | Module | Django app(s) | Status |
 |---|--------|---------------|--------|
-| 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | 🟦 17 of 21 built — 0.1–0.17 (4 remain: 0.18–0.21) |
+| 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | 🟦 18 of 21 built — 0.1–0.18 (3 remain: 0.19–0.21) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built |
 | 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built |
 | 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1–3.41 built — all 41 sub-modules |
@@ -101,7 +101,7 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 > 0.12 and 0.13 — were reconciled and closed out on 2026-09-19/21, which added the missing models and
 > surfaces and recorded what is deliberately *not* built on the pages themselves.
 >
-> The remaining **4** sub-modules (0.18–0.21) are unbuilt. Several of the live ones still surface only part
+> The remaining **3** sub-modules (0.19–0.21) are unbuilt. Several of the live ones still surface only part
 > of their own bullet lists — **0.3 maps 1 of 5, 0.4 maps 4 of 5, 0.5 maps 2 of 5, 0.7 maps 1 of 5, 0.9
 > maps 1 of 5 and 0.14 maps 1 of 5** — and the reconcile has classified every one of those gaps, so each is
 > a known build rather than an unknown. Two of those counts need a caveat: **0.4's single gap is
