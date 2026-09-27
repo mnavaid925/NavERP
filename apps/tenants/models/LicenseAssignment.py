@@ -113,8 +113,22 @@ class LicenseAssignment(models.Model):
         """One rule: the [RULING] 8 duplicate guard on the unique tuple.
 
         Reachable by an ordinary user, because both `user` and `module_slug` are on the form.
+
+        Plus the tenant-consistency guard on `subscription` (I15). The form scopes that dropdown, so a
+        crafted POST is already rejected; this closes the UNSCOPED Django admin. Here the FK is
+        `SET_NULL`, so a bad pair is a cross-tenant READ rather than a cross-tenant delete — which is
+        why the guard is defence-in-depth and not a Critical. `Subscription` is referenced through the
+        models package: it is a sibling module and `_base` does not re-export it.
         """
         super().clean()
+        if self.tenant_id and self.subscription_id:
+            from apps.tenants.models import Subscription as _Subscription
+            if not _Subscription.objects.filter(
+                pk=self.subscription_id, tenant_id=self.tenant_id
+            ).exists():
+                raise ValidationError({
+                    "subscription": "That subscription belongs to another workspace.",
+                })
         if self.tenant_id and self.user_id:
             # `module_slug` is normalised to "" here so a form that posts None (or omits the key) is
             # compared as the same tenant-wide value the unique_together stores.
