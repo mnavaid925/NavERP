@@ -1,22 +1,22 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% comment %}
-  0.19 â€” one seat. Backing view: licenseassignment_detail.
+  0.19 &mdash; one seat. Backing view: licenseassignment_detail.
 
   Context, and ONLY this:
     obj          the LicenseAssignment (user joined; `subscription` is NULLABLE)
     seat_summary the board's {active, reclaimed, revoked, expired, total} roll-up for THIS
                  tenant, computed in Boards._seat_summary off ONE grouped query and reused
                  here rather than re-queried. `expired` counts rows whose expires_on is
-                 past AND whose status == "active" â€” the DISPLAYED state, never a stored one,
+                 past AND whose status == "active" &mdash; the DISPLAYED state, never a stored one,
                  which is why it cannot come from a .values("status") group alone.
 
   `subscription` is a nullable FK: every read is inside an {% if %} branch (L10).
 
   `status`, `reclaimed_on` and `reclaim_reason` are OFF the form. The only writer is the
-  licenseassignment_reclaim verb â€” a form carrying `status` would let a member POST
+  licenseassignment_reclaim verb &mdash; a form carrying `status` would let a member POST
   status=active and silently re-activate a reclaimed seat, undoing the one-writer discipline.
 {% endcomment %}
-{% block title %}{{ obj.number }} Â· Seat{% endblock %}
+{% block title %}{{ obj.number }} &middot; Seat{% endblock %}
 {% block content %}
   <div class="page-header">
     <div>
@@ -119,7 +119,7 @@
           {% endcomment %}
           {% if obj.is_reclaimable %}
             <a href="{% url 'tenants:licenseassignment_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
-            <form method="post" action="{% url 'tenants:licenseassignment_reclaim' obj.pk %}" onsubmit="return confirm('Reclaim this seat? It records a commercial fact only â€” it does NOT disable anyoneâ€™s login. There is no identity sync in NavERP.');">
+            <form method="post" action="{% url 'tenants:licenseassignment_reclaim' obj.pk %}" onsubmit="return confirm('Reclaim this seat? It records a commercial fact only &mdash; it does NOT disable anyone&rsquo;s login. There is no identity sync in NavERP.');">
               {% csrf_token %}
               <button class="btn btn-primary" type="submit"><i data-lucide="user-minus"></i> Reclaim seat</button>
             </form>
@@ -127,7 +127,7 @@
             <p class="text-muted" style="margin-bottom:.5rem;">This seat is no longer active, so it cannot be edited
               or reclaimed. Its status is written by the reclaim action alone.</p>
           {% endif %}
-          <form method="post" action="{% url 'tenants:licenseassignment_delete' obj.pk %}" onsubmit="return confirm('Delete this seat record? The holder keeps their login either way â€” this only removes the register row.');">
+          <form method="post" action="{% url 'tenants:licenseassignment_delete' obj.pk %}" onsubmit="return confirm('Delete this seat record? The holder keeps their login either way &mdash; this only removes the register row.');">
             {% csrf_token %}
             <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
           </form>
