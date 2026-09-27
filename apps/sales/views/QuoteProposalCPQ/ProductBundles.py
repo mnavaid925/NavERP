@@ -41,6 +41,13 @@ def product_bundle_list(request):
     if option_group:
         qs = qs.filter(option_group=option_group)
 
+    # The plan also names a component_product filter; it is the other half of
+    # "which products can appear inside a bundle", so without it a rep can only
+    # ask the question in one direction.
+    component_id = request.GET.get("component_product", "").strip()
+    if component_id and component_id.isdigit():
+        qs = qs.filter(component_product_id=int(component_id))
+
     compatibility_rule = request.GET.get("compatibility_rule", "").strip()
     if compatibility_rule:
         qs = qs.filter(compatibility_rule=compatibility_rule)
@@ -64,6 +71,11 @@ def product_bundle_list(request):
         bundle_options__isnull=False
     ).distinct().order_by("name")
 
+    component_products = Product.objects.filter(
+        tenant=tenant,
+        component_in_bundles__isnull=False
+    ).distinct().order_by("name")
+
     option_groups = ProductBundleOption.objects.filter(
         tenant=tenant
     ).values_list("option_group", flat=True).distinct().order_by("option_group")
@@ -75,6 +87,7 @@ def product_bundle_list(request):
     context = {
         "bundles": page_obj,
         "bundle_products": bundle_products,
+        "component_products": component_products,
         "option_groups": option_groups,
         "compatibility_choices": ProductBundleOption.COMPATIBILITY_CHOICES,
         "stats": stats,
