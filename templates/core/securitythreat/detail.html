@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% comment %}
+  One declared finding. Context: obj, incident_count, age_days, source_ip_display, notes.
+  The rate-limit seam links core:rate_limit_edit with the pk, because core:rate_limit_detail
+  does not exist in this application and reversing it is a hard 500.
+{% endcomment %}
+{% block title %}{{ obj.title|truncatechars:60 }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title|truncatechars:90 }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:security_overview' %}">Security</a><span class="sep">&rsaquo;</span><a href="{% url 'core:securitythreat_list' %}">Threats</a><span class="sep">&rsaquo;</span><span>{{ obj.title|truncatechars:40 }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:securitythreat_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'core:threat_board' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Threat board</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Nothing detected this.</strong>
+      NavERP has no IDS/IPS agent, no packet capture and no anomaly engine. This row is what a
+      person reported, and recording it changed nothing about any system.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="layout-2col">
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">The finding</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_threat_type_display }}</dd></div>
+            <div class="detail-item"><dt>Severity</dt><dd>
+              {% if obj.severity == "info" %}<span class="badge badge-info">{{ obj.get_severity_display }}</span>
+              {% elif obj.severity == "warning" %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>
+              {% elif obj.severity == "critical" %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Status</dt><dd>
+              {% if obj.status == "new" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "triaged" or obj.status == "investigating" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "contained" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "resolved" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "false_positive" or obj.status == "ignored" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Observed</dt><dd>{{ obj.detected_at|date:"M d, Y H:i" }}
+              <div class="text-muted">Declared by hand{% if age_days is not None %}, {{ age_days }} day{{ age_days|pluralize }} ago{% endif %}</div></dd></div>
+            <div class="detail-item"><dt>Occurrences</dt><dd>{{ obj.occurrence_count }}
+              <div class="text-muted">A number somebody typed &mdash; NavERP counted no requests</div></dd></div>
+            <div class="detail-item"><dt>Source IP</dt><dd>{% if obj.source_ip %}<code>{{ obj.source_ip }}</code>{% else %}<span class="text-muted">{{ source_ip_display }} &mdash; no address was recorded</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Component</dt><dd>{% if obj.service %}<a href="{% url 'core:service_component_detail' obj.service.pk %}">{{ obj.service.name }}</a>{% elif obj.service_label %}{{ obj.service_label }} <span class="text-muted">(snapshot)</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>MITRE ATT&amp;CK</dt><dd>{% if obj.mitre_technique %}<code>{{ obj.mitre_technique }}</code>{% else %}<span class="text-muted">&mdash; not mapped</span>{% endif %}
+              {% if obj.mitre_tactic %}<div class="text-muted">Tactic: {{ obj.mitre_tactic }}</div>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Rule reference</dt><dd>{% if obj.rule_reference %}{{ obj.rule_reference }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Target account</dt><dd>{% if obj.target_user %}{{ obj.target_user.get_username }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Target credential</dt><dd>{% if obj.target_credential %}<a href="{% url 'core:credential_edit' obj.target_credential.pk %}">{{ obj.target_credential.label }}</a>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Recorded WAF action</dt><dd>{% if obj.waf_action %}{{ obj.get_waf_action_display }}{% else %}<span class="text-muted">&mdash; none recorded</span>{% endif %}
+              <div class="text-muted">A posture somebody wrote down; NavERP runs no WAF</div></dd></div>
+            <div class="detail-item"><dt>Recorded defence mode</dt><dd>{% if obj.defense_mode %}{{ obj.get_defense_mode_display }}{% else %}<span class="text-muted">&mdash; none recorded</span>{% endif %}
+              <div class="text-muted">A posture somebody wrote down; NavERP issues no CAPTCHA and challenges nobody</div></dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">The account somebody gave</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Summary</dt><dd>{% if obj.summary %}{{ obj.summary|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Detail</dt><dd>{% if obj.detail %}{{ obj.detail|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Evidence</dt><dd>{% if obj.evidence %}{{ obj.evidence|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Notes</dt><dd>{% if obj.notes %}{{ obj.notes|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      {% if obj.resolved_at or obj.resolution_note %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">The decision recorded</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Resolved</dt><dd>{% if obj.resolved_at %}{{ obj.resolved_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>By</dt><dd>{% if obj.resolved_by %}{{ obj.resolved_by.get_username }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Resolution note</dt><dd>{% if obj.resolution_note %}{{ obj.resolution_note }}{% else %}<span class="text-muted">none written</span>{% endif %}</dd></div>
+          </dl>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Actions</h2></div>
+        <div class="card-body">
+          <div class="form-actions">
+            <a href="{% url 'core:securitythreat_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit this record</a>
+          </div>
+          <form method="post" action="{% url 'core:securitythreat_delete' obj.pk %}" onsubmit="return confirm('Delete this threat record? It deletes what a person reported, not the event itself.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete this record</button>
+          </form>
+          <div class="form-actions">
+            <a href="{% url 'core:securitythreat_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to threats</a>
+          </div>
+          <p class="text-muted"><i data-lucide="info"></i> Security incidents naming this threat as their primary finding:
+            <strong>{{ incident_count }}</strong>. A count of rows somebody created, not of attacks that happened.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">The seams with 0.13 and 0.17</h2></div>
+        <div class="card-body">
+          {% if obj.alert_event %}
+            <p class="text-muted">Originating alert. 0.17 owns the firing; this row only points at it.</p>
+            <p><a href="{% url 'core:alert_event_detail' obj.alert_event.pk %}">{{ obj.alert_event.message|truncatechars:60 }}</a></p>
+          {% else %}
+            <p class="text-muted">No originating alert is linked, so this finding was not raised from a 0.17 firing.</p>
+          {% endif %}
+          {% if obj.rate_limit_policy %}
+            <p class="text-muted">Rate-limit policy this finding crossed. 0.13 owns the limit itself and this application has no rate-limit detail page, so this opens its edit form.</p>
+            <p><a href="{% url 'core:rate_limit_edit' obj.rate_limit_policy.pk %}">{{ obj.rate_limit_policy.name }}</a></p>
+          {% else %}
+            <p class="text-muted">No rate-limit policy is linked.</p>
+          {% endif %}
+          {% if obj.mitigated_by %}
+            <p class="text-muted">Allow/deny rule recorded against this finding. It is a policy nobody evaluates.</p>
+            <p><a href="{% url 'core:ipaccessrule_detail' obj.mitigated_by.pk %}">{{ obj.mitigated_by.cidr }}</a> &mdash; {{ obj.mitigated_by.get_direction_display|lower }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Record a decision</h2></div>
+        <div class="card-body">
+          {% comment %}
+            Each button is shown only when the guard in the VIEW would allow the POST, but that
+            is a convenience and not the enforcement: the guard lives in the view, so a
+            hand-made POST is refused there and no audit row is written for it.
+          {% endcomment %}
+          {% if obj.status == "new" %}
+            <form method="post" action="{% url 'core:securitythreat_triage' obj.pk %}" onsubmit="return confirm('Record that somebody read this finding? NavERP investigated nothing.');">
+              {% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="eye"></i> Record triage</button>
+            </form>
+          {% else %}
+            <p class="text-muted">This finding is {{ obj.get_status_display|lower }}, and only a new finding is waiting on somebody. A second triage would imply a second look that may not have happened.</p>
+          {% endif %}
+
+          {% if obj.status == "resolved" or obj.status == "false_positive" or obj.status == "ignored" %}
+            <p class="text-muted">This finding is already settled. Recording a second resolution would overwrite who settled it and when.</p>
+          {% else %}
+            <form method="post" action="{% url 'core:securitythreat_resolve' obj.pk %}" onsubmit="return confirm('Record that somebody declared this resolved? NavERP will not fix anything.');">
+              {% csrf_token %}
+              <input type="text" name="resolution_note" maxlength="255" class="form-input" style="width:100%; margin-bottom:.5rem;" placeholder="Resolution note (optional)" aria-label="Resolution note (optional)">
+              <button class="btn btn-outline" type="submit"><i data-lucide="check"></i> Record resolution</button>
+            </form>
+          {% endif %}
+          <p class="text-muted"><i data-lucide="info"></i> Each of these records that a person did something. None of them investigates, fixes or re-checks anything.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">What this record is not</h2></div>
+        <div class="card-body">
+          <p class="text-muted"><i data-lucide="info"></i> <strong>No packet, flow record or alert payload is attached to this row.</strong>
+            NavERP captures none of them, so there is nowhere to read them from &mdash; name the ticket or the runbook in
+            <em>Evidence</em> instead.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
