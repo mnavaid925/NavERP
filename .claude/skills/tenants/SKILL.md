@@ -82,6 +82,29 @@ TypeError.
 `usagequota/`, `licenseassignment/` (each with `list` / `detail` / `form.html`), plus two
 app-root board pages: `quota_board.html`, `renewal_board.html`.
 
+### Every confirm button comes from one partial
+
+`templates/partials/confirm_button.html` owns the POST form, the `confirm()` dialog, the CSRF token
+and the icon button. **Never hand-roll that form** — 0.19 had six copies and they drifted. A test
+fails if any 0.19 page contains `method="post"` or `onsubmit=`.
+
+```django
+{% url 'tenants:usagequota_delete' obj.pk as delete_url %}
+{% include "partials/confirm_button.html" with
+    action=delete_url
+    confirm_message="Delete this quota? The recorded ceiling is removed; the usage already consumed is not."
+    label="Delete" icon="trash-2" variant="danger" %}
+```
+
+**The apostrophe trap (L42) — the partial cannot save you.** The message lands inside a JavaScript
+single-quoted string. Django escapes a literal `'` to `&#39;`, the browser DECODES IT BACK to a bare
+quote, the string ends early, and the dialog silently stops guarding anything. There is no way to
+escape this from inside a Django template, so the message must be a **fixed literal with no ASCII
+apostrophe and no backslash** — use the typographic `’`. A test enforces this; do not rely on review.
+
+**Icon-only controls need `aria-label`, not just `title`.** `btn-icon` renders only a lucide `<i>`,
+so `title` is the accessible name at best. `confirm_button.html` emits both.
+
 ## Seeder — `manage.py seed_tenants`
 
 Idempotent and **independently self-healing per entity**: a tenant with features but no quotas still
@@ -140,9 +163,33 @@ calls `None` unmetered and "deliberately distinct from `0`").
 security.py`). Every 0.19 test is `test_licensing_*` and every helper `lic019_*`, so the next
 sub-module appending nearby cannot shadow them.
 
-**Run with `--no-migrations` while iterating.** A cold migration-backed run of 14 apps takes several
-minutes and blows past the command timeout; `--no-migrations` brings the suite down to seconds. Run
-the **full unfiltered** `apps/tenants/tests` once without it before declaring done (L47 — never `-k`).
+**Run with `--no-migrations` while iterating** — the suite drops from minutes to seconds.
+
+**A migration-backed run is affordable now, which it never was.** `pytest.ini` has always carried
+`--reuse-db`, and for a long time it was a **silent no-op**: on SQLite Django reads only
+`DATABASES["default"]["TEST"]["NAME"]` for the *test* database and ignores `NAME`, so with nothing set
+it fell back to shared in-memory — discarded at exit, meaning **every run re-applied all ~270
+migrations** (20+ minutes here, long enough that people start killing runs and leaving a partial DB
+behind).
+
+```powershell
+# fast iteration
+pytest apps/tenants/tests -q --no-migrations
+
+# the real thing, paid once and then cached
+$env:NAVERP_TEST_DB = "nav_erp_test.sqlite3"
+pytest apps/tenants/tests          # slow ONCE
+pytest apps/tenants/tests          # seconds from then on
+Remove-Item nav_erp_test.sqlite3   # start over
+```
+
+Two traps: the knob is **`TEST["NAME"]`**, not `NAME`; and it must be a **bare filename**, not a path,
+because Django uses the value verbatim. `root/conftest.py` additionally turns off SQLite durability for
+the test DB (`synchronous=OFF`, `journal_mode=MEMORY`), guarded on the engine so it can never reach a
+real database.
+
+Always run the **full unfiltered** `apps/tenants/tests` before declaring done (L47 — never `-k`), and
+**never kill a run part-way** — that discards the migration work.
 
 The query-count guards assert that the count does not **grow with row count**, not a magic number: a
 hard-coded count encodes whatever the page cost on the day it was written, while a per-row query
