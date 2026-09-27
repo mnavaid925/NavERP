@@ -1,10 +1,12 @@
 """Seed Module 0.1 data: subscriptions, invoices, branding, encryption keys, health
 metrics — per tenant. Idempotent (skips a tenant that already has a subscription).
-Run after seed_core and seed_accounts.
+Also seeds 0.19 licensing data (feature catalog, plan grants, quotas, seats) with its
+OWN per-entity guards. Run after seed_core and seed_accounts.
 """
 import datetime
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -13,9 +15,13 @@ from apps.core.models import Tenant
 from apps.tenants.models import (
     BrandingSetting,
     EncryptionKey,
+    EntitlementFeature,
     HealthMetric,
+    LicenseAssignment,
+    PlanEntitlement,
     Subscription,
     SubscriptionInvoice,
+    UsageQuota,
     UsageRecord,
 )
 
@@ -50,6 +56,9 @@ class Command(BaseCommand):
             # it for workspaces that already exist — which is exactly what happened when usage
             # metering was first added here: Acme and Globex were skipped and got no usage rows.
             self._seed_usage(tenant)
+
+            # 0.19 licensing. Same reasoning: its OWN per-entity guards, never a tenant-wide one.
+            self._seed_licensing(tenant)
 
         self.stdout.write(self.style.SUCCESS("tenants seed complete."))
 
@@ -131,3 +140,159 @@ class Command(BaseCommand):
                 notes="Seeded demo usage.",
             )
         self.stdout.write(self.style.SUCCESS(f"{tenant.name}: seeded usage metering"))
+
+    def _seed_licensing(self, tenant):
+        """0.19 licensing. Per-entity guards — never one tenant-wide guard (see `handle()`).
+
+        It creates NO `Subscription`: 0.1 owns those. The two 0.19 columns on that existing row
+        (`auto_renew`, `grace_ends_on`) are backfilled only when still unset, so a re-run never
+        overwrites a term somebody edited by hand in the UI.
+
+        Every catalog row uses `get_or_create` on a unique tuple — necessary rather than tidy,
+        because the auto-numbered `number` column means a bare `create()` would mint a duplicate
+        (and a duplicate `EntitlementFeature` code is a duplicate commercial feature).
+        """
+        sub = Subscription.objects.filter(tenant=tenant).order_by("-created_at").first()
+
+        # The per-entity guard. Without it this method would still print "seeded" on every later
+        # run while creating nothing, which is the confident-prose failure L52 exists to stop —
+        # `get_or_create` would make it correct but the OUTPUT a lie about what just happened.
+        if EntitlementFeature.objects.filter(tenant=tenant).exists():
+            return
+
+        if sub is not None and sub.grace_ends_on is None and sub.renews_on is not None:
+            sub.grace_ends_on = sub.renews_on
+            sub.save(update_fields=["grace_ends_on"])
+
+        # --- bullet 2: the feature catalog -----------------------------------------------
+        feature_specs = [
+            ("sso", "Single Sign-On", "boolean", "active", False,
+             "Federated sign-in for every member of the workspace."),
+            ("api_access", "Public API Access", "boolean", "active", False,
+             "Token-authenticated access to the REST endpoints."),
+            ("seats", "Named User Seats", "integer", "active", False,
+             "How many named users this plan licenses."),
+            ("sso_provider", "SSO Provider", "select", "active", True,
+             "Which identity provider federated sign-in may use."),
+            ("advanced_reporting", "Advanced Reporting", "boolean", "draft", True,
+             "The scheduled report packs. Still a draft add-on, so NO plan grants it."),
+            ("audit_export", "Audit Evidence Export", "boolean", "active", True,
+             "Exportable control evidence. An add-on, granted per subscription below."),
+        ]
+        features = {}
+        for code, name, priv, status, is_add_on, description in feature_specs:
+            feature, _created = EntitlementFeature.objects.get_or_create(
+                tenant=tenant, code=code,
+                defaults={
+                    "name": name, "description": description, "privilege_type": priv,
+                    "status": status, "is_add_on": is_add_on, "is_active": status == "active",
+                    "select_options": "entra_id,okta,onelogin" if priv == "select" else "",
+                },
+            )
+            features[code] = feature
+
+        # --- bullet 2: plan-level grants. `subscription=None` is the PLAN row; the overrides
+        # below pin the same grant at one subscription (Chargebee: subscription-level
+        # entitlements take precedence over catalog-level ones).
+        grant_specs = [
+            ("free", "sso", "false", False),
+            ("free", "api_access", "false", False),
+            ("free", "seats", "3", False),
+            ("starter", "sso", "false", False),
+            ("starter", "api_access", "true", False),
+            ("starter", "seats", "10", False),
+            ("pro", "sso", "true", False),
+            ("pro", "api_access", "true", False),
+            ("pro", "seats", "50", False),
+            # An add-on granted at the PLAN level, so the register shows an add-on row that is
+            # NOT a subscription override — the two are different facts and the list shows both.
+            ("pro", "sso_provider", "okta", True),
+            ("enterprise", "sso", "true", False),
+            ("enterprise", "api_access", "true", False),
+            ("enterprise", "seats", "500", False),
+            ("enterprise", "sso_provider", "entra_id", True),
+        ]
+        for plan, code, value, is_add_on in grant_specs:
+            PlanEntitlement.objects.get_or_create(
+                tenant=tenant, plan=plan, feature=features[code], subscription=None,
+                defaults={"privilege_value": value, "is_add_on": is_add_on, "is_enabled": True},
+            )
+
+        if sub is not None:
+            # A negotiated override ABOVE the plan allowance. `is_override` is a @property
+            # derived from `subscription_id`, so nothing extra is set: the row existing at a
+            # subscription IS the override, and it outranks the plan row.
+            PlanEntitlement.objects.get_or_create(
+                tenant=tenant, plan=sub.plan, feature=features["seats"], subscription=sub,
+                defaults={
+                    "privilege_value": "75", "is_add_on": False, "is_enabled": True,
+                    "notes": "Negotiated 75 seats on this subscription, above the plan allowance.",
+                },
+            )
+            PlanEntitlement.objects.get_or_create(
+                tenant=tenant, plan=sub.plan, feature=features["audit_export"], subscription=sub,
+                defaults={
+                    "privilege_value": "true", "is_add_on": True, "is_enabled": True,
+                    "notes": "Audit evidence export purchased as an add-on for this subscription.",
+                },
+            )
+
+        # --- bullet 3: the commercial ceilings. `quota_limit` 0 means UNMETERED (mirroring
+        # `UsageRecord.included_allowance` returning None), which is why transactions is seeded
+        # at 0 rather than at some large number: the board must show all three states.
+        if sub is not None:
+            quota_specs = [
+                ("api_calls", Decimal("750000.00"), 80, "alert", False),
+                ("storage_mb", Decimal("102400.00"), 90, "charge", True),
+                ("transactions", Decimal("0.00"), 80, "alert", False),
+            ]
+            for metric, limit, warn_pct, action, fair_use in quota_specs:
+                UsageQuota.objects.get_or_create(
+                    tenant=tenant, subscription=sub, metric=metric, period="monthly",
+                    defaults={
+                        "quota_limit": limit, "warn_at_pct": warn_pct,
+                        "action_on_breach": action, "is_fair_use": fair_use,
+                        "notes": "Seeded demo ceiling. `action_on_breach` is a RECORDED policy — "
+                                 "nothing in NavERP enforces it.",
+                    },
+                )
+
+        # --- bullet 1: the seat register. Only users WHOSE TENANT IS THIS TENANT may be seated:
+        # `accounts.User.tenant` is nullable (the superuser has tenant=None), and seating one
+        # would make the board's count disagree with the register by exactly one (contract 1.4).
+        if sub is not None:
+            users = list(get_user_model().objects.filter(tenant=tenant).order_by("email")[:6])
+            # (user index, module_slug, status, expires_on, notes)
+            seat_specs = [
+                (0, "", "active", None, "Workspace-wide seat."),
+                (1, "", "active", None, "Workspace-wide seat."),
+                (2, "accounting", "active", None, "Licensed for the accounting module only."),
+                (3, "accounting", "active", None, "Licensed for the accounting module only."),
+                (4, "crm", "active", timezone.localdate() - datetime.timedelta(days=3),
+                 "Expired: the display state is DERIVED from expires_on, not a stored status."),
+                (5, "", "reclaimed", None, "Reclaimed by the demo; reclaim_reason is the verb's."),
+            ]
+            for idx, slug, status, expires_on, notes in seat_specs:
+                if idx >= len(users):
+                    break
+                # One seat per (user, module_slug) — the unique tuple `clean()` also guards, so a
+                # second run skips rather than tripping it.
+                if LicenseAssignment.objects.filter(
+                    tenant=tenant, user=users[idx], module_slug=slug
+                ).exists():
+                    continue
+                assignment = LicenseAssignment(
+                    tenant=tenant, user=users[idx], module_slug=slug, status=status,
+                    assignment_source="direct", subscription=sub,
+                    assigned_from=timezone.localdate() - datetime.timedelta(days=30),
+                    expires_on=expires_on, notes=notes,
+                )
+                if status == "reclaimed":
+                    # A seeder may set the one-writer stamp directly — the 0.1 usage seeder does the
+                    # same for is_billed/billed_at, and nothing else in the app may.
+                    assignment.reclaimed_on = timezone.now() - datetime.timedelta(days=5)
+                    assignment.reclaim_reason = "Seeded demo: seat returned to the pool."
+                assignment.save()
+
+        self.stdout.write(self.style.SUCCESS(
+            f"{tenant.name}: seeded 0.19 licensing (features, plan grants, quotas, seats)"))
