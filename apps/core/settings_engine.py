@@ -173,6 +173,17 @@ LITERAL_PREFIX_MODELS = {
     "PE": ["tenants.PlanEntitlement"],
     "UQ": ["tenants.UsageQuota"],
     "SEAT": ["tenants.LicenseAssignment"],
+    # 0.20 Admin Console & System Operations is the third case. `JobDefinition`, `JobRun`,
+    # `MaintenanceWindow` and `ChangeRequest` all mint their prefix in `save()` through a hardcoded
+    # literal, so the `NUMBER_PREFIX` scan above cannot see any of them, and each model's docstring says
+    # so and points HERE as the reason its prefix is discoverable. Without the entries below, four more
+    # docstrings would cite wiring that did not exist and `prefix_usage()` would report all four as
+    # `model_only` without ever naming the models that mint them — the same false negative, four more
+    # times. `FeatureRollout` is deliberately absent: it is a child row with no number column at all.
+    "JOB": ["core.JobDefinition"],
+    "RUN": ["core.JobRun"],
+    "MNTW": ["core.MaintenanceWindow"],
+    "CHG": ["core.ChangeRequest"],
 }
 
 
