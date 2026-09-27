@@ -28,6 +28,14 @@ from apps.core.models.Integration import SyncSchedule
 from apps.core.utils import next_number
 
 
+#: 0.13's cadence vocabulary, re-exposed BY REFERENCE. Assign the object; never paste a copy. A
+#: copied list is two vocabularies that drift, and the numbering/board surfaces would then disagree
+#: about what "daily" means. This is the `AlertRule.SEVERITY_CHOICES` reuse in
+#: `apps/core/models/Security.py`, restated: the field below reads THIS attribute so a test can
+#: assert identity (`is`, not `==`) on the class — Django normalizes a field's own `choices` into a
+#: fresh list, so identity is only observable here.
+SCHEDULE_KIND_CHOICES = SyncSchedule.FREQUENCY_CHOICES
+
 #: The kinds of background work a tenant declares. `integration_sync` is the one 0.13's
 #: `SyncSchedule` drives; the rest are workspace chores a platform admin schedules by hand.
 JOB_TYPE_CHOICES = [
@@ -71,6 +79,12 @@ class JobDefinition(models.Model):
 
     tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE,
                                related_name="job_definitions", db_index=True)
+    #: Re-exposed on the class so a view and a test read the same object, the SecurityThreat /
+    #: UsageQuota pattern. `is`, not `==`, is the assertion that matters: two equal lists are
+    #: still two lists, and only identity proves this one reuses 0.13's vocabulary rather than a
+    #: copy of it that can drift.
+    SCHEDULE_KIND_CHOICES = SCHEDULE_KIND_CHOICES
+    JOB_TYPE_CHOICES = JOB_TYPE_CHOICES
     #: JOB-##### — minted in save() with a hardcoded literal; see
     #: `core.settings_engine.LITERAL_PREFIX_MODELS`, without which `core:numbering_board` would
     #: report this prefix as configured but minted by no model.
@@ -82,10 +96,8 @@ class JobDefinition(models.Model):
     module_slug = models.CharField(max_length=60)
     job_type = models.CharField(max_length=20, choices=JOB_TYPE_CHOICES, default="scheduled_task")
     description = models.TextField(blank=True)
-    #: Reused BY REFERENCE from 0.13 rather than pasted. A copied list is two vocabularies that
-    #: drift, and the numbering/board surfaces would then disagree about what "daily" means.
-    schedule_kind = models.CharField(max_length=10, choices=SyncSchedule.FREQUENCY_CHOICES,
-                                     default="manual")
+    #: Reused BY REFERENCE from 0.13 rather than pasted - see `SCHEDULE_KIND_CHOICES` above.
+    schedule_kind = models.CharField(max_length=10, choices=SCHEDULE_KIND_CHOICES, default="manual")
     #: Free text so an operator can record a real cron string without this project adopting a cron
     #: parser it does not have. Nothing validates or evaluates it.
     cron_expression = models.CharField(max_length=60, blank=True)
