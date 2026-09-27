@@ -220,6 +220,9 @@ def renewal_board(request):
         expiring=Count("id", filter=Q(renews_on__gte=today, renews_on__lte=today + timedelta(days=30))),
         expired=Count("id", filter=Q(renews_on__lt=today)),
         in_grace=Count("id", filter=Q(grace_ends_on__isnull=False, grace_ends_on__gte=today)),
+        # I10: this counts a DECISION somebody made. `auto_renew` is three-state, so the
+        # NULL rows (nobody has said) and the False rows (somebody declined) are both
+        # correctly excluded - a decline is not a flag, and neither is an absence.
         auto_renew=Count("id", filter=Q(auto_renew=True)),
         # The untruncated size of the workspace, so the page can state the cap honestly.
         total=Count("id"),
@@ -239,7 +242,11 @@ def renewal_board(request):
             "status": subscription.status,
             "status_label": status_labels.get(subscription.status, subscription.status),
             "days_left": days_left,
-            "auto_renew": getattr(subscription, "auto_renew", False),
+            # I10: forwarded RAW. `getattr(..., False)` used to coerce, which would have
+            # made "nobody has said" indistinguishable from "somebody declined" on the
+            # page. The template renders all three states; the default is None for the
+            # same reason, so a Subscription without the column still reads as unspecified.
+            "auto_renew": getattr(subscription, "auto_renew", None),
             # Read inside an `{% if %}` in the template, never through a filter argument (L10).
             "grace_ends_on": grace_ends_on,
             "in_grace": bool(grace_ends_on is not None and today <= grace_ends_on),
