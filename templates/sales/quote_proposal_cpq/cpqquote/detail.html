@@ -115,6 +115,7 @@
                 <div>
                     <h4 class="text-sm font-semibold text-blue-900">Digitally Accepted &amp; Signed</h4>
                     <p class="text-xs text-blue-700">Signed by <strong>{{ quote.signer_name }}</strong> ({{ quote.signer_title }}) on {{ quote.signed_at|date:"M d, Y H:i" }}</p>
+                    <p class="text-xs text-blue-600 mt-0.5">Accepted from <span class="font-mono">{{ quote.signer_ip_address|default:"address not recorded" }}</span> &middot; behind a proxy this is the proxy</p>
                 </div>
             </div>
         </div>
