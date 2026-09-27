@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:jobdefinition_list' %}">Jobs</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <form method="post" action="{% url 'core:jobdefinition_run_now' obj.pk %}">
+        {% csrf_token %}
+        <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Run now</button>
+      </form>
+      <a href="{% url 'core:jobdefinition_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:jobdefinition_delete' obj.pk %}" onsubmit="return confirm('Delete this job declaration?');">
+        {% csrf_token %}
+        <button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  {% comment %}
+    The Run now button sits above the declaration with its consequence spelled out, because it is the
+    one action on this page a reader could mistake for real execution. It records a dry run and
+    nothing else; the "Dry run" badge on the runs table below is the visible proof.
+  {% endcomment %}
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Run now records a run; it does not execute
+      anything.</strong> NavERP has no scheduler, no queue and no worker pool. The action writes one
+      <code>queued</code> run marked as a dry run, and never imports or calls the handler path below.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The declaration</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Module</dt><dd>{{ obj.module_slug }}</dd></div>
+        <div class="detail-item"><dt>Job type</dt><dd>{{ obj.get_job_type_display }}</dd></div>
+        <div class="detail-item"><dt>Cadence</dt><dd>{{ obj.get_schedule_kind_display }} <span class="text-muted">(declared; nothing runs on it)</span></dd></div>
+        <div class="detail-item"><dt>Cron expression</dt><dd>{% if obj.cron_expression %}<code>{{ obj.cron_expression }}</code>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Interval</dt><dd>{% if obj.interval_minutes %}{{ obj.interval_minutes }} min{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Handler path</dt><dd><code>{{ obj.handler_path }}</code> <span class="text-muted">&mdash; declared only, never imported</span></dd></div>
+        <div class="detail-item"><dt>Linked schedule</dt><dd>{% if obj.sync_schedule %}{{ obj.sync_schedule.name }} <span class="text-muted">(0.13)</span>{% else %}<span class="text-muted">not linked</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Environment</dt><dd>{% if obj.environment %}{{ obj.environment.name }}{% else %}<span class="text-muted">any</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Priority</dt><dd>{{ obj.priority }} <span class="text-muted">(recorded order; no dispatcher sorts by it)</span></dd></div>
+        <div class="detail-item"><dt>Timeout</dt><dd>{% if obj.timeout_seconds %}{{ obj.timeout_seconds }}s{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Max active runs</dt><dd>{{ obj.max_active_runs }}</dd></div>
+        <div class="detail-item"><dt>Pool</dt><dd>{% if obj.pool_name %}{{ obj.pool_name }} &mdash; {{ obj.pool_slots }} slot{{ obj.pool_slots|pluralize }} <span class="text-muted">(declared; no pool exists)</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Failure policy</dt><dd>auto-pause after {{ obj.max_consecutive_failures }} consecutive failure{{ obj.max_consecutive_failures|pluralize }} <span class="text-muted">(recorded; nothing counts failures)</span></dd></div>
+        <div class="detail-item"><dt>State</dt><dd>{% if obj.is_muted %}<span class="badge badge-amber">Muted</span>{% elif obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Last run</dt><dd>{{ obj.last_run_at|date:"M d, Y H:i"|default:"&mdash;" }}</dd></div>
+        <div class="detail-item"><dt>Next run</dt><dd>{{ obj.next_run_at|date:"M d, Y H:i"|default:"&mdash;" }} <span class="text-muted">&mdash; no scheduler advances this</span></dd></div>
+      </dl>
+      {% if obj.description %}<p class="text-muted">{{ obj.description|linebreaksbr }}</p>{% endif %}
+      {% if obj.notes %}<p class="text-muted">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recorded runs ({{ run_count }})</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Run</th><th>Triggered</th><th>Trigger</th><th>Status</th><th>Duration</th><th>By</th></tr></thead>
+        <tbody>
+          {% for run in runs %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:jobrun_detail' run.pk %}">{{ run.number }}</a></td>
+              <td>{{ run.triggered_at|date:"M d, Y H:i" }}</td>
+              <td>{{ run.get_trigger_kind_display }}</td>
+              <td>
+                {% if run.status == "success" %}<span class="badge badge-green">{{ run.get_status_display }}</span>
+                {% elif run.status == "failed" %}<span class="badge badge-red">{{ run.get_status_display }}</span>
+                {% elif run.is_open %}<span class="badge badge-amber">{{ run.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ run.get_status_display }}</span>{% endif %}
+                {% if run.is_dry_run %}<span class="badge badge-info">Dry run</span>{% endif %}
+              </td>
+              <td>{{ run.duration_display }}</td>
+              <td>{% if run.triggered_by %}{{ run.triggered_by }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="history"></i><h3>No runs recorded</h3><p class="text-muted">This job has never been asked to run &mdash; which is the normal state of every job in a build with no scheduler.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
