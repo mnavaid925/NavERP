@@ -2,8 +2,15 @@
 
 Review range: `463f7a06..ecadce4b` (my 0.20 commits), scoped by FILE LIST because the history is
 interleaved with a concurrent 0.21 session. Contract: `.claude/tasks/contract-core-0.20.md`.
-Status: **Phase 4 in progress.** Passes 1-2 of 6 recorded below; passes 3-6 to follow
-(`frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`).
+Status: **Phase 4 in progress.** Passes 1-3 of 6 recorded below; passes 4-6 to follow
+(`performance-reviewer`, `qa-smoke-tester`, `security-reviewer`).
+
+> **RETRACTION — C6 (pass 2) is a FALSE POSITIVE and must NOT be fixed.** The explorer reported that
+> `core:incident_list` does not exist and 500s the Admin Console. The frontend-reviewer checked it
+> independently, contradicted it, and **I verified it myself**: `reverse("core:incident_list")` returns
+> `/core/monitoring/incidents/`, `views.incident_list` exists (so `crud("monitoring/incidents",
+> "incident")` at `urls.py:241` does generate the name), and `core:incident_board` is the one that does
+> **not** reverse. Renaming to `incident_board` would break a working page. C6 is struck.
 
 ---
 
@@ -160,3 +167,75 @@ unlabelled `is_dry_run` checkbox).
 ### Fix order the reviewer recommends
 1. C6 (restores the module landing page) · 2. C7 · 3. C8 · 4. C9 · 5. cosmetic badge tinting
    (`opstrail.html:49`, `adminboard.html:85`) and the optional `bulk_preview` audit alignment.
+
+> **C6 IS STRUCK — see the RETRACTION at the top of this file.** It was a false positive; the
+> explorer misread `crud()`. Do not rename `core:incident_list`.
+
+---
+
+## Pass 3 — `frontend-reviewer` (read-only, 19 templates)
+
+**Verdict: request changes.** Design-system discipline is strong: zero unclosed `{#`, every palette
+class verified present, `|stringformat:"d"` on every pk filter with zero `|slugify` uses, the shared
+`partials/pagination.html` properly L9-guarded and preserving filter params, zero hard-coded colour
+literals (so dark mode is free), every table in `.table-wrap`, no fixed pixel widths, and all 25
+`{% url %}` names reverse including the cross-app `crm:` / `hrm:` ones. But it **independently
+reproduced the C1/C3/C4 500s across the full choice space**, and it is the pass that caught the
+explorer on C6.
+
+### Critical
+
+- **C1 — `changerequest/form.html:47`, `maintenancewindow/form.html:36`, `featurerollout/form.html:35`.**
+  Confirms and sharpens pass-1 C1/C3/C4 by **reproducing across the full choice space**: the only four
+  failing values are `ChangeRequest` `approved` / `rolled_back`, `MaintenanceWindow` `ended_early`,
+  and `FeatureRollout` `completed`; every other value validates cleanly. Structurally invisible to
+  the 37-check smoke, which only exercises **seeded** rows and never a user-chosen dropdown value.
+  **Fix (frontend-side, no model change): restrict each `status` select to the values a person may
+  actually author, via the form's widget** — `ChangeRequestForm` offers only `draft`;
+  `MaintenanceWindowForm` drops `ended_early`; `FeatureRolloutForm` drops `completed`. The model
+  `clean()` guards stay as they are: they are correct, and they should keep firing for admin and API
+  callers.
+- **C2 — same three forms, plus the copy that already warns about it.** `changerequest/form.html:56-57`
+  says "Leave `status` at Draft. Submitting is a separate action on the change's own page" — correct
+  and well-judged — but the `<select>` directly above it offers nine values including Approved and
+  Rolled back, and choosing either 500s. The honesty copy describes a constraint the control does not
+  enforce. Resolved by the C1 fix.
+
+### Important
+
+- **I1 — `adminboard.html:83` and `opstrail.html:47`.** `row.created_at` -> `row.at`. Confirms pass-2
+  C8 independently. Two cells, both load-bearing: they are the "When" column on two audit surfaces.
+- **I2 — a "keep as is" instruction, not a change.** The reviewer's sharpest observation: the
+  "this system still has no scheduler" thread is correct on every page, and the two seeded rows that
+  a careless future pass would "improve" are the ones that would break the invariant. Do NOT replace a
+  seeded `skipped` run with a green success, or a `queued` one with any claim of real execution.
+- **I3 — `changerequest/detail.html` badge chain** does not cover the model's full
+  `STATUS_CHOICES`; some legal values fall through to a generic slate badge. Align it.
+- **I4 — `maintenancewindow/list.html` badge chain** likewise has gaps against
+  `WINDOW_STATUS_CHOICES`. Align it.
+- **I5 — the rollback-reason input on `changerequest/detail.html`** needs an explicit `<label>` and a
+  logical-property margin instead of the inline `style` it uses now.
+- **I6 — six `<th>` elements use `class="table-actions"`** where the header-cell class should be
+  `th-actions` (the body-cell class genuinely is `table-actions`). Align the header cells.
+- **I7 — a name that will mislead the next editor**, same class as I2: correct today, wrong-sounding
+  tomorrow.
+
+### Minor
+
+- **M1 — a `{{ n|pluralize:"...ies,y" }}` argument order** to correct.
+- **M2-M5 — cleanups** reported in the agent's full output; none blocking.
+
+### The reviewer's fix order
+C1/C2 -> I1 -> I3, I4 -> I5 -> I6 -> M1 -> I2, I7, M3-M5. It flags **I2 and I7** as the two most
+likely to be skipped and most likely to cause a future incident, "since both are cases where the
+code is right today and the *name* or the *silence* will mislead the next editor."
+
+### Confirmed CLEAN by the reviewer (do not re-litigate)
+Comment-leak class · theme palette · pagination L9 guards and param preservation · pk filters
+(`|stringformat:"d"`, zero `|slugify`) · every view `filters=[...]` name has a matching `name=` in
+the template and every `request.GET.X` re-selects · None-safe display (every nullable FK/datetime is
+inside a guard or uses the `|date:...|default:"—"` idiom; **no None FK in a filter argument**) ·
+cross-app URLs · dark mode · responsiveness.
+
+---
+
