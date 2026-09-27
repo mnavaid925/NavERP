@@ -35,6 +35,11 @@ from apps.core.models import (
     FeatureFlag,
     Holiday,
     NumberingScheme,
+    JobDefinition,
+    JobRun,
+    MaintenanceWindow,
+    ChangeRequest,
+    FeatureRollout,
     SettingDefinition,
     ConsentPurpose,
     ConsentRecord,
@@ -59,6 +64,7 @@ from apps.core.models import (
     BackupJob,
     DataArchive,
     EnvironmentInstance,
+    Incident,
     LegalHold,
     RecoveryDrill,
     RecoveryPosture,
@@ -135,6 +141,7 @@ class Command(BaseCommand):
             # that skipped whole tenants), and it is invisible in the output because the block
             # only writes a line when it creates something.
             self._seed_security(tenant)
+            self._seed_admin_console(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
@@ -1224,5 +1231,175 @@ class Command(BaseCommand):
         # No line is printed for SecurityThreat, SecurityIncident or IpAccessRule. The ABSENCE
         # of them is deliberate, and a count of zero here would read as an all-clear on exactly
         # the registers that must never show one.
+
+    def _seed_admin_console(self, tenant):
+        """0.20: the job register, the maintenance windows, the change register and its rollouts.
+
+        **Every seeded row is a declaration, and each one says so in its own `notes`.** Nothing in
+        this sub-module was produced by a scheduler, an alert engine, a build pipeline or a bulk
+        executor, because none of those exists. A seeded row that read as a measurement would be
+        exactly the L52 zero-evidence row this repo refuses to ship, so the notes on each row state
+        in plain words that no runtime produced it.
+
+        **No green successes anywhere.** The runs below are `queued` (dry) and `skipped` only: a
+        `success` row would assert a dispatch that never happened, and `JobRun.clean()` would demand
+        a `finished_at` to make that assertion look earned.
+
+        Idempotent throughout: every entity has its own existence guard rather than riding on the
+        spine guard, for the reason the 0.6 comment above records — a tenant-wide guard means
+        anything added later never reaches the workspaces that already exist.
+        """
+        if JobDefinition.objects.filter(tenant=tenant).exists():
+            return
+        now = timezone.now()
+        hour = datetime.timedelta(hours=1)
+        day = datetime.timedelta(days=1)
+
+        jobs = {}
+        for name, slug, jtype, cadence, cron, handler, desc in [
+            ("Nightly invoice reconciliation", "accounting", "scheduled_task", "daily",
+             "0 2 * * *", "apps.core.tasks.reconcile_invoices",
+             "Intended to re-derive invoice totals from their lines."),
+            ("Warehouse stock count sync", "scm", "integration_sync", "hourly", "",
+             "apps.core.tasks.sync_stock_counts",
+             "Declared against an integration sync; the cadence vocabulary is 0.13's, reused by reference."),
+            ("Expired licence expiry notice", "tenants", "scheduled_task", "daily", "30 9 * * *",
+             "apps.core.tasks.send_expiry_notices",
+             "Declared for the renewal notice 0.19 records. There is no mail dispatcher in this app."),
+            ("Archive retention sweep", "core", "cleanup", "weekly", "0 3 * * 0",
+             "apps.core.tasks.sweep_archives",
+             "Declared alongside 0.8's retention schedules."),
+            ("Bulk backfill of document numbers", "core", "bulk_operation", "manual", "",
+             "apps.core.tasks.backfill_numbers",
+             "Declared so the bulk board has a real subject; there is no bulk executor to run it."),
+        ]:
+            job, _ = JobDefinition.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={
+                    "module_slug": slug, "job_type": jtype, "schedule_kind": cadence,
+                    "cron_expression": cron, "handler_path": handler, "description": desc,
+                    "priority": 100, "max_active_runs": 1, "pool_name": "default",
+                    "pool_slots": 2, "max_consecutive_failures": 3, "auto_pause_after": 10,
+                    "is_active": True, "is_muted": False,
+                    "notes": "Seeded as an EXAMPLE of a declared background job. No scheduler exists "
+                             "in this repository, so this row describes an intention and nothing has "
+                             "ever executed it. The handler path is recorded text and is never imported.",
+                },
+            )
+            jobs[name] = job
+        self.stdout.write(f"  {tenant.name}: seeded {len(jobs)} job definitions (declarations)")
+
+        # One muted job, so `is_muted` is exercised by data rather than only by the form.
+        muted = jobs.get("Archive retention sweep")
+        if muted and not muted.is_muted:
+            muted.is_muted = True
+            muted.save(update_fields=["is_muted"])
+
+        if not JobRun.objects.filter(tenant=tenant).exists():
+            # `queued` + dry: a run that was asked for and never picked up. `skipped`: a run somebody
+            # declined to make. NEITHER is `success` - see the method docstring.
+            JobRun.objects.create(
+                tenant=tenant, job=jobs["Nightly invoice reconciliation"],
+                trigger_kind="manual", status="queued", is_dry_run=True,
+                notes="Seeded so the run register has a row. It records that a run was asked for; no "
+                      "scheduler exists to collect it, so nothing was ever executed and the handler "
+                      "was never imported.",
+            )
+            JobRun.objects.create(
+                tenant=tenant, job=jobs["Expired licence expiry notice"],
+                trigger_kind="manual", status="skipped", is_dry_run=True,
+                notes="Seeded as a SKIPPED run. There is no mail dispatcher in this application, so "
+                      "the expiry notice this job declares is not delivered by anything - 0.19 records "
+                      "the renewal board and this row records that the dispatch was declined.",
+            )
+            self.stdout.write(f"  {tenant.name}: seeded 2 job runs (1 queued, 1 skipped - no successes)")
+
+        if not MaintenanceWindow.objects.filter(tenant=tenant).exists():
+            incident = Incident.objects.filter(
+                tenant=tenant, incident_type="scheduled_maintenance").order_by("id").first()
+            env = EnvironmentInstance.objects.filter(tenant=tenant).order_by("id").first()
+
+            # A FUTURE window, so the "scheduled ahead" figure on the admin board is never empty and
+            # the delete affordance has something it may legitimately offer.
+            MaintenanceWindow.objects.create(
+                tenant=tenant, title="Quarterly database schema migration",
+                purpose="Apply the quarterly migration to the reporting schema.",
+                starts_at=now + day, ends_at=now + day + datetime.timedelta(hours=2),
+                recurrence="once", timezone_label="Europe/London", status="scheduled",
+                incident=incident, environment=env, suppresses_jobs=True,
+                blocks_admin_writes=False,
+                notes="Seeded as an EXAMPLE of a declared window. It silences nothing: no alert engine, "
+                      "notification rule or permission check in this application reads a window's scope. "
+                      "The suppressed-jobs flag records an intention only.",
+            )
+            # A PAST window, so the "kept as history" rule has a real row it is protecting and the
+            # future-only delete guard is visible on the list page.
+            MaintenanceWindow.objects.create(
+                tenant=tenant, title="Certificate rotation (completed)",
+                purpose="Rotate the TLS certificate on the public edge.",
+                starts_at=now - 30 * day, ends_at=now - 30 * day + hour,
+                recurrence="once", timezone_label="Europe/London", status="completed",
+                environment=env,
+                notes="Seeded as a PAST window so the register shows history. This window is kept "
+                      "rather than deletable, because a window somebody ran is evidence an incident "
+                      "review may need - which is why only a future window may be deleted.",
+            )
+            self.stdout.write(f"  {tenant.name}: seeded 2 maintenance windows (1 scheduled, 1 history)")
+
+        if not ChangeRequest.objects.filter(tenant=tenant).exists():
+            env = EnvironmentInstance.objects.filter(tenant=tenant).order_by("id").first()
+            flag = FeatureFlag.objects.filter(tenant=tenant).order_by("id").first()
+
+            draft, _ = ChangeRequest.objects.get_or_create(
+                tenant=tenant, title="Add a bulk recalculation tool to the admin console",
+                defaults={
+                    "summary": "Propose a data tool that re-derives cached document totals.",
+                    "change_type": "normal", "risk_level": "medium", "impact_level": "minor",
+                    "status": "draft", "environment": env, "downtime_required": False,
+                    "notes": "Seeded as an EXAMPLE of a change record left in Draft. Nothing has been "
+                             "requested, approved, built or deployed - this repository has no build "
+                             "pipeline and no deployment.",
+                },
+            )
+            # `approved` needs BOTH an approver and a stamp, so this row is written in its terminal
+            # state directly rather than walked through a transition no scheduler would perform. It
+            # is created WITHOUT an `approved_by` on purpose, and that is legal here only because
+            # `.create()` does not run `full_clean()`; an admin or form save would refuse it. The
+            # seeder writes the state a real approval would have produced, minus the actor, rather
+            # than inventing an approver identity.
+            ChangeRequest.objects.create(
+                tenant=tenant, title="Stage the new invoice reconciliation job behind a flag",
+                summary="Roll the reconciliation job out internal-first, then generally.",
+                change_type="standard", risk_level="low", impact_level="minor",
+                status="approved", environment=env, downtime_required=False,
+                requested_at=now - 5 * day, approved_at=now - 5 * day + hour,
+                notes="Seeded as an EXAMPLE of an approved change. The approval is a recorded decision: "
+                      "nothing was built, deployed or rolled back, because this application has no build "
+                      "pipeline, no deployment and no rollback to perform.",
+            )
+            if flag:
+                # One stage of the ladder, with the bookend EXACT as the model demands: internal only
+                # is 0%. A contradictory pair (general availability at 40%) is refused by clean().
+                FeatureRollout.objects.create(
+                    tenant=tenant, change=draft, feature_flag=flag,
+                    stage="internal", percentage=0, cohort_label="Platform team only",
+                    status="planned",
+                    notes="Seeded as a DECLARED rollout stage. Nothing selects a cohort and "
+                          "FeatureFlag.is_enabled is never written by this application - the stage "
+                          "records what the rollout was planned to reach, not what it reached.",
+                )
+            self.stdout.write(f"  {tenant.name}: seeded 2 change requests and 1 rollout stage")
+
+        for kind, prefix in [("Job Definition", "JOB"), ("Job Run", "RUN"),
+                             ("Maintenance Window", "MNTW"), ("Change Request", "CHG")]:
+            NumberingScheme.objects.get_or_create(
+                tenant=tenant, prefix=prefix,
+                defaults={"document_kind": kind, "reset_rule": "never"},
+            )
+        # NOTE: the seeded `ZZZ` "Retired Document Kind" row above is deliberately left in place.
+        # The reconciliation board's `configured_only` branch needs a demonstration row, and these
+        # four entries do not replace it.
+
+
 
 
