@@ -40,6 +40,12 @@ from apps.core.models import (
     MaintenanceWindow,
     ChangeRequest,
     FeatureRollout,
+    ControlFramework,
+    ComplianceControl,
+    ControlFrameworkMapping,
+    CorporatePolicy,
+    PolicyAcknowledgement,
+    RiskRegister,
     SettingDefinition,
     ConsentPurpose,
     ConsentRecord,
@@ -97,6 +103,39 @@ PEOPLE = [
 ]
 
 
+def _seed_actor(tenant):
+    """This tenant's first active user, or `None` when `seed_accounts` has not run yet.
+
+    **`None` is the correct answer, not a failure.** The run order is
+    `seed_core -> seed_accounts -> seed_tenants`, so on a first pass no `accounts.User` exists at
+    all. Every 0.21 actor FK (`ComplianceControl.owner`, `CorporatePolicy.owner`,
+    `RiskRegister.owner`) is `null=True, blank=True` precisely so an unowned row is a legal state
+    rather than a crash — and the seeder must not invent an owner identity to fill the gap, which
+    is the same rule 0.20 follows when it writes an `approved` change with no `approved_by`.
+
+    Re-running `seed_core` after `seed_accounts` fills the owners in, because each 0.21 block
+    guards on the MODEL being absent rather than on the owner being set.
+    """
+    from django.contrib.auth import get_user_model
+
+    return (get_user_model().objects.filter(tenant=tenant, is_active=True)
+            .order_by("id").first())
+
+
+def _seed_actors(tenant, limit=2):
+    """Up to `limit` active users, for the acknowledgement seed rows. May be empty.
+
+    Empty is expected on a first pass, for the same reason `_seed_actor` returns `None`. The
+    caller skips the acknowledgement block entirely when there is nobody to acknowledge, because a
+    fabricated acknowledgement — attributed to a user who never pressed anything — is exactly the
+    evidence a compliance register must never contain.
+    """
+    from django.contrib.auth import get_user_model
+
+    return list(get_user_model().objects.filter(tenant=tenant, is_active=True)
+                .order_by("id")[:limit])
+
+
 class Command(BaseCommand):
     help = "Seed core tenants and spine demo data (idempotent)."
 
@@ -142,6 +181,10 @@ class Command(BaseCommand):
             # only writes a line when it creates something.
             self._seed_security(tenant)
             self._seed_admin_console(tenant)
+            # 0.21 Compliance, Governance & Risk. Its OWN method with its own per-entity guards,
+            # for the same reason the two calls above do not ride on the spine guard: anything added
+            # under a tenant-wide `continue` never reaches a workspace that already existed.
+            self._seed_compliance(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
@@ -1399,6 +1442,204 @@ class Command(BaseCommand):
         # NOTE: the seeded `ZZZ` "Retired Document Kind" row above is deliberately left in place.
         # The reconciliation board's `configured_only` branch needs a demonstration row, and these
         # four entries do not replace it.
+    def _seed_compliance(self, tenant):
+        """0.21 Compliance, Governance & Risk: frameworks, controls, policies and the risk register.
+
+        **The seeder must not claim certification.** A framework a seeder created is NOT adopted:
+        every seeded `ControlFramework` carries `adopted_on=None`, and no note below asserts this
+        workspace is compliant with anything. This mirrors `regulatory_sync`'s own refusal — "a
+        workspace claiming HIPAA because a seeder said so would be a compliance lie" — and it is
+        why the demo set is small and honest rather than a fake-exhaustive 200-control catalogue.
+
+        **Every block has its OWN per-entity guard**, per the documented defect recorded at the
+        call site: a tenant-wide guard means a block added later never reaches a workspace that
+        already existed.
+
+        **`inherent_score` is never passed.** `RiskRegister.clean()` recomputes it from
+        likelihood x impact, and a seeder that set it would be asserting a number nothing
+        calculated — the same lie as a seeder writing an `effective` control it never reviewed,
+        which is why the one `effective` control below carries an explicit `last_reviewed_on`.
+        """
+        day = datetime.timedelta(days=1)
+        today = timezone.localdate()
+        admin_user = _seed_actor(tenant)
+
+        if not ControlFramework.objects.filter(tenant=tenant).exists():
+            ControlFramework.objects.create(
+                tenant=tenant, code="SOC2", name="SOC 2 Trust Services Criteria",
+                framework_type="attestation", version="2017", authority="AICPA",
+                description="Security (CC), with Availability, Confidentiality, Processing "
+                            "Integrity and Privacy available as optional categories.",
+                is_active=True, adopted_on=None,
+                notes="Seeded as a REGISTERED framework, not an adopted one. No audit has been "
+                      "performed and this application cannot perform one - `adopted_on` is "
+                      "deliberately NULL.",
+            )
+            ControlFramework.objects.create(
+                tenant=tenant, code="ISO27001", name="ISO/IEC 27001 Information Security",
+                framework_type="attestation", version="2022", authority="ISO",
+                description="Annex A control set for an information security management system.",
+                is_active=True, adopted_on=None,
+                notes="Seeded as a REGISTERED framework. Nothing in this application certifies "
+                      "anything against it.",
+            )
+            # The third row exists PRECISELY to show the 0.8 boundary: GDPR's obligations stay on
+            # `core.RegulatoryFramework` (0.8) and this row only cross-links the regime. If the
+            # two were the same fact they would be one table, not two joined by a `regulatory` type.
+            ControlFramework.objects.create(
+                tenant=tenant, code="GDPR", name="General Data Protection Regulation",
+                framework_type="regulatory", version="2016/679", authority="EU",
+                description="Cross-link row only. The obligations, the DSAR clock and the "
+                            "residency notes live on core.RegulatoryFramework (0.8).",
+                is_active=True, adopted_on=None,
+                notes="Seeded to make the 0.21 / 0.8 boundary visible: a `regulatory` framework "
+                      "POINTS AT the regime, it does not restate it.",
+            )
+            self.stdout.write(f"  {tenant.name}: seeded 3 control frameworks (none adopted)")
+
+        if not ComplianceControl.objects.filter(tenant=tenant).exists():
+            specs = [
+                ("A.5.1", "Policies for information security", "organisational", "effective",
+                 "annually", "Reviewed as part of the annual policy cycle."),
+                ("A.8.15", "Logging", "technical", "implemented", "continuous",
+                 "Log source and retention are described in the retention policy."),
+                ("CC6.1", "Logical access security", "access_control", "in_progress", "quarterly",
+                 "Partially rolled out; the privileged-access review is outstanding."),
+                ("CC7.2", "System monitoring for anomalies", "technical", "not_started",
+                 "continuous",
+                 "Not implemented. No monitoring test runs anywhere in this application."),
+            ]
+            for code, title, category, status, frequency, note in specs:
+                ComplianceControl.objects.get_or_create(
+                    tenant=tenant, code=code,
+                    defaults={
+                        "title": title, "category": category, "status": status,
+                        "owner": admin_user, "frequency": frequency,
+                        # `effective` REQUIRES a last_reviewed_on (clean() refuses it without
+                        # one), and `not_started` is deliberately left with no evidence pointer:
+                        # there is no evidence for a control nobody has run.
+                        "last_reviewed_on": (today - 60 * day) if status == "effective" else None,
+                        "next_review_on": (today + 305 * day) if status == "effective" else None,
+                        "notes": "Seeded as an EXAMPLE control. " + note + " No control in this "
+                                 "application is enforced or tested by any code path.",
+                    },
+                )
+            self.stdout.write(f"  {tenant.name}: seeded {len(specs)} compliance controls")
+
+        if not ControlFrameworkMapping.objects.filter(tenant=tenant).exists():
+            # Five rows so the MANY-TO-MANY is visible on the first render: one control mapped
+            # into two frameworks is the case that proves the join is real, and it is the case
+            # Drata names explicitly as accepted practice ("mapping multiple controls to a single
+            # requirement is a common and accepted practice").
+            pairs = [
+                ("SOC2", "A.5.1", "CC1.1", "covered"),
+                ("SOC2", "CC6.1", "CC6.1", "partial"),
+                ("ISO27001", "A.5.1", "5.1", "covered"),
+                ("ISO27001", "A.8.15", "A.8.15", "partial"),
+                ("GDPR", "A.8.15", "Art. 32", "not_started"),
+            ]
+            made = 0
+            for fw_code, ctl_code, clause, coverage in pairs:
+                framework = ControlFramework.objects.filter(tenant=tenant, code=fw_code).first()
+                control = ComplianceControl.objects.filter(tenant=tenant, code=ctl_code).first()
+                if framework and control:
+                    _, created = ControlFrameworkMapping.objects.get_or_create(
+                        tenant=tenant, framework=framework, control=control,
+                        defaults={
+                            "clause_reference": clause, "coverage": coverage,
+                            "notes": "Seeded mapping. `covered` is what a person recorded - no code "
+                                     "in this application tests a control against a clause.",
+                        },
+                    )
+                    made += int(created)
+            self.stdout.write(f"  {tenant.name}: seeded {made} control-to-framework mappings")
+
+        if not CorporatePolicy.objects.filter(tenant=tenant).exists():
+            CorporatePolicy.objects.create(
+                tenant=tenant, code="SEC-001", title="Information Security Policy",
+                summary="The umbrella policy every other security policy sits under.",
+                policy_type="security", version="1.0", status="published",
+                owner=admin_user, effective_on=today - 180 * day,
+                review_due_on=today + 185 * day, requires_acknowledgement=True,
+                body="Seeded as an EXAMPLE published policy. Publication is a record: no access "
+                     "check, permission or workflow anywhere in this application reads it.",
+                notes="Seeded PUBLISHED so the acknowledge action has a policy it will accept, and "
+                      "so clean()'s publish rule is exercised by the demo rather than only by a "
+                      "test.",
+            )
+            # A DRAFT, so the acknowledge refusal has a real target and the list's status filter
+            # has more than one value. A draft is not in force, so acknowledging it is refused.
+            CorporatePolicy.objects.create(
+                tenant=tenant, code="AUP-002", title="Acceptable Use Policy",
+                summary="What employees may and may not do with company systems.",
+                policy_type="acceptable_use", version="0.1", status="draft",
+                owner=admin_user, requires_acknowledgement=True,
+                notes="Seeded as a DRAFT. A draft is not in force, so the acknowledge action "
+                      "refuses it - the refusal has a real target on a demo database.",
+            )
+            self.stdout.write(f"  {tenant.name}: seeded 2 corporate policies (1 published, 1 draft)")
+
+        if not PolicyAcknowledgement.objects.filter(tenant=tenant).exists():
+            published = CorporatePolicy.objects.filter(tenant=tenant, status="published").first()
+            actors = _seed_actors(tenant)
+            if published:
+                made = 0
+                for person in actors[:2]:
+                    _, created = PolicyAcknowledgement.objects.get_or_create(
+                        tenant=tenant, policy=published, user=person,
+                        # The SNAPSHOT, written explicitly because `policy_version` is
+                        # `editable=False` and only the view ever sets it in normal use.
+                        policy_version=published.version,
+                    )
+                    made += int(created)
+                self.stdout.write(f"  {tenant.name}: seeded {made} policy acknowledgements")
+
+        if not RiskRegister.objects.filter(tenant=tenant).exists():
+            specs = [
+                ("RSK-01", "Single region of operation",
+                 "If the primary region is unavailable, then core services are unavailable for "
+                 "the duration of the outage.",
+                 "operational", "possible", "major", "mitigate", "treating",
+                 "Continue to run a second non-production environment; a full DR posture is a "
+                 "later 0.16 exercise, not something this register can deliver."),
+                ("RSK-02", "Key-person dependency on release management",
+                 "If the person who maintains the release process is unavailable, then releases "
+                 "stall until they return.",
+                 "operational", "unlikely", "moderate", "accept", "monitoring",
+                 "Accepted: the runbook is documented and a second reviewer is being trained."),
+                ("RSK-03", "Unpatched third-party dependency",
+                 "If a published advisory affects a vendored library, then the application "
+                 "carries an unpatched known weakness until the next release.",
+                 "technical", "likely", "severe", "mitigate", "assessing",
+                 "No scanner runs anywhere in this application, so this exposure is tracked by "
+                 "hand in the vulnerability register (0.18) - this row is the enterprise-level "
+                 "statement of it, not a second detection mechanism."),
+            ]
+            for (code, title, statement, category, likelihood, impact, treatment, status,
+                 plan) in specs:
+                RiskRegister.objects.create(
+                    tenant=tenant, code=code, title=title, risk_statement=statement,
+                    category=category, likelihood=likelihood, impact=impact,
+                    treatment=treatment, treatment_plan=plan, status=status, owner=admin_user,
+                    reviewed_on=today - 30 * day, next_review_on=today + 335 * day,
+                    notes="Seeded as an EXAMPLE risk. `inherent_score` is NOT passed here - it is "
+                          "recomputed by the model from likelihood x impact, and a seeder that "
+                          "set it would be asserting a number nothing calculated.",
+                )
+            self.stdout.write(f"  {tenant.name}: seeded {len(specs)} risks (all three score bands)")
+
+        for kind, prefix in [("Control Framework", "CFW"), ("Compliance Control", "CTL"),
+                             ("Corporate Policy", "CPOL"), ("Risk Register", "GRC")]:
+            NumberingScheme.objects.get_or_create(
+                tenant=tenant, prefix=prefix,
+                defaults={"document_kind": kind, "reset_rule": "never"},
+            )
+        # `GRC` and NOT `RSK`: `RSK` is already `projects.ProjectRisk`, and two document types
+        # sharing a number in one workspace are indistinguishable to an operator. The RULING and
+        # its evidence are in `.claude/tasks/contract-core-0.21.md` section 7.
+
+
+
 
 
 
