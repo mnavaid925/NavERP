@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Controls{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Controls</h1>
+      <div class="breadcrumb"><a href="{% url 'core:grc_overview' %}">Compliance</a><span class="sep">&rsaquo;</span><span>Controls</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:controlframework_list' %}" class="btn btn-outline"><i data-lucide="shield-check"></i> Frameworks</a>
+      <a href="{% url 'core:compliancecontrol_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add a control</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">The attestation activities this workspace says it performs. Controls are
+      <strong>framework-agnostic</strong> &mdash; one control is mapped into as many frameworks as it
+      answers, which is the normal case rather than an exception.</p>
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Nothing here is enforced.</strong> A
+      control marked <em>effective</em> is a sentence a person typed. No code path in this application
+      reads this register to gate an action, and no test asserts that one does.</p>
+    <p class="text-muted"><strong>{{ effective_count }}</strong> marked effective, <strong>{{ overdue_count }}</strong>
+      past a review date, and <strong>{{ unmapped_count }}</strong> mapped into no framework at all
+      &mdash; a control in no framework is one no audit will ever ask about.</p>
+    {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search code, title, category&hellip;">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:compliancecontrol_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Control</th><th>Category</th><th>Status (recorded)</th><th>Owner</th><th>Frequency</th><th>Next review</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:compliancecontrol_detail' obj.pk %}">{{ obj.code }}</a>
+              <div class="text-muted">{{ obj.title }}</div></td>
+            <td>{% if obj.category %}{{ obj.category }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>
+              {% if obj.status == "effective" %}<span class="badge badge-green">Effective</span>
+              {% elif obj.status == "implemented" %}<span class="badge badge-green">Implemented</span>
+              {% elif obj.status == "in_progress" %}<span class="badge badge-amber">In progress</span>
+              {% elif obj.status == "not_applicable" %}<span class="badge badge-slate">Not applicable</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>{% if obj.owner %}{{ obj.owner.get_username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+            <td>{% if obj.frequency %}{{ obj.frequency }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}
+              {% if obj.frequency %}<div class="text-muted">recorded, not scheduled</div>{% endif %}</td>
+            <td>{% if obj.next_review_on %}{{ obj.next_review_on|date:"d M Y" }}
+              {% if obj.is_overdue_review %}<span class="badge badge-amber">Overdue</span>{% endif %}
+              {% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:compliancecontrol_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:compliancecontrol_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:compliancecontrol_delete' obj.pk %}" onsubmit="return confirm('Delete this control? Every framework mapping under it is deleted too.');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No controls recorded</h3><p class="text-muted">Nothing has been registered. A control is an attestation activity a named person owns and evidences &mdash; it is not something this application can test.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
