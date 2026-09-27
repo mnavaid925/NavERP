@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% comment %}
+  One allow/deny policy, and the threats somebody says it mitigates.
+  Context: obj, mitigated_threat_count, is_expired, expires_display, notes.
+  `expires_display` is "permanent" for a NULL expires_at, never today's date.
+{% endcomment %}
+{% block title %}{{ obj.cidr }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Access rule: {{ obj.cidr }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:security_overview' %}">Security</a><span class="sep">&rsaquo;</span><a href="{% url 'core:ipaccessrule_list' %}">IP access rules</a><span class="sep">&rsaquo;</span><span>{{ obj.cidr }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:ipaccessrule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'core:ipaccessrule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All rules</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>NavERP enforces nothing here.</strong>
+      There is no WAF, no reverse proxy and no gateway in this repository, so this row records a decision.
+      Read "block" below as <em>would block</em>: it describes a control that would have to exist somewhere else
+      before any address was refused.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+  </div></div>
+
+  <div class="layout-2col">
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">The policy as written</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Address</dt><dd><code>{{ obj.cidr }}</code></dd></div>
+            <div class="detail-item"><dt>Direction</dt><dd>
+              {% if obj.direction == "deny" %}<span class="badge badge-red">{{ obj.get_direction_display }}</span>
+              {% elif obj.direction == "allow" %}<span class="badge badge-slate">{{ obj.get_direction_display }}</span>
+              {% else %}<span class="badge badge-muted">{{ obj.get_direction_display }}</span>{% endif %}
+            </dd></div>
+            <div class="detail-item"><dt>Action</dt><dd>{{ obj.get_action_display }}
+              <div class="text-muted">
+                {% if obj.action == "block" %}NavERP would block this address if a gateway read this table. Nothing does.
+                {% elif obj.action == "allow" %}NavERP would allow this address past a gateway. Nothing does.
+                {% elif obj.action == "log" %}NavERP would only log a match. It keeps no request log and no flow record.
+                {% else %}NavERP issues no challenge of this kind and has no CAPTCHA library. Nothing does.
+                {% endif %}
+              </div></dd></div>
+            <div class="detail-item"><dt>Scope</dt><dd>{{ obj.get_scope_display }}</dd></div>
+            <div class="detail-item"><dt>Source</dt><dd>{{ obj.get_source_display }}
+              <div class="text-muted">Nothing in NavERP ever chooses this automatically</div></dd></div>
+            <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-info">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Expires</dt><dd>{{ expires_display }}
+              {% if is_expired %}<span class="badge badge-amber">Past its expiry</span>{% endif %}
+              {% if not obj.expires_at %}<div class="text-muted">A rule with no expiry is a permanent one, which is a choice somebody should make deliberately</div>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Component</dt><dd>{% if obj.service %}<a href="{% url 'core:service_component_detail' obj.service.pk %}">{{ obj.service.name }}</a>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Credential</dt><dd>{% if obj.credential %}<a href="{% url 'core:credential_edit' obj.credential.pk %}">{{ obj.credential.label }}</a>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Rate-limit policy</dt><dd>{% if obj.rate_limit_policy %}<a href="{% url 'core:rate_limit_edit' obj.rate_limit_policy.pk %}">{{ obj.rate_limit_policy.name }}</a>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Added by</dt><dd>{% if obj.added_by_label %}{{ obj.added_by_label }}{% elif obj.added_by %}{{ obj.added_by.get_username }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Recorded</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">The account somebody gave</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Reason</dt><dd>{% if obj.reason %}{{ obj.reason|linebreaksbr }}{% else %}<span class="text-muted">nothing written &mdash; an unexplained allow/deny is the first thing an auditor asks about</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Notes</dt><dd>{% if obj.notes %}{{ obj.notes|linebreaksbr }}{% else %}<span class="text-muted">nothing written</span>{% endif %}</dd></div>
+          </dl>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Threats this rule is recorded against</h2></div>
+        <div class="card-body">
+          <p class="text-muted">Threat records pointing at this rule: <strong>{{ mitigated_threat_count }}</strong>. That is a link an operator typed; it is not a count of attacks this rule stopped.</p>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Threat</th><th>Severity</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+              <tbody>
+                {% for threat in obj.mitigated_threats.all %}
+                  <tr>
+                    <td class="fw-600"><a href="{% url 'core:securitythreat_detail' threat.pk %}">{{ threat.title|truncatechars:60 }}</a></td>
+                    <td>
+                      {% if threat.severity == "info" %}<span class="badge badge-info">{{ threat.get_severity_display }}</span>
+                      {% elif threat.severity == "warning" %}<span class="badge badge-amber">{{ threat.get_severity_display }}</span>
+                      {% elif threat.severity == "critical" %}<span class="badge badge-red">{{ threat.get_severity_display }}</span>
+                      {% else %}<span class="badge badge-slate">{{ threat.get_severity_display }}</span>{% endif %}
+                    </td>
+                    <td>
+                      {% if threat.status == "new" %}<span class="badge badge-red">{{ threat.get_status_display }}</span>
+                      {% elif threat.status == "triaged" or threat.status == "investigating" %}<span class="badge badge-amber">{{ threat.get_status_display }}</span>
+                      {% elif threat.status == "contained" %}<span class="badge badge-info">{{ threat.get_status_display }}</span>
+                      {% elif threat.status == "resolved" %}<span class="badge badge-slate">{{ threat.get_status_display }}</span>
+                      {% elif threat.status == "false_positive" or threat.status == "ignored" %}<span class="badge badge-muted">{{ threat.get_status_display }}</span>
+                      {% else %}<span class="badge badge-slate">{{ threat.get_status_display }}</span>{% endif %}
+                    </td>
+                    <td><div class="table-actions">
+                      <a href="{% url 'core:securitythreat_detail' threat.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                    </div></td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="4"><div class="empty-state"><i data-lucide="unlink"></i><h3>No threat points at this rule</h3>
+                    <p class="text-muted">Nobody has linked a recorded finding to this policy. That is not evidence that
+                      nothing needed it &mdash; it means no row in the register says so.</p></div></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Actions</h2></div>
+        <div class="card-body">
+          <div class="form-actions">
+            <a href="{% url 'core:ipaccessrule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit this rule</a>
+          </div>
+          <form method="post" action="{% url 'core:ipaccessrule_delete' obj.pk %}" onsubmit="return confirm('Delete this rule record? Nothing was ever blocked by it, so this deletes only the written decision.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete this rule</button>
+          </form>
+          <div class="form-actions">
+            <a href="{% url 'core:ipaccessrule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to rules</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">What this rule does not do</h2></div>
+        <div class="card-body">
+          <p class="text-muted"><i data-lucide="info"></i> <strong>Nothing enforces it.</strong> NavERP has no WAF, no
+            reverse proxy, no API gateway and no request log pipeline, so no packet from this address was ever
+            evaluated against this row.</p>
+          <p class="text-muted"><i data-lucide="info"></i> Removing the rule changes no traffic. It removes a
+            written intention and nothing else.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
