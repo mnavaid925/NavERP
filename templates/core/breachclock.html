@@ -99,9 +99,25 @@
                 </div></td>
               </tr>
             {% empty %}
-              <tr><td colspan="4"><div class="empty-state"><i data-lucide="check-circle"></i><h3>Every open incident has a decision recorded</h3>
-                <p class="text-muted">No open incident is sitting undecided. That is a statement about this register, not about
-                  any breach: NavERP detects nothing, so it cannot tell you whether a decision is still owed on something nobody recorded.</p></div></td></tr>
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="check-circle"></i>
+                {% if undecided_count > 0 %}
+                  {# THIS BRANCH IS THE FIX. The undecided rows are derived from the CAPPED list, so
+                     when the open set exceeds BOARD_ROW_CAP the table can be empty while the
+                     (untruncated) count says 50. The old wording read "Every open incident has a
+                     decision recorded" directly beneath a counter reading 50 - a confident, wrong
+                     statement on the one board whose entire purpose is the undecided state. #}
+                  <h3>The undecided incidents are not shown here</h3>
+                  <p class="text-muted">This board is showing the {{ undecided_count }} most recent
+                    open incident{{ undecided_count|pluralize }}, and every one of them has a decision
+                    recorded. <strong>{{ undecided_count }} undecided incident{{ undecided_count|pluralize }}
+                    exist{{ undecided_count|pluralize:"s," }} beyond that cap</strong> - open the incident
+                    register and filter by "Not decided" to work through them.</p>
+                {% else %}
+                  <h3>Every open incident has a decision recorded</h3>
+                  <p class="text-muted">No open incident is sitting undecided. That is a statement about this register, not about
+                    any breach: NavERP detects nothing, so it cannot tell you whether a decision is still owed on something nobody recorded.</p>
+                {% endif %}
+              </div></td></tr>
             {% endfor %}
           </tbody>
         </table>
