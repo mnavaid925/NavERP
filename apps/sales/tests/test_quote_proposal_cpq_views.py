@@ -1783,6 +1783,50 @@ def test_quoteproposalcpq_bundle_list_component_product_filter_narrows(db, tenan
 
 def test_quoteproposalcpq_bundle_list_component_filter_survives_junk(db, tenant_a):
     admin = _quoteproposalcpq_admin(tenant_a)
+
+
+def test_quoteproposalcpq_compare_reports_added_and_removed_lines(db, tenant_a):
+    """The verify list asks the comparison to highlight added/removed lines, not
+    only price changes. A line present in only one of the two revisions must show
+    up as its own row rather than as a modification of nothing."""
+    admin = _quoteproposalcpq_admin(tenant_a)
+    currency = _quoteproposalcpq_currency()
+    older = _quoteproposalcpq_quote(tenant_a, currency, name="Deal")
+    _quoteproposalcpq_line(tenant_a, older, description="Kept line", sequence=10)
+    _quoteproposalcpq_line(tenant_a, older, description="Dropped line", sequence=20)
+    newer = _quoteproposalcpq_quote(
+        tenant_a, currency, name="Deal", quote_group_id=older.quote_group_id, revision_number=2
+    )
+    _quoteproposalcpq_line(tenant_a, newer, description="Kept line", sequence=10)
+    _quoteproposalcpq_line(tenant_a, newer, description="Fresh line", sequence=20)
+
+    response = _quoteproposalcpq_client(admin).get(
+        reverse("sales:quote_compare_versions", args=[older.pk, newer.pk])
+    )
+    assert response.status_code == 200
+    rows = {row["description"]: row["status"] for row in response.context["diff_data"]["line_diffs"]}
+    assert rows["Fresh line"] == "added"
+    assert rows["Dropped line"] == "removed"
+    assert rows["Kept line"] == "unchanged"
+
+
+def test_quoteproposalcpq_the_compare_page_labels_added_and_removed_rows(db, tenant_a):
+    """The diff is only useful if the reader can SEE which row is which; an
+    unlabelled table of deltas is the defect this bullet exists to prevent."""
+    admin = _quoteproposalcpq_admin(tenant_a)
+    currency = _quoteproposalcpq_currency()
+    older = _quoteproposalcpq_quote(tenant_a, currency, name="Labelled deal")
+    _quoteproposalcpq_line(tenant_a, older, description="Removed widget", sequence=10)
+    newer = _quoteproposalcpq_quote(
+        tenant_a, currency, name="Labelled deal", quote_group_id=older.quote_group_id, revision_number=2
+    )
+    _quoteproposalcpq_line(tenant_a, newer, description="Added widget", sequence=10)
+    body = _quoteproposalcpq_client(admin).get(
+        reverse("sales:quote_compare_versions", args=[older.pk, newer.pk])
+    ).content.decode()
+    assert "+ Added" in body
+    assert "- Removed" in body
+
     assert _quoteproposalcpq_client(admin).get(
         reverse("sales:product_bundle_list"), {"component_product": "abc"}
     ).status_code == 200
