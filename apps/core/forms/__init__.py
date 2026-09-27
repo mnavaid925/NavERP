@@ -115,3 +115,15 @@ from .AdminConsole import (
     ChangeRequestForm,
     FeatureRolloutForm,
 )  # noqa: F401
+# 0.21 — Compliance, Governance & Risk. Flat at the package root (rule 9: core is a Module 0
+# foundation app with no NavERP sub-modules), so the entity file sits beside every other one.
+# Re-exporting every form is not optional: `apps.core.views` imports them by name from here, and a
+# form that exists but is not re-exported is an ImportError at URLconf-import time.
+from .Compliance import (
+    ControlFrameworkForm,
+    ComplianceControlForm,
+    ControlFrameworkMappingForm,
+    CorporatePolicyForm,
+    PolicyAcknowledgementForm,
+    RiskRegisterForm,
+)  # noqa: F401
