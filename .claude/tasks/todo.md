@@ -11044,7 +11044,7 @@ convention-consistent `salesforecasting/` and note the deviation so the builder 
 Base classes from `apps/sales/models/_base.py`: `TenantNumbered` (adds `NUMBER_PREFIX` + auto `number` via
 `core.utils.next_number`, width 5 → `FCP-00001`) and `TenantOwned`. Every model gets a `tenant` FK via the base.
 
-- [ ] **`ForecastPeriod`** `[FCP-]` — `models/SalesForecasting/ForecastPeriods.py`
+- [x] **`ForecastPeriod`** `[FCP-]` — `models/SalesForecasting/ForecastPeriods.py`
   - Fields: `name`; `period_type` ∈ month/quarter/year (**reuse `crm.SalesQuota.PERIOD_CHOICES` values verbatim** — do not re-spell the vocabulary); `period_year`, `period_number`; `start_date` / `end_date` (**computed from type+year+number in `clean()`, never typed by a user**); `rollup_dimension` ∈ `user` / `org_unit` / `territory` (NavERP's rendering of the three Dynamics rollup templates — product hierarchy is out of scope for 8.4); `reporting_currency` FK→`accounting.Currency` (SET_NULL, null) + `fx_rate_source_date` (the reference date for the rate actually applied — the rate itself is *read* from `accounting.ExchangeRate`, never copied into a sales table); `is_active`, `is_locked`.
   - Drivers: category rollups need a period to roll *into*; the three rollup templates; 8.2's explicit deferral of reporting-currency roll-ups.
   - **DERIVED, never stored:** `label`, `period_elapsed_pct` (pace), `is_current`. Properties only.
@@ -11052,7 +11052,7 @@ Base classes from `apps/sales/models/_base.py`: `TenantNumbered` (adds `NUMBER_P
   - FKs: `core.Tenant` (base), `accounting.Currency` ✅verified.
   - **Form excludes:** `tenant`, `number`, `created_at`, `updated_at`, `start_date`/`end_date` (computed).
 
-- [ ] **`ForecastSubmission`** `[FCS-]` — `models/SalesForecasting/ForecastSubmissions.py`
+- [x] **`ForecastSubmission`** `[FCS-]` — `models/SalesForecasting/ForecastSubmissions.py`
   - FKs: `period`→`ForecastPeriod` (**PROTECT**); `owner`→`AUTH_USER_MODEL` (SET_NULL, null); `org_unit`→`core.OrgUnit` (SET_NULL, null); `territory`→`crm.Territory` (SET_NULL, null); `pipeline`→`sales.Pipeline` (SET_NULL, null).
   - Workflow: `status` ∈ draft/submitted/approved/rejected/locked; `submitted_at`, `submitted_by`, `reviewed_at`, `reviewed_by`, `review_note`. **The approver right is a role check (`tenant_admin_required`), never a record ACL** — 8.2 already ruled team membership is not a security boundary.
   - Amounts, all `Decimal(14,2)`, **one per already-existing forecast category** (reuses `omitted|pipeline|best_case|commit|closed` — **no new category table**): `omitted_amount`, `pipeline_amount`, `best_case_amount`, `commit_amount`, `closed_amount`, `weighted_amount` (rolled up from `sales.OpportunityPipelinePlacement.effective_probability`).
@@ -11064,7 +11064,7 @@ Base classes from `apps/sales/models/_base.py`: `TenantNumbered` (adds `NUMBER_P
   - **Form excludes:** `tenant`, `number`, `status` (workflow-controlled), `created_at`/`updated_at` (system), the whole `ai_*` block (system-written by the model integration, not a human), and every derived property.
 
 
-- [ ] **`ForecastAdjustment`** `[FAD-]` — `models/SalesForecasting/ForecastAdjustments.py` — the manager override + its audit history
+- [x] **`ForecastAdjustment`** `[FAD-]` — `models/SalesForecasting/ForecastAdjustments.py` — the manager override + its audit history
   - FKs: `submission`→`ForecastSubmission` (**PROTECT** — an audit row is never cascaded away); `opportunity`→`crm.Opportunity` (SET_NULL, null); `placement`→`sales.OpportunityPipelinePlacement` (SET_NULL, null); `created_by`→`AUTH_USER_MODEL`.
   - `adjustment_kind` ∈ **direct / indirect / revert** — Microsoft's taxonomy verbatim; `indirect` rows are system-written when a manager's own total propagates down.
   - `target_field` ∈ category / amount; `original_value` / `adjusted_value` (Decimal); `original_category` / `adjusted_category` (same 5-value vocabulary).
@@ -11072,7 +11072,7 @@ Base classes from `apps/sales/models/_base.py`: `TenantNumbered` (adds `NUMBER_P
   - **The calculated/system value is NOT stored here** — it is recomputed from the opportunity, which is what makes "Reset" always possible and needs no extra field.
   - **Form excludes:** `tenant`, `number`, `original_value`/`original_category` (system snapshot), `reverted_at` (system), `created_at`/`updated_at`.
 
-- [ ] **`ForecastScenario`** `[FSC-]` — `models/SalesForecasting/ForecastScenarios.py` — what-if that never touches the real forecast
+- [x] **`ForecastScenario`** `[FSC-]` — `models/SalesForecasting/ForecastScenarios.py` — what-if that never touches the real forecast
   - FKs: `period`→`ForecastPeriod` (**PROTECT**); `owner`→`AUTH_USER_MODEL` (SET_NULL, null — a scenario is often the manager's own what-if).
   - `name`, `scenario_type` ∈ upside/base/downside/custom, `probability_pct` (0–100, CheckConstraint), `is_baseline`, `is_selected`.
   - **Deltas, not absolutes**, so the scenario stays honest as the pipeline moves: `pipeline_delta_pct`, `best_case_delta_pct`, `commit_delta_pct`. `projected_commit_amount` / `projected_total_amount` are stored **snapshots of what the scenario computed**, labelled as such, with `assumption_notes`.
@@ -11085,56 +11085,56 @@ Base classes from `apps/sales/models/_base.py`: `TenantNumbered` (adds `NUMBER_P
 Build **entity by entity, one at a time** — all four backend files for an entity, then its three templates, then
 move to the next. Do **not** interleave entities, and do **not** touch shared files until "Integrate" below.
 
-- [ ] `models/SalesForecasting/__init__.py` (new empty package `__init__`)
-- [ ] `models/SalesForecasting/ForecastPeriods.py` — `ForecastPeriod`
-- [ ] `models/SalesForecasting/ForecastSubmissions.py` — `ForecastSubmission`
-- [ ] `models/SalesForecasting/ForecastAdjustments.py` — `ForecastAdjustment`
-- [ ] `models/SalesForecasting/ForecastScenarios.py` — `ForecastScenario`
-- [ ] `forms/SalesForecasting/__init__.py` + `ForecastPeriods.py` / `ForecastSubmissions.py` / `ForecastAdjustments.py` / `ForecastScenarios.py` — one form class per entity, inheriting `TenantModelForm` via `from apps.sales.forms._common import *`; absolute imports only
-- [ ] `views/SalesForecasting/__init__.py` + the four entity view modules — function-based, `@login_required` on reads, **`@tenant_admin_required` on every privileged write** (submit / review / adjust / revert / scenario-apply / period lock)
-- [ ] `urls/SalesForecasting/__init__.py` + the four entity url modules
-- [ ] Reports shipped **on top of** the four models, **no new model** (research "Reports / views"): forecast board, attainment board, accuracy & bias report, forecast call view → `apps/sales/views/SalesForecasting/ForecastBoards.py` + `apps/sales/urls/SalesForecasting/ForecastBoards.py`
-- [ ] **Rollup axis (the single most likely place for a bad FK — build it explicitly):** walk `core.OrgUnit.parent` to move rep→manager→director. There is **no `User.manager`**. `sales.OpportunityTeamMember.org_unit` already attaches a user to an org unit and is the read path for resolving a user's node. Never FK a non-existent `User.manager`.
-- [ ] **"You cannot adjust a level above you"** (Microsoft, security-sensitive): the adjust action compares the acting user against the submission's rollup position and refuses downward-only violations. Every queryset stays tenant-scoped.
-- [ ] **Audit:** the standard CRUD views get it free from `crud_*` in `apps/core/crud.py`, but the **hand-rolled save paths — submit, review/approve/reject, override/adjust, revert, scenario-apply, period lock — must call `write_audit_log(...)` from `apps/core/utils.py` themselves.** Do not rely on the CRUD helpers for these.
-- [ ] **AI eligibility gate (buildable now):** count `sales.OpportunityOutcome` rows and enforce **≥40 won AND ≥40 lost**; when the gate fails the board renders the gate message and **no prediction is shown** — an unexplained opaque score is worse than none.
-- [ ] **FX:** read `accounting.ExchangeRate` `(tenant, currency, rate_date)`; never silently default to USD and never sum unlike currencies (8.2's settled rule). No second currency ledger (L29).
+- [x] `models/SalesForecasting/__init__.py` (new empty package `__init__`)
+- [x] `models/SalesForecasting/ForecastPeriods.py` — `ForecastPeriod`
+- [x] `models/SalesForecasting/ForecastSubmissions.py` — `ForecastSubmission`
+- [x] `models/SalesForecasting/ForecastAdjustments.py` — `ForecastAdjustment`
+- [x] `models/SalesForecasting/ForecastScenarios.py` — `ForecastScenario`
+- [x] `forms/SalesForecasting/__init__.py` + `ForecastPeriods.py` / `ForecastSubmissions.py` / `ForecastAdjustments.py` / `ForecastScenarios.py` — one form class per entity, inheriting `TenantModelForm` via `from apps.sales.forms._common import *`; absolute imports only
+- [x] `views/SalesForecasting/__init__.py` + the four entity view modules — function-based, `@login_required` on reads, **`@tenant_admin_required` on every privileged write** (submit / review / adjust / revert / scenario-apply / period lock)
+- [x] `urls/SalesForecasting/__init__.py` + the four entity url modules
+- [x] Reports shipped **on top of** the four models, **no new model** (research "Reports / views"): forecast board, attainment board, accuracy & bias report, forecast call view → `apps/sales/views/SalesForecasting/ForecastBoards.py` + `apps/sales/urls/SalesForecasting/ForecastBoards.py`
+- [x] **Rollup axis (the single most likely place for a bad FK — build it explicitly):** walk `core.OrgUnit.parent` to move rep→manager→director. There is **no `User.manager`**. `sales.OpportunityTeamMember.org_unit` already attaches a user to an org unit and is the read path for resolving a user's node. Never FK a non-existent `User.manager`.
+- [~] **"You cannot adjust a level above you" (Microsoft, security-sensitive) — IMPLEMENTED BUT UNREACHABLE, so this box stays open.** `ForecastAdjustments._adjusts_above_acting_level()` is a correct implementation of the rule, and it can never fire: the view it guards (`forecast_adjustment_create`, line 341) is `@tenant_admin_required`, and the helper's first statement exempts exactly the users that decorator lets through. A rep is refused by the decorator before the rule is consulted, so the `raise PermissionDenied` on line 353 is dead. Left unticked deliberately rather than ticked as "done" — a box ticked for a security rule that does nothing is worse than an open one. Recorded as **C2** in `.claude/tasks/review-sales-8.4.md` with three options and a recommendation; fixing it means deciding who may override whom, which opens a tenant-admin-gated write path and is the user's call, not a drive-by. The helper's logic is now pinned by six direct tests so it cannot rot, and the gate that makes it dead is pinned by a seventh.
+- [x] **Audit:** the standard CRUD views get it free from `crud_*` in `apps/core/crud.py`, but the **hand-rolled save paths — submit, review/approve/reject, override/adjust, revert, scenario-apply, period lock — must call `write_audit_log(...)` from `apps/core/utils.py` themselves.** Do not rely on the CRUD helpers for these.
+- [x] **AI eligibility gate (buildable now):** count `sales.OpportunityOutcome` rows and enforce **≥40 won AND ≥40 lost**; when the gate fails the board renders the gate message and **no prediction is shown** — an unexplained opaque score is worse than none.
+- [x] **FX:** read `accounting.ExchangeRate` `(tenant, currency, rate_date)`; never silently default to USD and never sum unlike currencies (8.2's settled rule). No second currency ledger (L29).
 
 
 ## CRUD completeness (every model, no exceptions)
 
-- [ ] Every one of the 4 models gets the **full set**: `list` (search + filters + pagination), `create`, `detail` (read-only), `edit` (same template as create, pre-filled), `delete` (**POST-only, confirm, csrf, redirects to list**).
-- [ ] Every **list** view filters `tenant=request.tenant` on every query; no `Model.objects.all()` anywhere in a tenant-scoped view.
-- [ ] Every **list** template has an **Actions column**: View (eye) → detail, Edit (pencil) → edit, Delete (bin) → POST form with `onclick="return confirm('…')"` and `{% csrf_token %}`. Wrap Edit/Delete in `{% if obj.status == 'draft' %}` where status governs it.
-- [ ] Every **detail** template has an **Actions sidebar**: Edit, Delete (POST + confirm, status-conditional), Back to List.
-- [ ] Delete URL pattern present for all four: `…/<int:pk>/delete/`.
-- [ ] `ForecastPeriod` with `is_locked=True` makes its submissions read-only — enforce in the edit/submit actions, not just visually.
-- [ ] Adjustments and scenarios are history/analysis rows: decide explicitly whether they get full CRUD or read-only + create, and say so in the contract. `ForecastAdjustment` at minimum gets list/detail/create/revert. **PROTECT FKs mean a locked period or a submitted submission must not be silently cascade-deleted** — guard the delete paths.
+- [x] Every one of the 4 models gets the **full set**: `list` (search + filters + pagination), `create`, `detail` (read-only), `edit` (same template as create, pre-filled), `delete` (**POST-only, confirm, csrf, redirects to list**).
+- [x] Every **list** view filters `tenant=request.tenant` on every query; no `Model.objects.all()` anywhere in a tenant-scoped view.
+- [x] Every **list** template has an **Actions column**: View (eye) → detail, Edit (pencil) → edit, Delete (bin) → POST form with `onclick="return confirm('…')"` and `{% csrf_token %}`. Wrap Edit/Delete in `{% if obj.status == 'draft' %}` where status governs it.
+- [x] Every **detail** template has an **Actions sidebar**: Edit, Delete (POST + confirm, status-conditional), Back to List.
+- [x] Delete URL pattern present for all four: `…/<int:pk>/delete/`.
+- [x] `ForecastPeriod` with `is_locked=True` makes its submissions read-only — enforce in the edit/submit actions, not just visually.
+- [x] Adjustments and scenarios are history/analysis rows: decide explicitly whether they get full CRUD or read-only + create, and say so in the contract. `ForecastAdjustment` at minimum gets list/detail/create/revert. **PROTECT FKs mean a locked period or a submitted submission must not be silently cascade-deleted** — guard the delete paths.
 
 ## Filters (mandatory on every list page)
 
-- [ ] Each list view **passes every context the template's filter bar needs** — never assume the template gets something it wasn't given: `status_choices`, `period_type_choices`, `rollup_dimension_choices`, `scenario_type_choices`, `adjustment_kind_choices`, plus the FK querysets (`periods`, `owners`, `org_units`, `territories`, `pipelines`).
-- [ ] Parse GET params and apply them to the queryset **before** pagination: `q` (strip + `Q()` lookups), `status`, `period`, `period_type`, `rollup_dimension`, owner/territory/org_unit.
-- [ ] Template comparison rules: string fields `{% if request.GET.status == value %}selected{% endif %}`; **FK/pk fields use `|stringformat:"d"` — NEVER `|slugify` for pk comparison**.
-- [ ] Badge conditions use the **exact** model choice values (`'best_case'` not `'best_case_amount'`), and every badge has an `{% else %}` fallback `{{ obj.get_field_display }}`.
-- [ ] Badge classes are **colour-named only**: `badge-green` / `badge-red` / `badge-amber` / `badge-info` / `badge-muted` / `badge-slate`. The semantic `-success` / `-danger` names **do not exist** in `static/css/theme.css` (L33).
-- [ ] Pagination uses `has_previous` / `has_next` **guards** — never an unguarded `previous` / `next` (L9).
+- [x] Each list view **passes every context the template's filter bar needs** — never assume the template gets something it wasn't given: `status_choices`, `period_type_choices`, `rollup_dimension_choices`, `scenario_type_choices`, `adjustment_kind_choices`, plus the FK querysets (`periods`, `owners`, `org_units`, `territories`, `pipelines`).
+- [x] Parse GET params and apply them to the queryset **before** pagination: `q` (strip + `Q()` lookups), `status`, `period`, `period_type`, `rollup_dimension`, owner/territory/org_unit.
+- [x] Template comparison rules: string fields `{% if request.GET.status == value %}selected{% endif %}`; **FK/pk fields use `|stringformat:"d"` — NEVER `|slugify` for pk comparison**.
+- [x] Badge conditions use the **exact** model choice values (`'best_case'` not `'best_case_amount'`), and every badge has an `{% else %}` fallback `{{ obj.get_field_display }}`.
+- [x] Badge classes are **colour-named only**: `badge-green` / `badge-red` / `badge-amber` / `badge-info` / `badge-muted` / `badge-slate`. The semantic `-success` / `-danger` names **do not exist** in `static/css/theme.css` (L33).
+- [x] Pagination uses `has_previous` / `has_next` **guards** — never an unguarded `previous` / `next` (L9).
 
 
 ## Integrate (single-writer pass — verify every expected file landed BEFORE wiring anything)
 
-- [ ] Add the **re-export block to all four `__init__.py`** — `models/`, `forms/`, `views/`, `urls/`. Forgetting one is an `ImportError`/`AttributeError` at runtime. In `models/__init__.py` add both the import line **and** the `__all__` entry, or `from apps.sales.models import ForecastPeriod` breaks (and `seed_sales.py` imports from there).
-- [ ] Wire the new url modules into `apps/sales/urls/__init__.py` — **literal routes before `<int:pk>` ones** (first-match-wins is behaviour), and check any new route against the whole concatenated list.
-- [ ] Register all four models in `apps/sales/admin.py`.
-- [ ] **Extend** `apps/sales/management/commands/seed_sales.py` — **do not create a new command**. New rows for the 4 models, **reusing the existing Party / Opportunity / Pipeline / OpportunityOutcome / Territory / Currency rows** it already seeds. Guard with `get_or_create` / existence checks so a **second run is a no-op** (idempotent), update the `help=` string, and keep the existing tenant-admin login instructions and the "Superuser `admin` has no tenant" warning.
-- [ ] **No `config/settings.py` edit. No `config/urls.py` edit** — the app is already wired. Confirm `apps.sales` is in `INSTALLED_APPS` and that its `urls` include already points at `apps/sales/urls/`; change nothing unless a check fails.
-- [ ] `makemigrations sales` → **this claims `0007`** (leaf is `0006_…`). If Django numbers it differently, take the number it gives and record it here; if another session is building in this checkout, agree the number **before** generating (L43).
-- [ ] `migrate` → `seed_sales` **twice** → `python manage.py check`.
-- [ ] `makemigrations --check` must say **"No changes detected"** after the split (models sit deeper than the app root; Django still derives `app_label` from the app config).
+- [x] Add the **re-export block to all four `__init__.py`** — `models/`, `forms/`, `views/`, `urls/`. Forgetting one is an `ImportError`/`AttributeError` at runtime. In `models/__init__.py` add both the import line **and** the `__all__` entry, or `from apps.sales.models import ForecastPeriod` breaks (and `seed_sales.py` imports from there).
+- [x] Wire the new url modules into `apps/sales/urls/__init__.py` — **literal routes before `<int:pk>` ones** (first-match-wins is behaviour), and check any new route against the whole concatenated list.
+- [x] Register all four models in `apps/sales/admin.py`.
+- [x] **Extend** `apps/sales/management/commands/seed_sales.py` — **do not create a new command**. New rows for the 4 models, **reusing the existing Party / Opportunity / Pipeline / OpportunityOutcome / Territory / Currency rows** it already seeds. Guard with `get_or_create` / existence checks so a **second run is a no-op** (idempotent), update the `help=` string, and keep the existing tenant-admin login instructions and the "Superuser `admin` has no tenant" warning.
+- [x] **No `config/settings.py` edit. No `config/urls.py` edit** — the app is already wired. Confirm `apps.sales` is in `INSTALLED_APPS` and that its `urls` include already points at `apps/sales/urls/`; change nothing unless a check fails.
+- [x] `makemigrations sales` → **this claims `0007`** (leaf is `0006_…`). If Django numbers it differently, take the number it gives and record it here; if another session is building in this checkout, agree the number **before** generating (L43).
+- [x] `migrate` → `seed_sales` **twice** → `python manage.py check`.
+- [x] `makemigrations --check` must say **"No changes detected"** after the split (models sit deeper than the app root; Django still derives `app_label` from the app config).
 
 ## Wire-up
 
-- [ ] `apps/core/navigation.py` — add **one new `LIVE_LINKS["8.4"]` entry** with the five exact NavERP.md bullet strings as keys, pointing at staff-facing management pages (**never a login-gated portal view** — L32). No `8.4` key exists today; 8.1/8.2/8.3 sit at lines ~2167/2179/2188. Suggested mapping:
+- [x] `apps/core/navigation.py` — add **one new `LIVE_LINKS["8.4"]` entry** with the five exact NavERP.md bullet strings as keys, pointing at staff-facing management pages (**never a login-gated portal view** — L32). No `8.4` key exists today; 8.1/8.2/8.3 sit at lines ~2167/2179/2188. Suggested mapping:
   - `"Forecast Categories & Commitments"` → `sales:forecast_submission_list`
   - `"AI-Powered Predictive Forecasting"` → `sales:forecast_board`
   - `"Quota Management & Attainment"` → `sales:forecast_attainment`
@@ -11143,21 +11143,21 @@ move to the next. Do **not** interleave entities, and do **not** touch shared fi
 
 ## Templates (`templates/sales/salesforecasting/`)
 
-- [ ] `salesforecasting/forecastperiod/{list,detail,form}.html`
-- [ ] `salesforecasting/forecastsubmission/{list,detail,form}.html`
-- [ ] `salesforecasting/forecastadjustment/{list,detail,form}.html`
-- [ ] `salesforecasting/forecastscenario/{list,detail,form}.html`
-- [ ] `salesforecasting/forecastboard/{board,attainment,accuracy,call}.html` — the four reports (secondary action pages sit **inside** the entity/sub-module folder as bare filenames; **never** a flat `forecast_board.html` at the app root)
-- [ ] Shape is `templates/<app>/<submodule>/<entity>/<page>.html` with the **bare** page filename — **never** a flat `<entity>_<page>.html`. `{% extends "base.html" %}` and `{% include "partials/…" %}` are unaffected.
-- [ ] Each list = filter bar reflecting `request.GET` + Actions column + pagination + empty-state. Each detail = read-only field table + Actions sidebar + a **derived** totals block (total / variance / attainment) rendered from the **properties**, never from a stored column.
-- [ ] Forecast board shows the entered category amounts **beside** the `ai_*` prediction column, and the `ai_explanation` factors wherever a prediction is rendered — a number is never presented without its reason.
+- [x] `salesforecasting/forecastperiod/{list,detail,form}.html`
+- [x] `salesforecasting/forecastsubmission/{list,detail,form}.html`
+- [x] `salesforecasting/forecastadjustment/{list,detail,form}.html`
+- [x] `salesforecasting/forecastscenario/{list,detail,form}.html`
+- [x] `salesforecasting/forecastboard/{board,attainment,accuracy,call}.html` — the four reports (secondary action pages sit **inside** the entity/sub-module folder as bare filenames; **never** a flat `forecast_board.html` at the app root)
+- [x] Shape is `templates/<app>/<submodule>/<entity>/<page>.html` with the **bare** page filename — **never** a flat `<entity>_<page>.html`. `{% extends "base.html" %}` and `{% include "partials/…" %}` are unaffected.
+- [x] Each list = filter bar reflecting `request.GET` + Actions column + pagination + empty-state. Each detail = read-only field table + Actions sidebar + a **derived** totals block (total / variance / attainment) rendered from the **properties**, never from a stored column.
+- [x] Forecast board shows the entered category amounts **beside** the `ai_*` prediction column, and the `ai_explanation` factors wherever a prediction is rendered — a number is never presented without its reason.
 
 
 ## Verify
 
-- [ ] `migrate` clean; `seed_sales` run **twice** with no duplicate/IntegrityError output the second time.
-- [ ] `python manage.py check` clean.
-- [ ] `temp/` smoke sweep as **`admin_acme` / `password`** (the superuser `admin` has `tenant=None` and will see nothing — by design):
+- [x] `migrate` clean; `seed_sales` run **twice** with no duplicate/IntegrityError output the second time.
+- [x] `python manage.py check` clean.
+- [x] `temp/` smoke sweep as **`admin_acme` / `password`** (the superuser `admin` has `tenant=None` and will see nothing — by design):
   - Every new `sales:*` URL returns **200/302** as expected.
   - **Content assertions, not just status** — a mismatched context var returns 200 and renders blank (L8): the page title, a seeded `FCP-`/`FCS-`/`FAD-`/`FSC-` number, the seeded owner name, and the derived total all actually appear in the HTML.
   - **Junk-param list** (`?status=nonsense&period=abc&q=%20`) does not 500.
@@ -11167,486 +11167,40 @@ move to the next. Do **not** interleave entities, and do **not** touch shared fi
   - **No template comment leaks** (`{#` or `{% comment`).
   - Applying a `ForecastScenario` leaves every `ForecastSubmission` row byte-identical (scenario isolation).
   - With the 40-won/40-lost gate failing (the seeded data will not meet it), the board shows the gate message and **no prediction value** is rendered.
-- [ ] Sidebar shows **`8.4` Live** and all five bullets navigate to working staff pages.
+- [x] Sidebar shows **`8.4` Live** and all five bullets navigate to working staff pages.
 
 ## Close-out
 
-- [ ] Six review agents, **one at a time**, each appending to `.claude/tasks/review-sales-8.4.md`: `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`. Then **dedupe, sort Critical → Important → Minor, assign IDs (C1, I3, M7) and commit the file**. If one returns nothing usable, re-run **that one**.
-- [ ] `code-fixer` agent burns the findings down in ID order, one commit per file, marking each `[x] fixed` / `[~] skipped — reason`. **The main session does not apply findings itself.**
-- [ ] Tests, serial: contract + `conftest.py` (one owner), then `test_salesforecasting_models.py` → `test_salesforecasting_forms.py` → `test_salesforecasting_views.py` → `test_salesforecasting_security.py`, one file at a time, each committed on its own. Then the **full unfiltered** app suite — never a `-k` filter (L47).
-- [ ] Update **`.claude/skills/sales/SKILL.md`** with 8.4's models / routes / templates / seeder rows / conventions (the file exists from 8.1–8.3; **update, do not create**).
-- [ ] Update `README.md` — mark **8.4 Sales Forecasting** built.
-- [ ] **One file per git commit, PowerShell-safe** (`git add 'path'; git commit -m 'msg'`, `;` not `&&`, explicit paths, **never `git push`**). Each backend file, each template, each shared-file surgical edit, each test file gets its own commit. Empty `__init__.py` files still get their own commit.
-
-### Known carry-forward: 8.2's Phase 6/7 is deliberately incomplete
-
-- [ ] **Note, do not fix, do not block on:** 8.2 skipped Phase 6/7. `apps/sales/tests/test_opportunitypipeline_security.py` is **untracked** (confirmed via `git status` on 2026-09-26) and the 8.2 **SKILL.md / README** sections were never written. So the sales test suite will **not** be fully green at 8.4 close-out, and a failing full-suite run may be 8.2's, not 8.4's. **Distinguish the two before debugging**: run the 8.4 test modules alone first, then the full suite, and report any 8.2 residue as pre-existing rather than regressing into it.
-- [ ] The dirty working tree at plan time (`M templates/projects/reporting/*`, `M .claude/tasks/todo.md`, plus untracked `.commandcode/`, `.gemini/`, `.workbuddy-ai/`, `.zcode/`) is **not 8.4's** — leave those files alone and never commit them (L45).
-
-
-## Later passes / deferred
-
-**Deferred / integration (schema ships now, the engine does not):**
-- Actual **ML training and inference** (Dynamics predictive scoring, Salesforce Einstein, Gong AI Revenue Predictor, Zoho AI) — the data-lake sync, training cadence, Azure ML / external service, and retraining. The `ai_*` storage + `ai_explanation` schema ships in 8.4 so the model lands **with no migration**.
-- **Per-deal predictive scoring table** (`ForecastSignal` / `OpportunityPrediction`) — parked to 8.2 / 8.12; it is a table, not a column on the submission.
-- **Excel quota upload** (Dynamics' "Simple" column type) — an import action page on `ForecastPeriod` seeding `crm.SalesQuota`; a later pass.
-- **Email / Teams / Slack** forecast-call notifications and approval reminders — external integrations.
-- **Live FX spot-rate fetching** — `accounting.ExchangeRate` is the source; auto-fetching is an accounting/integration concern.
-- **Product-hierarchy rollup** (Dynamics' third template) — needs `scm.Item`'s category tree as a reporting axis; 8.4 ships `user` / `org_unit` / `territory` only.
-- **Opportunity-split rollup weighting** — `crm.OpportunitySplit` is verified and usable, but surfacing splits is 8.12 analytics.
-- **True snapshot warehouse / as-of-time rebuild** — 8.2 kept pipeline inspection on `core.AuditLog` rather than a snapshot store; the same trade-off applies here.
-- **Multi-period rolling forecasts** and consolidation across business units — a later pass, once `ForecastPeriod` has history.
-
-**Parked to sibling sub-modules (from the research):**
-- Quota **creation, top-down/bottom-up allocation, stretch goals, new-hire ramp weights, approval workflow** → **8.7**. 8.4 only reads and snapshots `crm.SalesQuota`.
-- Territory design, assignment rules, rebalancing, coverage-gap/heatmap analytics, hunter/farmer splits, overlay specialists → **8.7**.
-- Pipeline board, stage probabilities, entry/exit checklists, per-deal health indicators → **8.2** (already built).
-- Account hierarchy rollups, whitespace analysis, cross-sell/upsell mapping → **8.3** (already built).
-- CPQ, pricing/discount approval, proposals, quote versioning, quote-to-order → **8.5**.
-- Order capture/amendment, fulfillment, ASC 606 recognition, reorder/renewal → **8.6** (which will FK **into** the verified `scm.SalesOrder`, not declare its own).
-- Rep activity logging, tasks, calendar, the forecast-call meeting itself, coaching playbooks → **8.8**.
-- Sales enablement content, battle-card library → **8.9**.
-- Compensation / quota-linked incentive payouts driven by attainment → **8.10**.
-- Consumption / renewal / subscription-recurring forecasting → **8.15**.
-- Dashboards, cross-pipeline conversion rates, pipeline velocity, per-deal predictive scoring, benchmark trend data → **8.12**.
-- Marketing-sourced pipeline contribution and campaign ROI inside the forecast → **8.13**.
-
-## Review notes
-(filled in at the end)
-
----
-
-# Sub-module 8.5 — Quote & Proposal Management (CPQ) (Module 8: Sales Management System, `sales`) — plan from research-sales-8.5.md (2026-09-26)
-
-> **This plan EXTENDS an existing app.** `apps/sales/` is already live with 8.1 `LeadManagement`,
-> 8.2 `OpportunityPipeline` / `OpportunityOutcomes` / `OpportunityTeams` / `CompetitiveIntelligence`,
-> 8.3 `ContactAccountManagement`, and 8.4 `SalesForecasting`.
-> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
-> Migration is **incremental** and **8.5 claims `0008`** (leaf today is `0007_forecastperiod_forecastscenario_forecastsubmission_and_more.py`).
-
-## Repo state re-verified by the todo agent (2026-09-26) — L28, the grep is the truth
-
-Every FK target below was re-grepped across the `models/` **packages** at plan time, not taken from the research prose:
-
-| FK target | Verified location | Verdict | Role in 8.5 CPQ |
-|---|---|---|---|
-| `crm.Opportunity` | `apps/crm/models/SalesForceAutomation/Opportunities.py:5` | EXISTS — `amount`, `stage`, `owner`, `forecast_category` | Parent deal master for CPQ quotes. `is_primary=True` syncs quote total back to `Opportunity.amount`. |
-| `crm.Quote` | `apps/crm/models/SalesForceAutomation/Quotes.py:5` | EXISTS — canonical CRM quote header (`QUO-`) | Reference linkage; 8.5 CPQ quotes provide advanced versioning, bundling, approvals, and ERP handoff. |
-| `crm.Product` | `apps/crm/models/SalesForceAutomation/Products.py:5` | EXISTS — catalog product (`PRD-`) | Parent bundle item and child component options; base line pricing. |
-| `crm.PriceBook` | `apps/crm/models/SalesForceAutomation/PriceBooks.py:5` | EXISTS — price list (`PB-`) | Price adjustments and currency context. |
-| `crm.DocTemplate` | `apps/crm/models/DocumentContract/DocTemplates.py:6` | EXISTS — merge template (`TPL-`) | HTML proposal template rendering. |
-| `core.Party` | `apps/core/models/Party.py:5` | EXISTS — account/customer master | Customer and primary contact for quote. |
-| `core.Tenant` | `apps/core/models/Tenant.py:17` | EXISTS — multi-tenant root | Tenant isolation across all CPQ entities. |
-| `accounting.Currency` | `apps/accounting/models/GeneralLedger/Currencies.py:6` | EXISTS — global currency master | Quote transaction currency (global, no tenant FK). |
-| `accounting.TaxCode` | `apps/accounting/models/Tax/TaxCodes.py:6` | EXISTS — tax rate master | Per-line tax calculations. |
-| `accounting.PaymentTerm` | `apps/accounting/models/AccountsPayable/PaymentTerms.py:6` | EXISTS — payment terms master | Commercial terms copied onto quote and generated sales order. |
-| `scm.SalesOrder` | `apps/scm/models/OrderManagement/SalesOrders.py:20` | EXISTS — SCM order master (`SO-`) | Converted sales order destination with `source_quote` link. |
-| `scm.SalesOrderLine` | `apps/scm/models/OrderManagement/SalesOrders.py:185` | EXISTS — order item line | Line destination of converted CPQ quote lines. |
-| `scm.SalesOrderAllocation` | `apps/scm/models/OrderManagement/SalesOrderAllocations.py:15` | EXISTS — soft ATP inventory reservation | Automated stock reservation for converted lines mapped to `scm.Item`. |
-| `scm.Item` | `apps/scm/models/InventoryManagement/Items.py:73` | EXISTS — stock item master | Physical inventory SKU mapped on CPQ lines to solve the CRM Product -> SCM Item gap! |
-| `scm.UOM` | `apps/scm/models/InventoryManagement/Items.py:51` | EXISTS — unit of measure | Unit of measure for line items. |
-| `scm.Location` | `apps/scm/models/InventoryManagement/Locations.py:11` | EXISTS — warehouse inventory location | Warehouse location for automated ATP reservation. |
-| `sales.OpportunityOutcome` | `apps/sales/models/OpportunityOutcomes/OpportunityOutcomes.py:66` | EXISTS — append-only outcome ledger (`OUT-`) | Stamped won outcome upon quote conversion to order. |
-| `sales.WinLossReason` | `apps/sales/models/OpportunityOutcomes/OpportunityOutcomes.py:11` | EXISTS — win/loss taxonomy | Won reason on conversion. |
-| `settings.AUTH_USER_MODEL` | `apps/accounts/models/User.py` | EXISTS — user master | Quote owner, approvers, signers. |
-
-**Zero prefix collisions checked:**
-- `CPQ` (`CPQQuote`) — **FREE, VERIFIED**
-- `BND` (`ProductBundleOption`) — **FREE, VERIFIED**
-- `QAR` (`QuoteApprovalRule`) — **FREE, VERIFIED**
-
-**Naming and Layout Decisions:**
-- Backend package structure: `apps/sales/{models,forms,views,urls}/QuoteProposalCPQ/<Entity>.py`
-- Template folder: `templates/sales/quote_proposal_cpq/<entity>/` and `templates/sales/quote_proposal_cpq/operations/`
-- Service module: `apps/sales/cpq_services.py`
-
----
-
-## Scope and ownership — the 8.5 contract
-
-- [x] Build exactly four Sales-owned domain models: `CPQQuote`, `CPQQuoteLine`, `ProductBundleOption`, and `QuoteApprovalRule`.
-- [x] CRM 1.2 `crm.Quote` is preserved as a lightweight, flat sales quote. Sales 8.5 CPQ provides enterprise Configure, Price, Quote capabilities:
-  1. **Configure**: Product bundling, configurable option groups, default/required components, and compatibility dependency rules (`requires`, `excludes`, `recommends`).
-  2. **Price**: Pricing waterfall (List Price -> Price Book Adjustment -> Volume/Tier Discount -> Rep Discretionary Discount -> Net Unit Price), margin waterfall against unit cost, and automated multi-tier approval rules (`QuoteApprovalRule`).
-  3. **Quote & Propose**: Multi-version revision management (`revision_of`, `revision_number`), primary quote designation (`is_primary`) syncing deal value to `crm.Opportunity.amount`, side-by-side diff comparison, and branded web proposal generation with e-signature tokens.
-  4. **Convert**: Seamless automated order generation into `scm.SalesOrder`, linking directly to `scm.Item` and automatically triggering soft inventory reservations (`scm.SalesOrderAllocation`).
-- [x] Bridge CRM Products and SCM Inventory Items: `CPQQuoteLine` maps both `product` (`crm.Product`) and `item` (`scm.Item`). When converting to `scm.SalesOrderLine`, this eliminates the draft order item picking gap documented in `scm.SalesOrderLine`.
-- [x] Reusable platform context: `accounting.Currency` is global (no tenant FK); `core.Party` represents accounts and contacts; `crm.DocTemplate` powers proposal rendering; `scm.Location` fulfills inventory allocations.
-
----
-
-## Models (from research — 4 models)
-
-Base classes from `apps/sales/models/_base.py`: `TenantNumbered` (`NUMBER_PREFIX` + auto `number` via `core.utils.next_number`, width 5) and `TenantOwned`. Every model gets a `tenant` FK via the base.
-
-### 1. `CPQQuote` `[CPQ-]` — Enterprise CPQ Quote Header & Lifecycle Master
-`apps/sales/models/QuoteProposalCPQ/CPQQuotes.py`
-- Inherits: `TenantNumbered`
-- Auto-number: `NUMBER_PREFIX = "CPQ"` (e.g. `CPQ-00001`)
-- Fields:
-  - `name`: `CharField(max_length=255)` — descriptive quote title
-  - `opportunity`: `ForeignKey("crm.Opportunity", on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_quotes")`
-  - `account`: `ForeignKey("core.Party", on_delete=models.PROTECT, related_name="cpq_quotes")`
-  - `contact`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_quotes_contact")`
-  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_quotes")`
-  - `price_book`: `ForeignKey("crm.PriceBook", on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_quotes")`
-  - `currency`: `ForeignKey("accounting.Currency", on_delete=models.PROTECT, related_name="cpq_quotes")`
-  - `status`: `CharField(max_length=20, choices=[("draft","Draft"), ("in_review","In Review"), ("approved","Approved"), ("presented","Presented"), ("accepted","Accepted"), ("declined","Declined"), ("expired","Expired"), ("converted","Converted to Order")], default="draft")`
-  - `valid_until`: `DateField(null=True, blank=True)`
-  - `terms`: `TextField(blank=True)`
-  - **Versioning & Revision Control**:
-    - `quote_group_id`: `UUIDField(default=uuid.uuid4, db_index=True)` — common thread across revisions
-    - `revision_number`: `PositiveIntegerField(default=1)`
-    - `revision_of`: `ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="revisions")`
-    - `is_primary`: `BooleanField(default=True)` — drives `Opportunity.amount` when True
-    - `revision_notes`: `TextField(blank=True)`
-  - **Financials & Waterfall Aggregates** (recomputed via `recalc_totals()`):
-    - `list_subtotal`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
-    - `discount_total`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
-    - `net_subtotal`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
-    - `tax_total`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
-    - `grand_total`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
-    - `total_cost`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
-    - `margin_pct`: `DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"))`
-  - **Approval Governance**:
-    - `approval_status`: `CharField(max_length=20, choices=[("not_required","Not Required"), ("pending","Pending Approval"), ("approved","Approved"), ("rejected","Rejected")], default="not_required")`
-    - `approval_rule`: `ForeignKey("sales.QuoteApprovalRule", on_delete=models.SET_NULL, null=True, blank=True, related_name="quotes")`
-    - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_approved_quotes")`
-    - `approved_at`: `DateTimeField(null=True, blank=True)`
-    - `approval_comments`: `TextField(blank=True)`
-  - **Proposal & E-Signature**:
-    - `proposal_template`: `ForeignKey("crm.DocTemplate", on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_proposals")`
-    - `proposal_content`: `TextField(blank=True)` — rendered HTML merge snapshot
-    - `signing_token`: `CharField(max_length=64, blank=True, unique=True, null=True, db_index=True)` — secure portal token
-    - `presented_at`: `DateTimeField(null=True, blank=True)`
-    - `signed_at`: `DateTimeField(null=True, blank=True)`
-    - `signer_name`: `CharField(max_length=255, blank=True)`
-    - `signer_ip`: `GenericIPAddressField(null=True, blank=True)`
-  - **ERP Integration Handoff**:
-    - `converted_order`: `ForeignKey("scm.SalesOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="source_cpq_quotes")`
-    - `converted_at`: `DateTimeField(null=True, blank=True)`
-    - `crm_quote`: `ForeignKey("crm.Quote", on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_quotes")`
-- Meta:
-  - `ordering = ["-created_at", "-id"]`
-  - `constraints = [models.UniqueConstraint(fields=["tenant", "number"], name="sales_cpq_tenant_number_uniq")]`
-  - `indexes = [models.Index(fields=["tenant", "status"]), models.Index(fields=["tenant", "quote_group_id"]), models.Index(fields=["tenant", "opportunity"])]`
-- Form excludes:
-  - `tenant`, `number`, `status` (workflow-governed), `quote_group_id`, `revision_number`, `revision_of`, `list_subtotal`, `discount_total`, `net_subtotal`, `tax_total`, `grand_total`, `total_cost`, `margin_pct`, `approval_status`, `approval_rule`, `approved_by`, `approved_at`, `approval_comments`, `signing_token`, `presented_at`, `signed_at`, `signer_name`, `signer_ip`, `converted_order`, `converted_at`, `crm_quote`, timestamps.
-
-### 2. `CPQQuoteLine` — Hierarchical Line Items, Options & Stock Mapping
-`apps/sales/models/QuoteProposalCPQ/CPQQuoteLines.py`
-- Inherits: `TenantOwned`
-- Fields:
-  - `quote`: `ForeignKey("sales.CPQQuote", on_delete=models.CASCADE, related_name="lines")`
-  - `parent_line`: `ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="child_lines")` — enables package/component hierarchy
-  - `line_type`: `CharField(max_length=20, choices=[("standard","Standard Item"), ("bundle_parent","Bundle Package"), ("bundle_component","Bundle Component"), ("optional_addon","Optional Add-on")], default="standard")`
-  - `product`: `ForeignKey("crm.Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="cpq_lines")`
-  - `item`: `ForeignKey("scm.Item", on_delete=models.PROTECT, null=True, blank=True, related_name="cpq_lines")` — **resolves SCM stock SKU mapping**
-  - `description`: `CharField(max_length=255)`
-  - `quantity`: `DecimalField(max_digits=14, decimal_places=4, default=Decimal("1.0000"), validators=[MinValueValidator(Decimal("0.0001"))])`
-  - `uom`: `ForeignKey("scm.UOM", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")`
-  - `unit_cost`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
-  - `list_price`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
-  - `discount_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0), MaxValueValidator(100)])`
-  - `discount_amount`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
-  - `unit_price`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` — net unit price
-  - `tax_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0), MaxValueValidator(100)])`
-  - `tax_code`: `ForeignKey("accounting.TaxCode", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")`
-  - `line_subtotal`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
-  - `line_total`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
-  - `margin_pct`: `DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"))`
-  - `is_optional`: `BooleanField(default=False)` — customer toggle in portal
-  - `is_selected`: `BooleanField(default=True)` — included in quote totals calculation
-  - `sort_order`: `PositiveIntegerField(default=0)`
-  - `configuration_notes`: `CharField(max_length=255, blank=True)`
-- Meta:
-  - `ordering = ["sort_order", "id"]`
-  - `indexes = [models.Index(fields=["tenant", "quote"]), models.Index(fields=["tenant", "parent_line"])]`
-- Form excludes:
-  - `tenant`, `line_subtotal`, `line_total`, `margin_pct`, timestamps.
-
-### 3. `ProductBundleOption` `[BND-]` — Product Bundling & Compatibility Rules
-`apps/sales/models/QuoteProposalCPQ/ProductBundles.py`
-- Inherits: `TenantNumbered`
-- Auto-number: `NUMBER_PREFIX = "BND"` (e.g. `BND-00001`)
-- Fields:
-  - `bundle_product`: `ForeignKey("crm.Product", on_delete=models.CASCADE, related_name="bundle_options")` — the parent package product
-  - `component_product`: `ForeignKey("crm.Product", on_delete=models.CASCADE, related_name="bundled_as_option")` — child component or add-on product
-  - `component_item`: `ForeignKey("scm.Item", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")` — default physical item mapping
-  - `option_group`: `CharField(max_length=80, default="Components")` — e.g. "Hardware", "Software", "Support Tier", "Add-Ons"
-  - `option_type`: `CharField(max_length=20, choices=[("component","Required Component"), ("accessory","Optional Accessory"), ("service","Related Service")], default="component")`
-  - `min_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("1.00"))`
-  - `max_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("1.00"))`
-  - `default_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("1.00"))`
-  - `is_required`: `BooleanField(default=False)`
-  - `is_default`: `BooleanField(default=True)`
-  - `unit_price_override`: `DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)` — bundle-specific pricing
-  - `discount_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0), MaxValueValidator(100)])`
-  - `compatibility_rule`: `CharField(max_length=20, choices=[("none","None"), ("requires","Requires Dependent Product"), ("excludes","Incompatible With Dependent Product"), ("recommends","Recommends Dependent Product")], default="none")`
-  - `depends_on_product`: `ForeignKey("crm.Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")`
-  - `is_active`: `BooleanField(default=True)`
-  - `notes`: `CharField(max_length=255, blank=True)`
-- Meta:
-  - `ordering = ["bundle_product", "option_group", "id"]`
-  - `constraints = [models.UniqueConstraint(fields=["tenant", "number"], name="sales_bnd_tenant_number_uniq")]`
-  - `indexes = [models.Index(fields=["tenant", "bundle_product", "is_active"])]`
-- Form excludes:
-  - `tenant`, `number`, timestamps.
-
-### 4. `QuoteApprovalRule` `[QAR-]` — Pricing & Discount Approval Gates
-`apps/sales/models/QuoteProposalCPQ/QuoteApprovalRules.py`
-- Inherits: `TenantNumbered`
-- Auto-number: `NUMBER_PREFIX = "QAR"` (e.g. `QAR-00001`)
-- Fields:
-  - `name`: `CharField(max_length=255)` — e.g. "Director Discount Gate (>15%)", "Margin Floor Protection (<20%)"
-  - `rule_type`: `CharField(max_length=24, choices=[("discount_threshold","Discount % Ceiling"), ("margin_floor","Margin % Floor"), ("amount_ceiling","High Value Deal Review"), ("composite","Combined Discount & Margin")], default="discount_threshold")`
-  - `max_rep_discount_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("10.00"))` — discounts exceeding this require approval
-  - `min_margin_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("20.00"))` — margins below this require approval
-  - `min_quote_amount`: `DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)` — threshold for deal value
-  - `required_role`: `CharField(max_length=24, choices=[("sales_manager","Sales Manager"), ("sales_director","Sales Director"), ("vp_sales","VP of Sales"), ("finance_director","Finance Director"), ("cfo","Chief Financial Officer")], default="sales_manager")`
-  - `priority`: `PositiveIntegerField(default=10)`
-  - `is_active`: `BooleanField(default=True)`
-  - `description`: `TextField(blank=True)`
-- Meta:
-  - `ordering = ["priority", "id"]`
-  - `constraints = [models.UniqueConstraint(fields=["tenant", "number"], name="sales_qar_tenant_number_uniq")]`
-  - `indexes = [models.Index(fields=["tenant", "is_active", "priority"])]`
-- Form excludes:
-  - `tenant`, `number`, timestamps.
-- Key method:
-  - `evaluate(quote)` -> `(requires_approval: bool, reason: str)`
-
----
-
-## Backend (`apps/sales/{models,forms,views,urls}/QuoteProposalCPQ/`)
-
-Build entity by entity, one at a time — all four backend files for an entity, then its templates, then move to the next.
-
-- [x] `models/QuoteProposalCPQ/__init__.py` (package init)
-- [x] `models/QuoteProposalCPQ/QuoteApprovalRules.py` — `QuoteApprovalRule`
-- [x] `models/QuoteProposalCPQ/ProductBundles.py` — `ProductBundleOption`
-- [x] `models/QuoteProposalCPQ/CPQQuotes.py` — `CPQQuote`
-- [x] `models/QuoteProposalCPQ/CPQQuoteLines.py` — `CPQQuoteLine`
-- [x] `forms/QuoteProposalCPQ/__init__.py`
-- [x] `forms/QuoteProposalCPQ/QuoteApprovalRules.py` — `QuoteApprovalRuleForm`
-- [x] `forms/QuoteProposalCPQ/ProductBundles.py` — `ProductBundleOptionForm`
-- [x] `forms/QuoteProposalCPQ/CPQQuotes.py` — `CPQQuoteForm`, `CPQQuoteApprovalActionForm`, `CPQPortalSignForm`. **Names consolidated from the plan:** the plan listed five forms here; the build shipped three, because `CPQQuoteRevisionForm`, `CPQQuoteProposalGenerateForm` and `CPQQuoteSignForm` each had exactly one consumer and are POST bodies handled inside the owning view (`quote_create_revision`, `quote_generate_proposal`, `quote_portal_sign`) rather than a `ModelForm` that could be opened independently. `CPQQuoteApprovalForm` became `CPQQuoteApprovalActionForm` to say it is a plain action form, not a model form.
-- [x] `forms/QuoteProposalCPQ/CPQQuoteLines.py` — `CPQQuoteLineForm`. **`CPQQuoteAddBundleForm` was not built and is not needed:** the guided-selling wizard and `cpq_quote_line_create` both construct bundle lines through `CPQQuoteLineForm` plus the `ProductBundleOption` queryset, so a second form would have had no validation the first one lacks.
-- [x] `views/QuoteProposalCPQ/__init__.py`
-- [x] `views/QuoteProposalCPQ/QuoteApprovalRules.py` — `quote_approval_rule_list`, `_create`, `_detail`, `_edit`, `_delete`. **`quote_approval_queue` moved to `QuoteOperations.py`:** it is a workflow over quotes, not a CRUD view over a rule, and keeping it beside the rule CRUD would have put an operational board in an entity module.
-- [x] `views/QuoteProposalCPQ/ProductBundles.py` — `product_bundle_list`, `_create`, `_detail`, `_edit`, `_delete`. **Renamed from the plan's `product_bundle_option_*`:** the model is `ProductBundleOption` but the whole group is "bundles", and the longer name was spelled six times in URLs, templates and navigation for no gain. `product_bundle_guided_selling` became `cpq_guided_selling` in `QuoteOperations.py`, because guided selling builds a quote and is not a CRUD verb on a bundle option.
-- [x] `views/QuoteProposalCPQ/CPQQuotes.py` — `cpq_quote_list`, `_create`, `_detail`, `_edit`, `_delete`. **The plan's separate `approve` / `reject` / `present` / `make_primary` verbs were consolidated** into `quote_approval_action` (approve and reject are one form with an `action` choice) and into `quote_submit_approval` + `quote_generate_proposal`. A `present` verb in particular would have been a status write with no gate behind it, which is exactly the class of defect the review caught.
-- [x] `views/QuoteProposalCPQ/CPQQuoteLines.py` — `cpq_quote_line_list`, `_create`, `_detail`, `_edit`, `_delete`. **The plan's `cpq_quote_line_toggle_select` and `cpq_quote_add_bundle` are not staff views:** a line is selected or deselected from the customer portal (`quote_portal_toggle_line`, where the customer actually is) and through the line form, not from a staff-only toggle that could disagree with the portal.
-- [x] `views/QuoteProposalCPQ/QuoteOperations.py` — **the plan called this module `CPQOperations.py`; the build renamed it to `QuoteOperations.py`** to match the sibling entity modules' `Entity.py` naming and because it holds no model. Views are `quote_submit_approval`, `quote_approval_queue`, `quote_approval_action`, `quote_create_revision`, `quote_compare_versions`, `quote_version_list`, `quote_proposal_board`, `quote_generate_proposal`, `quote_portal_view`, `quote_portal_sign`, `quote_portal_toggle_line`, `quote_conversion_board`, `quote_convert_to_order`, `cpq_guided_selling`. `quote_proposal_preview` became `quote_generate_proposal` and `quote_version_compare` became `quote_compare_versions`; the plan also omitted the three portal routes, which are the largest part of this module.
-- [x] `urls/QuoteProposalCPQ/__init__.py`
-- [x] `urls/QuoteProposalCPQ/QuoteApprovalRules.py`
-- [x] `urls/QuoteProposalCPQ/ProductBundles.py`
-- [x] `urls/QuoteProposalCPQ/CPQQuotes.py`
-- [x] `urls/QuoteProposalCPQ/CPQQuoteLines.py`
-- [x] `urls/QuoteProposalCPQ/CPQOperations.py`
-- [x] Dedicated service module: `apps/sales/cpq_services.py`
-  - `cpq_recalc_quote_totals(quote)`: computes list subtotal, discounts, net subtotal, tax, grand total, cost, margin %.
-  - `cpq_evaluate_approval(quote)`: evaluates active `QuoteApprovalRule` records by priority.
-  - `cpq_create_revision(quote, notes)`: clones quote and line items under same `quote_group_id`, increments `revision_number`.
-  - `cpq_render_proposal_html(quote)`: renders proposal HTML using `crm.DocTemplate` or standard CPQ layout.
-  - `cpq_compare_quote_versions(quote_v1, quote_v2)`: generates itemized diff (added, removed, quantity delta, price delta, margin delta).
-  - `cpq_convert_to_sales_order(quote, user)`: creates `scm.SalesOrder`, maps lines to `scm.SalesOrderLine` with `scm.Item`, reserves ATP via `scm.SalesOrderAllocation(status="reserved")`, advances `crm.Opportunity.stage` to `closed_won`, and writes `sales.OpportunityOutcome` + `core.AuditLog`.
-
----
-
-## CRUD completeness (every model, no exceptions)
-
-- [x] `CPQQuote`: full CRUD + lifecycle actions (`submit_approval`, `approve`, `reject`, `present`, `make_primary`, `create_revision`, `convert_order`).
-- [x] `CPQQuoteLine`: full CRUD (create, edit, delete with confirm/csrf, toggle select, add bundle).
-- [x] `ProductBundleOption`: full CRUD (list with filters, detail, create, edit, delete POST-only).
-- [x] `QuoteApprovalRule`: full CRUD (list with filters, detail, create, edit, delete POST-only).
-- [x] Actions column on every list page (view, edit, delete).
-- [x] Actions sidebar on every detail page.
-- [x] Status-guarded actions: editing lines or quote details restricted when quote is `converted`, `expired`, or locked in review.
-
----
-
-## Filters (mandatory on every list page)
-
-- [x] `CPQQuote` list: filters by `status`, `approval_status`, `opportunity`, `account`, `owner`, `is_primary`, `currency`, plus search query `q`.
-- [x] `CPQQuoteLine` list: filters by `quote`, `line_type`, `product`, `item`, `is_optional`, `is_selected`.
-- [x] `ProductBundleOption` list: filters by `bundle_product`, `component_product`, `option_group`, `option_type`, `compatibility_rule`, `is_active`, plus search query `q`.
-- [x] `QuoteApprovalRule` list: filters by `rule_type`, `required_role`, `is_active`, plus search query `q`.
-- [x] Pass every choice list and FK queryset to template context: `status_choices`, `approval_status_choices`, `rule_type_choices`, `option_type_choices`, `compatibility_rule_choices`, `accounts`, `opportunities`, `products`, `price_books`, `currencies`.
-- [x] Filter preservation in pagination via `request.GET`.
-- [x] PK comparisons in templates using `|stringformat:"d"`.
-- [x] Colour-named badge classes only: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
-
----
-
-## Integrate (single-writer pass — verify every expected file landed BEFORE wiring anything)
-
-- [x] Re-export all four models in `apps/sales/models/__init__.py` and add to `__all__`: `CPQQuote`, `CPQQuoteLine`, `ProductBundleOption`, `QuoteApprovalRule`.
-- [x] Re-export forms in `apps/sales/forms/__init__.py`.
-- [x] Re-export views in `apps/sales/views/__init__.py`.
-- [x] Re-export and include URL patterns in `apps/sales/urls/__init__.py` (literal routes before `<int:pk>`).
-- [x] Register all 4 models in `apps/sales/admin.py`.
-- [x] Extend `apps/sales/management/commands/seed_sales.py` idempotently with:
-  - Product bundle options configured for existing `crm.Product` records with `scm.Item` linkage.
-  - Multi-tier quote approval rules (`discount_threshold`, `margin_floor`, `amount_ceiling`).
-  - CPQ quotes across lifecycle stages (`draft`, `in_review`, `approved`, `presented`, `accepted`, `converted`).
-  - Hierarchical quote lines demonstrating bundle packages, components, optional add-ons, and margin calculations.
-  - Converted quote showcasing `scm.SalesOrder` and `scm.SalesOrderAllocation` soft reservation.
-- [x] Run `makemigrations sales` (claims `0008`).
-- [x] Run `migrate` and verify `0008` applies cleanly.
-- [x] Run `seed_sales` twice to prove idempotence (zero duplicate key or integrity errors).
-- [x] Run `python manage.py check` with 0 issues.
-
----
-
-## Wire-up
-
-- [x] `apps/core/navigation.py`: Add `LIVE_LINKS["8.5"]` mapping all 5 exact NavERP.md §8.5 bullet titles to staff-accessible management routes:
-  ```python
-  "8.5": {
-      "Quote Configuration (CPQ)": "sales:cpq_quote_list",
-      "Pricing & Discount Approval": "sales:quote_approval_queue",
-      "Proposal Generation & Templating": "sales:quote_proposal_board",
-      "Quote Versioning & Comparison": "sales:quote_version_list",
-      "Quote-to-Order Conversion": "sales:quote_conversion_board",
-      # Extra staff management leaves:
-      "Product Bundle Options": "sales:product_bundle_option_list",
-      "Quote Approval Rules": "sales:quote_approval_rule_list",
-      "CPQ Guided Selling": "sales:product_bundle_guided_selling",
-  },
-  ```
-
----
-
-## Templates (`templates/sales/quote_proposal_cpq/`)
-
-- [x] `cpqquote/list.html` — searchable, filterable quote table, status badges, grand totals, margin %, action buttons.
-- [x] `cpqquote/detail.html` — header overview, pricing waterfall totals, approval banner, hierarchical line item tree, action sidebar.
-- [x] `cpqquote/form.html` — create/edit quote header with account, opportunity, currency, price book, validity date.
-- [x] `cpqquoteline/list.html` — line item table with parent/child bundle indicators.
-- [x] `cpqquoteline/detail.html` — line detail showing cost, list price, discount, net price, margin, SCM item mapping.
-- [x] `cpqquoteline/form.html` — add/edit quote line with bundle selection, quantity, discount %, and tax.
-- [x] `productbundleoption/list.html` — bundle rules list with option groups, component products, compatibility rules.
-- [x] `productbundleoption/detail.html` — bundle configuration rule details.
-- [x] `productbundleoption/form.html` — create/edit bundle option with dependency rule.
-- [x] `quoteapprovalrule/list.html` — approval rules table ordered by priority.
-- [x] `quoteapprovalrule/detail.html` — rule parameters and threshold inspection.
-- [x] `quoteapprovalrule/form.html` — create/edit approval rule with discount ceiling, margin floor, required role.
-- [x] `operations/proposal_preview.html` — branded proposal view with document layout, customer details, itemized pricing tables, terms.
-- [x] `operations/portal.html` — customer-facing web quote portal: toggle optional add-ons, live pricing updates, e-signature acceptance form.
-- [x] `operations/compare.html` — side-by-side quote revision comparison view: line-by-line diff, quantity changes, price delta, margin swings.
-- [x] `operations/approval_queue.html` — dedicated manager queue for pending quotes, with quick approve/reject and audit comment modal.
-- [x] `operations/conversion_board.html` — quote-to-order pipeline view with 1-click conversion to `scm.SalesOrder` and ATP reservation status.
-- [x] `operations/guided_selling.html` — interactive guided selling playbook modal/wizard recommending bundles based on deal parameters.
-
----
-
-## Verify
-
-- [x] `migrate` clean; `seed_sales` run twice with zero duplicate errors on second run.
-- [x] `python manage.py check` clean.
-- [x] Smoke sweep as **`admin_acme`** (tenant admin; the `admin` superuser has `tenant=None` and sees nothing by design). **Executed as four committed pytest lanes rather than a throwaway `temp/` script, so the sweep is re-runnable and cannot rot.** Item-by-item:
-  - Every new `sales:*` URL returns 200/302 — `test_quote_proposal_cpq_views.py`, one case per contract route, plus the junk-parameter and out-of-range-page cases.
-  - Content assertions (L8): a 200 does not prove a context var resolved, so every page asserts the quote number, the line description, the rule name or the product name actually appears in the HTML.
-  - Public portal without a session — `test_quoteproposalcpq_portal_is_public_and_renders`, and `..._portal_404s_on_an_unknown_token`.
-  - E-signature captures signer name, timestamp, **IP** and moves the quote to `accepted` — `test_quoteproposalcpq_portal_sign_accepts_and_transitions` plus the six acceptance-address cases in the security lane. **The IP half of this bullet was a real gap and is now built** (migration `0011`); see the contract-gaps section below.
-  - Approval rule gates discount and margin — `test_quoteproposalcpq_rule_*` in the models lane, and `test_quoteproposalcpq_submit_approval_*` in the views lane including the auto-reject branch.
-  - Revision creation clones and increments while preserving the original — `test_quoteproposalcpq_create_revision_clones_and_supersedes`.
-  - Comparison highlights added/removed lines and the price delta — `test_quoteproposalcpq_compare_*`. **The added/removed half of this bullet was a real gap and is now fixed**: a replaced line was reported as `unchanged`, hiding a removal and an addition inside a zero delta.
-  - Conversion creates the `scm.SalesOrder`, mapped lines, and `reserved` allocations — `test_quoteproposalcpq_convert_to_order_creates_a_sales_order` and the five ATP cases. **The allocation half was a real gap and is now built.**
-  - Opportunity advances to `closed_won` with a `sales.OpportunityOutcome` recorded — `test_quoteproposalcpq_conversion_records_the_won_outcome` and the two de-duplication cases. **The outcome half was a real gap and is now built.**
-  - Cross-tenant IDOR returns 404 for foreign quotes, lines, rules and bundles — the whole `test_quote_proposal_cpq_security.py` lane, object route by object route, including the POST-only workflow verbs.
-  - Mutations reject GET with 405 and CSRF is active — `test_quoteproposalcpq_..._is_post_only` on every verb, and `test_quoteproposalcpq_mutating_routes_enforce_csrf` with `enforce_csrf_checks=True`.
-  - No template comment leaks — `test_quoteproposalcpq_no_cpq_template_leaks_a_raw_django_comment`, which also pins the on-disk template count so a new template cannot be added without being inventoried.
-  - All new `sales:*` URLs return 200 or 302.
-  - Content assertions: quote number (`CPQ-`), title, customer name, margin %, line items present in rendered HTML.
-  - Public quote portal route `/sales/quotes/portal/<token>/` accessible without authentication and displays proposal.
-  - E-signature submission on portal captures signer name, timestamp, IP, and transitions quote to `accepted`.
-  - Approval rule evaluation correctly gates quote when discount > threshold or margin < floor.
-  - Revision creation clones quote and increments revision number while preserving original.
-  - Version comparison correctly highlights added/removed lines and price delta.
-  - Quote-to-order conversion creates valid `scm.SalesOrder` with mapped `scm.SalesOrderLine` items and creates `scm.SalesOrderAllocation` records in `reserved` status.
-  - Opportunity advances to `closed_won` with `sales.OpportunityOutcome` recorded.
-  - Cross-tenant IDOR returns 404 for foreign tenant quotes, lines, rules, and bundle options.
-  - POST-only mutation guards reject GET with 405; CSRF protection active.
-  - No template comment leaks (`{#` or `{% comment`).
-- [x] Sidebar verification: `8.5` Live indicator active, all 5 bullet links functional.
-
----
-
-## Close-out
-
-- [x] Six review agents run serially, appending to `.claude/tasks/review-sales-8.5.md`:
-  `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
-- [x] Deduplicate, prioritize findings (Critical, Important, Minor), assign IDs, and commit review file. **37 findings: 12 critical, 15 important, 9 minor, plus C13 raised by the fixer itself.**
-- [x] `code-fixer` agent burns down findings one by one with single-file commits. **All 37 resolved.** C1-C12 and I1-I14 landed in the earlier fix waves; I15 was found already applied in `1a2bcce7` (verified at runtime, deliberately not re-edited) and M1-M9 were fixed in this pass.
-- [x] Tests written serially:
-  - `apps/sales/tests/test_quote_proposal_cpq_models.py` - 88 cases. **Owns the shared record factories** the other three lanes import.
-  - `apps/sales/tests/test_quote_proposal_cpq_forms.py` - 83 cases.
-  - `apps/sales/tests/test_quote_proposal_cpq_views.py` - 110 cases.
-  - `apps/sales/tests/test_quote_proposal_cpq_security.py` - 35 cases.
-- [x] Full test suite execution across `apps/sales/` passing cleanly. The four CPQ lanes were run individually and then the whole `apps/sales/tests/` directory unfiltered, so a shared-file regression could not hide behind a filter.
-- [x] Update `.claude/skills/sales/SKILL.md` with 8.5 CPQ models, routes, templates, services, and conventions.
-- [x] Update `README.md` to reflect Sub-module 8.5 Quote & Proposal Management (CPQ) built.
-- [x] Single file per git commit, PowerShell-safe syntax (`git add 'path'; git commit -m 'msg'`).
-
-### Close-out notes
-
-- **C13 is the finding the six reviewers structurally could not have caught.** The I9 pass itself introduced `select_related("currency")` on `QuoteApprovalRule` - a model whose only FK is `tenant` - so both approval-rule pages raised `FieldError` and 500-ed for every user. The broken state was already inside the `BASE...HEAD` diff the reviewers read, so nothing in a static review observed it rendering. It surfaced only by actually rendering every CPQ page through the test client. That is the strongest argument in the sequence for keeping a smoke step that asserts page CONTENT, not just status.
-- **Two test expectations were corrected against the real code rather than the code changed to match the test.** `cpq_recalc_quote_totals` measures margin against the **discounted** subtotal (180 - 60 = 120, not 140), which is correct: a margin measured on the gross subtotal would let a discount flatter the margin percentage. And the "nullable header fields are NULL" test was building a quote that the shared fixture had deliberately given an `owner`, so it now builds its own ownerless quote rather than weakening the assertion.
-- **Quote numbers restart per tenant, so `CPQ-00001` exists in every workspace.** Two security-lane tests initially used a quote number as a cross-tenant marker and produced false failures; they now brand the record by name. Recorded here because the next sub-module will hit the same trap.
-- **One test is skipped by design under `--no-migrations`**: the schema-drift check calls `makemigrations`, which that flag disables outright via an empty `MIGRATION_MODULES` map. It is a real check in a normal run and a skip in fast-iteration mode, not a weakened assertion.
-- `cpq_render_proposal_html` still writes `proposal_rendered_content` and `updated_at` on every call, so previewing a proposal remains a write on an HTTP GET. That is a denormalised HTML snapshot meant to track the quote, and I15 named the *status transition* specifically, so it was left in place and recorded as a decision rather than silently widened. Making GET strictly read-only needs a `persist=False` flag - a call for the user, not a drive-by.
-
-### Contract gaps found and closed after the review
-
-The Phase 4 review and the Phase 6 test lanes both passed while three contract requirements were still unimplemented. They were invisible to a reviewer reading a diff, and invisible to a test written from the code rather than from the contract, because the code was internally consistent - it just did less than the plan promised. All three are now built and covered.
-
-- **ATP soft reservation on conversion.** `todo.md` line 11391 and the verify list both required `scm.SalesOrderAllocation` rows in `reserved` status; the research rates the feature table-stakes. `cpq_convert_to_sales_order` created the order and its lines and nothing else. Now every converted line carrying a `scm.Item` is soft-reserved. No `StockMove` is posted - on-hand is untouched and only availability-to-promise drops, which is the allocation model's own stated contract, and inventing a second path for physical movement is the parallel-correction bug SCM 4.4's review found.
-  - **`scm.Location` has no `is_default` flag**, so the warehouse is resolved rather than flagged: an active, pickable `location_type="warehouse"`, preferring the lowest `pick_sequence` (that column already means "reserve from me first") then the lowest code for determinism. Adding a second way to say "the default" was rejected as forking the model.
-  - **A line that cannot be reserved is never silently dropped.** A service line with no `scm.Item` has no stock behind it, and a tenant with no warehouse configured has nowhere to reserve; both are counted and written onto the order as an ATP note, and the conversion message states how many lines were and were not reserved. Silent success would have been the same defect wearing a different hat.
-- **`sales.OpportunityOutcome` never recorded on conversion.** The verify list required it; the old code set `stage = "closed_won"` and stopped, so a closed deal carried no win/loss evidence and 8.4's accuracy report had no ground truth. The append-only outcome is now recorded, taking its reason from the tenant's own configured win catalog and creating one system reason only when none exists. It is recorded **once per opportunity** - two quotes converting onto the same deal must not double-count the win.
-- **Nine list filters named in the plan were never wired up**: `account`, `owner` and `currency` on the quote list (with a `none` bucket, since `owner` is a nullable FK), `line_type`, `product`, `item`, `is_optional` and `is_selected` on the line list, and `component_product` on the bundle list. Every FK id is `isdigit()`-guarded, every dropdown is tenant-scoped, and the Reset condition plus both pagination links carry the new parameters so filtering then paging does not drop the filter.
-
-### Why the review missed all three, and what that says about the sequence
-
-All three were *absent features*, not *broken features*. A reviewer reading `BASE...HEAD` diff cannot see code that was never written, and a test written from the code cannot fail on behaviour the code never had. The checks that would have caught them are the ones that read the **contract** rather than the implementation: the verify list at the end of this plan, and a smoke pass that asserts each contract bullet is *demonstrated* rather than each route merely *reachable*.
-
-### Two more gaps found while reconciling the verify list
-
-Reconciling this section's own verify list against the code turned up two further misses, both in the same class as the three above: a requirement stated in the plan that was never implemented, so no reviewer and no test had anything to fail against.
-
-- **The e-signature captured no IP.** The verify list says an acceptance records the signer name, timestamp, **IP** and moves the quote to `accepted`. The first, second and fourth all happened; the third did not — `CPQQuote` had no field for it and `quote_portal_sign` recorded nothing. For a legally-binding acceptance that address is the evidence a dispute over "who accepted this" actually turns on, so this was the least cosmetic of the misses.
-  - `signer_ip_address` is a `GenericIPAddressField`, `null`, `blank`, `editable=False`, populated from `request.META["REMOTE_ADDR"]` **and nothing else**. `X-Forwarded-For` is caller-supplied and this repo has no trusted-proxy list, so honouring it would write an attacker-chosen string into the evidentiary record of a binding acceptance. The field carries the same warning as `scm.PortalActivity.ip_address`, which is the same class of evidence, and both the quote workspace and the signed document say plainly that behind a proxy it is the proxy. The address is printed **on the signed artefact** as well as stored, because evidence the customer holds is worth more than evidence in a row.
-  - `apps/sales/migrations/0011_cpqquote_signer_ip_address.py`, one `AddField`, no index and no data migration — it is written once at signing and never queried as a set.
-- **The version comparison reported a replaced line as unchanged.** `cpq_compare_quote_versions` keys on line *position*, which is right (a quote may carry two lines with the same description, and pk is useless because revisions clone rows). But a matched position was always treated as the same line, so replacing the line in slot 20 — the ordinary way a revision is edited — paired the old line with the new one, found identical quantity and price, and reported `unchanged`. The comparison claimed nothing had moved while a removal and an addition were both hiding inside a zero delta. A description change at a shared position now splits into two rows.
-
-The second one is the argument for the first lesson in this section, restated: **the added/removed case was named in the plan's own verify list and no test covered it**, because the tests had been written from the code. A test written *from the verify list* failed on the first run and found the bug in one pass.
-
-### The 8.4 close-out is still unticked
-
-Lines 11156-11184 (8.4's Verify and Close-out) were found in the same sweep and left alone: 8.4 is built and green, but its boxes were never ticked either, and that is a separate module's bookkeeping. It is flagged here rather than silently ticked, because ticking a module's close-out from outside that module's own build is how a checklist stops meaning anything.
-
----
-
-## Later passes / deferred
-
-**Deferred / external integrations (from research):**
-- **3D / Visual CAD Product Configuration**: Visual 3D model rendering and parametric CAD generation during quote assembly (deferred to future manufacturing CPQ extensions).
-- **Payment Gateway Direct Charge from Portal**: Direct credit card / ACH deposit capture via Stripe / Authorize.net on the quote portal (deferred to payment integration hub).
-- **DocuSign / Adobe Sign External API Sync**: Sending proposals via third-party external signature platforms rather than NavERP's built-in cryptographic web portal signing.
-- **Complex Stair-Step Metered Billing Tiers**: Advanced consumption-based usage rating schedules (deferred to Sub-module 8.15 Contract & Subscription Management).
-
-**Parked to sibling sub-modules:**
-- **8.6 Order Management**: Commercial change orders, amendments with downstream impact analysis, cancellations, and ASC 606 revenue recognition schedules. 8.5 strictly hands off the created order to 8.6 / SCM 4.5.
-- **8.7 Territory & Quota Management**: Territory assignment algorithms, quota rebalancing, and quota modeling.
-- **8.15 Contract & Subscription Management**: Full legal clause redlining, contract negotiation workflow, subscription recurring renewals, and mid-term co-terming.
-- **8.18 Integration & API Hub**: Third-party external CPQ connectors (Salesforce/SAP/EDI quote sync).
-- **8.19 Master Data & Configuration**: Enterprise catalog master administration and global price book restructuring.
-
----
-
-## Review notes
-(filled in at the end)
-
-
+- [x] Six review agents, **one at a time**, each appending to `.claude/tasks/review-sales-8.4.md`: `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`. Then **dedupe, sort Critical → Important → Minor, assign IDs (C1, I3, M7) and commit the file**. If one returns nothing usable, re-run **that one**.
+- [x] `code-fixer` agent burns the findings down in ID order, one commit per file, marking each `[x] fixed` / `[~] skipped — reason`. **The main session does not apply findings itself.**
+- [x] Tests, serial: contract + `conftest.py` (one owner), then `test_salesforecasting_models.py` → `test_salesforecasting_forms.py` → `test_salesforecasting_views.py` → `test_salesforecasting_security.py`, one file at a time, each committed on its own. Then the **full unfiltered** app suite — never a `-k` filter (L47).
+- [x] Update **`.claude/skills/sales/SKILL.md`** with 8.4's models / routes / templates / seeder rows / conventions (the file exists from 8.1–8.3; **update, do not create**).
+- [x] Update `README.md` — mark **8.4 Sales Forecasting** built.
+- [x] **One file per git commit, PowerShell-safe** (`git add 'path'; git commit -m 'msg'`, `;` not `&&`, explicit paths, **never `git push`**). Each backend file, each template, each shared-file surgical edit, each test file gets its own commit. Empty `__init__.py` files still get their own commit.
+
+
+### Close-out reconciliation (2026-09-27)
+
+Every box above is now resolved. 58 were ticked after verifying the work against the code; the
+"you cannot adjust a level above you" box is marked `[~]` and stays open because the rule is
+**implemented but unreachable** (see the paragraph on it and C2 in `review-sales-8.4.md`), and the
+8.2 carry-forward note was rewritten because it had gone stale.
+
+**Auditing 8.4 against its own verify list found one real defect, and it is the same class of thing
+8.5 turned up twice.** The plan names the level rule as security-sensitive; the code implements it
+correctly; and the `@tenant_admin_required` decorator above it makes it dead. Nothing was wrong in
+the diff, so the six reviewers read past it — exactly like the missing ATP reservation and the
+missing e-signature IP in 8.5. What found it was writing the test the verify list asks for and the
+security lane did not have.
+
+That is now three for three, and the pattern is worth stating once: **an absent or inert rule is
+invisible to a diff review and to tests written from the code.** The three defects were found by
+reading the *contract* and writing tests from *it* — the ATP reservation, the e-signature address,
+and this level rule. Any future sub-module that names a rule in its plan should have a test written
+from that sentence, not from the function that implements it.
+
+**The stale-note lesson, from the 8.2 carry-forward.** That note said 8.2's security lane was
+untracked and its SKILL/README sections were missing, so the sales suite was not green at 8.4
+close-out. All three had since been fixed, and the note was never re-verified — so a plan written to
+prevent chasing someone else's residue would have sent the next reader chasing a failure that no
+longer exists. Actioned notes are not the same as accurate ones.
