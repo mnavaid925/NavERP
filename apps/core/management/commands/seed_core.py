@@ -1190,7 +1190,7 @@ class Command(BaseCommand):
         everything added to this command after the fact unreachable in workspaces that already
         existed.
         """
-        from apps.core.models import VulnerabilityFinding
+        from apps.core.models import REMEDIATION_SLA_DAYS, VulnerabilityFinding
 
         if not VulnerabilityFinding.objects.filter(tenant=tenant).exists():
             VulnerabilityFinding.objects.create(
@@ -1206,8 +1206,11 @@ class Command(BaseCommand):
                 fixed_in_version="1.0.1",
                 status="open",
                 first_seen_at=timezone.now() - datetime.timedelta(days=3),
+                # The SLA comes from the SAME constant the page prints beside it, rather than a
+                # literal 90. Hard-coding it meant the seeded row silently disagreed with the policy
+                # shown on the page the moment REMEDIATION_SLA_DAYS["medium"] moved.
                 due_on=(timezone.now() - datetime.timedelta(days=3)).date()
-                + datetime.timedelta(days=90),
+                + datetime.timedelta(days=REMEDIATION_SLA_DAYS["medium"]),
                 scan_frequency="manual",
                 evidence="Seeded as an EXAMPLE of how a hand-entered advisory is recorded. "
                          "NavERP ran no scanner and performed no dependency audit to produce "
