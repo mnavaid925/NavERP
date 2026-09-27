@@ -10671,6 +10671,79 @@ convention (`_`-prefixed inside the folder that includes them — cf.
 - [ ] Migration number **`0026`** pinned in the contract with the L43 rule beside it: `apps/projects/migrations/` ends at `0025_projectwebhookdelivery_pwh_del_tnt_att_idx_and_more.py` (listed 2026-09-20); re-list immediately before `makemigrations` and, if a sibling session has taken `0026`, take the next free number and amend the CONTRACT rather than the code.
 - [ ] The credential ruling pinned: `credential` is a **Fernet cipher** via `apps/core/crypto.py` (`encrypt` idempotent — `:71–82`; `decrypt` strict, raises `ImproperlyConfigured` on a rotated key — `:96–106`); single write choke point in `save()`; writer `set_credential()`; readers `get_credential()` / `credential_masked` (degrades to `"(set — undecryptable with the current key)"`, never raises) / `credential_set`; `credential` appears in **no** template, **no** `list_display`, **no** audit `changes` — the one exception is the session-once reveal on `ixc_detail` (research §4.6 + §6.2: writing the ruling into the model docstring is mandatory whichever way it goes).
 - [ ] The context-source ruling pinned (see §3): hand-rolled context dicts for every page whose contract key is `connectors` / `mappings` / `jobs` / `runs` / `connector` / `mapping` / `job` / `run`, because `crud_*` cannot supply them. If the contract instead standardises on `object_list` / `obj`, the research §5.6 key list must be re-pinned first — never ship a template reading `connectors` while the view injects `object_list` (L7/L8).
+
+---
+
+## Phase 6 — Tests (complete, 0.19)
+
+Four lanes, committed one file each, in the required order. Every test is `test_licensing_*` and
+every helper `lic019_*`, so the next sub-module appending nearby cannot shadow them; the 0.1
+fixtures were left untouched (L43) and 0.19's were appended to the shared `conftest.py`.
+
+| File | Covers |
+|---|---|
+| `test_licensing_models.py` | prefixes, by-identity choice sharing, derived-vs-stored, the [RULING] 2 guard, the `"0"` UNMETERED sentinel, I15 tenant consistency |
+| `test_licensing_forms.py` | the `TenantModelForm` contract, L22 one-writer exclusions, the three duplicate guards on create AND edit, the I10 tri-state |
+| `test_licensing_views.py` | 24 routes, content-not-just-status, both boards empty and loaded, junk params, the verbs, query counts |
+| `test_licensing_security.py` | IDOR on GET and POST, the role gate, the method gate, CSRF, and the honesty band on the template FILES |
+
+**Result: 375 tests, 0 failures** on the full unfiltered `apps/tenants/tests` (108 pre-existing 0.1
+tests + 267 new).
+
+### The Phase 6 tests found a real Critical — C4
+
+`test_licensing_an_uppercase_duplicate_seat_is_a_keyed_error_not_an_integrity_error` failed, and it
+was **not** a bad test. The [RULING] 8 duplicate guard in `LicenseAssignmentForm.clean()` compared the
+**raw posted slug**, so a POST of `module_slug="ACCOUNTING"` found no clash against a stored
+`"accounting"`, the form validated, `save()` normalised it, and the `unique_together` raised
+`IntegrityError` — an HTTP 500 on a duplicate POST, which is the exact defect [RULING] 8 exists to
+prevent.
+
+The model-level guard could not cover it: `TenantModelForm` keeps `tenant` on the **form**, never on
+the instance, and `ModelForm._post_clean()` runs `instance.full_clean()` during `is_valid()` — before
+the view assigns `obj.tenant`. So `self.tenant_id` is still `None` and `LicenseAssignment.clean()`
+short-circuits. **The form is the only place the tenant is known while the row is being validated**,
+so the normalisation has to happen there too. Fixed in `apps/tenants/forms/LicenseAssignment.py`.
+
+Six review passes did not catch this, because each read the code rather than driving it, and the
+model docstring already *claimed* the fix existed. A docstring asserting a fix is not a fix.
+
+### Two other things Phase 6 corrected
+
+- **`reverse()` takes positional `args`, not a `pk=` kwarg.** A kwarg is a `TypeError`, and inside a
+  loop it reads as a broken view rather than a broken test.
+- **A foreign row is 404 on GET but 405 on the six `@require_POST` URLs**, because the method check is
+  the outermost decorator. Asserting 404 everywhere was the wrong test, not a wrong gate.
+
+### Running the suite here
+
+A cold migration-backed run of 14 apps takes **several minutes** and exceeds the command timeout. Use
+`--no-migrations` while iterating (seconds instead) and run the full unfiltered suite once without it
+before declaring done (L47 — never `-k`). Do **not** kill a run part-way and restart: that discards
+the migration work and can leave a partial test DB.
+
+## Phase 7 — Close-out (complete, 0.19)
+
+- `.claude/skills/tenants/SKILL.md` **authored**. It did not exist — `core` has a skill and `tenants`
+  did not, so 0.1 shipped without one. `next-module` says to *update* an existing skill, but with
+  nothing there, creating it is the correct action rather than a duplicate.
+- Review summary reconciled: it claimed "all resolved" three lines above a per-finding list recording
+  M3/M4/M6 as skipped-with-a-reason. Now reads **3 fixed / 3 deliberately skipped**, naming which.
+- Contract **[RULING] 10** added: the M5 direct-`render()` decision existed only in the review prose —
+  the contract still specified `crud_detail` at all four `_detail` lines, and `crud_detail` is in fact
+  not exported by `views/_common.py`. The contract now says what the code does, and why.
+- `README.md` / `NavERP.md` / `NavERP-ERD.md`: **19 of 21** built; 0.19 covers **4 of 5** bullets.
+
+### Final gates (0.19)
+
+| Gate | Result |
+|---|---|
+| `manage.py check` | clean — 0 issues |
+| `makemigrations --check --dry-run` | No changes detected |
+| `temp/audit_integrity.py` | **6/6**, "all checks passed" |
+| `seed_tenants` run twice | idempotent — "0.19 licensing already complete" for all 6 tenants |
+| Full unfiltered `apps/tenants/tests` | **375 passed, 0 failed** |
+
 - [ ] `DecimalField` appears **nowhere** in 7.18 — no money: the only numerics are `batch_size`, the record counters, `attempt_no` and `duration_ms` (research §5.0). State it so nobody invents a cost column.
 - [ ] `UNVERIFIED` flags carried as flags, never asserted: (a) nothing in `seed_projects.py` mentions a 7.16 helper as of 2026-09-20, so re-read `_seed_tenant` and the `--flush` block immediately before editing them in case the 7.16 session lands `_reporting*` there (research §7.4); (b) `SYNC_BACKOFF_SECONDS = (0, 5, 300, 1800, 7200, 18000, 36000, 36000)` is cited from the two shipped in-repo adoptions (`scm` `DELIVERY_BACKOFF_SECONDS`, `inventory` `SYNC_BACKOFF_SECONDS`) and was not re-fetched from Svix in that run (research §7.4); (c) 7.16's board render paths were not read (their files are another session's).
 - [ ] Audit verbs pinned inside `AuditLog.action`'s `varchar(10)`: `create`, `update`, `delete`, `toggle`, `rotate`, `test`, `run`, `retry` (research §5.9). Do NOT invent longer ones; the verb detail goes in `changes` (`{"verb": …, "from": …, "to": …}`).
