@@ -351,14 +351,26 @@ def quote_portal_sign(request, token):
         quote.signer_email = form.cleaned_data["signer_email"]
         quote.signature_data = form.cleaned_data["signature_data"]
         quote.signed_at = timezone.now()
+        # REMOTE_ADDR only -- never X-Forwarded-For. See the security note on
+        # CPQQuote.signer_ip_address: a client-supplied header written into the
+        # record of a binding acceptance is worse than no address at all.
+        quote.signer_ip_address = request.META.get("REMOTE_ADDR") or None
         quote.status = "accepted"
-        quote.save(update_fields=["signer_name", "signer_title", "signer_email", "signature_data", "signed_at", "status", "updated_at"])
+        quote.save(update_fields=[
+            "signer_name", "signer_title", "signer_email", "signature_data",
+            "signed_at", "signer_ip_address", "status", "updated_at",
+        ])
 
-        # Re-render HTML with signature block
+        # Re-render HTML with signature block. The snapshot is re-rendered AFTER
+        # the IP is stamped so the signed document itself carries the evidence.
         cpq_render_proposal_html(quote)
 
         # Audit
-        write_audit_log(None, quote, "portal_sign", {"action": "portal_sign", "signer_name": quote.signer_name}, tenant=quote.tenant)
+        write_audit_log(None, quote, "portal_sign", {
+            "action": "portal_sign",
+            "signer_name": quote.signer_name,
+            "signer_ip_address": quote.signer_ip_address,
+        }, tenant=quote.tenant)
         messages.success(request, "Thank you! The proposal has been digitally signed and accepted.")
         return redirect("sales:quote_portal_view", token=token)
 
