@@ -1,60 +1,60 @@
-# Review — Sub-module 8.4 Sales Forecasting (Module 8, sales) — code-reviewer pass
+# Review Ã¢â‚¬â€ Sub-module 8.4 Sales Forecasting (Module 8, sales) Ã¢â‚¬â€ code-reviewer pass
 BASE 6edc6178 .. HEAD (4fe48513)
 
 Scope reviewed: `apps/sales/models/SalesForecasting/*`, `apps/sales/forms/SalesForecasting/*`,
 `apps/sales/views/SalesForecasting/*`, `apps/sales/forecast_services.py`, `apps/sales/urls/*`,
 `apps/sales/admin.py`, `apps/sales/management/commands/seed_sales.py`, `apps/core/navigation.py`,
 all 16 files under `templates/sales/salesforecasting/**`, against
-`.claude/tasks/contract-sales-8.4.md` §0–§8.
+`.claude/tasks/contract-sales-8.4.md` Ã‚Â§0Ã¢â‚¬â€œÃ‚Â§8.
 
 ---
 
 ## Critical
 
-- [x] fixed — C1.  `apps/sales/views/SalesForecasting/ForecastPeriods.py:326` — the stale-instance bug a
+- [x] fixed Ã¢â‚¬â€ C1.  `apps/sales/views/SalesForecasting/ForecastPeriods.py:326` Ã¢â‚¬â€ the stale-instance bug a
   previous pass reported is **still present**. `forecast_period_edit` builds
   `ForecastPeriodForm(request.POST, instance=obj)`, so `form.instance is obj`; `form.is_valid()`
-  runs `_post_clean()` → `Model.full_clean()` → `ForecastPeriod.clean()`
+  runs `_post_clean()` Ã¢â€ â€™ `Model.full_clean()` Ã¢â€ â€™ `ForecastPeriod.clean()`
   (`models/.../ForecastPeriods.py:181-183`), which **writes the freshly derived `start_date` /
-  `end_date` onto `form.instance`**. Line 326 then does `form.instance = locked` — a *separately
-  loaded* row from `ForecastPeriod.objects.select_for_update().get(pk=obj.pk, …)`, whose
+  `end_date` onto `form.instance`**. Line 326 then does `form.instance = locked` Ã¢â‚¬â€ a *separately
+  loaded* row from `ForecastPeriod.objects.select_for_update().get(pk=obj.pk, Ã¢â‚¬Â¦)`, whose
   `start_date`/`end_date` are the **old stored** values. Lines 327-334 copy only
   `form._meta.fields`; `start_date` and `end_date` are `editable=False` (model lines 72-73) so
   they are structurally absent from `form.fields` and are **never copied**. Line 335
   `form.save(commit=False)` returns `locked`, and `locked.save()` reaches
   `ForecastPeriod.save()` (model lines 187-192), whose guard is
-  `if self.start_date is None or self.end_date is None: recompute` — the freshly loaded row is
+  `if self.start_date is None or self.end_date is None: recompute` Ã¢â‚¬â€ the freshly loaded row is
   non-`None`, so the recompute is **skipped**. Net effect: a period edited from Q1 2025 to Q3 2025
   saves `period_type='quarter', period_year=2025, period_number=3` with the **Q1 window**. The row
   now contradicts its own type/year/number and no exception is raised.
   Corruption trace:
-  - `period_elapsed_pct` (`models/.../ForecastPeriods.py:132-149`) reads the stale window → wrong
-    denominator → wrong elapsed % on the list and detail pages.
+  - `period_elapsed_pct` (`models/.../ForecastPeriods.py:132-149`) reads the stale window Ã¢â€ â€™ wrong
+    denominator Ã¢â€ â€™ wrong elapsed % on the list and detail pages.
   - `ForecastSubmission.pace_pct` (`models/.../ForecastSubmissions.py:215-219`) is
-    `self.period.period_elapsed_pct` → `ForecastBoards._band()`
+    `self.period.period_elapsed_pct` Ã¢â€ â€™ `ForecastBoards._band()`
     (`views/.../ForecastBoards.py:378-383`) bands every rep on it, so reps flip Ahead/Behind on
     `forecast_attainment` with no underlying change, and `row["pace_pct"]` (line 373) is the same
     wrong figure.
-  - `is_current` (`models/.../ForecastPeriods.py:127-129`) → the "Current" badge
+  - `is_current` (`models/.../ForecastPeriods.py:127-129`) Ã¢â€ â€™ the "Current" badge
     (`forecastperiod/list.html:15`) and the `stats.current` aggregate
     (`views/.../ForecastPeriods.py:118`) both misfire.
   - `_period_window()` (`forecast_services.py:71-80`) returns the stale pair and
     `_open_opportunities()` (`forecast_services.py:117-119`) filters
-    `close_date__gte=window[0], close_date__lte=window[1]` on it → `weighted_amount` is snapshotted
+    `close_date__gte=window[0], close_date__lte=window[1]` on it Ã¢â€ â€™ `weighted_amount` is snapshotted
     from the wrong set of deals on the next `forecast_submission_submit`
     (`views/.../ForecastSubmissions.py:409-412`).
   - The same window feeds `won.filter(closed_at__date__range=window)`
-    (`forecast_services.py:183-192`) → `actual_amount`, which in turn feeds `variance_amount`,
+    (`forecast_services.py:183-192`) Ã¢â€ â€™ `actual_amount`, which in turn feeds `variance_amount`,
     `attainment_pct`, the board's `variance_amount` and the whole accuracy page.
   - `_periods(tenant, only_past=True)` (`views/.../ForecastBoards.py:95-97`) filters
-    `end_date__lt=today` on the stale column → a period edited forward silently disappears from
+    `end_date__lt=today` on the stale column Ã¢â€ â€™ a period edited forward silently disappears from
     `forecast_accuracy`.
 
-- [x] fixed — C2.  `templates/sales/salesforecasting/forecastadjustment/detail.html:24` — an entire
+- [x] fixed Ã¢â‚¬â€ C2.  `templates/sales/salesforecasting/forecastadjustment/detail.html:24` Ã¢â‚¬â€ an entire
   fragment sits **after `{% endblock %}` (line 22)** and is therefore **silently discarded** by
   `{% extends "base.html" %}` (line 1). The dead line is
-  `</dl>{% if obj.note %}<p …><strong>Note:</strong> {{ obj.note|linebreaksbr }}</p>{% endif %}<p …>The system value is a snapshot …</p></div></div>`
-  — the manager's **override note never renders at all**, and the only two closing tags that
+  `</dl>{% if obj.note %}<p Ã¢â‚¬Â¦><strong>Note:</strong> {{ obj.note|linebreaksbr }}</p>{% endif %}<p Ã¢â‚¬Â¦>The system value is a snapshot Ã¢â‚¬Â¦</p></div></div>`
+  Ã¢â‚¬â€ the manager's **override note never renders at all**, and the only two closing tags that
   balance the first card die with it. The damage compounds:
   - line 7 opens `<div class="card">` + `<div class="card-body">` + `<dl class="detail-grid">` and
     closes none of them inside the block;
@@ -67,27 +67,27 @@ all 16 files under `templates/sales/salesforecasting/**`, against
     `<div class="lg:col-span-2 space-y-4">` (line 6) are **never closed**, so the whole
     Actions / State / Reset sidebar (`<div class="space-y-4">`, line 13) collapses into the left
     column and the 3-column grid never closes.
-  All of this returns **HTTP 200** — the page renders, the note is just gone and the layout is
+  All of this returns **HTTP 200** Ã¢â‚¬â€ the page renders, the note is just gone and the layout is
   wrong.
-  **Fix** — move line 24's content up to immediately after line 8 (closing the `<dl>`, the
+  **Fix** Ã¢â‚¬â€ move line 24's content up to immediately after line 8 (closing the `<dl>`, the
   `card-body` and the `card`), give the "What it targets" card its own `</dl></div></div>`, and
   make lines 12/20/21 close `lg:col-span-2` and `grid` exactly once each. Re-run the
   `html.parser` balance check (`LEFTOVER OPEN == []`, no unmatched closes) as part of the fix;
   `templates/sales/salesforecasting/forecastperiod/detail.html:14-23` is the correct reference.
 
-- [x] fixed — C3.  `templates/sales/salesforecasting/forecastscenario/detail.html:7` — the first card's
+- [x] fixed Ã¢â‚¬â€ C3.  `templates/sales/salesforecasting/forecastscenario/detail.html:7` Ã¢â‚¬â€ the first card's
   `<div class="card">` / `<div class="card-body">` are **never closed**; line 9 closes only the
   `<dl>`. Consequence: the "Projection from the live forecast" card (line 10) and every card after
-  it — "The real forecast is untouched" (line 22), "Current plan" (line 23), "Apply the period"
-  (line 26), "Rollup axis" (line 30) — all render **as children of the "The scenario" card body**
+  it Ã¢â‚¬â€ "The real forecast is untouched" (line 22), "Current plan" (line 23), "Apply the period"
+  (line 26), "Rollup axis" (line 30) Ã¢â‚¬â€ all render **as children of the "The scenario" card body**
   instead of as siblings. `<div class="grid lg:grid-cols-3 gap-4">` (line 5) is also never closed
   (verified: `LEFTOVER OPEN == [('div', 5)]`). The page returns 200 with a visibly wrong card
   nesting and an unterminated grid container.
-  **Fix** — close the first card after its `<dl>` content on line 9
-  (`</dl>…</p></div></div>`), and add the missing `</div>` for the grid container before
+  **Fix** Ã¢â‚¬â€ close the first card after its `<dl>` content on line 9
+  (`</dl>Ã¢â‚¬Â¦</p></div></div>`), and add the missing `</div>` for the grid container before
   `{% endblock %}` on line 31. `forecastperiod/detail.html:14-23` is the correct reference.
 
-- [x] fixed — C4.  `apps/sales/forecast_services.py:117-119` — `_open_opportunities()` filters
+- [x] fixed Ã¢â‚¬â€ C4.  `apps/sales/forecast_services.py:117-119` Ã¢â‚¬â€ `_open_opportunities()` filters
   `close_date__gte=window[0], close_date__lte=window[1]`, but `crm.Opportunity.close_date` is
   `models.DateField(null=True, blank=True)`
   (`apps/crm/models/SalesForceAutomation/Opportunities.py:36`). A NULL `close_date` fails both
@@ -98,74 +98,74 @@ all 16 files under `templates/sales/salesforecasting/**`, against
 
 ## Important
 
-- [x] fixed — I1. `apps/sales/views/SalesForecasting/ForecastBoards.py:454` and `:503` — `bias_values`
+- [x] fixed Ã¢â‚¬â€ I1. `apps/sales/views/SalesForecasting/ForecastBoards.py:454` and `:503` Ã¢â‚¬â€ `bias_values`
   is a single list fed by **two different populations**. Line 454 appends `bias_pct`, a
   *period-level* tenant-wide bias; line 503 appends `mean_bias`, a *rep-level* mean. Line 527
   then computes `mean_bias_pct = sum(bias_values) / Decimal(len(bias_values))` and the stat card
   "Mean bias" (`accuracy.html:5`) prints it. With 5 periods and 10 reps the headline number is a
   15-way average that double-counts the same underlying submissions and weights reps against
-  periods arbitrarily. **Fix** — keep two lists: compute `mean_bias_pct` from the period-level
+  periods arbitrarily. **Fix** Ã¢â‚¬â€ keep two lists: compute `mean_bias_pct` from the period-level
   values only (and expose a separate `mean_owner_bias_pct` from the owner values), or report
   `mean_bias_pct` as the unweighted mean of `bias_rows` alone.
 
-- [x] fixed — I2. `apps/sales/views/SalesForecasting/ForecastBoards.py:426-433` — `forecast_accuracy`
+- [x] fixed Ã¢â‚¬â€ I2. `apps/sales/views/SalesForecasting/ForecastBoards.py:426-433` Ã¢â‚¬â€ `forecast_accuracy`
   parses and validates `?period=` into `selected_period_id`, hands it to the template (line 536)
-  … and then **never uses it**: the report always aggregates every past period.
+  Ã¢â‚¬Â¦ and then **never uses it**: the report always aggregates every past period.
   `templates/sales/salesforecasting/forecastboard/accuracy.html` has no `<form method="get">` and
   no period dropdown at all, so the pinned `period_choices` key is dead too. Net effect: a
   bookmarked `?period=7` silently returns the tenant-wide report while the URL claims otherwise,
-  and two contract-pinned context keys are never rendered. **Fix** — either render the period
+  and two contract-pinned context keys are never rendered. **Fix** Ã¢â‚¬â€ either render the period
   dropdown on `accuracy.html` and honour `selected_period_id` by narrowing `periods` to it
   (falling back to all past periods when absent), or drop the parameter and the two keys and
-  record the deviation from contract §5.4 (contract line 562).
+  record the deviation from contract Ã‚Â§5.4 (contract line 562).
 
-- [x] fixed — I3. `apps/sales/views/SalesForecasting/ForecastBoards.py:125-151` — `_submissions()`,
+- [x] fixed Ã¢â‚¬â€ I3. `apps/sales/views/SalesForecasting/ForecastBoards.py:125-151` Ã¢â‚¬â€ `_submissions()`,
   `_adjustments()` and `_scenarios()` are **unbounded**; none applies `MAX_ROWS`, directly
   contradicting the module docstring at lines 59-62 ("the lists are bounded so a huge workspace
   cannot pull an unbounded set into memory"). `forecast_call` (line 557) then materialises every
-  submission *and* every adjustment of a period into per-row dicts. **Fix** — add `[:MAX_ROWS]` to
+  submission *and* every adjustment of a period into per-row dicts. **Fix** Ã¢â‚¬â€ add `[:MAX_ROWS]` to
   all three helpers and surface the truncation in `caveats` (the pattern the 0.17 firing board
   already uses: "this list is capped at N").
 
-- [x] fixed — I4. `apps/sales/views/SalesForecasting/ForecastBoards.py:441-455` — the accuracy loop
-  runs `_submissions(tenant, period)` **and** `_adjustments(tenant, period, …)` per period, over
+- [x] fixed Ã¢â‚¬â€ I4. `apps/sales/views/SalesForecasting/ForecastBoards.py:441-455` Ã¢â‚¬â€ the accuracy loop
+  runs `_submissions(tenant, period)` **and** `_adjustments(tenant, period, Ã¢â‚¬Â¦)` per period, over
   `periods[:MAX_PERIODS]` = up to **200** periods: up to 400 queries plus 200 round trips for one
 
-- [x] fixed — I6. `apps/sales/views/SalesForecasting/ForecastPeriods.py:201-218` — `submissions` is
+- [x] fixed Ã¢â‚¬â€ I6. `apps/sales/views/SalesForecasting/ForecastPeriods.py:201-218` Ã¢â‚¬â€ `submissions` is
   sliced to `[:200]` (line 204) and that **capped list** is what `_period_rollups()` sums, so
   `category_totals`, `currency_rollups` and `total_forecast_amount` silently exclude every
-  submission past the 200th — while `submissions_count` (line 206) is the *true* count, so the two
-  numbers on the same page disagree with no explanation. **Fix** — compute the rollups from
+  submission past the 200th Ã¢â‚¬â€ while `submissions_count` (line 206) is the *true* count, so the two
+  numbers on the same page disagree with no explanation. **Fix** Ã¢â‚¬â€ compute the rollups from
   `values(...).annotate(Sum(...))` over the untruncated queryset, and add a caveat when
   `submissions_count > len(submissions)`.
 
-- [x] fixed — I7. `apps/sales/views/SalesForecasting/ForecastBoards.py:97` — `only_past` uses
+- [x] fixed Ã¢â‚¬â€ I7. `apps/sales/views/SalesForecasting/ForecastBoards.py:97` Ã¢â‚¬â€ `only_past` uses
   `end_date__lt=today`, which **excludes a period on its own final day**. That is an off-by-one
-  against the model, which treats the same day as `today >= end_date` → `period_elapsed_pct == 100`
+  against the model, which treats the same day as `today >= end_date` Ã¢â€ â€™ `period_elapsed_pct == 100`
   (`models/.../ForecastPeriods.py:147`) and `is_current == True` (line 129). A period whose actuals
   have landed is missing from the accuracy report on its last day and only appears the day after.
-  **Fix** — use `end_date__lte=today` (or `Q(end_date__lt=today) | Q(end_date=today,
+  **Fix** Ã¢â‚¬â€ use `end_date__lte=today` (or `Q(end_date__lt=today) | Q(end_date=today,
   start_date__lte=today)`), matching the `period_elapsed_pct` definition.
 
-- [x] fixed — I8. `apps/sales/views/SalesForecasting/ForecastBoards.py:487-496` — the "Manager
+- [x] fixed Ã¢â‚¬â€ I8. `apps/sales/views/SalesForecasting/ForecastBoards.py:487-496` Ã¢â‚¬â€ the "Manager
   overrides by rep" table sums `adjustment.net_delta` (a **money** amount,
   `adjusted_value - original_value`) per rep with **no currency label and no caveat**.
   `ForecastAdjustment` carries no currency field, so on a tenant whose calls sit in several
-  currencies this is a cross-currency sum presented as one figure — a direct L29 violation, and
+  currencies this is a cross-currency sum presented as one figure Ã¢â‚¬â€ a direct L29 violation, and
   the only report on the page that does it (the board at least emits a currency caveat, lines
-  253-258). It is also a contract break: contract §5.4 (contract line 562) pins `sandbagging_rows`
-  as `{"owner", "early_vs_final_pct", "adjustment_count"}` — a *percentage* — and the build
+  253-258). It is also a contract break: contract Ã‚Â§5.4 (contract line 562) pins `sandbagging_rows`
+  as `{"owner", "early_vs_final_pct", "adjustment_count"}` Ã¢â‚¬â€ a *percentage* Ã¢â‚¬â€ and the build
   substituted `net_delta`, an absolute amount, then changed `accuracy.html:12` to match.
-  **Fix** — compute the pinned `early_vs_final_pct` (mean signed % move per rep, `None`-guarded);
+  **Fix** Ã¢â‚¬â€ compute the pinned `early_vs_final_pct` (mean signed % move per rep, `None`-guarded);
   if the absolute figure is also wanted, bucket it by the period's `reporting_currency` and add a
   `currency_code` key plus a caveat exactly as the board does.
 
-- [x] fixed — I9. `templates/sales/salesforecasting/forecastboard/call.html:4` — the "New call" CTA is
+- [x] fixed Ã¢â‚¬â€ I9. `templates/sales/salesforecasting/forecastboard/call.html:4` Ã¢â‚¬â€ the "New call" CTA is
   gated on `{% if can_review and period %}`, and `can_review` is `_is_tenant_admin(request.user)`
-  (`views/.../ForecastBoards.py:612`). A rep — the one person who is supposed to *make* the
-  forecast call — never sees the button on the page whose entire purpose is the forecast call,
+  (`views/.../ForecastBoards.py:612`). A rep Ã¢â‚¬â€ the one person who is supposed to *make* the
+  forecast call Ã¢â‚¬â€ never sees the button on the page whose entire purpose is the forecast call,
   while `forecast_submission_create` is `@login_required` and would happily serve them. This is an
-  inverted role check, not just a missing button. **Fix** — drop the `can_review` condition (keep
+  inverted role check, not just a missing button. **Fix** Ã¢â‚¬â€ drop the `can_review` condition (keep
   `{% if period %}` so the link has a period to forecast into), or gate on "this user may create a
   call", which is the actual precondition.
 
@@ -174,72 +174,72 @@ all 16 files under `templates/sales/salesforecasting/**`, against
 
 ## Minor
 
-- [x] fixed — M1. `_is_tenant_admin()` is copy-pasted into four sibling modules —
-  `views/SalesForecasting/ForecastPeriods.py:68`, `…/ForecastSubmissions.py:64`,
-  `…/ForecastAdjustments.py:48`, `…/ForecastScenarios.py:62` — and `ForecastBoards.py:31` then
+- [x] fixed Ã¢â‚¬â€ M1. `_is_tenant_admin()` is copy-pasted into four sibling modules Ã¢â‚¬â€
+  `views/SalesForecasting/ForecastPeriods.py:68`, `Ã¢â‚¬Â¦/ForecastSubmissions.py:64`,
+  `Ã¢â‚¬Â¦/ForecastAdjustments.py:48`, `Ã¢â‚¬Â¦/ForecastScenarios.py:62` Ã¢â‚¬â€ and `ForecastBoards.py:31` then
   imports the private copy from `ForecastPeriods`. Four copies of a role check is four things to
-  drift, and the import makes the boards module depend on a sibling's private name. **Fix** — move
+  drift, and the import makes the boards module depend on a sibling's private name. **Fix** Ã¢â‚¬â€ move
   it to `apps/sales/views/_helpers.py` (or `_common.py`) and import it everywhere.
 
-- [x] fixed — M2. `templates/sales/salesforecasting/forecastboard/call.html:9` — the badge ladder
+- [x] fixed Ã¢â‚¬â€ M2. `templates/sales/salesforecasting/forecastboard/call.html:9` Ã¢â‚¬â€ the badge ladder
   tests `row.status == 'reverted'`, which is **not** in `ForecastSubmission.STATUS_CHOICES`
   (`models/.../ForecastSubmissions.py:67-73`: draft/submitted/approved/rejected/locked). The branch
-  is unreachable; a reverted call falls to the `{% else %}` muted badge. **Fix** — delete the
+  is unreachable; a reverted call falls to the `{% else %}` muted badge. **Fix** Ã¢â‚¬â€ delete the
   `'reverted'` branch (reverting is an *adjustment* state, not a submission state;
   `mark_reverted()` sends the call back to `draft`).
 
-- [x] fixed — M3. `templates/sales/salesforecasting/forecastboard/attainment.html:6` — the third stat
+- [x] fixed Ã¢â‚¬â€ M3. `templates/sales/salesforecasting/forecastboard/attainment.html:6` Ã¢â‚¬â€ the third stat
   card reads `{{ stats.on_pace }}` under the label **"No quota"**, while `stats["on_pace"]` and
   `stats["no_quota"]` are the *same* count (`views/.../ForecastBoards.py:413` and `:415` both count
-  `attainment_pct is None`) and `stats.no_quota` is passed but never read. **Fix** — read
+  `attainment_pct is None`) and `stats.no_quota` is passed but never read. **Fix** Ã¢â‚¬â€ read
   `stats.no_quota` under that label and drop the duplicate `on_pace` key (or keep `on_pace` and
   rename its card).
 
-- [x] fixed — M4. `templates/sales/salesforecasting/forecastboard/attainment.html:6` — `stats.total`
+- [x] fixed Ã¢â‚¬â€ M4. `templates/sales/salesforecasting/forecastboard/attainment.html:6` Ã¢â‚¬â€ `stats.total`
   is labelled **"Reps"** but `views/.../ForecastBoards.py:411` sets it to `len(rows)`, and rows
-  are grouped by `submission.owner_id` (line 350) — the `None` (unassigned) key forms its own row,
-  so the count is "distinct owner buckets including unassigned", not "reps". **Fix** — label it
+  are grouped by `submission.owner_id` (line 350) Ã¢â‚¬â€ the `None` (unassigned) key forms its own row,
+  so the count is "distinct owner buckets including unassigned", not "reps". **Fix** Ã¢â‚¬â€ label it
   "Owners", or break the `None` bucket out into an explicit "Unassigned" card.
 
-- [x] fixed — M5. `apps/sales/views/SalesForecasting/ForecastPeriods.py:226,228,231` — the period
+- [x] fixed Ã¢â‚¬â€ M5. `apps/sales/views/SalesForecasting/ForecastPeriods.py:226,228,231` Ã¢â‚¬â€ the period
   detail context passes `submissions_count`, `status_choices` and `category_choices`, and
   `templates/sales/salesforecasting/forecastperiod/detail.html` reads **none** of them (status
   badges are hard-coded per value at line 15, category labels per value at line 14). Harmless, but
-  dead context hides drift. **Fix** — either consume the keys in the template (cleaner) or drop
+  dead context hides drift. **Fix** Ã¢â‚¬â€ either consume the keys in the template (cleaner) or drop
   them from the view.
 
-- [x] fixed — M6. `apps/sales/forms/SalesForecasting/ForecastSubmissions.py:174` + `:176-179` — on a
+- [x] fixed Ã¢â‚¬â€ M6. `apps/sales/forms/SalesForecasting/ForecastSubmissions.py:174` + `:176-179` Ã¢â‚¬â€ on a
   rejected submission with an empty note, `ForecastReviewForm` emits **two** errors for the same
   thing: Django's `"This field is required."` (from `required = not approved`) and the custom
-  `"A rejection must say why."` from `clean()`. **Fix** — keep the declarative
+  `"A rejection must say why."` from `clean()`. **Fix** Ã¢â‚¬â€ keep the declarative
   `required = not approved` and drop the `clean()` re-check, or leave the field optional and keep
 
 ---
 
 ## Verified clean
 
-**Template structure** — all 16 files under `templates/sales/salesforecasting/**` exist at the
-contract §7 paths with bare `list`/`detail`/`form` filenames; the four report pages are correctly
+**Template structure** Ã¢â‚¬â€ all 16 files under `templates/sales/salesforecasting/**` exist at the
+contract Ã‚Â§7 paths with bare `list`/`detail`/`form` filenames; the four report pages are correctly
 nested as `forecastboard/<action>.html`. `{% block content %}` opens on line 3 and `{% endblock %}`
-closes on the last line of every file, with **zero** `{{ … }}`/`{% … %}` tokens outside a block in
+closes on the last line of every file, with **zero** `{{ Ã¢â‚¬Â¦ }}`/`{% Ã¢â‚¬Â¦ %}` tokens outside a block in
 the 15 files other than C2. `html.parser` tag-balance is clean on 14 of 16 (only C2 and C3 leak).
-No `{# … #}` or `{% comment %}` leaks into any output. `{% include "partials/pagination.html" %}`
+No `{# Ã¢â‚¬Â¦ #}` or `{% comment %}` leaks into any output. `{% include "partials/pagination.html" %}`
 is present after the table on all four list pages, and all four build `page_obj` from
 `apps.core.crud.paginate` (which sets `page_obj.window`), never a bare `Paginator`.
 
-**Design system** — every badge in the changeset is colour-named
+**Design system** Ã¢â‚¬â€ every badge in the changeset is colour-named
 (`badge-green|red|amber|info|muted|slate`) and every stat icon is
 `blue|green|orange|purple|slate`; a mechanical scan found no `badge-success` / `badge-danger` /
 `badge-warning` and no invented `stat-icon` colour. All of them exist in `static/css/theme.css`.
 
-**URLs** — `apps/sales/urls/__init__.py:38-42` places the four 8.4 groups after the 8.3 boards
+**URLs** Ã¢â‚¬â€ `apps/sales/urls/__init__.py:38-42` places the four 8.4 groups after the 8.3 boards
 and before the 8.2 pipelines; within every group the literal routes (`add/`, `export/`, `apply/`,
 `submit/`, `approve/`, `reject/`, `lock/`, `unlock/`, `revert/`, `select/`) precede the
-`<int:pk>` ones, and no sales route is a `<str:…>` catch-all, so nothing can be shadowed. Scenarios
+`<int:pk>` ones, and no sales route is a `<str:Ã¢â‚¬Â¦>` catch-all, so nothing can be shadowed. Scenarios
 correctly ship **no** export route, and the list template therefore renders no export button and
 reads no `export_url`.
 
-**Multi-tenancy** — every queryset in the five view modules filters `tenant=request.tenant`
+**Multi-tenancy** Ã¢â‚¬â€ every queryset in the five view modules filters `tenant=request.tenant`
 (`ForecastPeriods.py:65`, `ForecastSubmissions.py:69`, `ForecastAdjustments.py:92`,
 `ForecastScenarios.py:76`, `ForecastBoards.py:90,94,106,129,138,150`); every detail/edit/delete
 route goes through `get_object_or_404(<tenant-scoped queryset>, pk=pk)`, so a cross-tenant pk is a
@@ -249,15 +249,15 @@ returns `[]`, `_periods`/`_submissions`/`_adjustments`/`_scenarios` return `[]`,
 (`ForecastSubmissions.py:306`, `ForecastAdjustments.py:346`, `ForecastScenarios.py:302`) redirect
 with a message instead of raising. No `.all()` on a tenant model anywhere in the changeset.
 
-**Django 5.1 / repo-specific hazards** — every `CheckConstraint` uses the keyword-only
+**Django 5.1 / repo-specific hazards** Ã¢â‚¬â€ every `CheckConstraint` uses the keyword-only
 `condition=` (`ForecastPeriods.py:103`, `ForecastSubmissions.py:170`, `ForecastScenarios.py:140,147`).
 `accounting.Currency` is treated as the global master it is: never tenant-filtered, explicitly
 documented at `ForecastPeriods.py:12-13` and applied at `ForecastPeriods.py:263` and
 `forms/.../ForecastPeriods.py:32-40`. The `OrgUnit.parent` walk (`forecast_services.py:46-67`) is
 iterative, depth-bounded at 12 and guarded by a `seen` set, so a legacy cycle truncates rather than
 hangs. The `PROTECT` FKs (`ForecastSubmission.period`, `ForecastScenario.period`,
-`ForecastAdjustment.submission`) are all caught — `ProtectedError` is imported and handled at
-`ForecastPeriods.py:410` and `ForecastSubmissions.py:510` — and the two model-level `delete()`
+`ForecastAdjustment.submission`) are all caught Ã¢â‚¬â€ `ProtectedError` is imported and handled at
+`ForecastPeriods.py:410` and `ForecastSubmissions.py:510` Ã¢â‚¬â€ and the two model-level `delete()`
 guards refuse in `clean()` before any row goes. The nullable-FK `unique_together` trap is
 explicitly avoided on `ForecastSubmission` (no DB-level `(tenant, period, owner)` unique; the rule
 lives in `clean()` at `ForecastSubmissions.py:258-273,295-298` and again in the form at
@@ -265,13 +265,13 @@ lives in `clean()` at `ForecastSubmissions.py:258-273,295-298` and again in the 
 `related_name="+"` on the two actor FKs. `manage.py check` is clean and
 `makemigrations --check --dry-run` reports "No changes detected".
 
-**Audit** — every hand-rolled save path calls `write_audit_log` inside the same
+**Audit** Ã¢â‚¬â€ every hand-rolled save path calls `write_audit_log` inside the same
 `transaction.atomic()` as the write: submit (`ForecastSubmissions.py:416`), approve/reject (`:476`),
 revert (`ForecastAdjustments.py:459`), lock/unlock (`ForecastPeriods.py:367`), period delete
 (`:404`), scenario apply (`ForecastScenarios.py:549`), scenario select (`:428`), scenario delete
 (`:591`), adjustment create/edit/delete. The four board views write nothing at all.
 
-**Filters and pagination** — GET is parsed and applied *before* `paginate(...)` in all four list
+**Filters and pagination** Ã¢â‚¬â€ GET is parsed and applied *before* `paginate(...)` in all four list
 views; enum params are validated against the model's own `CHOICES` and reset to `""` on junk
 (`period_type`, `rollup_dimension`, `status`, `scenario_type`, `is_selected`, `kind`,
 `reason_code`, `target_field`); integer FK params go through `as_db_int` so `?period_id=abc` and an
@@ -280,18 +280,18 @@ bounded context key (`periods`, `owners`, `org_units`, `territories`, `pipelines
 `opportunities`, `period_choices`, `selected_choices`, `active_choices`, `locked_choices`,
 `reverted_choices`). pk comparisons in filter dropdowns use `|stringformat:"d"`
 (`forecastsubmission/list.html:9-13`, `forecastscenario/list.html:9-10`,
-`forecastadjustment/list.html:11-12`) — never `slugify`.
+`forecastadjustment/list.html:11-12`) Ã¢â‚¬â€ never `slugify`.
 
-**CRUD completeness** — list / detail / create / edit / delete exist for all four entities
+**CRUD completeness** Ã¢â‚¬â€ list / detail / create / edit / delete exist for all four entities
 (periods, submissions, adjustments, scenarios); all four deletes are `@require_POST` +
 `@tenant_admin_required` with a `confirm()` and `{% csrf_token %}` in the template, and all four
 have a url name. Each list template carries a View / Edit / Delete Actions column and each detail
 template an Actions sidebar with Back-to-list.
 
-**Contract conformance (sampled)** — the five NavERP.md 8.4 bullet strings in
+**Contract conformance (sampled)** Ã¢â‚¬â€ the five NavERP.md 8.4 bullet strings in
 `apps/core/navigation.py:2229-2239` match `NavERP.md:1328-1332` byte-for-byte, and every value
 resolves to a distinct, staff-reachable page. The template folder is `salesforecasting/`
-(mechanical lowercase) as §1 settled, not `forecasting/`. The number prefixes `FCP` / `FCS` /
+(mechanical lowercase) as Ã‚Â§1 settled, not `forecasting/`. The number prefixes `FCP` / `FCS` /
 `FAD` / `FSC` and the `crm.SalesQuota.PERIOD_CHOICES` / `crm.Opportunity.FORECAST_CATEGORY_CHOICES`
 vocabularies are reused, never re-spelled, and no opportunity, quota, currency or order table is
 re-declared. The isolation rule holds: applying or selecting a scenario writes only
@@ -300,7 +300,7 @@ re-declared. The isolation rule holds: applying or selecting a scenario writes o
 `_selected_period` (`ForecastBoards.py:105-122`) validates `?period=` against *this* tenant's
 period list, so a foreign pk returns `None` rather than leaking the row.
 
-**Derived values are not columns** — `total_forecast_amount`, `variance_amount`, `attainment_pct`,
+**Derived values are not columns** Ã¢â‚¬â€ `total_forecast_amount`, `variance_amount`, `attainment_pct`,
 `pace_pct`, `is_current`, `period_elapsed_pct` are all `@property`
 (`ForecastSubmissions.py:188-219`, `ForecastPeriods.py:126-149`); `ForecastAdjustment.net_delta` is
 a property (`:225-234`); `ForecastScenario.effective_*` are properties (`:187-200`) and
@@ -308,16 +308,16 @@ a property (`:225-234`); `ForecastScenario.effective_*` are properties (`:187-20
 The per-row board/attainment/accuracy figures are computed in the view from the category columns,
 never read off a stored total.
 
-**Division safety** — every percentage is zero-guarded and returns `None` rather than
+**Division safety** Ã¢â‚¬â€ every percentage is zero-guarded and returns `None` rather than
 `Infinity`/`NaN`: `_safe_pct` (`ForecastBoards.py:78-87`, `denominator in (None, 0, ZERO)`),
 `ForecastSubmission.attainment_pct` (`:209-211`, `quota <= 0`), `_variance_pct`
 (`ForecastScenarios.py:489`, `Decimal(before) == 0`), the accuracy bias at `:452` and `:478`, and
-`period_elapsed_pct`'s `total_days <= 0` guard. `Decimal` is used throughout — no `float` cast
+`period_elapsed_pct`'s `total_days <= 0` guard. `Decimal` is used throughout Ã¢â‚¬â€ no `float` cast
 anywhere in the derived maths. The templates guard each comparison with `is not None` first
 (`board.html:11`, `attainment.html:9`, `accuracy.html:5,8,11,12`), so no `None` reaches a
 comparison.
 
-**AI gate** — `forecast_ai_gate` (`forecast_services.py:201-219`) requires
+**AI gate** Ã¢â‚¬â€ `forecast_ai_gate` (`forecast_services.py:201-219`) requires
 `won >= 40 AND lost >= 40` from the append-only `OpportunityOutcome` and returns the count message
 otherwise. Every prediction surface on all four report pages **and** the submission detail is
 gated: `board.html:8,10,11`, `call.html:7`, `forecastsubmission/detail.html:15,17` all sit behind
@@ -327,62 +327,62 @@ gated: `board.html:8,10,11`, `call.html:7`, `forecastsubmission/detail.html:15,1
 
   the message; not both.
 
-- [x] fixed — M7. `templates/sales/salesforecasting/forecastboard/attainment.html:9` vs `:11-12` — the
+- [x] fixed Ã¢â‚¬â€ M7. `templates/sales/salesforecasting/forecastboard/attainment.html:9` vs `:11-12` Ã¢â‚¬â€ the
   main table renders `{{ row.owner.get_full_name|default:row.owner.username|default:"Unassigned" }}`
   while the two "Ahead/Behind of pace" summary lists below render `{{ row.owner }}`, i.e. raw
-  `User.__str__`. The same rep appears under two different labels on one page. **Fix** — add an
+  `User.__str__`. The same rep appears under two different labels on one page. **Fix** Ã¢â‚¬â€ add an
   `owner_label` to each row dict in the view and use it in all three places.
 
-- [x] fixed — M8. Amended contract §8 with a dated deviation note naming the three functions that are in \orecast_services.py\ and the eight that are view functions, rather than moving working, otherwise-correct code. See \.claude/tasks/contract-sales-8.4.md:628\. Contract drift, structural: contract §8 (contract line 626) pins ten functions in
+- [x] fixed Ã¢â‚¬â€ M8. Amended contract Ã‚Â§8 with a dated deviation note naming the three functions that are in \orecast_services.py\ and the eight that are view functions, rather than moving working, otherwise-correct code. See \.claude/tasks/contract-sales-8.4.md:628\. Contract drift, structural: contract Ã‚Â§8 (contract line 626) pins ten functions in
   `apps/sales/forecast_services.py` (`forecast_rollup_rows`, `forecast_attainment_rows`,
   `forecast_accuracy_rows`, `forecast_submit`, `forecast_review`, `forecast_revert`,
   `forecast_lock_period`, `forecast_apply_scenario` alongside the three that are there). Only the
   three were moved; the rest live in the view modules. The code is fine and the module docstring is
-  honest about it, but the contract is the frozen spec. **Fix** — either move the eight, or amend
+  honest about it, but the contract is the frozen spec. **Fix** Ã¢â‚¬â€ either move the eight, or amend
   the contract with a dated note recording the deviation.
 
-- [x] fixed — M9. `apps/sales/views/SalesForecasting/ForecastBoards.py:275-282` —
+- [x] fixed Ã¢â‚¬â€ M9. `apps/sales/views/SalesForecasting/ForecastBoards.py:275-282` Ã¢â‚¬â€
   `ai_predicted_commit` and `ai_confidence_pct` are written into **every** row dict
   unconditionally (as `None` when the gate is shut), so the gate is enforced in two places
-  (view + `board.html:10-11`). Not a leak — the template double-gates and the values are `None` —
+  (view + `board.html:10-11`). Not a leak Ã¢â‚¬â€ the template double-gates and the values are `None` Ã¢â‚¬â€
   but the redundancy means a future template that forgets `{% if ai_available %}` would render
-  `None` rather than nothing, hiding the mistake. **Fix** — omit the keys entirely when
+  `None` rather than nothing, hiding the mistake. **Fix** Ã¢â‚¬â€ omit the keys entirely when
   `not ai_available` and let the template's `{% if %}` guard on `ai_available` alone.
 
-- [~] skipped — M10. The premise is not reproducible: the finding says \ForecastSubmissionForm\ sets \self.locked_fields = []\ and never populates it, but \ForecastSubmissions.py:101-104\ does populate it — \if self.instance.pk and self.instance.is_frozen: self.locked_fields = list(self.fields)\ — so the tamper-detection path IS live for exactly the frozen records it is meant to protect (is_frozen covers both FROZEN_STATES and a locked period). Deleting the helper and attribute as instructed would REMOVE a working guard rather than fix a gap. Left as-is; see the commit that moved \_is_tenant_admin\ out of these modules for the verified import state. `apps/sales/forms/SalesForecasting/ForecastSubmissions.py:119-125` —
+- [~] skipped Ã¢â‚¬â€ M10. The premise is not reproducible: the finding says \ForecastSubmissionForm\ sets \self.locked_fields = []\ and never populates it, but \ForecastSubmissions.py:101-104\ does populate it Ã¢â‚¬â€ \if self.instance.pk and self.instance.is_frozen: self.locked_fields = list(self.fields)\ Ã¢â‚¬â€ so the tamper-detection path IS live for exactly the frozen records it is meant to protect (is_frozen covers both FROZEN_STATES and a locked period). Deleting the helper and attribute as instructed would REMOVE a working guard rather than fix a gap. Left as-is; see the commit that moved \_is_tenant_admin\ out of these modules for the verified import state. `apps/sales/forms/SalesForecasting/ForecastSubmissions.py:119-125` Ã¢â‚¬â€
   `_locked_value()` compares a `Decimal` field against the raw POST string, but
   `ForecastSubmissionForm` sets `self.locked_fields = []` (line 63) and never populates it, so the
   whole tamper-detection path is inert for this form. The frozen-record rule is still enforced by
   the `period.is_locked` / `FROZEN_STATES` checks at lines 139-145, so this is defence-in-depth
-  that is switched off rather than a hole. **Fix** — populate `locked_fields` in `__init__` from
+  that is switched off rather than a hole. **Fix** Ã¢â‚¬â€ populate `locked_fields` in `__init__` from
   the instance's frozen state, or delete the unused helper and attribute so the next reader does
   not assume a guard that is not there.
 
-- [x] fixed — I10. `apps/sales/forms/SalesForecasting/ForecastScenarios.py:190-194` — dead code after
+- [x] fixed Ã¢â‚¬â€ I10. `apps/sales/forms/SalesForecasting/ForecastScenarios.py:190-194` Ã¢â‚¬â€ dead code after
   `return cleaned` in `ForecastScenarioApplyForm.clean`: a stray block that re-disables every field
   when the period is locked (and references `self.instance` / `self.fields`, which an action form
-  does not reliably have). It parses — it sits inside the method body — but never executes, and it
+  does not reliably have). It parses Ã¢â‚¬â€ it sits inside the method body Ã¢â‚¬â€ but never executes, and it
   is a copy-paste of the block that belongs in `ForecastScenarioForm.__init__` (lines 100-105).
-  **Fix** — delete lines 190-194; the locked-period refusal for the apply form is already enforced
+  **Fix** Ã¢â‚¬â€ delete lines 190-194; the locked-period refusal for the apply form is already enforced
   correctly at lines 181-182.
 
   page load. `select_related` inside the helpers is correct, so this is a query-count storm rather
-  than a classic N+1, but the effect is the same. **Fix** — collapse the report into 2-3
+  than a classic N+1, but the effect is the same. **Fix** Ã¢â‚¬â€ collapse the report into 2-3
   aggregates: one
-  `ForecastSubmission.objects.filter(tenant=…, period__in=pks).values("period_id").annotate(...)`
+  `ForecastSubmission.objects.filter(tenant=Ã¢â‚¬Â¦, period__in=pks).values("period_id").annotate(...)`
   for submitted/actual/weighted, one
-  `ForecastAdjustment.objects.filter(tenant=…, submission__period__in=pks, is_reverted=False)
+  `ForecastAdjustment.objects.filter(tenant=Ã¢â‚¬Â¦, submission__period__in=pks, is_reverted=False)
   .values("submission__owner_id").annotate(...)` for the override table, then group in Python.
 
-- [x] fixed — I5. `apps/sales/views/SalesForecasting/ForecastScenarios.py:529-548` and
-  `apps/sales/models/SalesForecasting/ForecastScenarios.py:174-200` —
+- [x] fixed Ã¢â‚¬â€ I5. `apps/sales/views/SalesForecasting/ForecastScenarios.py:529-548` and
+  `apps/sales/models/SalesForecasting/ForecastScenarios.py:174-200` Ã¢â‚¬â€
   `forecast_scenario_apply` iterates **every** scenario in the period under `select_for_update()`
   (no `[:N]`), and for each one calls `baseline_submission()` roughly seven times
-  (`snapshot_projection()` → 3× `_project`, `_apply_target_amount()` → up to 3 more,
-  `_baseline_target_amount()` → 1). That is ~7 **identical** `ForecastSubmission` queries per
-  scenario inside one long transaction holding row locks — 350 queries for 50 scenarios.
+  (`snapshot_projection()` Ã¢â€ â€™ 3Ãƒâ€” `_project`, `_apply_target_amount()` Ã¢â€ â€™ up to 3 more,
+  `_baseline_target_amount()` Ã¢â€ â€™ 1). That is ~7 **identical** `ForecastSubmission` queries per
+  scenario inside one long transaction holding row locks Ã¢â‚¬â€ 350 queries for 50 scenarios.
   `forecast_scenario_detail` (lines 232-258) repeats it: `effective_*` (3) + `baseline_totals` (1)
-  + the `baseline_submission` context key (1) = 5 identical queries for one page. **Fix** — hoist
+  + the `baseline_submission` context key (1) = 5 identical queries for one page. **Fix** Ã¢â‚¬â€ hoist
   `submission = obj.baseline_submission()` above the apply loop and pass it down instead of
   re-fetching, and prefetch the baseline submissions for the whole scenario set (or cache per
   `(tenant, period)` for the request). Also cap the apply loop with a `[:N]` and report what it
@@ -392,66 +392,70 @@ gated: `board.html:8,10,11`, `call.html:7`, `forecastsubmission/detail.html:15,1
     `weighted = Decimal("0")` and **writes `weighted_amount = 0.00`** as a stored snapshot on
     `forecast_submission_submit` (`views/.../ForecastSubmissions.py:410`);
   - the "Pipeline behind this call" panel
-    (`templates/…/forecastsubmission/detail.html:26`) prints its empty state, *"No open
-    opportunities match this call's owner, territory and pipeline inside the period window."* —
+    (`templates/Ã¢â‚¬Â¦/forecastsubmission/detail.html:26`) prints its empty state, *"No open
+    opportunities match this call's owner, territory and pipeline inside the period window."* Ã¢â‚¬â€
     an assertion the data does not support.
   A wrong stored number **and** a wrong user-facing statement, with no caveat anywhere.
-  **Fix** — treat a missing close date as "lands in this period" rather than "does not exist",
+  **Fix** Ã¢â‚¬â€ treat a missing close date as "lands in this period" rather than "does not exist",
   e.g. `queryset.filter(Q(close_date__isnull=True) | Q(close_date__range=window))`, and add a
   caveat when any matched opportunity had a NULL `close_date` so the panel stops claiming the
   pipeline is empty.
 
   - `forecast_period_export` (`views/.../ForecastPeriods.py:437-438`) emits the stale Start/End
     date columns.
-  **Fix** — carry the derived window across the instance swap, one line before the field copy:
+  **Fix** Ã¢â‚¬â€ carry the derived window across the instance swap, one line before the field copy:
   `locked.start_date = form.instance.start_date; locked.end_date = form.instance.end_date` placed
   immediately above `form.instance = locked` at line 326 (with a comment explaining that clean()
   derived the window on `form.instance` and that `editable=False` keeps it out of the copy loop
   below). Equivalently, drop the `form.instance = locked` swap and re-check the lock against a
   re-read. Add a regression test asserting that editing `period_year`/`period_number` changes
-  `start_date`/`end_date` on the saved row. `forecast_period_create` (lines 276-278) is **not**
-  affected — there `form.instance` is the row that is saved.
 
 ---
 
 ## Found during the close-out reconciliation (not by the six reviewers)
 
-- [~] skipped - needs a decision. **C2. "You cannot adjust a level above you" is dead code.**
-  `apps/sales/views/SalesForecasting/ForecastAdjustments.py:69` `_adjusts_above_acting_level()` is a
-  correct implementation of the rule the plan calls out by name ("Microsoft, security-sensitive"): it
-  resolves the acting user's node through `sales.OpportunityTeamMember.org_unit` and refuses a
-  submission whose org unit is a strict ancestor, walking `core.OrgUnit.parent`. It is correct, and it
-  **can never fire**.
+- [x] fixed - **C5. "You cannot adjust a level above you" WAS dead code, and is now the real guard.**
+  `apps/sales/views/SalesForecasting/ForecastAdjustments.py` implemented the rule the plan calls out
+  by name ("Microsoft, security-sensitive") in `_adjusts_above_acting_level()`: it resolves the acting
+  user's node through `sales.OpportunityTeamMember.org_unit` and refuses a submission whose org unit
+  is a strict ancestor, walking `core.OrgUnit.parent`. The implementation was correct - and it
+  **could never fire**.
 
-  The view that calls it, `forecast_adjustment_create` (line 341), is `@tenant_admin_required`.
-  `_is_tenant_admin()` (line 77) is the same test the decorator uses, and it is the *first* thing the
-  helper does. So the only users who reach line 352 are the ones the helper exempts, and the
-  `raise PermissionDenied` on line 353 is unreachable. A rep - the user the rule was written for - is
-  refused by the decorator before the rule is ever consulted.
+  `forecast_adjustment_create` was `@tenant_admin_required`, and `_is_tenant_admin()` is the same
+  test the decorator uses **and** the first statement of the helper. So the only users who reached
+  the check were the ones it exempts, and the `raise PermissionDenied` below it was unreachable. A
+  rep - the user the rule was written for - was refused by the decorator before the rule was
+  consulted.
 
-  The six reviewers missed it because it is not a defect *in* the diff: the rule is fully written and
-  reads correctly. It was found by writing the test the plan's verify list asks for and the security
-  lane never had. `test_salesforecasting_the_level_rule_*` now pins the helper's logic directly
-  (ancestor refused, own node and descendant allowed, sibling ignored, fail-open without provable
-  nesting, admin exempt) so the rule cannot rot, and
-  `test_salesforecasting_the_adjust_create_view_is_tenant_admin_gated` pins the gate that makes it
-  dead - so if that gate ever changes, the change is announced by a test rather than discovered in
-  production.
+  The six reviewers read past it because nothing is wrong in the diff: the rule is fully written and
+  reads correctly. It was found by writing the test the plan's verify list asks for and that the
+  security lane never had. The test failed on its first run, which is what proved the rule was dead
+  rather than merely untested.
 
-  **Not fixed here, because the fix is a product decision about who may override whom, and it opens a
-  tenant-admin-gated write path.** Three coherent options:
+  **Fixed on the recommended option, with the check strengthened.** `forecast_adjustment_create` is
+  now `@login_required` and the rule is the real guard, rewritten as `_adjustment_scope(user,
+  submission)` returning `(allowed, reason)`. A user may file an override when they are a tenant
+  admin, the owner of the call, or positioned at or above the call's org unit. **Edit, delete and
+  revert stay `@tenant_admin_required`:** filing an override is a manager act, while *correcting* a
+  filed one rewrites the audit trail.
 
-  1. **Open the view to `@login_required` and let the level check be the real guard.** This is what
-     the plan describes - a manager overriding a call. It also needs the check *strengthened*: as
-     written it blocks only "above your level", which would let a rep rewrite a **peer's** number
-     (the sibling-branch case is currently allowed). "At or above the submission" is the correct
-     manager-override semantic and closes that hole.
-  2. **Keep the view admin-only and delete the rule.** Honest - the real product decision today is
-     "only an admin overrides" - but it contradicts the plan and discards working code.
-  3. **Keep the rule, add a separate non-admin manager URL** rather than relaxing the existing one.
-     More surface, no change to today's behaviour.
+  Two semantic corrections over the first draft, both deliberate:
 
-  Recommendation: **option 1 with the strengthened check**, because the plan, the module's own
-  description ("manager override audit trail") and the existing helper all assume it, and the
-  alternative is shipping a security rule that does nothing while the code claims otherwise. This
-  needs a decision on who counts as a manager, and is left open rather than assumed.
+  * It blocked only "a strict ancestor of me", which left a **sibling branch adjustable** - a rep
+    in one department could rewrite a peer's number. Sibling and unrelated branches are now refused
+    as not being a reporting line.
+  * Unprovable nesting now **fails CLOSED** for a non-owner. The old fail-open let anyone who declined
+    to declare an org node adjust anyone's plan. The owner case is what keeps the ordinary rep path
+    working with no membership.
+
+  The containment test is easy to get backwards, and was in the first attempt:
+  `forecast_org_unit_chain(node)` contains the node ITSELF, so a single "target in acting_chain" test
+  resolves own-node as a violation. Both chains are now compared explicitly and the direction is
+  spelled out in the comment beside the test.
+
+  **This also fixed a UI inconsistency logged as a pattern elsewhere (the SCM 4.19 M10):** the "New
+  adjustment" button on the list page was never gated, so a non-admin used to click it and land on a
+  raw 403. The create view now serves them.
+
+  Covered by seven `_adjustment_scope` unit tests plus five that drive it through the view, in
+  `apps/sales/tests/test_salesforecasting_security.py`.
