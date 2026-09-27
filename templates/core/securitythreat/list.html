@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% comment %}
+  The declared-findings register. Every row here was typed by a person; nothing in NavERP
+  produced one, and no green badge appears on this page, because a green "0 open" would be
+  the exact false all-clear this sub-module refuses: a zero here means "nobody wrote anything
+  down", not "nothing is happening".
+{% endcomment %}
+{% block title %}Threats{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Threats</h1>
+      <div class="breadcrumb"><a href="{% url 'core:security_overview' %}">Security</a><span class="sep">&rsaquo;</span><span>Threats</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:threat_board' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Threat board</a>
+      <a href="{% url 'core:securitythreat_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record a threat</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>These are claims a person wrote.</strong>
+      Nothing in NavERP watches for threats. A row is a record of what somebody reported, and
+      recording it does not make it true.</p>
+    {% for note in notes %}<p class="text-muted"><i data-lucide="info"></i> {{ note }}</p>{% endfor %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search title, MITRE, source IP, summary&hellip;">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        {# The GET param is `type`; the column it filters is threat_type. #}
+        <select name="type" class="form-select" aria-label="Threat type">
+          <option value="">Any type</option>
+          {% for value, label in threat_type_choices %}<option value="{{ value }}" {% if request.GET.type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="severity" class="form-select" aria-label="Severity">
+          <option value="">Any severity</option>
+          {% for value, label in severity_choices %}<option value="{{ value }}" {% if request.GET.severity == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="service" class="form-select" aria-label="Component">
+          <option value="">Any component</option>
+          {% for s in services %}<option value="{{ s.pk }}" {% if request.GET.service == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="waf" class="form-select" aria-label="Recorded WAF action">
+          <option value="">Any recorded WAF action</option>
+          {% for value, label in waf_action_choices %}<option value="{{ value }}" {% if request.GET.waf == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="defense" class="form-select" aria-label="Recorded bot defence mode">
+          <option value="">Any recorded defence mode</option>
+          {% for value, label in defense_mode_choices %}<option value="{{ value }}" {% if request.GET.defense == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:securitythreat_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Threat</th><th>Type</th><th>Severity</th><th>Status</th><th>Source IP</th><th>Observed</th><th>Component</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:securitythreat_detail' obj.pk %}">{{ obj.title|truncatechars:70 }}</a>
+              {% if obj.mitigated_by %}<div class="text-muted">Mitigation recorded: {{ obj.mitigated_by.cidr }}</div>{% endif %}</td>
+            <td>{{ obj.get_threat_type_display }}</td>
+            <td>
+              {% if obj.severity == "info" %}<span class="badge badge-info">{{ obj.get_severity_display }}</span>
+              {% elif obj.severity == "warning" %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>
+              {% elif obj.severity == "critical" %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>{% endif %}
+            </td>
+            <td>
+              {% if obj.status == "new" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "triaged" or obj.status == "investigating" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "contained" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "resolved" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "false_positive" or obj.status == "ignored" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>{% if obj.source_ip %}<code>{{ obj.source_ip }}</code>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>{{ obj.detected_at|date:"M d, Y H:i" }}</td>
+            <td>{% if obj.service %}{{ obj.service.name }}{% elif obj.service_label %}{{ obj.service_label }} <span class="text-muted">(snapshot)</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:securitythreat_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:securitythreat_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:securitythreat_delete' obj.pk %}" onsubmit="return confirm('Delete this threat record? It deletes what a person reported, not the event itself.');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8"><div class="empty-state"><i data-lucide="shield-off"></i><h3>No threats have been recorded</h3>
+            <p class="text-muted">This is not an all-clear. NavERP has no IDS/IPS agent and no anomaly engine, so an empty
+              register means <strong>nobody has written anything down</strong> &mdash; it cannot tell you whether anything is happening.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+{% endblock %}
