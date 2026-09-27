@@ -96,8 +96,8 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 > **Implementation status (this repo).** Module 0 is realized by four Django apps — `core` (tenant spine,
 > middleware, navigation, audit, shared CRUD), `accounts` (users, RBAC, auth, invites), `tenants` (sub-module
 > **0.1**), and `dashboard` (KPIs). Sub-module **0.1 Tenant & Subscription Management is fully built**
-> (subscriptions + Stripe billing, branding, encryption keys, health monitoring, onboarding). **14 of the 21
-> sub-modules have a `LIVE_LINKS` entry: 0.1–0.14.** Nine of them — 0.1, 0.2, 0.4, 0.6, 0.8, 0.10, 0.11,
+> (subscriptions + Stripe billing, branding, encryption keys, health monitoring, onboarding). **18 of the 21
+> sub-modules have a `LIVE_LINKS` entry: 0.1–0.18.** Nine of them — 0.1, 0.2, 0.4, 0.6, 0.8, 0.10, 0.11,
 > 0.12 and 0.13 — were reconciled and closed out on 2026-09-19/21, which added the missing models and
 > surfaces and recorded what is deliberately *not* built on the pages themselves.
 >
