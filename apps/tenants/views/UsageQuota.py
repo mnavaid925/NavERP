@@ -59,10 +59,12 @@ def usagequota_detail(request, pk):
     # rather than re-queried here — a row-dict contract is a second contract: read the PRODUCER of
     # the rows, not the view that forwards them.
     from apps.tenants.views.Boards import _consumption_by_subscription
-    return crud_detail(
-        request, model=UsageQuota, pk=pk,
-        template="tenants/usagequota/detail.html",
-        extra_context={
+    # ONE fetch, then render — the `usagerecord_detail` house pattern, not `crud_detail` (which
+    # re-fetches the row by pk, costing a second query for one page).
+    return render(
+        request, "tenants/usagequota/detail.html",
+        {
+            "obj": obj,
             "consumption": _consumption_by_subscription(request.tenant).get(obj.subscription_id, {}),
         },
     )
