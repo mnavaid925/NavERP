@@ -150,3 +150,73 @@ Recorded so they are not re-raised, and so the next reviewer does not re-derive 
 4. **M2** — contract row for a nonexistent view.
 5. **M1** — deferred, no change.
 
+## Pass 2 — `explorer`
+
+Scored across 5 areas. **Areas 2 (dropped wiring) and 5 (core-spine reuse) came back CLEAN**; those
+results are recorded because a clean area is a result, not a silence.
+
+**Wiring — verified mechanically, 0 gaps:** 6/6 models in `admin.py`; 11/11 CHOICES/VALUES constants
+re-exported from `models/__init__.py` (runtime `hasattr` check, not grep); 6/6 forms in `forms/__init__.py`;
+30/30 view functions in `views/__init__.py`; all 29 URL names `reverse()`; `LITERAL_PREFIX_MODELS`
+registration consistent with how `CFW`/`CTL`/`CPOL`/`GRC` are actually minted; the seeder registers all four
+`NumberingScheme` rows; `conftest.py` is genuinely append-only (the 0.21 block sits above the pre-existing
+`import pytest` / `from django.test import Client` and redeclares nothing — all 11 new fixtures are
+`cml021_`-prefixed, the 3 originals untouched); every helper in `test_compliance_models.py` is
+`_cml021_`-prefixed and every test is `test_compliance_*`, so the next sub-module cannot shadow them.
+
+**Core-spine reuse — CLEAN and the strongest part of the changeset.** Verified against the actual files:
+no duplicated framework table (`ControlFramework` = certification programme, 0.8 `RegulatoryFramework` =
+the law, with `dsar_window_days` + `data_residency_region`; different facts, different lifecycles, and the
+boundary is stated in the model docstring, `models/__init__.py`, `navigation.py` and
+`corporatepolicy/list.html:16-18`). `CorporatePolicy` is distinct from both 0.8 `RetentionPolicy` and
+`hrm.HrPolicy`. `PolicyAcknowledgement` is distinct from `core.AuditLog` (`AuditLog.user` is
+system-written; an acknowledgement is a human act). All three `owner` fields are actor FKs with
+`SET_NULL`/`related_name="+"`, matching `Backup.py:202` / `Security.py:665` / `Monitoring.py:470`; every
+place free text *is* used carries a one-line justification for why a closed set would be wrong.
+
+**Convention — no drift found.** `models.Model` used directly rather than `TenantConsistentMixin`, which
+matches the closest siblings (`Privacy.py:17,72`, `Change.py:90,179`); `Security.py` uses the mixin, so
+both patterns exist in this app and 0.21 picked the right neighbour. `@require_POST` above
+`@tenant_admin_required` on all 7 mutating routes is correct (decorators apply bottom-up, so the role gate
+runs first) and is documented at `views/Compliance.py:21`. Message audit: every success says "recorded";
+grepping `enforced|granted|reminded|verified|compliant` across all 11 messages returns nothing, matching the
+module's honesty rule. The two entities with no detail page have no `detail.html` on disk, no detail route,
+and — the part that matters — no dead `{% url %}` to either. The `{% if x is not None %}` branch in
+`controlframeworkmapping/form.html` correctly falls to the generic form when `available_controls` is
+undefined and to the picker when it is an empty queryset.
+
+### I3 — Important: `grc_overview` builds two querysets its template never reads
+
+**`apps/core/views/Compliance.py:506,509`** — `"controls": controls.order_by("code")[:8]` and
+`"policies": policies.order_by("code")[:8]`. `templates/core/grcoverview.html` renders the frameworks
+panel (`{% for fw in frameworks %}`, line 71) and the risks panel (`{% for risk in risks %}`, line 97), and
+reports `published_policies` / `open_risks` as scalar counts. It never iterates `controls` or `policies`.
+Two wasted queries per board render, on the page an auditor opens first.
+
+**Fix** — drop both keys. `controls` and `policies` stay in the view as local variables; they are still
+used for the `critical_risks` / `overdue_reviews` / `published_policies` counts.
+
+### I4 — Minor: `controlframeworkmapping_list` passes a `controls` queryset it never uses
+
+**`apps/core/views/Compliance.py:176`** — the list template filters on `coverage` and `framework`
+(line 31 and 37) but has no control filter, so `ComplianceControl.objects.filter(tenant=...)` is one
+wasted query per render. Either drop the key or add the missing control filter dropdown; dropping is the
+smaller honest change.
+
+### M3 — Minor: form-page context keys leak non-context values into the audit
+
+`policyacknowledgement_create` passes `is_edit` / `on_behalf_of` / `recorded_by` / `people` /
+`policies`; `people` and `policies` are genuinely used (form.html:40, 48) and the rest are read by
+`partials/form_field.html`. Recorded as **no defect** — noted only so the next reviewer does not re-derive
+it as one.
+
+## Fix order update (Phase 5)
+
+1. **C1** — seeded `inherent_score = 0` on every fresh demo DB (seeder).
+2. **I2** — back-fill form silently drops the typed note (`views/Compliance.py`).
+3. **I1** — rename `unacknowledged_count` to what it counts (view + template + contract).
+4. **I3** — drop two unused querysets from `grc_overview`.
+5. **I4** — drop the unused `controls` queryset from `controlframeworkmapping_list`.
+6. **M2** — remove the contract row for the nonexistent `controlframeworkmapping_edit` view.
+7. **M1** — deferred, no change.
+
