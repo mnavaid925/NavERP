@@ -388,6 +388,10 @@ def changerequest_detail(request, pk):
     return crud_detail(
         request, model=ChangeRequest, pk=pk, template="core/changerequest/detail.html",
         select_related=("environment", "requestor", "approved_by"),
+        # `rollouts` is prefetched so `ChangeRequest.rollout_count` reads the cache instead of
+        # firing a query per row - the property is prefetch-aware precisely so this page (and any
+        # list that grows one) pays nothing for the count.
+        prefetch_related=("rollouts",),
         extra_context={
             "rollouts": FeatureRollout.objects.filter(change_id=pk).select_related("feature_flag"),
             "windows": MaintenanceWindow.objects.filter(change_request_id=pk),
