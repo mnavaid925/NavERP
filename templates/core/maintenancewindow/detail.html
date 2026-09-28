@@ -65,13 +65,13 @@
           {% comment %}
             Three SEPARATE loops, so `{% empty %}` is not available here: it only binds to the single
             `{% for %}` directly above it, and there are three. The empty state is therefore computed
-            with `{% firstof %}`-style emptiness checked on the counts instead, and the `{% if %}`
-            branch carries the message.
+            from the three PREFETCHED sets - `{% empty %}` is not usable with three loops, and
+            `.exists` would re-query each set and throw the prefetch away (`.all` reads the cache).
           {% endcomment %}
           {% for svc in obj.affected_services.all %}<tr><td>Service</td><td class="fw-600">{{ svc.name }}</td></tr>{% endfor %}
           {% for rule in obj.suppressed_alert_rules.all %}<tr><td>Alert rule</td><td class="fw-600">{{ rule.name }}</td></tr>{% endfor %}
           {% for rule in obj.suppressed_notification_rules.all %}<tr><td>Notification rule</td><td class="fw-600">{{ rule.name }}</td></tr>{% endfor %}
-          {% if not obj.affected_services.exists and not obj.suppressed_alert_rules.exists and not obj.suppressed_notification_rules.exists %}
+          {% if not obj.affected_services.all and not obj.suppressed_alert_rules.all and not obj.suppressed_notification_rules.all %}
             <tr><td colspan="2"><div class="empty-state"><i data-lucide="bell-off"></i><h3>No scope recorded</h3><p class="text-muted">This window names no service, alert rule or notification rule. It is a statement of intent and nothing more.</p></div></td></tr>
           {% endif %}
         </tbody>
