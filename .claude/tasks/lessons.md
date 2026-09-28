@@ -1631,3 +1631,39 @@ a file that already contains non-ASCII, check the diff for `-` lines you did not
 re-count U+FFFD afterwards.** A lesson file that mangles its own history is worse than no lesson.
 
 See [[next-builds-one-submodule]], L43, L45, L8.
+
+---
+
+## L57 - an `annotate()` alias must never equal a model `@property` name, and a smoke with no rows cannot see it
+
+Two lessons from 0.21, both learned the expensive way, and the second is the more important.
+
+**1. `annotate()` cannot shadow a `@property`.** A `property` is a **data descriptor**, so Django's
+`ModelIterable` cannot `setattr` the annotation onto the instance; the query raises
+`AttributeError: can't set attribute '<name>'` **the first time a row is instantiated**. In 0.21 this
+shipped as `annotate(framework_count=...)` over a `ComplianceControl.framework_count` property and
+`annotate(acknowledged_count=...)` over a `CorporatePolicy.acknowledged_count` property. Both list pages
+were dead for the entire build. Check every `annotate()` alias against `_meta.get_fields()` before
+committing. Two related rules from the same defect: a `GROUP BY` **suppresses `Meta.ordering`**, so an
+annotated list needs an explicit `.order_by()` or `LIMIT/OFFSET` paging is non-deterministic; and
+**a property is not cached**, so a template that reads one twice issues the query twice.
+
+**2. A smoke test against an EMPTY tenant is structurally incapable of finding this - and worse, it
+reports a pass.** The 0.21 smoke ran as a tenant with zero controls and zero policies, so iterating the
+queryset never reached the `setattr`, and it returned **200 for both dead pages**. The policy list was
+the worst case: it 500ed with rows present and returned **200 with a false "No policies recorded"** the
+moment a filter matched nothing - a *masked* 500 that asserts something untrue about the register, and
+that a status-only smoke scores as healthy. What finally found it was a later smoke that built its
+**own tenant with 18 rows in each model** and asserted the row's own code as a **literal string in the
+HTML**. **So: a 200 is not a pass, an empty tenant is not a test, and content must be asserted.**
+This extends L8 rather than replacing it - L8 says assert content, not just status; L57 adds that the
+fixture must have the rows, or the assertion is vacuous.
+
+**3. The same bug lived in the test fixture.** `cml021_risk`'s docstring claimed "likely x severe = 20,
+the critical band" while the fixture used `objects.create()`, which - like the seeder - never calls
+`full_clean()`. The fixture was a `0` and the docstring was a lie that the assertion still passed.
+**A fixture that lies about the value under test is worse than no fixture.** Anything that creates a
+row whose fields are written in `clean()` must call `clean()` itself, and a fixture docstring asserting
+a computed value is a claim to be tested, not a comment.
+
+See L8, L49, [[annotate-alias-vs-property]], [[a-200-is-not-a-pass]].
