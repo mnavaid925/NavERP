@@ -698,3 +698,326 @@ class RiskRegister(models.Model):
 
     def __str__(self):
         return "%s %s" % (self.number, self.title)
+
+
+# ======================================================================
+# 0.21b, bullet 4: Audit & Certification Support
+# ======================================================================
+# Evidence collection, auditor access, and control attestation. **Evidence is a POINTER to 0.1's
+# `core.Document`, never a second file table** (L36), and `auditor_email` is a *recorded contact*,
+# not an account, because granting an auditor access is declined: there is no user type for a firm
+# outside the workspace and no invitation flow that would make one. Every page in this section says
+# so, and every success message says "recorded", never "attested" or "granted".
+#
+# The three models are a chain, not a hierarchy: an audit is run, evidence is gathered *inside* it,
+# and findings fall out of it. Evidence and findings both `CASCADE` with the audit (an evidence row
+# without its audit is meaningless) but `SET_NULL` on `control`, because evidence and a finding both
+# outlive the control they were raised against -- deleting a control must not silently shrink an
+# audit that an auditor may later ask to see.
+
+#: What kind of engagement this is. `certification` is the SOC 2 / ISO case, where an external firm
+#: attests; `internal` is the workspace auditing itself, the honest default for a register nobody
+#: certifies against yet.
+AUDIT_TYPE_CHOICES = [
+    ("certification", "External certification"),
+    ("internal", "Internal audit"),
+    ("customer", "Customer-driven audit"),
+    ("regulatory", "Regulatory examination"),
+]
+
+#: The lifecycle. A four-step arc with no shortcut: findings cannot be issued before fieldwork,
+#: which is enforced only as a `clean()` guard (a recorded rule, not a gate).
+AUDIT_STATUS_CHOICES = [
+    ("planned", "Planned"),
+    ("fieldwork", "Fieldwork in progress"),
+    ("findings_issued", "Findings issued"),
+    ("closed", "Closed"),
+]
+
+#: What kind of artefact the evidence is. `document` is the only one that points at a
+#: `core.Document`; the rest are observations and exports recorded as text, and `clean()` refuses
+#: `document` without an attached document.
+EVIDENCE_TYPE_CHOICES = [
+    ("document", "Document (in the document register)"),
+    ("screenshot", "Screenshot"),
+    ("log_export", "Log / data export"),
+    ("attestation", "Written attestation"),
+    ("observation", "Auditor observation"),
+]
+
+#: Finding severity. `observation` is separated from `minor` on purpose: an auditor note is not a
+#: defect, and a register that lumps them together makes the minor column unreadable.
+AUDIT_SEVERITY_CHOICES = [
+    ("critical", "Critical"),
+    ("major", "Major"),
+    ("minor", "Minor"),
+    ("observation", "Observation"),
+]
+
+#: Finding lifecycle. `risk_accepted` is a real state and is refused for `critical` -- this register
+#: will not record a decision to accept a critical finding.
+AUDIT_FINDING_STATUS_CHOICES = [
+    ("open", "Open"),
+    ("remediation", "Remediation in progress"),
+    ("resolved", "Resolved"),
+    ("risk_accepted", "Risk accepted"),
+    ("closed", "Closed"),
+]
+
+
+class ComplianceAudit(models.Model):
+    """One audit or certification engagement, run against a framework. [CAUD-]
+
+    **Nothing here is a gate.** `status="closed"` is a sentence somebody typed. No code path in
+    NavERP reads this table to block a release, a payment or a login, and no test asserts that one
+    does. The pages say so in words.
+
+    **The auditor is a name and an email, never an account.** The bullet says "auditor access"
+    and this module grants **none**: there is no `accounts.User` for a firm outside the workspace
+    and no invitation flow that would create one, so `auditor_email` records a contact nobody has
+    ever been able to reach from inside the application. A model with an `auditor` FK would imply
+    a grant that does not exist.
+
+    **`framework` is `SET_NULL`**, not `CASCADE`. An audit is a historical record of what was
+    examined when; retiring a framework must not delete the audit run against it, which is
+    precisely the evidence an auditor later asks for.
+    """
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE,
+                               related_name="compliance_audits", db_index=True)
+    number = models.CharField(max_length=20, editable=False)
+    code = models.CharField(max_length=40)
+    title = models.CharField(max_length=200)
+    framework = models.ForeignKey("core.ControlFramework", on_delete=models.SET_NULL,
+                                  null=True, blank=True, related_name="audits")
+    audit_type = models.CharField(max_length=20, choices=AUDIT_TYPE_CHOICES, default="internal")
+    status = models.CharField(max_length=20, choices=AUDIT_STATUS_CHOICES, default="planned")
+    #: The firm, free text. An external auditor is not a `core.User`, so this is not a FK.
+    auditor_name = models.CharField(max_length=120, blank=True)
+    #: A recorded contact. Nothing sends mail to it -- see the class docstring.
+    auditor_email = models.EmailField(blank=True)
+    started_on = models.DateField(null=True, blank=True)
+    target_date = models.DateField(null=True, blank=True)
+    closed_on = models.DateField(null=True, blank=True)
+    summary = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    STATUS_CHOICES = AUDIT_STATUS_CHOICES
+    TYPE_CHOICES = AUDIT_TYPE_CHOICES
+    OPEN_STATUSES = ("planned", "fieldwork", "findings_issued")
+
+    class Meta:
+        ordering = ["-started_on", "code"]
+        unique_together = ("tenant", "code")
+        verbose_name_plural = "compliance audits"
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="cad_tenant_status_idx"),
+            models.Index(fields=["tenant", "-started_on"], name="cad_tenant_start_idx"),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.number:
+            for _ in range(5):
+                candidate = next_number(self.tenant, "CAUD", width=5)
+                if not ComplianceAudit.objects.filter(
+                        tenant=self.tenant, number=candidate).exists():
+                    self.number = candidate
+                    break
+            else:
+                raise RuntimeError("Could not mint a CAUD- number after five attempts.")
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        if self.target_date and self.started_on and self.target_date < self.started_on:
+            raise ValidationError({"target_date": "An audit cannot be due before it began."})
+        # The pair-of-truths rule: "closed" and a close date are the same statement, so neither may
+        # be recorded without the other. A closed audit with no date is a fiction, and a date
+        # against an open audit is a contradiction.
+        if self.status == "closed" and not self.closed_on:
+            raise ValidationError({"closed_on": "A closed audit needs the date it closed."})
+        if self.closed_on and self.status != "closed":
+            raise ValidationError({"closed_on": "Only a closed audit has a close date."})
+
+    @property
+    def evidence_count(self):
+        return self.evidence.count()
+
+    @property
+    def finding_count(self):
+        return self.findings.count()
+
+    @property
+    def open_finding_count(self):
+        return self.findings.exclude(status__in=("resolved", "closed")).count()
+
+    @property
+    def is_overdue(self):
+        """Derived, never stored. A NULL `target_date` is *not* an overdue audit."""
+        return bool(self.target_date and self.status != "closed"
+                    and self.target_date < timezone.localdate())
+
+    def __str__(self):
+        return "%s %s" % (self.number, self.title)
+
+
+class AuditEvidence(models.Model):
+    """One piece of evidence gathered for a control, inside an audit. [EVD-]
+
+    **This table holds no files and no bytes (L36).** 0.1's `core.Document` owns upload and
+    storage (`upload_to="documents/%Y/%m/"`); `document` is a **pointer** to one. Re-declaring a
+    `FileField` here would give the workspace two document registers, two delete paths, and two
+    answers to "which evidence do we hold for this control?" -- exactly the failure
+    `core.settings_engine.prefix_usage()` exists to prevent for numbers.
+
+    **`document` is `SET_NULL`, not `CASCADE`.** Evidence that referenced a since-deleted document
+    is still a truthful record that evidence was collected on a date. A hard FK would delete the
+    evidence row and silently shrink an audit that an auditor may later ask to see -- the register
+    would look cleaner by having destroyed the record of its own gap.
+
+    **`control` is `SET_NULL` too**, because a control can be retired while the evidence gathered
+    against it remains the answer to "how did you satisfy this in 2026?".
+    """
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE,
+                               related_name="audit_evidence", db_index=True)
+    number = models.CharField(max_length=20, editable=False)
+    code = models.CharField(max_length=40)
+    title = models.CharField(max_length=200)
+    audit = models.ForeignKey("core.ComplianceAudit", on_delete=models.CASCADE,
+                              related_name="evidence")
+    control = models.ForeignKey("core.ComplianceControl", on_delete=models.SET_NULL,
+                                null=True, blank=True, related_name="+")
+    #: The pointer. Nullable, because not every kind of evidence is a file.
+    document = models.ForeignKey("core.Document", on_delete=models.SET_NULL, null=True,
+                                 blank=True, related_name="+")
+    evidence_type = models.CharField(max_length=20, choices=EVIDENCE_TYPE_CHOICES,
+                                     default="observation")
+    collected_on = models.DateField(null=True, blank=True)
+    #: e.g. "2026-Q1". Free text on purpose: the period vocabulary is per-programme, and
+    #: enumerating "Q1..Q4 plus fiscal years" here would be wrong the first time a programme uses
+    #: a different convention.
+    period_covered = models.CharField(max_length=40, blank=True)
+    description = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+
+    TYPE_CHOICES = EVIDENCE_TYPE_CHOICES
+
+    class Meta:
+        ordering = ["-collected_on", "code"]
+        unique_together = ("tenant", "code")
+        verbose_name_plural = "audit evidence"
+        indexes = [
+            models.Index(fields=["tenant", "audit"], name="evd_tenant_audit_idx"),
+            models.Index(fields=["tenant", "evidence_type"], name="evd_tenant_type_idx"),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.number:
+            for _ in range(5):
+                candidate = next_number(self.tenant, "EVD", width=5)
+                if not AuditEvidence.objects.filter(
+                        tenant=self.tenant, number=candidate).exists():
+                    self.number = candidate
+                    break
+            else:
+                raise RuntimeError("Could not mint an EVD- number after five attempts.")
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        # Claiming a document you did not attach is the exact shape of a fabricated evidence trail,
+        # so the two are refused together.
+        if self.evidence_type == "document" and not self.document_id:
+            raise ValidationError({"document": "Evidence typed as a document must point at one in "
+                                               "the document register."})
+
+    @property
+    def is_attached(self):
+        """True when the row still resolves to a real document, NULL pointer included."""
+        return self.document_id is not None
+
+    def __str__(self):
+        return "%s %s" % (self.number, self.title)
+
+
+class AuditFinding(models.Model):
+    """One thing an audit found that is not yet fixed. [FND-]
+
+    **A finding is a statement about a past engagement, not a work item.** Nothing here opens a
+    ticket, assigns a sprint or escalates. `status="resolved"` is a sentence somebody typed, and
+    `resolved_on` is the date they typed it.
+
+    **`risk_accepted` is refused for a critical finding.** This register will not record a
+    decision to accept the most serious class of finding, because "we accepted it" is exactly the
+    sentence that makes a compliance register worthless. This is a **recorded rule, not an
+    enforcement**: nothing blocks the POST, `clean()` refuses the row, and the page says the rule
+    is only a rule.
+    """
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE,
+                               related_name="audit_findings", db_index=True)
+    number = models.CharField(max_length=20, editable=False)
+    code = models.CharField(max_length=40)
+    title = models.CharField(max_length=200)
+    audit = models.ForeignKey("core.ComplianceAudit", on_delete=models.CASCADE,
+                              related_name="findings")
+    control = models.ForeignKey("core.ComplianceControl", on_delete=models.SET_NULL,
+                                null=True, blank=True, related_name="+")
+    severity = models.CharField(max_length=16, choices=AUDIT_SEVERITY_CHOICES, default="minor")
+    status = models.CharField(max_length=20, choices=AUDIT_FINDING_STATUS_CHOICES, default="open")
+    description = models.TextField()
+    remediation = models.TextField(blank=True)
+    due_on = models.DateField(null=True, blank=True)
+    resolved_on = models.DateField(null=True, blank=True)
+    #: WHO owns the remediation, per the actor-FK convention: `SET_NULL` + `related_name="+"`, so
+    #: an ownership trail that loses its name to a deleted account is still a truthful record.
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                              blank=True, related_name="+")
+    notes = models.TextField(blank=True)
+
+    STATUS_CHOICES = AUDIT_FINDING_STATUS_CHOICES
+    SEVERITY_CHOICES = AUDIT_SEVERITY_CHOICES
+    OPEN_STATUSES = ("open", "remediation", "risk_accepted")
+
+    class Meta:
+        # Worst first: a findings register is read top-down under time pressure, and alphabetical
+        # order buries the critical row under the observations.
+        ordering = ["severity", "code"]
+        unique_together = ("tenant", "code")
+        verbose_name_plural = "audit findings"
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="fnd_tenant_status_idx"),
+            models.Index(fields=["tenant", "severity"], name="fnd_tenant_sev_idx"),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.number:
+            for _ in range(5):
+                candidate = next_number(self.tenant, "FND", width=5)
+                if not AuditFinding.objects.filter(
+                        tenant=self.tenant, number=candidate).exists():
+                    self.number = candidate
+                    break
+            else:
+                raise RuntimeError("Could not mint an FND- number after five attempts.")
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        # The pair-of-truths rule again, same shape as ComplianceAudit: "resolved" and a resolve
+        # date are one statement, so neither may be recorded without the other.
+        if self.status == "resolved" and not self.resolved_on:
+            raise ValidationError({"resolved_on": "A resolved finding needs the date it resolved."})
+        if self.resolved_on and self.status != "resolved":
+            raise ValidationError({"resolved_on": "Only a resolved finding has a resolve date."})
+        if self.severity == "critical" and self.status == "risk_accepted":
+            raise ValidationError({"status": "A critical finding cannot be marked accepted. "
+                                             "Resolve it or leave it open."})
+
+    @property
+    def is_open(self):
+        return self.status in self.OPEN_STATUSES
+
+    @property
+    def is_overdue(self):
+        """Derived, never stored. A NULL `due_on` is *not* an overdue finding."""
+        return bool(self.due_on and self.is_open and self.due_on < timezone.localdate())
+
+    def __str__(self):
+        return "%s %s" % (self.number, self.title)
