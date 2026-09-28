@@ -50,14 +50,15 @@
             <td>
               <div class="table-actions">
                 {% comment %}
-                  Delete only, and deliberately. An acknowledgement is immutable evidence: there is
-                  no edit page, so a row can never be quietly rewritten to claim somebody agreed to
-                  something they did not. Removing one is itself audited.
+                  No actions at all, and deliberately. An acknowledgement is immutable evidence:
+                  there is no edit page, so a row can never be quietly rewritten to claim somebody
+                  agreed to something they did not — and there is no delete button either, because
+                  an admin who can remove an attestation can also quietly manufacture a clean
+                  register. The view refuses deletion outright; the audit trail is the permanent
+                  record. A wrong person is handled by recording the correct one, which the
+                  back-fill page flags as recorded-on-behalf-of.
                 {% endcomment %}
-                <form method="post" action="{% url 'core:policyacknowledgement_delete' obj.pk %}" onsubmit="return confirm('Delete this acknowledgement record? It is evidence that it happened.');">
-                  {% csrf_token %}
-                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                </form>
+                <span class="text-muted" title="Acknowledgements are permanent evidence and cannot be edited or deleted."><i data-lucide="lock"></i></span>
               </div>
             </td>
           </tr>
