@@ -66,7 +66,9 @@ GRC_NOTES = [
 # ============================================================ bullet 1: control frameworks
 @tenant_admin_required
 def controlframework_list(request):
-    qs = ControlFramework.objects.filter(tenant=request.tenant)
+    # I7: select_related("owner") -- the list renders the owner column, so without it that is
+    # one extra query per row.
+    qs = ControlFramework.objects.filter(tenant=request.tenant).select_related("owner")
     return crud_list(
         request, qs, "core/controlframework/list.html",
         search_fields=["code", "name", "authority", "description"],
@@ -214,7 +216,7 @@ def compliancecontrol_list(request):
     # which also ends the three-way ambiguity I11 recorded: `framework_count` meant the
     # per-control mapping count here, the active-framework count on the board, and the
     # all-frameworks count on the framework list.
-    qs = ComplianceControl.objects.filter(tenant=request.tenant).annotate(
+    qs = ComplianceControl.objects.filter(tenant=request.tenant).select_related("owner").annotate(
         mapping_total=Count("mappings", distinct=True)
     )
     # A GROUP BY suppresses `Meta.ordering` in Django, so without this the annotated list is
@@ -290,7 +292,7 @@ def corporatepolicy_list(request):
     # happens once a row is actually instantiated, a filter matching nothing returned 200
     # with "No policies recorded" and nobody saw the 500. `acknowledgement_total` is the
     # same number under a name nothing else claims.
-    qs = CorporatePolicy.objects.filter(tenant=request.tenant).annotate(
+    qs = CorporatePolicy.objects.filter(tenant=request.tenant).select_related("owner").annotate(
         acknowledgement_total=Count("acknowledgements", distinct=True)
     )
     # GROUP BY suppresses Meta.ordering; order explicitly so LIMIT/OFFSET pagination is
@@ -488,7 +490,9 @@ def policyacknowledgement_delete(request, pk):
 # ============================================================ bullet 3: the risk register
 @tenant_admin_required
 def riskregister_list(request):
-    qs = RiskRegister.objects.filter(tenant=request.tenant)
+    # I7: select_related("owner"), matching riskregister_detail. Without it the list template's
+    # Owner column is one extra query per row.
+    qs = RiskRegister.objects.filter(tenant=request.tenant).select_related("owner")
     return crud_list(
         request, qs, "core/riskregister/list.html",
         search_fields=["code", "title", "risk_statement", "category"],
@@ -499,9 +503,10 @@ def riskregister_list(request):
             "treatment_choices": RiskRegister.TREATMENT_CHOICES,
             "likelihood_choices": RiskRegister.LIKELIHOOD_CHOICES,
             "open_count": qs.filter(status__in=RiskRegister.OPEN_STATUSES).count(),
-            # Read off the derived band, not a stored column, so the figure can never disagree
-            # with the score it summarises.
-            "critical_count": sum(1 for r in qs if r.score_label == "critical"),
+            # The band, counted in SQL. `score_label` is `inherent_score > 16` for "critical"
+            # (models/Compliance.py:668-674) -- the same boundary, read off the stored score
+            # rather than re-derived by walking every row in Python (I8).
+            "critical_count": qs.filter(inherent_score__gt=16).count(),
             "notes": GRC_NOTES,
         },
     )
@@ -553,18 +558,25 @@ def grc_overview(request):
     controls = ComplianceControl.objects.filter(tenant=tenant)
     risks = RiskRegister.objects.filter(tenant=tenant)
     policies = CorporatePolicy.objects.filter(tenant=tenant)
+    # I8: every figure below is a DB-side COUNT. The three `sum(1 for ...)` aggregates walked
+    # whole querysets in Python on every board load, which is O(all rows) to produce one integer.
+    # `score_label` is `> 16` for "critical" (models/Compliance.py:668-674), so the band is
+    # reproduced as a filter on the stored score rather than by re-deriving it in Python.
+    # `is_overdue_review` is `next_review_on and next_review_on < today`; `__lt` excludes NULL
+    # for the same reason, so a row with no review date is still not counted overdue.
+    today = timezone.localdate()
     return render(request, "core/grcoverview.html", {
         "frameworks": ControlFramework.objects.filter(tenant=tenant, is_active=True)[:8],
         "framework_count": ControlFramework.objects.filter(tenant=tenant).count(),
-        "controls": controls.order_by("code")[:8],
         "control_count": controls.count(),
         "effective_count": controls.filter(status="effective").count(),
-        "policies": policies.order_by("code")[:8],
         "published_policies": policies.filter(status="published").count(),
         "risks": risks[:8],
         "open_risks": risks.filter(status__in=RiskRegister.OPEN_STATUSES).count(),
-        "critical_risks": sum(1 for r in risks if r.score_label == "critical"),
-        "overdue_reviews": (sum(1 for c in controls if c.is_overdue_review)
-                            + sum(1 for r in risks if r.is_overdue_review)),
+        "critical_risks": risks.filter(inherent_score__gt=16).count(),
+        "overdue_reviews": (
+            controls.filter(next_review_on__lt=today).count()
+            + risks.filter(next_review_on__lt=today).count()
+        ),
         "notes": GRC_NOTES,
     })
