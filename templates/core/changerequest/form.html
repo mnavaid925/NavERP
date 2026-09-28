@@ -45,7 +45,6 @@
           {% include "partials/form_field.html" with field=form.risk_level %}
           {% include "partials/form_field.html" with field=form.impact_level %}
           {% include "partials/form_field.html" with field=form.status %}
-          {% include "partials/form_field.html" with field=form.requested_at %}
           {% include "partials/form_field.html" with field=form.downtime_required %}
           {% include "partials/form_field.html" with field=form.notes %}
         </div>
@@ -53,8 +52,10 @@
           go wrong, impact is what it does to users if it does. This vocabulary is deliberately NOT the alert
           severity list &mdash; a firing severity and an assessed change risk are different facts that happen to
           share three words.</p>
-        <p class="text-muted">Leave <code>status</code> at Draft. Submitting is a separate action on the change's
-          own page, and it is what stamps the requestor and the request time.</p>
+        <p class="text-muted">Leave <code>status</code> at Draft &mdash; it is the only value on this dropdown.
+          Submitting, approving and rolling back are separate actions on the change's own page, and each
+          one stamps the requestor, the approver or the reason itself. A status typed here could claim a
+          decision without the evidence behind it, so the control does not offer one.</p>
       </div>
     </div>
 
