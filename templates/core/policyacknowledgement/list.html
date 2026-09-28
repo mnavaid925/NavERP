@@ -19,6 +19,12 @@
     <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>These rows are evidence of a
       click, nothing more.</strong> There is no mail dispatcher in this application, so nobody is
       reminded, chased or escalated.</p>
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Only tenant administrators can
+      record an acknowledgement</strong> &mdash; both the Acknowledge button and the back-fill page sit
+      behind the administrator gate. So this register is a record of what <em>administrators</em>
+      recorded, and a low count here is not evidence that ordinary members failed to read a policy: it
+      usually means they were never able to acknowledge it at all. Nothing on a policy page should be
+      read as a statement about the wider workforce.</p>
     {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
     <form method="get" class="filter-bar">
       <div class="form-group" style="flex:1; min-width:200px;">
