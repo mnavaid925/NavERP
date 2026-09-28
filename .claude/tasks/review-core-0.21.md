@@ -674,3 +674,44 @@ if number is None:
 control = get_object_or_404(ComplianceControl, pk=number, tenant=request.tenant)
 ```
 
+## Phase 5 — fixes applied
+
+Each finding, and how it was verified. **Every "fixed" line below was proved by execution against the
+live database or a real request, not by reading the diff and assuming.**
+
+| ID | Status | Verification |
+|---|---|---|
+| **C1** | [x] fixed | `seed_core` now constructs the risk, calls `clean()`, then `save()`. **Verified in the DB:** RSK-01=12/high, RSK-02=6/medium, RSK-03=20/critical — previously 0/0/0. Sort order is now meaningful. |
+| **C2** | [x] fixed | Aliases renamed to `mapping_total` / `acknowledgement_total`; explicit `.order_by("code")` added. **Verified:** both annotated querysets now evaluate cleanly against the live DB (`AttributeError` gone). |
+| **C3** | [x] fixed | The context-build `sum(1 for c in qs ...)` is now a DB-side `.filter().count()`. **Verified:** evaluating the old form over an *empty* annotated queryset no longer raises, so the page is no longer dead at 0 rows. |
+| **I1** | [x] fixed | Renamed to `acknowledgement_count` in view, template and contract, with the reasoning recorded in the contract so the name is not "fixed" back. |
+| **I2** | [x] fixed | `defaults={"notes": form.cleaned_data.get("notes") or ""}` passed to `get_or_create` — keeps double-submit idempotency and avoids a `TypeError` on the already-acknowledged branch. |
+| **I3** | [x] fixed | `controls` / `policies` removed from `grc_overview`'s context; the template reads only scalar counts. |
+| **I4** | [x] fixed | Dead `controls` queryset removed from `controlframeworkmapping_list`. |
+| **I5** | [x] fixed | All 3 `badge-blue` → `badge-info`. **Verified:** zero `badge-blue` occurrences remain anywhere in `templates/`, and `badge-info` is one of the six classes `theme.css` actually defines. |
+| **I6** | [x] fixed | All 3 coverage fallbacks now `get_coverage_display`. **Verified:** `not_started`→"Not started", `covered`→"Covered", and an unknown value now renders itself instead of falsely claiming "Not started". |
+| **I7** | [x] fixed | `select_related("owner")` added to the three lists that lacked it. |
+| **I8** | [x] fixed | `critical_risks` → `inherent_score__gt=16` (uses `grc_tenant_score_idx`); `overdue_reviews` → two DB counts; `riskregister_list`'s `critical_count` likewise. No queryset is walked in Python to produce one integer. |
+| **I9** | [x] fixed | The three aggregates are evaluated once in the view and passed as context; the template reads plain values instead of re-running the properties. |
+| **I10** | [x] fixed | Reworded rather than changing the authorization boundary — the register now states that only administrators can acknowledge, so a low count is not read as workforce non-compliance. The decision to keep the admin gate is recorded explicitly. |
+| **I11** | [x] fixed | The three meanings of `framework_count` are now distinct names; recorded as a contract rule. |
+| **I12** | [x] fixed | `as_db_int` (the existing helper, which cites L11) now guards all three POST reads, and the comment claiming it was unnecessary is deleted. **Verified:** `as_db_int('²')`, `as_db_int('9'*100)`, `as_db_int('')`, `as_db_int('-3')` all return `None`; `as_db_int('12')` returns `12`. |
+| **I13** | [x] fixed | Acknowledgement delete now refuses outright with an explanatory message; policy delete is blocked while attestations exist unless `discard_attestations=1` is posted, which writes an audit row naming how many were destroyed. **Verified end-to-end:** ack delete → row survives + message shown; policy delete → refused, policy survives; override → both gone. The misleading delete button was removed from the list. |
+| **I14** | [x] fixed | `acknowledged_count` now filters `policy_version=self.version`, with a new `superseded_acknowledgement_count` shown beside it so the excluded attestations are named rather than silently dropped. **Verified** against the live DB. |
+| **M1** | [~] skipped | Deferred — one avoidable COUNT on a list that already runs 6; not worth churn on its own. |
+| **M2** | [x] fixed | Contract §3 now marks `controlframeworkmapping_edit` as **deliberately absent** and says why, instead of carrying a row for a view that does not exist. No view was invented. |
+| **M3** | [~] skipped | Not a defect — recorded to stop re-derivation. |
+| **M4** | [~] skipped | Consistent with every core sibling; an app-wide accessibility change is not a 0.21 fix. |
+| **M5** | [x] fixed | Seeded acknowledgements now carry a "DEMO DATA" note **on the row**. **Verified** by clearing and re-seeding: both rows carry the note. |
+
+**No finding was closed by assertion.** Where a fix could not be proven, it stayed open.
+
+### Post-fix gate
+
+- `manage.py check` → **clean** (0 issues).
+- `makemigrations core --check --dry-run` → **"No changes detected"** — the fixes are behaviour and
+  template changes; I14 added only properties, so no migration is owed. Migration `0018` remains the leaf.
+- `seed_core` run **twice**, both exit 0, no duplicates created — idempotency intact after the `clean()`
+  and `get_or_create(defaults=...)` changes.
+- `test_compliance_models.py` → **29 passed** after the fixes.
+
