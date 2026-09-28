@@ -1615,18 +1615,32 @@ class Command(BaseCommand):
                  "hand in the vulnerability register (0.18) - this row is the enterprise-level "
                  "statement of it, not a second detection mechanism."),
             ]
+            # `clean()` is where `inherent_score` is computed (likelihood x impact, model
+            # line 647), and `Model.save()` does NOT call `full_clean()`. So a bare
+            # `objects.create(...)` here would leave all three seeded risks at the field
+            # default `0` and a board that printed "0 / Low" for every one of them. Build,
+            # validate, then save -- the score must be calculated, never asserted by hand.
+            made = 0
+            scored = []
             for (code, title, statement, category, likelihood, impact, treatment, status,
                  plan) in specs:
-                RiskRegister.objects.create(
+                risk = RiskRegister(
                     tenant=tenant, code=code, title=title, risk_statement=statement,
                     category=category, likelihood=likelihood, impact=impact,
                     treatment=treatment, treatment_plan=plan, status=status, owner=admin_user,
                     reviewed_on=today - 30 * day, next_review_on=today + 335 * day,
-                    notes="Seeded as an EXAMPLE risk. `inherent_score` is NOT passed here - it is "
-                          "recomputed by the model from likelihood x impact, and a seeder that "
-                          "set it would be asserting a number nothing calculated.",
+                    notes="Seeded as an EXAMPLE risk. The inherent score is calculated by the "
+                          "model from likelihood x impact when the seeder calls `clean()`, so "
+                          "the figure shown is derived rather than typed in.",
                 )
-            self.stdout.write(f"  {tenant.name}: seeded {len(specs)} risks (all three score bands)")
+                risk.clean()
+                risk.save()
+                made += 1
+                scored.append(f"{code}={risk.inherent_score} ({risk.score_label})")
+            # The old line here claimed "all three score bands" and printed the FACTORS, which
+            # said nothing about the number a reader would then see on the register. Print the
+            # calculated score and its derived band, so the stdout cannot disagree with the page.
+            self.stdout.write(f"  {tenant.name}: seeded {made} risks: " + ", ".join(scored))
 
         for kind, prefix in [("Control Framework", "CFW"), ("Compliance Control", "CTL"),
                              ("Corporate Policy", "CPOL"), ("Risk Register", "GRC")]:
