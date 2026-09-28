@@ -1,25 +1,37 @@
 """core — 0.20 forms: the job register, the maintenance window, the change register and its rollouts.
 
-**Five forms, all `Meta`-only except the one that cannot be.** `ModelForm._post_clean()` calls
+**Validation lives in one place: the model.** `ModelForm._post_clean()` calls
 `instance.full_clean()`, so every `clean()` in `models/JobScheduler.py`, `models/Maintenance.py`
 and `models/Change.py` already holds on every form, on the admin and on the seeder. A
 `clean_<field>` copy could never fire on its own, so one rule lives in one place.
 
-**The one exception is `FeatureRolloutForm`, and it is forced.** The repo-wide trap the 0.16 form
-docstring describes applies here: a `unique_together` is never validated by a `ModelForm`, because
-`Model._get_unique_checks()` only sees fields that are in `Meta.fields`, and the database raises
-`IntegrityError` as a 500 on save. `FeatureRollout` declares
+**The forms narrow the CHOICES a person may author; they never re-implement a guard.** Three
+`__init__` methods restrict a `status` widget to the values a human can legitimately set from a
+form — `ChangeRequestForm` offers `draft` only, `MaintenanceWindowForm` drops `ended_early`,
+`FeatureRolloutForm` drops `completed` — because each of those statuses needs an evidence stamp
+that is deliberately NOT on the form. This is a *usability* narrowing, not the safety property:
+the model's `clean()` still fires for the Django admin and for any API caller, and on the form it
+renders as a non-field error. Every guard that keys an excluded stamp is keyed on
+`NON_FIELD_ERRORS`, because `add_error()` raises `ValueError` for a key that is not a form field
+and that turned an ordinary dropdown choice into a 500.
+
+**One hand-written rule remains: `FeatureRolloutForm.clean_feature_flag`, and it is forced.** The
+repo-wide trap the 0.16 form docstring describes applies here: a `unique_together` is never
+validated by a `ModelForm`, because `Model._get_unique_checks()` only sees fields that are in
+`Meta.fields`, and the database raises `IntegrityError` as a 500 on save. `FeatureRollout` declares
 `unique_together = (("change", "feature_flag"),)`, so the user-facing failure needs a form-level
 duplicate guard. It copies the `clean_<field>` shape from `apps/core/forms/Localization.py`
 (`StatutoryRuleForm`).
 
 **Every evidence stamp and every actor field is excluded, on purpose.**
-`JobDefinition.last_run_at` / `next_run_at`, `JobRun.triggered_at` / `triggered_by`,
-`MaintenanceWindow.ended_at`, and `ChangeRequest.requestor` / `approved_by` / `requested_at` /
-`approved_at` / `implemented_at` / `rollback_at` / `rollback_reason` / `post_review` are all written
-by a POST-only verb or by the system, never by a form (L22). If `approved_by` were editable a user
-could attribute an approval to somebody else — and the approval is precisely the act an audit
-exists to attribute.
+`JobDefinition.last_run_at` / `next_run_at`, `JobRun.triggered_at` / `triggered_by` /
+`is_dry_run`, `MaintenanceWindow.ended_at`, and `ChangeRequest.requestor` / `approved_by` /
+`requested_at` / `approved_at` / `implemented_at` / `rollback_at` / `rollback_reason` /
+`post_review` are all written by a POST-only verb or by the system, never by a form (L22). If
+`approved_by` were editable a user could attribute an approval to somebody else — and the approval
+is precisely the act an audit exists to attribute. `requested_at` was on `ChangeRequestForm` until
+this pass: a hand-made POST could forge the request date on the register, and permanently so on a
+row that stayed a draft, because the submit verb only overwrites it on the legitimate path.
 """
 from django.core.exceptions import ValidationError
 
@@ -52,7 +64,12 @@ class JobDefinitionForm(TenantModelForm):
 
 
 class JobRunForm(TenantModelForm):
-    """A run record. `triggered_at` and `triggered_by` are excluded — see the module docstring.
+    """A run record. `triggered_at`, `triggered_by` and `is_dry_run` are excluded.
+
+    The first two are stamped by the action that requested the run, so the register cannot be
+    edited into claiming a different requester or time. `is_dry_run` is dropped for the same
+    reason it defaults to `True` in the model: nothing in this repository can legitimately clear
+    it, so a checkbox that could would let an operator edit a dry run into asserting a real one.
 
     There is deliberately NO create route and no Add button for a `JobRun`: the only legitimate
     writer is the `run_now` verb. This form exists so an operator can correct a recorded outcome,
@@ -62,18 +79,20 @@ class JobRunForm(TenantModelForm):
 
     class Meta:
         model = JobRun
-        fields = ["job", "trigger_kind", "status", "is_dry_run", "started_at", "finished_at",
+        fields = ["job", "trigger_kind", "status", "started_at", "finished_at",
                   "exit_code", "records_processed", "duration_ms", "error_message", "notes"]
 
 
 class MaintenanceWindowForm(TenantModelForm):
     """A maintenance window. `ended_at` is excluded — only the `end_now` verb writes it.
 
-    `status` IS editable, and that combination is deliberate: `MaintenanceWindow.clean()` refuses
-    `ended_early` without an `ended_at`, so a user who types that status gets a refusal explaining
-    that a window may only be ended by the verb which records the ending, never by typing a status.
-    The two recorded-scope booleans stay editable because stating the intent is the operator's job;
-    each carries a `help_text` saying that nothing enforces it.
+    `status` IS editable, and that combination is deliberate: the `status` widget below offers
+    only the values a person may AUTHOR, so `ended_early` is never on the dropdown. Ending a
+    window early is the POST-only verb's job, because only the verb can write the `ended_at`
+    evidence stamp — `MaintenanceWindow.clean()` refuses `ended_early` without it, and that
+    refusal renders as a non-field error rather than a 500.
+    The two recorded-scope booleans stay editable because stating the intent is the operator's
+    job; each carries a `help_text` saying that nothing enforces it.
     """
 
     class Meta:
@@ -82,6 +101,13 @@ class MaintenanceWindowForm(TenantModelForm):
                   "status", "affected_services", "suppressed_alert_rules",
                   "suppressed_notification_rules", "incident", "environment", "change_request",
                   "suppresses_jobs", "blocks_admin_writes", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # `ended_early` needs `ended_at`, which is not on this form, so it is not authorable here.
+        # The model guard stays for the admin and for the verb's own callers.
+        self.fields["status"].widget.choices = [
+            (v, l) for v, l in MaintenanceWindow.STATUS_CHOICES if v != "ended_early"]
 
 
 class ChangeRequestForm(TenantModelForm):
@@ -92,27 +118,50 @@ class ChangeRequestForm(TenantModelForm):
     evidence stamps; `rollback_reason` is only meaningful alongside a rollback verb, which refuses
     without it. `post_review` is excluded for the same reason a verification stamp is: it is
     written after the fact, never as part of authoring the change.
+
+    **`status` offers `draft` ONLY** (see `__init__`). Every other lifecycle value needs a stamp
+    this form cannot supply — `approved` needs an approver, `rolled_back` needs a reason and a
+    time — and `submitted` is the submit verb's transition. Those transitions are POST-only verbs
+    that stamp the evidence themselves; a status dropdown that offered them was a dropdown that
+    promised a state the form could not make true.
     """
 
     class Meta:
         model = ChangeRequest
         fields = ["title", "summary", "change_type", "risk_level", "impact_level", "status",
-                  "environment", "requested_at", "downtime_required", "notes"]
+                  "environment", "downtime_required", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Authorable values only. `ChangeRequest.clean()` still refuses an unstamped approval or
+        # rollback for the admin and for any API caller; those refusals render as non-field errors.
+        self.fields["status"].widget.choices = [
+            (v, l) for v, l in ChangeRequest.STATUS_CHOICES if v == "draft"]
 
 
 class FeatureRolloutForm(TenantModelForm):
     """One rollout stage. `started_at` and `completed_at` are excluded.
 
-    Both are written by the verb that moves the stage, never typed. The duplicate guard below is
-    the one hand-written rule in this file, and it exists because `unique_together` is enforced
-    only by the database: without it a user who stages the same flag twice under one change gets a
-    500 rather than a field error.
+    Both are written by the verb that moves the stage, never typed. `status` therefore offers
+    every value EXCEPT `completed`: completing a stage is a transition that records when it
+    finished, and only the mover may record that. `FeatureRollout.clean()` still refuses an
+    unstamped completion for the admin and for any API caller.
+
+    The duplicate guard below is the one hand-written rule in this file, and it exists because
+    `unique_together` is enforced only by the database: without it a user who stages the same flag
+    twice under one change gets a 500 rather than a field error.
     """
 
     class Meta:
         model = FeatureRollout
         fields = ["change", "feature_flag", "stage", "percentage", "cohort_label",
                   "scheduled_at", "status", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # `completed` needs `completed_at`, which is not on this form.
+        self.fields["status"].widget.choices = [
+            (v, l) for v, l in FeatureRollout.STATUS_CHOICES if v != "completed"]
 
     def clean_feature_flag(self):
         """Refuse a second stage for the same flag under the same change.
