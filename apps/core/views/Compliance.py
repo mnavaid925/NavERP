@@ -66,9 +66,11 @@ GRC_NOTES = [
 # ============================================================ bullet 1: control frameworks
 @tenant_admin_required
 def controlframework_list(request):
-    # I7: select_related("owner") -- the list renders the owner column, so without it that is
-    # one extra query per row.
-    qs = ControlFramework.objects.filter(tenant=request.tenant).select_related("owner")
+    # I7: no `select_related` here because `ControlFramework` has NO `owner` field - a framework is
+    # a certification programme, not something a person owns. Only `ComplianceControl`,
+    # `CorporatePolicy` and `RiskRegister` have one, and only those three lists carry the
+    # `select_related("owner")` that keeps the Owner column off an N+1.
+    qs = ControlFramework.objects.filter(tenant=request.tenant)
     return crud_list(
         request, qs, "core/controlframework/list.html",
         search_fields=["code", "name", "authority", "description"],
