@@ -29,12 +29,95 @@ reference for a foundation app with flat entity files. Read them before inventin
 Reference Configuration · `0.15` Localization & Regional Settings ·
 `0.16` Backup, Recovery & Data Lifecycle · `0.17` Monitoring, Logging & Observability ·
 `0.18` Threat Protection & Security Operations · `0.19` License & Subscription Administration
-(in `tenants`) · `0.20` Operations Audit Trail · `0.21` Compliance, Governance & Risk.
+(in `tenants`) · `0.20` **Admin Console & System Operations** · `0.21` Compliance, Governance & Risk.
 
 **Module 0 is complete.** Migrations: `core.0005`–`core.0018`, `accounts.0003`–`accounts.0004`,
 `tenants.0004`.
 
+## 0.20 Admin Console & System Operations
+
+Four models in **three flat files** (backend rule 9 — `core` is a foundation app, so no
+`<SubModule>/` folder), plus a fourth class that is a child with no number.
+
+| Model | Prefix | File | What it is |
+|---|---|---|---|
+| `JobDefinition` | `JOB-` | `models/JobScheduler.py` | A **declared** background job |
+| `JobRun` | `RUN-` | `models/JobScheduler.py` | One recorded run attempt |
+| `MaintenanceWindow` | `MNTW-` | `models/Maintenance.py` | A declared quiet period |
+| `ChangeRequest` | `CHG-` | `models/Change.py` | The change record |
+| `FeatureRollout` | **none** | `models/Change.py` | A stage of a phased rollout |
+
+**Routes** (`app_name` is `core`): four literal board segments FIRST — `core:admin_board`,
+`core:support_board`, `core:bulk_board`, `core:ops_audit_trail` — then four `crud()` groups, then six
+POST-only verbs. **`jobrun` is the one entity that does NOT use `crud()`**: it has no create route,
+because only the `run_now` verb and the seeder write a `JobRun`, and a reachable "add a run" page
+would offer to invent one.
+
+**Templates** (19): `templates/core/<entity>/{list,detail,form}.html` for the five entities, plus
+four standalone boards at the app root — `adminboard.html`, `supportboard.html`, `bulkboard.html`,
+`opstrail.html`.
+
+**Seeder**: `seed_core` gains `_seed_admin_console` (5 jobs, 2 runs, 2 windows, 2 changes, 1 rollout
+per tenant) and four `NumberingScheme` rows for `JOB`/`RUN`/`MNTW`/`CHG`. **There is no green
+success anywhere in it** — the runs are `queued` (dry) and `skipped` only, because nothing in this
+repository produces a run that succeeded.
+
+### The honesty invariant — the one rule to preserve
+
+Everything 0.20 stores is a **declaration**, and **no page may present a declaration as though it
+were enforced**. Nine capabilities are declined, and each is stated in words on the page itself and
+numbered in the `LIVE_LINKS["0.20"]` comment: scheduler execution, queue/worker pool, run
+monitoring, maintenance-window enforcement, change deployment, rollout application, rollback
+execution, bulk execution, and in-app help delivery.
+
+Concretely, these are **recorded and enforced by nothing**: a job's `handler_path` (never imported
+anywhere — a test asserts that, because resolving it would be RCE), `pool_name`, `priority` and
+failure thresholds; a window's `suppressed_alert_rules`, `suppressed_notification_rules` and
+`blocks_admin_writes`; a change's approval and deployment; a rollout's `percentage`. If you add a
+field here, decide which side of that line it is on **before** you write the template, and say which
+in the `help_text`.
+
+### Gotchas specific to 0.20 — all four were found the hard way
+
+- **A `Model.clean()` guard keyed on a field the form EXCLUDES is a 500, not a field error.**
+  `ModelForm._post_clean()` -> `full_clean()` -> `clean()` -> `add_error(None, errors)`, and
+  `add_error` raises `ValueError` for a key that is not a form field. Four status values
+  (`ChangeRequest` `approved`/`rolled_back`, `MaintenanceWindow` `ended_early`, `FeatureRollout`
+  `completed`) 500'd on create **and** edit, and the values were **in the rendered dropdowns**. The
+  fix has two halves and both are needed: key such guards on `NON_FIELD_ERRORS`, **and** narrow the
+  `status` widget to the values a person may author (`_narrow_status` in `forms/AdminConsole.py`).
+- **A narrowed `<select>` whose current value is absent will silently RESET the row.** The browser
+  posts the first option, and that option is a legal value — editing an approved change's title
+  would quietly set it back to Draft. `_narrow_status` therefore re-adds the instance's own status
+  on edit, labelled `(current)`.
+- **`AuditLog.action` is `max_length=10`.** A descriptive verb belongs in `changes`, never in
+  `action` — a 12-char verb truncates SILENTLY on this project's non-strict MariaDB and is a
+  `DataError` 500 under `STRICT_TRANS_TABLES`. `write_audit_log` now enforces the width at source.
+- **A docstring that claims a field is excluded when it is not will hide that bug for six review
+  passes.** That is exactly how `ChangeRequestForm.requested_at` survived: the module docstring
+  asserted it was off the form. **When you change a form's `Meta.fields`, update its docstring in
+  the same edit** — and grep the family for the same false-claim shape.
+
+### 0.20's evidence rules (deliberate, and easy to undo by accident)
+
+- `JobRun.is_dry_run` **defaults to `True`** and is **not a form field**. Only a real dispatcher
+  could legitimately clear it, and none exists, so a checkbox that could would let an operator edit
+  a dry run into asserting a real one.
+- `JobDefinition.last_run_at` / `next_run_at` are **off the form and left alone by `run_now`** — a
+  human pressing a button is not the scheduler, and stamping them invents a cadence observation.
+- **Only a window that has not started may be deleted.** A window somebody ran is evidence an
+  incident review may need, so the guard is in the view *and* in the template's Actions column.
+- **A rollback with no stated reason is refused by the view**, not just by the input's `required`.
+- Actor and stamp fields (`requestor`, `approved_by`, `requested_at`, `approved_at`, `ended_at`,
+  `triggered_by`, `completed_at`) are **never form fields**, so a crafted POST cannot forge them.
+  Asserted in `test_ac0_security.py` at the request level, not only at the form level.
+- **The seeder must never write a `status="approved"` row with no `approved_by`.** `crud_edit`
+  re-runs `full_clean()` on every save, so such a row is permanently uneditable — a shipped demo
+  record that can never be saved again. The example change is seeded `submitted` for this reason.
+
+
 ## 0.21 Compliance, Governance & Risk
+
 
 Six models, all in one flat file `apps/core/models/Compliance.py` (backend rule 9 — `core` is a
 foundation app, so no `<SubModule>/` folder and no `*_advanced.py`).
