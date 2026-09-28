@@ -103,6 +103,12 @@ keyed on fields **excluded from their own forms** (an ordinary dropdown choice 5
 
 ---
 
+
+
+---
+
+---
+
 ## Pass 2 — `explorer` (read-only, as-built verification)
 
 **Outcome: 2 new Critical, 1 new Important.** Every claim from pass 1 was CONFIRMED against the
@@ -170,9 +176,6 @@ unlabelled `is_dry_run` checkbox).
 
 > **C6 IS STRUCK — see the RETRACTION at the top of this file.** It was a false positive; the
 > explorer misread `crud()`. Do not rename `core:incident_list`.
-
----
-
 ## Pass 3 — `frontend-reviewer` (read-only, 19 templates)
 
 **Verdict: request changes.** Design-system discipline is strong: zero unclosed `{#`, every palette
@@ -239,3 +242,92 @@ cross-app URLs · dark mode · responsiveness.
 
 ---
 
+---
+
+
+---
+
+## Pass 4 — `performance-reviewer` (read-only, all render paths)
+
+**Verdict: three real N+1s on hot paths.** Query counts were derived from the actual render paths,
+not estimated. Nothing in the model layer runs a query per row except `ChangeRequest.rollout_count`.
+
+### Measured per page load (fixed + N+1)
+
+| View | Fixed | N+1 | Total |
+|---|---|---|---|
+| `support_board` | 12 | **+20** | <=32 |
+| `admin_board` | 12 | **+10** | <=22 |
+| `jobrun_list` | 4 | **+15** | <=19 |
+| `jobdefinition_detail` | 3 | **+10** | <=13 |
+| `maintenancewindow_list` | 5 (2 are O(all rows)) | 0 | 5 |
+| `ops_audit_trail` | 3 (1 is O(all audit rows)) | 0 | 3 |
+| `jobdefinition_list`, `changerequest_list`, `bulk_board`, `featurerollout_list` | 4-7 | 0 | clean |
+
+### Critical
+
+- **C10 — `views/AdminConsole.py:166` + `templates/core/jobrun/list.html:73`.** `jobrun_list`
+  `select_related`s `job`, but the row loop prints `{{ obj.triggered_by }}`, an FK to `accounts.User`
+  that is **not** selected. **1 + N, up to 15 extra queries on a 15-row page.** `User.__str__`
+  returns `self.email`, so there is no chained hop and one field fixes it.
+  **Fix: `select_related("job", "triggered_by")`.**
+- **C11 — `views/AdminConsole.py:704-705` + `templates/core/supportboard.html:98,107`.**
+  `crm_articles` and `hrm_articles` carry no `select_related`, but the templates dereference
+  `{{ a.kb_category.name }}` and `{{ a.category.name }}`. **Up to 10 + 10 = 20 extra queries** — the
+  largest single-page N+1 here. The other two loops (`crm_cases`, `hrm_tickets`) dereference only
+  local columns: **confirmed no N+1 there.** **Fix: add `select_related` for each category.**
+- **C12 — `views/AdminConsole.py:657` + `templates/core/adminboard.html:84`.** `recent_activity` has
+  no `select_related("user")` and the template prints `{{ row.user }}`. **Up to 10 extra queries on
+  the page an operator opens first.** The telling part: `ops_audit_trail` at `:860` **does** have
+  `.select_related("user")` for the same model, same column, same dereference, 200 lines away. This
+  is a **copy divergence, not a design choice.** **Fix: add `select_related("user")`.**
+
+### Important
+
+- **C13 — `views/AdminConsole.py:236`.** Confirms and extends the already-established `current_count`
+  finding: a Python generator over the full unpaginated `qs`, which also carries
+  `prefetch_related("affected_services")`, so every row's M2M is hydrated and thrown away. This is
+  **two** defects, not one:
+  1. **Cost**: O(all windows) plus a wasted prefetch, on every list load.
+  2. **Correctness**: it is built from the **PRE-FILTER** queryset, while `crud_list` applies
+     status/recurrence/environment/search internally — so **the badge can disagree with the table
+     below it** whenever a filter is active.
+  **Fix: `qs.filter(starts_at__lte=now, ends_at__gt=now).count()` with one captured `now`,** which
+  also removes the per-row `timezone.now()` read and needs no `isnull` filters (SQL three-valued
+  logic already excludes NULL, matching the property's `bool()` guard).
+- **C14 — `views/AdminConsole.py:873-875`.** `action_choices` scans **every distinct action over the
+  tenant's entire append-only audit log on every page load**, unbounded, to re-derive a small closed
+  vocabulary. Needs a bounded alternative and an `assertNumQueries` lock so it cannot regress to a
+  full scan.
+- **C15 — `Change.py:170-173` (`ChangeRequest.rollout_count` = `len(self.rollouts.all())`).** A
+  **query per call**; currently safe because the detail template reads it once, but it is a latent
+  N+1 the moment a list template renders it per row. Annotate when used in a list.
+- **C16 — `views/AdminConsole.py:110` (`jobdefinition_detail`).** Up to 10 extra queries; the `runs`
+  loop is not `select_related` through the job.
+- **C17 — `maintenancewindow_detail`.** Needs a 3-line `prefetch_related` param on the shared
+  `crud_detail` plus moving the template's `.exists` test into the view.
+
+### Confirmed ACCEPTABLE — do NOT "fix" these (the reviewer was explicit)
+
+- The four list-view `.count()`s (`unrun_count` / `muted_count` / `awaiting_count` /
+  `high_risk_open`) — real but cheap.
+- The **eleven** `admin_board` counts — "leave them". The real defect on that page is the `row.user`
+  N+1 (C12), not the count count.
+- **Both `MaintenanceWindow` indexes are correctly matched to their queries.** `window_live` is
+  index-served by `(tenant, starts_at)` as a range scan; `window_scheduled` is index-assisted by
+  `(tenant, status)` collapsing `status__in` to two keys. **Add neither** — a table holding tens of
+  declared windows per tenant does not justify it.
+- M1's unused joins, M2's unused context keys.
+
+### Handoff to test-writer
+`assertNumQueries` on `core:jobrun_list` (4), `core:support_board` (12), `core:admin_board` (12),
+`core:jobdefinition_detail` (3), `core:ops_audit_trail` (3), plus a row-count assertion on
+`action_choices` to lock C14 against regressing to a full scan.
+
+### Non-perf, flagged in passing — CORROBORATES pass-1 C5
+`"bulk_preview"` is 12 chars into `AuditLog.action = CharField(max_length=10)`
+(`AdminConsole.py:842` vs `AuditLog.py:16`), and **`write_audit_log` never validates `action`
+against `ACTION_CHOICES`** — a MySQL strict-mode `DataError` 1406 on every Preview click, invisible
+to the SQLite test suite. A third independent confirmation that C5 is real.
+
+---
