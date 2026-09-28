@@ -65,7 +65,7 @@
                     {% if mapping.coverage == "covered" %}<span class="badge badge-green">Covered</span>
                     {% elif mapping.coverage == "partial" %}<span class="badge badge-amber">Partial</span>
                     {% elif mapping.coverage == "not_applicable" %}<span class="badge badge-slate">Not applicable</span>
-                    {% else %}<span class="badge badge-slate">Not started</span>{% endif %}
+                    {% else %}<span class="badge badge-slate">{{ mapping.get_coverage_display }}</span>{% endif %}
                   </td>
                   <td>
                     <div class="table-actions">
