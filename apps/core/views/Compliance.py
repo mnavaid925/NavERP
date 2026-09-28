@@ -25,6 +25,7 @@ method check ran, and the house standard is 405 for a wrong method regardless of
 from django.contrib import messages
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
 from apps.core.views._common import *  # noqa: F401,F403
 from apps.core.utils import write_audit_log
@@ -198,8 +199,21 @@ def controlframeworkmapping_delete(request, pk):
 # ============================================================ bullet 1: the controls
 @tenant_admin_required
 def compliancecontrol_list(request):
+    # C2/C3: the annotation is deliberately NOT named `framework_count`.
+    # `ComplianceControl` has a `@property framework_count` (models/Compliance.py:338) and an
+    # annotate() alias that collides with a property makes Django SET the attribute on the
+    # instance, which raises `AttributeError: can't set attribute` and 500s this page
+    # unconditionally. `mapping_total` is the same number under a name nothing else claims,
+    # which also ends the three-way ambiguity I11 recorded: `framework_count` meant the
+    # per-control mapping count here, the active-framework count on the board, and the
+    # all-frameworks count on the framework list.
     qs = ComplianceControl.objects.filter(tenant=request.tenant).annotate(
-        framework_count=Count("mappings"))
+        mapping_total=Count("mappings", distinct=True)
+    )
+    # A GROUP BY suppresses `Meta.ordering` in Django, so without this the annotated list is
+    # unordered: LIMIT/OFFSET pagination is then non-deterministic and it forfeits the
+    # (tenant_id, code) unique index as its sort source. Order explicitly, by the same column.
+    qs = qs.order_by("code")
     return crud_list(
         request, qs, "core/compliancecontrol/list.html",
         search_fields=["code", "title", "description", "category"],
@@ -207,10 +221,19 @@ def compliancecontrol_list(request):
         extra_context={
             "status_choices": ComplianceControl.STATUS_CHOICES,
             "effective_count": qs.filter(status="effective").count(),
-            "overdue_count": sum(1 for c in qs if c.is_overdue_review),
+            # Counted in the DATABASE, not by walking the annotated queryset in Python. That
+            # walk is what forced the GROUP BY evaluation at context-build time (C3), and it is
+            # O(all controls) on every page load. `is_overdue_review` is
+            # `next_review_on and next_review_on < today`; `__lt` excludes NULL for the same
+            # reason, so a control with no review date is still not counted as overdue.
+            "overdue_count": qs.filter(
+                next_review_on__isnull=False,
+                next_review_on__lt=timezone.localdate(),
+            ).count(),
             # The gap figure: a control in no framework at all is a control no audit will ever ask
-            # about, which is exactly what a framework register exists to surface.
-            "unmapped_count": qs.filter(framework_count=0).count(),
+            # about, which is exactly what a framework register exists to surface. Reads the
+            # renamed alias, since the property of the old name is shadowed by nothing now.
+            "unmapped_count": qs.filter(mapping_total=0).count(),
             "notes": GRC_NOTES,
         },
     )
@@ -253,8 +276,19 @@ def compliancecontrol_delete(request, pk):
 # ============================================================ bullet 2: policies
 @tenant_admin_required
 def corporatepolicy_list(request):
+    # C2: NOT `acknowledged_count` -- `CorporatePolicy` has a `@property` of that name
+    # (models/Compliance.py:492), and an annotate() alias colliding with a property makes
+    # Django set the attribute on the instance and raise `AttributeError: can't set
+    # attribute`. This page was the MASKED half of the same defect: because the crash only
+    # happens once a row is actually instantiated, a filter matching nothing returned 200
+    # with "No policies recorded" and nobody saw the 500. `acknowledgement_total` is the
+    # same number under a name nothing else claims.
     qs = CorporatePolicy.objects.filter(tenant=request.tenant).annotate(
-        acknowledged_count=Count("acknowledgements"))
+        acknowledgement_total=Count("acknowledgements", distinct=True)
+    )
+    # GROUP BY suppresses Meta.ordering; order explicitly so LIMIT/OFFSET pagination is
+    # deterministic and the (tenant_id, code) index can serve the sort.
+    qs = qs.order_by("code")
     return crud_list(
         request, qs, "core/corporatepolicy/list.html",
         search_fields=["code", "title", "summary"],
@@ -263,7 +297,9 @@ def corporatepolicy_list(request):
             "status_choices": CorporatePolicy.STATUS_CHOICES,
             "type_choices": CorporatePolicy.POLICY_TYPE_CHOICES,
             "published_count": qs.filter(status="published").count(),
-            "unacknowledged_count": PolicyAcknowledgement.objects.filter(
+            # I1: was `unacknowledged_count`, which said the opposite of what it counts --
+            # it is the number of acknowledgements that EXIST against published policies.
+            "acknowledgement_count": PolicyAcknowledgement.objects.filter(
                 tenant=request.tenant, policy__status="published",
                 policy__requires_acknowledgement=True).count(),
             "notes": GRC_NOTES,
