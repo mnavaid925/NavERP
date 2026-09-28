@@ -180,8 +180,24 @@ class ChangeRequest(models.Model):
 
     @property
     def rollout_count(self):
-        """How many rollout stages this change declares."""
-        return len(self.rollouts.all())
+        """How many rollout stages this change declares.
+
+        **Prefetch-aware, deliberately.** A plain `len(self.rollouts.all())` is safe on the one
+        detail page that reads it, and is a latent N+1 the moment a LIST renders it per row - each
+        row would fire its own query. Reading Django's prefetch cache when it is there makes the
+        count free on any view that passes `prefetch_related("rollouts")`, and still correct on
+        one that does not.
+
+        **Not an `annotate()` alias, and must never become one.** A `property` is a data
+        descriptor, so `ModelIterable` cannot `setattr` an annotation of the same name onto the
+        instance and the query dies with `AttributeError: can't set attribute` the first time a
+        row is instantiated (L57 - it shipped twice in 0.21). A view that wants the count in SQL
+        must annotate under a DIFFERENT name and read that.
+        """
+        cache = getattr(self, "_prefetched_objects_cache", {})
+        if "rollouts" in cache:
+            return len(cache["rollouts"])
+        return self.rollouts.count()
 
     def __str__(self):
         return "%s %s" % (self.number, self.title)
