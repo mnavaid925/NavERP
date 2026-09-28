@@ -839,8 +839,15 @@ def bulk_preview(request):
     affected = BULK_AFFECTED[tool](tenant)
     label = dict((v, l) for v, l, _ in BULK_TOOL_CHOICES)[tool]
 
-    write_audit_log(request.user, None, "bulk_preview", tenant=tenant,
-                    changes={"tool": tool, "would_affect": affected, "executed": False})
+    # `AuditLog.action` is varchar(10), and the descriptive verb belongs in `changes` (see the
+    # same rule stated above `run_now`). `bulk_preview` is 12 characters, so passing it as the
+    # ACTION truncated it to `bulk_previe` on this non-strict MariaDB and would be a DataError
+    # 1406 -> HTTP 500 on every preview click under a STRICT_TRANS_TABLES host. The write happens
+    # before the redirect, so the operator would have seen a 500 instead of the count. The audit
+    # trail is a permanent record: the verb goes in the payload, not truncated into the column.
+    write_audit_log(request.user, None, "update", tenant=tenant,
+                    changes={"verb": "bulk_preview", "tool": tool, "would_affect": affected,
+                             "executed": False})
     messages.info(
         request, "Preview only: %s would affect %d rows. Nothing was changed — this application has "
                  "no bulk executor." % (label, affected))
