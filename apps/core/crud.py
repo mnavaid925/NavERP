@@ -236,10 +236,13 @@ def crud_edit(request, *, model, pk, form_class, template, success_url, extra_co
     return render(request, template, ctx)
 
 
-def crud_detail(request, *, model, pk, template, extra_context=None, select_related=()):
+def crud_detail(request, *, model, pk, template, extra_context=None, select_related=(),
+                prefetch_related=()):
     qs = model.objects.filter(tenant=request.tenant)
     if select_related:
         qs = qs.select_related(*select_related)
+    if prefetch_related:
+        qs = qs.prefetch_related(*prefetch_related)
     obj = get_object_or_404(qs, pk=pk)
     ctx = {"obj": obj}
     ctx.update(extra_context or {})
