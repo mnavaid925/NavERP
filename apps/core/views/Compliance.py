@@ -330,7 +330,15 @@ def corporatepolicy_detail(request, pk):
         "obj": policy,
         "acknowledgements": policy.acknowledgements.select_related("user"),
         # The rate is `None` (not 0) when it cannot be determined; the template prints an em dash.
+        #
+        # I9: `acknowledgement_rate`, `acknowledged_count` and
+        # `superseded_acknowledgement_count` are all DB-hitting properties and a property is not
+        # cached, so the template re-running each one per access meant the same COUNT was issued
+        # two or three times for this one page. They are evaluated once here and handed to the
+        # template as plain values; the template reads the names below, not `obj.<property>`.
         "acknowledgement_rate": policy.acknowledgement_rate,
+        "acknowledged_count": policy.acknowledged_count,
+        "superseded_acknowledgement_count": policy.superseded_acknowledgement_count,
         "notes": GRC_NOTES,
     })
 
