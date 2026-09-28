@@ -816,16 +816,18 @@ class ComplianceAudit(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        if not self.number:
-            for _ in range(5):
-                candidate = next_number(self.tenant, "CAUD", width=5)
-                if not ComplianceAudit.objects.filter(
-                        tenant=self.tenant, number=candidate).exists():
-                    self.number = candidate
-                    break
-            else:
-                raise RuntimeError("Could not mint a CAUD- number after five attempts.")
-        super().save(*args, **kwargs)
+        if self.number:
+            return super().save(*args, **kwargs)
+        # Five attempts: `next_number()` is existence-guarded max+1 and is explicitly documented
+        # as not atomic under concurrency, so a collision is possible and must be survivable.
+        for _ in range(5):
+            self.number = next_number(ComplianceAudit, self.tenant, "CAUD")
+            try:
+                with transaction.atomic():
+                    return super().save(*args, **kwargs)
+            except IntegrityError:
+                self.number = ""
+        return super().save(*args, **kwargs)
 
     def clean(self):
         if self.target_date and self.started_on and self.target_date < self.started_on:
@@ -911,16 +913,16 @@ class AuditEvidence(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        if not self.number:
-            for _ in range(5):
-                candidate = next_number(self.tenant, "EVD", width=5)
-                if not AuditEvidence.objects.filter(
-                        tenant=self.tenant, number=candidate).exists():
-                    self.number = candidate
-                    break
-            else:
-                raise RuntimeError("Could not mint an EVD- number after five attempts.")
-        super().save(*args, **kwargs)
+        if self.number:
+            return super().save(*args, **kwargs)
+        for _ in range(5):
+            self.number = next_number(AuditEvidence, self.tenant, "EVD")
+            try:
+                with transaction.atomic():
+                    return super().save(*args, **kwargs)
+            except IntegrityError:
+                self.number = ""
+        return super().save(*args, **kwargs)
 
     def clean(self):
         # Claiming a document you did not attach is the exact shape of a fabricated evidence trail,
@@ -988,16 +990,16 @@ class AuditFinding(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        if not self.number:
-            for _ in range(5):
-                candidate = next_number(self.tenant, "FND", width=5)
-                if not AuditFinding.objects.filter(
-                        tenant=self.tenant, number=candidate).exists():
-                    self.number = candidate
-                    break
-            else:
-                raise RuntimeError("Could not mint an FND- number after five attempts.")
-        super().save(*args, **kwargs)
+        if self.number:
+            return super().save(*args, **kwargs)
+        for _ in range(5):
+            self.number = next_number(AuditFinding, self.tenant, "FND")
+            try:
+                with transaction.atomic():
+                    return super().save(*args, **kwargs)
+            except IntegrityError:
+                self.number = ""
+        return super().save(*args, **kwargs)
 
     def clean(self):
         # The pair-of-truths rule again, same shape as ComplianceAudit: "resolved" and a resolve
