@@ -50,7 +50,7 @@
   </div></div>
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Window</th><th>Starts</th><th>Ends</th><th>Length</th><th>Recurrence</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+      <thead><tr><th>Window</th><th>Starts</th><th>Ends</th><th>Length</th><th>Recurrence</th><th>Status</th><th class="th-actions">Actions</th></tr></thead>
       <tbody>
         {% for obj in object_list %}
           <tr>
@@ -61,8 +61,17 @@
             <td>{{ obj.duration_human }}</td>
             <td>{{ obj.get_recurrence_display }}</td>
             <td>
+              {% comment %}
+                The chain covers all six of `MaintenanceWindow.STATUS_CHOICES` (draft, scheduled,
+                active, ended_early, completed, cancelled). `cancelled` is RED because the window was
+                called off and will never run; the two in the final `else` are `active` whose times
+                have elapsed without the row being moved on, and `completed` - both SLATE, and
+                deliberately not green: nothing in this build silences anything, so a "successful"
+                window would be a claim the page cannot back (the honesty invariant).
+              {% endcomment %}
               {% if obj.is_current %}<span class="badge badge-amber">In progress</span>
               {% elif obj.status == "ended_early" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "cancelled" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
               {% elif obj.status == "draft" or obj.status == "scheduled" %}{% if obj.is_future %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
               {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
             </td>
