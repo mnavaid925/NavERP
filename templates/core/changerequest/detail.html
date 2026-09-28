@@ -42,7 +42,7 @@
     <div class="card-body">
       <dl class="detail-grid">
         <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
-        <div class="detail-item"><dt>Status</dt><dd>{% if obj.status == "approved" or obj.status == "completed" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == "submitted" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == "rejected" or obj.status == "rolled_back" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{% if obj.status == "approved" or obj.status == "completed" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == "submitted" or obj.status == "scheduled" or obj.status == "in_progress" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == "rejected" or obj.status == "rolled_back" or obj.status == "cancelled" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_change_type_display }}</dd></div>
         <div class="detail-item"><dt>Risk</dt><dd>{{ obj.get_risk_level_display }} <span class="text-muted">(assessed for this change; not an alert severity)</span></dd></div>
         <div class="detail-item"><dt>Impact</dt><dd>{{ obj.get_impact_level_display }}</dd></div>
@@ -68,7 +68,17 @@
     <div class="card"><div class="card-body">
       <form method="post" action="{% url 'core:change_request_rollback' obj.pk %}" onsubmit="return confirm('Record this change as rolled back? You will be asked for a reason.');">
         {% csrf_token %}
-        <input type="text" name="rollback_reason" class="form-input" placeholder="Why is it being rolled back? (required)" required style="max-width:420px; display:inline-block; margin-right:8px;">
+        {% comment %}
+          The reason is REQUIRED, and it is the one field on this page a person types, so it gets a
+          real <label> rather than a placeholder standing in for one: a placeholder disappears the
+          moment the field has content, which is exactly when the operator needs to re-read what
+          they wrote. The markup is the house shape from `partials/form_field.html` - `.form-label`
+          with a `.req` marker - and the width/margin stay inline because there is no `me-*`
+          utility in theme.css, but the margin is now the LOGICAL `margin-inline-end` so it mirrors
+          correctly in an RTL locale, which `margin-right: 8px` would not.
+        {% endcomment %}
+        <label class="form-label" for="rollback_reason">Reason for the rollback <span class="req">*</span></label>
+        <input type="text" id="rollback_reason" name="rollback_reason" class="form-input" placeholder="Why is it being rolled back?" required style="max-width:420px; display:inline-block; margin-inline-end:8px;">
         <button class="btn btn-outline danger" type="submit"><i data-lucide="undo-2"></i> Record a rollback</button>
       </form>
       <p class="text-muted">A rollback with no stated reason is refused by the view, not just by this field &mdash;
@@ -80,7 +90,7 @@
     <div class="card-header"><h2 class="card-title">Rollout stages ({{ rollouts|length }})</h2></div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Stage</th><th>Feature flag</th><th>Reach</th><th>Cohort</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <thead><tr><th>Stage</th><th>Feature flag</th><th>Reach</th><th>Cohort</th><th>Status</th><th class="th-actions">Actions</th></tr></thead>
         <tbody>
           {% for r in rollouts %}
             <tr>
