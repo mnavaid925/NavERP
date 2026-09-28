@@ -15,7 +15,7 @@
   <div class="card"><div class="card-body">
     <p class="text-muted">One row per background job this workspace has <em>declared</em>. NavERP has no scheduler and no worker pool, so nothing here is ever executed: a declared cadence, a declared handler path and a declared failure policy are a written-down intention, reviewed by a person.</p>
     {% if unrun_count %}
-      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>{{ unrun_count }} job{{ unrun_count|pluralize }}</strong> carr{{ unrun_count|pluralize:"ies,y" }} no recorded run. That is expected in this build &mdash; it means the declaration has never been exercised, not that a scheduler is failing.</p>
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>{{ unrun_count }} job{{ unrun_count|pluralize }}</strong> carr{{ unrun_count|pluralize:"y,ies" }} no recorded run. That is expected in this build &mdash; it means the declaration has never been exercised, not that a scheduler is failing.</p>
     {% endif %}
     {% if muted_count %}
       <p class="text-muted"><i data-lucide="bell-off"></i> <strong>{{ muted_count }}</strong> marked muted for a maintenance window. The flag is recorded; no scheduler reads it.</p>
@@ -57,7 +57,7 @@
 
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Job</th><th>Module</th><th>Type</th><th>Cadence</th><th>Handler (declared)</th><th>Pool</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+      <thead><tr><th>Job</th><th>Module</th><th>Type</th><th>Cadence</th><th>Handler (declared)</th><th>Pool</th><th>State</th><th class="th-actions">Actions</th></tr></thead>
       <tbody>
         {% for obj in object_list %}
           <tr>
