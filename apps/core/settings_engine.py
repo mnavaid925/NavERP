@@ -203,6 +203,15 @@ LITERAL_PREFIX_MODELS = {
     "CTL": ["core.ComplianceControl"],
     "CPOL": ["core.CorporatePolicy"],
     "GRC": ["core.RiskRegister"],
+    # 0.21b, bullet 4 is the fifth such case. `ComplianceAudit`, `AuditEvidence` and
+    # `AuditFinding` all mint their prefix in `save()` through a hardcoded literal, exactly as
+    # the six 0.21 models above do, so the `NUMBER_PREFIX` scan cannot see any of them. All three
+    # prefixes (`CAUD`, `EVD`, `FND`) were verified free against every prefix in the repository
+    # before this block was written -- the same check that caught `RSK` colliding with
+    # `projects.ProjectRisk`.
+    "CAUD": ["core.ComplianceAudit"],
+    "EVD": ["core.AuditEvidence"],
+    "FND": ["core.AuditFinding"],
 }
 
 
