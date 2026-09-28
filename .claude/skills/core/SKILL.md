@@ -1,6 +1,6 @@
 ---
 name: core
-description: Work on Module 0 (System Admin & Security) — the foundation, realized across FOUR apps (`core`, `accounts`, `tenants`, `dashboard`). Covers the unified spine (Party/PartyRole/Address/ContactMethod/PartyRelationship/Employment/OrgUnit/Activity/Document/AuditLog) and the platform layer built by 0.1–0.16: tenant & subscription, IAM, RBAC, SSO/MFA, user & organization, module access scope, data security & encryption, privacy & data protection, audit trail, system configuration & settings, workflow & approval administration, notification & communication, integration & API management, master data, localization & regional settings, and backup, recovery & data lifecycle. Use when the user asks to add/change/debug anything under apps/core, apps/accounts, apps/tenants or apps/dashboard, extend seed_core/seed_accounts/seed_tenants, touch Module 0 sidebar wiring (LIVE_LINKS 0.1–0.21), or invokes /core.
+description: Work on Module 0 (System Admin & Security) — the foundation, realized across FOUR apps (`core`, `accounts`, `tenants`, `dashboard`), and now COMPLETE (21 of 21 sub-modules). Covers the unified spine (Party/PartyRole/Address/ContactMethod/PartyRelationship/Employment/OrgUnit/Activity/Document/AuditLog) and the platform layer built by 0.1–0.21: tenant & subscription, IAM, RBAC, SSO/MFA, user & organization, module access scope, data security & encryption, privacy & data protection, audit trail, system configuration & settings, workflow & approval administration, notification & communication, integration & API management, master data, localization & regional settings, backup/recovery/data lifecycle, monitoring & observability, threat protection, license administration, operations audit trail, and compliance/governance/risk. Use when the user asks to add/change/debug anything under apps/core, apps/accounts, apps/tenants or apps/dashboard, extend seed_core/seed_accounts/seed_tenants, touch Module 0 sidebar wiring (LIVE_LINKS 0.1–0.21), or invokes /core.
 ---
 
 # Module 0 — System Admin & Security (the foundation)
@@ -19,7 +19,7 @@ reference for a foundation app with flat entity files. Read them before inventin
 
 ## As-built
 
-**18 of 21 sub-modules are live** (`LIVE_LINKS` in `apps/core/navigation.py` is the source of truth):
+**21 of 21 sub-modules are live** (`LIVE_LINKS` in `apps/core/navigation.py` is the source of truth):
 
 `0.1` Tenant & Subscription · `0.2` Identity & Access Management · `0.3` RBAC & Permissions ·
 `0.4` Authentication & SSO · `0.5` User & Organization · `0.6` Module Administration & Access Scope ·
@@ -28,12 +28,78 @@ reference for a foundation app with flat entity files. Read them before inventin
 `0.12` Notification & Communication · `0.13` Integration & API Management · `0.14` Master Data &
 Reference Configuration · `0.15` Localization & Regional Settings ·
 `0.16` Backup, Recovery & Data Lifecycle · `0.17` Monitoring, Logging & Observability ·
-`0.18` Threat Protection & Security Operations.
+`0.18` Threat Protection & Security Operations · `0.19` License & Subscription Administration
+(in `tenants`) · `0.20` Operations Audit Trail · `0.21` Compliance, Governance & Risk.
 
-**Unbuilt: `0.19`–`0.21`** (License Administration, Admin Console,
-Compliance & Governance). They render as roadmap pills.
+**Module 0 is complete.** Migrations: `core.0005`–`core.0018`, `accounts.0003`–`accounts.0004`,
+`tenants.0004`.
 
-Migrations: `core.0005`–`core.0016`, `accounts.0003`–`accounts.0004`, `tenants.0004`.
+## 0.21 Compliance, Governance & Risk
+
+Six models, all in one flat file `apps/core/models/Compliance.py` (backend rule 9 — `core` is a
+foundation app, so no `<SubModule>/` folder and no `*_advanced.py`).
+
+| Model | Prefix | What it is |
+|---|---|---|
+| `ControlFramework` | `CFW-` | A **certification programme** (SOC 2, ISO 27001, PCI-DSS) |
+| `ComplianceControl` | `CTL-` | One attestation activity a named person owns |
+| `ControlFrameworkMapping` | — | Join row: how much of one clause one control covers |
+| `CorporatePolicy` | `CPOL-` | A policy somebody wrote, with a lifecycle |
+| `PolicyAcknowledgement` | — | Child row: one person acknowledging one **version** |
+| `RiskRegister` | `GRC-` | A risk scored on likelihood x impact |
+
+**There is deliberately no `ComplianceFramework`, and there is no `RSK-` prefix.** 0.8's
+`core.RegulatoryFramework` already answers "which regimes is this workspace under" and already
+carries `dsar_window_days` + `data_residency_region`; a second framework table listing GDPR and
+HIPAA would give one workspace two answers to the same question at audit time (L36). And `RSK` is
+already `projects.ProjectRisk` — two `RSK-00001`s in one tenant are indistinguishable, which is the
+exact failure `prefix_usage()` exists to catch. Both decisions are recorded in
+`.claude/tasks/contract-core-0.21.md`.
+
+**Routes** (`app_name` is `core`): the standalone board `core:grc_overview` at `/core/compliance/`;
+four `crud()` groups give the 20 standard names; then `core:controlframeworkmapping_add`,
+`core:policy_acknowledge`, `core:policyacknowledgement_create`. `controlframeworkmapping` and
+`policyacknowledgement` have **no detail and no edit** — a mapping is a pure join row and an
+acknowledgement is immutable evidence, so their lists are delete-only.
+
+**Templates** (15): `templates/core/<entity>/{list,detail,form}.html` for the four full-CRUD
+entities, `{list,form}.html` for the two child entities, plus the standalone
+`templates/core/grcoverview.html`.
+
+**Seeder**: `seed_core` gains 4 `NumberingScheme` rows and guarded demo blocks (3 frameworks /
+4 controls / 5 mappings / 2 policies / 2 acknowledgements / 3 risks). Every framework is seeded with
+`adopted_on=None` and an explicit "registered, not adopted" note; the seeded acknowledgements carry a
+"DEMO DATA" note **on the row** (M5). Re-running creates nothing.
+
+### Gotchas specific to 0.21 — all four were found the hard way
+
+- **An `annotate()` alias must NEVER equal a model `@property` name.** A `property` is a data
+  descriptor, so `ModelIterable` cannot `setattr` the annotation and the query raises
+  `AttributeError: can't set attribute` **the moment a row is instantiated**. This shipped as C2: the
+  control list 500ed on any tenant with rows, and the policy list was worse — a **masked** 500 that
+  answered 200 with a false "No policies recorded" whenever a filter matched nothing. Aliases are now
+  `mapping_total` / `acknowledgement_total`.
+- **A `GROUP BY` suppresses `Meta.ordering` in Django**, so any annotated list needs an explicit
+  `.order_by(...)` or `LIMIT/OFFSET` pagination is non-deterministic (`UnorderedObjectListWarning`).
+- **`inherent_score` is written in `clean()` alone, and `save()` does not call `full_clean()`.** So
+  anything that creates a `RiskRegister` without calling `clean()` first — the seeder (C1) and the
+  test fixture — lands on the field default of `0`. A fixture that lies about the value under test is
+  worse than no fixture, because the assertion still passes.
+- **`acknowledgement_rate` counts the CURRENT version only.** Counting every version made
+  re-versioning a policy retroactively validate the prior cohort: every row stayed truthful and only
+  the aggregate lied. `superseded_acknowledgement_count` shows what is excluded.
+
+### 0.21's evidence rules (deliberate, and easy to undo by accident)
+
+- An **acknowledgement cannot be deleted** — the view refuses outright. An admin who can remove an
+  attestation can also quietly manufacture a clean register.
+- Deleting a **policy that carries attestations** is refused unless `discard_attestations=1` is
+  posted, which writes an audit row naming how many records were destroyed.
+- `acknowledged_at` is `auto_now_add=True, editable=False`; `user` and `policy_version` are never
+  form fields, so neither can be forged through a crafted POST.
+- Only **tenant admins** can acknowledge, so a low count is not evidence that members failed to read
+  a policy — it usually means they were never able to. The register says so on the page.
+
 
 ## App layout — FOUNDATION apps keep entity files FLAT
 
@@ -359,5 +425,14 @@ with no error.
 - **Run the tests:** `venv\Scripts\python.exe -m pytest apps/core/tests --nomigrations` (~84–186× faster
   than applying migrations). `--nomigrations` cannot catch an unapplied-migration defect — keep one run
   **without** it as the phase gate.
+  **On this checkout `--reuse-db` is inert unless `NAVERP_TEST_DB` is set** — without it every run
+  re-applies ~270 migrations (>20 min). The fast invocation is:
+  `cmd.exe /c "cd /d c:\xampp\htdocs\NavERP && set NAVERP_TEST_DB=nav_erp_test.sqlite3 && venv\Scripts\python.exe -m pytest <path> --reuse-db -q"`.
+  If the shared test DB is locked by another session, use `--no-migrations` (tables built straight from
+  the models, seconds not 20 min, fully isolated). **Never run two long jobs at once here** — a
+  checkout is shared with a concurrent session.
+- **A 200 is not a pass.** Assert the row's own code appears in the HTML, and run the assertion with
+  **rows present**. A smoke against an empty tenant cannot see a page that dies on the first row — which
+  is exactly how 0.21's control list and policy list were dead for the whole build.
 - **Module 0 is not covered by `/next-module`.** That skill's own SKILL.md says to edit the foundation
   directly; a bare run auto-detects module 7. Build Module 0 sub-modules explicitly.
