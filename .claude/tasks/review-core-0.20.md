@@ -2,8 +2,8 @@
 
 Review range: `463f7a06..ecadce4b` (my 0.20 commits), scoped by FILE LIST because the history is
 interleaved with a concurrent 0.21 session. Contract: `.claude/tasks/contract-core-0.20.md`.
-Status: **Phase 4 in progress.** Passes 1-3 of 6 recorded below; passes 4-6 to follow
-(`performance-reviewer`, `qa-smoke-tester`, `security-reviewer`).
+Status: **Phase 4 in progress.** Passes 1-5 of 6 recorded below; pass 6 (`security-reviewer`) to
+follow, then Phase 5 (`code-fixer`) applies the findings.
 
 > **RETRACTION — C6 (pass 2) is a FALSE POSITIVE and must NOT be fixed.** The explorer reported that
 > `core:incident_list` does not exist and 500s the Admin Console. The frontend-reviewer checked it
@@ -244,7 +244,6 @@ cross-app URLs · dark mode · responsiveness.
 
 ---
 
-
 ---
 
 ## Pass 4 — `performance-reviewer` (read-only, all render paths)
@@ -331,3 +330,82 @@ against `ACTION_CHOICES`** — a MySQL strict-mode `DataError` 1406 on every Pre
 to the SQLite test suite. A third independent confirmation that C5 is real.
 
 ---
+---
+
+## Pass 5 — `qa-smoke-tester` (the only reviewer permitted to touch the DB; REPORT-ONLY override applied)
+
+
+**Verdict: FAIL. The predicted four 500s are all confirmed and no others — but the defect is worse
+than predicted, because on EDIT it is data-dependent.**
+
+### Critical
+
+- **C18 — CONFIRMS pass-1 C1/C3/C4 and pass-3 C1, and escalates it.** All four reproduce on **create
+  AND edit**:
+  | Form | Status | Exception |
+  |---|---|---|
+  | `ChangeRequestForm` | `approved` | `ValueError: 'ChangeRequestForm' has no field named 'approved_by'` |
+  | `ChangeRequestForm` | `rolled_back` | `ValueError: ... has no field named 'rollback_reason'` |
+  | `MaintenanceWindowForm` | `ended_early` | `ValueError: ... has no field named 'ended_at'` |
+  | `FeatureRolloutForm` | `completed` | `ValueError: ... has no field named 'completed_at'` |
+  **Three findings the static passes could not produce:**
+  1. **The values ARE in the rendered dropdowns.** QA dumped the shipped form markup and confirmed
+     `changerequest add` renders `[draft, submitted, approved, ...]`, `maintenancewindow add` renders
+     `[draft, scheduled, active, ended_early, ...]`, and `featurerollout add` renders
+     `[planned, running, paused, completed, rolled_back]`. **A tenant admin picks "Approved" and gets
+     a 500.** This is the most reachable 500 in the sub-module — not a hand-made-POST edge case.
+  2. **On EDIT the outcome depends on invisible prior state.** `construct_instance` only writes
+     `Meta.fields`, so editing a row whose stamp is NULL 500s, while editing a row a verb already
+     stamped **saves fine (302)**. The same dropdown therefore 500s or silently saves depending on
+     state the user cannot see. That is worse than a plain 500.
+  3. **The form docstrings promise the opposite.** `forms/AdminConsole.py:70-77` states a user who
+     picks `ended_early` "gets a refusal explaining that a window may only be ended by the verb" — it
+     gets a 500 instead. **Fix: key every `clean()` rule that guards an excluded evidence stamp to
+     `NON_FIELD_ERRORS` (or to a field that IS in `Meta.fields`), and correct the three docstrings
+     that claim the refusal already works.** Add a test that walks every `STATUS_CHOICES` value
+     through create **and** edit — that walk alone catches all four.
+
+### Important
+
+- **C19 — CONFIRMS pass-1 C5, with the environment evidence that makes it a real 500.** POST a valid
+  tool to `bulk_preview`, then the newest `AuditLog` row's `action` comes back **silently truncated**:
+  the column is `max_length=10` and the code passes a 12-character `"bulk_preview"`. QA also captured
+  why it is currently silent — `@@sql_mode = 'NO_ZERO_IN_DATE,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION'`,
+  i.e. `STRICT_TRANS_TABLES` is **not** set, and `mysql.W002` is emitted on every migrate. Under a
+  strict-mode host the same click is a `DataError` 1406. **Fix: widen the column (the audit trail is a
+  permanent record), and add a length assertion or `full_clean()` in `write_audit_log` so a too-long
+  verb fails loudly at the source rather than depending on `sql_mode`.**
+
+### Confirmed WORKING by QA (do not re-litigate, do not "fix")
+
+- **All six POST-only verbs behave correctly**, including every documented refusal: cross-tenant pk
+  -> 404, GET -> 405, submit an already-submitted change -> refused, approve a non-submitted one ->
+  refused, roll back a non-completed one -> refused, roll back with an EMPTY reason -> refused, end a
+  draft window -> refused, end an already-ended window -> refused, delete an already-started window ->
+  refused. **`@require_POST` above `@tenant_admin_required` is confirmed correct** (405 regardless of
+  role). **Refusals write 0 audit rows**, which is the behaviour every guard comment claims.
+- **Full CRUD round-trips pass on all five entities** with minted numbers `JOB-00006`, `RUN-00007`,
+  `MNTW-00022`, `CHG-00066`; `FeatureRollout` correctly has no number.
+- **`JobRun.clean()`'s own rules surface as clean field errors** through the form, and the
+  hand-written `FeatureRolloutForm.clean_feature_flag` duplicate guard refuses a duplicate pair with a
+  **field error, not a 500** — "exactly the pattern C18 needs".
+- **The `FeatureRollout` stage x percentage ladder behaves exactly as documented**: `internal` 0 only,
+  `general` 100 only, `partial` 1-99, `pilot` unconstrained, all rejections clean field errors.
+- **Page 2 and every filter**: page 2 renders wherever rows exceed the page size
+  (maintenancewindow 21, changerequest 65, featurerollout 26); `page=abc` / `-1` / `0` all fall back;
+  **all 5 lists, 17 filter dropdowns, every choice value applied with no 500**; search narrows on all
+  five.
+- **`admin_board`**: 8 tiles, every one an int with a resolving URL; `needs_attention` 7/7;
+  `ADMIN_BOARD_LINKS` 10/10. **The zero rule holds** — "Open incidents 0" and "Configured settings 0"
+  are genuine counts, not unmeasured values.
+- **`ops_audit_trail`**: 217 rows, pagination 25/25/25/17, `page=999` and `page=abc` clamp, `?action=`
+  correct for all 9 real actions, junk action safe, and **POST/DELETE/PUT re-render without writing** —
+  the read-only claim holds.
+
+### Minor
+
+- **M6 — the shared `crud.py` boolean map** accepts only `True`/`False`; QA suggests widening to
+  `true/1/on` / `false/0/off`. Explicitly **not** a 0.20 blocker.
+
+---
+ (read-only, all render paths)
