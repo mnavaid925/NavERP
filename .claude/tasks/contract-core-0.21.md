@@ -231,7 +231,7 @@ what an acknowledgement is.
 ---
 | `controlframeworkmapping_list` | `core/controlframeworkmapping/list.html` | `["framework__code", "control__code", "clause_reference"]` | `("coverage", "coverage", False)`, `("framework", "framework_id", True)` | `coverage_choices`, `frameworks`, `controls`, `notes` |
 | `controlframeworkmapping_create` | `core/controlframeworkmapping/form.html` | — | — | `notes` |
-| `controlframeworkmapping_edit` | `core/controlframeworkmapping/form.html` | — | — | `notes` |
+| ~~`controlframeworkmapping_edit`~~ | — | — | — | **DELIBERATELY ABSENT (M2).** A mapping is a pure join row — framework, control, clause, coverage, note — with nothing to edit. Correcting one is remove-and-remap, so the list is delete-only and no `edit` view, route or `detail.html` exists. No view was invented to satisfy this row. |
 | `controlframeworkmapping_delete` | → `core:controlframeworkmapping_list` | — | — | — |
 | `policyacknowledgement_list` | `core/policyacknowledgement/list.html` | `["policy__code", "user__username"]` | `("policy", "policy_id", True)` | `policies`, `notes` |
 | `policyacknowledgement_create` | `core/policyacknowledgement/form.html` | — | — | `notes` |
@@ -470,6 +470,17 @@ Rules every template follows:
 A template filter dropdown whose options were never passed renders empty and silently drops the
 filter.
 
+> **RULE ADDED IN PHASE 5 (C2/I11) — an `annotate()` alias must NEVER equal a model `@property` name.**
+> A `property` is a data descriptor, so Django's `ModelIterable` cannot `setattr` the annotation onto
+> the instance and the query raises `AttributeError: can't set attribute '<name>'` the moment a row is
+> actually instantiated. `compliancecontrol_list` and `corporatepolicy_list` both shipped that way and
+> 500ed on any tenant holding rows (worse, the policy list returned a **masked** 200 with a false
+> "No policies recorded" whenever a filter matched nothing). The aliases are now `mapping_total` and
+> `acknowledgement_total`; the properties keep their names and are used only off a single object.
+> A second rule from the same defect: **a `GROUP BY` suppresses `Meta.ordering` in Django**, so any
+> annotated list must also carry an explicit `.order_by(...)` or `LIMIT/OFFSET` pagination is
+> non-deterministic. Both list views now do.
+
 | View | Template | `search_fields` | `filters` (param, lookup, is_int) | `extra_context` keys |
 |---|---|---|---|---|
 | `controlframework_list` | `core/controlframework/list.html` | `["code", "name", "authority", "description"]` | `("type", "framework_type", False)`, `("is_active", "is_active", False)` | `type_choices`, `framework_count`, `mapping_count`, `notes` |
@@ -482,7 +493,12 @@ filter.
 | `compliancecontrol_detail` | `core/compliancecontrol/detail.html` | — | — | `mappings`, `framework_count`, `notes` |
 | `compliancecontrol_edit` | `core/compliancecontrol/form.html` | — | — | `notes` |
 | `compliancecontrol_delete` | → `core:compliancecontrol_list` | — | — | — |
-| `corporatepolicy_list` | `core/corporatepolicy/list.html` | `["code", "title", "summary"]` | `("status", "status", False)`, `("policy_type", "policy_type", False)` | `status_choices`, `type_choices`, `published_count`, `unacknowledged_count`, `notes` |
+| `corporatepolicy_list` | `core/corporatepolicy/list.html` | `["code", "title", "summary"]` | `("status", "status", False)`, `("policy_type", "policy_type", False)` | `status_choices`, `type_choices`, `published_count`, `acknowledgement_count`, `notes` |
+
+> **Renamed during Phase 5 (I1).** This key was `unacknowledged_count`, which said the *opposite* of what
+> it counts: an unacknowledged person has no row, so they are invisible to the query and the figure
+> **rises as people comply**. It counts acknowledgement rows that exist, so it is now
+> `acknowledgement_count`. The template's prose was always the honest one; only the key name lied.
 | `corporatepolicy_create` | `core/corporatepolicy/form.html` | — | — | `notes` |
 | `corporatepolicy_detail` | `core/corporatepolicy/detail.html` | — | — | `acknowledgements`, `acknowledgement_rate`, `notes` |
 | `corporatepolicy_edit` | `core/corporatepolicy/form.html` | — | — | `notes` |
