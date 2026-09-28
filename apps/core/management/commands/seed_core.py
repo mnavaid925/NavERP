@@ -1404,21 +1404,31 @@ class Command(BaseCommand):
                              "pipeline and no deployment.",
                 },
             )
-            # `approved` needs BOTH an approver and a stamp, so this row is written in its terminal
-            # state directly rather than walked through a transition no scheduler would perform. It
-            # is created WITHOUT an `approved_by` on purpose, and that is legal here only because
-            # `.create()` does not run `full_clean()`; an admin or form save would refuse it. The
-            # seeder writes the state a real approval would have produced, minus the actor, rather
-            # than inventing an approver identity.
+            # Seeded `submitted`, NOT `approved`, and the reason is reachability.
+            #
+            # `approved` needs BOTH an approver and a stamp. `.create()` does not run
+            # `full_clean()`, so an `approved` row with no `approved_by` is writable here — but
+            # `crud_edit` DOES run `full_clean()` on every save, so that row could never be edited
+            # again: every save 500'd. A shipped demo record that is permanently uneditable is a
+            # worse artefact than a demo record one step earlier in the lifecycle.
+            #
+            # `_seed_actor(tenant)` would be the other way out, but it returns None on a first pass
+            # (`seed_core` runs BEFORE `seed_accounts`), and an `approved` row still needs the actor
+            # at EDIT time — a demo that only works once the accounts seeder has run is not a
+            # reliable demo. `submitted` needs no actor at all, `ChangeRequest.clean()` places no
+            # rule on it, and it is the state the Approve action is offered from, so the register
+            # still demonstrates a decision somebody owes.
             ChangeRequest.objects.create(
                 tenant=tenant, title="Stage the new invoice reconciliation job behind a flag",
                 summary="Roll the reconciliation job out internal-first, then generally.",
                 change_type="standard", risk_level="low", impact_level="minor",
-                status="approved", environment=env, downtime_required=False,
-                requested_at=now - 5 * day, approved_at=now - 5 * day + hour,
-                notes="Seeded as an EXAMPLE of an approved change. The approval is a recorded decision: "
-                      "nothing was built, deployed or rolled back, because this application has no build "
-                      "pipeline, no deployment and no rollback to perform.",
+                status="submitted", environment=env, downtime_required=False,
+                requested_at=now - 5 * day,
+                notes="Seeded as an EXAMPLE of a change submitted for approval. Nobody has approved "
+                      "it, and nothing was built, deployed or rolled back: this application has no "
+                      "build pipeline, no deployment and no rollback to perform. It is 'submitted' "
+                      "rather than 'approved' so the row stays editable - an approval needs an "
+                      "approver, and a seeded row has no honest one to name.",
             )
             if flag:
                 # One stage of the ladder, with the bookend EXACT as the model demands: internal only
