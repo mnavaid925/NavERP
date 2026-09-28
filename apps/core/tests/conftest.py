@@ -1065,3 +1065,536 @@ def sec_incident_payload():
         "forensic_log": "", "root_cause": "", "lessons_learned": "", "evidence": "", "notes": "",
     }
 
+# ===================== 0.20 Admin Console & System Operations fixtures (appended) =====================
+# APPEND-ONLY, per the L43 discipline. Everything above this line belongs to 0.9-0.18 and 0.21 and
+# is never rewritten.
+#
+# **PREFIX RULE (house convention):** everything here is `ac0_`-prefixed, and every test function
+# that uses it is `test_adminconsole_*`. The reason is collision, not taste: sub-module 0.21 is
+# appending its own `cml021_` block to THIS SAME FILE right now, and an unprefixed name here would
+# either collide outright or, worse, silently take a fixture with it. The prefix is `ac0_` and not
+# a bare `admin_` for the same reason 0.18 used `sec_` rather than `security_`: a short prefix is
+# one a later author is likely to reuse a name inside.
+#
+# The contract these fixtures are written against is
+# `.claude/tasks/test-contract-core-0.20.md`. Every name below was read out of the code.
+
+
+# ------------------------------------------------------------------ the actor
+@pytest.fixture
+def ac0_actor(db, tenant_a):
+    """A SECOND tenant admin in tenant_a, deliberately NOT the root conftest's `admin_user`.
+
+    `change_request_approve` stamps `approved_by = request.user` and never reads a form, so "a
+    change cannot be approved in somebody else's name" is only a PROVABLE claim when the
+    requester and the approver are different rows. Requested by `admin_user`, approved by
+    `ac0_actor`: the stamp must name the actor.
+
+    The root `admin_user` is reused as-is for everything that only needs "a tenant admin"; this
+    exists solely so the attribution lane has two names to tell apart.
+    """
+    from apps.accounts.models import User
+
+    return User.objects.create_user(
+        email="ops-lead@acme.com",
+        username="ops_lead_acme",
+        password="TestPass123!",
+        tenant=tenant_a,
+        is_tenant_admin=True,
+    )
+
+
+@pytest.fixture
+def ac0_actor_client(db, ac0_actor):
+    """A client logged in as `ac0_actor` - the mirror of the root conftest's `client_a`."""
+    from django.test import Client
+
+    c = Client()
+    c.force_login(ac0_actor)
+    return c
+
+
+# ------------------------------------------------------------------ the referenced spine rows
+@pytest.fixture
+def ac0_env(db, tenant_a):
+    """One 0.16 `EnvironmentInstance` - the environment `JobDefinition`, `MaintenanceWindow` and
+    `ChangeRequest` all point AT rather than re-declaring (L29/L36)."""
+    from apps.core.models import EnvironmentInstance
+
+    return EnvironmentInstance.objects.create(
+        tenant=tenant_a, name="Staging - ops rehearsal", kind="staging", tier="",
+        copy_scope="metadata_only", status="active", is_active=True,
+    )
+
+
+@pytest.fixture
+def ac0_flag(db, tenant_a):
+    """0.10's per-tenant toggle - the flag a `FeatureRollout` stages. Unique on `(tenant, key)`."""
+    from apps.core.models import FeatureFlag
+
+    return FeatureFlag.objects.create(
+        tenant=tenant_a, key="ops.reconciliation_job", label="Invoice reconciliation job",
+        is_enabled=False,
+    )
+
+
+@pytest.fixture
+def ac0_flag_alt(db, tenant_a):
+    """A SECOND flag, so two stages can hang off ONE change.
+
+    `FeatureRollout.unique_together` is `(("change", "feature_flag"),)`: a change stages each flag
+    once, so two rollouts under one change need two flags. This is the second one, and it is what
+    makes `rollout_count == 2` and the duplicate-flag guard observable against a real sibling.
+    """
+    from apps.core.models import FeatureFlag
+
+    return FeatureFlag.objects.create(
+        tenant=tenant_a, key="ops.bulk_backfill", label="Bulk document-number backfill",
+        is_enabled=False,
+    )
+
+
+@pytest.fixture
+def ac0_service(db, tenant_a):
+    """A `ServiceComponent` for a window's `affected_services`.
+
+    Attached to `ac0_window`, deliberately: the window detail prefetches three M2M sets, and a page
+    whose sets are all empty cannot tell a working prefetch from a missing one.
+    """
+    from django.utils import timezone
+
+    from apps.core.models import ServiceComponent
+
+    return ServiceComponent.objects.create(
+        tenant=tenant_a, name="Payments API", code="ac0-payments", kind="api",
+        current_status="operational", last_status_at=timezone.now(),
+    )
+
+
+# ------------------------------------------------------------------ bullet 2: jobs and runs
+@pytest.fixture
+def ac0_job(db, tenant_a, ac0_env):
+    """A DECLARED job: a cadence, a handler path, a failure policy.
+
+    `last_run_at` is NULL on purpose, because "a job nobody has ever run" is the state the
+    `admin_board` never-run tile and the `needs_attention` strip both count. Nothing advances
+    either stamp - no scheduler exists.
+    """
+    from apps.core.models import JobDefinition
+
+    return JobDefinition.objects.create(
+        tenant=tenant_a, name="Invoice reconciliation sweep", module_slug="accounting",
+        job_type="scheduled_task", schedule_kind="daily", cron_expression="0 2 * * *",
+        handler_path="apps.core.tasks.reconcile_invoices", environment=ac0_env,
+        description="Re-derive invoice totals from their lines.",
+        is_active=True, priority=100, max_active_runs=1, pool_name="default", pool_slots=2,
+        max_consecutive_failures=3, auto_pause_after=10, is_muted=False,
+        last_run_at=None, next_run_at=None,
+    )
+
+
+@pytest.fixture
+def ac0_job_muted(db, tenant_a):
+    """A job silenced by hand. `is_muted` is a flag on a schedule, not an interceptor - nothing
+    anywhere consults it, and the seeder mutes one row so the field is exercised by data."""
+    from apps.core.models import JobDefinition
+
+    return JobDefinition.objects.create(
+        tenant=tenant_a, name="Archive retention sweep", module_slug="core", job_type="cleanup",
+        schedule_kind="weekly", cron_expression="0 3 * * 0",
+        handler_path="apps.core.tasks.sweep_archives", is_muted=True,
+    )
+
+
+@pytest.fixture
+def ac0_job_b(db, tenant_b):
+    """A job in the OTHER tenant - the cross-tenant IDOR target. Never reachable from tenant_a."""
+    from apps.core.models import JobDefinition
+
+    return JobDefinition.objects.create(
+        tenant=tenant_b, name="Globex-only job", module_slug="globex", job_type="bulk_operation",
+        handler_path="apps.globex.tasks.nightly",
+    )
+
+
+@pytest.fixture
+def ac0_run(db, tenant_a, ac0_job, ac0_actor):
+    """An OPEN run: `queued`, dry, no start or finish stamp - so `is_open` is True and
+    `duration_display` is the em dash. `is_dry_run` is left at the model default rather than
+    passed, so a test asserting the default is asserting the MODEL's."""
+    from apps.core.models import JobRun
+
+    return JobRun.objects.create(
+        tenant=tenant_a, job=ac0_job, trigger_kind="manual", status="queued",
+        triggered_by=ac0_actor,
+        notes="Recorded by an operator pressing Run now. No scheduler exists, so nothing executed.",
+    )
+
+
+@pytest.fixture
+def ac0_run_success(db, tenant_a, ac0_job):
+    """A run with BOTH stamps, so `duration_display` has something real to render.
+
+    `JobRun.clean()` refuses a `success` with no `finished_at` and refuses a `finished_at` earlier
+    than `started_at`; this row satisfies both, which is the point - it is a run a form could
+    legitimately have saved. `is_open` is False: success is terminal.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.core.models import JobRun
+
+    started = timezone.now() - timedelta(minutes=5)
+    return JobRun.objects.create(
+        tenant=tenant_a, job=ac0_job, trigger_kind="scheduled", status="success",
+        started_at=started, finished_at=started + timedelta(seconds=90), exit_code=0,
+        records_processed=42, duration_ms=90000,
+    )
+
+
+@pytest.fixture
+def ac0_run_b(db, tenant_b, ac0_job_b):
+    """A run in the OTHER tenant - the cross-tenant IDOR target."""
+    from apps.core.models import JobRun
+
+    return JobRun.objects.create(tenant=tenant_b, job=ac0_job_b, status="queued")
+
+
+# ------------------------------------------------------------------ bullet 3a: maintenance windows
+@pytest.fixture
+def ac0_window(db, tenant_a, ac0_env, ac0_change_draft, ac0_service):
+    """A FUTURE window - `is_future` is True, so this is the ONE state `maintenancewindow_delete`
+    will actually delete. A window somebody ran is evidence an incident review may need, so every
+    other shape refuses.
+
+    Carries `ac0_change_draft` and one `ac0_service`, so the detail page's linked-change block and
+    its prefetched `affected_services` set both have something to read.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.core.models import MaintenanceWindow
+
+    now = timezone.now()
+    window = MaintenanceWindow.objects.create(
+        tenant=tenant_a, title="Ledger schema migration", purpose="Deploy migration 0019.",
+        starts_at=now + timedelta(days=2), ends_at=now + timedelta(days=2, hours=3),
+        recurrence="once", timezone_label="UTC", status="scheduled", environment=ac0_env,
+        change_request=ac0_change_draft, suppresses_jobs=True, blocks_admin_writes=False,
+    )
+    window.affected_services.set([ac0_service])
+    return window
+
+
+@pytest.fixture
+def ac0_window_running(db, tenant_a):
+    """A window AS IT RUNS: opened an hour ago, closes in an hour. `is_current` is True and
+    `is_future` is False, so it is NOT deletable - and it is the legal `end_now` target."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.core.models import MaintenanceWindow
+
+    now = timezone.now()
+    return MaintenanceWindow.objects.create(
+        tenant=tenant_a, title="Rolling node restart", purpose="Restart the batch node.",
+        starts_at=now - timedelta(hours=1), ends_at=now + timedelta(hours=1), status="active",
+        recurrence="once",
+    )
+
+
+@pytest.fixture
+def ac0_window_past(db, tenant_a):
+    """A window that ran its course - history. Neither future nor current, so the delete guard
+    refuses it, and `end_now` refuses it too because it is already `completed`."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.core.models import MaintenanceWindow
+
+    now = timezone.now()
+    return MaintenanceWindow.objects.create(
+        tenant=tenant_a, title="Certificate rotation", purpose="Rotate the TLS certificate.",
+        starts_at=now - timedelta(days=3), ends_at=now - timedelta(days=3, hours=1),
+        status="completed", recurrence="once",
+    )
+
+
+@pytest.fixture
+def ac0_window_b(db, tenant_b):
+    """A window in the OTHER tenant - the cross-tenant IDOR target. Future, so it is deletable in
+    its own tenant; the point is that tenant_a cannot reach it at all."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.core.models import MaintenanceWindow
+
+    now = timezone.now()
+    return MaintenanceWindow.objects.create(
+        tenant=tenant_b, title="Globex-only window", purpose="Globex maintenance.",
+        starts_at=now + timedelta(days=1), ends_at=now + timedelta(days=1, hours=2),
+        status="scheduled",
+    )
+
+
+# ------------------------------------------------------------------ bullet 3b: changes and rollouts
+@pytest.fixture
+def ac0_change_draft(db, tenant_a, ac0_env):
+    """A DRAFT change - the only status `ChangeRequestForm` offers, and the state
+    `change_request_submit` acts from. No actor, no stamp, nothing to be inconsistent with."""
+    from apps.core.models import ChangeRequest
+
+    return ChangeRequest.objects.create(
+        tenant=tenant_a, title="Enable multi-currency on invoices",
+        summary="Turn on the second currency on the invoice form.",
+        change_type="standard", risk_level="low", impact_level="minor", status="draft",
+        environment=ac0_env, downtime_required=False,
+    )
+
+
+@pytest.fixture
+def ac0_change(db, tenant_a, ac0_env, admin_user):
+    """A `submitted` change - the state the Approve action is offered from, and EDITABLE.
+
+    **Why `submitted` and not `approved`.** `ChangeRequest.clean()` refuses an `approved` row with
+    no `approved_by` and no `approved_at`, and `crud_edit` runs `full_clean()` on EVERY save - so an
+    approved row with no approver can never be saved again through the form, and every POST fails.
+    A fixture in that state could not exercise the edit page at all, which is exactly why the
+    seeder moved its demo row back to `submitted` in the same fix. `submitted` places no rule in
+    `clean()` and needs no actor, so this row saves cleanly.
+
+    `requested_at` and `requestor` are set because the submit verb is the only writer of both and
+    they are off the form - a test that wants to prove the form never touches them needs a row
+    that already carries them.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.core.models import ChangeRequest
+
+    return ChangeRequest.objects.create(
+        tenant=tenant_a, title="Retire the legacy export endpoint",
+        summary="Turn off the v1 export and move callers to v2.",
+        change_type="normal", risk_level="medium", impact_level="moderate", status="submitted",
+        environment=ac0_env, requestor=admin_user,
+        requested_at=timezone.now() - timedelta(days=5), downtime_required=False,
+    )
+
+
+@pytest.fixture
+def ac0_change_approved(db, tenant_a, ac0_env, ac0_actor):
+    """An `approved` change that DOES carry its evidence - the counter-example that proves the
+    refusal is about the missing stamp and not about the status.
+
+    `approved_by` and `approved_at` are both set, so `full_clean()` passes and this row IS
+    editable through the form. Pair it with `ac0_change` to show the two differ only by their
+    evidence. An approved change with NO approver is deliberately not a fixture: it is unsaveable
+    by construction, so a test that wants it must build the row in-line.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.core.models import ChangeRequest
+
+    return ChangeRequest.objects.create(
+        tenant=tenant_a, title="Add the reconciliation job to the scheduler register",
+        summary="Declare the job; nothing executes it.",
+        change_type="standard", risk_level="low", impact_level="minor", status="approved",
+        environment=ac0_env, approved_by=ac0_actor,
+        approved_at=timezone.now() - timedelta(days=2), downtime_required=False,
+    )
+
+
+@pytest.fixture
+def ac0_change_completed(db, tenant_a, ac0_env, ac0_actor):
+    """A COMPLETED change - the only state `change_request_rollback` accepts.
+
+    Carries an approver and an implementation stamp, so `clean()` passes and the row stays
+    editable; the rollback verb then has a legal starting point to move away from.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.core.models import ChangeRequest
+
+    return ChangeRequest.objects.create(
+        tenant=tenant_a, title="Move the nightly backup to the new host",
+        summary="Repoint the backup job at the replacement host.",
+        change_type="normal", risk_level="medium", impact_level="major", status="completed",
+        environment=ac0_env, approved_by=ac0_actor,
+        approved_at=timezone.now() - timedelta(days=10),
+        implemented_at=timezone.now() - timedelta(days=8), downtime_required=True,
+    )
+
+
+@pytest.fixture
+def ac0_change_b(db, tenant_b):
+    """A change in the OTHER tenant - the cross-tenant IDOR target."""
+    from apps.core.models import ChangeRequest
+
+    return ChangeRequest.objects.create(
+        tenant=tenant_b, title="Globex-only change", change_type="emergency", risk_level="high",
+        impact_level="major", status="draft",
+    )
+
+
+@pytest.fixture
+def ac0_rollout(db, tenant_a, ac0_change, ac0_flag):
+    """One declared stage: `partial` at 25% on `ac0_flag` under `ac0_change`.
+
+    The `(change, feature_flag)` pair is UNIQUE - that is the whole point of this fixture. The
+    pair is enforced by the database only, so a duplicate is an `IntegrityError` and a 500, and
+    `FeatureRolloutForm.clean_feature_flag` is the one hand-written rule that turns it into a field
+    error instead. `ac0_rollout_alt` is the sibling the guard has to refuse.
+    """
+    from apps.core.models import FeatureRollout
+
+    return FeatureRollout.objects.create(
+        tenant=tenant_a, change=ac0_change, feature_flag=ac0_flag, stage="partial",
+        percentage=25, cohort_label="Finance team", status="planned",
+    )
+
+
+@pytest.fixture
+def ac0_rollout_alt(db, tenant_a, ac0_change, ac0_flag_alt):
+    """A SECOND stage under the SAME change - on a DIFFERENT flag, which is the only legal way to do
+    it. Two rollouts on one change is the ladder the model is shaped for, and it is what makes
+    `rollout_count == 2` observable on a prefetched page.
+
+    `general` at exactly 100% is the other exact bookend; a test wanting a contradiction builds it
+    in-line rather than as a fixture.
+    """
+    from apps.core.models import FeatureRollout
+
+    return FeatureRollout.objects.create(
+        tenant=tenant_a, change=ac0_change, feature_flag=ac0_flag_alt, stage="general",
+        percentage=100, cohort_label="Everyone", status="planned",
+    )
+
+
+@pytest.fixture
+def ac0_rollout_b(db, tenant_b, ac0_change_b, ac0_flag):
+    """A rollout in the OTHER tenant - the cross-tenant IDOR target. It reuses `ac0_flag` on
+    purpose: the pair is unique per CHANGE, and this change is a different row, so the fixture is
+    legal and still exercises the tenant boundary."""
+    from apps.core.models import FeatureRollout
+
+    return FeatureRollout.objects.create(
+        tenant=tenant_b, change=ac0_change_b, feature_flag=ac0_flag, stage="pilot",
+        percentage=5, status="planned",
+    )
+
+
+# ------------------------------------------------------------------ minimal valid form payloads
+# Datetimes are in the `%Y-%m-%dT%H:%M` format `TenantModelForm` declares in `input_formats` - the
+# same shape its `datetime-local` widget posts. M2M fields are LISTS of pks; a checkbox is "on"
+# when set and ABSENT when not. Every payload carries the WHOLE form, because a partial dict
+# silently exercises the "field absent" path rather than the "field supplied" one.
+
+
+def _ac0_stamp(days=0, hours=0):
+    """A `%Y-%m-%dT%H:%M` string offset from now - the format the form widgets post."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    return (timezone.now() + timedelta(days=days, hours=hours)).strftime("%Y-%m-%dT%H:%M")
+
+
+@pytest.fixture
+def ac0_job_payload(ac0_env):
+    """A minimal VALID create payload for `JobDefinitionForm`.
+
+    `handler_path` is supplied because it is REQUIRED on the model and deliberately still on the
+    form - recording the declared target is the point of the register. `last_run_at` and
+    `next_run_at` are absent on purpose: they are off the form, and a payload that tried to set
+    them would be testing a field that does not exist. `is_muted` is absent so it posts False.
+    """
+    return {
+        "name": "Nightly stock count sync", "module_slug": "scm", "job_type": "integration_sync",
+        "description": "Declared against an integration sync.", "schedule_kind": "hourly",
+        "cron_expression": "", "interval_minutes": 60,
+        "handler_path": "apps.core.tasks.sync_stock_counts", "sync_schedule": "",
+        "environment": str(ac0_env.pk), "is_active": "on", "priority": 100,
+        "timeout_seconds": 900, "max_active_runs": 1, "pool_name": "default", "pool_slots": 2,
+        "max_consecutive_failures": 3, "auto_pause_after": 10, "notes": "",
+    }
+
+
+@pytest.fixture
+def ac0_run_payload(ac0_job):
+    """A minimal VALID `JobRunForm` payload that RECORDS AN OUTCOME.
+
+    `status="success"` needs `finished_at` (`JobRun.clean()` refuses it otherwise) and
+    `started_at` must not be later. `triggered_at`, `triggered_by` and `is_dry_run` are absent:
+    all three are off the form, and a dry run edited into asserting a real one is precisely what
+    dropping `is_dry_run` prevents.
+    """
+    return {
+        "job": str(ac0_job.pk), "trigger_kind": "manual", "status": "success",
+        "started_at": _ac0_stamp(hours=-1), "finished_at": _ac0_stamp(),
+        "exit_code": 0, "records_processed": 12, "duration_ms": 90000, "error_message": "",
+        "notes": "",
+    }
+
+
+@pytest.fixture
+def ac0_window_payload(ac0_env, ac0_service, ac0_change_draft):
+    """A minimal VALID `MaintenanceWindowForm` payload - both ends present, because the model
+    refuses a one-ended window.
+
+    `ended_at` is absent (off the form, verb-written only) and `status` is `scheduled`, one of the
+    five values the widget actually offers. `suppresses_jobs` is posted "on" and
+    `blocks_admin_writes` is absent, so the two recorded-scope booleans are exercised in both
+    states - stating the intent is the operator's job; nothing enforces either.
+    """
+    return {
+        "title": "Read replica failover rehearsal", "purpose": "Prove the replica fails over.",
+        "starts_at": _ac0_stamp(days=1), "ends_at": _ac0_stamp(days=1, hours=2),
+        "recurrence": "once", "timezone_label": "UTC", "status": "scheduled",
+        "affected_services": [str(ac0_service.pk)], "suppressed_alert_rules": [],
+        "suppressed_notification_rules": [], "incident": "", "environment": str(ac0_env.pk),
+        "change_request": str(ac0_change_draft.pk), "suppresses_jobs": "on",
+        "blocks_admin_writes": "", "notes": "",
+    }
+
+
+@pytest.fixture
+def ac0_change_payload(ac0_env):
+    """A minimal VALID `ChangeRequestForm` payload.
+
+    `status` is `draft` - the ONLY value the widget offers, and the only one a person may author.
+    Every actor field and every evidence stamp is absent, which is the L22 property under test:
+    `requestor`, `approved_by`, `requested_at`, `approved_at`, `implemented_at`, `rollback_at`,
+    `rollback_reason` and `post_review` are all written by a verb or after the fact, never typed.
+    """
+    return {
+        "title": "Raise the invoice approval threshold",
+        "summary": "Only above 10k needs a sign-off.",
+        "change_type": "standard", "risk_level": "medium", "impact_level": "minor",
+        "status": "draft", "environment": str(ac0_env.pk), "downtime_required": "", "notes": "",
+    }
+
+
+@pytest.fixture
+def ac0_rollout_payload(ac0_change, ac0_flag):
+    """A minimal VALID `FeatureRolloutForm` payload.
+
+    `stage="partial"` with `percentage=25` satisfies the ladder guard (a partial stage must be
+    between 1% and 99%), and `status="planned"` is one of the four the widget offers - `completed`
+    is dropped because it needs `completed_at`, which is off the form. `scheduled_at` is supplied
+    because it IS authorable; `started_at` and `completed_at` are not.
+    """
+    return {
+        "change": str(ac0_change.pk), "feature_flag": str(ac0_flag.pk), "stage": "partial",
+        "percentage": 25, "cohort_label": "Finance team", "scheduled_at": _ac0_stamp(days=1),
+        "status": "planned", "notes": "",
+    }
