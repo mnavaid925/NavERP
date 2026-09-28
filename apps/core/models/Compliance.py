@@ -490,7 +490,19 @@ class CorporatePolicy(models.Model):
 
     @property
     def acknowledged_count(self):
-        return self.acknowledgements.count()
+        """Attestations of the version currently in force, not of any version ever.
+
+        Counting every version would make editing `version` retroactively "validate" the whole
+        prior cohort: bump 1.0 to 2.0 and yesterday's acknowledgements of 1.0 would be counted
+        towards 2.0, which is an attestation nobody gave. Every individual row stays truthful
+        and only the aggregate lies, so the filter belongs here rather than in the template.
+        """
+        return self.acknowledgements.filter(policy_version=self.version).count()
+
+    @property
+    def superseded_acknowledgement_count(self):
+        """Attestations left behind by earlier versions — shown, never counted into the rate."""
+        return self.acknowledgements.exclude(policy_version=self.version).count()
 
     @property
     def acknowledgement_rate(self):
@@ -500,6 +512,8 @@ class CorporatePolicy(models.Model):
         template prints an em dash, never a fake 100%), and `None` rather than `0` when the
         expected count is zero — "0% acknowledged" of nobody is a false statement about a
         workspace, not a measurement of it.
+
+        The numerator is `acknowledged_count`, which counts the CURRENT version only.
         """
         if not self.requires_acknowledgement:
             return None
