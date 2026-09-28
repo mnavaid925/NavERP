@@ -20,7 +20,7 @@
       enforce it, and an unacknowledged policy produces no reminder.</strong> There is no mail
       dispatcher in this application, so nobody is ever chased.</p>
     <p class="text-muted"><strong>{{ published_count }}</strong> published.
-      {% if unacknowledged_count %}<strong>{{ unacknowledged_count }}</strong> acknowledgement{{ unacknowledged_count|pluralize }} recorded against published policies.{% endif %}</p>
+      {% if acknowledgement_count %}<strong>{{ acknowledgement_count }}</strong> acknowledgement{{ acknowledgement_count|pluralize }} recorded against published policies.{% endif %}</p>
     {% if notes %}<ul class="text-muted">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
     <form method="get" class="filter-bar">
       <div class="form-group" style="flex:1; min-width:200px;">
@@ -61,7 +61,7 @@
             <td>{% if obj.review_due_on %}{{ obj.review_due_on|date:"d M Y" }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
             <td>
               {% if not obj.requires_acknowledgement %}<span class="text-muted">Not required</span>
-              {% else %}{{ obj.acknowledged_count }}{% endif %}
+              {% else %}{{ obj.acknowledgement_total }}{% endif %}
             </td>
             <td>
               <div class="table-actions">
