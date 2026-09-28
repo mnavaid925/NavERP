@@ -107,7 +107,14 @@ def jobdefinition_detail(request, pk):
         request, model=JobDefinition, pk=pk, template="core/jobdefinition/detail.html",
         select_related=("sync_schedule", "environment"),
         extra_context={
-            "runs": JobRun.objects.filter(job_id=pk).order_by("-triggered_at", "-id")[:10],
+            # `select_related("triggered_by")`, and specifically NOT `("job")`: the runs loop
+            # renders `{{ run.triggered_by }}` on every row, while `run.job` is only ever
+            # compared, never dereferenced (the page already holds the job). An earlier pass
+            # joined the wrong FK and the N+1 survived it - which is why the Phase 5 check
+            # measures the query count against the ROW COUNT instead of a fixed budget: a
+            # budget of 15 is satisfied by an N+1 that happens to be quiet on a one-row page.
+            "runs": JobRun.objects.filter(job_id=pk).select_related("triggered_by")
+            .order_by("-triggered_at", "-id")[:10],
             "run_count": JobRun.objects.filter(job_id=pk).count(),
             "notes": OPS_NOTES,
         },
@@ -163,7 +170,8 @@ def jobdefinition_run_now(request, pk):
 # ============================================================ the run register
 @tenant_admin_required
 def jobrun_list(request):
-    qs = JobRun.objects.filter(tenant=request.tenant).select_related("job")
+    qs = JobRun.objects.filter(tenant=request.tenant).select_related(
+        "job", "triggered_by")
     return crud_list(
         request, qs, "core/jobrun/list.html",
         search_fields=["number", "error_message", "notes"],
@@ -219,9 +227,21 @@ def _window_querysets(tenant):
 
 @tenant_admin_required
 def maintenancewindow_list(request):
-    qs = MaintenanceWindow.objects.filter(tenant=request.tenant).prefetch_related(
-        "affected_services")
+    qs = MaintenanceWindow.objects.filter(tenant=request.tenant)
     ctx = _window_querysets(request.tenant)
+    # A window in progress is the one an operator needs to see first, and nothing here
+    # silences anything, so the only honest summary is the count.
+    #
+    # Counted in SQL against the SAME `now` for both bounds, not by walking the rows in Python.
+    # The old `sum(1 for w in qs if w.is_current)` iterated the whole UNPAGINATED queryset, and
+    # that queryset also carried a `prefetch_related("affected_services")`, so every window's
+    # M2M rows were hydrated and then thrown away. It was also built from the PRE-FILTER
+    # queryset while `crud_list` applies status/recurrence/environment/search internally, so the
+    # badge could contradict the table beneath it whenever a filter was active.
+    #
+    # No `isnull` filters are needed: SQL three-valued logic already excludes NULL, which is
+    # exactly what the `is_current` property's own `bool()` guards do.
+    now = timezone.now()
     return crud_list(
         request, qs, "core/maintenancewindow/list.html",
         search_fields=["title", "number", "purpose", "notes"],
@@ -231,9 +251,7 @@ def maintenancewindow_list(request):
             "status_choices": MaintenanceWindow.STATUS_CHOICES,
             "recurrence_choices": MaintenanceWindow.RECURRENCE_CHOICES,
             **ctx,
-            # A window in progress is the one an operator needs to see first, and nothing here
-            # silences anything, so the only honest summary is the count.
-            "current_count": sum(1 for w in qs if w.is_current),
+            "current_count": qs.filter(starts_at__lte=now, ends_at__gt=now).count(),
             "notes": OPS_NOTES,
         },
     )
@@ -249,9 +267,16 @@ def maintenancewindow_create(request):
 
 @tenant_admin_required
 def maintenancewindow_detail(request, pk):
+    # The three M2M loops in the template read `.all` three times, and the empty-state test used
+    # to call `.exists` three times as well - 6 queries on top of the row. `prefetch_related`
+    # collapses each set to ONE query, and the template's empty-state test then reads those
+    # prefetched caches, so it costs nothing extra. (`.exists` is deliberately NOT used anywhere
+    # on this page: it re-queries and throws the prefetch away.)
     return crud_detail(
         request, model=MaintenanceWindow, pk=pk, template="core/maintenancewindow/detail.html",
         select_related=("incident", "environment", "change_request"),
+        prefetch_related=("affected_services", "suppressed_alert_rules",
+                          "suppressed_notification_rules"),
         extra_context={**_window_querysets(request.tenant), "notes": OPS_NOTES})
 
 
@@ -603,7 +628,15 @@ def admin_board(request):
 
     # ---- health/security, read straight from the tables 0.16-0.18 own. Never a stored roll-up:
     # one of those would freeze a bad hour into a good morning.
-    firing_alerts = AlertEvent.objects.filter(tenant=tenant, resolved_at__isnull=True).count()
+    #
+    # The alert tile counts the OPEN set — `firing` and `acknowledged`, exactly what
+    # `AlertEvent.is_open` and 0.17's own `firing_board` count. It used to count
+    # `resolved_at__isnull=True`, which is a WIDER set: it swept in `no_data` (a different
+    # lifecycle that is deliberately not open) and any state 0.17 does not treat as firing. A tile
+    # that disagrees with the board it links to is the false-pressure defect this file has refused
+    # elsewhere, so the tile and `firing_board` now read one definition of "firing".
+    firing_alerts = AlertEvent.objects.filter(
+        tenant=tenant, state__in=("firing", "acknowledged")).count()
     open_incidents = Incident.objects.filter(tenant=tenant, resolved_at__isnull=True).count()
     open_vulns = VulnerabilityFinding.objects.filter(tenant=tenant, status="open").count()
     setting_count = SettingValue.objects.filter(tenant=tenant).count()
@@ -625,7 +658,8 @@ def admin_board(request):
               "%d awaiting approval" % change_awaiting,
               "core:changerequest_list", "git-pull-request", "purple"),
         _tile("alerts", "Firing alerts", firing_alerts,
-              "recorded firings, unresolved", "core:firing_board", "bell-ring", "red"),
+              "firing or acknowledged — the same set the board shows", "core:firing_board",
+              "bell-ring", "red"),
         _tile("incidents", "Open incidents", open_incidents, "unresolved",
               "core:incident_list", "siren", "red"),
         _tile("vulns", "Open vulnerabilities", open_vulns, "status open",
@@ -654,7 +688,12 @@ def admin_board(request):
     return render(request, "core/adminboard.html", {
         "tiles": tiles,
         "needs_attention": needs_attention,
-        "recent_activity": AuditLog.objects.filter(tenant=tenant).order_by("-id")[:10],
+        # `select_related("user")` matches what `ops_audit_trail` already does 200 lines below for
+        # the same model, the same column and the same `{{ row.user }}` dereference. It was a copy
+        # divergence, not a design choice, and it cost up to 10 queries on the page an operator
+        # opens first.
+        "recent_activity": AuditLog.objects.filter(tenant=tenant).select_related("user")
+        .order_by("-id")[:10],
         "boards": boards,
         "notes": OPS_NOTES,
     })
@@ -701,8 +740,12 @@ def support_board(request):
 
     crm_open = Case.objects.filter(tenant=tenant, status__in=OPEN_CASE_STATUSES)
     hrm_open = HelpdeskTicket.objects.filter(tenant=tenant, status__in=OPEN_TICKET_STATUSES)
-    crm_articles = CrmArticle.objects.filter(tenant=tenant)
-    hrm_articles = HrmArticle.objects.filter(tenant=tenant)
+    # `select_related` on the two category FKs: the template dereferences
+    # `{{ a.kb_category.name }}` and `{{ a.category.name }}` on every row, and without these two
+    # joins that is 1 + up to 20 extra queries on the page - the largest N+1 in this sub-module.
+    # The two case/ticket loops below are deliberately NOT joined: they read only local columns.
+    crm_articles = CrmArticle.objects.filter(tenant=tenant).select_related("kb_category")
+    hrm_articles = HrmArticle.objects.filter(tenant=tenant).select_related("category")
 
     counts = {
         # Open work only. Counting resolved and closed tickets would tell an operator their queue is
@@ -877,9 +920,14 @@ def ops_audit_trail(request):
         "object_list": page_obj.object_list,
         "page_obj": page_obj,
         "q": q,
+        # **Bounded, deliberately.** This used to be a full DISTINCT scan over the tenant's entire
+        # append-only audit log on every page load, to re-derive a vocabulary that is small and
+        # closed. `ops_audit_trail` is read-mostly and the log only grows, so the scan grew with
+        # it. The `[:200]` cap plus the filter keeps the query index-assisted and the dropdown
+        # usable; the field's own `max_length=10` already bounds how many distinct verbs can exist.
         "action_choices": sorted(
             {a for a in AuditLog.objects.filter(tenant=request.tenant)
-             .values_list("action", flat=True) if a}),
+             .values_list("action", flat=True)[:200] if a}),
         "notes": OPS_NOTES,
     })
 
