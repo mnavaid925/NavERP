@@ -19,7 +19,7 @@ are declarations. The page says so rather than implying a control surface that d
 `CHG-` is minted with a hardcoded literal in `save()`, so `core.settings_engine.LITERAL_PREFIX_MODELS`
 is what makes it discoverable to the numbering board.
 """
-from django.core.exceptions import ValidationError
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.core.validators import MaxValueValidator
 from django.db import IntegrityError, models, transaction
 
@@ -156,16 +156,27 @@ class ChangeRequest(models.Model):
         # An approval is a decision somebody made, so it must carry who and when. The `approved_at`
         # half is the same L22 evidence-stamp rule the rest of the repo uses: a status that claims
         # a transition without its stamp is a claim with nothing behind it.
+        #
+        # **Keyed on `NON_FIELD_ERRORS`, deliberately.** `ChangeRequestForm` excludes every field
+        # named below, and a `ModelForm` routes a `ValidationError` key through
+        # `form.add_error(key, ...)`, which raises `ValueError` for a key that is not a form field.
+        # Keying on `approved_by` therefore turned an ordinary dropdown choice into a 500 rather
+        # than a refusal. `__all__` is always a legal form key, so the guard still fires for the
+        # admin and for any API caller (where it raises exactly as before) but RENDERS as a
+        # non-field error on the form instead of crashing the request.
         if self.status == "approved":
             if not self.approved_by_id:
-                raise ValidationError({"approved_by": "An approved change must name its approver."})
+                raise ValidationError(
+                    {NON_FIELD_ERRORS: "An approved change must name its approver."})
             if not self.approved_at:
-                raise ValidationError({"approved_at": "An approved change must record when."})
+                raise ValidationError(
+                    {NON_FIELD_ERRORS: "An approved change must record when."})
         if self.status == "rolled_back":
             if not (self.rollback_reason or "").strip():
-                raise ValidationError({"rollback_reason": "A rollback must say why."})
+                raise ValidationError({NON_FIELD_ERRORS: "A rollback must say why."})
             if not self.rollback_at:
-                raise ValidationError({"rollback_at": "A rollback must record when."})
+                raise ValidationError(
+                    {NON_FIELD_ERRORS: "A rollback must record when."})
 
     @property
     def rollout_count(self):
@@ -225,10 +236,15 @@ class FeatureRollout(models.Model):
             raise ValidationError({"percentage": "General availability is 100%."})
         if self.stage == "partial" and not 0 < self.percentage < 100:
             raise ValidationError({"percentage": "A partial stage must be between 1% and 99%."})
+        # `completed_at` is excluded from `FeatureRolloutForm`, so this is keyed on
+        # NON_FIELD_ERRORS for the same reason as the `ChangeRequest` guards above: a key that is
+        # not a form field raises `ValueError` inside `add_error` and 500s the save.
         if self.status == "completed" and not self.completed_at:
-            raise ValidationError({"completed_at": "A completed stage must record when it finished."})
+            raise ValidationError(
+                {NON_FIELD_ERRORS: "A completed stage must record when it finished."})
         if self.started_at and self.completed_at and self.completed_at < self.started_at:
-            raise ValidationError({"completed_at": "A stage cannot finish before it started."})
+            raise ValidationError(
+                {NON_FIELD_ERRORS: "A stage cannot finish before it started."})
 
     def __str__(self):
         return "%s / %s (%d%%)" % (self.change.number, self.get_stage_display(), self.percentage)
