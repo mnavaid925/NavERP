@@ -99,7 +99,7 @@
                   <td><strong>{{ risk.inherent_score }}</strong>
                     {% if risk.score_label == "critical" %}<span class="badge badge-red">Critical</span>
                     {% elif risk.score_label == "high" %}<span class="badge badge-amber">High</span>
-                    {% else %}<span class="badge badge-blue">{{ risk.score_label|title }}</span>{% endif %}</td>
+                    {% else %}<span class="badge badge-info">{{ risk.score_label|title }}</span>{% endif %}</td>
                   <td class="fw-600"><a href="{% url 'core:riskregister_detail' risk.pk %}">{{ risk.title }}</a>
                     <div class="text-muted">{{ risk.code }}</div></td>
                   <td>{{ risk.get_treatment_display }}</td>
