@@ -48,7 +48,14 @@
         <div class="detail-item"><dt>Acknowledgement</dt><dd>
           {% if not obj.requires_acknowledgement %}Not required
           {% elif acknowledgement_rate is None %}<span class="text-muted">Not measurable</span>
-          {% else %}{{ obj.acknowledged_count }} recorded{% endif %}
+          {% else %}{{ obj.acknowledged_count }} recorded of v{{ obj.version }}
+            {% if obj.superseded_acknowledgement_count %}
+              <span class="text-muted">({{ obj.superseded_acknowledgement_count }} earlier
+              version{{ obj.superseded_acknowledgement_count|pluralize }} not counted
+              &mdash; a re-version invalidates the prior attestations rather than carrying them
+              forward)</span>
+            {% endif %}
+          {% endif %}
         </dd></div>
       </dl>
       {% if obj.summary %}<p class="text-muted">{{ obj.summary|linebreaksbr }}</p>{% endif %}
