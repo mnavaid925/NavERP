@@ -61,7 +61,7 @@
               <span class="fw-600">{{ obj.inherent_score }}</span>
               {% if obj.score_label == "critical" %}<span class="badge badge-red">Critical</span>
               {% elif obj.score_label == "high" %}<span class="badge badge-amber">High</span>
-              {% elif obj.score_label == "medium" %}<span class="badge badge-blue">Medium</span>
+              {% elif obj.score_label == "medium" %}<span class="badge badge-info">Medium</span>
               {% else %}<span class="badge badge-green">Low</span>{% endif %}
               <div class="text-muted">{{ obj.get_likelihood_display }} &times; {{ obj.get_impact_display }}</div>
             </td>
@@ -71,7 +71,7 @@
             <td>{{ obj.get_treatment_display }}</td>
             <td>
               {% if obj.status == "closed" %}<span class="badge badge-slate">Closed</span>
-              {% else %}<span class="badge badge-blue">{{ obj.get_status_display }}</span>{% endif %}
+              {% else %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% endif %}
             </td>
             <td>{% if obj.owner %}{{ obj.owner.get_username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
             <td>{% if obj.next_review_on %}{{ obj.next_review_on|date:"d M Y" }}
