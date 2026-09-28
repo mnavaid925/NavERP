@@ -346,6 +346,38 @@ def corporatepolicy_edit(request, pk):
 @require_POST
 @tenant_admin_required
 def corporatepolicy_delete(request, pk):
+    """Delete a policy, but not the attestations recorded against it by accident.
+
+    **I13 — a published policy carrying acknowledgements is evidence, not a draft.** Deleting it
+    cascades its attestations away silently, and a direct POST bypasses the list page's JS
+    `confirm()` entirely. So the delete is refused while attestations exist, and only an explicit
+    `?discard_attestations=1` — which writes an audit row naming what was destroyed — gets past
+    it. The refusal is the default because the recovery cost is asymmetric: a policy can be
+    re-entered, an attestation cannot.
+    """
+    policy = get_object_or_404(CorporatePolicy, pk=pk, tenant=request.tenant)
+    attributions = policy.acknowledgements.count()
+    if attributions and request.POST.get("discard_attestations") != "1":
+        messages.error(
+            request,
+            "This policy has %d acknowledgement%s recorded against it, and deleting it would "
+            "destroy evidence somebody actually gave. Retire it instead, or re-send with "
+            "discard_attestations=1 if you genuinely mean to destroy those records."
+            % (attributions, "" if attributions == 1 else "s"),
+        )
+        return redirect("core:corporatepolicy_detail", pk=pk)
+    if attributions:
+        write_audit_log(
+            request.user, policy, "delete",
+            changes={"discarded_attestations": attributions},
+        )
+        policy.delete()
+        messages.success(
+            request,
+            "Deleted, along with %d acknowledgement%s. The audit trail records that they were "
+            "discarded." % (attributions, "" if attributions == 1 else "s"),
+        )
+        return redirect("core:corporatepolicy_list")
     return crud_delete(request, model=CorporatePolicy, pk=pk,
                        success_url="core:corporatepolicy_list")
 
@@ -482,8 +514,26 @@ def policyacknowledgement_create(request):
 @require_POST
 @tenant_admin_required
 def policyacknowledgement_delete(request, pk):
-    return crud_delete(request, model=PolicyAcknowledgement, pk=pk,
-                       success_url="core:policyacknowledgement_list")
+    """I13 — an acknowledgement is EVIDENCE, and evidence is not deleted from a register.
+
+    Every other 0.21 entity is a working register an admin is entitled to correct. This one is
+    different: the row asserts that a named person pressed a button at a timestamp, and the only
+    honest corrections are "this was recorded for the wrong person" (which the back-fill view
+    already flags in the audit trail) and "this person has since been removed" (which
+    `acknowledgement_rate` handles by counting only active users). Deleting the row would leave
+    no trace that the attestation ever existed, so this refuses outright rather than merely
+    warning: an admin who can delete an attestation can also quietly manufacture a clean register.
+    """
+    acknowledgement = get_object_or_404(PolicyAcknowledgement, pk=pk,
+                                       tenant=request.tenant)
+    messages.error(
+        request,
+        "An acknowledgement cannot be deleted - it is a record that %s pressed save on %s v%s. "
+        "The audit trail for this entry is the permanent record of it."
+        % (acknowledgement.user.get_username(),
+           acknowledgement.policy.code, acknowledgement.policy_version),
+    )
+    return redirect("core:policyacknowledgement_list")
 
 
 
