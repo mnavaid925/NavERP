@@ -80,7 +80,7 @@
         <tbody>
           {% for row in recent_activity %}
             <tr>
-              <td>{{ row.created_at|date:"M d, Y H:i" }}</td>
+              <td>{{ row.at|date:"M d, Y H:i" }}</td>
               <td>{% if row.user %}{{ row.user }}{% else %}<span class="text-muted">system</span>{% endif %}</td>
               <td><span class="badge badge-slate">{{ row.action }}</span></td>
               <td>{{ row.target|truncatechars:56 }}</td>
