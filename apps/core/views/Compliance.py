@@ -28,6 +28,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from apps.core.views._common import *  # noqa: F401,F403
+from apps.core.crud import as_db_int
 from apps.core.utils import write_audit_log
 from apps.core.models import (
     ComplianceControl,
@@ -130,14 +131,17 @@ def controlframeworkmapping_add(request, pk):
     framework = get_object_or_404(ControlFramework, pk=pk, tenant=request.tenant)
     mapped_ids = framework.mappings.values_list("control_id", flat=True)
     if request.method == "POST":
-        control_id = request.POST.get("control_id", "")
-        if not str(control_id).isdigit():
+        control_id = as_db_int(request.POST.get("control_id", ""))
+        if control_id is None:
             messages.error(request, "Choose a control to add.")
             return redirect("core:controlframeworkmapping_add", pk=pk)
-        # Tenant-scoped, so a foreign pk is indistinguishable from a missing one. `as_db_int` is
-        # deliberately NOT used here: this value is chosen from a rendered list rather than typed
-        # into a URL, and the isdigit guard above already refuses the junk that reaches it.
-        control = get_object_or_404(ComplianceControl, pk=int(control_id),
+        # I12: `as_db_int`, not an `isdigit()` guard. `str.isdigit()` accepts `'²'` and an
+        # unbounded 100-digit string, both of which convert/raise on the way into `int()` and
+        # 500 with a DEBUG traceback -- and DEBUG defaults to True in config/settings.py, so the
+        # traceback ships request.tenant and the queryset. The helper is the L11 rule this
+        # comment previously and wrongly claimed was unnecessary. Tenant-scoped, so a foreign
+        # pk is indistinguishable from a missing one.
+        control = get_object_or_404(ComplianceControl, pk=control_id,
                                     tenant=request.tenant)
         mapping, created = ControlFrameworkMapping.objects.get_or_create(
             tenant=request.tenant, framework=framework, control=control,
@@ -173,8 +177,11 @@ def controlframeworkmapping_list(request):
         filters=[("coverage", "coverage", False), ("framework", "framework_id", True)],
         extra_context={
             "coverage_choices": ControlFrameworkMapping.COVERAGE_CHOICES,
+            # I4: `controls` is dropped. The list template's framework filter is populated from
+            # `frameworks` only (verified by reading the template), so this queryset was dead
+            # context. It cost zero queries -- an unevaluated queryset in a context is never
+            # fetched -- so this is tidiness, not performance.
             "frameworks": ControlFramework.objects.filter(tenant=request.tenant),
-            "controls": ComplianceControl.objects.filter(tenant=request.tenant),
             "notes": GRC_NOTES,
         },
     )
@@ -424,25 +431,35 @@ def policyacknowledgement_create(request):
     if request.method == "POST":
         form = PolicyAcknowledgementForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            policy_id = request.POST.get("policy", "")
-            user_id = request.POST.get("user", "")
-            if not str(policy_id).isdigit() or not str(user_id).isdigit():
+            # I12: `as_db_int` on both, not `str.isdigit()`. isdigit() returns True for '²' and
+            # for a 100-digit string, and both then raise inside int() -- an uncaught 500 with a
+            # DEBUG traceback (DEBUG defaults True here) exposing request.tenant and the queryset.
+            policy_id = as_db_int(request.POST.get("policy", ""))
+            user_id = as_db_int(request.POST.get("user", ""))
+            if policy_id is None or user_id is None:
                 messages.error(request, "Choose both a policy and a person.")
                 return redirect("core:policyacknowledgement_create")
             # Both lookups are tenant-scoped, so a foreign pk is a 404, not a cross-tenant write.
-            policy = get_object_or_404(CorporatePolicy, pk=int(policy_id),
+            policy = get_object_or_404(CorporatePolicy, pk=policy_id,
                                        tenant=request.tenant)
             from django.contrib.auth import get_user_model
-            person = get_object_or_404(get_user_model(), pk=int(user_id),
+            person = get_object_or_404(get_user_model(), pk=user_id,
                                        tenant=request.tenant)
+            # I2: the form's `notes` was bound and validated but never passed to get_or_create,
+            # so a note typed into the back-fill form was silently discarded on the row it was
+            # written to explain. `defaults` only applies on create, which is correct here: the
+            # acknowledgement already exists, and overwriting its note on a duplicate submit
+            # would rewrite evidence rather than record it.
             acknowledgement, created = PolicyAcknowledgement.objects.get_or_create(
                 tenant=request.tenant, policy=policy, user=person,
                 policy_version=policy.version,
+                defaults={"notes": form.cleaned_data.get("notes") or ""},
             )
             if created:
                 write_audit_log(request.user, acknowledgement, "create",
                                 changes={"recorded_by": request.user.get_username(),
-                                         "on_behalf_of": person.get_username()})
+                                         "on_behalf_of": person.get_username(),
+                                         "note": form.cleaned_data.get("notes") or ""})
                 messages.success(request, "Acknowledgement recorded on behalf of %s."
                                  % person.get_username())
             else:
