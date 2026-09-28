@@ -57,7 +57,7 @@
               {% if obj.coverage == "covered" %}<span class="badge badge-green">Covered</span>
               {% elif obj.coverage == "partial" %}<span class="badge badge-amber">Partial</span>
               {% elif obj.coverage == "not_applicable" %}<span class="badge badge-slate">Not applicable</span>
-              {% else %}<span class="badge badge-slate">Not started</span>{% endif %}
+              {% else %}<span class="badge badge-slate">{{ obj.get_coverage_display }}</span>{% endif %}
             </td>
             <td>{% if obj.notes %}{{ obj.notes|truncatechars:60 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
             <td>
