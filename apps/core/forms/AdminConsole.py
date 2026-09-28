@@ -45,6 +45,36 @@ from apps.core.models import (
 )
 
 
+def _narrow_status(form, status_choices, authorable):
+    """Restrict a `status` widget to the values a person may AUTHOR, without clobbering a row.
+
+    `authorable` is the subset of `status_choices` a form may set. Two rules make this safe:
+
+    1. **Never offer a value the model would refuse** for want of an evidence stamp the form does
+       not carry. Those are the values that used to 500.
+    2. **Never silently change an existing row's status.** On EDIT the instance already holds a
+       status that may sit outside `authorable` — a submitted change, a window a verb ended early.
+       A `<select>` whose current value is not among its options renders with NOTHING selected,
+       so the browser posts the first option, and that first option is a legal value: editing an
+       approved change's title would quietly reset it to Draft. So the instance's own current
+       status is added back to the choices on edit, marked as current. It is selectable (the row
+       genuinely is in that state, and hiding it would misrepresent the record) but it is never
+       *offered* as something new to move into, because it is already there.
+
+    An UNSAVED instance (a create form) has no status worth preserving, so only `authorable` is
+    shown there.
+    """
+    choices = [(v, l) for v, l in status_choices if v in authorable]
+    current = getattr(form.instance, "status", None)
+    if current and not form.instance.pk:
+        # Unsaved instance: nothing to preserve.
+        current = None
+    if current and current not in authorable:
+        label = dict(status_choices).get(current, current)
+        choices.append((current, "%s (current)" % label))
+    form.fields["status"].widget.choices = choices
+
+
 class JobDefinitionForm(TenantModelForm):
     """A declared job. Note what is absent: `last_run_at` and `next_run_at`.
 
@@ -106,8 +136,9 @@ class MaintenanceWindowForm(TenantModelForm):
         super().__init__(*args, **kwargs)
         # `ended_early` needs `ended_at`, which is not on this form, so it is not authorable here.
         # The model guard stays for the admin and for the verb's own callers.
-        self.fields["status"].widget.choices = [
-            (v, l) for v, l in MaintenanceWindow.STATUS_CHOICES if v != "ended_early"]
+        _narrow_status(
+            self, MaintenanceWindow.STATUS_CHOICES,
+            authorable={"draft", "scheduled", "active", "completed", "cancelled"})
 
 
 class ChangeRequestForm(TenantModelForm):
@@ -135,8 +166,7 @@ class ChangeRequestForm(TenantModelForm):
         super().__init__(*args, **kwargs)
         # Authorable values only. `ChangeRequest.clean()` still refuses an unstamped approval or
         # rollback for the admin and for any API caller; those refusals render as non-field errors.
-        self.fields["status"].widget.choices = [
-            (v, l) for v, l in ChangeRequest.STATUS_CHOICES if v == "draft"]
+        _narrow_status(self, ChangeRequest.STATUS_CHOICES, authorable={"draft"})
 
 
 class FeatureRolloutForm(TenantModelForm):
@@ -160,8 +190,9 @@ class FeatureRolloutForm(TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # `completed` needs `completed_at`, which is not on this form.
-        self.fields["status"].widget.choices = [
-            (v, l) for v, l in FeatureRollout.STATUS_CHOICES if v != "completed"]
+        _narrow_status(
+            self, FeatureRollout.STATUS_CHOICES,
+            authorable={"planned", "running", "paused", "rolled_back"})
 
     def clean_feature_flag(self):
         """Refuse a second stage for the same flag under the same change.
