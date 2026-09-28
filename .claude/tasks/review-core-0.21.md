@@ -295,3 +295,118 @@ does not re-derive it as a 0.21 regression.
 8. **M2** — remove the contract row for the nonexistent `controlframeworkmapping_edit` view.
 9. **M1**, **M4** — deferred, no change.
 
+## Pass 4 — `performance-reviewer`
+
+This pass found the **worst defect in the whole review**, and it is a shipped-broken page rather than a
+blemish. Measurement was claimed live; the two claims that matter were **re-verified by the main session
+against the live dev database** (see C2 below).
+
+### C2 — Critical: `annotate()` collides with a same-named `@property` and 500s two list pages
+
+**`apps/core/views/Compliance.py:201-202` and `256-257`**
+
+```python
+qs = ComplianceControl.objects.filter(tenant=request.tenant).annotate(framework_count=Count("mappings"))
+qs = CorporatePolicy.objects.filter(tenant=request.tenant).annotate(acknowledged_count=Count("acknowledgements"))
+```
+
+`ComplianceControl.framework_count` (`models/Compliance.py:337-339`) and
+`CorporatePolicy.acknowledged_count` (`models/Compliance.py:491-493`) are `@property`. A `property` is a
+**data descriptor**, so Django's `ModelIterable` cannot `setattr` the annotation onto the instance and the
+query raises on evaluation.
+
+**Verified by the main session against the live dev DB — both list pages are dead:**
+
+```
+SQL  compliancecontrol_list: SELECT `core_compliancecontrol`.`id`, ... GROUP BY ...
+     -> AttributeError: can't set attribute 'framework_count'
+SQL  corporatepolicy_list:    SELECT `core_corporatepolicy`.`id`, ... GROUP BY ...
+     -> AttributeError: can't set attribute 'acknowledged_count'
+```
+
+So `/core/compliance/controls/` and `/core/compliance/policies/` return **HTTP 500** for any tenant that
+actually has rows. This is why the earlier content smoke passed and this is not: that smoke ran as a tenant
+with **0 controls and 0 policies**, and iterating an empty queryset never reaches the `setattr`. The smoke
+was structurally incapable of catching it — worth keeping (L8: a 200 with rows present is the only real
+assertion).
+
+**Two further harms from the same annotation**, both visible in the generated SQL above:
+
+1. **It destroys `Meta.ordering`.** Django suppresses `Meta.ordering` when the query has a `GROUP BY`, so
+   both pages lose `ordering = ["code"]` and raise
+### I7 — Important: owner N+1 on three list pages
+
+**`apps/core/views/Compliance.py:66, 200, 255, 437`** — only `riskregister_list` (line 468) has
+`select_related("owner")`. The other three lists render `obj.owner`, so a 20-row page issues 1 + 20
+`accounts_user` queries. **Verified**: `select_related` appears at lines 94, 155, 167, 231, 286, 353 and
+**only** 468 — the risk list.
+
+**Fix** — add `select_related("owner")` to `controlframework_list`, `compliancecontrol_list` and
+`corporatepolicy_list`, matching line 468.
+
+### I8 — Important: `grc_overview` computes aggregates in Python over full querysets
+
+**`apps/core/views/Compliance.py:500-516`** — `framework_count`, `critical_risks` (a Python
+`sum(1 for r in risks if r.score_label == "critical")` over the **entire** register) and `overdue_reviews`
+(a Python sum over **all** controls and **all** risks) each fetch or scan rows the template never displays.
+Only the `[:8]` slices reach the page. As the register grows this is O(all rows) per board load, and
+`critical_risks` cannot use `grc_tenant_score_idx` because the banding happens in Python.
+
+**Fix** — `critical_risks` becomes
+`RiskRegister.objects.filter(tenant=tenant, inherent_score__gt=16).count()` (uses `grc_tenant_score_idx`);
+`overdue_reviews` becomes two `.filter(next_review_on__lt=today).exclude(next_review_on=None).count()`;
+`framework_count` stays a `.count()`. Keep the `[:8]` display querysets as they are.
+
+### I9 — Minor: `corporatepolicy_detail` issues two identical COUNTs on `policy_id`
+
+`acknowledgements.count()` for the header, then the same count again inside `acknowledgement_rate`. One is
+reclaimable by passing the value through the context.
+
+### Corrections to already-recorded findings (measured precision, not new defects)
+
+- **I3** (`grc_overview` unused `controls`/`policies`) — costs **1** query, not two: the board issues no
+  `SELECT … FROM core_corporatepolicy` at all, so `policies[:8]` is never evaluated. Only `controls[:8]`'s
+  base queryset is touched, by the `overdue_reviews` sum. The real board waste is the five separate COUNTs
+  and the three full fetches (now I8).
+- **I4** (`controlframeworkmapping_list` unused `controls`) — costs **zero** queries. An unevaluated
+  queryset in a template context is never fetched. It is **dead context, not a wasted round-trip**; still
+  worth dropping, but as tidiness rather than performance.
+
+**Areas verified CLEAN:** `riskregister_detail` measures 1 app query with `select_related`;
+`policyacknowledgement_list` 4 queries, no N+1; `controlframeworkmapping_list` 3 queries; all 12 index names
+≤ 30 chars; `makemigrations --check` clean; every list view filters `tenant=request.tenant`;
+`score_label` / `is_open` / `is_overdue_review` are pure-Python and DB-free (**verified** — they compare
+fields and call `timezone.localdate()` only); seeder idempotency intact, `get_or_create` on real unique keys.
+
+## Consolidated fix order (Phase 5)
+
+| # | Finding | File(s) | Why |
+|---|---|---|---|
+| 1 | **C2** — annotate/property collision, two 500s | `views/Compliance.py` + 2 templates | Only defect that breaks a page |
+| 2 | **C1** — seeded `inherent_score = 0` | `seed_core.py` | Shipped page states something false |
+| 3 | **I2** — back-fill drops the typed note | `views/Compliance.py` | Silent loss of user data |
+| 4 | **I5** — `badge-blue` undefined (3 sites) | 2 templates | Wrong on every render, but invisible |
+| 5 | **I6** — hardcoded "Not started" (3 sites) | 3 templates | False statement on the honesty axis |
+| 6 | **I7** — owner N+1 on 3 lists | `views/Compliance.py` | Linear query growth |
+| 7 | **I8** — Python aggregates over full querysets | `views/Compliance.py` | O(all rows) per board load |
+| 8 | **I1** — rename `unacknowledged_count` | view + template + contract | Name says the opposite |
+| 9 | **I3** / **I4** — dead context keys | `views/Compliance.py` | Tidiness |
+| 10 | **I9** — duplicate COUNT on policy detail | `views/Compliance.py` | Minor |
+| 11 | **M2** — contract row for a nonexistent view | `contract-core-0.21.md` | Docs |
+| — | M1, M4 | — | Deferred, no change |
+
+   `UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list`
+   (`crud.py:23`). That is non-deterministic `LIMIT/OFFSET` pagination **and** it forfeits the
+   `(tenant_id, code)` unique index as the sort source. The SQL has `GROUP BY` with **no `ORDER BY`**.
+2. **It forces a temp table + filesort** where the plain query was an index-ordered scan.
+
+Net: an optimisation intended to replace N per-row `COUNT`s delivers **zero** benefit here while adding a
+`LEFT JOIN` + `GROUP BY` to the paginator's own COUNT and destroying the sort index on the module's two
+most-read registers.
+
+**Fix (one rule, applied consistently).** An annotation alias must never equal a model `@property` name.
+Either drop the two colliding properties, or rename the aliases and update the two templates. **Chosen fix:
+keep the properties (the detail views legitimately use them), rename the annotations to `mapping_total` /
+`acknowledgement_total`, and add explicit `.order_by("code")` to restore deterministic pagination.** Then
+re-measure.
+
