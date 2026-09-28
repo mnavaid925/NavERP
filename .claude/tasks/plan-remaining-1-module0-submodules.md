@@ -1,49 +1,106 @@
-# Plan 1 — Finish Module 0 (System Admin & Security): **3** unbuilt sub-modules (0.19–0.21)
+# Plan 1 — Finish Module 0 (System Admin & Security): ✅ **21 of 21 BUILT** — only 0.20 close-out left
 
-**Created:** 2026-09-19 · **HEAD at authoring:** `0ba7f760` · **Status:** 🟨 **10 of the 14 built since authoring; 4 remain**
-**Scope:** `core` + `accounts` + `tenants` + `dashboard` · **Effort:** large — 4 remaining `/next-module` runs
+**Created:** 2026-09-19 · **HEAD at authoring:** `0ba7f760` · **Status:** ✅ **BUILT (21 of 21)**; 🟨 0.20 Phase 6/7 outstanding
+**Scope:** `core` + `accounts` + `tenants` + `dashboard` · **Effort:** small — one test wave + one docs pass
 
-> **Re-verified 2026-09-26 against `LIVE_LINKS` (authoritative).** The original header said "14
-> unbuilt"; **ten of those fourteen are now live**: **0.4, 0.6, 0.8, 0.10, 0.11, 0.12, 0.13, 0.15,
-> 0.16, 0.17, 0.18**. Module 0 is now **18 of 21 built (0.1–0.18)** and the remaining work is exactly
-> **0.19–0.21 — three sub-modules, not six.**
-> Steps 0 and 2 of this plan are also **DONE** (reconcile file committed; `core/SKILL.md` written).
-> The table in Step 1 carries per-row status so the finished ones are not rebuilt.
+> **Re-verified 2026-09-28 against `LIVE_LINKS` (authoritative).** The original header said "14
+> unbuilt"; **all fourteen are now live**: **0.4, 0.6, 0.8, 0.10, 0.11, 0.12, 0.13, 0.15, 0.16, 0.17,
+> 0.18, 0.19, 0.20, 0.21**. **Module 0 is 21 of 21 (0.1–0.21) — COMPLETE.** Steps 0 and 2 are DONE
+> (reconcile file committed; `core/SKILL.md` written). **Do not run `/next-module 0.N` again.**
 >
-> **0.17 landed without a docs close-out** — migration `core.0015`, four models
-> (`ServiceComponent`, `AlertRule`, `AlertEvent`, `Incident`), `_seed_monitoring(tenant)`, a full
-> `LIVE_LINKS["0.17"]` block and 17 templates were all committed, but this file, `plan-remaining-INDEX.md`,
-> `README.md`, `NavERP.md`, `.claude/skills/core/SKILL.md` and `todo.md` were never updated. All of
-> them now read 0.19–0.21. **`temp/audit_integrity.py` passes all six checks** (re-run 2026-09-27:
-> `module 0: 3 catalogued but NOT built -> 0.19, 0.20, 0.21`).
+> **The last three landed between 2026-09-26 and 2026-09-28:**
+> - **0.19** → `tenants`, four models + four green test lanes + `tenants/SKILL.md` section.
+> - **0.20** → `core`, five models, migration `core.0017`, six reviewers run, **17 of 19 fixed**
+>   (X18/X19 deferred). **Phases 6 and 7 are NOT done** — see "What is left" below.
+> - **0.21** → `core`, six models, migration `core.0018`, four green test lanes + `core/SKILL.md`
+>   section. Complete through Phase 7.
+>
+> **`temp/audit_integrity.py` passes all six checks** (re-run 2026-09-28: 482 catalogued, **171 live**,
+> 3,868 route names, 2,359 template refs, 761 sidebar targets, 0 unexplained unseeded models,
+> `core: 21 live sub-modules`).
 
 ---
 
 ## Goal
 
-Module 0 is the only module in the 0–7.13 range that is materially unfinished. At authoring it was
-**7 of 21 sub-modules live**; it is now **18 of 21 (0.1–0.18)**. Every other module in the range is
-complete against the catalog. This plan closes the last three: **0.19–0.21**.
+Module 0 was the only module in the 0–7.13 range that was materially unfinished. At authoring it was
+**7 of 21 sub-modules live**; it is now **21 of 21 (0.1–0.21)**. **This plan is closed as a build plan.**
+The only thing it still asks for is 0.20's close-out, written out in "What is left" below.
 
-## Why it is the biggest item
+## What is left — 0.20 close-out only
 
-This is **not one task — it is 4.** Each unbuilt sub-module is a full Module Creation Sequence run
-(Phases 0–7 of `.claude/CLAUDE.md`): research → todo → build → 6 serial reviewers → `code-fixer` →
-tests → docs. Do them **one at a time, strictly serially**, exactly like 7.1–7.15 were done.
+**Not one sub-module needs building.** Three items, in order:
+
+### 1. Phase 6 — tests (0.20) — 🟨 half-started
+
+`.claude/tasks/test-contract-core-0.20.md` **is written** and pins the lanes
+`test_adminconsole_{models,forms,views,security}.py`, every `ac0_*` fixture, the POST-only set and
+the L20/L22 negative-form assertions. `apps/core/tests/conftest.py` carries a **533-line uncommitted
+`ac0_*` fixture block**. What does not exist yet is any of the four lanes.
+
+1. Commit the conftest block on its own (one file, one commit).
+2. Delete `apps/core/tests/test_ac0_smoke_tmp.py` — it is a throwaway harness and its own docstring
+   says so (L46). It has done its job now that the fixtures are in `conftest.py`.
+3. Write the four lanes **one at a time**, one commit each: `_models` → `_forms` → `_views` →
+   `_security`. Every function `test_adminconsole_*`, every helper `_adminconsole_*` (the contract
+   explains why: 0.21 owns the bare `test_core_*` names).
+4. Run the **full unfiltered** `apps/core` suite and fix it green. Never `-k` filter (L47) — a filter
+   excludes exactly the tests a shared `conftest.py` change can break. **Use `--nomigrations`**; on
+   this box a filtered/unmigrated single lane is 17s, but a full suite that replays every migration
+   in a 13-app project runs for tens of minutes.
+5. Fix drift against the contract, not against the current code.
+
+### 2. Phase 7 — docs (0.20) — ⬜ not started
+
+- `.claude/skills/core/SKILL.md` has sections for 0.16, 0.17, 0.18 and 0.21 but **no 0.20 section**
+  — grepping it for `JobDefinition|MaintenanceWindow|ChangeRequest|FeatureRollout` returns **0 hits**.
+  Write it: five models, routes, templates, seeder rows, the `bulk_preview` sixth POST-only verb, the
+  three-by-design `BULK_AFFECTED` zero lambdas, the four `NumberingScheme` prefixes, the ops-audit
+  trail, and the gotchas (the two `AuditLog.action` width fixes, the `N+1` row-count-invariance
+  lesson L58, the `NON_FIELD_ERRORS` keying rule from X-fixes C1/C3/C4).
+- `README.md` — Module 0's row already reads `🟦 21 of 21 sub-modules built (0.1–0.21) — Module 0 is
+  COMPLETE`, and it already narrates 0.21, 0.19 and 0.18. **Add the 0.20 sentence** so the row is not
+  the one sub-module the roadmap does not describe.
+- `todo.md` — add a 0.20 close-out note, and in the same sitting correct `todo.md:19`
+  ("2 catalogued but NOT built → 0.20, 0.21") and tick the 0.21 checklist at `todo.md:12506+`, which
+  is still entirely unchecked although 0.21 finished. Those are stale in a file another session may
+  hold — if `git status` shows `todo.md` dirty, leave it to the owner (L43/L45).
+
+### 3. Findings X18 + X19 — ⬜ deferred by Phase 5, on the record
+
+`review-core-0.20.md:602-603` marks both `[~] skipped`. **X18 recommends an app-wide pass** on the
+shared `crud.py` boolean map — it was skipped because `crud.py` was being used by the concurrent 0.21
+session, not because the finding is wrong. **X19** (`ops_audit_trail` rendering `changes` in bulk)
+was judged not a new exposure: same `@tenant_admin_required` audience, same tenant filter as 0.9's
+`auditlog_detail`. Neither is a 0.20 defect. Decide explicitly whether to run the X18 sweep or accept
+the deferral in writing; do not let it sit as an unexamined `[~]`.
+
+### Also open, outside this plan
+
+- **0.21 bullets 4 and 5** (audit/certification, data residency) were **deliberately deferred** to a
+  second 0.21 pass with its own contract (`todo.md:12525`). Not a defect.
+- **Module 8**: 8.1–8.5 are built; **8.6–8.19 (14 sub-modules) are not**. The next build anywhere in
+  this repo is `/next-module 8.6`, not another Module 0 sub-module.
+- `build-state.json` shows 7.10's Phases 3–7 as `pending` although 7.10 is built, and its last entry
+  is 8.4 — the 0.19/0.20/0.21 runs were never recorded. Cosmetic, but it is why this plan's status
+  was wrong for two days.
 
 ## Hard rules (do not skip)
 
-1. **Always pass the sub-module explicitly:** `/next-module 0.4`, never bare `/next-module`.
-   With no argument the skill auto-detects "the module currently in progress" — which today is
-   **module 7**, and a concurrent session is already mid-build on **7.16**. A bare run would hand you
-   7.16, not module 0. (Verified: `.claude/skills/next-module/SKILL.md:148-156` picks the lowest `N.M`
-   with no `LIVE_LINKS` entry of the module in progress.)
-2. **`git status` first, every run.** A dirty tree at session start is not yours (L45). As of authoring
-   there are 3 modified files and 1 untracked file that belong to other sessions — see Plan 2.
-   Never commit them.
-3. **Agree the migration number** with any other live session before generating one (L43).
+1. ~~**Always pass the sub-module explicitly:** `/next-module 0.4`, never bare `/next-module`.~~
+   **MOOT — Module 0 is complete. There is no `0.N` left to build.** The rule stands for the *next*
+   module: bare `/next-module` auto-detects "the module currently in progress", which is now **module
+   8**. The next build is `/next-module 8.6`, passed explicitly.
+2. **`git status` first, every run.** A dirty tree at session start is not yours (L45). **The tree is
+   dirty right now and this time the dirt IS 0.20's own Phase 6 work** — `apps/core/tests/conftest.py`
+   modified, `test-contract-core-0.20.md` and `test_ac0_smoke_tmp.py` untracked. Finish it; it is not
+   another session's.
+3. **Agree the migration number** with any other live session before generating one (L43). `core` is at
+   `0018_compliancecontrol_controlframework_and_more`; a 0.20 test lane should generate **no migration
+   at all** — if it does, something in the contract drifted.
 4. **One file per commit. Never `git push`.**
 5. Run python as `venv\Scripts\python.exe` — Django is not on system python.
+6. **`--nomigrations` on every pytest run on this box** (learned on 8.4: 17s vs ~40min).
 
 ---
 
@@ -80,13 +137,12 @@ bullets are already built, they collapse into one-line nav additions rather than
 
 ---
 
-## Step 1 — The remaining sub-modules, in this order
+## Step 1 — The sub-modules, in build order — ✅ **all 14 built**
 
-Numeric order is the default (predictable, matches the skill's lowest-numbered rule). The **two marked
-★ were foundations other sub-modules consume** — both are now built. Do not interleave: finish one
-before starting the next.
+Numeric order was the default and is kept for history. The **two marked ★ were foundations other
+sub-modules consume** — both are built. **All fourteen are done; do not rebuild any of them.**
 
-| # | sub-module | title | status 2026-09-26 |
+| # | sub-module | title | status 2026-09-28 |
 |---|---|---|---|
 | 1 | 0.4 | Authentication & Single Sign-On (SSO) | ✅ **built** — MFA/TOTP, SAML/OIDC, password policy, session mgmt |
 | 2 | 0.6 | Application Module Administration & Access Scope | ✅ **built** — the 13-bullet one |
@@ -98,47 +154,76 @@ before starting the next.
 | 8 | 0.15 | Localization & Regional Settings | ✅ **built** — language packs, RTL, multi-currency |
 | 9 | 0.16 | Backup, Recovery & Data Lifecycle | ✅ **built** — 7 models, `core/migrations/0013_backup_recovery_data_lifecycle.py` |
 | 10 | 0.17 | Monitoring, Logging & Observability | ✅ **built** — 4 models, `core/migrations/0015_alertrule_alertevent_servicecomponent_incident_and_more.py` |
-| 11 | **0.18** | **Threat Protection & Security Operations** | ✅ **BUILT 2026-09-27** |
-| 12 | **0.19** | **License & Subscription Administration** | ⬜ **OPEN** |
-| 13 | **0.20** | **Admin Console & System Operations** | ⬜ **OPEN** |
-| 14 | **0.21** | **Compliance, Governance & Risk** | ⬜ **OPEN** |
+| 11 | 0.18 | Threat Protection & Security Operations | ✅ **BUILT 2026-09-27** |
+| 12 | 0.19 | License & Subscription Administration | ✅ **BUILT** — 4 models in `tenants`; 4 test lanes green; Phases 1–7 done |
+| 13 | 0.20 | Admin Console & System Operations | 🟨 **BUILT, close-out open** — 5 models, `core/migrations/0017_…`; Phases 1–5 done (17/19 fixed); **Phase 6 tests + Phase 7 docs outstanding** |
+| 14 | 0.21 | Compliance, Governance & Risk | ✅ **BUILT** — 6 models, `core/migrations/0018_…`; 4 test lanes green; Phases 1–7 done; bullets 4–5 deferred by design |
 
-### Notes carried forward for the four still open
+### What each of the last three actually shipped (so it is not re-derived)
 
-- **0.17 is closed** — it landed in `apps/core/models/Monitoring.py` as `ServiceComponent`, `AlertRule`,
-  `AlertEvent` and `Incident` (migration `core.0015`, seeder block `_seed_monitoring(tenant)`). Note it
-  **declines** three of the five bullets rather than faking them: centralized log aggregation
-  (no log pipeline exists in this repo), distributed tracing / true APM (no tracing SDK) and quota
-  management (billing's). What ships is the alert-threshold vocabulary, the register of recorded
-  firings, latency/throughput/slow-query thresholds, the capacity board and the incident register.
-  **0.18 picks up from exactly that boundary.**
-- **0.18** WAF/rate limiting, threat detection, incident response, vulnerability mgmt. Note
-  `core.RateLimitPolicy` already exists (claimed by 0.2/0.4) — extend, do not re-declare.
-- **0.19** Entitlements, seat counting, renewals. Overlaps `tenants.Subscription` /
-  `tenants.SubscriptionInvoice` (0.1) and `tenants.UsageRecord` — state the boundary, do not re-declare.
-- **0.20** Ops console, jobs, maintenance mode, cache control. **0.6/0.20 are the natural home for console
-  surfaces**; if you put models in `dashboard` it becomes a real app and needs a test lane (Plan 5 Item A
-  added one, so the lane now exists).
-- **0.21** Control library, risk register, evidence, policy attestation. Overlaps procurement 6.17's
-  `ComplianceScreening`/`AuditSeal` and 4.12 — reconcile before building, do not re-declare (L36).
-- **0.16 is closed** — it landed as `core/migrations/0013_backup_recovery_data_lifecycle.py` with
-  BackupJob, DataArchive, RestoreRecord and four more; it reused `core.DisposalRecord` as evidence of a
-  real disposal rather than re-declaring it.
+- **0.19 — `apps/tenants`, four models.** `EntitlementFeature` [ENT-] (the commercial feature catalog
+  with **typed** privileges: boolean / integer / select), `PlanEntitlement` [PE-] (a grant at a plan, or
+  an **override** at one subscription that outranks the plan row), `UsageQuota` [UQ-] (the commercial
+  **ceiling** — `quota_limit == 0` means UNMETERED, not "zero permitted") and `LicenseAssignment`
+  [SEAT-] (the seat register; the prefix is `SEAT-`, **not** `LIC-`, which `scm.TradeLicense` already
+  mints). Plus `Subscription.auto_renew` as a **three-state** column where `null` means *nobody has
+  said*, and `grace_ends_on`. It **records** commercial terms and enforces **none** of them — no
+  interceptor, no identity sync, no scheduler, no proration; all ten declines are stated in the page
+  prose. Maps **4 of 5** bullets: bullet 4 is 0.1's `SubscriptionInvoice` + webhook, extended by
+  reference rather than re-declared (L36). Tests: `test_licensing_{models,forms,views,security}.py`.
+  **Two items it left open on the record:** the app-wide `aria-label` sweep beyond 0.19, and moving
+  `next_number()` out of `Model.save()` so `bulk_create` becomes usable.
+- **0.20 — `apps/core`, five models** across `JobScheduler.py` + `Maintenance.py` + `Change.py`.
+  Numbers `JOB-` / `RUN-` / `MNTW-` / `CHG-`; `FeatureRollout` is **deliberately unnumbered** — it has
+  no `number` field and no prefix, which `prefix_usage()` must say out loud rather than report a
+  prefix nobody mints. Five named POST-only action verbs **plus `core:bulk_preview`** is the sixth
+  POST-only view; all five `*_delete` views are `@require_POST` too, so a GET on any of the ten must
+  not delete. Three of the six `BULK_AFFECTED` tools are hard `lambda t: 0` **by design** (accounting
+  owns the ledger, CASCADE leaves no orphans, search has no separate index) and the board says so.
+  Phase 4 produced 19 consolidated findings; Phase 5 fixed 17 and deferred X18/X19.
+- **0.21 — `apps/core`, six models, all in one file** `apps/core/models/Compliance.py` (foundation-app
+  flat layout — backend rule 9). `ControlFramework` [CFW-] is a **certification programme**; there is
+  deliberately **no** `ComplianceFramework`, because 0.8's `RegulatoryFramework` already answers that
+  question and already carries `data_residency_region` — a second framework table would give one
+  workspace two answers at audit time (L36). `RiskRegister` is [GRC-] and **not** [RSK-], which is
+  `projects.ProjectRisk`; two `RSK-00001`s in one tenant are indistinguishable to an operator, which
+  is the exact failure `prefix_usage()` exists to catch. It **records** the posture and enforces
+  **none** of it: no control gates an action, no auditor is granted access, no data is pinned to a
+  region, nobody is reminded to acknowledge. `GRC_NOTES` prints this on every page. The seeder creates
+  **zero** rows that assert certification, and every seeded acknowledgement carries a "DEMO DATA" note
+  on the row.
 
-### Which app does each go in?
+### Notes carried forward (kept so the boundaries are not re-litigated)
 
-Module 0 spans four apps. Decide per sub-module from the catalog bullets and the existing pattern:
+- **0.17 declined three of five bullets** rather than faking them: centralized log aggregation (no log
+  pipeline exists in this repo), distributed tracing / true APM (no tracing SDK), quota management
+  (billing's). What ships is the alert-threshold vocabulary, the firings register, latency/throughput/
+  slow-query thresholds, the capacity board and the incident register. **0.18 picked up from exactly
+  that boundary.**
+- **0.18** — `core.RateLimitPolicy` already exists (claimed by 0.2/0.4): extend, do not re-declare.
+- **0.19** overlapped `tenants.Subscription` / `SubscriptionInvoice` (0.1) and `tenants.UsageRecord`:
+  the boundary was stated, and `UsageQuota` became the **ceiling** half against `UsageRecord`'s
+  consumption half, reusing `UsageRecord.METRIC_CHOICES` by identity.
+- **0.20 / 0.6 are the natural home for console surfaces.** 0.20's models went into `core`, **not**
+  `dashboard` — which keeps `dashboard` a model-less app whose test lane Plan 5 Item A already added.
+  Had models landed there it would have needed its own lane.
+- **0.21** reconciled against procurement 6.17's `ComplianceScreening`/`AuditSeal` and 4.12 and
+  declined to re-declare either (L36). Risk→control FKs and cross-module rollup against
+  `projects.ProjectRisk` were declined as a **cross-module project, not a 0.21 side effect**.
+- **0.16** reused `core.DisposalRecord` as evidence of a real disposal rather than re-declaring it.
 
-- `tenants` — 0.1 (built), 0.7 key management, 0.19 licensing → tenant/commercial concerns.
-- `accounts` — 0.2/0.3 (built), **0.4 SSO** → identity and auth.
-- `core` — 0.9/0.14 (built), **0.10, 0.11, 0.12, 0.13, 0.15, 0.16, 0.17, 0.18, 0.20, 0.21** → platform.
-- `dashboard` — currently only `apps.py`, `urls.py`, `views.py` (**no models, no tests**). **0.6/0.20**
-  are the natural home for console/admin surfaces; if you put models there it becomes a real app and
-  needs a test lane (see Plan 5).
+### Which app did each go in? (settled — recorded so nobody relocates them)
 
-`0.6`'s 13 bullets are per-module access scopes for modules that mostly do not exist yet (8–23). Build it
-against the modules that **are** live (1–7) and make the rest explicit no-ops, or defer the bullet —
-either is fine, but say which in the contract.
+Module 0 spans four apps. The placement questions are all decided now:
+
+- `tenants` — 0.1 ✅, 0.7 key management ✅, **0.19 licensing ✅** → tenant/commercial concerns.
+- `accounts` — 0.2/0.3 ✅, **0.4 SSO ✅** → identity and auth.
+- `core` — 0.9/0.14 ✅, **0.10, 0.11, 0.12, 0.13, 0.15, 0.16, 0.17, 0.18 ✅, 0.20 ✅, 0.21 ✅** → platform.
+- `dashboard` — still only `apps.py`, `urls.py`, `views.py` (**no models**). It kept its own test lane
+  from Plan 5 Item A, so a future console surface has somewhere to go, but **0.20 chose `core`**.
+
+`0.6`'s 13 bullets are per-module access scopes for modules that mostly do not exist yet (8–23). It was
+built against the modules that **are** live (1–7) with the rest as explicit no-ops.
 
 ---
 
@@ -184,34 +269,39 @@ failing is the 7.10 failure mode and must be finished before moving on.
 
 - [x] Step 0 reconcile file committed and every unmapped bullet classified —
       `.claude/tasks/plan-1-module0-reconcile.md`; verdict: nothing was built-but-unsurfaced.
-- [ ] All 21 sub-modules have a `LIVE_LINKS["N.M"]` entry — **18 of 21 today; 0.19–0.21 outstanding.**
-- [ ] `temp/audit_integrity.py` passes all 6 checks — ✅ **verified 2026-09-26: all six PASS** at the
-      current HEAD (3,748 routes, 2,275 template refs, 730 sidebar targets, 0 unexplained unseeded
-      models). It reports "module 0: 3 catalogued but NOT built -> 0.19, 0.20, 0.21".
+- [x] **All 21 sub-modules have a `LIVE_LINKS["N.M"]` entry — ✅ 21 of 21 (0.1–0.21). 0.19, 0.20 and
+      0.21 all landed; Module 0 is COMPLETE.** This is the item that makes the rest of this plan moot.
+- [x] `temp/audit_integrity.py` passes all 6 checks — ✅ **verified 2026-09-28: all six PASS** at the
+      current HEAD (482 catalogued, **171 live**, 3,868 routes, 2,359 template refs, 761 sidebar
+      targets, 0 unexplained unseeded models). It reports **no** catalogued-but-unbuilt sub-module in
+      Module 0, and `core: 21 live sub-modules`.
 - [x] `.claude/skills/core/SKILL.md` exists with an accurate As-built line — `4ce6b4a2`; the as-built
-      list now ends at `0.18` and reads "Unbuilt: `0.19`–`0.21`".
-- [x] `README.md` module-0 row updated — now `🟦 18 of 21 sub-modules built (0.1–0.18)` (`README.md:1193`);
-      `NavERP.md:61` likewise. Both corrected after 0.17 landed without a docs close-out.
-- [ ] `.claude/tasks/todo.md` has a close-out note per sub-module — 0.1–0.18 done; 0.19–0.21
-      outstanding. The stale `core is now 15 of 21; 6 remain (0.16–0.21)` line that sat at
-      `todo.md:9313` is now corrected and a 0.17 close-out note added.
+      list now ends at `0.21`. *(One gap remains inside it: no 0.20 section — Phase 7, above.)*
+- [x] `README.md` module-0 row updated — now `🟦 21 of 21 sub-modules built (0.1–0.21) — Module 0 is
+      COMPLETE` (`README.md:1238`); `NavERP.md` likewise. Both corrected after 0.17 landed without a
+      docs close-out, and again after 0.19–0.21. *(The 0.20 sentence is still missing — Phase 7.)*
+- [ ] `.claude/tasks/todo.md` has a close-out note per sub-module — **0.1–0.19 and 0.21 done; 0.20
+      outstanding**, and three stale spots to correct in the same sitting: `todo.md:19` ("2 catalogued
+      but NOT built → 0.20, 0.21"), the fully-unchecked 0.21 checklist at `todo.md:12506+`, and the
+      missing 0.20 note.
 
-## Risks
+## Risks — carried forward, now historical for the builds
 
-- **Auto-detect will fight you.** Bare `/next-module` picks the lowest `N.M` in the module in progress —
-  which is now **module 8** (a concurrent session is working in `apps/sales/`, with 8.1–8.5 live).
-  Always pass `0.N`, starting with `/next-module 0.19`.
-- **Migration collisions** with the concurrent session — agree the number first (L43). `core` is at
-  `0015_alertrule_alertevent_servicecomponent_incident_and_more` (0.17), so 0.18 will likely be
-  `0016_*`; confirm before generating.
-- **0.19 and 0.21 overlap existing registers.** Procurement 6.17 owns `ComplianceScreening`/`AuditSeal`;
-  `tenants` owns the subscription spine (`Subscription`, `SubscriptionInvoice`, `UsageRecord`).
-  `core.RateLimitPolicy` already exists. The house rule is *never re-declare a sibling's spine* (L36) —
-  state the boundary in the contract, as 7.6 did with `DeliverableInspection`.
-- **0.18 inherits three deferred 0.17 bullets** — centralized log aggregation, distributed tracing / true
-  APM, and capacity quota. 0.17 declined them explicitly in `LIVE_LINKS["0.17"]`'s comments. Decide
-  honestly whether 0.18 can now serve them or must carry the same deferral, and say which in the contract.
-- **Dirty tree.** Four `templates/projects/reporting/*.html` files are modified in the tree on
-  2026-09-26, and `apps/core/tests/test_monitoring_*.py` plus
-  `.claude/tasks/test-contract-core-0.17.md` are **untracked in-flight 0.17 Phase-6 work** — they belong
-  to another session. Leave them alone; never commit them (L45).
+- **Auto-detect will fight you** — for the *next* module, not this one. Bare `/next-module` picks the
+  lowest `N.M` in the module in progress, which is now **module 8**. The next build is
+  **`/next-module 8.6`**, passed explicitly.
+- **Migration collisions** — settled. `core` is at `0018_compliancecontrol_controlframework_and_more`
+  (0.21); 0.19 lives in `tenants`. A 0.20 test lane should generate **no** migration.
+- **0.19 and 0.21 overlapped existing registers** and both were resolved by stating the boundary, not
+  by re-declaring (L36): 0.19 used `UsageQuota` as the ceiling half against `tenants.UsageRecord`'s
+  consumption half; 0.21 refused to add a `ComplianceFramework` because 0.8's `RegulatoryFramework`
+  already answers that question.
+- **0.18 inherited three deferred 0.17 bullets** — centralized log aggregation, distributed tracing /
+  true APM, and capacity quota. Those remain declined, stated in `LIVE_LINKS["0.17"]`'s comments.
+- **The real risk now is documentation drift, not code.** This plan was wrong twice in three days
+  (0.17 landed without a close-out; 0.19–0.21 landed and nothing recorded it), and `build-state.json`
+  never saw the 0.19/0.20/0.21 runs at all. **When a sub-module lands, update the docs in the same
+  sitting** — Phase 7 is not optional bookkeeping, it is the only thing that keeps the next reader from
+  rebuilding a finished sub-module.
+- **Dirty tree** — resolved. The dirt on 2026-09-28 is 0.20's own Phase 6 work
+  (`apps/core/tests/conftest.py` + two untracked files), not another session's. Finish it.
