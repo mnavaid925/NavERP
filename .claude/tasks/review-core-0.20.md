@@ -500,38 +500,38 @@ deliberately absent.
 
 ## Critical
 
-| ID | Finding | Location | Fix |
-|---|---|---|---|
-| **X1** | **Four status values 500 on create AND edit.** `clean()` raises `ValidationError` keyed on fields **excluded from their own form**; `_update_errors` -> `add_error(None, …)` -> `ValueError` for a key that is not a form field. Affects `ChangeRequest` `approved` / `rolled_back`, `MaintenanceWindow` `ended_early`, `FeatureRollout` `completed`. The values **are in the rendered dropdowns**, and on edit the outcome is **data-dependent** (a NULL stamp 500s; a verb-stamped row saves). | `models/Change.py:159-168,228-229`, `models/Maintenance.py:140-141`, `forms/AdminConsole.py:81-84,99-100,114-115` | **Three parts, all required.** **(a) Model:** key every guard on an excluded stamp to `NON_FIELD_ERRORS` (`__all__`) so the refusal RENDERS instead of raising — the guards themselves are correct and must keep firing for admin/API callers. **(b) Form:** restrict each `status` widget to the values a person may author, so guarded values are never offered: `ChangeRequestForm` -> `draft` only; `MaintenanceWindowForm` -> drop `ended_early`; `FeatureRolloutForm` -> drop `completed`. **(c) Correct the three form docstrings that claim the refusal already works** (`forms/AdminConsole.py:70-77` and siblings). |
-| **X2** | **`bulk_preview` writes a 12-char verb into a `varchar(10)` column.** Every other 0.20 verb fits (`run_now` 7, `end_now` 7, `submit` 6, `approve` 7, `rollback` 8). Silently truncates to `bulk_previe` on this non-strict MariaDB (`@@sql_mode` lacks `STRICT_TRANS_TABLES`); **`DataError` -> 500 on every preview click** under a strict host. The write happens *before* the redirect, so the operator sees a 500 instead of the count. | `views/AdminConsole.py:842`, `models/AuditLog.py:19`, `config/settings.py:110` | Pass `action="update"` and move the verb into `changes={"verb": "bulk_preview", …}`, matching the rule the file's own comment at `:155` states and the `projects/…/RetentionBoard.py:124-129` precedent. **Also add a length guard in `write_audit_log`** so a too-long verb fails loudly at the source rather than depending on `sql_mode`. **Do NOT shorten the verb to fit** — the audit trail is a permanent record. |
-| **X3** | **`ChangeRequestForm` exposes `requested_at` — a forgeable evidence stamp.** Settable on EVERY edit, not just creation: create a draft, POST the edit with `status=submitted&requested_at=2019-01-01`; `clean()` has no rule for `submitted`, so it saves. A **forged request date on the register**. The submit verb overwrites it later, but the lie is live until then and permanent if the row stays a draft. | `forms/AdminConsole.py:100`, `templates/core/changerequest/form.html:48` | Drop `"requested_at"` from `Meta.fields` and the include from the template. **Then grep the other four form classes for the same false-claim docstring shape** — the docstring at `:90-94` asserting this field is off the form is why it survived six passes. |
-| **X4** | **The seeded `status="approved"` ChangeRequest is permanently uneditable.** `crud_edit` re-runs `full_clean()` on every save and `approved_by_id` is `None`, so every save 500s. A shipped demo record that can never be edited again. | `management/commands/seed_core.py:1413-1422` | Seed `status="submitted"` (reachable and honest) **or** give the row a real approver via the actor lookup the seeder already has. The seeder row and the `clean()` guard are each defensible; together they are not. |
-| **X5** | **Three N+1s on hot paths**, together ~45 wasted queries across four pages. | `views/AdminConsole.py:166` (`jobrun_list` -> `triggered_by`), `:704-705` (`support_board` -> `kb_category` / `category`), `:657` (`admin_board` -> `user`) | Add the missing `select_related`. Note `:657` is a **copy divergence**: `ops_audit_trail` at `:860` already has `.select_related("user")` for the same model, column and dereference. |
-| **X6** | **`current_count` is O(all rows) in Python AND disagrees with the table it sits above.** A generator over the full unpaginated `qs` (which also carries a wasted `prefetch_related`), built from the **PRE-FILTER** queryset while `crud_list` applies status/recurrence/environment/search internally — so the badge can contradict the rows beneath it whenever a filter is active. | `views/AdminConsole.py:236` | `qs.filter(starts_at__lte=now, ends_at__gt=now).count()` with a single captured `now`. No `isnull` filters needed — SQL three-valued logic already excludes NULL, matching the property's `bool()` guard. |
+| ID | Status | Finding | Location | Fix |
+|---|---|---|---|---|
+| **X1** | [x] fixed | **Four status values 500 on create AND edit.** `clean()` raises `ValidationError` keyed on fields **excluded from their own form**; `_update_errors` -> `add_error(None, …)` -> `ValueError` for a key that is not a form field. Affects `ChangeRequest` `approved` / `rolled_back`, `MaintenanceWindow` `ended_early`, `FeatureRollout` `completed`. The values **are in the rendered dropdowns**, and on edit the outcome is **data-dependent** (a NULL stamp 500s; a verb-stamped row saves). | `models/Change.py:159-168,228-229`, `models/Maintenance.py:140-141`, `forms/AdminConsole.py:81-84,99-100,114-115` | **Three parts, all required.** **(a) Model:** key every guard on an excluded stamp to `NON_FIELD_ERRORS` (`__all__`) so the refusal RENDERS instead of raising — the guards themselves are correct and must keep firing for admin/API callers. **(b) Form:** restrict each `status` widget to the values a person may author, so guarded values are never offered: `ChangeRequestForm` -> `draft` only; `MaintenanceWindowForm` -> drop `ended_early`; `FeatureRolloutForm` -> drop `completed`. **(c) Correct the three form docstrings that claim the refusal already works** (`forms/AdminConsole.py:70-77` and siblings). |
+| **X2** | [x] fixed | **`bulk_preview` writes a 12-char verb into a `varchar(10)` column.** Every other 0.20 verb fits (`run_now` 7, `end_now` 7, `submit` 6, `approve` 7, `rollback` 8). Silently truncates to `bulk_previe` on this non-strict MariaDB (`@@sql_mode` lacks `STRICT_TRANS_TABLES`); **`DataError` -> 500 on every preview click** under a strict host. The write happens *before* the redirect, so the operator sees a 500 instead of the count. | `views/AdminConsole.py:842`, `models/AuditLog.py:19`, `config/settings.py:110` | Pass `action="update"` and move the verb into `changes={"verb": "bulk_preview", …}`, matching the rule the file's own comment at `:155` states and the `projects/…/RetentionBoard.py:124-129` precedent. **Also add a length guard in `write_audit_log`** so a too-long verb fails loudly at the source rather than depending on `sql_mode`. **Do NOT shorten the verb to fit** — the audit trail is a permanent record. |
+| **X3** | [x] fixed | **`ChangeRequestForm` exposes `requested_at` — a forgeable evidence stamp.** Settable on EVERY edit, not just creation: create a draft, POST the edit with `status=submitted&requested_at=2019-01-01`; `clean()` has no rule for `submitted`, so it saves. A **forged request date on the register**. The submit verb overwrites it later, but the lie is live until then and permanent if the row stays a draft. | `forms/AdminConsole.py:100`, `templates/core/changerequest/form.html:48` | Drop `"requested_at"` from `Meta.fields` and the include from the template. **Then grep the other four form classes for the same false-claim docstring shape** — the docstring at `:90-94` asserting this field is off the form is why it survived six passes. |
+| **X4** | [x] fixed | **The seeded `status="approved"` ChangeRequest is permanently uneditable.** `crud_edit` re-runs `full_clean()` on every save and `approved_by_id` is `None`, so every save 500s. A shipped demo record that can never be edited again. | `management/commands/seed_core.py:1413-1422` | Seed `status="submitted"` (reachable and honest) **or** give the row a real approver via the actor lookup the seeder already has. The seeder row and the `clean()` guard are each defensible; together they are not. |
+| **X5** | [x] fixed | **Three N+1s on hot paths**, together ~45 wasted queries across four pages. | `views/AdminConsole.py:166` (`jobrun_list` -> `triggered_by`), `:704-705` (`support_board` -> `kb_category` / `category`), `:657` (`admin_board` -> `user`) | Add the missing `select_related`. Note `:657` is a **copy divergence**: `ops_audit_trail` at `:860` already has `.select_related("user")` for the same model, column and dereference. |
+| **X6** | [x] fixed | **`current_count` is O(all rows) in Python AND disagrees with the table it sits above.** A generator over the full unpaginated `qs` (which also carries a wasted `prefetch_related`), built from the **PRE-FILTER** queryset while `crud_list` applies status/recurrence/environment/search internally — so the badge can contradict the rows beneath it whenever a filter is active. | `views/AdminConsole.py:236` | `qs.filter(starts_at__lte=now, ends_at__gt=now).count()` with a single captured `now`. No `isnull` filters needed — SQL three-valued logic already excludes NULL, matching the property's `bool()` guard. |
 
 
 ## Important
 
 | ID | Finding | Location | Fix |
 |---|---|---|---|
-| **X7** | **`row.created_at` on a field that does not exist** — `AuditLog`'s timestamp is `at`. Both "When" cells render **blank** on two audit surfaces. | `templates/core/adminboard.html:83`, `templates/core/opstrail.html:47` | `row.created_at` -> `row.at`. |
-| **X8** | **`action_choices` scans the tenant's ENTIRE append-only audit log on every page load**, unbounded, to re-derive a small closed vocabulary. | `views/AdminConsole.py:873-875` | Bound it (a fixed set, or `.values("action").distinct()` with a cap). |
-| **X9** | **`JobRunForm` exposes `is_dry_run` with no `help_text`**, unlike its neighbours `handler_path` and `pool_name` which both say "recorded only". Unchecking it makes the register assert a run that was not a dry run. | `forms/AdminConsole.py:66`, `templates/core/jobrun/form.html:31`, `models/JobScheduler.py:182` | Drop it from the form — only a real dispatcher could legitimately clear it. |
-| **X10** | **The "Firing alerts" tile over-counts**, using `resolved_at__isnull=True` rather than the state set 0.17's own `firing_board` uses, so the console and the board it links to can disagree. | `views/AdminConsole.py:606` | Filter on the same states `AlertEvent.is_open` uses (`firing`, `acknowledged`). |
-| **X11** | **`jobdefinition_detail` N+1** — up to 10 extra queries; the `runs` loop is not `select_related` through the job. | `views/AdminConsole.py:110` | `select_related`. |
-| **X12** | **`ChangeRequest.rollout_count` runs a query per call** — safe today (one detail read) but a latent N+1 the moment a list renders it per row. | `models/Change.py:170-173` | Annotate when used in a list. |
-| **X13** | **`maintenancewindow_detail`** — the three M2M loops and the template's `.exists` test. | `views/AdminConsole.py`, `templates/core/maintenancewindow/detail.html` | 3-line `prefetch_related` param on the shared `crud_detail`; move the `.exists` test into the view. |
-| **X14** | **Badge chains do not cover the full CHOICES sets** on two pages. | `templates/core/changerequest/detail.html`, `templates/core/maintenancewindow/list.html` | Align with the model's `STATUS_CHOICES`. |
-| **X15** | **The rollback-reason input has no `<label>`** and uses an inline `style` rather than a logical-property margin. | `templates/core/changerequest/detail.html` | Add the label; use logical properties. |
-| **X16** | **Six `<th>` use `class="table-actions"`** where the header-cell class is `th-actions`. | six header cells across the entity lists | Align the header cells. |
+| **X7** | [x] fixed | **`row.created_at` on a field that does not exist** — `AuditLog`'s timestamp is `at`. Both "When" cells render **blank** on two audit surfaces. | `templates/core/adminboard.html:83`, `templates/core/opstrail.html:47` | `row.created_at` -> `row.at`. |
+| **X8** | [x] fixed | **`action_choices` scans the tenant's ENTIRE append-only audit log on every page load**, unbounded, to re-derive a small closed vocabulary. | `views/AdminConsole.py:873-875` | Bound it (a fixed set, or `.values("action").distinct()` with a cap). |
+| **X9** | [x] fixed | **`JobRunForm` exposes `is_dry_run` with no `help_text`**, unlike its neighbours `handler_path` and `pool_name` which both say "recorded only". Unchecking it makes the register assert a run that was not a dry run. | `forms/AdminConsole.py:66`, `templates/core/jobrun/form.html:31`, `models/JobScheduler.py:182` | Drop it from the form — only a real dispatcher could legitimately clear it. |
+| **X10** | [x] fixed | **The "Firing alerts" tile over-counts**, using `resolved_at__isnull=True` rather than the state set 0.17's own `firing_board` uses, so the console and the board it links to can disagree. | `views/AdminConsole.py:606` | Filter on the same states `AlertEvent.is_open` uses (`firing`, `acknowledged`). |
+| **X11** | [x] fixed | **`jobdefinition_detail` N+1** — up to 10 extra queries; the `runs` loop is not `select_related` through the job. | `views/AdminConsole.py:110` | `select_related`. |
+| **X12** | [x] fixed | **`ChangeRequest.rollout_count` runs a query per call** — safe today (one detail read) but a latent N+1 the moment a list renders it per row. | `models/Change.py:170-173` | Annotate when used in a list. |
+| **X13** | [x] fixed | **`maintenancewindow_detail`** — the three M2M loops and the template's `.exists` test. | `views/AdminConsole.py`, `templates/core/maintenancewindow/detail.html` | 3-line `prefetch_related` param on the shared `crud_detail`; move the `.exists` test into the view. |
+| **X14** | [x] fixed | **Badge chains do not cover the full CHOICES sets** on two pages. | `templates/core/changerequest/detail.html`, `templates/core/maintenancewindow/list.html` | Align with the model's `STATUS_CHOICES`. |
+| **X15** | [x] fixed | **The rollback-reason input has no `<label>`** and uses an inline `style` rather than a logical-property margin. | `templates/core/changerequest/detail.html` | Add the label; use logical properties. |
+| **X16** | [x] fixed | **Six `<th>` use `class="table-actions"`** where the header-cell class is `th-actions`. | six header cells across the entity lists | Align the header cells. |
 
 ## Minor
 
 | ID | Finding | Location | Fix |
 |---|---|---|---|
-| **X17** | A `{{ n|pluralize:"...ies,y" }}` argument order to correct. | `templates/core/jobdefinition/list.html` | Correct it. |
-| **X18** | `crud.py`'s shared boolean map accepts only `True`/`False`; QA suggests widening to `true/1/on` / `false/0/off`. | `apps/core/crud.py` (shared) | **Deferred** — not a 0.20 blocker, and it is a shared file another session may be using. |
-| **X19** | `ops_audit_trail` renders `changes` in bulk where 0.9's `auditlog_detail` renders one row at a time, amplifying any leak's visibility. | `views/AdminConsole.py:841` | **DEFERRED** — same audience and same tenant filter, so not a new exposure. |
+| **X17** | [x] fixed | A `{{ n|pluralize:"...ies,y" }}` argument order to correct. | `templates/core/jobdefinition/list.html` | Correct it. |
+| **X18** | [~] skipped — **pre-marked DEFERRED by the review.** Widening `crud.py`'s shared boolean map is not a 0.20 defect, and `crud.py` is a shared file a concurrent 0.21 session is using; changing shared plumbing outside the findings file's own instruction is exactly what this pass was told not to do. **Recommend an app-wide pass.** | `apps/core/crud.py` (shared) | Deferred — not a 0.20 blocker, and it is a shared file another session may be using. |
+| **X19** | [~] skipped — **pre-marked DEFERRED by the review.** `ops_audit_trail` renders `changes` in bulk where 0.9's `auditlog_detail` renders one row at a time, amplifying any leak's visibility. **Not a new exposure**: same `@tenant_admin_required` audience, same tenant filter, and the security pass traced every hand-rolled `changes=` dict in the repo and found no sensitive value on any 0.20 write path. Deferring it changes no verdict. | `views/AdminConsole.py:841` | **DEFERRED** — same audience and same tenant filter, so not a new exposure. |
 
 ## KEEP AS IS — do NOT "fix" these
 
@@ -543,7 +543,8 @@ Recorded because three separate passes flagged them as wrong or as traps:
   range-served by `(tenant, starts_at)`; `window_scheduled` is index-assisted by `(tenant, status)`.
   **Add neither.**
 - **The two seeded `JobRun` rows (`queued` and `skipped`)** — nothing detects or executes in 0.20, so
-  a green success would be a false claim. **Never replace them with a success.**
+  a green success would be a false claim. **Never replace them with a success.** Phase 5 left both
+  exactly as seeded, as instructed.
 - **`related_name="+"` on `MaintenanceWindow.incident`** — 0.17 owns `Incident`; nothing reads a
   reverse accessor.
 - **`core:incident_list`** — valid; `core:incident_board` is the name that does NOT exist. C6 was a
@@ -563,6 +564,105 @@ Recorded because three separate passes flagged them as wrong or as traps:
   POST-settable; every FK dropdown tenant-scoped.
 - `assertNumQueries` on `jobrun_list` (4), `support_board` (12), `admin_board` (12),
   `jobdefinition_detail` (3), `ops_audit_trail` (3) — locks X5 and X8.
+  **Do not write these as fixed budgets.** Phase 5 proved the budget form cannot catch this class
+  of defect: `jobdefinition_detail` had a budget of 6, a `select_related` was added, and the page
+  still cost 15 because the join was on the wrong FK. Assert the count is **identical at N rows
+  and at 2N rows** instead (L58), and keep the rows present (L57).
+
+---
+
+# PHASE 5 — APPLIED (`code-fixer`)
+
+**Outcome: 17 of 19 fixed, 2 deliberately skipped (X18, X19 — both pre-marked DEFERRED).** No row
+is left open. Every "fixed" below was proved by a command actually run in this pass; the command
+is named so a later pass can re-run it rather than take this on trust.
+
+## How each was proved
+
+| ID | Status | How it was verified | Evidence |
+|---|---|---|---|
+| **X1** | [x] fixed | **(a)** the four guards re-keyed on `NON_FIELD_ERRORS`; **(b)** each `status` widget narrowed to authorable values; **(c)** the three docstrings corrected. `is_valid()` **returns** for all four values on create AND edit carrying a non-field error, and all 20 values across the three `STATUS_CHOICES` walk cleanly. Then the real HTTP flow: **9 POSTs, every one HTTP 200 with the refusal rendered and the row unchanged.** | `temp/_020_verify.py`, `temp/_020_probe_500s.py` |
+| **X2** | [x] fixed | `bulk_preview` writes `action='update'` (6 chars) and the verb survives in `changes`. A length guard now raises at the source in `write_audit_log` instead of depending on `sql_mode`. The verb was **not** shortened. | `temp/_020_verify.py` |
+| **X3** | [x] fixed | `requested_at` gone from `Meta.fields` and from the form template. The false-claim docstring that hid this is corrected, and the module docstring now records **why** the field is excluded. | commit `109665da` + the docstring rewrite |
+| **X4** | [x] fixed | **Chose `status="submitted"`, not a real approver.** `submitted` needs no actor and `clean()` places no rule on it, so the row is editable from the first save on a fresh DB *and* on a re-seed — `_seed_actor()` returns `None` on a first pass because `seed_core` runs **before** `seed_accounts`, so an approved row seeded that way would be uneditable again. The seeder must not invent an approver identity, which is `_seed_actor`'s own stated rule. `submitted` is also the state Approve is offered from, so the register still shows a decision somebody owes. | commit `0815c0f3`; the seeded row verified in `temp/_020_probe_500s.py` |
+| **X5** | [x] fixed | The three `select_related` added. Proved by **row-count invariance**, not a budget: `jobrun_list` 11 queries at 1 and at 5 rows; `support_board` 19 and 19; `admin_board` 19 and 19. | `temp/_020_verify.py` |
+| **X6** | [x] fixed | `current_count` is a DB-side `.count()`. It is now asserted to **agree with the `is_current` property** (both say 2) rather than merely being fast. | `temp/_020_verify.py` |
+| **X7** | [x] fixed | `row.created_at` -> `row.at` on both surfaces. Asserted by checking the newest row's **real timestamp appears in the rendered HTML** — a content assertion, so this cannot return as a quiet blank. | `temp/_020_verify.py` |
+| **X8** | [x] fixed | The `action_choices` scan is capped at 200; `ops_audit_trail` now costs 10 queries against a log that only grows. | `temp/_020_verify.py` |
+| **X9** | [x] fixed | `is_dry_run` dropped from `JobRunForm` and from the form template, with the reason recorded — nothing in this repo can legitimately clear it. | commits `e14b9282`, `965d7372` |
+| **X10** | [x] fixed | The tile counts `firing` + `acknowledged`, the same set `AlertEvent.is_open` and 0.17's `firing_board` use, so the tile can no longer contradict the board it links to. | `temp/_020_verify.py` |
+
+| **X11** | [x] fixed | **The first attempt was wrong and the check caught it.** The prior `select_related("job")` joined a FK the template never dereferences — the loop renders `{{ run.triggered_by }}` — so the page cost 15 queries before *and after*. Now joined on `triggered_by`: **10 queries, flat at 1 and 5 rows.** See L58. | `temp/_020_verify.py` |
+| **X12** | [x] fixed | `rollout_count` reads the prefetch cache when present, and the detail view passes `prefetch_related=("rollouts")`. Asserted **both** ways: 11 queries at 1 and at 5 rollout stages, and the count equals the table prefetched *and* unprefetched. Deliberately **not** an `annotate()` alias — a `property` is a data descriptor, so `ModelIterable` cannot `setattr` it and the page would die (L57). | `temp/_020_verify.py` |
+| **X13** | [x] fixed | `crud_detail` gained an optional `prefetch_related` (additive, defaults `()`, every existing caller unchanged) and the window detail uses it. The template's empty state reads the prefetched `.all` — **`.exists` re-queries and throws the prefetch away.** 11 queries at 1 and at 5 attached services. | `temp/_020_verify.py` |
+| **X14** | [x] fixed | Both badge chains aligned with their `STATUS_CHOICES` (9 and 6 values). `cancelled` is now red on the window list rather than sharing neutral slate with `completed`, and the comment records why the remaining `else` stays slate and **not** green: nothing here silences anything, so a green "successful" window would be a claim the page cannot back. | `temp/_020_verify.py` |
+| **X15** | [x] fixed | The rollback reason now has a real `<label>` in the house shape (`.form-label` + the `.req` marker), and the inline margin is the **logical** `margin-inline-end`. The check force-renders the form on a `completed` change first, so it cannot pass vacuously. | `temp/_020_verify.py` |
+| **X16** | [x] fixed | All six 0.20 header cells use `th-actions`; the `<td>` row cells keep `table-actions`, which is correct there. `featureflag/list.html` also has one but belongs to an earlier sub-module, so it was left alone. | `temp/_020_verify.py` |
+| **X17** | [x] fixed | `pluralize:"ies,y"` (singular, plural — **reversed**) rendered "1 job carrIES". Now `pluralize:"y,ies"`. | `temp/_020_verify.py` |
+| **X18** | [~] skipped | **Pre-marked DEFERRED.** Not a 0.20 defect, and `crud.py` is shared with the concurrent 0.21 session. **Recommend an app-wide pass.** | — |
+| **X19** | [~] skipped | **Pre-marked DEFERRED.** Same audience and same tenant filter as 0.9's `auditlog_detail`, so not a new exposure. | — |
+
+## Two things this pass changed about its own instructions
+
+- **X11's first fix was aimed at the wrong column.** The review said `views/AdminConsole.py:110`
+  needed a `select_related`; a join was added on `run.job`, which the template never dereferences,
+  and the query count did not move. Only the row-count-invariance check exposed it. **A fixed
+  budget would have passed it.** Recorded as **L58** in `lessons.md`.
+- **The `has_scope` idea for X13 was reverted.** An earlier draft computed the empty state in the
+  view, which meant `maintenancewindow_detail` had stopped calling `crud_detail` and the new
+  `prefetch_related` parameter was left dead. It now goes through `crud_detail` like every other
+  detail page, and the template tests the prefetched sets — no duplicated tenant-scoping logic.
+
+## Commands run (all from `c:\xampp\htdocs\NavERP`)
+
+| Command | Result |
+|---|---|
+| `venv\Scripts\python.exe manage.py check` | `System check identified no issues (0 silenced).` |
+| `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` | `No changes detected` — no migration was needed, and none was generated. |
+| `venv\Scripts\python.exe temp\_020_smoke.py` | `0.20 smoke OK - 37 checks` |
+| `venv\Scripts\python.exe temp\_020_verify.py` | `0.20 verify OK - 57 checks` |
+| `venv\Scripts\python.exe temp\_020_probe_500s.py` | `0.20 500-probe OK - 9 POSTs: no status value 500s on create or edit` |
+
+## Manual confirmation of the four formerly-500ing values
+
+Required explicitly, and done through the real HTTP flow rather than at the form layer —
+`temp/_020_probe_500s.py`, all nine POSTs returning **HTTP 200 with the refusal rendered on the
+page and the row unchanged**:
+
+| Model | Status | CREATE | EDIT |
+|---|---|---|---|
+| `ChangeRequest` | `approved` | 200, refused, row still `draft` | 200, refused, row still `draft` |
+| `ChangeRequest` | `rolled_back` | 200, refused, row still `draft` | 200, refused, row still `draft` |
+| `MaintenanceWindow` | `ended_early` | 200, refused, row still `scheduled` | 200, refused, row still `scheduled` |
+| `FeatureRollout` | `completed` | 200, refused, row still `planned` | 200, refused, row still `planned` |
+
+Plus the seeded row from X4: edit form **200**, POST **302**.
+
+## Deliberately NOT touched
+
+Per the binding **KEEP AS IS** section, and verified as untouched: `core:incident_list` (valid —
+`core:incident_board` is the name that does not exist, so C6 stays struck); no indexes added; the
+two seeded non-success `JobRun` rows left exactly as seeded; `related_name="+"` on
+`MaintenanceWindow.incident` unchanged. The eleven `admin_board` counts and the four list-view
+`.count()`s were also left alone — the real defect on that page was X5, which is fixed.
+
+## For Phase 6 (tests)
+
+`temp/_020_verify.py` (57 checks) and `temp/_020_probe_500s.py` (9 POSTs) are the executable
+specification for the four test modules below. Concretely, the assertions that earned their keep
+here and should become tests rather than throwaway scripts:
+
+- **The `STATUS_CHOICES` walk** (all 20 values, create and edit, asserting `is_valid()` RETURNS).
+  This is the single check that catches all of X1 — a guard that fires on four values and crashes
+  on a fifth is not a fix.
+- **Row-count invariance** instead of `assertNumQueries` budgets (L58).
+- **`_020_probe_500s.py`'s 9 POSTs** — the form-layer check proves the guard renders; only the HTTP
+  check proves the request does not 500.
+- The badge-coverage and `th-actions` checks read TEMPLATE SOURCE, not rendered HTML: a rendered
+  page shows one object's status, so a rendered-HTML search for all nine values can never pass.
+
+
+
 
 
 
