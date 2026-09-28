@@ -25,7 +25,7 @@ so in words rather than implying the silence is in force.
 the guard lives in the view (so a hand-made POST cannot reach it) *and* in each template's Actions
 column, because a window somebody ran and might need for an incident review is evidence.
 """
-from django.core.exceptions import ValidationError
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
@@ -137,10 +137,17 @@ class MaintenanceWindow(models.Model):
             raise ValidationError({"ends_at": "A window cannot close before it opens."})
         # Ended-early is an evidence stamp (L22): its only writer is the end_now verb, and a row
         # claiming it without the stamp is a claim with nothing behind it.
+        #
+        # Keyed on `NON_FIELD_ERRORS` because `ended_at` is EXCLUDED from `MaintenanceWindowForm`,
+        # and a `ModelForm` hands a ValidationError key to `add_error`, which raises `ValueError`
+        # for a key that is not a form field. The guard still raises for the admin and any API
+        # caller; it only stops 500-ing an ordinary dropdown choice on the form.
         if self.status == "ended_early" and not self.ended_at:
-            raise ValidationError({"ended_at": "An ended-early window must record when it was ended."})
+            raise ValidationError(
+                {NON_FIELD_ERRORS: "An ended-early window must record when it was ended."})
         if self.ended_at and self.ends_at and self.ended_at > self.ends_at:
-            raise ValidationError({"ended_at": "A window cannot be ended after it was due to close."})
+            raise ValidationError(
+                {NON_FIELD_ERRORS: "A window cannot be ended after it was due to close."})
 
     @property
     def is_future(self):
