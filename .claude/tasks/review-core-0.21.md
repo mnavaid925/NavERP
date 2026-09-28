@@ -220,3 +220,78 @@ it as one.
 6. **M2** — remove the contract row for the nonexistent `controlframeworkmapping_edit` view.
 7. **M1** — deferred, no change.
 
+## Pass 3 — `frontend-reviewer`
+
+**No Critical findings.** Nothing 500s, no dead route, no blank region, no unescaped user data.
+**Areas 4 (XSS), 5 (markup/colspan/empty states) and 6 (structure) came back CLEAN.**
+
+**Verified clean, and worth stating because these are the checks that usually fail:**
+
+- **CRUD completeness**: the 4 full-CRUD entities each carry the complete Actions column — View (eye),
+  Edit (pencil), Delete (POST form + `{% csrf_token %}` + `confirm`) — plus Edit/Delete in the detail
+  header. The 2 delete-only entities explain that decision *in-file*.
+- **XSS**: no `|safe`, no `{% autoescape off %}`, no unescaped `request.GET`. The only `request.GET` echo
+  is `value="{{ q }}"`, autoescaped and supplied by `crud.py:181`. `|linebreaksbr` is used correctly on 3
+  sites (it escapes before converting). All 12 `confirm()` strings are fixed literals with no apostrophe
+  or backslash — honouring the L42 rule in `partials/confirm_button.html:20-29` — and none is built from a
+  row value, so "deleted with no confirmation" cannot occur.
+- **Table markup**: every `colspan` matches its real header count (8/8, 7/7, 7/7, 8/8, 6/6, 6/6);
+  `<thead>`/`<tbody>` well-formed on all 12 tables; every panel has a real empty state.
+- **Better than the siblings**: all 15 filter controls carry `aria-label`, where `retentionpolicy/list.html:22,28`
+  has bare selects with none. No `<th scope="col">` anywhere — but no core sibling uses it either, so that
+  is consistency, not a deviation.
+
+### I5 — Important: `badge-blue` does not exist, so 3 badges render with no colour at all
+
+**`riskregister/list.html:64`, `riskregister/list.html:74`, `grcoverview.html:102`**
+
+**Verified:** `static/css/theme.css:284` defines `.badge` with **only** shape/typography — `padding`,
+`border-radius`, `font-size`, `font-weight` — and **no** `background`/`color`. The palette defines exactly
+six: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+`badge-blue` appears **nowhere** in `static/css/`, and these 3 lines are its only uses in the whole
+`templates/` tree.
+
+The pill still renders, so nothing looks broken — it renders *colourless*. The "Medium" band and **all
+four open risk statuses** (`identified`, `assessing`, `treating`, `monitoring`) lose their fill, so on the
+register whose leading column *is* the score band, "Medium" is indistinguishable from "Low", and the
+board's "N in the critical band" caption has no coloured counterpart. Invisible to any template-only check.
+
+**Fix** — `badge-blue` → `badge-info` at all three lines. Swap the template rather than adding a
+`.badge-blue` alias to the shared stylesheet: 0.21 is the only consumer, and the theme already owns the
+palette.
+
+### I6 — Important: the coverage badge's `{% else %}` hardcodes "Not started" instead of `get_coverage_display`
+
+**`controlframework/detail.html:68`, `compliancecontrol/detail.html:67`, `controlframeworkmapping/list.html:60`**
+
+```html
+{% else %}<span class="badge badge-slate">Not started</span>{% endif %}
+```
+
+The three explicit branches are exact `COVERAGE_CHOICES` members, so nothing is blank **today**. But the
+terminal branch must be `{{ mapping.get_coverage_display }}` (Filter rule 5 and `contract-core-0.21.md:451-452`).
+As written, any future fifth coverage value renders as **"Not started"** — a false statement, on the one
+axis (`coverage`, the recorded-vs-enforced distinction) this module exists to keep honest. The correct
+pattern sits 20 lines away in the same directory: `compliancecontrol/list.html:55` ends
+`{% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}`.
+
+**Fix (×3)** — `{% else %}<span class="badge badge-slate">{{ mapping.get_coverage_display }}</span>{% endif %}`
+(`obj.` rather than `mapping.` in the two detail templates).
+
+### M4 — Minor: no `<th scope="col">` in any of the 15 templates
+
+Consistent with every other core list page, so **not** fixed here. Recorded so a future accessibility pass
+does not re-derive it as a 0.21 regression.
+
+## Fix order update (Phase 5)
+
+1. **C1** — seeded `inherent_score = 0` on every fresh demo DB (seeder).
+2. **I2** — back-fill form silently drops the typed note (`views/Compliance.py`).
+3. **I5** — `badge-blue` → `badge-info` at 3 sites (2 templates).
+4. **I6** — coverage badge `{% else %}` → `get_coverage_display` at 3 sites (3 templates).
+5. **I1** — rename `unacknowledged_count` to what it counts (view + template + contract).
+6. **I3** — drop two unused querysets from `grc_overview`.
+7. **I4** — drop the unused `controls` queryset from `controlframeworkmapping_list`.
+8. **M2** — remove the contract row for the nonexistent `controlframeworkmapping_edit` view.
+9. **M1**, **M4** — deferred, no change.
+
