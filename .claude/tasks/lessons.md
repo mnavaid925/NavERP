@@ -1570,16 +1570,16 @@ See [[next-builds-one-submodule]], L36, L29.
 
 ---
 
-## L49 — a `Model.clean()` guard keyed on `self.tenant_id` is a NO-OP on the form path
+## L49 ï¿½ a `Model.clean()` guard keyed on `self.tenant_id` is a NO-OP on the form path
 
-**The trap.** `TenantModelForm.__init__` stores `tenant` on the FORM (`self.tenant`) and never on the instance. `ModelForm._post_clean()` then calls `instance.full_clean()` during `is_valid()` — which runs BEFORE the view does `obj.tenant = request.tenant`. So at validation time `self.tenant_id` is still `None`, and any model guard written as `if self.tenant_id and self.subscription_id: ...` silently does nothing. The model looks protected; the form is the only place the tenant is known while the row is validated.
+**The trap.** `TenantModelForm.__init__` stores `tenant` on the FORM (`self.tenant`) and never on the instance. `ModelForm._post_clean()` then calls `instance.full_clean()` during `is_valid()` ï¿½ which runs BEFORE the view does `obj.tenant = request.tenant`. So at validation time `self.tenant_id` is still `None`, and any model guard written as `if self.tenant_id and self.subscription_id: ...` silently does nothing. The model looks protected; the form is the only place the tenant is known while the row is validated.
 
-**It bit 0.19 for real.** Six review passes read `LicenseAssignment.clean()` and saw the duplicate guard. The model docstring even explained the normalisation in detail. But the [RULING] 8 duplicate guard that actually runs is the one in `LicenseAssignmentForm.clean()` — and it compared the RAW posted slug, so `module_slug="ACCOUNTING"` found no clash against a stored `"accounting"`, validated fine, normalised on save, and raised `IntegrityError` ? HTTP 500 on a duplicate POST.
+**It bit 0.19 for real.** Six review passes read `LicenseAssignment.clean()` and saw the duplicate guard. The model docstring even explained the normalisation in detail. But the [RULING] 8 duplicate guard that actually runs is the one in `LicenseAssignmentForm.clean()` ï¿½ and it compared the RAW posted slug, so `module_slug="ACCOUNTING"` found no clash against a stored `"accounting"`, validated fine, normalised on save, and raised `IntegrityError` ? HTTP 500 on a duplicate POST.
 
 **Rules.**
-1. If a form must compare a value against what the database holds, normalise it in the FORM too — not only in `Model.save()`. Same transformation, same place, or the two disagree.
+1. If a form must compare a value against what the database holds, normalise it in the FORM too ï¿½ not only in `Model.save()`. Same transformation, same place, or the two disagree.
 2. Do not assume a `Model.clean()` guard runs on the form path. If it depends on `self.tenant_id`, verify it actually fires before relying on it.
-3. **A docstring asserting a fix is not a fix.** The 0.19 model docstring described the normalisation as already done "so `clean()` — which is what the form calls — compares the same string the database will hold". It read as reassurance and it was wrong about its own reach. Docstrings are claims; tests are evidence.
+3. **A docstring asserting a fix is not a fix.** The 0.19 model docstring described the normalisation as already done "so `clean()` ï¿½ which is what the form calls ï¿½ compares the same string the database will hold". It read as reassurance and it was wrong about its own reach. Docstrings are claims; tests are evidence.
 
 **Why six reviews missed it:** every reviewer read the code instead of driving it. A reviewer asking "does a duplicate POST 500?" and *posting one* would have found this in under a minute. Reach for the cheapest test whenever a guard is claimed to hold.
 
@@ -1667,3 +1667,32 @@ row whose fields are written in `clean()` must call `clean()` itself, and a fixt
 a computed value is a claim to be tested, not a comment.
 
 See L8, L49, [[annotate-alias-vs-property]], [[a-200-is-not-a-pass]].
+
+---
+
+## L58 - prove an N+1 is gone by ROW-COUNT INVARIANCE, never by a fixed query budget
+
+Learned in 0.20 Phase 5, and it caught a "fixed" N+1 that a budget had already called done.
+
+**A fixed budget is a guess about the page's cost, and an N+1 satisfies it whenever the page
+happens to be quiet.** `jobdefinition_detail` cost 15 queries; a reviewer set the budget at 6,
+a `select_related` was added, and the page still cost 15 - because the join was on the WRONG
+foreign key (`run.job`, which the template never dereferences) rather than the one it does
+(`run.triggered_by`). Nothing about a number going nowhere looks like a failure.
+
+**The check that cannot be fooled: measure the page at N rows and at 2N rows and assert the
+count is IDENTICAL.** An N+1 makes the count grow by exactly the row delta; a correct
+`select_related`/`prefetch_related` makes it flat. This is invariant to every unrelated change
+to the page, so it does not rot the way a budget does, and it still demands the rows be present
+(L57) - with one row there is nothing to grow.
+
+**Two corollaries, both from the same defect:**
+
+- **Read the template before choosing the join.** The FK to select is the one the template
+  *dereferences* (`{{ run.triggered_by }}`), not the one it merely filters on. A join on a
+  related-but-unused column looks identical in the queryset and costs nothing to add.
+- **`.exists` defeats a prefetch.** It re-queries and throws the cache away, so an empty-state
+  test written as `.exists` silently reinstates the cost the prefetch was added to remove. Test
+  the prefetched `.all` instead.
+
+See L8, L49, L57, [[annotate-alias-vs-property]], [[a-200-is-not-a-pass]], [[prove-n-plus-one-by-invariance]].
