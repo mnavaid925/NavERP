@@ -120,26 +120,41 @@ def cml021_policy_b(db, tenant_b):
 
 @pytest.fixture
 def cml021_risk(db, tenant_a, admin_user):
-    """`likely`(4) x `severe`(5) = 20, which lands in the CRITICAL band."""
+    """`likely`(4) x `severe`(5) = 20, which lands in the CRITICAL band.
+
+    **C1: `clean()` is called explicitly**, exactly as `seed_core` now does. `objects.create()`
+    does NOT run `full_clean()`, and `inherent_score` is written in `clean()` alone — so a fixture
+    (or a seeder, which is what C1 actually was) that creates the row without it lands on the
+    field default of `0`, and the fixture silently stops being the critical-band risk its own
+    docstring claims. A fixture that lies about the value under test is worse than no fixture,
+    because the assertion still passes.
+    """
     from apps.core.models import RiskRegister
 
-    return RiskRegister.objects.create(
+    risk = RiskRegister(
         tenant=tenant_a, code="RSK-01", title="Single region of operation",
         risk_statement="If the primary region is unavailable, then services are unavailable.",
         category="operational", likelihood="likely", impact="severe",
         treatment="mitigate", treatment_plan="Run a second environment.", status="treating",
         owner=admin_user,
     )
+    risk.clean()
+    risk.save()
+    return risk
 
 
 @pytest.fixture
 def cml021_risk_b(db, tenant_b):
+    """Tenant B's risk, for the IDOR lane. Scored the same way C1's `cml021_risk` is."""
     from apps.core.models import RiskRegister
 
-    return RiskRegister.objects.create(
+    risk = RiskRegister(
         tenant=tenant_b, code="RSK-B", title="Globex risk",
         risk_statement="If X, then Y.", status="identified",
     )
+    risk.clean()
+    risk.save()
+    return risk
 
 
 @pytest.fixture
