@@ -536,3 +536,141 @@ isolated. **Worth adding to the notes in `config/settings_test.py`.**
 `nav_erp_smoke.sqlite3` (18 MB) was left in the project root as an untracked, disposable scratch copy of the
 shared test DB, held by a process this agent could not safely identify. Delete once that process exits.
 
+## Pass 6 — `security-reviewer`
+
+**No Critical.** **No tenant-isolation break, no IDOR, no CSRF hole, no injection.** The earlier passes'
+conclusion that the scoping and method gates hold up under edge-case and related-hop analysis.
+
+**Areas verified CLEAN (with the reason, so it need not be re-derived):**
+
+- **Related-hop tenant isolation** — every `framework.mappings` / `control.mappings` hop starts from an
+  object fetched with `tenant=request.tenant`, so the hop cannot cross. All 6 `get_object_or_404` calls in
+  the two actions are tenant-scoped, as are the `int()`-coerced POST reads.
+- **Mass assignment** — `inherent_score` and `residual_score` are confirmed off `RiskRegisterForm`;
+  `user` and `policy_version` off `PolicyAcknowledgementForm`; `tenant` supplied by `TenantModelForm` and
+  never a form field. No derived or evidence field is reachable through a bound form.
+- **CSRF / method safety** — every state-changing 0.21 route is POST-only, and every POST form carries
+  `{% csrf_token %}`. No GET mutates.
+- **Injection** — `q` reaches `Q(**{f"{field}__icontains": q})` (`crud.py:37-43`): pure ORM, fully
+  parameterised, and the field names are developer literals, never user input. int-FK filters are declared
+  `is_int=True` and already go through `as_db_int`. A repo-wide grep for `.raw(`, `.extra(`, `eval(`,
+  `exec(`, `mark_safe`, `|safe`, `autoescape off` and request-driven dynamic `getattr` returned **no hits**
+  in 0.21.
+- **Information disclosure** — cross-tenant and nonexistent pks both answer 404 with an identical body, so
+  there is no 404-vs-403 enumeration oracle. All four `GRC_NOTES` strings *remove* a misconception; none
+  discloses a host, path, key or another tenant's data.
+- **`acknowledged_at` is `DateTimeField(auto_now_add=True, editable=False)`** — verified. It cannot be
+  backdated through any form, and `editable=False` keeps it off every ModelForm.
+- **Seeder safety** — every seeded framework carries `adopted_on=None` with an explicit "registered, not
+  adopted" note; the one `effective` control has a real `last_reviewed_on`; the acknowledgement block picks
+  a `published` policy, not a draft; `owner` is left `None` rather than inventing an identity.
+
+### I12 — Important: `int()` on an `isdigit()`-guarded POST pk is a reachable uncaught 500
+
+**`apps/core/views/Compliance.py:133,139` and `:393,397,400`**
+
+`str.isdigit()` and `int()` accept **different character sets**. **Verified on this machine:**
+
+```
+'²'  (U+00B2)  isdigit=True  int() -> ValueError: invalid literal for int() with base 10
+'³'  (U+00B3)  isdigit=True  int() -> ValueError
+'9'*100        isdigit=True  int() -> 99999999999999999999  -> OverflowError in the SQLite driver
+```
+
+So `POST /core/compliance/frameworks/1/add-controls/` with `control_id=%C2%B2` — or 100 nines — is an
+unhandled 500. Neither `ValueError` nor `OverflowError` is caught anywhere in the path.
+
+**The repo has already diagnosed this exact class.** `crud.py:59-63` defines `as_db_int`, whose docstring
+names the correct predicate and cites **L11**: *"`?vendor=abc` and `?vendor=²` are refused by `isdecimal()`"*.
+**Verified behaviour:**
+
+```
+as_db_int('²')      = None      as_db_int('12')  = 12
+as_db_int('9'*100)  = None      as_db_int('0x1') = None
+as_db_int('')       = None      as_db_int('-3')  = None
+### I13 — Important: acknowledgement evidence is hard-deletable, and a policy delete cascades it away
+
+**`views/Compliance.py:427-431`, `:301-305`, `models/Compliance.py:534`**
+
+Any tenant admin can delete an acknowledgement via the list page's delete action, and deleting a
+`CorporatePolicy` cascades its acknowledgements away. Neither path writes an audit row. For a module whose
+central claim is that its rows are trustworthy evidence, a plain delete with only a JS `confirm()` (which a
+direct POST bypasses) is the wrong affordance.
+
+**Secure fix** — refuse deletion of a `PolicyAcknowledgement` outright with an explanatory message, and
+block deletion of a `CorporatePolicy` that still has acknowledgements unless an explicit override is posted.
+Both are ordinary, authorised actions — which is exactly why the cross-tenant IDOR and permission passes
+could not have caught this.
+
+### I14 — Important: `acknowledgement_rate` counts attestations of *any* version
+
+**`models/Compliance.py:491-509`** — the rate divides the acknowledgement count by the active-user count
+without filtering on `policy_version`. So editing a policy's `version` retroactively "validates" every prior
+acknowledgement of the earlier version. **Every individual row on the page is truthful; only the aggregate
+lies** — the more subtle of the two evidence findings.
+
+**Secure fix** — filter to the current version:
+`self.acknowledgements.filter(policy_version=self.version).count()`, and say in the template when older
+versions exist rather than silently counting them.
+
+### M5 — Minor: the seeder attributes acknowledgements to real named users
+
+**`seed_core.py:1584-1595`** — a seeded acknowledgement is indistinguishable from a genuine attestation
+unless the reader already knows it is demo data. Acceptable for a demo seeder, but the row's own `notes`
+should say so rather than relying on the seeder's stdout.
+
+## Phase 4 summary — 3 Critical, 11 Important, 5 Minor, 6 retractions
+
+| ID | Finding | Sev | File |
+|---|---|---|---|
+| **C1** | Seeder never calls `clean()`; every seeded risk shows `0`/"Low" | Critical | `seed_core.py` |
+| **C2** | `annotate()` alias collides with a `@property`; policy list is a **masked** 500, control list 500s unconditionally | Critical | `views/Compliance.py` |
+| **C3** | Control list instantiates the annotated `qs` in Python at context-build time | Critical | `views/Compliance.py` |
+| **I1** | `unacknowledged_count` counts the opposite of its name | Important | view + template + contract |
+| **I2** | Back-fill form silently drops the typed note | Important | `views/Compliance.py` |
+| **I3** | `grc_overview` passes two querysets its template never reads | Important | `views/Compliance.py` |
+| **I4** | `controlframeworkmapping_list` passes a dead `controls` queryset | Important | `views/Compliance.py` |
+| **I5** | `badge-blue` is not a class in the theme; 3 badges render colourless | Important | 2 templates |
+| **I6** | Coverage badge `{% else %}` hardcodes "Not started" | Important | 3 templates |
+| **I7** | Owner N+1 on three list pages | Important | `views/Compliance.py` |
+| **I8** | Board aggregates computed in Python over full querysets | Important | `views/Compliance.py` |
+| **I9** | Policy detail issues two identical COUNTs | Important | `views/Compliance.py` |
+| **I10** | Acknowledgement register can only ever contain admins | Important | design — reword |
+| **I11** | `framework_count` means three different things | Important | naming |
+| **I12** | `int()` on `isdigit()`-guarded POST pk → uncaught 500 + DEBUG traceback | Important | `views/Compliance.py` |
+| **I13** | Acknowledgement evidence is hard-deletable; cascades on policy delete | Important | views + model |
+| **I14** | `acknowledgement_rate` counts any version, so re-versioning validates the cohort | Important | `models/Compliance.py` |
+| **M1** | Extra COUNT on the policy list | Minor | deferred |
+| **M2** | Contract lists a `controlframeworkmapping_edit` view that does not exist | Minor | contract |
+| **M3** | Form-page context keys — **no defect**, recorded to stop re-derivation | Minor | — |
+| **M4** | No `<th scope="col">` — consistent with every core sibling | Minor | deferred |
+| **M5** | Seeded acknowledgements attributed to real users | Minor | seeder |
+
+**The three Criticals share one root cause worth naming: nothing asserted content on a page that had rows.**
+The original smoke ran against a tenant with zero controls and policies and passed; the C2/C3 pages were dead
+the entire time. Fixing the smoke's blind spot — rows present, code asserted as a literal in the HTML — is
+what found the worst defect in the changeset.
+
+```
+
+And the view's own comment at `Compliance.py:136-138` asserts the **opposite** of the truth: *"`as_db_int`
+is deliberately NOT used here: … the isdigit guard above already refuses the junk that reaches it."* It does
+not. The helper is one import away in the same package.
+
+Impact: authenticated tenant-admin availability loss, plus — because `DEBUG = _bool("DEBUG", "True")`
+**defaults to True** in `config/settings.py:16` — a Django technical 500 page with a full traceback and
+local variables, which here include the resolved `request.tenant` and the queryset. Not an isolation
+break; a reachable crash plus a traceback.
+
+**Secure fix** — use the existing helper in all three places and delete the incorrect comment:
+
+```python
+from apps.core.crud import as_db_int
+
+number = as_db_int(control_id)
+if number is None:
+    messages.error(request, "Choose a control to add.")
+    return redirect("core:controlframeworkmapping_add", pk=pk)
+control = get_object_or_404(ComplianceControl, pk=number, tenant=request.tenant)
+```
+
