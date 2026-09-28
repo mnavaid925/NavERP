@@ -1,6 +1,10 @@
 """Small shared helpers: audit logging + per-tenant document numbering."""
+import logging
+
 from django.contrib.contenttypes.models import ContentType
 from django.db.models.functions import Length
+
+logger = logging.getLogger(__name__)
 
 
 def write_audit_log(user, obj, action, changes=None, tenant=None):
@@ -8,8 +12,33 @@ def write_audit_log(user, obj, action, changes=None, tenant=None):
 
     ``user`` may be an AnonymousUser (stored as NULL). ``obj`` is the affected
     model instance; its tenant/pk/str() are captured for traceability.
+
+    **The action width is enforced HERE, in Python, never left to the database.**
+    ``AuditLog.action`` is ``varchar(10)`` and this project's MariaDB is NOT in strict mode
+    (``@@sql_mode`` lacks ``STRICT_TRANS_TABLES``; ``mysql.W002`` is emitted on every migrate), so
+    an over-long verb does not raise there — the DRIVER truncates it silently, and the same call
+    would be a ``DataError`` 1406 -> HTTP 500 on a strict-mode host. Neither is acceptable for a
+    permanent audit record, so the value is never handed to the column unchecked: it is clamped
+    here and an ERROR is logged naming the verb and the caller.
+
+    The clamp is deliberately NOT a raise. Roughly 34 call sites in procurement, sales, inventory
+    and projects pass a descriptive verb longer than 10 characters (e.g.
+    ``"knowledge_resource_archive"``), and turning the guard into an exception would 500 all of
+    them at once — a far worse outcome than a logged, deterministic clamp, and a change to four
+    apps that this fix is not scoped to make. A caller that means to be correct passes a short
+    verb as the action and puts the descriptive verb in ``changes``, which is what the CRUD
+    helpers and the 0.20 verbs now do.
     """
     from .models import AuditLog
+
+    max_length = AuditLog._meta.get_field("action").max_length
+    if action is not None and len(str(action)) > max_length:
+        logger.error(
+            "AuditLog.action is varchar(%d) but %r is %d characters; storing it clamped to %r. "
+            "Pass a short verb as the action and put the descriptive verb in changes=.",
+            max_length, action, len(str(action)), str(action)[:max_length],
+        )
+        action = str(action)[:max_length]
 
     content_type = None
     object_id = None
