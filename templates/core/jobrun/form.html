@@ -12,9 +12,12 @@
     <p class="text-muted"><strong>There is no way to create a run from this page.</strong> A run is written by a
       job's <em>Run now</em> action or by the seeder, because a run somebody typed in is a claim that a dispatch
       happened and this repository has no dispatcher. This form only corrects an outcome already recorded.</p>
-    <p class="text-muted"><strong>Not on this form:</strong> <code>triggered_at</code> and
-      <code>triggered_by</code> &mdash; they are stamped by the action that requested the run, so the register
-      cannot be edited into claiming a different requester or time.</p>
+    <p class="text-muted"><strong>Not on this form:</strong> <code>triggered_at</code>,
+      <code>triggered_by</code> and <code>is_dry_run</code> &mdash; the first two are stamped by the
+      action that requested the run, so the register cannot be edited into claiming a different
+      requester or time. The third defaults to true and nothing in this application can clear it:
+      there is no dispatcher, so every run recorded here is a dry run and a checkbox that could
+      uncheck it would let this form assert an execution that never happened.</p>
   </div></div>
 
   <form method="post" novalidate>
@@ -28,7 +31,6 @@
           {% include "partials/form_field.html" with field=form.job %}
           {% include "partials/form_field.html" with field=form.trigger_kind %}
           {% include "partials/form_field.html" with field=form.status %}
-          {% include "partials/form_field.html" with field=form.is_dry_run %}
           {% include "partials/form_field.html" with field=form.started_at %}
           {% include "partials/form_field.html" with field=form.finished_at %}
           {% include "partials/form_field.html" with field=form.exit_code %}
