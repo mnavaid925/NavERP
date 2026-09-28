@@ -196,6 +196,10 @@ from .Compliance import (
     CorporatePolicy,
     PolicyAcknowledgement,
     RiskRegister,
+    # 0.21b, bullet 4: Audit & Certification Support
+    ComplianceAudit,
+    AuditEvidence,
+    AuditFinding,
     FRAMEWORK_TYPE_CHOICES,
     CONTROL_STATUS_CHOICES,
     COVERAGE_CHOICES,
@@ -207,4 +211,10 @@ from .Compliance import (
     RISK_IMPACT_VALUES,
     TREATMENT_CHOICES,
     RISK_STATUS_CHOICES,
+    # 0.21b, bullet 4: audit and certification vocabulary
+    AUDIT_TYPE_CHOICES,
+    AUDIT_STATUS_CHOICES,
+    EVIDENCE_TYPE_CHOICES,
+    AUDIT_SEVERITY_CHOICES,
+    AUDIT_FINDING_STATUS_CHOICES,
 )  # noqa: F401
