@@ -410,3 +410,129 @@ keep the properties (the detail views legitimately use them), rename the annotat
 `acknowledgement_total`, and add explicit `.order_by("code")` to restore deterministic pagination.** Then
 re-measure.
 
+## Pass 5 — `qa-smoke-tester` (report-only; fix behaviour overridden)
+
+**301 recorded checks, 3 runs, ~50s each.** The critical methodological point: this pass built its **own
+tenants with 18 rows in each of the 6 models** (so the 15-per-page paginator has a real page 2 and a junk
+filter has something to wrongly empty), plus a second tenant for the IDOR lane, and asserted row codes as
+**literal strings in the HTML** — not just status codes. That is precisely what the original smoke could not
+do, and it is why this pass found what the others missed.
+
+### C2 is upgraded — `corporatepolicy_list` is a MASKED 500, which is worse than the 500 recorded above
+
+**Verified by the main session (ORM mechanism), with the end-to-end HTTP behaviour observed by the agent:**
+
+| Request (4 policies in the tenant) | Expected | Actual |
+|---|---|---|
+| `GET /core/compliance/policies/` | 200 | **500** |
+| `GET /core/compliance/policies/?q=PONLYONE` (1 row) | 200 | **500** |
+| `GET /core/compliance/policies/?q=zzzznotarealvalue` (0 rows) | — | **200 + "No policies recorded"** |
+
+Mechanism, confirmed by the main session: Django only trips when it `setattr`s the annotation **onto an
+instance** (`query.py:133`). `corporatepolicy_list` never instantiates on the empty path — it only calls
+`.count()` — so a filter matching nothing renders **200 with the empty state on a workspace holding four
+policies**. That asserts something false about the register, and a status-only smoke scores it *passing*.
+This is the worst behaviour in the changeset and it is strictly worse than the plain 500 recorded in pass 4.
+
+### C3 — Critical: `compliancecontrol_list` 500s unconditionally, and no empty-state smoke can ever see it work
+
+**`apps/core/views/Compliance.py:201-202` and `:210`**
+
+Beyond the same alias collision, the view iterates the annotated queryset **at context-build time**:
+
+```python
+"overdue_count": sum(1 for c in qs if c.is_overdue_review),
+```
+
+`qs` is the **unfiltered** annotated queryset, so it instantiates controls even when the page's own result
+set is empty. **Verified**: `sum(1 for c in qs if c.is_overdue_review)` raises
+`AttributeError: can't set attribute 'framework_count'` against the live DB. The page is therefore dead at
+3 rows, at 1 row **and at 0 rows** — a "no rows" smoke cannot make this page pass under any circumstances.
+
+Folded into the C2 fix: rename the aliases and replace the Python `sum` with a DB-side count (I8).
+
+### I10 — Important (design, not a bug): the acknowledgement register can only ever contain admins
+
+Every 0.21 page — **including the policy detail page where the Acknowledge button lives** — is
+`@tenant_admin_required`, and so is `policy_acknowledge`. **Proven**: a non-admin member POSTing
+acknowledge gets **403** and writes nothing.
+
+But `policyacknowledgement/list.html` describes itself as "One row per person, per policy, per version",
+and `CorporatePolicy.acknowledgement_rate` divides acknowledgements by the *active user count* — i.e. the
+register and the rate are both written as if the whole workforce acknowledges. In practice only tenant
+admins ever can. On a real workspace `acknowledgement_rate` will read near-0% and imply non-compliance
+where the real cause is that members cannot click the button at all.
+
+This is a **scope** finding, not a defect in what was built — but it must not ship as a silent lie. Fix:
+either drop `@tenant_admin_required` from the acknowledge action and the policy detail page (a signed-in
+member may acknowledge; the *back-fill* stays admin-only), **or** keep the gate and reword the register and
+the rate's denominator so neither claims to cover people who were never able to act. **Chosen: keep the
+admin gate** (it is the safer default and the 0.16 evidence-stamp convention supports it) and reword —
+changing an authorization boundary mid-review is the riskier edit, and the wording change is honest either
+way. Recorded so the decision is explicit rather than accidental.
+
+### I11 — Important: `framework_count` means three different things in one module
+
+It is a `@property` on `ComplianceControl`, an `annotate` alias on that same model, **and** the board's
+`ControlFramework` count (`grcoverview.html:30`). This is what made C2 easy to introduce and hard to see.
+**Fix** — distinct names: `n_mappings` (annotation), `mapping_total` (property), and leave the board's
+`framework_count` alone since it is a different model.
+
+**C2 fix, revised in light of the above:** rename the annotations to `mapping_total` / `acknowledgement_total`
+(no model property shares those names), update the two templates that read them, add explicit
+`.order_by("code")` to restore deterministic pagination, and replace `compliancecontrol_list`'s
+`sum(1 for c in qs ...)` with a `.filter(...).count()`.
+
+### Verified passing all seven checks (state this — it is most of the surface)
+
+- **List pages** — frameworks, risks, mappings, acknowledgements: all 7 (status, content, junk params,
+  page 2, IDOR, permissions, POST-only).
+- **Detail pages** — framework, control, policy, risk: all 7.
+- **Form pages** — 6 create + 4 edit: fields present and correctly pre-filled on edit.
+- **GRC board** `/core/compliance/`: all 7.
+- **Delete POSTs** — all 6: GET 405 with no mutation, POST 302 and the row is gone.
+- **`policy_acknowledge`** — GET 405; POST on a published policy writes +1 with the correct actor and the
+  version **snapshotted**; **draft and retired both refused with a message and +0 rows**; idempotent on a
+  double press; re-versioning opens a new round and the superseded badge renders. The evidence-stamp
+  design works.
+- **`controlframeworkmapping_add`** — picker excludes an already-mapped control **from the `<select>`**
+  (it still appears under "Already mapped"); POST 302 +1 at `not_started`; idempotent; cross-tenant
+  `control_id` → 404; junk `control_id` → no 500.
+- **Junk params** — `?type/is_active/status/policy_type/treatment/likelihood/coverage=bogus`,
+  `?framework=notanint`, `?policy=notanint`: all 200 showing the **full unfiltered 15-row page 1**.
+- **Pagination** — `?page=2/0/999/-1/abc`: all 200 clean; page 2 is a genuinely different row set.
+- **`?q=` no-match** — 200 + empty state, **no row text leaked**; `?q=<real>` still finds its row.
+- **Cross-tenant IDOR** — 9 GETs + 7 POSTs: all **404**, no tenant-B text in any body, and every foreign
+  row was still alive afterwards.
+- **Permissions** — 22 pages, 6 delete POSTs, mapping-add POST: non-admin member 403 throughout; anonymous
+  302. `policy_acknowledge` GET is **405, not 403** — method is checked before the role, which is the
+  documented and correct decorator order.
+- **Tenant-B isolation** on the 4 working lists and the board: no tenant-A text; tenant-B sees its own rows.
+
+### False alarms run down (each was a defect in the test, not the app — do not re-report)
+
+- *"CREATE policy/risk returns 200 with no row"* — incomplete payloads; the forms correctly required
+  `policy_type`/`version` and `likelihood`/`impact`/`treatment`/`status`. With complete payloads: 302 + row,
+  and `inherent_score` = 20 (likely x severe) — **the create path computes the score correctly**, which
+  independently corroborates that C1 is confined to the seeder.
+- *"DELETE mapping/acknowledgement already gone"* — both are `CASCADE` children and the parents had been
+  deleted first. With parents intact: 405 on GET, 302 + gone on POST. The cascade is correct.
+- *"`policy_acknowledge` writes 0 rows"* — an acknowledgement had been pre-created for every policy, so the
+  POST hit the `unique_together` guard. Against a policy with no row: 302, +1, actor and version correct.
+- *"An already-mapped control is offered again"* — parsing the `<select name="control_id">` shows it is not
+  an option; it is only in the "Already mapped" context list. The picker is correct.
+- *"Empty state has 2 rows"* — the counter matched `<tr>` inside `<thead><tr>`; a regex on `<tr>\s*\n` gives
+  exact counts.
+
+### Environment finding worth keeping
+
+`--reuse-db` was unusable for this pass: `nav_erp_test.sqlite3` was **locked by the concurrent session**
+(`database is locked` on `DROP INDEX prc_asl_tnt_sealed_idx`), and a file copy was a mid-migration snapshot.
+`--no-migrations` was used instead — tables built straight from the models, seconds not 20 minutes, fully
+isolated. **Worth adding to the notes in `config/settings_test.py`.**
+
+### Housekeeping
+
+`nav_erp_smoke.sqlite3` (18 MB) was left in the project root as an untracked, disposable scratch copy of the
+shared test DB, held by a process this agent could not safely identify. Delete once that process exits.
+
