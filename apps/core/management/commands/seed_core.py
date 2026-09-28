@@ -1590,6 +1590,14 @@ class Command(BaseCommand):
                         # The SNAPSHOT, written explicitly because `policy_version` is
                         # `editable=False` and only the view ever sets it in normal use.
                         policy_version=published.version,
+                        # M5: an attestation is the one row in this module that claims a NAMED
+                        # PERSON did something. Without a note on the row itself, a seeded
+                        # acknowledgement is indistinguishable from a real one to anyone reading
+                        # the register, and demo evidence that looks real is exactly the thing this
+                        # module refuses to create. The note travels with the row.
+                        notes="DEMO DATA. Seeded by `seed_core`, not given by this person. It is "
+                              "here so the acknowledgement register and the rate on the policy "
+                              "page have something to display - it is not an attestation.",
                     )
                     made += int(created)
                 self.stdout.write(f"  {tenant.name}: seeded {made} policy acknowledgements")
