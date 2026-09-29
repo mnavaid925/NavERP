@@ -1806,3 +1806,30 @@ Found during the 8.7 research commit. Two separate traps, both of which cost a r
 Write the temp file **outside the worktree** (`$env:TEMP`) so it never shows up in `git status` --
 a message file in the repo root is an untracked file the instant you create it, and the 8.6 close-out
 already recorded one truncation of a shared file this session.
+
+## L64 - Never build a Python file with blind `insert_line` offsets; write it in order, then `ast.parse` it
+Hit while writing `apps/sales/models/TerritoryQuotaManagement/TerritoryRules.py` (8.7). The editor
+tool caps a single payload at ~6 KB, so a 250-line model has to be written in 3-4 chunks — and the
+natural reflex is to call `insert_line` with an offset computed from the previous chunk. **That
+offset is wrong the moment the file's real line count differs from your mental model of it**, and the
+result is not a clean error: the chunks *interleave*. What actually happened, in order:
+
+1. A chunk intended for the end of `class Meta` landed one line early and split the `indexes = [...]`
+   list, putting a `def` inside `class Meta` — `SyntaxError: invalid syntax`.
+2. Repairing that by hand re-inserted `TERRITORY_FIELDS` at a line the earlier mistake had already
+   vacated, so the tail became a *stale copy* of two earlier chunks. That file parsed as valid Python
+   with the `TERRITORY_FIELDS` **silently deleted** — a missing module constant that only fails when
+   something imports it.
+3. The same class of error is what truncated the shared `conftest.py` in the 8.6 pass (L59) and
+   `todo.md` twice.
+
+**Rule.**
+* Build a multi-chunk file by creating chunk 1 with no `insert_line`, then always appending at
+  `line_count + 1` (or `new_text = <entire file>`, if it fits). Never at a remembered offset.
+* After the LAST chunk, run `ast.parse` **and** assert each top-level symbol you meant to define is
+  actually present (`'TERRITORY_FIELDS = {' in src`). A parse-clean file can still be missing a
+  definition — parse-clean is necessary, not sufficient (L60 again: check the thing and the guard
+  together).
+* Then import it through `django.setup()` and read back the field metadata. `ast.parse` cannot catch a
+  missing CHOICES constant, a wrong `related_name`, or a field that should be `editable=False` and is
+  not; only the live model can.
