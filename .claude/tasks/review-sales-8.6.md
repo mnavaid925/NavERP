@@ -1,4 +1,7 @@
+
+
 ## Summary — 3 findings, all fixed, all the same species
+
 
 | ID | Severity | Finding | Status |
 |---|---|---|---|
@@ -26,10 +29,32 @@ guard. The Phase 6 tests exist to make each of these a failure that cannot come 
 > after each agent reports, then deduped and sorted Critical → Important → Minor with IDs.
 > The build already fixed one `save()` bug before this phase began (see §Pre-Phase fixes).
 
+---
+
 ## Pre-Phase fixes (found and fixed during the build, before review opened)
+
+---
+
+---
+
+## 1. `code-reviewer` (read-only, first pass)
+
+
+- `OrderAmendments.py` — the `impact_snapshot` `save()` guard was missing its
+  `super().save(...)`, so **no `OrderAmendment` would ever persist**. Fixed in `36bc0a29`.
+- `OrderBoards.py:_top_items` — walked `sales_order_line__sales_order_id` from `SalesOrderLine`,
+  a path that only exists from `SalesOrderAllocation`; it raised `FieldError` and **500'd the
+  reorder board on every render**. Caught by the Phase 3.5 content smoke, fixed in `b338d8e0`.
+- Contract corrections made in flight: the unreachable `close` change type was removed (4.5 closes
+  only an `invoiced` order, which is not amendable); the `decision_note` column the plan specified
+  was restored; `order_hold_raise` was moved to `orders/raise/<int:order_id>/`.
+
+---
+
 ---
 
 ## 2. `explorer` (read-only, second pass) — contract drift
+
 
 Ran a mechanical drift check (`temp/explorer_86.py`, throwaway) that introspects the live
 Django registry rather than reading prose, then compared it field-by-field against the
@@ -60,7 +85,10 @@ no file under `apps/scm/` modified · no `class SalesOrder` in `apps/sales` · n
 instantiated anywhere.
 ---
 
+---
+
 ## 3. `frontend-reviewer` · 4. `performance-reviewer` · 5. `security-reviewer` (read-only)
+
 
 **Frontend — verified clean, with one false positive struck.** All 23 templates exist at the
 contracted paths. Badge classes are within the six legal ones; every `badge-success` grep hit is
@@ -88,7 +116,10 @@ paginated pages by the content smoke.
 | `order_amendment_list` / `…open_queue` | 11 | 254 / 296 |
 ---
 
+---
+
 ## 6. `qa-smoke-tester` (read-only; the ONLY pass that touches the DB, report-only override)
+
 
 Content smoke (`temp/smoke_86.py`, throwaway) — **73 checks, 0 failures.** It asserts rendered
 CONTENT, not just status, which is the L8 point: a context key a template reads but the view does
@@ -129,84 +160,54 @@ separate one-file fix; widening this changeset to repair it would be the wrong c
 
 ---
 
-## Pre-Phase fixes (found and fixed during the build, before review opened)
-| `reorder_customers_board` | 11 | 230 |
-| `renewals_due_board` | 9 | 277 |
-
-Every page is 9–24 queries and flat regardless of row count, because each board aggregates in one
-grouped query and the per-line loops operate on an already-fetched list. The two heaviest
-(`revenue_recognition_board`, `revenue_schedule_list`) derive a `stats` dict in Python by
-design — the SQLite integer-division trap forbids pushing that into `aggregate()` — and are
-still well inside budget. `select_related` is used on all five view modules (3–16 call sites).
-No unbounded loop issues per-row queries; the one loop flagged by pattern
-(`OrderBoards.py:506`, over already-fetched `rows`) is a false positive.
-
-**Security — verified clean.** All **23 mutating verbs refuse GET with 405 Method Not Allowed**;
-none mutated on GET and none 500'd. Greps for `eval(`, `.raw(`, `raw_sql`, `password`,
-`api_key`, `secret` across the three 8.6 packages: **all clean**. Frozen evidence is
-server-generated and off every form; the hold checkout is exclusive; cross-tenant IDOR returns
-404 on all four detail surfaces (asserted in the content smoke).
-
-> **Probe artefact, struck, not a finding:** six verbs reported "cannot reverse" —
-> `order_hold_bulk_raise` / `…bulk_clear` (no `pk`), and the four child line/obligation verbs
-> (need `line_pk` / `obligation_pk`). Those are my probe passing the wrong kwargs, not app
-> defects: the routes exist and, per the 405 log, correctly reject GET. Recorded because a
-> reverse failure and a real routing bug look identical in a report.
-
 ---
 
-## Pre-Phase fixes (found and fixed during the build, before review opened)
+## Phase 6 — Tests (all four lanes, one at a time)
+
+| Lane | Tests | Carries |
+|---|---|---|
+| `test_ordermanagement_models.py` | 35 | **C1, C2, C3 named regressions**, the derived-not-stored register, `evaluate()` purity, SET_NULL evidence, tenant isolation, FK `on_delete` policy |
+| `test_ordermanagement_forms.py` | 18 | the 0.20 `ValueError` trap, driven through **real form instances** (never `full_clean()` in isolation); exact `Meta.fields`; frozen-evidence leakage; tenant-scoped FK querysets |
+| `test_ordermanagement_views.py` | 23 | all 49 URL names reverse; L8 content assertions; context keys; POST-only on all 23 mutating verbs; the C3 edit lock at the HTTP layer |
+| `test_ordermanagement_security.py` | 15 | cross-tenant **404** on every surface, the wrong-parent child case, board/list leak checks, login floor, enforced CSRF |
+
+**91 tests, all green.** Every C1/C2/C3 test is named after the bug it prevents rather than the
+feature it covers, so a future regression points straight at the review finding it reopens.
+
+### The full unfiltered Sales suite — the L47 gate
+
+`pytest apps/sales/tests/` → **1,024 tests, 1,023 passed, 1 skipped, 0 failed, 0 errors.**
+Unfiltered on purpose: a `-k` filter excludes exactly the tests a shared-file change can break, and
+this changeset *did* change two shared files. The progress output carries **zero `F` and zero `E`**
+characters across all fourteen progress lines.
+
+### Phase 6 found two defects no reviewer could have
+
+1. **I destroyed the shared conftest and committed it.** While adding 8.6's fixtures I truncated
+   `apps/sales/tests/conftest.py` from **2,707 lines to 343**, deleting `LEADMANAGEMENT_MODEL_FIELDS`,
+   `SALESFORECASTING_CHOICES`, `leadmanagement_tenant_a` and every 8.1–8.5 factory — and committed
+   that. Nothing caught it because **I had only ever run my own lane**, which imported cleanly from
+   my rewritten copy: precisely the trap L47 warns about. The diffstat
+   (`275 insertions(+), 2639 deletions(-)`) said so in plain text and I read past it. Restored from
+   `HEAD~1`, 8.6's section moved strictly below a marker comment, and the 8.4/8.5 lanes re-run green
+   to prove it. **L59.**
+2. **I did it again, one file over.** Removing a duplicated close-out block from `todo.md` by line
+   range took it from **13,727 lines to 1,102** — 12,680 deletions of other modules' plans — and
+   committed that too. Restored from `HEAD~1` and re-applied at the top only.
+
+Both were invisible to the reviewers because a reviewer reads a *diff*, and a diff that deletes
+someone else's fixtures reads as a deliberate refactor. Only running the neighbours finds them.
+Two instances of the same failure in one session is what turned L59 from an anecdote into a rule:
+**never edit a large shared file by line range, and read the diffstat before moving on.**
+
+### Gates re-run after the test work
+
+| Gate | Result |
+|---|---|
+| Full unfiltered `apps/sales/tests/` | **1,023 passed, 1 skipped, 0 failed** |
+| `manage.py check` | clean |
+| `makemigrations sales --check` | "No changes detected" |
+| Content smoke (`temp/smoke_86.py`) | **73 checks, 0 failures** |
+| 8.4 / 8.5 lanes (neighbour regression proof) | green |
 
 ---
-
-## 1. `code-reviewer` (read-only, first pass)
-
-- `OrderAmendments.py` — the `impact_snapshot` `save()` guard was missing its
-  `super().save(...)`, so **no `OrderAmendment` would ever persist**. Fixed in `36bc0a29`.
-- `OrderBoards.py:_top_items` — walked `sales_order_line__sales_order_id` from `SalesOrderLine`,
-  a path that only exists from `SalesOrderAllocation`; it raised `FieldError` and **500'd the
-  reorder board on every render**. Caught by the Phase 3.5 content smoke, fixed in `b338d8e0`.
-- Contract corrections made in flight: the unreachable `close` change type was removed (4.5 closes
-  only an `invoiced` order, which is not amendable); the `decision_note` column the plan specified
-  was restored; `order_hold_raise` was moved to `orders/raise/<int:order_id>/`.
-
----
-
-## 1. `code-reviewer` (read-only, first pass)
-
-**Verified clean by this pass:** `manage.py check` · `makemigrations --check` "No changes detected"
-· all 49 url names reverse to distinct patterns · no file under `apps/scm/` modified · no
-`class SalesOrder` anywhere in `apps/sales` · no `JournalEntry` written. **The L36/L37 ruling is
-honoured without exception** — `apply()` delegates to 4.5's own `recalc_totals()` /
-`recompute_allocation_status()`, cancellation delegates to 4.5's logic, and the boards write
-nothing on an order row. The `save()` contract, `update_fields` correctness (all 14 sites),
-`select_for_update` scoping, the single-writer rule, L11 junk-param handling, URL shadowing, L29,
-L33 and L42 were each checked and are clean.
-
-### CRITICAL
-
-- **C1 — `recompute()` raises `TypeError` on any schedule mixing dated and undated obligations.**
-  `RevenueSchedules.py:395` sorts by `(r.recognize_on or UNSCHEDULED, …)` where
-  `UNSCHEDULED = (1, 1, 1)` is a **tuple** while `recognize_on` is a `date`. One dated + one
-  undated obligation ⇒ `tuple < date` ⇒ crash. `recognize_on` is `null=True` and the form invites
-  a blank ("Leave blank only if the performance has no date yet"), so this is a **normal path**,
-  and it kills the only verb in 8.6 that moves money. The seeder masks it by dating both rows.
-  **Fix:** `UNSCHEDULED = date.max` — a real `date`, and strictly better than the `date.min` the
-  code's own comment (lines 83–84) identifies, because `date.min` would sort undated obligations
-  *first* and let them consume the shared recognition budget ahead of dated ones.
-
-- **C2 — `OrderHold.clean()` keys a message on `evaluation_snapshot`, which is off the form —
-  the exact 0.20 `ValueError` trap.** `OrderHolds.py:291-292`; `OrderHoldForm.Meta.fields` is
-  `["sales_order","rule","party","hold_type","reason","clear_note"]` and `evaluation_snapshot` is
-  `editable=False`. Django routes the key through `add_error(None, …)` → `ValueError` → **500 on
-  both create and edit**, and it is *data-dependent* (fires only for a malformed stored blob), so
-  the same form saves for one hold and 500s for another. The sibling `OrderAmendment` already
-  normalises the equivalent field in `save()` and documents why it must not be validated in
-  `clean()`. **Fix:** delete the `clean()` guard; add an `OrderHold.save()` normalising
-  `self.evaluation_snapshot = {}` when it is not a dict, mirroring `OrderAmendments.py:532-539`.
-
-- **C3 — an APPROVED amendment's lines and reason stay editable, and every edit re-freezes the
-  impact snapshot the approver signed.** `OrderAmendments.py:141` and the edit view. The approval
-  is a decision about a *frozen impact read-out*; letting the document change under it means the
-  approval and the applied change are not the same thing.
-
