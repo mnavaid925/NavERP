@@ -53,15 +53,31 @@ in detail, and the sibling module violates it anyway:
 > shared file by line range. **Verify the line count before and after every truncation, every
 > time**, because the recovery is cheap only while the bad commit is the most recent one.
 
-**Filed, not fixed — deliberately out of scope:**
+**Originally filed out of scope — both since FIXED in a follow-up change:**
 
-- A whole-database `seed_sales` can abort on a later tenant with `ValidationError: ["That
-  idempotency key was already used for different enrichment evidence."]` from
-  `apps/sales/services.py` `create_enrichment_event` (8.3-era code). It reproduces with no 8.6
-  file involved, and 8.6's own seeder block is byte-stable. One file, separate change — widening
-  this changeset to repair an unrelated 8.3 bug would have been the wrong call.
-- `apps/sales/models/_base.py` `TenantNumbered` numbering exhaustion (contract §12), out of scope
-  by contract.
+Leaving two CRITICALs in the numbering base and the seeder is not a defensible place to stop, so
+both were fixed rather than merely filed. Recorded because the *reasons* they were deferred were
+right and the decision to stop was wrong.
+
+- **The `seed_sales` idempotency abort.** A whole-database run aborted with `ValidationError:
+  ["That idempotency key was already used for different enrichment evidence."]`. The **service was
+  right**; the seeder was wrong to ask. `_enrichment_request_payload` includes `requested_by_id`
+  and `_enrichment_request_matches` compares it, but the seeder resolved its owner with an
+  **unordered** `User.objects.filter(...).first()`. Once a tenant gained a second admin the row
+  `.first()` returned could change, so the next run replayed an identical key with a different
+  requester. Now `order_by("pk")`. **Two hypotheses were wrong first** — cross-tenant collision
+  (the lookup is tenant-scoped) and payload drift after an applied enrichment (a same-requester
+  replay is genuinely idempotent). Only *a different `requested_by` under the same key* reproduces
+  the error. **L61.**
+- **`TenantNumbered` numbering exhaustion** (contract §12). After five `IntegrityError` retries the
+  loop fell through to `super().save()` with `self.number == ""`, persisting a blank number —
+  reproduced against MySQL, one row saved with `number=''`. That silently defeats the
+  `(tenant, number)` uniqueness the whole prefix system exists to provide. Now raises. **L62.**
+
+**Verified end to end**, not only by unit test: `manage.py seed_sales` run **twice** against the
+live multi-tenant database completes with no traceback on either run. Both regression tests were
+**mutation-checked** — each fix reverted in place, its test confirmed to FAIL, then restored — so
+they are load-bearing rather than merely green.
 
 **The transferable lesson:** the checks that catch an *absent* or *contradicted* guard must be
 written from the contract, not from the code. Every one of C1–C3 is documented correctly in a
