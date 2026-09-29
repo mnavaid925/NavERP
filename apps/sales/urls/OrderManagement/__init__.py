@@ -26,11 +26,13 @@ completeness answer and the tenant-isolation guard.
 ``app_name`` stays ``"sales"`` — set once in ``apps/sales/urls/__init__.py``, not repeated here.
 """
 from .OrderAmendments import urlpatterns as amendment_patterns
+from .OrderBoards import urlpatterns as board_patterns
 from .OrderHolds import urlpatterns as hold_patterns
 from .OrderValidationRules import urlpatterns as rule_patterns
 from .RevenueSchedules import urlpatterns as revenue_patterns
 
 urlpatterns = (
+    board_patterns +
     rule_patterns +
     hold_patterns +
     amendment_patterns +
