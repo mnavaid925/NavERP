@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% comment %}
+  Order Hold detail — the page whose whole job is to explain one decision.
+
+  The Evaluation snapshot panel renders the PARSED dict (`evaluation`, never the raw column),
+  so a malformed blob is an empty panel rather than a JSON string dumped into the page — or a
+  500 on the one screen a user needs when a customer is asking why their order is stuck.
+
+  The confirm() calls name {{ hold.number }} — the SYSTEM-assigned OHD- document number — and
+  never {{ hold.reason }}, which is free text an author typed (L42).
+
+  The Checkout / Release / Clear buttons are shown only where the SAME guard in the view will
+  let them through (L11's UI half): a hold another user has checked out offers no Clear, and
+  a non-holder who is not a tenant admin is told why before they press anything (4.11: a
+  button that 403s or errors on click is worse than not offering it).
+{% endcomment %}
+{% block title %}{{ hold.number }} &middot; Order Hold{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ hold.number }} &middot; Order Hold</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:order_hold_list' %}">Order Holds</a><span class="sep">&rsaquo;</span><span>{{ hold.number }}</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:order_hold_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to holds</a>
+    <a href="{% url 'sales:order_hold_edit' hold.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="hash"></i></div><div class="stat-value">{{ hold.number }}</div><div class="stat-label">Hold number</div></div>
+  <div class="stat-card"><div class="stat-icon {% if hold.severity == 'block' %}red{% elif hold.severity == 'warn' %}green{% else %}amber{% endif %}"><i data-lucide="shield-alert"></i></div><div class="stat-value">{{ hold.severity|upper }}</div><div class="stat-label">Severity at fire time</div></div>
+  <div class="stat-card"><div class="stat-icon {% if hold.is_open %}red{% else %}green{% endif %}"><i data-lucide="list-checks"></i></div><div class="stat-value">{{ hold.get_status_display }}</div><div class="stat-label">Status</div></div>
+  <div class="stat-card"><div class="stat-icon {% if hold.is_checked_out %}amber{% else %}slate{% endif %}"><i data-lucide="user-check"></i></div><div class="stat-value">{% if hold.checked_out_by %}{{ hold.checked_out_by }}{% else %}Unclaimed{% endif %}</div><div class="stat-label">Checkout</div></div>
+</div>
+
+<div class="layout-2col">
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Hold</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd>{{ hold.number }}</dd></div>
+          <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-slate">{{ hold.get_hold_type_display }}</span></dd></div>
+          <div class="detail-item"><dt>Severity</dt><dd>{% if hold.severity == "block" %}<span class="badge badge-red">{{ hold.get_severity_display }}</span>{% elif hold.severity == "hold" %}<span class="badge badge-amber">{{ hold.get_severity_display }}</span>{% elif hold.severity == "warn" %}<span class="badge badge-info">{{ hold.get_severity_display }}</span>{% else %}<span class="badge badge-muted">{{ hold.get_severity_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Status</dt><dd>{% if hold.status == "open" %}<span class="badge badge-red">{{ hold.get_status_display }}</span>{% elif hold.status == "cleared" %}<span class="badge badge-green">{{ hold.get_status_display }}</span>{% elif hold.status == "superseded" %}<span class="badge badge-slate">{{ hold.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ hold.get_status_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Order</dt><dd>{% if order %}<span class="fw-600">{{ order.number }}</span> &middot; {{ order.get_status_display }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Customer</dt><dd>{% if hold.party %}{{ hold.party.name }}{% elif order %}{{ order.customer.name }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Rule</dt><dd>{% if hold.rule %}<span class="fw-600">{{ hold.rule.number }}</span> &middot; {{ hold.rule.name }}{% else %}<span class="text-muted">Placed by hand</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Reason</dt><dd>{{ hold.reason|linebreaksbr }}</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Evaluation snapshot</h2></div>
+      <div class="card-body">
+        {% comment %}
+          FROZEN, SERVER-GENERATED EVIDENCE. It is rendered from the PARSED dict, so a bad
+          blob shows an empty panel rather than a raw JSON string — and the emptiness test is
+          done first, because `|default:"{}"` would print the string "{}" for an empty dict.
+        {% endcomment %}
+        {% if evaluation %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Captured at</dt><dd>{{ evaluation.captured_at }}</dd></div>
+          <div class="detail-item"><dt>Raised by</dt><dd>{% if evaluation.raised_by %}{{ evaluation.raised_by }}{% else %}<span class="text-muted">The rule set</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Order at capture</dt><dd>{{ evaluation.order_number|default_if_none:"&mdash;" }} &middot; {{ evaluation.order_status|default_if_none:"" }}</dd></div>
+          <div class="detail-item"><dt>Order total at capture</dt><dd>{{ evaluation.order_total|default_if_none:"&mdash;" }}</dd></div>
+          <div class="detail-item"><dt>Rule at capture</dt><dd>{% if evaluation.rule_number %}{{ evaluation.rule_number }} &middot; {{ evaluation.rule_name }}{% else %}<span class="text-muted">No rule — a manual hold</span>{% endif %}</dd></div>
+        </dl>
+        {% if evaluation.findings %}
+        <h3 style="margin-top:1rem;">Findings at capture</h3>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Rule</th><th>Type</th><th>Severity</th><th>Observed</th><th>Threshold</th><th>Message</th></tr></thead>
+            <tbody>
+              {% for finding in evaluation.findings %}
+              <tr>
+                <td class="fw-600">{{ finding.rule }}</td>
+                <td><span class="badge badge-slate">{{ finding.rule_type }}</span></td>
+                <td>{% if finding.severity == "block" %}<span class="badge badge-red">{{ finding.severity }}</span>{% elif finding.severity == "hold" %}<span class="badge badge-amber">{{ finding.severity }}</span>{% else %}<span class="badge badge-info">{{ finding.severity }}</span>{% endif %}</td>
+                <td>{{ finding.observed|default_if_none:"&mdash;" }}</td>
+                <td>{{ finding.threshold|default_if_none:"&mdash;" }}</td>
+                <td>{{ finding.message }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="text-muted">
+          No evaluation snapshot was captured for this hold. One is written by the server every
+          time a hold is raised, so an empty panel here means the row predates this feature or
+          the stored snapshot is not readable &mdash; not that the order passed anything.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+
+
+    <div class="card">
+      <div class="card-header"><h2>Other open holds on this order</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Hold</th><th>Type</th><th>Severity</th><th>Checkout</th><th>Reason</th></tr></thead>
+          <tbody>
+            {% for other in open_holds %}
+            <tr>
+              <td><a href="{% url 'sales:order_hold_detail' other.pk %}" class="fw-600">{{ other.number }}</a></td>
+              <td><span class="badge badge-slate">{{ other.get_hold_type_display }}</span></td>
+              <td>{% if other.severity == "block" %}<span class="badge badge-red">{{ other.get_severity_display }}</span>{% elif other.severity == "hold" %}<span class="badge badge-amber">{{ other.get_severity_display }}</span>{% else %}<span class="badge badge-muted">{{ other.get_severity_display }}</span>{% endif %}</td>
+              <td>{% if other.checked_out_by %}{{ other.checked_out_by }}{% else %}<span class="text-muted">Unclaimed</span>{% endif %}</td>
+              <td>{{ other.reason|truncatechars:80 }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="check-circle"></i><h3>No other open holds</h3><p>This is the only thing holding the order right now.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Actions</h2></div>
+      <div class="card-body" style="display:flex; flex-direction:column; gap:.6rem;">
+        {% comment %}
+          Every guard below is the SAME condition the view enforces, so the button and the
+          refusal cannot disagree (4.11).
+        {% endcomment %}
+        {% if hold.is_open and not hold.is_checked_out %}
+        <form method="post" action="{% url 'sales:order_hold_checkout' hold.pk %}">
+          {% csrf_token %}<button class="btn btn-primary" type="submit" style="width:100%;"><i data-lucide="user-check"></i> Check out this hold</button>
+        </form>
+        {% elif hold.is_open %}
+        <p class="text-muted">
+          {% if hold.checked_out_by_id == request.user.pk %}
+            This hold is checked out to you. You can release it, or clear it and submit the order.
+          {% else %}
+            {{ hold.checked_out_by }} has this hold checked out. A second user cannot take it;
+            only they, or a tenant administrator, can release the checkout.
+          {% endif %}
+        </p>
+        {% endif %}
+
+
+        {% if hold.is_checked_out and hold.checked_out_by_id == request.user.pk %}
+        <form method="post" action="{% url 'sales:order_hold_release_checkout' hold.pk %}" onsubmit="return confirm('Release your checkout of hold {{ hold.number }}?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit" style="width:100%;"><i data-lucide="log-out"></i> Release checkout</button>
+        </form>
+        {% elif hold.is_checked_out %}
+          {% comment %}
+            The override case: a tenant admin MAY take a colleague's checkout (they went home
+            mid-hold), but the view demands a written reason and stamps it into clear_note, so
+            the form demands it here too rather than bouncing a submission the view will refuse.
+          {% endcomment %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'sales:order_hold_release_checkout' hold.pk %}" onsubmit="return confirm('Take the checkout of hold {{ hold.number }} from {{ hold.checked_out_by }}? A reason is required and is recorded on the hold.');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="ohd-override">Why are you overriding the checkout?</label>
+              <textarea id="ohd-override" name="release_note" class="form-textarea" rows="2" required placeholder="Required: an override that leaves no trace makes the board untrustworthy."></textarea>
+            </div>
+            <button class="btn btn-outline" type="submit" style="width:100%;"><i data-lucide="log-out"></i> Override and release checkout</button>
+          </form>
+          {% else %}
+          <p class="text-muted">
+            You are not the holder and you are not a tenant administrator, so this checkout is
+            not yours to release.
+          </p>
+          {% endif %}
+        {% endif %}
+
+
+        {% if hold.is_open %}
+          {% if hold.is_checked_out and hold.checked_out_by_id != request.user.pk %}
+            <p class="text-muted">Clear is unavailable while a colleague holds the checkout. Release it first.</p>
+          {% else %}
+            <form method="post" action="{% url 'sales:order_hold_clear' hold.pk %}" onsubmit="return confirm('Clear hold {{ hold.number }}? A reason is required and is recorded on the hold.');">
+              {% csrf_token %}
+              <div class="form-group">
+                <label class="form-label" for="ohd-clear-note">Reason for release</label>
+                <textarea id="ohd-clear-note" name="clear_note" class="form-textarea" rows="2" required placeholder="What changed, who agreed."></textarea>
+              </div>
+              <button class="btn btn-outline" type="submit" style="width:100%;"><i data-lucide="check"></i> Clear hold</button>
+            </form>
+            {% if order %}
+            <form method="post" action="{% url 'sales:order_hold_clear_and_submit' hold.pk %}" onsubmit="return confirm('Clear hold {{ hold.number }} and submit order {{ order.number }}? SCM re-runs the credit and fraud checks, so the order may be held again.');">
+              {% csrf_token %}
+              <div class="form-group">
+                <label class="form-label" for="ohd-clear-submit-note">Reason for release</label>
+                <textarea id="ohd-clear-submit-note" name="clear_note" class="form-textarea" rows="2" required placeholder="What changed, who agreed."></textarea>
+              </div>
+              <button class="btn btn-primary" type="submit" style="width:100%;"><i data-lucide="send"></i> Clear and submit order</button>
+            </form>
+            <p class="text-muted">
+              The submit is handed to SCM's own logic, which re-runs its credit and fraud
+              evaluation and refuses an order with unmapped lines. This page never writes an
+              order's status itself.
+            </p>
+            {% endif %}
+          {% endif %}
+        {% endif %}
+
+        <a href="{% url 'sales:order_hold_edit' hold.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit hold</a>
+        {% if hold.is_open %}
+          <p class="text-muted">
+            An OPEN hold cannot be deleted. Deleting it would release the order with no record
+            of who released it and why &mdash; clear it with a reason instead.
+          </p>
+        {% else %}
+        <form method="post" action="{% url 'sales:order_hold_delete' hold.pk %}" onsubmit="return confirm('Delete hold {{ hold.number }}? This cannot be undone.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit" style="width:100%;"><i data-lucide="trash-2"></i> Delete hold</button>
+        </form>
+        {% endif %}
+        {% if order %}
+        <a href="{% url 'scm:salesorder_detail' order.pk %}" class="btn btn-outline"><i data-lucide="arrow-right"></i> Open order {{ order.number }}</a>
+        {% endif %}
+        <a href="{% url 'sales:order_hold_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to holds</a>
+      </div>
+    </div>
+
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Record</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd>{{ hold.number }}</dd></div>
+          <div class="detail-item"><dt>Raised</dt><dd>{{ hold.raised_at|date:"M d, Y H:i" }}{% if hold.raised_by %} &middot; {{ hold.raised_by }}{% endif %}</dd></div>
+          <div class="detail-item"><dt>Checked out</dt><dd>{% if hold.checked_out_by %}{{ hold.checked_out_by }} &middot; {{ hold.checked_out_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Cleared</dt><dd>{% if hold.cleared_at %}{{ hold.cleared_at|date:"M d, Y H:i" }}{% if hold.cleared_by %} &middot; {{ hold.cleared_by }}{% endif %}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Clear note</dt><dd>{% if hold.clear_note %}{{ hold.clear_note|linebreaksbr }}{% else %}<span class="text-muted">None recorded</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Superseded by</dt><dd>{% if hold.superseded_by %}<a href="{% url 'sales:order_hold_detail' hold.superseded_by.pk %}">{{ hold.superseded_by.number }}</a>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Created</dt><dd>{{ hold.created_at|date:"M d, Y H:i" }}</dd></div>
+          <div class="detail-item"><dt>Updated</dt><dd>{{ hold.updated_at|date:"M d, Y H:i" }}</dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
+
