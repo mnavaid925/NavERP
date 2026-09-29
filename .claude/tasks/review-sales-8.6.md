@@ -9,8 +9,9 @@
 | C2 | CRITICAL | `OrderHold.clean()` keyed a message on `evaluation_snapshot`, which is off the form → `ValueError` 500 on create *and* edit (the 0.20 trap) | `[x] fixed` — `c43351fb` |
 | C3 | CRITICAL | An APPROVED amendment stayed editable, re-freezing the impact snapshot the approver had signed | `[x] fixed` — `fcfd6385`, `b3676891` |
 | F1 | Minor | Contract §6 heading said "24 files"; the enumerated list totals 23 and 23 ship | `[x] fixed` — contract corrected |
-| — | PRE-EXISTING | `seed_sales` not idempotent across a whole multi-tenant DB (8.3-era `create_enrichment_event`) | `[~] skipped — separate one-file fix, out of 8.6 scope` |
-| — | PRE-EXISTING | `apps/sales/models/_base.py` `TenantNumbered` exhaustion path (contract §12) | `[~] skipped — out of scope by contract` |
+| F2 | CRITICAL | `TenantNumbered.save()` fell through after 5 number collisions and **persisted `number=''`** | `[x] fixed` — `f86315f2` |
+| F3 | CRITICAL | `seed_sales` aborted on a second admin because the owner lookup was an unordered `.first()` | `[x] fixed` — `31338081` |
+| — | PRE-EXISTING | ~~`seed_sales` not idempotent across a whole multi-tenant DB~~ → **resolved as F3** | `[x] fixed` |
 
 **The pattern worth keeping.** C1, C2 and C3 are one defect wearing three hats: **a guard the
 prose promised and the code did not deliver.** The docstrings state the invariants correctly and
@@ -152,11 +153,43 @@ that is 28 "failing" pages, and the temptation is to blame the app.
 `seed_sales` aborts partway through a multi-tenant database with
 `ValidationError: ["That idempotency key was already used for different enrichment evidence."]`
 raised from `apps/sales/services.py:774` (`create_enrichment_event`), reached from
-`_seed_contact_account_management`. It fires on a **later tenant whose enrichment row was
-written with different evidence text**, so `seed_sales` is idempotent per tenant but not across
-a whole database. This is 8.3-era code, pre-dates this changeset, and reproduces with no 8.6
-file involved. **8.6's own seeder block is byte-stable and is not the cause.** Filed for a
-separate one-file fix; widening this changeset to repair it would be the wrong call.
+`_seed_contact_account_management`. Filed as a pre-existing 8.3-era defect at close-out and
+**since resolved — see F3 below**, where the root cause turned out to be the seeder's unordered
+owner lookup rather than anything in the enrichment service.
+
+
+### F2 / F3 — the two deferred defects, since fixed
+
+Both were filed "out of scope" at close-out and then fixed in a follow-up change, because leaving
+two CRITICALs in the numbering base and the seeder is not a defensible place to stop.
+
+**F2 — `TenantNumbered.save()` persisted a BLANK number** (`apps/sales/models/_base.py`). After
+five `IntegrityError` retries the loop fell through to `super().save()` with `self.number == ""`.
+Reproduced against MySQL before the fix: the probe forced five collisions and **one row saved with
+`number=''`**. That silently defeats the `(tenant, number)` uniqueness the entire prefix system
+exists to provide, and the *second* such row violates it outright. Now raises `IntegrityError`
+with an actionable message. A transient single collision still recovers — the retry loop is not a
+dead branch — and an explicit `number=` still bypasses allocation entirely.
+
+**F3 — `seed_sales` was not idempotent across a whole database** (`seed_sales.py`). The service
+refused with *"That idempotency key was already used for different enrichment evidence."*, and
+**the service was right**; the seeder was wrong to ask. Root cause: `_enrichment_request_payload`
+includes `requested_by_id` and `_enrichment_request_matches` compares it, while the seeder
+resolved the owner with an **unordered** `User.objects.filter(...).first()`. Once a tenant gained
+a second admin, the row `.first()` returned could change, so the next run replayed an identical
+key with a different requester.
+
+> **Two hypotheses were wrong before the right one.** Cross-tenant collision — wrong, the lookup
+> is tenant-scoped. Payload drift after an applied enrichment — wrong, a same-requester replay is
+> genuinely idempotent (verified). Only *a different `requested_by` under the same key* reproduces
+> the exact error. The dead ends are recorded so the next person does not re-walk them.
+
+**Verified end to end**, not just by unit test: `manage.py seed_sales` run twice against the live
+multi-tenant database completes with no traceback on either run.
+
+**Both fixes are proven load-bearing by mutation check** (`temp/mutation_check.py`): each fix was
+reverted in place, its regression test confirmed to FAIL, and the fix restored. A regression test
+that passes against the buggy code proves nothing.
 
 ---
 
