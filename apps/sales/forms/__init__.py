@@ -29,6 +29,16 @@ from .QuoteProposalCPQ.CPQQuotes import CPQQuoteForm, CPQQuoteApprovalActionForm
 from .QuoteProposalCPQ.CPQQuoteLines import CPQQuoteLineForm
 from .QuoteProposalCPQ.ProductBundles import ProductBundleOptionForm
 from .QuoteProposalCPQ.QuoteApprovalRules import QuoteApprovalRuleForm
+# 8.6 Order Management. Frozen evidence (evaluation_snapshot, impact_snapshot, decision_note) is
+# off every one of these forms by design — L22.
+from .OrderManagement.OrderAmendments import (
+    OrderAmendmentDecisionForm,
+    OrderAmendmentForm,
+    OrderAmendmentLineForm,
+)
+from .OrderManagement.OrderHolds import OrderHoldActionForm, OrderHoldForm
+from .OrderManagement.OrderValidationRules import OrderValidationRuleForm
+from .OrderManagement.RevenueSchedules import PerformanceObligationForm, RevenueScheduleForm
 
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
@@ -45,6 +55,11 @@ __all__ = [
     "ForecastScenarioForm", "ForecastScenarioApplyForm",
     "CPQQuoteForm", "CPQQuoteApprovalActionForm", "CPQPortalSignForm",
     "CPQQuoteLineForm", "ProductBundleOptionForm", "QuoteApprovalRuleForm",
+    # 8.6 Order Management
+    "OrderValidationRuleForm",
+    "OrderHoldForm", "OrderHoldActionForm",
+    "OrderAmendmentForm", "OrderAmendmentLineForm", "OrderAmendmentDecisionForm",
+    "RevenueScheduleForm", "PerformanceObligationForm",
 ]
 
 
