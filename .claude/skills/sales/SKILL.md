@@ -362,11 +362,19 @@ Badges use only `badge-green|red|amber|info|muted|slate` (L33). Filter dropdowns
 
 - `apps/sales/migrations/0012_ordermanagement_*.py` is the 8.6 schema.
 - `seed_sales` calls a dedicated 8.6 block; it is idempotent (`OVR 3, OHD 1, AMD 1, line 1,
-  RVS 1, POB 2` on re-run).
-- **Known pre-existing bug, not 8.6's:** a whole-database `seed_sales` can abort on a later tenant
-  with `ValidationError: ["That idempotency key was already used for different enrichment
-  evidence."]` from `apps/sales/services.py` `create_enrichment_event` (8.3-era code). 8.6's own
-  block is byte-stable. See `.claude/tasks/review-sales-8.6.md`.
+  RVS 1, POB 2` on re-run). **Verified by running `manage.py seed_sales` twice against the live
+  multi-tenant database, not just by unit test.**
+- **The seeder resolves its owner with `order_by("pk")`, and that ordering is load-bearing.**
+  `requested_by_id` is part of the enrichment idempotency comparison
+  (`_enrichment_request_matches`), so the owner must resolve to the same row every run. An
+  unordered `.first()` lets a tenant that gains a second admin resolve to a different row, and the
+  next run then replays an identical key with a different requester and aborts with *"That
+  idempotency key was already used for different enrichment evidence."* The service was right to
+  refuse; the seeder was wrong to ask.
+- **`TenantNumbered.save()` RAISES after five number collisions** — it does not fall through and
+  save a blank. Persisting `number=''` silently defeats the `(tenant, number)` uniqueness the whole
+  prefix system exists to provide, and the second such row violates it outright. If you extend
+  the numbering base, keep the raise.
 
 ### 8.6 tests
 
