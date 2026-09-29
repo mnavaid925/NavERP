@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% comment %}
+  Revenue Recognition board — the ASC 606 / IFRS 15 position across every schedule.
+
+  This is the only board whose figures are MONEY, and every one of them is a @property on
+  RevenueSchedule, read live: contract_amount IS SCM 4.5 own order total, and the rest are sums and
+  differences over the schedule own obligations. None of them is a column, so none of them can be
+  stale - and equally, none of them can be edited here.
+
+  The stats strip is summed in PYTHON in the view, never with aggregate("Sum") on a Decimal: that
+  is the SQLite integer-division trap SCM 4.5 names in recalc_totals(), and a contract value that
+  reads back 12,345 instead of 12,345.67 is worse than no register at all. A VOID schedule is
+  excluded from the money and counted separately, because a voided schedule is a document that was
+  abandoned, not a position the company holds.
+
+  The register own verbs (open a schedule, add an obligation, recognise) are deliberately NOT
+  duplicated here. This is the portfolio view; the register one screen away owns the document. What
+  the board adds is the cross-schedule total - the one number nobody can get from a paginated list.
+{% endcomment %}
+{% block title %}Revenue Recognition{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Revenue Recognition Board</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Order Management</span><span class="sep">&rsaquo;</span><span>Recognition</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:revenue_schedule_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Schedule register</a>
+    <a href="{% url 'sales:revenue_schedule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Open revenue schedule</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">DERIVED</span>
+      Every money figure on this board is <strong>derived on read and none of it is stored</strong>.
+      The contract value <em>is</em> SCM 4.5's own order total, read live; the recognised, deferred,
+      contract-asset and contract-liability balances are sums over each schedule's own obligations.
+      The totals below are summed in Python in the view, never with a database-side sum, because
+      that silently drops fractional cents rather than raising. Nothing here can be edited &mdash;
+      recognition happens on the schedule's own <em>Recognise</em> verb, which posts no journal
+      entry at all (L29).
+      {% if stats.voided %}
+        &nbsp;{{ stats.voided }} voided schedule{{ stats.voided|pluralize }} {{ stats.voided|pluralize:"is,are" }} excluded from the money below.
+      {% endif %}
+    </p>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Schedules</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="play"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.overdue %}orange{% else %}slate{% endif %}"><i data-lucide="clock-alert"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="file-text"></i></div><div class="stat-value">{{ stats.contract_value }}</div><div class="stat-label">Contract value (derived)</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ stats.recognized }}</div><div class="stat-label">Recognised (derived)</div></div>
+  <div class="stat-card"><div class="stat-icon amber"><i data-lucide="pause"></i></div><div class="stat-value">{{ stats.deferred }}</div><div class="stat-label">Deferred (derived)</div></div>
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="arrow-left-right"></i></div><div class="stat-value">{{ stats.contract_asset }}</div><div class="stat-label">Contract asset (derived)</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="scale"></i></div><div class="stat-value">{{ stats.contract_liability }}</div><div class="stat-label">Contract liability (derived)</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="rec-search">Search</label>
+        <input id="rec-search" name="q" value="{{ q }}" class="form-input" placeholder="Schedule number, notes, or order number">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="rec-method">Method</label>
+        <select id="rec-method" name="method" class="form-select">
+          <option value="">All methods</option>
+          {% for value, label in method_choices %}<option value="{{ value }}"{% if method == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="rec-status">Status</label>
+        <select id="rec-status" name="status" class="form-select">
+          <option value="">All statuses</option>
+          {% for value, label in status_choices %}<option value="{{ value }}"{% if status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="rec-standard">Standard</label>
+        {% comment %}
+          Rendered but disabled: the contract pins ?fiscal_period= as this board only FK filter, so
+          a live compliance_standard widget would advertise a filter the view ignores. A dead widget
+          is worse than no widget.
+        {% endcomment %}
+        <select id="rec-standard" class="form-select" disabled>
+          {% for value, label in compliance_standard_choices %}<option>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="rec-period">Fiscal period</label>
+        <select id="rec-period" name="fiscal_period" class="form-select">
+          <option value="">All periods</option>
+          {% for period in fiscal_periods %}<option value="{{ period.pk|stringformat:"d" }}"{% if fiscal_period == period.pk|stringformat:"d" %} selected{% endif %}>{{ period.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:revenue_recognition_board' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Schedules</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Schedule</th><th>Order</th><th>Standard</th><th>Method</th><th>Status</th><th>Contract / Recognised</th><th>Progress</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in schedules %}
+        <tr>
+          <td>
+            <a href="{% url 'sales:revenue_schedule_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            <div class="text-muted">{{ obj.get_fiscal_period|default_if_none:"No period" }}</div>
+          </td>
+          <td>
+            {% if obj.sales_order %}
+              <a href="{% url 'scm:salesorder_detail' obj.sales_order.pk %}" class="fw-600">{{ obj.sales_order.number }}</a>
+              <div class="text-muted">{{ obj.sales_order.customer.name }}</div>
+            {% else %}<span class="text-muted">-</span>{% endif %}
+          </td>
+          <td><span class="badge badge-slate">{{ obj.get_compliance_standard_display }}</span></td>
+          <td>
+            {% if obj.method == "point_in_time" %}<span class="badge badge-info">{{ obj.get_method_display }}</span>
+            {% elif obj.method == "over_time" %}<span class="badge badge-green">{{ obj.get_method_display }}</span>
+            {% elif obj.method == "milestone" %}<span class="badge badge-amber">{{ obj.get_method_display }}</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_method_display }}</span>{% endif %}
+          </td>
+          <td>
+            {% if obj.status == "draft" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "active" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "complete" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "void" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+          </td>
+          <td>
+            {% comment %}
+              Two DERIVED @property values, read live. The progress cell is the third: a
+              PYTHON-computed percentage, because the F()-expression version integer-divides on
+              SQLite and reports 66 where the truth is 66.67.
+            {% endcomment %}
+            <div class="fw-600">{{ obj.contract_amount }}</div>
+            <div class="text-muted">{{ obj.recognized_amount }} recognised</div>
+          </td>
+          <td>
+            {% if obj.is_overdue %}
+              <span class="badge badge-amber">{{ obj.days_overdue }}d late</span>
+            {% elif obj.is_unbalanced %}
+              <span class="badge badge-amber">{{ obj.allocation_pct_total }}% allocated</span>
+            {% endif %}
+            <div class="text-muted">{{ obj.recognition_progress_pct }}%</div>
+          </td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:revenue_schedule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              {% comment %}
+                A void schedule's money is excluded from the stats strip above, and the row says so
+                rather than quietly contributing a figure the total does not contain.
+              {% endcomment %}
+              {% if obj.status == "void" %}
+                <span class="badge badge-red">Excluded</span>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8"><div class="empty-state"><i data-lucide="file-text"></i><h3>No revenue schedules</h3><p>No revenue schedule has been opened against an order in this workspace. A schedule is how the app states, under ASC 606, which part of a contract has been earned.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
