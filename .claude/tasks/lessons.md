@@ -1833,3 +1833,22 @@ result is not a clean error: the chunks *interleave*. What actually happened, in
 * Then import it through `django.setup()` and read back the field metadata. `ast.parse` cannot catch a
   missing CHOICES constant, a wrong `related_name`, or a field that should be `editable=False` and is
   not; only the live model can.
+
+## L65 - A CharField `max_length` must fit the LONGEST `choices` VALUE, and a `models.Index` name must be <= 30 chars
+Hit twice while building the four 8.7 models, and caught by `django.core.checks` BEFORE the
+migration existed. Neither is visible from reading the code.
+
+1. **`fields.E009`**: `max_length=8` with a choice of `("secondary", "Secondary")` — the stored
+   VALUE is `secondary` (9 chars), not the label. `TerritoryRule.alignment_type` and
+   `AccountTerritoryAssignment.alignment_type` both declared 8. A test that never saves a
+   `secondary` row never sees it; the database is where it dies. **Count the longest VALUE, never
+   the longest LABEL.**
+2. **`models.E034`**: an index `name=` of 31 chars fails; the limit is 30. Named
+   `sales_tmember_tnt_terr_prim_idx` -> `sales_tmember_tnt_terr_idx`.
+
+**Why this is worth a lesson rather than a one-off fix:** both survived research, the plan AND the
+frozen contract, because all three transcribed `max_length=8` from each other. A contract is a
+*transcription*, not a proof — it is downstream of the same miscount. `run_checks()` in-process
+(`checks.run_checks()`, which prints each `e.id` and message) is the cheapest possible check and it
+must run before `makemigrations`, not after: a migration that encodes a bad `max_length` is a
+migration you have to hand-edit.
