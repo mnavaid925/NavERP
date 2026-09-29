@@ -307,7 +307,9 @@ orders/backorders/<int:allocation_pk>/resolve/ -> order_backorder_resolve
 
 **`OrderValidationRules.py` (5):** `orders/validation-rules/` · `…/create/` · `…/<int:pk>/` · `…/<int:pk>/edit/` · `…/<int:pk>/delete/`
 
-**`OrderHolds.py` (12):** `orders/holds/` · `…/create/` · `…/bulk-raise/` · `…/bulk-clear/` · `…/<int:pk>/` · `…/<int:pk>/edit/` · `…/<int:pk>/delete/` · `…/<int:pk>/checkout/` · `…/<int:pk>/release-checkout/` · `…/<int:pk>/clear/` · `…/<int:pk>/clear-and-submit/` · `orders/holds/<int:order_pk>/raise/`
+**`OrderHolds.py` (12):** `orders/holds/` · `…/create/` · `…/bulk-raise/` · `…/bulk-clear/` · `…/<int:pk>/` · `…/<int:pk>/edit/` · `…/<int:pk>/delete/` · `…/<int:pk>/checkout/` · `…/<int:pk>/release-checkout/` · `…/<int:pk>/clear/` · `…/<int:pk>/clear-and-submit/` · `orders/raise/<int:order_id>/`
+
+> **AMENDED 2026-09-29 — `order_hold_raise` sits at `orders/raise/<int:order_id>/`, not `orders/holds/<int:order_pk>/raise/`.** It takes an ORDER id, not a hold id, so nesting it under the hold namespace would have implied it operates on a hold. It is also unambiguously safe from the sibling `<int:pk>` routes (a different literal prefix, listed first). The build used this path; the contract is amended to match.
 
 **`OrderAmendments.py` (13):** `orders/amendments/` · `…/create/` · `…/open/` · `…/<int:pk>/` · `…/<int:pk>/edit/` · `…/<int:pk>/delete/` · `…/<int:pk>/impact/` · `…/<int:pk>/decide/` · `…/<int:pk>/apply/` · `…/<int:pk>/withdraw/` · `…/<int:pk>/lines/add/` · `…/<int:pk>/lines/<int:line_pk>/edit/` · `…/<int:pk>/lines/<int:line_pk>/delete/`
 
