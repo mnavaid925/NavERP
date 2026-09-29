@@ -128,11 +128,14 @@ The reserved change-order flow 4.5 deliberately omitted. Impact analysis is **fr
 - `requested_at` — `DateTimeField(default=timezone.now, editable=False)`
 - `decided_by` — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="order_amendments_decided", editable=False)`
 - `decided_at` — `DateTimeField(null=True, blank=True, editable=False)`
+- `decision_note` — `TextField(blank=True)` — **written by the decision verb, never by a form** (L22: an authorable approval justification is a user-supplied evidentiary field). Present in the plan (`.claude/tasks/todo.md`) and in §3's exclusion prose; it was **missing from the first draft of this section** and is restored here. The `OrderAmendmentDecisionForm` field is named `decision_note` to match this column.
 - `applied_at` — `DateTimeField(null=True, blank=True, editable=False)`
 - `applied_by` — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="order_amendments_applied", editable=False)`
 - `notes` — `TextField(blank=True)`
 
-**CHOICES:** `CHANGE_TYPE_CHOICES` = `[("quantity","Quantity Change"), ("price","Price Change"), ("add_line","Add Line"), ("remove_line","Remove Line"), ("cancel","Cancel Order"), ("close","Close Order")]` · `STATUS_CHOICES` = `[("draft","Draft"), ("pending","Pending Approval"), ("approved","Approved"), ("rejected","Rejected"), ("applied","Applied"), ("withdrawn","Withdrawn"), ("superseded","Superseded")]`.
+**CHOICES:** `CHANGE_TYPE_CHOICES` = `[("quantity","Quantity Change"), ("price","Price Change"), ("add_line","Add Line"), ("remove_line","Remove Line"), ("cancel","Cancel Order")]` · `STATUS_CHOICES` = `[("draft","Draft"), ("pending","Pending Approval"), ("approved","Approved"), ("rejected","Rejected"), ("applied","Applied"), ("withdrawn","Withdrawn"), ("superseded","Superseded")]`.
+
+> **CORRECTED 2026-09-29 — `("close","Close Order")` was REMOVED from these choices.** The original list carried it, and it was unreachable by construction: 4.5's `salesorder_close` accepts exactly one status (`invoiced`), and `invoiced` is deliberately *not* in `AMENDABLE_STATUSES`, so no Close amendment could ever satisfy both rules at once. A dropdown choice that always refuses is worse than no choice — it advertises a verb that cannot fire. **Closing stays 4.5's own action on the order page.** Do not re-add it without also revisiting `AMENDABLE_STATUSES`, and do not widen `AMENDABLE_STATUSES` to make it reachable: that would make every other amendment eligible against an invoiced order too, which is exactly what the tuple exists to prevent.
 
 - `AMENDABLE_STATUSES = ("submitted", "on_hold", "allocated", "partially_fulfilled")` — an amendment changes a **live** commitment. `draft` orders are edited directly by 4.5; `fulfilled`/`invoiced`/`cancelled`/`closed` are terminal. **`recompute_impact()` and the create form's dropdown use this same tuple**, so eligibility cannot disagree.
 - `Meta`: `ordering = ["-requested_at", "-id"]` · `unique_together = ("tenant", "number")` · indexes `(tenant, status)` → `sales_amd_tnt_status_idx`, `(tenant, sales_order)` → `sales_amd_tnt_order_idx`.
@@ -206,7 +209,7 @@ All form classes inherit `TenantModelForm` from `apps/core/forms/_common.py` (wh
   `sales_order`'s queryset is narrowed to `status__in=OrderAmendment.AMENDABLE_STATUSES` **and** `tenant=self.tenant`.
 - **`OrderAmendmentLineForm`** — `Meta.fields = ["sales_order_line", "operation", "new_quantity", "new_unit_price", "note"]`.
   **Excluded:** `amendment` (**set by the parent view**, never from user input) · `created_at`/`updated_at`.
-- **`OrderAmendmentDecisionForm`** — a plain `forms.Form` (NOT a ModelForm): `decision` (`ChoiceField`, choices `[("approved","Approve"), ("rejected","Reject")]`), `note` (`CharField(widget=forms.Textarea, required=False)`). The only authorable path to the decision stamps, which the **view** writes, never the form.
+- **`OrderAmendmentDecisionForm`** — a plain `forms.Form` (NOT a ModelForm): `decision` (`ChoiceField`, choices `[("approved","Approve"), ("rejected","Reject")]`), `decision_note` (`CharField(widget=forms.Textarea, required=False)` — named for the `decision_note` column it writes). It is the only authorable path to the decision stamps, and those stamps plus `decision_note` are written by the **view**, never by the form.
 - **`RevenueScheduleForm`** — `Meta.fields = ["sales_order", "status", "method", "compliance_standard", "fiscal_period", "notes"]`.
   **Excluded:** `tenant` · `number` · `journal_entry` (**reference-only**, `editable=False`) · `created_at`/`updated_at`.
   **`status` IS included** — the single authorable `status` in 8.6 — with its widget queryset narrowed to `STATUS_CHOICES`.
