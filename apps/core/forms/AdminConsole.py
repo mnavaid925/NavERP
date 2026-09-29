@@ -150,11 +150,12 @@ class ChangeRequestForm(TenantModelForm):
     without it. `post_review` is excluded for the same reason a verification stamp is: it is
     written after the fact, never as part of authoring the change.
 
-    **`status` offers `draft` ONLY** (see `__init__`). Every other lifecycle value needs a stamp
-    this form cannot supply — `approved` needs an approver, `rolled_back` needs a reason and a
-    time — and `submitted` is the submit verb's transition. Those transitions are POST-only verbs
-    that stamp the evidence themselves; a status dropdown that offered them was a dropdown that
-    promised a state the form could not make true.
+    **`status` offers the values a person may author** (see `__init__`): `draft`, `scheduled`,
+    `in_progress` and `completed` — the states that record what a human observed. It does **not**
+    offer `approved` or `rolled_back`, because those need a stamp this form cannot supply
+    (`approved_by`, a `rollback_reason` and a time), and `submitted` is the submit verb's own
+    transition. Those are POST-only verbs that stamp the evidence themselves; a status dropdown that
+    offered them was a dropdown that promised a state the form could not make true.
     """
 
     class Meta:
@@ -166,7 +167,17 @@ class ChangeRequestForm(TenantModelForm):
         super().__init__(*args, **kwargs)
         # Authorable values only. `ChangeRequest.clean()` still refuses an unstamped approval or
         # rollback for the admin and for any API caller; those refusals render as non-field errors.
-        _narrow_status(self, ChangeRequest.STATUS_CHOICES, authorable={"draft"})
+        #
+        # `in_progress`, `completed` and `scheduled` ARE authorable by a person: they assert what a
+        # human observed — "I started this", "it is done" — and no verb can infer any of them from a
+        # click. The form previously offered `draft` alone, which left three states the views and
+        # templates READ (`in_progress` for the lifecycle, `completed` for the rollback verb's own
+        # precondition, `scheduled` for the window link) with no path at all able to produce one: an
+        # operator could not mark a change implemented, and the rollback verb was unreachable because
+        # its precondition could never be met. Found by this lane's reachability assertion.
+        _narrow_status(
+            self, ChangeRequest.STATUS_CHOICES,
+            authorable={"draft", "scheduled", "in_progress", "completed"})
 
 
 class FeatureRolloutForm(TenantModelForm):
