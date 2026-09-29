@@ -448,12 +448,20 @@ def order_fulfillment_board(request):
 
     # Per-row derived values, attached to the row object so the template never has to re-derive
     # them (and cannot get a different answer than the stat cards).
+    allocations_by_order = _allocations_by_order(page_ids)
     for order in page_obj.object_list:
         order.risk_bucket = _risk_bucket_for(order, today)
         order.backordered_qty = backordered.get(order.pk, ZERO)
         order.open_hold_count = hold_counts.get(order.pk, 0)
         order.blocking_reasons = hold_reasons.get(order.pk, [])
         order.board_shipments = shipments_by_order.get(order.pk, [])
+        # The allocations the Resolve form posts against. Only the ACTIVE ones are offered: a
+        # cancelled claim has nothing left to release, and SCM 4.5's own cancel verb refuses it.
+        order.board_allocations = [
+            allocation
+            for allocation in allocations_by_order.get(order.pk, [])
+            if allocation.status in ("reserved", "released")
+        ]
 
     return render(request, FULFILLMENT_TEMPLATE, {
         "orders": page_obj,
@@ -478,9 +486,30 @@ def order_fulfillment_board(request):
     })
 
 
+def _allocations_by_order(order_ids):
+    """``{order_id: [SalesOrderAllocation, …]}`` — 4.5's soft reservations, for the Resolve form.
+
+    Scoped to the orders ON SCREEN and fetched once for the whole page, not per row: the Resolve
+    button posts an allocation id, and a per-row fetch would be an N+1 on the one page whose job
+    is to be scanned quickly.
+    """
+    from apps.scm.models import SalesOrderAllocation
+
+    if not order_ids:
+        return {}
+    grouped = {}
+    rows = (
+        SalesOrderAllocation.objects.filter(sales_order_line__sales_order_id__in=order_ids)
+        .select_related("sales_order_line", "location")
+        .order_by("id")
+    )
+    for allocation in rows:
+        grouped.setdefault(allocation.sales_order_line.sales_order_id, []).append(allocation)
+    return grouped
+
+
 def _shipments_by_order(order_ids):
     """``{order_id: [Shipment, …]}`` — 4.6's outbound shipments, read for the POD column.
-
     Scoped to the order's OWN shipments, never reached through a load or a consignment: a
     consolidated load legitimately carries another customer's order, and showing its tracking
     against this order would be a cross-customer leak on a read-only board.
