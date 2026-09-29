@@ -1319,7 +1319,11 @@ def ac0_window_past(db, tenant_a):
     now = timezone.now()
     return MaintenanceWindow.objects.create(
         tenant=tenant_a, title="Certificate rotation", purpose="Rotate the TLS certificate.",
-        starts_at=now - timedelta(days=3), ends_at=now - timedelta(days=3, hours=1),
+        # `timedelta(days=3, hours=1)` is 3 days MINUS 1 hour, not plus - the keyword args share one
+        # sign - so it would put `ends_at` an hour BEFORE `starts_at` and `clean()` would (rightly)
+        # refuse the row. Build it from `now` and offset positively.
+        starts_at=now - timedelta(days=3, hours=2),
+        ends_at=now - timedelta(days=3),
         status="completed", recurrence="once",
     )
 
