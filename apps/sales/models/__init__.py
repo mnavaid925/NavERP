@@ -30,6 +30,12 @@ from .QuoteProposalCPQ.CPQQuotes import CPQQuote
 from .QuoteProposalCPQ.CPQQuoteLines import CPQQuoteLine
 from .QuoteProposalCPQ.ProductBundles import ProductBundleOption
 from .QuoteProposalCPQ.QuoteApprovalRules import QuoteApprovalRule
+# 8.6 Order Management. These EXTEND scm.SalesOrder (owned by SCM 4.5) by FK — none of them
+# is a second order master. See the package docstring for the full L36/L37 ruling.
+from .OrderManagement.OrderAmendments import OrderAmendment, OrderAmendmentLine
+from .OrderManagement.OrderHolds import OrderHold
+from .OrderManagement.OrderValidationRules import OrderValidationRule
+from .OrderManagement.RevenueSchedules import PerformanceObligation, RevenueSchedule
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
@@ -42,6 +48,9 @@ __all__ = [
     "WinLossReason", "OpportunityOutcome",
     "ForecastPeriod", "ForecastSubmission", "ForecastAdjustment", "ForecastScenario",
     "CPQQuote", "CPQQuoteLine", "ProductBundleOption", "QuoteApprovalRule",
+    # 8.6 Order Management
+    "OrderValidationRule", "OrderHold", "OrderAmendment", "OrderAmendmentLine",
+    "RevenueSchedule", "PerformanceObligation",
 ]
 
 
