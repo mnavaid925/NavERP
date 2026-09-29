@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% comment %}
+  Revenue Schedules — the 8.6 ASC 606 register.
+
+  Every badge keys on the model's EXACT choice value with an {% else %} fallback to
+  get_<field>_display (L33). Only badge-green/red/amber/info/muted/slate exist in theme.css;
+  badge-success/warning/danger do NOT and render unstyled.
+
+  EVERY money figure in this table is a @property on the model, read live. None of them is a
+  column, so none of them can be stale — and equally, none of them can be edited here. The stats
+  strip is summed in PYTHON in the view, never with aggregate("Sum") on a Decimal, which is the
+  SQLite integer-division trap.
+
+  The Delete button is only offered on a draft or active schedule. A complete or void schedule is
+  a permanent record of a revenue position somebody reported, and the view refuses the delete
+  with exactly the reason shown here (4.11: a button that errors on click is worse than not
+  offering it).
+
+  The confirm() below names {{ obj.number }} — the SYSTEM-assigned RVS- document number — and
+  never {{ obj.notes }}, which is free text an author typed (L42).
+{% endcomment %}
+{% block title %}Revenue Schedules{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Revenue Schedules</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Order Management</span><span class="sep">&rsaquo;</span><span>Revenue</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:revenue_schedule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Open revenue schedule</a>
+  </div>
+</div>
+
+{% comment %}
+  Every figure below is DERIVED on read, not stored. The label says so on the card itself,
+  because a number that looks like a column and is not needs telling — a user who assumes it can
+  be edited here is a user who will file a bug about why it will not save.
+{% endcomment %}
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total schedules</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="play"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.overdue %}orange{% else %}slate{% endif %}"><i data-lucide="clock-alert"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="file-text"></i></div><div class="stat-value">{{ stats.contract_value }}</div><div class="stat-label">Contract value (derived)</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ stats.recognized }}</div><div class="stat-label">Recognised (derived)</div></div>
+  <div class="stat-card"><div class="stat-icon amber"><i data-lucide="pause"></i></div><div class="stat-value">{{ stats.deferred }}</div><div class="stat-label">Deferred (derived)</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="rvs-search">Search</label>
+        <input id="rvs-search" name="q" value="{{ q }}" class="form-input" placeholder="Schedule number, notes, or order number">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="rvs-method">Method</label>
+        <select id="rvs-method" name="method" class="form-select">
+          <option value="">All methods</option>
+          {% for value, label in method_choices %}<option value="{{ value }}"{% if method == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="rvs-status">Status</label>
+        <select id="rvs-status" name="status" class="form-select">
+          <option value="">All statuses</option>
+          {% for value, label in status_choices %}<option value="{{ value }}"{% if status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="rvs-standard">Standard</label>
+        <select id="rvs-standard" name="compliance_standard" class="form-select">
+          <option value="">All standards</option>
+          {% for value, label in compliance_standard_choices %}<option value="{{ value }}"{% if compliance_standard == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="rvs-period">Fiscal period</label>
+        <select id="rvs-period" name="fiscal_period" class="form-select">
+          <option value="">All periods</option>
+          {% for period in fiscal_periods %}<option value="{{ period.pk|stringformat:"d" }}"{% if fiscal_period == period.pk|stringformat:"d" %} selected{% endif %}>{{ period.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="rvs-order">Order</label>
+        <select id="rvs-order" name="sales_order" class="form-select">
+          <option value="">All orders</option>
+          {% for order in sales_orders %}<option value="{{ order.pk|stringformat:"d" }}"{% if sales_order == order.pk|stringformat:"d" %} selected{% endif %}>{{ order.number }} &middot; {{ order.customer.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="align-self:flex-end;">
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Revenue register</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Schedule</th><th>Order</th><th>Standard</th><th>Method</th><th>Status</th><th>Contract / Recognised</th><th>Progress</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in schedules %}
+        <tr>
+          <td>
+            <a href="{% url 'sales:revenue_schedule_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            <div class="text-muted">{{ obj.get_fiscal_period|default_if_none:"No period" }} &middot; {{ obj.created_at|date:"M d, Y" }}</div>
+          </td>
+          <td>
+            {% if obj.sales_order %}
+              <a href="{% url 'scm:salesorder_detail' obj.sales_order.pk %}" class="fw-600">{{ obj.sales_order.number }}</a>
+              <div class="text-muted">{{ obj.sales_order.customer.name }}</div>
+            {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+          </td>
+          <td><span class="badge badge-slate">{{ obj.get_compliance_standard_display }}</span></td>
+          <td>{% if obj.method == "point_in_time" %}<span class="badge badge-info">{{ obj.get_method_display }}</span>{% elif obj.method == "over_time" %}<span class="badge badge-green">{{ obj.get_method_display }}</span>{% elif obj.method == "milestone" %}<span class="badge badge-amber">{{ obj.get_method_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_method_display }}</span>{% endif %}</td>
+          <td>{% if obj.status == "draft" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% elif obj.status == "active" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == "complete" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% elif obj.status == "void" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
+          <td>
+            {% comment %}
+              Two DERIVED @property values, read live. The progress cell is the third: a
+              PYTHON-computed percentage, because the F()-expression version integer-divides on
+              SQLite and reports 66 where the truth is 66.67.
+            {% endcomment %}
+            <div class="fw-600">{{ obj.contract_amount }}</div>
+            <div class="text-muted">{{ obj.recognized_amount }} recognised</div>
+          </td>
+          <td>
+            {% if obj.is_overdue %}
+              <span class="badge badge-amber">{{ obj.days_overdue }}d late</span>
+            {% elif obj.is_unbalanced %}
+              <span class="badge badge-amber">{{ obj.allocation_pct_total }}% allocated</span>
+            {% endif %}
+            <div class="text-muted">{{ obj.recognition_progress_pct }}%</div>
+          </td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:revenue_schedule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              {% if obj.is_editable %}
+                <a href="{% url 'sales:revenue_schedule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              {% endif %}
+              {% if obj.status == "draft" or obj.status == "active" %}
+              <form method="post" action="{% url 'sales:revenue_schedule_delete' obj.pk %}" onsubmit="return confirm('Delete revenue schedule {{ obj.number }}? This cannot be undone.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8"><div class="empty-state"><i data-lucide="file-text"></i><h3>No revenue schedules</h3><p>No revenue schedule has been opened against an order in this workspace. A schedule is how the app states, under ASC 606, which part of a contract has been earned.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
+
