@@ -101,15 +101,22 @@ class OrderAmendment(TenantNumbered):
     NUMBER_PREFIX = "AMD"
 
     #: The KIND of change, not its magnitude. ``quantity`` / ``price`` / ``add_line`` /
-    #: ``remove_line`` each rewrite line figures; ``cancel`` / ``close`` are order-level moves
-    #: delegated to 4.5's own logic. The VALUE is what a badge or a fixture compares against.
+    #: ``remove_line`` each rewrite line figures; ``cancel`` is the one order-level move, and it
+    #: is delegated to 4.5's own logic. The VALUE is what a badge or a fixture compares against.
+    #:
+    #: There is deliberately NO ``close``. 4.5's ``salesorder_close`` accepts exactly one status
+    #: (``invoiced``), and ``invoiced`` is deliberately not in ``AMENDABLE_STATUSES``, so a Close
+    #: amendment could never satisfy both rules at once. A dropdown choice that always refuses is
+    #: worse than no choice — it advertises a verb that cannot fire. Closing stays 4.5's own
+    #: action on the order page, once the invoice is settled. Do not re-add ``close`` without also
+    #: revisiting ``AMENDABLE_STATUSES``, and do not widen that tuple to reach it: that would make
+    #: every other amendment eligible against an invoiced order too.
     CHANGE_TYPE_CHOICES = [
         ("quantity", "Quantity Change"),
         ("price", "Price Change"),
         ("add_line", "Add Line"),
         ("remove_line", "Remove Line"),
         ("cancel", "Cancel Order"),
-        ("close", "Close Order"),
     ]
     STATUS_CHOICES = [
         ("draft", "Draft"),
@@ -151,6 +158,12 @@ class OrderAmendment(TenantNumbered):
                                    blank=True, related_name="order_amendments_decided",
                                    editable=False)
     decided_at = models.DateTimeField(null=True, blank=True, editable=False)
+    # The approver's own justification, written by the decision VERB. Deliberately NOT editable
+    # on a ModelForm: an approval reason that a later form edit could rewrite is not evidence of
+    # why the approver said yes (L22). Kept separate from ``notes`` (the change order's own notes)
+    # so a rejection's reasoning is still legible after the amendment is applied and the notes are
+    # appended to.
+    decision_note = models.TextField(blank=True)
     applied_at = models.DateTimeField(null=True, blank=True, editable=False)
     applied_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
                                    blank=True, related_name="order_amendments_applied",
@@ -349,8 +362,10 @@ class OrderAmendment(TenantNumbered):
           cancelled since the approver read it.
         * ``change_type="cancel"`` refuses while ``has_active_allocations()`` and then delegates
           to 4.5's own cancellation, rather than writing the status itself.
-        * ``change_type="close"`` always refuses: closing is 4.5's own verb on the order page,
-          and the only status it accepts is not amendable. Said in full at the check below.
+
+        There is no ``close`` branch because there is no ``close`` choice — see
+        ``CHANGE_TYPE_CHOICES`` for why a Close amendment could never be applied and why
+        removing the choice beats shipping a dropdown entry that always refuses.
 
         Totals and allocation status are recomputed by 4.5's own methods — never by arithmetic
         re-implemented here. Returns a summary dict for the view's message and raises
@@ -364,21 +379,6 @@ class OrderAmendment(TenantNumbered):
             )
         if locked_order is None or locked_order.pk != self.sales_order_id:
             raise ValidationError("The locked order does not match this amendment's order.")
-        if self.change_type == "close":
-            # 4.5's `salesorder_close` is the only writer of a closed order and it accepts
-            # exactly one status — ``invoiced``. That status is deliberately NOT in the frozen
-            # ``AMENDABLE_STATUSES`` (an invoiced order is terminal, not amendable), so a Close
-            # amendment can never satisfy both rules at once. Stated plainly here rather than
-            # left as a branch that silently refuses with a misleading message: the close path
-            # is SCM's own verb, on the order page, once the invoice is settled. Widening
-            # ``AMENDABLE_STATUSES`` to make this reachable would make every other amendment
-            # eligible against an invoiced order too, which is exactly what the tuple exists
-            # to prevent.
-            raise ValidationError(
-                f"Order {locked_order.number} cannot be closed through a change order. Closing is "
-                "SCM's own action, on the order page, once the invoice is settled — and an "
-                "invoiced order is not amendable."
-            )
         if locked_order.status not in self.AMENDABLE_STATUSES:
             raise ValidationError(
                 f"Order {locked_order.number} is {locked_order.get_status_display().lower()}, "
@@ -408,7 +408,6 @@ class OrderAmendment(TenantNumbered):
 
         return {
             "cancelled": self.change_type == "cancel",
-            "closed": self.change_type == "close",
             "lines": len(entries),
             "order": locked_order.number,
         }
