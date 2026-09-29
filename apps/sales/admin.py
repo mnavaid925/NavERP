@@ -25,6 +25,13 @@ from .models import (
     CPQQuoteLine,
     ProductBundleOption,
     QuoteApprovalRule,
+    # 8.6 Order Management
+    OrderValidationRule,
+    OrderHold,
+    OrderAmendment,
+    OrderAmendmentLine,
+    RevenueSchedule,
+    PerformanceObligation,
 )
 
 
@@ -432,6 +439,101 @@ class QuoteApprovalRuleAdmin(admin.ModelAdmin):
     list_filter = ("rule_type", "approver_role", "is_active", "tenant")
     search_fields = ("number", "name", "description")
     readonly_fields = ("tenant", "number", "created_at", "updated_at")
+
+
+# ---------------------------------------------------------------- 8.6 Order Management
+#
+# 8.6 EXTENDS `scm.SalesOrder` (owned by SCM 4.5) by FK. None of the models below is a second
+# order master, and none of them posts a JournalEntry (L29). The four REGISTERED admins are the
+# four numbered headers; the two tenant-less children get inlines on their parent instead of
+# registrations of their own, because a child row is never edited from the admin list.
+
+
+@admin.register(OrderValidationRule)
+class OrderValidationRuleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "rule_type", "severity", "active_on", "party", "priority", "is_active", "tenant")
+    list_filter = ("rule_type", "severity", "active_on", "is_active", "tenant")
+    search_fields = ("number", "name", "description", "party__name")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("party", "tenant")
+    raw_id_fields = ("party",)
+
+
+@admin.register(OrderHold)
+class OrderHoldAdmin(admin.ModelAdmin):
+    list_display = ("number", "sales_order", "hold_type", "severity", "status", "raised_at", "raised_by", "checked_out_by", "tenant")
+    list_filter = ("hold_type", "severity", "status", "tenant")
+    search_fields = ("number", "reason", "clear_note", "sales_order__number", "party__name")
+    # status / severity / evaluation_snapshot and EVERY lifecycle stamp are written by a named
+    # POST verb, never by hand. An editable snapshot from /admin/ would be a forgeable record of
+    # why an order was held (L22), and an editable status would bypass the checkout guards.
+    readonly_fields = (
+        "tenant", "number", "status", "severity", "evaluation_snapshot",
+        "raised_at", "raised_by", "checked_out_by", "checked_out_at",
+        "cleared_by", "cleared_at", "superseded_by",
+        "created_at", "updated_at",
+    )
+    list_select_related = ("sales_order", "rule", "party", "raised_by", "checked_out_by", "cleared_by", "tenant")
+    raw_id_fields = ("sales_order", "rule", "party", "raised_by", "checked_out_by", "cleared_by", "superseded_by")
+
+
+class OrderAmendmentLineInline(admin.TabularInline):
+    model = OrderAmendmentLine
+    extra = 0
+    # The child is TENANT-LESS (reached via amendment.tenant), matching the scm sibling
+    # convention. sales_order_line is nullable + SET_NULL because an `add_line` amendment has no
+    # original line — that is the field's meaning, not a data-integrity gap.
+    fields = ("sales_order_line", "operation", "new_quantity", "new_unit_price", "note")
+    raw_id_fields = ("sales_order_line",)
+
+
+@admin.register(OrderAmendment)
+class OrderAmendmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "sales_order", "change_type", "status", "requested_by", "requested_at", "decided_by", "applied_at", "tenant")
+    list_filter = ("change_type", "status", "tenant")
+    search_fields = ("number", "reason", "notes", "decision_note", "sales_order__number")
+    # impact_snapshot is the frozen pre-approval impact read-out and the decision stamps are
+    # written by their own verbs; both stay read-only here.
+    readonly_fields = (
+        "tenant", "number", "status", "impact_snapshot",
+        "requested_by", "requested_at", "decided_by", "decided_at",
+        "applied_by", "applied_at",
+        "created_at", "updated_at",
+    )
+    list_select_related = ("sales_order", "requested_by", "decided_by", "applied_by", "tenant")
+    raw_id_fields = ("sales_order", "document", "requested_by", "decided_by", "applied_by")
+    inlines = [OrderAmendmentLineInline]
+
+
+class PerformanceObligationInline(admin.TabularInline):
+    model = PerformanceObligation
+    extra = 0
+    # allocated_amount / recognized_amount are the ONLY stored money columns in 8.6, both
+    # editable=False, and recompute() is their only writer. They are NOT in `fields`, so the
+    # admin cannot mint a recognised figure that the schedule never derived.
+    fields = (
+        "sales_order_line", "item", "obligation_type", "description",
+        "allocation_pct", "recognition_method", "recognize_on",
+        "milestone_label", "evidence_reference",
+    )
+    raw_id_fields = ("sales_order_line", "item")
+
+
+@admin.register(RevenueSchedule)
+class RevenueScheduleAdmin(admin.ModelAdmin):
+    list_display = ("number", "sales_order", "status", "method", "compliance_standard", "fiscal_period", "contract_amount", "recognized_amount", "deferred_amount", "tenant")
+    list_filter = ("status", "method", "compliance_standard", "tenant")
+    search_fields = ("number", "notes", "sales_order__number")
+    # contract_amount / allocated / recognized / deferred are DERIVED properties, not columns, so
+    # there is nothing here to make editable — which is the point. journal_entry is a
+    # reference-only FK: 8.6 posts nothing (L29).
+    readonly_fields = (
+        "tenant", "number", "journal_entry",
+        "created_at", "updated_at",
+    )
+    list_select_related = ("sales_order", "fiscal_period", "journal_entry", "tenant")
+    raw_id_fields = ("sales_order", "fiscal_period", "journal_entry")
+    inlines = [PerformanceObligationInline]
 
 
 
