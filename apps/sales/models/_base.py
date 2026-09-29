@@ -37,4 +37,15 @@ class TenantNumbered(TenantOwned):
                         return super().save(*args, **kwargs)
                 except IntegrityError:
                     self.number = ""
+            # Every attempt collided. Previously this fell through to `super().save()`, which
+            # PERSISTED the row with `number == ""` -- a numbered document with no number, and
+            # a second one silently violates the (tenant, number) unique constraint that the
+            # whole prefix system exists to provide. Five collisions mean a concurrent writer is
+            # winning the race every time, so refusing is the only honest outcome: the caller
+            # learns the row was not written instead of finding an unnumbered document later.
+            raise IntegrityError(
+                f"Could not allocate a unique {self.NUMBER_PREFIX} number for "
+                f"{type(self).__name__} after 5 attempts. Another writer is holding the "
+                f"sequence; retry, or pass an explicit `number=`."
+            )
         return super().save(*args, **kwargs)
