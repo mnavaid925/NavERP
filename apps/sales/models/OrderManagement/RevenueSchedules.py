@@ -65,6 +65,7 @@ Two validation traps are handled explicitly, both the 0.20 close-out lesson:
 * ``PerformanceObligation.clean()`` is keyed on ``NON_FIELD_ERRORS`` throughout: its form
   excludes ``schedule`` (set by the parent view), both money columns and the timestamps.
 """
+from datetime import date
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -80,9 +81,15 @@ ZERO = Decimal("0")
 CENT = Decimal("0.01")
 ONE_HUNDRED = Decimal("100")
 
-#: Sorts an obligation with no ``recognize_on`` behind every dated one. ``date.min`` would do,
-#: but naming it means the ordering rule is visible at the call site that depends on it.
-UNSCHEDULED = (1, 1, 1)
+#: Sorts an obligation with no ``recognize_on`` BEHIND every dated one, so an undated row can
+#: never consume the shared recognition budget ahead of a dated one. This must be a real
+#: ``date``: the sort key pairs it with ``recognize_on`` itself, and Python compares the two
+#: directly, so a tuple sentinel raises ``TypeError: '<' not supported between instances of
+#: 'tuple' and 'datetime.date'`` the moment a schedule mixes dated and undated obligations —
+#: which the form explicitly invites ("Leave blank only if the performance has no date yet").
+#: ``date.max`` rather than ``date.min``: the undated rows sort last, and they are never
+#: recognised anyway (the loop below skips them), so the ordering only matters for budget order.
+UNSCHEDULED = date.max
 
 
 class RevenueSchedule(TenantNumbered):
