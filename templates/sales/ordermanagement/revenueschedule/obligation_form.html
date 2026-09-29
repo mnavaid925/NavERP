@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% comment %}
+  Add / edit ONE performance obligation. A SECONDARY-ACTION page living inside the entity
+  folder, not a flat revenueschedule_obligation_form.html.
+
+  Reached two ways: the Add button on the schedule's detail page (a bound form, empty), and an
+  invalid POST, which re-renders HERE with the errors attached and the schedule, its order and the
+  order's own lines still in context — so an author who mistypes a percentage comes back to the
+  screen they were on, not to a bare form.
+
+  The order-lines table is the point of showing the current figures beside the dropdown: the
+  author is allocating a share of a contract against the lines of THIS order and needs to see what
+  each one says now before saying what it is worth.
+
+  There is deliberately no money field. `allocated_amount` and `recognized_amount` are
+  `editable=False` and are written by RevenueSchedule.recompute() in Python; typing them here
+  would be a person stating the answer the schedule exists to work out. `schedule` is not on the
+  form either — it comes from the URL, never from the POST body, so a crafted submit cannot
+  attach a promise to somebody else's contract.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Obligation{% else %}Add Obligation{% endif %} &middot; {{ schedule.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Obligation{% else %}Add Obligation{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:revenue_schedule_list' %}">Revenue Schedules</a><span class="sep">&rsaquo;</span><a href="{% url 'sales:revenue_schedule_detail' schedule.pk %}">{{ schedule.number }}</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit obligation{% else %}New obligation{% endif %}</span></div>
+  </div>
+  <a href="{% url 'sales:revenue_schedule_detail' schedule.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to schedule</a>
+</div>
+
+<div class="layout-2col">
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Performance obligation</h2></div>
+      <div class="card-body">
+        <p class="text-muted">
+          One distinct promise inside the contract. Give it a share of the contract price and, when
+          the performance is due, the date it should be recognised on. Nothing is recognised by
+          saving this &mdash; the figures move when somebody presses Recognise on an active
+          schedule.
+        </p>
+        <form method="post" action="{% if is_edit %}{% url 'sales:revenue_schedule_obligation_edit' schedule.pk obligation.pk %}{% else %}{% url 'sales:revenue_schedule_obligation_add' schedule.pk %}{% endif %}" novalidate>
+          {% csrf_token %}
+          {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+          <div class="form-grid">
+            {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save obligation{% else %}Add obligation{% endif %}</button>
+            <a href="{% url 'sales:revenue_schedule_detail' schedule.pk %}" class="btn btn-outline">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>How the three figures relate</h2></div>
+      <div class="card-body">
+        {% comment %}
+          The same explanation as on the schedule form, at the level of one obligation. A user
+          who cannot see WHY there is no amount field will ask for one.
+        {% endcomment %}
+        <table class="table">
+          <thead><tr><th>Figure</th><th>Where it comes from</th></tr></thead>
+          <tbody>
+            <tr><td class="fw-600">Allocated</td><td>This obligation's share of the contract value, worked out in Python by <code>recompute()</code> and rounded to cents. Not a field, and not editable.</td></tr>
+            <tr><td class="fw-600">Recognised</td><td>Written by <code>recompute()</code> once the recognition date has passed, oldest obligation first, spending a shared budget of the contract value.</td></tr>
+            <tr><td class="fw-600">Remaining</td><td>Allocated less recognised, read live. It is what "overdue" is measured against &mdash; a passed date with nothing left to recognise is history, not lateness.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Contract {{ schedule.contract_amount }}{% if order %} &middot; order {{ order.number }}{% endif %}</h2></div>
+      <div class="card-body">
+        <p class="text-muted">
+          The contract value is the order's total, read live from SCM. This schedule allocates
+          <strong>{{ schedule.allocation_pct_total }}%</strong> across its obligations &mdash; so
+          the share you choose here should bring that to 100.
+        </p>
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Allocated so far</dt><dd>{{ schedule.allocated_amount }}</dd></div>
+          <div class="detail-item"><dt>Recognised so far</dt><dd>{{ schedule.recognized_amount }}</dd></div>
+          <div class="detail-item"><dt>Deferred</dt><dd>{{ schedule.deferred_amount }}</dd></div>
+          <div class="detail-item"><dt>Status</dt><dd>{{ schedule.get_status_display }}</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Order lines</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Item</th><th>Quantity</th><th>Unit price</th></tr></thead>
+          <tbody>
+            {% for line in order_lines %}
+            <tr>
+              <td>{% if line.item_id %}{{ line.item.sku }}{% else %}{{ line.description|default_if_none:"unmapped line" }}{% endif %}</td>
+              <td>{{ line.quantity_ordered }}</td>
+              <td>{{ line.unit_price }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3"><p class="text-muted" style="padding:1rem;">This order has no lines. An obligation can still be recorded against a description alone.</p></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
