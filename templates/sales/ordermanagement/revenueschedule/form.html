@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% comment %}
+  Create / edit one RevenueSchedule. One template serves both: `is_edit` and `obj` are pinned on
+  BOTH create and edit (obj is None on create), so the Back link and the Cancel target are the
+  only two things that differ.
+
+  The six fields below are the WHOLE authorable surface of a schedule, and one of them —
+  `status` — is the single authorable status in 8.6. A schedule is drafted, activated and voided
+  by a person, not by a workflow verb, so putting the picker here is the point: going ACTIVE is
+  the act that authorises revenue recognition, and `recompute()` refuses on anything else.
+
+  There is no money field here and there cannot be one. The contract value, the allocation, the
+  recognised figure and the deferred balance are all @property values worked out from the order
+  and the obligations. They are not columns, so they are not on this form, and the second table
+  below says so for every figure a user is likely to go looking for.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Revenue Schedule{% else %}Open Revenue Schedule{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Revenue Schedule{% else %}Open Revenue Schedule{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:revenue_schedule_list' %}">Revenue Schedules</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:revenue_schedule_detail' obj.pk %}{% else %}{% url 'sales:revenue_schedule_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      A revenue schedule states, under ASC 606, which part of a customer order has been earned and
+      which part is still being held. The order itself belongs to SCM &mdash; this record points at
+      it, reads its total, and writes nothing on it.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save schedule{% else %}Open schedule{% endif %}</button>
+        <a href="{% if is_edit %}{% url 'sales:revenue_schedule_detail' obj.pk %}{% else %}{% url 'sales:revenue_schedule_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>What the server decides</h2></div>
+  <div class="card-body">
+    {% comment %}
+      Printed rather than implied, because every one of these is a field the form does NOT offer —
+      and a user who cannot see why is a user who asks for them to be added.
+    {% endcomment %}
+    <table class="table">
+      <thead><tr><th>Figure or field</th><th>Why it is not on this form</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-600">Contract value</td><td>Derived from the order's total, read live from SCM 4.5. It is not a column here, so it cannot be typed &mdash; and it moves by itself the moment an amendment re-prices the order. A typed copy would be a snapshot of another module's arithmetic that silently disagreed with it.</td></tr>
+        <tr><td class="fw-600">Allocated amount</td><td>Worked out in Python by <code>recompute()</code> from each obligation's share of the contract value. <code>editable=False</code>, off every form, and written by that one method only.</td></tr>
+        <tr><td class="fw-600">Recognised amount</td><td>Also written only by <code>recompute()</code>, and only as far as the passed recognition dates allow. A person who could type it would be asserting the answer the schedule exists to work out.</td></tr>
+        <tr><td class="fw-600">Deferred / contract asset / contract liability</td><td>All three are arithmetic on the two above. None is stored, so there is nothing to save and nothing that can fall out of date.</td></tr>
+        <tr><td class="fw-600">Journal entry</td><td>Reference-only and <code>editable=False</code>. 8.6 posts NOTHING (L29) &mdash; it states the revenue position and the ledger is another module's job. A form carrying this would let a clerk record that revenue was posted when nothing was posted.</td></tr>
+        <tr><td class="fw-600">Performance obligations</td><td>Added on the schedule's own page, one at a time, through the parent. An obligation that reached its schedule from a form field would be a way to attach a promise to somebody else's contract.</td></tr>
+        <tr><td class="fw-600">Number</td><td>System-assigned <code>RVS-</code> at save time, and it is what every confirm dialog and audit row names.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if is_edit and obj %}
+<div class="card">
+  <div class="card-header"><h2>Where this schedule stands</h2></div>
+  <div class="card-body">
+    <p class="text-muted">Read live from the schedule's obligations. Every one of these is derived, so none of them is saved by this form.</p>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Contract value</dt><dd>{{ obj.contract_amount }}</dd></div>
+      <div class="detail-item"><dt>Allocated</dt><dd>{{ obj.allocated_amount }}</dd></div>
+      <div class="detail-item"><dt>Recognised</dt><dd>{{ obj.recognized_amount }}</dd></div>
+      <div class="detail-item"><dt>Deferred</dt><dd>{{ obj.deferred_amount }}</dd></div>
+      <div class="detail-item"><dt>Progress</dt><dd>{{ obj.recognition_progress_pct }}%</dd></div>
+      <div class="detail-item"><dt>Allocation</dt><dd>{{ obj.allocation_pct_total }}%{% if obj.is_unbalanced %} &mdash; not balanced{% endif %}</dd></div>
+    </dl>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
