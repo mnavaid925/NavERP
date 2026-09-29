@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% comment %}
+  Reorder Customers board — who is due to buy again, derived from their own order history.
+
+  8.6 BUILDS NO BASKET MODEL, no reorder-point table and no campaign entity. A stored "next order
+  due" is a column that is stale the moment an order is cancelled in SCM, and §2.5 rules that out.
+  So every figure here is derived in PYTHON on read, over the tenant's real order history.
+
+  THE KEY HONESTY ON THIS PAGE: a customer with ONE order has no cadence and therefore no
+  expected date. They still appear, with a real lifetime value and a real order count - "we have
+  sold to them once and never again" IS a finding - but their expected date reads "no cadence yet"
+  rather than a fabricated 30 days. Inventing a cadence from a single observation is the exact
+  error a stored days_open counter makes.
+
+  Cancelled orders are excluded from the maths. They are a commercial fact about the relationship
+  but not a PURCHASE, and averaging one into a cadence would tell the caller to ring a customer
+  whose last real order was much older than the maths says.
+{% endcomment %}
+{% block title %}Reorder Customers{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Reorder &amp; Renewal Watch</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Order Management</span><span class="sep">&rsaquo;</span><span>Reorder</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:renewals_due_board' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Renewals due</a>
+    <a href="{% url 'sales:order_history_board' %}" class="btn btn-outline"><i data-lucide="history"></i> Order history</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">DERIVED</span>
+      Every figure on this board is derived on read and nothing here is stored. Lifetime value is
+      the sum of 4.5's own order totals; the cadence is the average gap between a customer's
+      consecutive order dates; the expected date is that gap added to their last order.
+      <strong>8.6 builds no basket model and no reorder-point table</strong> &mdash; a stored "due
+      again" date goes stale the moment an order is cancelled in SCM.
+      Cancelled orders are excluded from the maths: they are a fact about the relationship but not
+      a purchase. &nbsp;As of <strong>{{ stats.as_of }}</strong>.
+    </p>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="users"></i></div><div class="stat-value">{{ stats.customers }}</div><div class="stat-label">Customers with history</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="phone-call"></i></div><div class="stat-value">{{ stats.reorderable }}</div><div class="stat-label">Due or overdue</div></div>
+  <div class="stat-card"><div class="stat-icon red"><i data-lucide="user-x"></i></div><div class="stat-value">{{ stats.lapsed }}</div><div class="stat-label">Lapsed</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="gem"></i></div><div class="stat-value">{{ lifetime_total }}</div><div class="stat-label">Lifetime value, all (derived)</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:280px;">
+        <label class="form-label" for="reo-search">Search</label>
+        <input id="reo-search" name="q" value="{{ q }}" class="form-input" placeholder="Customer name, or any order number they placed">
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:reorder_customers_board' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Customers to call, most overdue first</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Customer</th><th>Orders</th><th>Lifetime value</th><th>Cadence</th><th>Last order</th><th>Expected next</th><th>On time</th><th>Usually buys</th></tr></thead>
+      <tbody>
+        {% for row in customers %}
+        <tr>
+          <td>
+            {% comment %}
+              SalesOrder.customer is a non-null FK, so a row always has a party. The guard is for a
+              row read from a legacy import, not for the normal case.
+            {% endcomment %}
+            {% if row.party %}
+              <span class="fw-600">{{ row.party.name }}</span>
+            {% else %}
+              <span class="fw-600 text-muted">Customer unavailable</span>
+            {% endif %}
+          </td>
+          <td>{{ row.order_count }}</td>
+          <td>{{ row.lifetime_value }}</td>
+          <td>
+            {% comment %}
+              A NULL cadence reads as a sentence, not as a zero. "Every 0 days" would be a lie
+              about a customer with a single order, and "0" for an unmeasurable average is exactly
+              the fabricated figure this board refuses to invent.
+            {% endcomment %}
+            {% if row.avg_days_between is None %}
+              <span class="text-muted">No cadence yet</span>
+            {% else %}
+              every {{ row.avg_days_between }} day{{ row.avg_days_between|pluralize }}
+            {% endif %}
+          </td>
+          <td>{{ row.last_order_on|default_if_none:"-" }}</td>
+          <td>
+            {% if row.due_state == "lapsed" %}<span class="badge badge-red">{{ row.expected_order_on }} &mdash; lapsed</span>
+            {% elif row.due_state == "due" %}<span class="badge badge-amber">{{ row.expected_order_on }} &mdash; due</span>
+            {% elif row.due_state == "soon" %}<span class="badge badge-green">{{ row.expected_order_on }}</span>
+            {% else %}<span class="text-muted">No cadence yet</span>{% endif %}
+          </td>
+          <td>
+            {% comment %}
+              On-time is measured against the date the CUSTOMER was given - 4.5 promised_date where
+              it exists, requested_date otherwise. An order still in transit is not late yet.
+            {% endcomment %}
+            {% if row.on_time_pct is None %}
+              <span class="text-muted">Nothing delivered yet</span>
+            {% else %}
+              {{ row.on_time_pct }}%
+            {% endif %}
+          </td>
+          <td class="text-muted">{{ row.top_items|default:"no mapped items" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8"><div class="empty-state"><i data-lucide="users"></i><h3>No customers with order history</h3><p>Nobody in this workspace has a non-cancelled order yet, so there is no buying history to derive a cadence from. This board reads real orders; it does not store a reorder rule.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
