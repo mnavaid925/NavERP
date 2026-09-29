@@ -91,7 +91,7 @@ class TerritoryMember(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "user"], name="sales_tmember_tnt_user_idx"),
-            models.Index(fields=["tenant", "territory", "is_primary"], name="sales_tmember_tnt_terr_prim_idx"),
+            models.Index(fields=["tenant", "territory", "is_primary"], name="sales_tmember_tnt_terr_idx"),
         ]
 
     def _relation_belongs_to_tenant(self, field_name):
