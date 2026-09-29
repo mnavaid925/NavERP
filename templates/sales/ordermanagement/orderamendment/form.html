@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% comment %}
+  Create / edit one OrderAmendment. One template serves both: `is_edit` and `obj` are pinned on
+  BOTH create and edit (obj is None on create), so the Back link and the Cancel target are the
+  only two things that differ.
+
+  The five fields below are the WHOLE authorable surface. There is no status picker, no impact
+  box and no timestamp field: those are the difference between a change-order register and a
+  suggestion box, and the server owns all three (L22). The impact snapshot in particular is
+  frozen evidence written by the server at propose time — a clerk who could type "no impact"
+  into it would leave nothing to check.
+
+  Editing is limited to a still-open amendment. A withdrawn, rejected, applied or superseded
+  one is a closed document, and the view refuses the edit before this template is ever reached.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Order Amendment{% else %}Propose Order Amendment{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Order Amendment{% else %}Propose Order Amendment{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:order_amendment_list' %}">Order Amendments</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:order_amendment_detail' obj.pk %}{% else %}{% url 'sales:order_amendment_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      A change order proposes a move against a live customer order, and freezes what that move
+      would cost at the moment you save it. The order itself belongs to SCM &mdash; this record
+      points at it, records why, and is the only thing in the app that writes new quantities
+      and prices onto its lines.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save amendment{% else %}Propose amendment{% endif %}</button>
+        <a href="{% if is_edit %}{% url 'sales:order_amendment_detail' obj.pk %}{% else %}{% url 'sales:order_amendment_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>What the server decides</h2></div>
+  <div class="card-body">
+    {% comment %}
+      Printed rather than implied, because every one of these is a field the form does NOT
+      offer — and a user who cannot see why is a user who asks for them to be added.
+    {% endcomment %}
+    <table class="table">
+      <thead><tr><th>Field</th><th>Why it is not on this form</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-600">Status</td><td>Workflow. A proposal starts as a draft, and only the Decide, Apply and Withdraw verbs move it &mdash; an edit form that could flip a withdrawn amendment back to approved would make the audit trail a suggestion.</td></tr>
+        <tr><td class="fw-600">Impact snapshot</td><td>Frozen evidence, written by the server when you save and re-frozen whenever a proposed line changes: what each order line was, what the amendment proposes, and how far the order total moves. A snapshot typed by hand would be the account of the cost written by the person the cost happens to.</td></tr>
+        <tr><td class="fw-600">Requested / decided / applied</td><td>Action-stamped. Each is written by exactly one named button, and the actor is always the signed-in user &mdash; never a name typed into a form.</td></tr>
+        <tr><td class="fw-600">Proposed lines</td><td>Added on the amendment\'s own page, one at a time, through the parent. A line that reached its parent from a form field would be a way to append a change to somebody else\'s change order.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
