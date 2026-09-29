@@ -316,7 +316,12 @@ orders/backorders/<int:allocation_pk>/resolve/ -> order_backorder_resolve
 **`RevenueSchedules.py` (9):** `orders/revenue-schedules/` · `…/create/` · `…/<int:pk>/` · `…/<int:pk>/edit/` · `…/<int:pk>/delete/` · `…/<int:pk>/obligations/add/` · `…/<int:pk>/obligations/<int:obligation_pk>/edit/` · `…/<int:pk>/obligations/<int:obligation_pk>/delete/` · `…/<int:pk>/recognize/`
 ---
 
-## 6. Templates — 24 files under `templates/sales/ordermanagement/`
+## 6. Templates — 23 files under `templates/sales/ordermanagement/`
+
+> **CORRECTED 2026-09-29 — this heading said "24 files". The enumerated list below totals 23**
+> (3 + 3 + 5 + 4 + 8 = 23), and 23 is what the build ships. The count in the heading was
+> simply wrong; the list was always right, and every file on it exists. Do not read the gap as a
+> missing template.
 
 - `ordervalidationrule/` — `list.html` · `detail.html` · `form.html`
 - `orderhold/` — `list.html` · `detail.html` · `form.html`
