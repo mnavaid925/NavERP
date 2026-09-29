@@ -536,6 +536,7 @@ class OrderAmendment(TenantNumbered):
         # ``parsed_impact`` promises.
         if not isinstance(self.impact_snapshot, dict):
             self.impact_snapshot = {}
+        return super().save(*args, **kwargs)
 
 
 class OrderAmendmentLine(models.Model):
