@@ -1399,11 +1399,21 @@ across four lanes, with 49 pinned URL names, 8 form field sets and all 11 CHOICE
 against the contract. `seed_sales` stays idempotent. See `.claude/tasks/contract-sales-8.6.md` for
 the frozen build contract and `.claude/tasks/review-sales-8.6.md` for the six-reviewer record.
 
-One pre-existing defect surfaced during the QA pass and is filed **separately** rather than fixed
-here: a whole-database `seed_sales` can abort on a later tenant with `ValidationError: ["That
-idempotency key was already used for different enrichment evidence."]` from
-`apps/sales/services.py` `create_enrichment_event` (8.3-era code, reproducible with no 8.6 file
-involved). 8.6's own seeder block is byte-stable; widening this changeset to repair an unrelated
-8.3 bug would have been the wrong call.
+One pre-existing defect surfaced during the QA pass and was initially filed separately rather than
+fixed inside the 8.6 changeset: a whole-database `seed_sales` aborted on a later tenant with
+`ValidationError: ["That idempotency key was already used for different enrichment evidence."]`
+from `apps/sales/services.py` `create_enrichment_event`. It has since been fixed. The enrichment
+service was **right** to refuse; the seeder was wrong to ask — `_enrichment_request_payload`
+includes `requested_by_id` and compares it, but the seeder resolved its owner with an **unordered**
+`User.objects.filter(...).first()`. Once a tenant gained a second admin the row `.first()` returned
+could change, so the next run replayed an identical idempotency key with a different requester. The
+seeder now resolves the owner with `order_by("pk")`, and `manage.py seed_sales` has been run twice
+end-to-end against a live multi-tenant database to prove it.
+
+That investigation also surfaced a second defect in the numbering base: `TenantNumbered.save()`
+retried a number allocation five times and, on exhaustion, **fell through and persisted the row
+with `number=''`** — silently defeating the `(tenant, number)` uniqueness the whole prefix system
+exists to provide. It now raises. Both fixes are covered by regression tests that were
+**mutation-checked**: each fix reverted in place, its test confirmed to fail, then restored.
 
 ---
