@@ -998,7 +998,12 @@ def _top_items(customer_orders, limit=3):
     counts = {}
     rows = (
         SalesOrderLine.objects.filter(sales_order_id__in=order_ids, item__isnull=False)
-        .values_list("sales_order_line__sales_order_id", "item__sku", "quantity_ordered")
+        # Grouped on the order's OWN column. The earlier version walked
+        # ``sales_order_line__sales_order_id`` — a path that only exists from
+        # ``SalesOrderAllocation``, not from the line itself — which raised FieldError and
+        # 500'd this board on every render. The line already carries ``sales_order_id``; there is
+        # no join to make here.
+        .values_list("sales_order_id", "item__sku", "quantity_ordered")
     )
     for _order_id, sku, quantity in rows:
         key = sku or "unnamed"
