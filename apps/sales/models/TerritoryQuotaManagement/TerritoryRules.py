@@ -147,7 +147,9 @@ class TerritoryRule(TenantNumbered):
     match_mode = models.CharField(max_length=8, choices=MATCH_MODE_CHOICES, default="all")
     conditions = models.JSONField(default=list, blank=True)
     is_catch_all = models.BooleanField(default=False)
-    alignment_type = models.CharField(max_length=8, choices=ALIGNMENT_TYPE_CHOICES, default="primary")
+    # max_length=9 fits the longest choice value, "secondary" (9). An 8 here passes every test that
+    # does not run Django's fields.E009, and then fails at the database.
+    alignment_type = models.CharField(max_length=9, choices=ALIGNMENT_TYPE_CHOICES, default="primary")
     assignment_scope = models.CharField(max_length=10, choices=ASSIGNMENT_SCOPE_CHOICES, default="exact")
     target_territory = models.ForeignKey(
         "crm.Territory",
