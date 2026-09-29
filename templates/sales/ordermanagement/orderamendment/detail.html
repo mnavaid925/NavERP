@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% comment %}
+  Order Amendment detail — the page an approver actually reads.
+
+  Every action button is shown only where the SAME guard in the view will let it through, and
+  the withheld ones say why in prose (4.11: a button that errors on click is worse than not
+  offering it). can_decide / can_apply / can_withdraw are computed in the view, not here, so
+  the page and the verb cannot disagree.
+
+  The Impact snapshot panel renders the PARSED dict (`impact`, never the raw column), so a
+  malformed blob is an empty panel rather than a JSON string dumped into the page — or a 500
+  on the one screen a user needs when a customer disputes the change.
+
+  The confirm() calls name {{ amendment.number }} — the SYSTEM-assigned AMD- document number —
+  and never {{ amendment.reason }}, which is free text an author typed (L42).
+{% endcomment %}
+{% block title %}{{ amendment.number }} &middot; Order Amendment{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ amendment.number }} &middot; Order Amendment</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:order_amendment_list' %}">Order Amendments</a><span class="sep">&rsaquo;</span><span>{{ amendment.number }}</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:order_amendment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+    <a href="{% url 'sales:order_amendment_impact' amendment.pk %}" class="btn btn-outline"><i data-lucide="gauge"></i> Impact report</a>
+    {% if amendment.is_open and amendment.status != "approved" %}
+      <a href="{% url 'sales:order_amendment_edit' amendment.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="hash"></i></div><div class="stat-value">{{ amendment.number }}</div><div class="stat-label">Amendment number</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="file-diff"></i></div><div class="stat-value">{{ amendment.get_change_type_display }}</div><div class="stat-label">Change type</div></div>
+  <div class="stat-card"><div class="stat-icon {% if amendment.status == 'approved' or amendment.status == 'applied' %}green{% elif amendment.status == 'rejected' %}red{% else %}orange{% endif %}"><i data-lucide="list-checks"></i></div><div class="stat-value">{{ amendment.get_status_display }}</div><div class="stat-label">Status</div></div>
+  <div class="stat-card"><div class="stat-icon {% if impact.delta_total %}blue{% else %}slate{% endif %}"><i data-lucide="trending-up"></i></div><div class="stat-value">{% if impact.delta_total != None %}{{ impact.delta_total }}{% else %}&mdash;{% endif %}</div><div class="stat-label">Delta total at capture</div></div>
+</div>
+
+<div class="layout-2col">
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Amendment</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd>{{ amendment.number }}</dd></div>
+          <div class="detail-item"><dt>Status</dt><dd>{% if amendment.status == "draft" %}<span class="badge badge-muted">{{ amendment.get_status_display }}</span>{% elif amendment.status == "pending" %}<span class="badge badge-amber">{{ amendment.get_status_display }}</span>{% elif amendment.status == "approved" %}<span class="badge badge-info">{{ amendment.get_status_display }}</span>{% elif amendment.status == "applied" %}<span class="badge badge-green">{{ amendment.get_status_display }}</span>{% elif amendment.status == "rejected" %}<span class="badge badge-red">{{ amendment.get_status_display }}</span>{% elif amendment.status == "withdrawn" %}<span class="badge badge-slate">{{ amendment.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ amendment.get_status_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Change type</dt><dd><span class="badge badge-slate">{{ amendment.get_change_type_display }}</span></dd></div>
+          <div class="detail-item"><dt>Order</dt><dd>{% if order %}<a href="{% url 'scm:salesorder_detail' order.pk %}" class="fw-600">{{ order.number }}</a> &middot; {{ order.get_status_display }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Customer</dt><dd>{% if order %}{{ order.customer.name }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Document</dt><dd>{% if amendment.document %}{{ amendment.document.name }}{% else %}<span class="text-muted">None attached</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Reason</dt><dd>{{ amendment.reason|linebreaksbr }}</dd></div>
+          <div class="detail-item"><dt>Notes</dt><dd>{% if amendment.notes %}{{ amendment.notes|linebreaksbr }}{% else %}<span class="text-muted">None recorded</span>{% endif %}</dd></div>
+        </dl>
+      </div>
+    </div>
+
+
+    <div class="card">
+      <div class="card-header"><h2>Impact snapshot</h2></div>
+      <div class="card-body">
+        {% comment %}
+          FROZEN, SERVER-GENERATED EVIDENCE. Rendered from the PARSED dict, so a bad blob shows
+          an empty panel rather than a raw JSON string. The emptiness test is done first,
+          because `|default:"{}"` would print the literal string "{}" for an empty dict.
+        {% endcomment %}
+        {% if impact %}
+        <p class="text-muted">
+          This is what the change looked like when it was proposed and last edited. It does not
+          move when the order does. The impact report shows it beside the order as it stands today.
+        </p>
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Captured at</dt><dd>{{ impact.captured_at|default_if_none:"&mdash;" }}</dd></div>
+          <div class="detail-item"><dt>Order at capture</dt><dd>{{ impact.order_number }} &middot; {{ impact.order_status }}</dd></div>
+          <div class="detail-item"><dt>Order total at capture</dt><dd>{{ impact.order_total|default_if_none:"&mdash;" }}</dd></div>
+          <div class="detail-item"><dt>Delta total</dt><dd><span class="fw-600">{{ impact.delta_total|default_if_none:"&mdash;" }}</span> <span class="text-muted">(gross, incl. tax)</span></dd></div>
+          <div class="detail-item"><dt>Revenue impact</dt><dd><span class="fw-600">{{ impact.revenue_impact|default_if_none:"&mdash;" }}</span> <span class="text-muted">(net, excl. tax)</span></dd></div>
+          <div class="detail-item"><dt>Allocations affected</dt><dd>{% if impact.allocations_affected %}<span class="badge badge-amber">{{ impact.allocations_affected }}</span> <span class="text-muted">reservation(s) held against the lines being changed</span>{% else %}<span class="text-muted">None at capture</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Shipments affected</dt><dd>{% if impact.shipments_affected %}<span class="badge badge-amber">{{ impact.shipments_affected }}</span> <span class="text-muted">shipment(s) already raised</span>{% else %}<span class="text-muted">None at capture</span>{% endif %}</dd></div>
+        </dl>
+        {% if impact.lines %}
+        <h3 style="margin-top:1rem;">Proposed lines at capture</h3>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Operation</th><th>Item</th><th>Order line</th><th>Quantity</th><th>Unit price</th><th>Net delta</th><th>Note</th></tr></thead>
+            <tbody>
+              {% for entry in impact.lines %}
+              <tr>
+                <td>{% if entry.operation == "add" %}<span class="badge badge-green">{{ entry.operation }}</span>{% elif entry.operation == "remove" %}<span class="badge badge-red">{{ entry.operation }}</span>{% else %}<span class="badge badge-info">{{ entry.operation }}</span>{% endif %}</td>
+                <td class="fw-600">{{ entry.item }}</td>
+                <td>{% if entry.sales_order_line %}#{{ entry.sales_order_line }}{% else %}<span class="text-muted">New line</span>{% endif %}</td>
+                <td>{{ entry.original_quantity }} &rarr; <span class="fw-600">{{ entry.proposed_quantity }}</span></td>
+                <td>{{ entry.original_unit_price }} &rarr; <span class="fw-600">{{ entry.proposed_unit_price }}</span></td>
+                <td><span class="fw-600">{{ entry.line_delta }}</span></td>
+                <td>{{ entry.note|default_if_none:"" }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="text-muted">
+          No impact snapshot was captured for this amendment. One is written by the server every
+          time the amendment is created or one of its lines changes, so an empty panel here
+          means the row predates this feature or the stored snapshot is not readable &mdash;
+          not that the change costs nothing.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Proposed lines</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Operation</th><th>Order line</th><th>Current</th><th>Proposed</th><th>Note</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for line in lines %}
+            <tr>
+              <td>{% if line.operation == "add" %}<span class="badge badge-green">{{ line.get_operation_display }}</span>{% elif line.operation == "remove" %}<span class="badge badge-red">{{ line.get_operation_display }}</span>{% else %}<span class="badge badge-info">{{ line.get_operation_display }}</span>{% endif %}</td>
+              <td>
+                {% if line.sales_order_line %}
+                  {% if line.sales_order_line.item_id %}{{ line.sales_order_line.item.sku }}{% else %}{{ line.sales_order_line.description|default_if_none:"unmapped line" }}{% endif %}
+                  <div class="text-muted">Order line #{{ line.sales_order_line.pk }}</div>
+                {% else %}<span class="text-muted">New line &mdash; none exists yet</span>{% endif %}
+              </td>
+              <td>
+                {% if line.sales_order_line %}
+                  {{ line.sales_order_line.quantity_ordered }} @ {{ line.sales_order_line.unit_price }}
+                {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+              </td>
+              <td>
+                {% if line.operation == "remove" %}
+                  <span class="text-muted">Line removed</span>
+                {% else %}
+                  {% if line.new_quantity %}{{ line.new_quantity }}{% else %}<span class="text-muted">unchanged</span>{% endif %}
+                  @ {% if line.new_unit_price %}{{ line.new_unit_price }}{% else %}<span class="text-muted">unchanged</span>{% endif %}
+                {% endif %}
+              </td>
+              <td>{{ line.note|default_if_none:"" }}</td>
+              <td>
+                <div class="table-actions">
+                  {% if amendment.is_open %}
+                    <a href="{% url 'sales:order_amendment_line_edit' amendment.pk line.pk %}" class="btn-icon" title="Edit line"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'sales:order_amendment_line_delete' amendment.pk line.pk %}" onsubmit="return confirm('Remove this proposed line from {{ amendment.number }}? The order line itself is not touched.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove line"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% else %}
+                    <span class="text-muted">Frozen</span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list-plus"></i><h3>No lines proposed</h3><p>This amendment has no line changes yet. Add the quantities and prices it proposes to move &mdash; the impact snapshot is re-frozen each time you do.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Actions</h2></div>
+      <div class="card-body" style="display:flex; flex-direction:column; gap:.6rem;">
+        {% comment %}
+          Every guard below is the SAME condition the view enforces, so the button and the
+          refusal cannot disagree (4.11). can_decide / can_apply / can_withdraw are computed in
+          _detail_context() from the very tuples the verbs test.
+        {% endcomment %}
+        {% if can_decide %}
+        <div class="card" style="box-shadow:none; border:1px solid var(--slate);">
+          <div class="card-body">
+            <h3 style="margin-bottom:.6rem;">Decide this amendment</h3>
+            <form method="post" action="{% url 'sales:order_amendment_decide' amendment.pk %}">
+              {% csrf_token %}
+              {% for error in decision_form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+              {% for field in decision_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+              </div>
+              {% endfor %}
+              <button class="btn btn-primary" type="submit" style="width:100%;"><i data-lucide="gavel"></i> Record decision</button>
+            </form>
+          </div>
+        </div>
+        {% elif amendment.status == "approved" %}
+        <p class="text-muted">
+          This amendment was {% if amendment.decided_by %}decided by {{ amendment.decided_by }}{% else %}decided{% endif %}{% if amendment.decided_at %} on {{ amendment.decided_at|date:"M d, Y H:i" }}{% endif %}. It can now be applied to the order.
+        </p>
+        {% else %}
+        <p class="text-muted">
+          This amendment is {{ amendment.get_status_display|lower }} and can no longer be decided.
+        </p>
+        {% endif %}
+
+        {% if can_apply %}
+        <form method="post" action="{% url 'sales:order_amendment_apply' amendment.pk %}" onsubmit="return confirm('Apply {{ amendment.number }} to order {{ order.number }}? This writes the new quantities and prices to the order.');">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="amd-apply-note">Application note</label>
+            <textarea id="amd-apply-note" name="note" class="form-textarea" rows="2" placeholder="Optional. Recorded on the amendment, and used as the cancellation reason for a Cancel amendment."></textarea>
+          </div>
+          <button class="btn btn-primary" type="submit" style="width:100%;"><i data-lucide="check-check"></i> Apply to order</button>
+        </form>
+        {% elif amendment.status == "approved" %}
+        <p class="text-muted">
+          Approved, but order {{ order.number }} is now {{ order.get_status_display|lower }} and can no longer be amended. The approver decided against a different state of the order, so the application is refused.
+        </p>
+        {% endif %}
+
+        {% if can_withdraw %}
+        <form method="post" action="{% url 'sales:order_amendment_withdraw' amendment.pk %}" onsubmit="return confirm('Withdraw {{ amendment.number }}? It stays on record as withdrawn.');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit" style="width:100%;"><i data-lucide="undo-2"></i> Withdraw</button>
+        </form>
+        {% endif %}
+
+        {% if amendment.is_open %}
+        <form method="post" action="{% url 'sales:order_amendment_line_add' amendment.pk %}">
+          {% csrf_token %}
+          {% for error in line_form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+          <button class="btn btn-outline" type="submit" style="width:100%;"><i data-lucide="list-plus"></i> Add a proposed line</button>
+        </form>
+        <a href="{% url 'sales:order_amendment_impact' amendment.pk %}" class="btn btn-outline"><i data-lucide="gauge"></i> Impact report</a>
+        {% if amendment.status != "approved" %}
+        <a href="{% url 'sales:order_amendment_edit' amendment.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit amendment</a>
+        {% endif %}
+        {% else %}
+        <p class="text-muted">
+          This amendment is {{ amendment.get_status_display|lower }}, so its lines, reason and type are frozen. They are read, never edited &mdash; the record of what was approved cannot be rewritten after the fact.
+        </p>
+        <a href="{% url 'sales:order_amendment_impact' amendment.pk %}" class="btn btn-outline"><i data-lucide="gauge"></i> Impact report</a>
+        {% endif %}
+
+        {% if amendment.status == "draft" or amendment.status == "pending" %}
+        <form method="post" action="{% url 'sales:order_amendment_delete' amendment.pk %}" onsubmit="return confirm('Delete amendment {{ amendment.number }}? This cannot be undone.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit" style="width:100%;"><i data-lucide="trash-2"></i> Delete amendment</button>
+        </form>
+        {% else %}
+        <p class="text-muted">
+          An amendment that has been approved, applied, rejected or withdrawn is a permanent record and cannot be deleted.
+        </p>
+        {% endif %}
+        {% if order %}
+        <a href="{% url 'scm:salesorder_detail' order.pk %}" class="btn btn-outline"><i data-lucide="arrow-right"></i> Open order {{ order.number }}</a>
+        {% endif %}
+        <a href="{% url 'sales:order_amendment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to amendments</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Record</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd>{{ amendment.number }}</dd></div>
+          <div class="detail-item"><dt>Requested</dt><dd>{{ amendment.requested_at|date:"M d, Y H:i" }}{% if amendment.requested_by %} &middot; {{ amendment.requested_by }}{% endif %}</dd></div>
+          <div class="detail-item"><dt>Decided</dt><dd>{% if amendment.decided_at %}{{ amendment.decided_at|date:"M d, Y H:i" }}{% if amendment.decided_by %} &middot; {{ amendment.decided_by }}{% endif %}{% else %}<span class="text-muted">Not yet</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Applied</dt><dd>{% if amendment.applied_at %}{{ amendment.applied_at|date:"M d, Y H:i" }}{% if amendment.applied_by %} &middot; {{ amendment.applied_by }}{% endif %}{% else %}<span class="text-muted">Not yet</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Created</dt><dd>{{ amendment.created_at|date:"M d, Y H:i" }}</dd></div>
+          <div class="detail-item"><dt>Updated</dt><dd>{{ amendment.updated_at|date:"M d, Y H:i" }}</dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
