@@ -588,14 +588,19 @@ def order_amendment_decide(request, pk):
                 )
                 return redirect("sales:order_amendment_detail", pk=amendment.pk)
             decision = form.cleaned_data["decision"]
-            note = (form.cleaned_data.get("note") or "").strip()
+            decision_note = (form.cleaned_data.get("decision_note") or "").strip()
             amendment.status = decision
             amendment.decided_by = request.user
             amendment.decided_at = timezone.now()
-            if note:
-                amendment.notes = f"{amendment.notes}\n{decision.title()}: {note}".strip()
+            # The approver's own words go to their OWN column, and a copy is appended to the
+            # amendment's running notes so the document reads in order. Kept separate because
+            # ``apply()`` appends to ``notes`` too, and the approver's reasoning must stay
+            # legible after that happens.
+            amendment.decision_note = decision_note
+            if decision_note:
+                amendment.notes = f"{amendment.notes}\n{decision.title()}: {decision_note}".strip()
             amendment.save(update_fields=[
-                "status", "decided_by", "decided_at", "notes", "updated_at",
+                "status", "decided_by", "decided_at", "decision_note", "notes", "updated_at",
             ])
             write_audit_log(
                 request.user,
@@ -605,7 +610,7 @@ def order_amendment_decide(request, pk):
                     "action": "decide_order_amendment",
                     "number": amendment.number,
                     "decision": decision,
-                    "note": note[:500],
+                    "decision_note": decision_note[:500],
                 },
                 tenant=request.tenant,
             )
