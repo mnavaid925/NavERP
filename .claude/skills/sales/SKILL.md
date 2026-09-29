@@ -250,6 +250,162 @@ The views lane asserts **content**, not just status codes (L8). The security lan
 
 Extra live leaves: Product Bundle Options → `sales:product_bundle_list`, Quote Approval Rules → `sales:quote_approval_rule_list`, CPQ Guided Selling → `sales:cpq_guided_selling`.
 
+---
+
+## 8.6 Order Management
+
+### Ownership boundary — the single most important fact about 8.6
+
+**8.6 does not own the order.** SCM 4.5 owns `scm.SalesOrder`, `scm.SalesOrderLine` and
+`scm.SalesOrderAllocation`. 8.6 adds **related commercial records** that all carry a
+`ForeignKey('scm.SalesOrder')`. Never declare a second `SalesOrder`, never edit an `apps/scm/`
+file, and never rename the order's fields. 8.5 deliberately stopped at the order handoff precisely
+so this sub-module could own the after-the-fact commercial layer.
+
+**8.6 posts no `JournalEntry`.** `RevenueSchedule.journal_entry` exists as a `SET_NULL`,
+`editable=False` column so Accounting can attach a real posting later, but nothing here writes
+it. A test asserts it stays `None` after a recognition — if you ever "helpfully" post one you have
+crossed a module boundary and broken double-entry ownership.
+
+### 8.6 models
+
+`apps/sales/models/OrderManagement/` — four entity files, six models.
+
+| Model | Prefix | Owns |
+|---|---|---|
+| `OrderValidationRule` | `OVR-` | the rule library: `rule_type` (8 types), `severity` (block/hold/warn), `active_on`, `parameters` JSON, optional `party` scope |
+| `OrderHold` | `OHD-` | a fired rule: frozen `evaluation_snapshot`, frozen `severity` copy, exclusive checkout, clear verbs |
+| `OrderAmendment` | `AMD-` | a proposed change with its own approval machine and a frozen `impact_snapshot` |
+| `OrderAmendmentLine` | — | one proposed change to one order line (`add`/`update`/`remove`) |
+| `RevenueSchedule` | `RVS-` | the ASC 606 contract: method, compliance standard, fiscal period, obligations |
+| `PerformanceObligation` | — | one distinct promise: `allocation_pct`, recognition method, `recognize_on`, milestone/evidence |
+
+**Rulings that will bite you if you forget them:**
+
+- **`UNSCHEDULED` must be a real `date`, not a tuple.** `RevenueSchedules.py` sorts
+  `(recognize_on or UNSCHEDULED)`, so a tuple sentinel raises `TypeError` the moment a schedule
+  mixes dated and undated obligations. `date.max` is deliberate: undated obligations must sort
+  **last** so they cannot consume the shared recognition budget ahead of a dated row. `date.min`
+  here inverts the whole schedule. (Review finding C1.)
+- **Every money balance is a `@property`, not a column.** `contract_amount`, `allocated_amount`,
+  `recognized_amount`, `deferred_amount`, `contract_asset`, `contract_liability`,
+  `recognition_progress_pct`, `days_overdue`, `is_overdue`, `is_unbalanced` are all derived. The
+  **only two stored money columns in the sub-module** are `PerformanceObligation.allocated_amount`
+  and `.recognized_amount`, both `editable=False`, both written only by
+  `RevenueSchedule.recompute()`. A stored derived figure drifts.
+
+- **`recompute()` is the only writer of recognised revenue.** It refuses a non-`active` schedule
+  outright (returning `{"refused": True, "reason": ...}` rather than raising), and undated
+  obligations are allocated but never recognised. It is idempotent, and a test says so.
+- **`OrderHold.clean()` must never validate `evaluation_snapshot`.** The field is `editable=False`
+  and therefore **absent from the form**; a `ValidationError` keyed on it routes through
+  `add_error(None, …)` and raises `ValueError` — a 500 on create *and* edit, and only for rows
+  whose stored blob happens to be malformed. The repair lives in `save()`. (Review finding C2.)
+- **`EDITABLE_STATUSES != OPEN_STATUSES`, deliberately.** An **approved** amendment is still open
+  (apply or withdraw) but is **not** editable: the approval was given against that exact
+  proposal, so its lines and reason are frozen or the approval means nothing. (Finding C3.)
+- **`AMENDABLE_STATUSES = ('submitted', 'on_hold', 'allocated', 'partially_fulfilled')`.**
+  `draft` is 4.5's; `fulfilled`/`invoiced`/`cancelled`/`closed` are terminal. There is no `close`
+  change type for the same reason — 4.5 closes only an invoiced order, which is not amendable, so
+  a `close` choice could never fire.
+- **SET_NULL where the record is evidence** (`OrderHold.rule` — deleting a rule must not delete
+  the reason a customer was held; `OrderAmendmentLine.sales_order_line`). **PROTECT where the FK
+  is the business key** (`OrderHold.party`, `PerformanceObligation.item`).
+- **The two children have no `tenant` column** — they are reached through their parent, so the
+  tenant guard lives on the *parent* lookup. That is why the security lane tests the child verbs
+  directly, including the wrong-parent case (tenant B reaching its own line through tenant A's
+  amendment pk).
+
+### 8.6 routes and views
+
+`apps/sales/urls/OrderManagement/` — four entity files plus `OrderBoards.py`, **49 routes**.
+
+- `OrderValidationRules.py` — `order_validation_rule_{list,create,detail,edit,delete}`
+- `OrderHolds.py` — `order_hold_{list,create,detail,edit,delete}` + `order_hold_{raise,checkout,release_checkout,clear,clear_and_submit,bulk_raise,bulk_clear}`
+- `OrderAmendments.py` — `order_amendment_{list,create,open_queue,detail,edit,delete,impact,decide,apply,withdraw}` + `order_amendment_line_{add,edit,delete}`
+- `RevenueSchedules.py` — `revenue_schedule_{list,create,detail,edit,delete,recognize}` + `revenue_schedule_obligation_{add,edit,delete}`
+- `OrderBoards.py` — `order_capture_board`, `order_fulfillment_board`, `order_history_board`, `reorder_customers_board`, `renewals_due_board`, `revenue_recognition_board`, `order_validate`, `order_repeat`, `order_backorder_resolve`, `order_timeline`
+
+**Literal routes come before `<int:pk>` routes in every file** — Django resolves first-match-wins,
+so `orders/holds/create/` after `orders/holds/<int:pk>/` would be dead. `order_hold_raise` lives
+at `orders/raise/<int:order_id>/`, not under `holds/`, because it is addressed by *order*.
+
+
+
+### 8.6 templates
+
+**23 files** under `templates/sales/ordermanagement/`, one folder per entity, the page as the
+bare filename:
+
+- `ordervalidationrule/` — `list` `detail` `form`
+- `orderhold/` — `list` `detail` `form`
+- `orderamendment/` — `list` `detail` `form` `impact` `line_form`
+- `revenueschedule/` — `list` `detail` `form` `obligation_form`
+- `boards/` — `capture` `fulfillment` `history` `timeline` `reorder` `renewals` `recognition` `validation`
+
+Badges use only `badge-green|red|amber|info|muted|slate` (L33). Filter dropdowns compare pks with
+`|stringformat:"d"`, never `|slugify`.
+
+### 8.6 conventions and gotchas
+
+- Every query is `Model.objects.filter(tenant=request.tenant)`; cross-tenant is **404, not 403**
+  (a 403 confirms the row exists, which is itself a leak).
+- `OrderValidationRule.evaluate(order)` is **pure** — it returns `(findings, block)` and writes
+  nothing. The caller raises the hold. A rule that saved its own finding would make "why is this
+  order held?" unanswerable.
+- Boards aggregate in one grouped query and derive their `stats` in Python, because SQLite
+  integer-division silently truncates a percentage pushed into `aggregate()`. Every board is
+  9–24 queries and flat in row count.
+- Money and percentages are **Python arithmetic**, never `aggregate()` maths.
+
+### 8.6 seeder and migrations
+
+- `apps/sales/migrations/0012_ordermanagement_*.py` is the 8.6 schema.
+- `seed_sales` calls a dedicated 8.6 block; it is idempotent (`OVR 3, OHD 1, AMD 1, line 1,
+  RVS 1, POB 2` on re-run).
+- **Known pre-existing bug, not 8.6's:** a whole-database `seed_sales` can abort on a later tenant
+  with `ValidationError: ["That idempotency key was already used for different enrichment
+  evidence."]` from `apps/sales/services.py` `create_enrichment_event` (8.3-era code). 8.6's own
+  block is byte-stable. See `.claude/tasks/review-sales-8.6.md`.
+
+### 8.6 tests
+
+Four lanes in `apps/sales/tests/`, named `test_ordermanagement_*` with helpers
+`_ordermanagement_*` so 8.1–8.5 cannot be shadowed:
+
+| Lane | Tests | Carries |
+|---|---|---|
+| `test_ordermanagement_models.py` | 35 | C1, C2, C3 regressions; the derived-not-stored register; tenant isolation |
+| `test_ordermanagement_forms.py` | 18 | the 0.20 `ValueError` trap, driven through **real form instances** |
+| `test_ordermanagement_views.py` | 23 | all 49 url names; L8 content assertions; POST-only on 23 verbs |
+| `test_ordermanagement_security.py` | 15 | cross-tenant 404 everywhere, the wrong-parent case, enforced CSRF |
+
+Shared fixtures and the pinned `ORDERMANAGEMENT_URL_NAMES` / `URL_KWARGS` / `CHOICES` /
+`MODEL_FIELDS` live in `apps/sales/tests/conftest.py` **under a marker comment** at the very end
+of the file. The 8.1–8.5 content above the marker is never edited.
+
+> **Editing `conftest.py`:** it is a shared file with 2,700+ lines owned by 8.1–8.5. Anything 8.6
+> adds goes *below* the marker. This is not theoretical — an over-eager append once deleted 2,639
+> lines of 8.1–8.5 fixtures and was only caught by running the neighbouring lanes.
+
+### 8.6 navigation wiring
+
+`apps/core/navigation.py` `LIVE_LINKS["8.6"]`:
+- Order Capture / Fulfillment → `sales:order_capture_board`, `sales:order_fulfillment_board`
+- Order History & Archive → `sales:order_history_board`
+- Order Validation Rules → `sales:order_validation_rule_list`
+- Order Hold Management → `sales:order_hold_list`
+- Order Amendments / Change Orders → `sales:order_amendment_list`
+- Revenue Recognition (ASC 606) → `sales:revenue_schedule_list`
+- Reorder & Repeat Orders → `sales:reorder_customers_board`
+- Renewals & Expiry Tracking → `sales:renewals_due_board`
+
+Extra live leaves: Open Amendment Queue → `sales:order_amendment_open_queue`, Revenue Recognition
+Board → `sales:revenue_recognition_board`, Order Timeline → `sales:order_timeline`.
+
+**All 23 mutating verbs are POST-only** and return **405** on GET.
+
+
 ## 8.3 Contact & Account Management
 
 8.3 is an account-workspace and buying-center layer over the canonical CRM/core spine. It adds only four Sales-owned records and four model-free boards. It does not add an account/contact master, health score, opportunity, order, invoice, product, or provider connector.
