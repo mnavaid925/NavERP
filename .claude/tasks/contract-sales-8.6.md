@@ -231,7 +231,7 @@ All form classes inherit `TenantModelForm` from `apps/core/forms/_common.py` (wh
 
 **Filters (read before pagination):** `?q=` → `Q(name__icontains) | Q(number__icontains) | Q(description__icontains)` · `?rule_type=` · `?severity=` · `?active_on=` · `?party=` (int, **skip 0** — L11) · `?is_active=true|false` (any other value ignored).
 
-### 4.2 `views/OrderManagement/OrderHolds.py` — 5 CRUD + 8 actions
+### 4.2 `views/OrderManagement/OrderHolds.py` — 5 CRUD + 7 actions (12 views)
 
 | View | URL name | Template | Context keys |
 |---|---|---|---|
