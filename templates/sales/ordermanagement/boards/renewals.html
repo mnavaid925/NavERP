@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% comment %}
+  Renewals Due board — a READ-ONLY watch over Accounting 2.4 own recurring-billing schedules.
+
+  8.6 BUILDS NO RENEWAL MODEL AND GENERATES NO RENEWAL ORDERS. That is Module 8.15 job, and this
+  page says so in visible prose rather than leaving a reader to assume the button is missing by
+  accident. What lives here is a lens: RecurringInvoice already owns the cadence, the status and
+  the next run date, and this board only sorts them by how soon they fall due.
+
+  EVERY FIGURE IS DERIVED. days_until is a subtraction against today, which is exactly the kind of
+  number that cannot be a column - a stored integer is correct when written and wrong the moment
+  the clock ticks past midnight - and exactly what §2.5 rules out.
+
+  The overdue bucket counts only ACTIVE schedules. A paused schedule is not late, it is paused, and
+  counting it would train people to ignore the card.
+{% endcomment %}
+{% block title %}Renewals Due{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Renewals Due</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Order Management</span><span class="sep">&rsaquo;</span><span>Renewals</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:reorder_customers_board' %}" class="btn btn-outline"><i data-lucide="repeat"></i> Reorder customers</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">DERIVED</span>
+      <strong>8.6 builds no renewal model and generates no renewal orders</strong> &mdash; automatic
+      renewal and renewal-order generation are Module 8.15 work, not this sub-module's. This board
+      is a read-only lens over Accounting 2.4's own <code>RecurringInvoice</code> schedules, which
+      own the cadence, the status and the next run date. The "days until" column is a subtraction
+      against today computed on read, never a stored counter: a stored integer is correct when
+      written and wrong the moment the clock ticks past midnight.
+      &nbsp;As of <strong>{{ stats.as_of }}</strong>.
+    </p>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon {% if stats.overdue %}red{% else %}green{% endif %}"><i data-lucide="clock-alert"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue runs</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.due_30d }}</div><div class="stat-label">Due by {{ stats.horizon }}</div></div>
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="repeat"></i></div><div class="stat-value">{{ stats.active_templates }}</div><div class="stat-label">Active schedules</div></div>
+</div>
+
+{% comment %}
+  Overdue counts only ACTIVE schedules. A paused schedule is not late, it is paused - counting it
+  would train people to ignore the card, which is the whole failure mode a stat card has.
+{% endcomment %}
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="ren-search">Search</label>
+        <input id="ren-search" name="q" value="{{ q }}" class="form-input" placeholder="Schedule number, description, or customer">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ren-status">Status</label>
+        <select id="ren-status" name="status" class="form-select">
+          <option value="">All statuses</option>
+          {% for value, label in status_choices %}<option value="{{ value }}"{% if status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:renewals_due_board' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Recurring billing schedules</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Schedule</th><th>Customer</th><th>Cadence</th><th>Status</th><th>Next run</th><th>Amount</th><th>Generated</th></tr></thead>
+      <tbody>
+        {% for obj in recurring_invoices %}
+        <tr>
+          <td>
+            <span class="fw-600">{{ obj.number }}</span>
+            <div class="text-muted">{{ obj.description|truncatechars:80 }}</div>
+          </td>
+          <td>{{ obj.party.name }}</td>
+          <td><span class="badge badge-slate">{{ obj.get_cadence_display }}</span></td>
+          <td>
+            {% if obj.status == "active" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "paused" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+          </td>
+          <td>
+            {% comment %}
+              The DERIVED count of days. A null next_run_date is "unscheduled", not "0 days" -
+              reporting zero would put it at the top of an overdue list it does not belong on.
+            {% endcomment %}
+            {% if obj.next_run_date is None %}
+              <span class="text-muted">No next run</span>
+            {% elif obj.is_overdue_run %}
+              <span class="badge badge-red">{{ obj.next_run_date }} &mdash; {{ obj.days_until }}d overdue</span>
+            {% elif obj.days_until == 0 %}
+              <span class="badge badge-amber">{{ obj.next_run_date }} &mdash; today</span>
+            {% else %}
+              {{ obj.next_run_date }}
+              <div class="text-muted">in {{ obj.days_until }} day{{ obj.days_until|pluralize }}</div>
+            {% endif %}
+          </td>
+          <td>{{ obj.amount }}</td>
+          <td>
+            {{ obj.occurrences_generated }}
+            <div class="text-muted">{% if obj.last_generated_at %}{{ obj.last_generated_at|date:"M d, Y" }}{% else %}never run{% endif %}</div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7"><div class="empty-state"><i data-lucide="calendar-clock"></i><h3>No recurring billing schedules</h3><p>Accounting 2.4 owns recurring billing. This board only watches when the next run falls due &mdash; it does not create a renewal, and 8.6 generates no renewal orders at all.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
