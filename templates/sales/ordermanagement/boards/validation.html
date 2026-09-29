@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% comment %}
+  Order Validation screen — WHY is (or is not) this order held.
+
+  This runs the workspace rule set and shows the answer WITHOUT raising anything. That separation is
+  the whole reason it is its own screen: order_hold_raise persists a hold, and a user who wants to
+  know what the rules WOULD say should not have to raise one to find out - a hold raised "to see"
+  is a hold somebody else then has to clear.
+
+  OrderValidationRule.evaluate() is PURE: it reads the order and the rule and returns. It never
+  writes, never saves, and never touches SalesOrder.status / credit_hold / hold_reason. So nothing
+  on this page can change anything, and the page says so.
+
+  The findings list is ordered worst-first - the finding that would actually stop the order is the
+  top line, not whichever rule was created last. Ties keep the rule set's own priority ordering,
+  because the sort is stable.
+{% endcomment %}
+{% block title %}Validate &middot; {{ order.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Validate order &middot; {{ order.number }}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:order_capture_board' %}">Order Capture</a><span class="sep">&rsaquo;</span><span>{{ order.number }}</span><span class="sep">&rsaquo;</span><span>Validate</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'scm:salesorder_detail' order.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to order</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">READ ONLY</span>
+      This screen ran {{ rules_evaluated }} active rule{{ rules_evaluated|pluralize }} against this
+      order at <strong>{{ evaluation_run_at|date:"M d, Y H:i" }}</strong> and
+      <strong>raised nothing</strong>. Each rule's <code>evaluate()</code> is pure &mdash; it reads
+      the order and the rule and returns a finding, and never writes. If you want a hold actually
+      raised, use the hold workbench: a hold raised "to see" is a hold somebody else has to clear.
+    </p>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="shield"></i></div><div class="stat-value">{{ rules_evaluated }}</div><div class="stat-label">Rules evaluated</div></div>
+  <div class="stat-card"><div class="stat-icon {% if blocking_count %}red{% else %}green{% endif %}"><i data-lucide="shield-alert"></i></div><div class="stat-value">{{ blocking_count }}</div><div class="stat-label">Would block or hold</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="list"></i></div><div class="stat-value">{{ findings|length }}</div><div class="stat-label">Findings in total</div></div>
+  <div class="stat-card"><div class="stat-icon {% if raised_holds %}red{% else %}green{% endif %}"><i data-lucide="octagon-x"></i></div><div class="stat-value">{{ raised_holds|length }}</div><div class="stat-label">Holds already raised</div></div>
+</div>
+
+<div class="layout-2col">
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Order under test</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd>{{ order.number }}</dd></div>
+          <div class="detail-item"><dt>Customer</dt><dd>{{ order.customer.name }}</dd></div>
+          <div class="detail-item"><dt>Status</dt><dd>{{ order.get_status_display }}</dd></div>
+          <div class="detail-item"><dt>Channel</dt><dd>{{ order.get_source_channel_display }}</dd></div>
+          <div class="detail-item"><dt>Total</dt><dd>{{ order.total }}</dd></div>
+          <div class="detail-item"><dt>Source quote</dt><dd>{% if order.source_quote %}{{ order.source_quote.number }}{% else %}<span class="text-muted">Not from a quote</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Ship-to</dt><dd>{% if order.ship_to_address %}{{ order.ship_to_address }}{% else %}<span class="text-muted">None on file</span>{% endif %}</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    {% comment %}
+      The holds ALREADY on this order. A finding below and a hold here are different things: a
+      finding is what the rules say right now, a hold is a record of a decision somebody made. Both
+      are shown so a reader can tell "the rules would hold this" from "this is held, and here is
+      who decided and why".
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header"><h2>Holds already raised against this order</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Hold</th><th>Type</th><th>Severity</th><th>Status</th><th>Raised</th></tr></thead>
+          <tbody>
+            {% for hold in raised_holds %}
+            <tr>
+              <td>
+                <a href="{% url 'sales:order_hold_detail' hold.pk %}" class="fw-600">{{ hold.number }}</a>
+                <div class="text-muted">{{ hold.reason|truncatechars:90 }}</div>
+              </td>
+              <td><span class="badge badge-slate">{{ hold.get_hold_type_display }}</span></td>
+              <td>
+                {% if hold.severity == "block" %}<span class="badge badge-red">{{ hold.get_severity_display }}</span>
+                {% elif hold.severity == "hold" %}<span class="badge badge-amber">{{ hold.get_severity_display }}</span>
+                {% elif hold.severity == "warn" %}<span class="badge badge-info">{{ hold.get_severity_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ hold.get_severity_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if hold.status == "open" %}<span class="badge badge-red">{{ hold.get_status_display }}</span>
+                {% elif hold.status == "cleared" %}<span class="badge badge-green">{{ hold.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ hold.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ hold.raised_at|date:"M d, Y" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5"><p class="text-muted" style="padding:1rem;">8.6 has raised no hold against this order.</p></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>What the rules say</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Rule</th><th>Severity</th><th>Finding</th></tr></thead>
+          <tbody>
+            {% for finding in findings %}
+            <tr>
+              <td>
+                <span class="fw-600">{{ finding.rule }}</span>
+                {% comment %}
+                  ``finding`` is a plain dict, not a model instance, so there is no
+                  get_rule_type_display to call - the raw rule_type value is shown instead of
+                  writing a get_<field>_display lookup that would silently render empty.
+                {% endcomment %}
+                <div class="text-muted">{{ finding.rule_type }}</div>
+              </td>
+              <td>
+                {% comment %} Keys on the EXACT 8.6 severity choice value, with a display fallback (L33). {% endcomment %}
+                {% if finding.severity == "block" %}<span class="badge badge-red">{{ finding.severity|title }}</span>
+                {% elif finding.severity == "hold" %}<span class="badge badge-amber">{{ finding.severity|title }}</span>
+                {% elif finding.severity == "warn" %}<span class="badge badge-info">{{ finding.severity|title }}</span>
+                {% else %}<span class="badge badge-muted">{{ finding.severity }}</span>{% endif %}
+              </td>
+              <td>
+                {{ finding.message }}
+                {% comment %}
+                  The observed figure and the threshold the rule was measured against, as the rule
+                  itself recorded them. Both are Decimals rendered by the template, never rounded
+                  by the database.
+                {% endcomment %}
+                <div class="text-muted">observed {{ finding.observed }} &middot; threshold {{ finding.threshold }}</div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3"><p class="text-muted" style="padding:1rem;">No active rule fires against this order. It would submit without a hold on the strength of this rule set.</p></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <p class="text-muted">
+          The figures above are what the rules would say <em>at this moment</em>. They are not
+          stored anywhere: re-running the evaluation after a rule is re-tuned will report different
+          numbers, which is the point &mdash; a rule set that could rewrite history would be worse
+          than no rule set. A hold, once raised, keeps its own FROZEN snapshot of the figures at the
+          moment it fired.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
