@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+{% comment %}
+  Revenue Schedule detail — the ASC 606 read-out, stated in the order the standard states it.
+
+  The five-step panel is the point of the page, and it says IN PROSE that every figure in it is
+  derived rather than stored. That is not decoration: a number that looks like a column but is a
+  property is a number a user will try to edit. Telling them plainly is cheaper than a bug report
+  about why saving does nothing.
+
+      1. contract value     = the order's total, read from SCM 4.5 — never copied
+      2. allocated          = Σ what each obligation's percentage says it is worth
+      3. recognised         = Σ what has actually been recognised
+      4. deferred           = allocated − recognised, the contract LIABILITY side
+      5. asset OR liability = whichever of the two is positive — never both
+
+  Step 5 is why deferred and contract asset are separate properties on the model: only one of
+  them can be true at a time, and one signed number cannot say which.
+
+  can_recognize is computed in the view from EXACTLY the guard recompute() enforces, so a button
+  that is offered cannot refuse on click and a button that is withheld is explained (4.11).
+
+  The confirm() calls name {{ schedule.number }} — the SYSTEM-assigned RVS- document number — and
+  never {{ schedule.notes }}, which is free text an author typed (L42).
+{% endcomment %}
+{% block title %}{{ schedule.number }} &middot; Revenue Schedule{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ schedule.number }} &middot; Revenue Schedule</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:revenue_schedule_list' %}">Revenue Schedules</a><span class="sep">&rsaquo;</span><span>{{ schedule.number }}</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:revenue_schedule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+    {% if schedule.is_editable %}
+      <a href="{% url 'sales:revenue_schedule_edit' schedule.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="file-text"></i></div><div class="stat-value">{{ schedule.number }}</div><div class="stat-label">Schedule number</div></div>
+  <div class="stat-card"><div class="stat-icon {% if schedule.status == 'active' %}green{% elif schedule.status == 'void' %}red{% else %}slate{% endif %}"><i data-lucide="list-checks"></i></div><div class="stat-value">{{ schedule.get_status_display }}</div><div class="stat-label">Status</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="scale"></i></div><div class="stat-value">{{ schedule.get_compliance_standard_display }}</div><div class="stat-label">Standard</div></div>
+  <div class="stat-card"><div class="stat-icon {% if schedule.is_overdue %}orange{% else %}slate{% endif %}"><i data-lucide="clock-alert"></i></div><div class="stat-value">{% if schedule.is_overdue %}{{ schedule.days_overdue }}d{% else %}0{% endif %}</div><div class="stat-label">Days overdue</div></div>
+</div>
+
+<div class="layout-2col">
+  <div>
+    {% comment %}
+      THE FIVE-STEP READ-OUT. Every value here is a @property on RevenueSchedule, computed on
+      read from the order and the obligations. None is a column; none can be edited; none can
+      fall out of date.
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header"><h2>The five steps, in ASC 606 order</h2></div>
+      <div class="card-body">
+        <p class="text-muted">
+          <strong>Every figure below is derived, not stored.</strong> Nothing here is a column on
+          the schedule and nothing here can be typed. Each one is worked out on the spot from the
+          order's own total and from the obligations below, which is why they cannot go stale when
+          an amendment re-prices the order, and why there is nothing to edit.
+        </p>
+        <ol style="padding-left:1.2rem; margin:0;">
+          <li style="margin-bottom:.75rem;">
+            <div class="text-muted">1 &middot; Contract value &mdash; the price of the deal</div>
+            <div class="fw-600" style="font-size:1.15rem;">{{ schedule.contract_amount }}</div>
+            <div class="text-muted">
+              Read live from order {% if order %}<a href="{% url 'scm:salesorder_detail' order.pk %}">{{ order.number }}</a>{% else %}&mdash;{% endif %}'s
+              total, which SCM 4.5 owns and recalculates. This module never copies it.
+            </div>
+          </li>
+          <li style="margin-bottom:.75rem;">
+            <div class="text-muted">2 &middot; Allocated &mdash; what the obligations say it is worth</div>
+            <div class="fw-600" style="font-size:1.15rem;">{{ schedule.allocated_amount }}</div>
+            <div class="text-muted">
+              The sum of each obligation's share of the contract price, quantised to cents in
+              Python. Written to the obligations only by <code>recompute()</code>.
+            </div>
+          </li>
+          <li style="margin-bottom:.75rem;">
+            <div class="text-muted">3 &middot; Recognised &mdash; what has actually been earned</div>
+            <div class="fw-600" style="font-size:1.15rem;">{{ schedule.recognized_amount }}</div>
+            <div class="text-muted">
+              {{ schedule.recognition_progress_pct }}% of allocated. Moves only when somebody
+              presses Recognise on an <em>active</em> schedule, and only as far as the passed
+              recognition dates allow.
+            </div>
+          </li>
+          <li style="margin-bottom:.75rem;">
+            <div class="text-muted">4 &middot; Deferred &mdash; paid for, not yet earned</div>
+            <div class="fw-600" style="font-size:1.15rem;">{{ schedule.deferred_amount }}</div>
+            <div class="text-muted">Allocated less recognised, floored at zero. Never negative.</div>
+          </li>
+          <li>
+            <div class="text-muted">5 &middot; The balance, whichever side it falls on</div>
+            {% if schedule.contract_asset > 0 %}
+              <div class="fw-600" style="font-size:1.15rem;"><span class="badge badge-amber">Contract asset</span> {{ schedule.contract_asset }}</div>
+              <div class="text-muted">More is recognised than allocated &mdash; the customer owes for work already delivered. This is the asset side, and it is why "deferred" alone would be the wrong word.</div>
+            {% elif schedule.contract_liability > 0 %}
+              <div class="fw-600" style="font-size:1.15rem;"><span class="badge badge-info">Contract liability</span> {{ schedule.contract_liability }}</div>
+              <div class="text-muted">More is allocated than recognised &mdash; revenue taken ahead of performance and held. Numerically the same gap as the deferred figure; the standard names it a liability.</div>
+            {% else %}
+              <div class="fw-600" style="font-size:1.15rem;"><span class="badge badge-green">In balance</span> 0.00</div>
+              <div class="text-muted">Allocated and recognised agree, so there is neither a contract asset nor a contract liability.</div>
+            {% endif %}
+          </li>
+        </ol>
+      </div>
+    </div>
+
+
+    <div class="card">
+      <div class="card-header"><h2>Performance obligations</h2></div>
+      <div class="card-body">
+        <p class="text-muted">
+          The distinct promises inside the contract. Their percentages should add up to 100 &mdash;
+          this schedule currently allocates
+          <strong>{{ schedule.allocation_pct_total }}%</strong>{% if schedule.is_unbalanced %}, which means the allocation is not balanced and the figures above cannot be trusted until it is{% endif %}.
+        </p>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Obligation</th><th>Type</th><th>Share</th><th>Recognise on</th><th>Allocated</th><th>Recognised</th><th>Remaining</th><th>Evidence</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for obligation in obligations %}
+            <tr>
+              <td>
+                <div class="fw-600">{{ obligation.description }}</div>
+                {% if obligation.item %}<div class="text-muted">{{ obligation.item.sku }}</div>{% endif %}
+                {% if obligation.milestone_label %}<div class="text-muted">{{ obligation.milestone_label }}</div>{% endif %}
+              </td>
+              <td>{% if obligation.obligation_type == "goods" %}<span class="badge badge-info">{{ obligation.get_obligation_type_display }}</span>{% elif obligation.obligation_type == "services" %}<span class="badge badge-green">{{ obligation.get_obligation_type_display }}</span>{% elif obligation.obligation_type == "milestone" %}<span class="badge badge-amber">{{ obligation.get_obligation_type_display }}</span>{% elif obligation.obligation_type == "warranty" %}<span class="badge badge-slate">{{ obligation.get_obligation_type_display }}</span>{% else %}<span class="badge badge-muted">{{ obligation.get_obligation_type_display }}</span>{% endif %}</td>
+              <td>{{ obligation.allocation_pct }}%</td>
+              <td>{% if obligation.recognize_on %}{{ obligation.recognize_on|date:"M d, Y" }}{% if obligation.is_recognisable %}<div><span class="badge badge-amber">due</span></div>{% endif %}{% else %}<span class="text-muted">Not dated</span>{% endif %}</td>
+              <td>{{ obligation.allocated_amount }}</td>
+              <td>{{ obligation.recognized_amount }}</td>
+              <td>{{ obligation.remaining_amount }}</td>
+              <td>
+                {% comment %}
+                  The obligation's PROOF. evidence_reference is authorable and is never rewritten
+                  by the server — a recompute that restated the evidence would be restating the
+                  conclusion along with it.
+                {% endcomment %}
+                {% if obligation.evidence_reference %}<span class="fw-600">{{ obligation.evidence_reference }}</span>{% else %}<span class="text-muted">None recorded</span>{% endif %}
+              </td>
+              <td>
+                {% if schedule.is_editable %}
+                <div class="table-actions">
+                  <a href="{% url 'sales:revenue_schedule_obligation_edit' schedule.pk obligation.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'sales:revenue_schedule_obligation_delete' schedule.pk obligation.pk %}" onsubmit="return confirm('Remove this obligation from {{ schedule.number }}?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+                {% else %}<span class="text-muted">Frozen</span>{% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="list-plus"></i><h3>No obligations yet</h3><p>A schedule with no obligations allocates nothing and recognises nothing. Add the distinct promises the customer is buying &mdash; the goods, the services, the milestones &mdash; and give each its share of the contract price.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+
+    <div class="card">
+      <div class="card-header"><h2>The order</h2></div>
+      <div class="card-body">
+        {% if order %}
+        <p class="text-muted">
+          SCM 4.5 owns this order. This module reads its total and writes nothing on it &mdash; no
+          status, no line, no total. The contract value above moves the moment an amendment is
+          applied in 8.6, with no schedule being touched at all.
+        </p>
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Order</dt><dd><a href="{% url 'scm:salesorder_detail' order.pk %}">{{ order.number }}</a></dd></div>
+          <div class="detail-item"><dt>Customer</dt><dd>{{ order.customer.name }}</dd></div>
+          <div class="detail-item"><dt>Order status</dt><dd>{{ order.get_status_display }}</dd></div>
+          <div class="detail-item"><dt>Order total</dt><dd>{{ order.total }}</dd></div>
+        </dl>
+        {% else %}
+        <p class="text-muted">The order this schedule points at is no longer available.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Reserved stock</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Order line</th><th>Location</th><th>Qty</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for allocation in allocations %}
+            <tr>
+              <td>Line #{{ allocation.sales_order_line_id }}</td>
+              <td>{{ allocation.location.code }}</td>
+              <td>{{ allocation.quantity }}</td>
+              <td>{% if allocation.status == "reserved" %}<span class="badge badge-amber">{{ allocation.get_status_display }}</span>{% elif allocation.status == "released" %}<span class="badge badge-info">{{ allocation.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ allocation.get_status_display }}</span>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4"><p class="text-muted" style="padding:1rem;">Nothing is reserved against this order yet.</p></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    {% comment %}
+      The Actions sidebar. Every button appears only where the SAME guard in the view will let it
+      through, and the withheld ones say why in prose (4.11).
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Actions</h2></div>
+      <div class="card-body">
+        {% if can_recognize %}
+          <form method="post" action="{% url 'sales:revenue_schedule_recognize' schedule.pk %}" onsubmit="return confirm('Recognise revenue on {{ schedule.number }} as far as the passed dates allow?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit" style="width:100%;"><i data-lucide="play"></i> Recognise revenue</button>
+          </form>
+          <p class="text-muted">
+            The only action in 8.6 that moves money. It writes each obligation's allocated and
+            recognised figures in Python, and posts no journal entry &mdash; this module states the
+            revenue position; the ledger is another module's job.
+          </p>
+        {% else %}
+          <p class="text-muted">
+            This schedule is {{ schedule.get_status_display|lower }}, so it recognises nothing.
+            {% if schedule.status == "draft" %}Set it to <strong>active</strong> on the edit form to authorise recognition &mdash; a draft stays at zero however far its recognition dates are in the past.{% elif schedule.status == "complete" %}It is a closed document and its position is final.{% else %}A void schedule has been withdrawn and is kept only as a record.{% endif %}
+          </p>
+        {% endif %}
+
+        {% if schedule.is_editable %}
+          <form method="post" action="{% url 'sales:revenue_schedule_obligation_add' schedule.pk %}">
+            {% csrf_token %}
+            {% for error in obligation_form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+            <button class="btn btn-outline" type="submit" style="width:100%;"><i data-lucide="list-plus"></i> Add an obligation</button>
+          </form>
+          <a href="{% url 'sales:revenue_schedule_edit' schedule.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit schedule</a>
+        {% else %}
+          <p class="text-muted">
+            This schedule is {{ schedule.get_status_display|lower }}, so its obligations, reason and
+            method are frozen. They are read, never edited &mdash; the record of what was reported
+            cannot be rewritten after the fact.
+          </p>
+        {% endif %}
+
+
+        {% if schedule.status == "draft" or schedule.status == "active" %}
+          <form method="post" action="{% url 'sales:revenue_schedule_delete' schedule.pk %}" onsubmit="return confirm('Delete revenue schedule {{ schedule.number }}? This cannot be undone.');">
+            {% csrf_token %}<button class="btn btn-danger" type="submit" style="width:100%;"><i data-lucide="trash-2"></i> Delete schedule</button>
+          </form>
+        {% else %}
+          <p class="text-muted">
+            A complete or void schedule is a permanent record of a reported revenue position and
+            cannot be deleted.
+          </p>
+        {% endif %}
+        {% if order %}
+          <a href="{% url 'scm:salesorder_detail' order.pk %}" class="btn btn-outline"><i data-lucide="arrow-right"></i> Open order {{ order.number }}</a>
+        {% endif %}
+        <a href="{% url 'sales:revenue_schedule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to schedules</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Schedule</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd>{{ schedule.number }}</dd></div>
+          <div class="detail-item"><dt>Status</dt><dd>{% if schedule.status == "draft" %}<span class="badge badge-muted">{{ schedule.get_status_display }}</span>{% elif schedule.status == "active" %}<span class="badge badge-green">{{ schedule.get_status_display }}</span>{% elif schedule.status == "complete" %}<span class="badge badge-info">{{ schedule.get_status_display }}</span>{% elif schedule.status == "void" %}<span class="badge badge-red">{{ schedule.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ schedule.get_status_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Method</dt><dd>{{ schedule.get_method_display }}</dd></div>
+          <div class="detail-item"><dt>Standard</dt><dd>{{ schedule.get_compliance_standard_display }}</dd></div>
+          <div class="detail-item"><dt>Fiscal period</dt><dd>{% if schedule.fiscal_period %}{{ schedule.fiscal_period.name }}{% else %}<span class="text-muted">Not set</span>{% endif %}</dd></div>
+          <div class="detail-item">
+            <dt>Journal entry</dt>
+            <dd>
+              {% if schedule.journal_entry %}
+                <a href="{% url 'accounting:journal_entry_detail' schedule.journal_entry.pk %}">{{ schedule.journal_entry.number }}</a>
+                <div class="text-muted">Reference only &mdash; this module posts nothing</div>
+              {% else %}
+                <span class="text-muted">None</span>
+                <div class="text-muted">Not authorable: 8.6 states the position, the ledger is another module's job</div>
+              {% endif %}
+            </dd>
+          </div>
+          <div class="detail-item"><dt>Created</dt><dd>{{ schedule.created_at|date:"M d, Y H:i" }}</dd></div>
+          <div class="detail-item"><dt>Updated</dt><dd>{{ schedule.updated_at|date:"M d, Y H:i" }}</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    {% if schedule.notes %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Notes</h2></div>
+      <div class="card-body"><p>{{ schedule.notes|linebreaksbr }}</p></div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
+
