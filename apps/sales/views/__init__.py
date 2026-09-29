@@ -176,13 +176,22 @@ from .Workspace import (
     opportunity_workspace_list,
 )
 from .QuoteProposalCPQ import *
+# 8.6 Order Management. These EXTEND scm.SalesOrder (owned by SCM 4.5); none writes
+# SalesOrder.status directly, and the mutating paths delegate to 4.5's own logic.
+from .OrderManagement import *
 
 # View functions exported for URLconf routing and external imports
 __all__ = [
     name for name in globals()
     if name.startswith((
         "lead_", "party_enrichment_", "account_", "opportunity_",
-        "forecast_", "cpq_", "quote_", "product_bundle_"
+        "forecast_", "cpq_", "quote_", "product_bundle_",
+        # 8.6 Order Management
+        "order_validation_rule_", "order_hold_", "order_amendment_",
+        "revenue_schedule_", "order_capture_board", "order_fulfillment_board",
+        "order_history_board", "order_timeline", "reorder_customers_board",
+        "renewals_due_board", "revenue_recognition_board",
+        "order_backorder_resolve", "order_repeat", "order_validate",
     ))
 ]
 
