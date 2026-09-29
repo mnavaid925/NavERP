@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% comment %}
+  Order Timeline — one order's whole story, ASSEMBLED ON READ. There is no timeline table.
+
+  This page is the reason 8.6 refuses to build an OrderEvent / OrderTimeline model. A sixth
+  append-only log summarising five existing ones is a log that can disagree with every one of
+  them, and the moment somebody edits an order directly in SCM the timeline table is the one copy
+  nobody looks at. Everything below is re-read from the records that are already the truth:
+
+    SCM 4.5      the order row, its status and the three notification stamps
+    SCM 4.5      the allocation timestamps
+    SCM 4.6      the append-only TrackingEvent ledger
+    Accounting   the invoice issue_date
+    Sales 8.6    its own holds and amendments
+
+  THE EVENTS ARE ONE ORDERED LIST, NEWEST FIRST, and every line is labelled with the module that
+  owns the record it came from. That is not decoration: a reader who cannot tell an SCM fact from
+  a Sales fact will read 8.6's own view of an order as a fact about the order, and the two disagree
+  whenever SCM is edited directly. The badge and the label both carry the source.
+
+  Every event carries a non-null `at`. An event that could not be dated is DROPPED by the view
+  rather than shown undated - a null sort key does not raise, it sorts last, and the ordering
+  quietly stops meaning anything.
+{% endcomment %}
+{% block title %}Timeline &middot; {{ order.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Order timeline &middot; {{ order.number }}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:order_history_board' %}">Order History</a><span class="sep">&rsaquo;</span><span>{{ order.number }}</span><span class="sep">&rsaquo;</span><span>Timeline</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'scm:salesorder_detail' order.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to order</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">DERIVED</span>
+      This timeline is <strong>assembled in the view on every read</strong> &mdash; 8.6 creates no
+      timeline table. A stored timeline would be a sixth append-only log summarising the five that
+      already exist, and it could disagree with every one of them the moment an order is edited
+      directly in SCM. Events that cannot be dated are dropped rather than shown undated, so a
+      missing sort key can never quietly reorder the list.
+    </p>
+    {% if dropped_events %}
+      <p class="text-muted">
+        {{ dropped_events }} event{{ dropped_events|pluralize }} could not be dated and
+        {% if dropped_events == 1 %}is{% else %}are{% endif %} therefore not shown here.
+      </p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="layout-2col">
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Order</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd>{{ order.number }}</dd></div>
+          <div class="detail-item"><dt>Customer</dt><dd>{{ order.customer.name }}</dd></div>
+          <div class="detail-item"><dt>Status</dt><dd>{{ order.get_status_display }}</dd></div>
+          <div class="detail-item"><dt>Channel</dt><dd>{{ order.get_source_channel_display }}</dd></div>
+          <div class="detail-item"><dt>Placed</dt><dd>{{ order.order_date|default_if_none:"-" }}</dd></div>
+          <div class="detail-item"><dt>Requested</dt><dd>{{ order.requested_date|default_if_none:"-" }}</dd></div>
+          <div class="detail-item"><dt>Promised</dt><dd>{{ order.promised_date|default_if_none:"not yet promised" }}</dd></div>
+          <div class="detail-item"><dt>Total</dt><dd>{{ order.total }}</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    {% comment %}
+      THE EVENTS: one ordered list, newest first, every line labelled with the module that owns the
+      record it came from. The badge and the label both carry the source, because a reader who
+      cannot tell an SCM fact from a Sales fact will read 8.6's own view of an order as a fact
+      ABOUT the order - and the two disagree whenever SCM is edited directly.
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header"><h2>What happened, newest first</h2></div>
+      <div class="card-body">
+        <ol class="text-muted" style="margin:0; padding-left:1.1rem;">
+          {% for event in events %}
+            <li style="margin-bottom:.85rem;">
+              <div class="fw-600">
+                {% if event.kind == "hold" or event.kind == "amendment" %}<span class="badge badge-slate">{{ event.source }}</span>
+                {% elif event.kind == "invoice" %}<span class="badge badge-amber">{{ event.source }}</span>
+                {% else %}<span class="badge badge-info">{{ event.source }}</span>{% endif %}
+                {{ event.label }}
+              </div>
+              <div class="text-muted">{{ event.at|date:"M d, Y H:i" }} &middot; {{ event.detail }}</div>
+            </li>
+          {% empty %}
+            <li>No dated event could be assembled for this order. It has no allocations, no shipments, no invoice and 8.6 has raised nothing against it.</li>
+          {% endfor %}
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Shipments &amp; tracking</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Shipment</th><th>Status</th><th>Delivered</th></tr></thead>
+          <tbody>
+            {% for shipment in shipments %}
+            <tr>
+              <td>
+                {{ shipment.number|default_if_none:"#" }}
+                <div class="text-muted">{{ shipment.carrier_tracking_number|default_if_none:"no tracking reference" }}</div>
+              </td>
+              <td>
+                {% if shipment.status == "planned" %}<span class="badge badge-muted">{{ shipment.get_status_display }}</span>
+                {% elif shipment.status == "booked" %}<span class="badge badge-info">{{ shipment.get_status_display }}</span>
+                {% elif shipment.status == "in_transit" %}<span class="badge badge-info">{{ shipment.get_status_display }}</span>
+                {% elif shipment.status == "exception" %}<span class="badge badge-red">{{ shipment.get_status_display }}</span>
+                {% elif shipment.status == "delivered" %}<span class="badge badge-green">{{ shipment.get_status_display }}</span>
+                {% elif shipment.status == "cancelled" %}<span class="badge badge-muted">{{ shipment.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ shipment.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ shipment.actual_delivery_at|date:"M d, Y"|default_if_none:"-" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3"><p class="text-muted" style="padding:1rem;">No shipment has been raised against this order.</p></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Tracking ledger</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>When</th><th>Milestone</th><th>Where</th></tr></thead>
+          <tbody>
+            {% for event in tracking_events %}
+            <tr>
+              <td>{{ event.event_at|date:"M d, Y H:i" }}</td>
+              <td>
+                <span class="badge badge-info">{{ event.get_event_type_display }}</span>
+                <div class="text-muted">{{ event.shipment.number|default_if_none:"shipment" }} &middot; {{ event.get_source_display }}</div>
+              </td>
+              <td>{{ event.location_text|default_if_none:"-" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3"><p class="text-muted" style="padding:1rem;">No tracking event has been recorded. SCM 4.6's ledger is append-only; nothing here was written by 8.6.</p></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Invoice</h2></div>
+      <div class="card-body">
+        {% if invoice %}
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Number</dt><dd>{{ invoice.number|default_if_none:"#" }}</dd></div>
+            <div class="detail-item"><dt>Status</dt><dd>{{ invoice.get_status_display }}</dd></div>
+            <div class="detail-item"><dt>Issued</dt><dd>{{ invoice.issue_date }}</dd></div>
+            <div class="detail-item"><dt>Total</dt><dd>{{ invoice.total }}</dd></div>
+          </dl>
+          <p class="text-muted">Accounting 2.4 owns this invoice. 8.6 reads it and posts nothing to it &mdash; no journal entry is created here (L29).</p>
+        {% else %}
+          <p class="text-muted">
+            No invoice is linked to this order. SCM 4.5 links one on its own mark-invoiced action,
+            after fulfilment &mdash; which is why most orders in mid-fulfilment have none yet.
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>8.6 holds &amp; amendments</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Document</th><th>Type</th><th>Status</th><th>Raised</th></tr></thead>
+          <tbody>
+            {% for hold in holds %}
+            <tr>
+              <td><a href="{% url 'sales:order_hold_detail' hold.pk %}" class="fw-600">{{ hold.number }}</a></td>
+              <td><span class="badge badge-slate">{{ hold.get_hold_type_display }}</span></td>
+              <td>
+                {% if hold.status == "open" %}<span class="badge badge-red">{{ hold.get_status_display }}</span>
+                {% elif hold.status == "cleared" %}<span class="badge badge-green">{{ hold.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ hold.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ hold.raised_at|date:"M d, Y" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4"><p class="text-muted" style="padding:1rem;">8.6 has raised no hold against this order. Any amendment proposed against it is listed below.</p></td></tr>
+            {% endfor %}
+            {% for amendment in amendments %}
+            <tr>
+              <td><a href="{% url 'sales:order_amendment_detail' amendment.pk %}" class="fw-600">{{ amendment.number }}</a></td>
+              <td><span class="badge badge-slate">{{ amendment.get_change_type_display }}</span></td>
+              <td>
+                {% if amendment.status == "approved" %}<span class="badge badge-green">{{ amendment.get_status_display }}</span>
+                {% elif amendment.status == "applied" %}<span class="badge badge-info">{{ amendment.get_status_display }}</span>
+                {% elif amendment.status == "rejected" %}<span class="badge badge-red">{{ amendment.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ amendment.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ amendment.requested_at|date:"M d, Y" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
