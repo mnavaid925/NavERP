@@ -1787,3 +1787,22 @@ against MySQL before the fix.
 Related: L38, [[a-200-is-not-a-pass]].
 
 Related: L20, [[a-200-is-not-a-pass]], [[prove-n-plus-one-by-invariance]].
+
+## L63 - On PowerShell 5.x, build a commit message with `[System.IO.File]::WriteAllText`, never `Set-Content -Encoding UTF8`
+Found during the 8.7 research commit. Two separate traps, both of which cost a round trip:
+
+1. **A BOM is prepended.** `Set-Content -Encoding UTF8` in Windows PowerShell 5.x writes a UTF-8
+   **BOM** (`EF BB BF`). `git commit -F <file>` stores those three bytes as the first characters of
+   the message, and the subject line then renders as `docs(sales): research ...` with an invisible
+   marker. `git log --oneline` shows it as a stray `﻿`. `git commit -m` does not have this problem --
+   only the `-F`/file path does, because only that path goes through PowerShell's encoder.
+2. **Nested quotes explode.** A multi-line `git commit -m '...'` containing an apostrophe (`8.1's`)
+   or a `&`/`$` terminates the quoted string, and PowerShell then splits the message into several
+   arguments -- which surfaces as the confusing `error: pathspec ''' did not match any file(s)`.
+
+**Rule.** For any message longer than one line, write it with a here-string and
+`[System.IO.File]::WriteAllText($path, $text, [System.Text.UTF8Encoding]::new($false))`
+(the `$false` is the no-BOM encoding), then `git commit -F $path`, then delete the temp file.
+Write the temp file **outside the worktree** (`$env:TEMP`) so it never shows up in `git status` --
+a message file in the repo root is an untracked file the instant you create it, and the 8.6 close-out
+already recorded one truncation of a shared file this session.
