@@ -8,6 +8,94 @@
 > Do not mass-tick the backlog.
 ---
 
+---
+
+# Sub-module 0.20 — Admin Console & System Operations — close-out 2026-09-29
+
+**COMPLETE.** 0.20 is the penultimate sub-module of Module 0. All seven phases of the
+module-creation sequence ran, in order, and every gate is green.
+
+## What shipped
+
+Five classes across three flat entity files, one forms module, one views module, a surgical
+addition to the flat `crud()` URLconf, nineteen templates (five entity triples + four boards), a
+`seed_core` block, the `LIVE_LINKS["0.20"]` block, four `LITERAL_PREFIX_MODELS` entries, five
+ModelAdmins and migration `core.0017`. `BASE` for the review range was `463f7a06`.
+
+## The verification, in the order it ran
+
+| Gate | Result |
+|---|---|
+| `manage.py check` | clean |
+| `manage.py makemigrations --check` | No changes detected |
+| 34 URL names reverse, `jobrun_create` absent, no literal shadowed | PASS |
+| 5 byte-identical nav bullets, 9 labels, 9 distinct targets | PASS |
+| every module-0 `core:` nav target resolves (21 blocks) | PASS |
+| four `LITERAL_PREFIX_MODELS` entries resolve and read as `used` | PASS |
+| `seed_core` x2 idempotent **by count** | PASS |
+| content smoke, 37 checks | PASS |
+| X1/X2/X3 independent re-verification | PASS |
+| six verification gates run together | 0 of 6 failed |
+| four test lanes | 316 tests, 0 failures |
+
+## What the six reviewers found, and what the fixer did
+
+All six ran, one at a time, read-only except the QA pass (report-only override applied). Their
+findings were deduplicated into 19 IDs; **17 were applied, 2 deliberately deferred** (a shared
+`crud.py` boolean map, and rendering `changes` in bulk on the audit trail — neither a 0.20 defect).
+
+**One finding was a false positive and is struck visibly.** The explorer reported that
+`core:incident_list` did not exist and 500'd the console. The frontend-reviewer contradicted it; I
+verified independently that `reverse("core:incident_list")` returns `/core/monitoring/incidents/`,
+`views.incident_list` exists, and `core:incident_board` is the name that does **not** reverse.
+Acting on the explorer's version would have broken a working page.
+
+**The heaviest finding was a class none of the six had seen before.** Three `Model.clean()` guards
+raised `ValidationError` keyed on fields *excluded from their own forms*; Django routes that through
+`add_error(None, ...)`, which raises `ValueError` for a key the form does not have, so **four
+status values 500'd on create *and* edit** — and the values were in the rendered dropdowns. On edit
+the outcome was *data-dependent*, so the same dropdown 500'd or silently saved depending on
+invisible prior state. The fix has three parts and all were required: re-key the guards onto
+`NON_FIELD_ERRORS`, narrow the `status` widgets to authorable values, and correct three docstrings
+that claimed the refusal already worked.
+
+**The second heaviest was a forgeable evidence stamp.** `ChangeRequestForm` exposed `requested_at`,
+which four places in the sub-module said was off the form. It was settable on *every* edit, so a
+tenant admin could date a request on a draft that was never submitted. It survived six passes
+because the module docstring asserted the opposite of the code — now recorded as a gotcha, with the
+instruction to update the docstring in the same edit as any `Meta.fields` change.
+
+**The tests found a real defect the reviews missed.** The forms lane's reachability assertion found
+that `scheduled`, `in_progress` and `completed` were read by the views and templates but produced by
+neither the form nor any verb. An operator could not mark a change implemented, and
+`change_request_rollback` was **unreachable**, because its `completed` precondition could never be
+met. The authorable set is now the four states a person can legitimately assert.
+
+**Three N+1s** were measured and fixed (~45 wasted queries across four pages), and the
+`current_count` badge was found to disagree with the table beneath it whenever a filter was active,
+because it counted a pre-filter queryset.
+
+## The honesty invariant, preserved
+
+0.20 stores declarations and enforces none of them. Nine declines are stated on the pages and
+numbered in the nav comment. The seeder contains **no green success** — the runs are `queued` (dry)
+and `skipped` only. `is_dry_run` defaults `True` and is not a form field. `handler_path` is free
+text nothing imports, and a test asserts that per-line, because resolving it would be RCE. Only a
+future window may be deleted. No actor or stamp field is form-authorable, asserted at both the form
+layer and the request layer.
+
+## Notes for the next run
+
+- **A concurrent session built 0.21 in this same checkout throughout**, interleaving ~30 commits.
+  Every commit here is one file on an explicit path; `git add .` was never run. Lesson L56 records
+  the mode, and that a concurrent session can make `manage.py check` fail for you — verify in
+  isolation with a `git worktree` at your own sha rather than in the shared tree.
+- **The full-migration `pytest apps/core/tests` run is slow** (~270 migrations against in-memory
+  SQLite). The 0.20 lanes were iterated with `--no-migrations`, which builds the schema directly
+  from the models and is therefore a genuine second opinion on the migrations, not a weaker one.
+
+---
+
 # Build Plan — Module 0 0.19 License & Subscription Administration
 
 > **Build status 2026-09-27 — Phases 0-3 COMPLETE, tree clean, 46 commits on `44c7de31..HEAD`.**
