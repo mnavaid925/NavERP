@@ -34,9 +34,17 @@ from apps.sales.models import (
     CPQQuoteLine,
     ProductBundleOption,
     QuoteApprovalRule,
+    # 8.6 Order Management. These all EXTEND scm.SalesOrder (SCM 4.5 owns it) by FK.
+    OrderValidationRule,
+    OrderHold,
+    OrderAmendment,
+    OrderAmendmentLine,
+    RevenueSchedule,
+    PerformanceObligation,
 )
 from apps.sales.cpq_services import cpq_recalc_quote_totals, cpq_render_proposal_html, cpq_convert_to_sales_order
 from apps.sales.forecast_services import forecast_submission_snapshot
+from apps.sales.models.OrderManagement.OrderHolds import build_evaluation_snapshot
 
 from apps.sales.opportunity_services import opportunity_pipeline_baseline_stages
 from apps.sales.services import (
@@ -55,7 +63,7 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Seed Sales 8.1, 8.2, 8.3, 8.4, and 8.5 data idempotently."
+    help = "Seed Sales 8.1, 8.2, 8.3, 8.4, 8.5, and 8.6 data idempotently."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -74,11 +82,12 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, backfill=backfill)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, and 8.5 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, and 8.6 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
         self.stdout.write(self.style.WARNING("Sales 8.3 enrichment is local review evidence only; provider, LinkedIn, verification, and sending workers are not seeded."))
+        self.stdout.write(self.style.WARNING("Sales 8.6 posts NO JournalEntry: RevenueSchedule.journal_entry is a reference-only FK (L29), so recognition figures stay a Sales-side schedule until Accounting consumes them."))
 
     def _seed_tenant(self, tenant, backfill=False):
         owner = User.objects.filter(tenant=tenant, is_tenant_admin=True).first() or User.objects.filter(tenant=tenant, is_active=True).first()
@@ -90,6 +99,7 @@ class Command(BaseCommand):
         self._seed_opportunity_pipeline(tenant, owner, backfill=backfill)
         self._seed_sales_forecasting(tenant, owner)
         self._seed_cpq(tenant, owner)
+        self._seed_order_management(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -1078,4 +1088,279 @@ class Command(BaseCommand):
                 pass
 
         self.stdout.write(f"{tenant.name}: Sales 8.5 CPQ demo rows ensured.")
+
+
+    def _seed_order_management(self, tenant, owner):
+        """8.6 Order Management demo rows, idempotent by construction.
+
+        **No second order master (L36/L37).** Nothing here creates an ``scm.SalesOrder``.
+        SCM 4.5 owns that table and 8.6 EXTENDS it by FK: this helper *finds* an order that
+        8.5's ``cpq_convert_to_sales_order`` already made (or one an earlier seeder made) and
+        hangs the four 8.6 entities off it. A second order here would be the exact parallel-
+        master bug L36 records, so this is a search and never a construction.
+
+        Every repeated table is written with ``get_or_create`` on a natural key — a rule name,
+        an order + hold type, an order + change type, an order, a schedule + description — so a
+        second run creates nothing and the row counts are byte-stable. The rows that are not
+        repeated (the amendment line, the two obligations) are guarded by an existence check
+        for the same reason.
+        """
+        from apps.scm.models import SalesOrder
+
+        # --- 0. The order we extend (never create) ------------------------
+        # A change order is only meaningful against a LIVE commitment, so the search is
+        # narrowed to 4.5's own AMENDABLE_STATUSES. Ordering by id keeps the choice stable
+        # across runs, which is what makes the get_or_create keys below stable too.
+        order = (
+            SalesOrder.objects.filter(
+                tenant=tenant,
+                status__in=OrderAmendment.AMENDABLE_STATUSES,
+            )
+            .select_related("customer")
+            .order_by("id")
+            .first()
+        )
+        if order is None:
+            # The 8.5 conversion path is the one that reliably produces an order; without it
+            # there is nothing for 8.6 to extend, and a warning beats a fabricated order.
+            converted = (
+                CPQQuote.objects.filter(tenant=tenant, converted_order__isnull=False)
+                .select_related("converted_order")
+                .order_by("id")
+                .first()
+            )
+            order = converted.converted_order if converted is not None else None
+
+        # --- 1. OrderValidationRule rows (the typed rule set) -------------
+        # The FIRST rule is seeded INACTIVE on purpose: a demo rule set showing only the
+        # enabled state hides the thing a tenant admin needs to see — that a rule can be
+        # parked without being deleted, and without losing the holds it already raised.
+        rule_specs = [
+            {
+                "name": "Unmapped Item Present",
+                "rule_type": "unmapped_item",
+                "severity": "block",
+                "active_on": "both",
+                "parameters": {"max_unmapped": 0},
+                "priority": 10,
+                "is_active": False,
+                "description": (
+                    "An order line with no mapped scm.Item cannot be allocated, picked or "
+                    "shipped, so submission is blocked. Parked rather than deleted, which is "
+                    "what a tenant does while its catalogue import is still catching up."
+                ),
+            },
+            {
+                "name": "Missing Ship-To Address",
+                "rule_type": "missing_ship_to",
+                "severity": "hold",
+                "active_on": "submit",
+                "parameters": {},
+                "priority": 20,
+                "is_active": True,
+                "description": (
+                    "An order with no ship-to address is held for a human to fill in, rather "
+                    "than blocked outright."
+                ),
+            },
+            {
+                "name": "Credit Exposure Ceiling",
+                "rule_type": "credit_limit",
+                "severity": "hold",
+                "active_on": "submit",
+                # HONESTY: the credit axis reads `limit`/`amount` and only falls back to the
+                # customer profile when neither is present, so a `pct` key on its own would be
+                # a dead threshold that parses cleanly and never fires. `pct` is therefore
+                # carried ALONGSIDE the real `limit` (unknown keys are ignored by design — see
+                # the model docstring) as the workspace's stated review tolerance, and `limit`
+                # is the figure the engine actually breaches against.
+                "parameters": {"pct": 20, "limit": "25000.00"},
+                "priority": 30,
+                "is_active": True,
+                "description": (
+                    "Exposure = order total + open receivable. Anything above the published "
+                    "credit limit is held for credit review rather than blocked, so a good "
+                    "customer is never stopped by an automated rule alone."
+                ),
+            },
+        ]
+        seeded_rules = {}
+        for spec in rule_specs:
+            rule, _created = OrderValidationRule.objects.get_or_create(
+                tenant=tenant,
+                name=spec["name"],
+                defaults=spec,
+            )
+            seeded_rules[spec["name"]] = rule
+        credit_rule = seeded_rules["Credit Exposure Ceiling"]
+
+        # --- 2. OrderHold with a frozen evaluation_snapshot --------------
+        # The snapshot is built by the MODEL's own `build_evaluation_snapshot`, and the
+        # observed/threshold pair is the rule engine's own `_measure()` reading the real order
+        # in Python — never a hand-typed figure, because a hold whose evidence was invented is
+        # worse than no hold at all (L22). The engine decides what breached; this row records
+        # the answer.
+        observed, threshold, breach_message = credit_rule._measure(order)
+        findings = []
+        if observed is not None and threshold is not None:
+            if credit_rule._breached(observed, threshold):
+                findings.append(
+                    {
+                        "rule": credit_rule.number or credit_rule.name,
+                        "rule_type": credit_rule.rule_type,
+                        "severity": credit_rule.severity,
+                        "message": breach_message,
+                        "observed": observed,
+                        "threshold": threshold,
+                    }
+                )
+                reason = breach_message
+            else:
+                # Within the published limit, but still held: the credit controller is
+                # reviewing the exposure by hand. The snapshot records what the engine
+                # actually read, INCLUDING the fact that nothing breached — a hold whose
+                # snapshot claimed a breach that did not happen is a lie with a timestamp.
+                reason = (
+                    f"Credit review opened by hand against {credit_rule.name}: measured "
+                    f"exposure {observed} against a published limit of {threshold}, which is "
+                    f"within policy. Held for a manual credit decision before release."
+                )
+        else:
+            reason = (
+                f"Credit hold raised by hand on {order.number}; no published limit is on file "
+                f"for this customer, so there is no threshold to measure against."
+            )
+        hold, hold_created = OrderHold.objects.get_or_create(
+            tenant=tenant,
+            sales_order=order,
+            hold_type="credit",
+            defaults={
+                # The rule CONSULTED, which is not always the rule that fired — that is what
+                # `rule` is SET_NULL for.
+                "rule": credit_rule,
+                "party": order.customer,
+                # COPIED at raise time, exactly as the hold workbench copies it: a rule
+                # re-tuned next month must not rewrite why this order was held today.
+                "severity": credit_rule.severity,
+                "reason": reason,
+                "evaluation_snapshot": build_evaluation_snapshot(
+                    credit_rule,
+                    findings,
+                    order=order,
+                    hold_type="credit",
+                    actor=owner,
+                ),
+                "raised_at": timezone.now(),
+                "raised_by": owner,
+            },
+        )
+        if hold_created:
+            # Mirror the hold workbench's write-back so the ORDER page and the hold board tell
+            # the same story: an open credit hold with `credit_hold=False` on the order would
+            # read as two contradictory facts. These two columns are the ONLY fields 8.6 ever
+            # writes on a 4.5 row, and only on the run that actually raised the hold.
+            if not order.credit_hold:
+                order.credit_hold = True
+                order.hold_reason = reason
+                order.save(update_fields=["credit_hold", "hold_reason", "updated_at"])
+
+        # --- 3. OrderAmendment + OrderAmendmentLine ----------------------
+        amendment, _created = OrderAmendment.objects.get_or_create(
+            tenant=tenant,
+            sales_order=order,
+            change_type="quantity",
+            defaults={
+                # `status` is workflow-owned and off the form, so it is set once here and
+                # moved only by the decide/apply verbs from then on.
+                "status": "pending",
+                "reason": (
+                    "Customer confirmed a larger first deployment after the order was placed. "
+                    "Quantity only — price and terms are unchanged, so this is an approval, "
+                    "not a re-negotiation."
+                ),
+                "requested_by": owner,
+                "requested_at": timezone.now() - timedelta(days=1),
+                "notes": "Seeded 8.6 demo change order, sitting at Pending Approval.",
+            },
+        )
+        order_line = order.lines.order_by("id").first()
+        if order_line is not None and not OrderAmendmentLine.objects.filter(
+            amendment=amendment
+        ).exists():
+            current_qty = order_line.quantity_ordered or Decimal("0")
+            proposed_qty = current_qty * Decimal("2")
+            OrderAmendmentLine.objects.create(
+                amendment=amendment,
+                sales_order_line=order_line,
+                operation="update",
+                new_quantity=proposed_qty,
+                new_unit_price=None,
+                note=f"Doubles the first line from {current_qty} to {proposed_qty} at the agreed unit price.",
+            )
+        # Frozen evidence, captured ONCE. Recomputing it on every run would restate the
+        # impact as of right now rather than as of the proposal, which is the forgeable-
+        # snapshot failure the column exists to prevent.
+        if not amendment.impact_snapshot:
+            amendment.impact_snapshot = amendment.recompute_impact()
+            amendment.save(update_fields=["impact_snapshot", "updated_at"])
+
+        # --- 4. RevenueSchedule + PerformanceObligation children ----------
+        schedule, _created = RevenueSchedule.objects.get_or_create(
+            tenant=tenant,
+            sales_order=order,
+            defaults={
+                "status": "active",
+                "method": "over_time",
+                "compliance_standard": "asc606",
+                "notes": (
+                    "Seeded 8.6 ASC 606 schedule. 8.6 posts NO JournalEntry — the recognition "
+                    "figures below stay a Sales-side schedule until Accounting consumes them."
+                ),
+            },
+        )
+        # The two promises must sum to EXACTLY 100.00% of the contract: `recompute()` clamps
+        # the running total against the contract, so a set that does not add up would leave a
+        # schedule quietly under-recognising revenue.
+        obligation_specs = [
+            {
+                "description": "Hardware delivered and accepted at go-live",
+                "obligation_type": "goods",
+                "allocation_pct": Decimal("60.00"),
+                "recognition_method": "point_in_time",
+                "recognize_on": timezone.localdate() - timedelta(days=5),
+                "sales_order_line": order_line,
+                "evidence_reference": "Customer go-live acceptance email, filed on the order.",
+            },
+            {
+                "description": "Implementation and support, recognised over the term",
+                "obligation_type": "services",
+                "allocation_pct": Decimal("40.00"),
+                "recognition_method": "over_time",
+                "recognize_on": timezone.localdate() + timedelta(days=55),
+                "sales_order_line": None,
+                "evidence_reference": "",
+            },
+        ]
+        for spec in obligation_specs:
+            PerformanceObligation.objects.get_or_create(
+                schedule=schedule,
+                description=spec["description"],
+                defaults=spec,
+            )
+        # THE ONLY WRITER of the two money columns, and the one place the recognition maths
+        # lives. Re-running it is safe: the figures are a function of the order and the dates.
+        summary = schedule.recompute()
+        if summary.get("refused"):
+            self.stdout.write(
+                self.style.WARNING(
+                    f"{tenant.name}: revenue schedule {schedule.number} refused recognition — "
+                    f"{summary.get('reason')}"
+                )
+            )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.6 order management demo rows ensured on {order.number} "
+            f"(hold {hold.number}, amendment {amendment.number}, schedule {schedule.number})."
+        )
+
 
