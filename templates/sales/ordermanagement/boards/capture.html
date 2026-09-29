@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% comment %}
+  Order Capture board — the queue of submitted orders waiting on validation, allocation or a hold.
+
+  EVERY FIGURE ON THIS PAGE IS DERIVED. The orders themselves are SCM 4.5's rows, read through an
+  FK; the hold counts come from 8.6's own OrderHold register; the unmapped count reads 4.5's line
+  mapping. Nothing on this page is stored, nothing here can be edited, and a number that looks like
+  a column and is not needs saying so out loud — hence the note card, not just this comment.
+
+  Every badge keys on the model's EXACT choice value with an {% else %} fallback to
+  get_<field>_display (L33). Only badge-green/red/amber/info/muted/slate exist in theme.css;
+  badge-success/warning/danger do NOT and render unstyled.
+
+  The two POST buttons are the only mutations reachable from this board. Validate runs the rule set
+  WITHOUT raising a hold — a hold raised "to see" is a hold somebody else then has to clear.
+{% endcomment %}
+{% block title %}Order Capture{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Order Capture &amp; Validation</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Order Management</span><span class="sep">&rsaquo;</span><span>Capture</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:order_fulfillment_board' %}" class="btn btn-outline"><i data-lucide="truck"></i> Fulfilment board</a>
+    <a href="{% url 'scm:salesorder_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New sales order</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">DERIVED</span>
+      Every figure on this board is derived on read and nothing here is stored. The queue is SCM 4.5's
+      own <code>SalesOrder.status</code>; the hold counts are 8.6's own <code>OrderHold</code> rows;
+      the unmapped count reads 4.5's line mapping. 8.6 declares no capture table, because a second
+      copy of "what came in" would be a second thing to keep in step with the first.
+      &nbsp;As of <strong>{{ stats.as_of }}</strong>.
+    </p>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">In the capture queue</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.on_hold %}red{% else %}green{% endif %}"><i data-lucide="octagon-x"></i></div><div class="stat-value">{{ stats.on_hold }}</div><div class="stat-label">Held</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.unmapped %}orange{% else %}green{% endif %}"><i data-lucide="unlink"></i></div><div class="stat-value">{{ stats.unmapped }}</div><div class="stat-label">Unmapped lines</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="globe"></i></div><div class="stat-value">{{ stats.by_channel.web }}</div><div class="stat-label">From the web</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="phone"></i></div><div class="stat-value">{{ stats.by_channel.phone }}</div><div class="stat-label">By phone</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="cap-search">Search</label>
+        <input id="cap-search" name="q" value="{{ q }}" class="form-input" placeholder="Order number, customer, or notes">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="cap-status">Status</label>
+        <select id="cap-status" name="status" class="form-select">
+          <option value="">All statuses</option>
+          {% for value, label in status_choices %}<option value="{{ value }}"{% if status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="cap-channel">Channel</label>
+        <select id="cap-channel" name="channel" class="form-select">
+          <option value="">All channels</option>
+          {% for value, label in channel_choices %}<option value="{{ value }}"{% if channel == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:order_capture_board' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Capture queue</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Order</th><th>Channel</th><th>Status</th><th>Holds</th><th>Lines</th><th>Total</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in orders %}
+        <tr>
+          <td>
+            <a href="{% url 'scm:salesorder_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            <div class="text-muted">{{ obj.customer.name }} &middot; {{ obj.order_date|default_if_none:"no order date" }}</div>
+          </td>
+          <td><span class="badge badge-slate">{{ obj.get_source_channel_display }}</span></td>
+          <td>
+            {% if obj.status == "submitted" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "on_hold" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "allocated" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "partially_fulfilled" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+          </td>
+          <td>
+            {% comment %}
+              The DERIVED open-hold count, from 8.6's own register — not SCM 4.5's single
+              credit_hold boolean, which cannot say how many reasons there are or which rule fired.
+            {% endcomment %}
+            {% if obj.open_hold_count %}
+              <span class="badge badge-red">{{ obj.open_hold_count }} hold{{ obj.open_hold_count|pluralize }}</span>
+            {% else %}
+              <span class="text-muted">None</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if obj.has_unmapped_line %}
+              {% comment %} 4.5's submit refuses an unmapped line, so this is a known blocker. {% endcomment %}
+              <span class="badge badge-amber">Unmapped</span>
+            {% else %}
+              <span class="text-muted">Mapped</span>
+            {% endif %}
+          </td>
+          <td>{{ obj.total }}</td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:order_timeline' obj.pk %}" class="btn-icon" title="Timeline"><i data-lucide="history"></i></a>
+              <a href="{% url 'scm:salesorder_detail' obj.pk %}" class="btn-icon" title="View in SCM"><i data-lucide="eye"></i></a>
+              {% comment %}
+                Validate is POST-only and RAISES NOTHING: it runs the pure rule evaluation and shows
+                the answer.
+              {% endcomment %}
+              <form method="post" action="{% url 'sales:order_validate' obj.pk %}">
+                {% csrf_token %}<button class="btn-icon" type="submit" title="Run validation rules"><i data-lucide="shield-check"></i></button>
+              </form>
+              <a href="{% url 'sales:order_hold_raise' obj.pk %}" class="btn-icon" title="Raise holds"><i data-lucide="shield-alert"></i></a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7"><div class="empty-state"><i data-lucide="inbox"></i><h3>Nothing in the capture queue</h3><p>No submitted order is waiting on validation, allocation or a hold in this workspace. A draft order is SCM's own editable register and does not appear here until it is submitted.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
