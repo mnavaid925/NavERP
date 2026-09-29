@@ -1696,3 +1696,48 @@ to the page, so it does not rot the way a budget does, and it still demands the 
   the prefetched `.all` instead.
 
 See L8, L49, L57, [[annotate-alias-vs-property]], [[a-200-is-not-a-pass]], [[prove-n-plus-one-by-invariance]].
+
+## L59 — Never rewrite a shared file you do not own; APPEND below a marker, and prove the neighbours still run
+
+`apps/sales/tests/conftest.py` was 2,707 lines of 8.1–8.5 infrastructure. While adding 8.6's
+fixtures I truncated it to 343 lines and **committed that** — deleting `LEADMANAGEMENT_MODEL_FIELDS`,
+`SALESFORECASTING_CHOICES`, `leadmanagement_tenant_a` and every 8.1–8.5 factory. Every one of
+those sub-modules' tests would have failed at import, and the `-q` progress line still showed dots
+because **I only ever ran the 8.6 file**, which imported cleanly from my rewritten copy.
+
+- **A shared file is append-only for anyone but its owner.** Put a marker comment at the top of
+  your section (`# ===== 8.6 … =====`) and add strictly below it. The rule already existed (L43);
+  what was missing is that L43 is about *another session building concurrently* — this was me
+  destroying a finished sub-module's tests in the same session.
+- **The commit diff is the alarm.** `1 file changed, 275 insertions(+), 2639 deletions(-)` was
+  right there in the git output and I read past it. A commit that deletes an order of magnitude
+  more than it adds to a file you are supposed to be *extending* is a mistake, not a refactor.
+  Read the diffstat before moving on.
+- **Run a neighbouring lane, not just your own.** `-p no:randomly apps/sales/tests/test_salesforecasting_models.py`
+  took 8 seconds and would have caught it immediately. A filter that selects only your own files
+  proves only that your own files work — the L47 rule about filtered runs is the same trap.
+- **Recovery:** `git show HEAD~1:apps/sales/tests/conftest.py` restores it. Do that FIRST, before
+  trying to reconstruct, and never from `HEAD` (which is the commit that broke it). I briefly reset
+  from `HEAD` and made it worse.
+
+Related: L43, L47, [[a-200-is-not-a-pass]].
+
+## L60 — A `hasattr` guard and the access it guards must be checked TOGETHER, or the guard proves nothing
+
+My drift-check script read `hasattr(cls, "SEVERITY_CHOICES")` and, inside the branch, accessed
+`cls.SEVITY_CHOICES` — a typo in the *access* only. The guard returned `True` on the correctly
+spelled name, the branch was entered, and the misspelled access raised `AttributeError` and killed
+the script three checks later. The report I would have written said "SEVERITY_CHOICES missing",
+which is the opposite of the truth.
+
+- **A guard and its guarded access are two spellings of one fact.** If they can drift, one of
+  them is decoration. Build the name once (`name = stem + "_CHOICES"`) and use it for both.
+- **This is the 8.6 C1/C2/C3 species at a smaller scale:** a promise made in one place and kept in
+  another. The docstrings state an invariant correctly while the sibling module violates it, and a
+  `hasattr` guard states a field exists while the access disagrees. Same failure, different size.
+- **A harness that crashes mid-run reports nothing about the part it never reached.** I read the
+  partial output as "sections B and C are clean" when in fact it had stopped early. When a
+  verification script dies, treat every section after the last line printed as **unverified**, and
+  say so in the report rather than letting a truncated run imply a clean bill of health.
+
+Related: L20, [[a-200-is-not-a-pass]], [[prove-n-plus-one-by-invariance]].
