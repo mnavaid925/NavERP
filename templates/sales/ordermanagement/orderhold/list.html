@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% comment %}
+  Order Holds — the 8.6 hold workbench board.
+
+  Every badge keys on the model's EXACT choice value with an {% else %} fallback to
+  get_<field>_display (L33). Only badge-green/red/amber/info/muted/slate exist in theme.css;
+  badge-success/warning/danger do NOT and render unstyled.
+
+  The confirm() below names {{ obj.number }} — the SYSTEM-assigned OHD- document number — and
+  never {{ obj.reason }}, which is free text an author typed (L42).
+
+  Both bulk verbs are PLAIN HTML forms, no JavaScript: the table sits inside one form whose
+  submit buttons carry their own `formaction`, and the row checkboxes are `hold_ids`. The
+  evaluate card posts a single `order_ids` value. Both verbs read their list through
+  as_db_int, so a crafted value is skipped rather than raising (L11).
+{% endcomment %}
+{% block title %}Order Holds{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Order Holds</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Order Management</span><span class="sep">&rsaquo;</span><span>Holds</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:order_hold_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Place hold</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total holds</div></div>
+  <div class="stat-card"><div class="stat-icon red"><i data-lucide="octagon-x"></i></div><div class="stat-value">{{ stats.open }}</div><div class="stat-label">Open</div></div>
+  <div class="stat-card"><div class="stat-icon amber"><i data-lucide="user-check"></i></div><div class="stat-value">{{ stats.checked_out }}</div><div class="stat-label">Checked out</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.cleared }}</div><div class="stat-label">Cleared</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="ohd-search">Search</label>
+        <input id="ohd-search" name="q" value="{{ q }}" class="form-input" placeholder="Hold number, reason, or order number">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ohd-hold-type">Hold type</label>
+        <select id="ohd-hold-type" name="hold_type" class="form-select">
+          <option value="">All hold types</option>
+          {% for value, label in hold_type_choices %}<option value="{{ value }}"{% if hold_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ohd-status">Status</label>
+        <select id="ohd-status" name="status" class="form-select">
+          <option value="">All statuses</option>
+          {% for value, label in status_choices %}<option value="{{ value }}"{% if status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ohd-severity">Severity</label>
+        <select id="ohd-severity" name="severity" class="form-select">
+          <option value="">All severities</option>
+          {% for value, label in severity_choices %}<option value="{{ value }}"{% if severity == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ohd-order">Order</label>
+        <select id="ohd-order" name="sales_order" class="form-select">
+          <option value="">Every order</option>
+          {% for order in sales_orders %}<option value="{{ order.pk|stringformat:"d" }}"{% if request.GET.sales_order == order.pk|stringformat:"d" %} selected{% endif %}>{{ order.number }} &middot; {{ order.customer.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ohd-party">Customer</label>
+        <select id="ohd-party" name="party" class="form-select">
+          <option value="">Every customer</option>
+          {% for party in parties %}<option value="{{ party.pk|stringformat:"d" }}"{% if request.GET.party == party.pk|stringformat:"d" %} selected{% endif %}>{{ party.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ohd-checkout">Checkout</label>
+        <select id="ohd-checkout" name="checked_out" class="form-select">
+          {% for value, label in checked_out_choices %}<option value="{{ value }}"{% if checked_out == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:order_hold_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Evaluate orders against the rule set</h2></div>
+  <div class="card-body">
+    {% comment %}
+      The automatic half of the workbench: every active rule is run against the chosen order
+      and one hold is raised per non-`warn` finding. `warn` findings come back as a message
+      and raise nothing, so this is safe to run over a whole list.
+    {% endcomment %}
+    <form method="post" action="{% url 'sales:order_hold_bulk_raise' %}" class="filter-bar">
+      {% csrf_token %}
+      <div class="form-group" style="flex:1; min-width:280px;">
+        <label class="form-label" for="ohd-evaluate-order">Order</label>
+        <select id="ohd-evaluate-order" name="order_ids" class="form-select" required>
+          <option value="">Choose an order&hellip;</option>
+          {% for order in sales_orders %}<option value="{{ order.pk|stringformat:"d" }}">{{ order.number }} &middot; {{ order.customer.name }} &middot; {{ order.get_status_display }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="shield-alert"></i> Evaluate &amp; raise holds</button>
+    </form>
+  </div>
+</div>
+
+
+{% comment %}
+  The bulk-clear form is declared HERE, in the header, and the row checkboxes below join it
+  through the HTML5 `form=` attribute. Nesting a per-row Delete form inside a wrapping bulk
+  form would be invalid markup and browsers resolve it by dropping one of the two — so the
+  two forms are kept siblings and bound by id instead. No JavaScript either way.
+{% endcomment %}
+<form id="ohd-bulk-clear" method="post" action="{% url 'sales:order_hold_bulk_clear' %}" onsubmit="return confirm('Clear every selected hold? The reason below is recorded against each one.');">
+  {% csrf_token %}
+  <input type="text" name="clear_note" class="form-input" style="min-width:280px;" placeholder="Reason for clearing the selected holds" required>
+  <button class="btn btn-outline" type="submit"><i data-lucide="check-check"></i> Clear selected</button>
+</form>
+
+<div class="card">
+  <div class="card-header"><h2>Hold register</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th style="width:2rem;"><span class="sr-only">Select</span></th><th>Hold</th><th>Order</th><th>Type</th><th>Severity</th><th>Status</th><th>Checkout</th><th>Reason</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in holds %}
+        <tr>
+          <td><input type="checkbox" name="hold_ids" value="{{ obj.pk|stringformat:"d" }}" form="ohd-bulk-clear" aria-label="Select hold {{ obj.number }}"></td>
+          <td>
+            <a href="{% url 'sales:order_hold_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            <div class="text-muted">{{ obj.raised_at|date:"M d, Y H:i" }} &middot; {% if obj.raised_by %}{{ obj.raised_by }}{% else %}system{% endif %}</div>
+          </td>
+          <td>
+            {% if obj.sales_order %}
+              <span class="fw-600">{{ obj.sales_order.number }}</span>
+              <div class="text-muted">{{ obj.sales_order.customer.name }}</div>
+            {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+          </td>
+          <td><span class="badge badge-slate">{{ obj.get_hold_type_display }}</span></td>
+          <td>{% if obj.severity == "block" %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>{% elif obj.severity == "hold" %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>{% elif obj.severity == "warn" %}<span class="badge badge-info">{{ obj.get_severity_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_severity_display }}</span>{% endif %}</td>
+          <td>{% if obj.status == "open" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% elif obj.status == "cleared" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == "superseded" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
+          <td>{% if obj.checked_out_by %}<span class="badge badge-amber">{{ obj.checked_out_by }}</span><div class="text-muted">{{ obj.checked_out_at|date:"M d H:i" }}</div>{% else %}<span class="text-muted">Unclaimed</span>{% endif %}</td>
+          <td>{{ obj.reason|truncatechars:90 }}</td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:order_hold_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'sales:order_hold_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'sales:order_hold_delete' obj.pk %}" onsubmit="return confirm('Delete hold {{ obj.number }}? This cannot be undone.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9"><div class="empty-state"><i data-lucide="shield-check"></i><h3>No order holds</h3><p>Nothing is being held in this workspace. Place a hold by hand, or evaluate an order against the validation rules.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
+
