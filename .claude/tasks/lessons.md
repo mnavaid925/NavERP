@@ -1740,4 +1740,50 @@ which is the opposite of the truth.
   verification script dies, treat every section after the last line printed as **unverified**, and
   say so in the report rather than letting a truncated run imply a clean bill of health.
 
+
+
+## L61 — An UNORDERED `.first()` is a latent idempotency bug; anything feeding a key comparison must be deterministic
+
+`seed_sales` aborted on a whole multi-tenant database with *"That idempotency key was already used
+for different enrichment evidence."* The enrichment service was **right**; the seeder was wrong to
+ask. `_enrichment_request_payload` includes `requested_by_id` and `_enrichment_request_matches`
+compares it, but the seeder resolved its owner with
+`User.objects.filter(tenant=tenant, is_tenant_admin=True).first()` — **unordered**. The moment a
+tenant gains a second admin the row `.first()` returns can change, so the next run replays an
+identical key with a different requester and the correctly-implemented guard fires.
+
+- **`.first()` without `order_by` is not "just one of them".** It is a *choice of a row* with no
+  rule for which. Use it only where the choice cannot matter; if the chosen row reaches a
+  comparison, a key, a FK, or an audit stamp, give it an explicit order. `.order_by("pk")` is the
+  right default for "the account this tenant was created with".
+- **Two hypotheses were wrong before the right one**, and that is the expensive part. Cross-tenant
+  collision — wrong, the lookup is tenant-scoped. Payload drift after an applied enrichment —
+  wrong, a same-requester replay is genuinely idempotent. Only *a different `requested_by` under
+  the same key* reproduced the exact error. **When a bug is "intermittent across runs", suspect
+  every unordered query in the path, and test the hypothesis rather than reasoning about it.**
+- **A guard that fires is not automatically the bug.** Read the message before assigning blame.
+  This one said "idempotency key ... different evidence" and pointed squarely at a correct service.
+  The caller was the liar.
+
+Related: [[a-200-is-not-a-pass]], L38.
+
+## L62 — A retry loop that exhausts must RAISE, never fall through to the default path
+
+`TenantNumbered.save()` retried a number allocation five times on `IntegrityError`, and when the
+budget ran out it **fell out of the `if` and called `super().save()` with `self.number = ""`**. The
+row persisted with a blank number, silently defeating the `(tenant, number)` uniqueness the whole
+prefix system exists to provide — and the *second* such row violated it outright. Reproduced
+against MySQL before the fix.
+
+- **The fall-through is invisible in review** because the last line of the method looks
+  unconditional and harmless, and the `for` loop above it looks like it always returns. It only
+  does so while the loop body succeeds.
+- **Exhausting a retry budget is an exceptional condition.** Handle it in the branch, not by
+  leaving the function. The same shape appears in any `for _ in range(N): try: ... except: retry`
+  — and the tell is a `return` inside the `try`.
+- **A "retry" that then does the unsafe thing is worse than no retry**, because it converts a loud
+  constraint violation into a quiet bad row.
+
+Related: L38, [[a-200-is-not-a-pass]].
+
 Related: L20, [[a-200-is-not-a-pass]], [[prove-n-plus-one-by-invariance]].
