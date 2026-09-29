@@ -317,13 +317,22 @@ def order_amendment_edit(request, pk):
     that could flip a withdrawn amendment back to approved would make the audit trail a
     suggestion, and one that could re-freeze the impact snapshot at will would let the number
     an approver signed off be quietly replaced after the fact.
+
+    The guard is ``is_editable``, NOT ``is_open``. ``is_open`` deliberately includes
+    ``approved`` — an approved amendment can still be applied or withdrawn — but editing it
+    would move the document out from under the approval and re-freeze the very snapshot the
+    approver read. That is why ``EDITABLE_STATUSES`` exists as a second, narrower tuple.
     """
     amendment = get_object_or_404(_amendment_queryset(request), pk=pk)
-    if not amendment.is_open:
+    if not amendment.is_editable:
+        closed = not amendment.is_open
         messages.info(
             request,
-            f"Amendment {amendment.number} is {amendment.get_status_display().lower()} and is a "
-            "closed document. It can be read, not edited.",
+            (f"Amendment {amendment.number} is {amendment.get_status_display().lower()} and is a "
+             "closed document. It can be read, not edited.")
+            if closed else
+            (f"Amendment {amendment.number} is approved. Its lines and reason are frozen — the "
+             "approval was given against this exact proposal. Withdraw it to change anything."),
         )
         return redirect("sales:order_amendment_detail", pk=amendment.pk)
 
@@ -419,13 +428,21 @@ def _lines_frozen(request, amendment):
 
     One helper for all three line verbs so the refusal text is identical wherever it comes from
     — a line button that silently does nothing on a withdrawn amendment is a bug report.
+
+    Reads ``is_editable``, not ``is_open``: an **approved** amendment is still open (it can be
+    applied or withdrawn) but its lines are frozen, because the approval was given against this
+    exact set of proposed changes.
     """
-    if amendment.is_open:
+    if amendment.is_editable:
         return False
+    approved = amendment.status == "approved"
     messages.info(
         request,
-        f"Amendment {amendment.number} is {amendment.get_status_display().lower()} — its lines "
-        "are frozen.",
+        (f"Amendment {amendment.number} is approved — its lines are frozen, because the approval "
+         "was given against this exact proposal. Withdraw it to change anything.")
+        if approved else
+        (f"Amendment {amendment.number} is {amendment.get_status_display().lower()} — its lines "
+         "are frozen."),
     )
     return True
 
