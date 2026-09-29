@@ -69,7 +69,9 @@ class AccountTerritoryAssignment(TenantNumbered):
     #: vocabulary. Re-spelling this list here is how the two drift apart and a board ends up
     #: grouping on a value the other half of 8.7 never emits.
     alignment_type = models.CharField(
-        max_length=8,
+        # max_length=9 fits the longest value in the SHARED TerritoryRule.ALIGNMENT_TYPE_CHOICES,
+        # "secondary" (9). See the note on TerritoryRule.alignment_type.
+        max_length=9,
         choices=TerritoryRule.ALIGNMENT_TYPE_CHOICES,
         default="primary",
     )
