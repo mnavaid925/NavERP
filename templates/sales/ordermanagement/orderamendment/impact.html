@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% comment %}
+  Impact report — FROZEN evidence on the left, LIVE figures on the right.
+
+  This is the page the entity exists for, and the whole design is one idea: an approver is
+  signing off a NUMBER, so the number must be frozen, while the order it will be applied to
+  keeps moving. The two columns are labelled in PROSE, not just in a heading, because the
+  difference between them is the finding:
+
+    * FROZEN = what the amendment looked like when it was proposed or last edited. Server-
+      generated, never authorable, never recomputed on read (L22). This is what gets approved.
+    * LIVE   = the order as it stands right now, plus the reservations and shipments that
+      exist right now. This is what the change would actually land on.
+
+  When they agree, the approval was taken against the current state. When they do not, somebody
+  edited the order in SCM, or made an allocation, or raised a shipment since. A page showing
+  two totals with no indication which is the evidence and which is the rumour is how an
+  approval goes wrong.
+
+  Read-only. Nothing here mutates and nothing here re-freezes the snapshot.
+{% endcomment %}
+{% block title %}Impact &middot; {{ amendment.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Impact report &middot; {{ amendment.number }}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:order_amendment_list' %}">Order Amendments</a><span class="sep">&rsaquo;</span><a href="{% url 'sales:order_amendment_detail' amendment.pk %}">{{ amendment.number }}</a><span class="sep">&rsaquo;</span><span>Impact</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:order_amendment_detail' amendment.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to amendment</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">FROZEN</span>
+      is the impact captured when this amendment was proposed or last edited. It is written by
+      the server, cannot be typed, and does not move.
+      &nbsp;&nbsp;
+      <span class="badge badge-amber">LIVE</span>
+      is the order as it stands today, together with the allocations and shipments that exist
+      today. This is what the change would actually land on.
+    </p>
+    <p class="text-muted">
+      If the two disagree, the order moved after the amendment was frozen &mdash; somebody
+      edited it in SCM, allocated stock, or raised a shipment. Re-freeze the analysis by
+      editing the amendment or one of its lines before approving.
+    </p>
+  </div>
+</div>
+
+<div class="layout-2col">
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Frozen impact at capture</h2></div>
+      <div class="card-body">
+        {% if impact %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Captured at</dt><dd>{{ impact.captured_at|default_if_none:"&mdash;" }}</dd></div>
+          <div class="detail-item"><dt>Change type at capture</dt><dd>{{ impact.change_type }}</dd></div>
+          <div class="detail-item"><dt>Order at capture</dt><dd>{{ impact.order_number }} &middot; {{ impact.order_status }}</dd></div>
+          <div class="detail-item"><dt>Order total at capture</dt><dd>{{ impact.order_total|default_if_none:"&mdash;" }}</dd></div>
+          <div class="detail-item"><dt>Delta total</dt><dd><span class="fw-600">{{ impact.delta_total|default_if_none:"&mdash;" }}</span><div class="text-muted">gross, incl. tax</div></dd></div>
+          <div class="detail-item"><dt>Revenue impact</dt><dd><span class="fw-600">{{ impact.revenue_impact|default_if_none:"&mdash;" }}</span><div class="text-muted">net, excl. tax &mdash; what a revenue schedule recognises</div></dd></div>
+          <div class="detail-item"><dt>Allocations affected</dt><dd>{% if impact.allocations_affected %}<span class="badge badge-amber">{{ impact.allocations_affected }}</span>{% else %}<span class="text-muted">None</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Shipments affected</dt><dd>{% if impact.shipments_affected %}<span class="badge badge-amber">{{ impact.shipments_affected }}</span>{% else %}<span class="text-muted">None</span>{% endif %}</dd></div>
+        </dl>
+
+        {% if impact.lines %}
+        <h3 style="margin-top:1rem;">Lines at capture</h3>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Operation</th><th>Item</th><th>Order line</th><th>Quantity</th><th>Unit price</th><th>Net delta</th></tr></thead>
+            <tbody>
+              {% for entry in impact.lines %}
+              <tr>
+                <td>{% if entry.operation == "add" %}<span class="badge badge-green">{{ entry.operation }}</span>{% elif entry.operation == "remove" %}<span class="badge badge-red">{{ entry.operation }}</span>{% else %}<span class="badge badge-info">{{ entry.operation }}</span>{% endif %}</td>
+                <td class="fw-600">{{ entry.item }}</td>
+                <td>{% if entry.sales_order_line %}#{{ entry.sales_order_line }}{% else %}<span class="text-muted">New line</span>{% endif %}</td>
+                <td>{{ entry.original_quantity }} &rarr; <span class="fw-600">{{ entry.proposed_quantity }}</span></td>
+                <td>{{ entry.original_unit_price }} &rarr; <span class="fw-600">{{ entry.proposed_unit_price }}</span></td>
+                <td><span class="fw-600">{{ entry.line_delta }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="text-muted">
+          No impact snapshot was captured. One is written by the server whenever the amendment
+          or one of its lines is saved, so an empty panel means the row predates the feature or
+          the stored blob is unreadable &mdash; not that the change is free.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Live order right now</h2></div>
+      <div class="card-body">
+        {% if order %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Order</dt><dd><a href="{% url 'scm:salesorder_detail' order.pk %}" class="fw-600">{{ order.number }}</a></dd></div>
+          <div class="detail-item"><dt>Status now</dt><dd><span class="badge {% if order.status == "submitted" or order.status == "allocated" or order.status == "partially_fulfilled" or order.status == "on_hold" %}badge-green{% else %}badge-red{% endif %}">{{ order.get_status_display }}</span></dd></div>
+          <div class="detail-item"><dt>Subtotal now</dt><dd>{{ order.subtotal }}</dd></div>
+          <div class="detail-item"><dt>Tax now</dt><dd>{{ order.tax_total }}</dd></div>
+          <div class="detail-item"><dt>Total now</dt><dd><span class="fw-600">{{ order.total }}</span></dd></div>
+          <div class="detail-item"><dt>Total at capture</dt><dd>{{ impact.order_total|default_if_none:"&mdash;" }}</dd></div>
+        </dl>
+        {% else %}
+        <p class="text-muted">The order this amendment points at no longer exists.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Live order lines</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Item</th><th>Quantity</th><th>Unit price</th><th>Allocated</th><th>Backordered</th></tr></thead>
+          <tbody>
+            {% for line in order.lines.all %}
+            <tr>
+              <td>{% if line.item_id %}{{ line.item.sku }}{% else %}{{ line.description|default_if_none:"unmapped line" }}{% endif %}</td>
+              <td>{{ line.quantity_ordered }}</td>
+              <td>{{ line.unit_price }}</td>
+              <td>{{ line.quantity_allocated }}</td>
+              <td>{% if line.is_backordered %}<span class="badge badge-amber">{{ line.quantity_backordered }}</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5"><p class="text-muted" style="padding:1rem;">This order has no lines.</p></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Live allocations</h2></div>
+      <div class="card-body">
+        <p class="text-muted">
+          Reservations the warehouse is holding against this order <em>now</em>. The frozen
+          panel counted them at capture; if this table is longer, stock has been reserved since
+          the amendment was analysed.
+        </p>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Order line</th><th>Location</th><th>Quantity</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for allocation in allocations %}
+            <tr>
+              <td>Order line #{{ allocation.sales_order_line_id }}</td>
+              <td>{{ allocation.location.code }}</td>
+              <td>{{ allocation.quantity }}</td>
+              <td>{% if allocation.status == "reserved" %}<span class="badge badge-amber">{{ allocation.get_status_display }}</span>{% elif allocation.status == "released" %}<span class="badge badge-info">{{ allocation.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ allocation.get_status_display }}</span>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4"><p class="text-muted" style="padding:1rem;">No stock is reserved against this order.</p></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Live shipments</h2></div>
+      <div class="card-body">
+        <p class="text-muted">
+          Physical commitments already raised against this order. These do not move with an
+          amendment, which is why a non-zero count at capture is a warning rather than a block.
+        </p>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Shipment</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for shipment in shipments %}
+            <tr>
+              <td>{% if shipment.tracking_ref %}{{ shipment.tracking_ref }}{% else %}Shipment #{{ shipment.pk }}{% endif %}</td>
+              <td>{% if shipment.status == "delivered" %}<span class="badge badge-green">{{ shipment.get_status_display }}</span>{% elif shipment.status == "exception" %}<span class="badge badge-red">{{ shipment.get_status_display }}</span>{% elif shipment.status == "cancelled" %}<span class="badge badge-muted">{{ shipment.get_status_display }}</span>{% else %}<span class="badge badge-info">{{ shipment.get_status_display }}</span>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="2"><p class="text-muted" style="padding:1rem;">No shipment has been raised against this order.</p></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Revenue schedule</h2></div>
+      <div class="card-body">
+        {% if schedule %}
+        <p>
+          A revenue schedule is open against this order
+          ({% if schedule.number %}{{ schedule.number }} &middot; {% endif %}{{ schedule.get_method_display }} &middot; {{ schedule.get_status_display }}).
+          The frozen <em>revenue impact</em> above is the amount that schedule would have to absorb.
+        </p>
+        {% else %}
+        <p class="text-muted">
+          No revenue schedule is open against this order. If one is opened after this amendment
+          is applied, the frozen revenue impact above is the figure it will be reconciling against.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
