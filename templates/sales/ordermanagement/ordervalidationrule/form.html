@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% comment %}
+  Create / edit one OrderValidationRule. One template serves both: `is_edit` and `obj` are
+  pinned on BOTH create and edit (obj is None on create), so the Back link and the Cancel
+  target are the only two things that differ.
+
+  `parameters` is a textarea of JSON. The form's clean_parameters() is what turns a malformed
+  blob into an inline error rather than a 500 out of JSONField on save — that is the whole
+  reason this field is worth a sentence in the UI.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Validation Rule{% else %}New Validation Rule{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Validation Rule{% else %}New Validation Rule{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:order_validation_rule_list' %}">Order Validation Rules</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:order_validation_rule_detail' obj.pk %}{% else %}{% url 'sales:order_validation_rule_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      Rules are tenant-scoped configuration. They are evaluated against SCM's sales order at
+      submit or amendment time and decide whether an order is blocked, held for review, or
+      merely warned about &mdash; they never change the order themselves.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save rule{% else %}Create rule{% endif %}</button>
+        <a href="{% if is_edit %}{% url 'sales:order_validation_rule_detail' obj.pk %}{% else %}{% url 'sales:order_validation_rule_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Threshold reference</h2></div>
+  <div class="card-body">
+    {% comment %}
+      The parameters blob is what makes a new rule type DATA rather than a migration, so the
+      keys each type reads are printed here rather than left to be guessed at.
+    {% endcomment %}
+    <table class="table">
+      <thead><tr><th>Rule type</th><th>Parameters it reads</th><th>Fires when</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-600">Credit Limit Exceeded</td><td>limit / amount</td><td>Order total plus open AR exceeds the limit</td></tr>
+        <tr><td class="fw-600">Order Value Ceiling</td><td>amount / value</td><td>Order total is above the ceiling</td></tr>
+        <tr><td class="fw-600">Margin Floor</td><td>pct / margin_pct</td><td>Computed margin is below the floor</td></tr>
+        <tr><td class="fw-600">Line Discount Ceiling</td><td>pct / discount_pct</td><td>A line discount is above the ceiling</td></tr>
+        <tr><td class="fw-600">Unmapped Item Present</td><td>max_unmapped</td><td>More unmapped lines than allowed</td></tr>
+        <tr><td class="fw-600">Missing Ship-To Address</td><td>none</td><td>The order has no ship-to</td></tr>
+        <tr><td class="fw-600">Source Quote Expired</td><td>none</td><td>The originating quote is past its validity</td></tr>
+        <tr><td class="fw-600">Inactive Item On Order</td><td>none</td><td>A line references a deactivated item</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
