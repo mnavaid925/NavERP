@@ -37,6 +37,17 @@ from .OrderManagement.OrderHolds import OrderHold
 from .OrderManagement.OrderValidationRules import OrderValidationRule
 from .OrderManagement.RevenueSchedules import PerformanceObligation, RevenueSchedule
 
+# 8.7 Territory & Quota Management. These EXTEND crm.Territory and crm.SalesQuota (both owned by
+# CRM 1.2) by FK — none of them is a second territory or quota master. See the package docstring.
+from .TerritoryQuotaManagement.AccountTerritoryAssignments import AccountTerritoryAssignment
+from .TerritoryQuotaManagement.QuotaPlans import PLAN_PARAMETER_KEYS, QuotaPlan
+from .TerritoryQuotaManagement.TerritoryMembers import TerritoryMember
+from .TerritoryQuotaManagement.TerritoryRules import (
+    TERRITORY_FIELDS,
+    TerritoryRule,
+    validate_territory_conditions,
+)
+
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
     "LeadQualification", "LeadRoutingRule", "LeadNurtureEnrollment", "validate_routing_conditions",
@@ -51,6 +62,9 @@ __all__ = [
     # 8.6 Order Management
     "OrderValidationRule", "OrderHold", "OrderAmendment", "OrderAmendmentLine",
     "RevenueSchedule", "PerformanceObligation",
+    # 8.7 Territory & Quota Management
+    "TerritoryRule", "TERRITORY_FIELDS", "validate_territory_conditions",
+    "AccountTerritoryAssignment", "TerritoryMember", "QuotaPlan", "PLAN_PARAMETER_KEYS",
 ]
 
 
