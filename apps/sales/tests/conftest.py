@@ -2848,10 +2848,15 @@ def ordermanagement_tenant_b(db):
 def _ordermanagement_admin(tenant, username):
     from apps.accounts.models import User as _OmUser
 
-    return _OmUser.objects.create(
+    # A raw ``password=`` kwarg is stored as the literal string, so ``client.login`` would
+    # always fail. Hash it through the same setter the seeder uses.
+    user = _OmUser.objects.create(
         username=username, tenant=tenant, is_tenant_admin=True, is_active=True,
-        is_staff=True, password="password",
+        is_staff=True,
     )
+    user.set_password("password")
+    user.save()
+    return user
 
 
 @pytest.fixture
