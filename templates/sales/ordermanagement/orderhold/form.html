@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% comment %}
+  Create / edit one OrderHold. One template serves both: `is_edit` and `obj` are pinned on
+  BOTH create and edit (obj is None on create), so the Back link and the Cancel target are
+  the only two things that differ.
+
+  The six fields below are the WHOLE authorable surface. There is no severity picker, no
+  status picker and no snapshot box: those three are the difference between a hold workbench
+  and a suggestion box, and the server owns all three (L22).
+
+  Editing an existing hold is deliberately limited to the reason and the note. The lifecycle
+  is moved by the Checkout / Release / Clear verbs on the detail page, where each one's
+  guard is visible before it is pressed.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Order Hold{% else %}Place Order Hold{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Order Hold{% else %}Place Order Hold{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:order_hold_list' %}">Order Holds</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:order_hold_detail' obj.pk %}{% else %}{% url 'sales:order_hold_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      A hold blocks an order until a named person releases it with a written reason. Placing
+      one here is the manual path: the rule set on the &ldquo;Evaluate orders&rdquo; card raises
+      the rest. The order itself belongs to SCM &mdash; this record only points at it and
+      records why it is held.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save hold{% else %}Place hold{% endif %}</button>
+        <a href="{% if is_edit %}{% url 'sales:order_hold_detail' obj.pk %}{% else %}{% url 'sales:order_hold_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>What the server decides</h2></div>
+  <div class="card-body">
+    {% comment %}
+      Printed rather than implied, because every one of these is a field the form does NOT
+      offer — and a user who cannot see why is a user who asks for them to be added.
+    {% endcomment %}
+    <table class="table">
+      <thead><tr><th>Field</th><th>Why it is not on this form</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-600">Severity</td><td>Copied from the rule that fired. A hold's severity is a fact about a past decision, not a preference &mdash; re-tuning a rule next month must not rewrite why an order was held today.</td></tr>
+        <tr><td class="fw-600">Status</td><td>Workflow. Only the raise, clear and supersede verbs move a hold between open, cleared and superseded.</td></tr>
+        <tr><td class="fw-600">Evaluation snapshot</td><td>Frozen evidence, written by the server at the moment the hold is raised: the figure observed, the threshold it breached, the order total and who raised it. A snapshot typed by hand would be an account of the decision written by the person the decision was made about.</td></tr>
+        <tr><td class="fw-600">Checkout &amp; timestamps</td><td>Action-stamped. Each is written by exactly one named button, and the checkout is exclusive &mdash; two people cannot work the same hold.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
