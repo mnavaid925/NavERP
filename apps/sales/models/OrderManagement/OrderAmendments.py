@@ -140,6 +140,16 @@ class OrderAmendment(TenantNumbered):
     #: touched. ``has_open_for()`` and the detail page's ``can_*`` flags all read this tuple.
     OPEN_STATUSES = ("draft", "pending", "approved")
 
+    #: Statuses whose *content* may still change. Deliberately NARROWER than
+    #: ``OPEN_STATUSES``, which is the workflow's tuple: an **approved** amendment is still open
+    #: (it can be applied or withdrawn) but it must NOT be editable, because the approval was a
+    #: decision about the frozen impact read-out sitting on this row. Letting an approved
+    #: amendment's reason or lines change — and re-freeze that snapshot — would mean the thing
+    #: the approver signed off is not the thing that gets applied, which is the whole failure
+    #: mode an approval step exists to prevent. ``order_amendment_edit`` and the three line verbs
+    #: read THIS tuple, not ``OPEN_STATUSES``.
+    EDITABLE_STATUSES = ("draft", "pending")
+
     sales_order = models.ForeignKey("scm.SalesOrder", on_delete=models.CASCADE,
                                     related_name="order_amendments")
     change_type = models.CharField(max_length=16, choices=CHANGE_TYPE_CHOICES, default="quantity")
@@ -189,6 +199,17 @@ class OrderAmendment(TenantNumbered):
     def is_open(self):
         """True while this amendment can still be edited, decided or applied."""
         return self.status in self.OPEN_STATUSES
+
+    @property
+    def is_editable(self):
+        """True while the amendment's CONTENT may still change.
+
+        Narrower than ``is_open`` on purpose: an approved amendment can still be applied or
+        withdrawn, but editing it would move the document out from under the approval — and
+        re-freeze the very impact snapshot the approver read. The edit view and the three line
+        verbs gate on THIS, not on ``is_open``.
+        """
+        return self.status in self.EDITABLE_STATUSES
 
     @property
     def parsed_impact(self) -> dict:
