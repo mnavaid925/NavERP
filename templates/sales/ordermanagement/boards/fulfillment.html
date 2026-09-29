@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% comment %}
+  Fulfilment board — where every live order stands, and what is stopping it.
+
+  This is the only board that has to answer a question in the customer's voice — "where is my
+  order" — out of FOUR modules' facts at once, so it shows all four and says which is which:
+
+    * backordered quantity  — SCM 4.5's DERIVED SalesOrderLine.quantity_backordered()
+    * promised / requested  — SCM 4.5's own dates
+    * blocked-by-hold reason — Sales 8.6's own hold register
+    * shipment / POD        — SCM 4.6's tracking, read never written
+
+  The blocked-by-hold reason is rendered IN THE ROW, not behind a count. "Nothing is happening to
+  my order" is the most expensive thing a fulfilment board can fail to show, and a clerk cannot
+  work a hold they cannot read.
+
+  Every badge keys on the exact choice value with an {% else %} fallback (L33). Only badge-green/
+  red/amber/info/muted/slate exist in theme.css; badge-success/warning/danger do NOT.
+
+  The Resolve button posts to the one verb that changes anything on this page, and it DELEGATES to
+  SCM 4.5's own release/cancel views. 8.6 never rewrites promised_date - "Keep promising" is
+  offered precisely so a promise already given to a customer can be left standing on the record.
+{% endcomment %}
+{% block title %}Order Fulfilment{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Order Fulfilment Tracking</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Order Management</span><span class="sep">&rsaquo;</span><span>Fulfilment</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:order_capture_board' %}" class="btn btn-outline"><i data-lucide="inbox"></i> Capture board</a>
+    <a href="{% url 'sales:order_hold_list' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Hold workbench</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">DERIVED</span>
+      Backorder quantities are derived from the order lines and their allocations; nothing here is
+      stored. 8.6 declares no backorder table, so a shortfall is always re-read from SCM 4.5's own
+      lines rather than kept as a second copy that could disagree with them. The risk bucket is
+      date arithmetic over 4.5's <code>promised_date</code> and <code>requested_date</code>.
+      &nbsp;As of <strong>{{ stats.as_of }}</strong>.
+    </p>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Live orders</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.backordered %}orange{% else %}green{% endif %}"><i data-lucide="package-x"></i></div><div class="stat-value">{{ stats.backordered }}</div><div class="stat-label">Short on stock (derived)</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.past_due %}red{% else %}green{% endif %}"><i data-lucide="clock-alert"></i></div><div class="stat-value">{{ stats.past_due }}</div><div class="stat-label">Past the promised date</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.on_hold %}red{% else %}green{% endif %}"><i data-lucide="octagon-x"></i></div><div class="stat-value">{{ stats.on_hold }}</div><div class="stat-label">Held</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="file-signature"></i></div><div class="stat-value">{{ stats.awaiting_pod }}</div><div class="stat-label">Delivered, awaiting POD</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="ful-search">Search</label>
+        <input id="ful-search" name="q" value="{{ q }}" class="form-input" placeholder="Order number, customer, or notes">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ful-risk">Delivery risk</label>
+        <select id="ful-risk" name="risk" class="form-select">
+          {% for value, label in risk_choices %}<option value="{{ value }}"{% if risk == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ful-status">Status</label>
+        <select id="ful-status" name="status" class="form-select">
+          <option value="">All statuses</option>
+          {% for value, label in status_choices %}<option value="{{ value }}"{% if status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ful-channel">Channel</label>
+        <select id="ful-channel" name="channel" class="form-select">
+          <option value="">All channels</option>
+          {% for value, label in channel_choices %}<option value="{{ value }}"{% if channel == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:order_fulfillment_board' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Live orders</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Order</th><th>Status</th><th>Risk</th><th>Short</th><th>Promised</th><th>Blocked by</th><th>Shipment</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in orders %}
+        <tr>
+          <td>
+            <a href="{% url 'scm:salesorder_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            <div class="text-muted">{{ obj.customer.name }} &middot; {{ obj.total }}</div>
+          </td>
+          <td>
+            {% if obj.status == "submitted" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "on_hold" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "allocated" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "partially_fulfilled" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+          </td>
+          <td>
+            {% comment %}
+              The four risk buckets. The row badge and the ?risk= filter are ONE derivation: the
+              filter is ORM date arithmetic over promised_date/requested_date, and this badge is
+              the same four clauses evaluated in Python for one order. They cannot drift apart.
+            {% endcomment %}
+            {% if obj.risk_bucket == "past_due" %}<span class="badge badge-red">Past Due</span>
+            {% elif obj.risk_bucket == "at_risk" %}<span class="badge badge-amber">At Risk</span>
+            {% elif obj.risk_bucket == "no_commitment" %}<span class="badge badge-slate">No Commitment</span>
+            {% elif obj.risk_bucket == "on_track" %}<span class="badge badge-green">On Track</span>
+            {% else %}<span class="badge badge-muted">Unclassified</span>{% endif %}
+          </td>
+          <td>
+            {% if obj.backordered_qty %}
+              <span class="badge badge-amber">{{ obj.backordered_qty }} short</span>
+            {% else %}
+              <span class="text-muted">Fully reserved</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if obj.promised_date %}
+              {{ obj.promised_date }}
+              <div class="text-muted">promised</div>
+            {% elif obj.requested_date %}
+              {{ obj.requested_date }}
+              <div class="text-muted">requested, not yet promised</div>
+            {% else %}
+              <span class="text-muted">No date given</span>
+            {% endif %}
+          </td>
+          <td>
+            {% comment %}
+              THE BLOCKED-BY-HOLD REASON, in the row. A clerk cannot work a hold they cannot read,
+              and "nothing is happening to my order" is the most expensive thing a fulfilment board
+              can fail to show. The sentences are 8.6 own, from its own hold register.
+            {% endcomment %}
+            {% if obj.blocking_reasons %}
+              <span class="badge badge-red">{{ obj.open_hold_count }} hold{{ obj.open_hold_count|pluralize }}</span>
+              <ul class="text-muted" style="margin:.35rem 0 0; padding-left:1rem;">
+                {% for reason in obj.blocking_reasons %}<li>{{ reason|truncatechars:110 }}</li>{% endfor %}
+              </ul>
+            {% else %}
+              <span class="text-muted">&mdash;</span>
+            {% endif %}
+          </td>
+          <td>
+            {% comment %} 4.6 shipment facts, read here and never written by 8.6. {% endcomment %}
+            {% for shipment in obj.board_shipments %}
+              <div>
+                {% if shipment.status == "delivered" %}<span class="badge badge-green">{{ shipment.get_status_display }}</span>
+                {% elif shipment.status == "exception" %}<span class="badge badge-red">{{ shipment.get_status_display }}</span>
+                {% elif shipment.status == "cancelled" %}<span class="badge badge-muted">{{ shipment.get_status_display }}</span>
+                {% else %}<span class="badge badge-info">{{ shipment.get_status_display }}</span>{% endif %}
+                {% if shipment.carrier_tracking_number %}<span class="text-muted">{{ shipment.carrier_tracking_number }}</span>{% endif %}
+              </div>
+              {% if shipment.status == "delivered" and not shipment.pod_received %}
+                <div><span class="badge badge-amber">POD outstanding</span></div>
+              {% endif %}
+            {% empty %}
+              <span class="text-muted">No shipment raised</span>
+            {% endfor %}
+          </td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:order_timeline' obj.pk %}" class="btn-icon" title="Timeline"><i data-lucide="history"></i></a>
+              <a href="{% url 'scm:salesorder_detail' obj.pk %}" class="btn-icon" title="View in SCM"><i data-lucide="eye"></i></a>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="8" style="background:var(--page-bg);">
+            {% comment %}
+              The one genuinely new verb in bullet 2, and it DELEGATES: release and cancel are
+              SCM 4.5's own salesorderallocation_release / _cancel views, run from here. 8.6 never
+              rewrites promised_date - "Keep promising" is offered precisely so a promise already
+              given to a customer can be left standing, with the decision written down.
+            {% endcomment %}
+            {% if obj.board_allocations %}
+              {% for allocation in obj.board_allocations %}
+                <form method="post" action="{% url 'sales:order_backorder_resolve' allocation.pk %}" class="filter-bar" style="padding:.4rem 0;">
+                  {% csrf_token %}
+                  <span class="text-muted fw-600">Reservation &middot; line {{ allocation.sales_order_line_id }}</span>
+                  <span class="text-muted">{{ allocation.quantity }} @ {{ allocation.location.code }}</span>
+                  <label class="sr-only" for="res-{{ allocation.pk }}">Resolution</label>
+                  <select id="res-{{ allocation.pk }}" name="resolution" class="form-select">
+                    {% for value, label in resolution_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                  </select>
+                  <button class="btn btn-outline" type="submit"><i data-lucide="check"></i> Resolve</button>
+                </form>
+              {% endfor %}
+            {% else %}
+              <span class="text-muted">No active reservation on this order, so there is no shortfall to resolve.</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8"><div class="empty-state"><i data-lucide="truck"></i><h3>No live orders</h3><p>Nothing is in fulfilment in this workspace. Orders appear here from the moment SCM 4.5 submits them until they are fulfilled, invoiced, closed or cancelled.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
