@@ -321,6 +321,14 @@ def order_capture_board(request):
     open_hold_counts = _open_hold_counts(request, page_ids)
     unmapped_ids = _unmapped_order_ids(page_ids)
 
+    # Per-row derived values, attached to the row object. A template CANNOT look a dict up by a
+    # variable key without a custom filter, and adding a filter to read one dictionary would be a
+    # worse answer than carrying the value on the row — which is also how the stat cards and the
+    # badge are guaranteed to read the SAME number rather than two derivations of it.
+    for order in page_obj.object_list:
+        order.open_hold_count = open_hold_counts.get(order.pk, 0)
+        order.has_unmapped_line = order.pk in unmapped_ids
+
     # The stats describe the WHOLE capture queue, not the filtered page — a stats strip that
     # changes when you search is a stats strip nobody trusts. Every figure is walked in PYTHON:
     # ``by_channel`` is a per-value count and ``unmapped`` reads each order's own lines, so
