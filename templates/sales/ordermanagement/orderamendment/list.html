@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% comment %}
+  Order Amendments — the 8.6 change-order register.
+
+  Every badge keys on the model's EXACT choice value with an {% else %} fallback to
+  get_<field>_display (L33). Only badge-green/red/amber/info/muted/slate exist in theme.css;
+  badge-success/warning/danger do NOT and render unstyled.
+
+  The same template serves BOTH the register and the open queue: the view pre-filters to
+  status__in OPEN_STATUSES and passes the identical context, so the two boards cannot drift
+  apart in their filters or their context keys (L8).
+
+  The confirm() below names {{ obj.number }} — the SYSTEM-assigned AMD- document number — and
+  never {{ obj.reason }}, which is free text an author typed (L42).
+{% endcomment %}
+{% block title %}Order Amendments{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Order Amendments</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Order Management</span><span class="sep">&rsaquo;</span><span>Amendments</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:order_amendment_open_queue' %}" class="btn btn-outline"><i data-lucide="inbox"></i> Open queue</a>
+    <a href="{% url 'sales:order_amendment_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Propose amendment</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total amendments</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.open }}</div><div class="stat-label">Open</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.approved }}</div><div class="stat-label">Approved</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="check-check"></i></div><div class="stat-value">{{ stats.applied }}</div><div class="stat-label">Applied</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="amd-search">Search</label>
+        <input id="amd-search" name="q" value="{{ q }}" class="form-input" placeholder="Amendment number, reason, or order number">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="amd-change-type">Change type</label>
+        <select id="amd-change-type" name="change_type" class="form-select">
+          <option value="">All change types</option>
+          {% for value, label in change_type_choices %}<option value="{{ value }}"{% if change_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="amd-status">Status</label>
+        <select id="amd-status" name="status" class="form-select">
+          <option value="">All statuses</option>
+          {% for value, label in status_choices %}<option value="{{ value }}"{% if status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="amd-sales-order">Order</label>
+        <select id="amd-sales-order" name="sales_order" class="form-select">
+          <option value="">All orders</option>
+          {% for order in sales_orders %}<option value="{{ order.pk|stringformat:"d" }}"{% if sales_order == order.pk|stringformat:"d" %} selected{% endif %}>{{ order.number }} &middot; {{ order.customer.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="align-self:flex-end;">
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      </div>
+
+<div class="card">
+  <div class="card-header"><h2>Amendment register</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Amendment</th><th>Order</th><th>Change</th><th>Status</th><th>Delta total</th><th>Allocations at risk</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in amendments %}
+        <tr>
+          <td>
+            <a href="{% url 'sales:order_amendment_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            <div class="text-muted">{{ obj.requested_at|date:"M d, Y H:i" }} &middot; {% if obj.requested_by %}{{ obj.requested_by }}{% else %}system{% endif %}</div>
+            <div class="text-muted">{{ obj.reason|truncatechars:70 }}</div>
+          </td>
+          <td>
+            {% if obj.sales_order %}
+              <a href="{% url 'scm:salesorder_detail' obj.sales_order.pk %}" class="fw-600">{{ obj.sales_order.number }}</a>
+              <div class="text-muted">{{ obj.sales_order.customer.name }}</div>
+            {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+          </td>
+          <td><span class="badge badge-slate">{{ obj.get_change_type_display }}</span></td>
+          <td>{% if obj.status == "draft" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% elif obj.status == "pending" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == "approved" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% elif obj.status == "applied" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == "rejected" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% elif obj.status == "withdrawn" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
+          <td>
+            {% comment %}
+              delta_total is read from the FROZEN snapshot, not recomputed here. A register
+              that showed a live delta would show a different number on every page load and
+              nobody could tell which one the approver had signed off.
+            {% endcomment %}
+            {% if obj.parsed_impact.delta_total != None %}
+              <span class="fw-600">{{ obj.parsed_impact.delta_total }}</span>
+            {% else %}<span class="text-muted">Not captured</span>{% endif %}
+          </td>
+          <td>
+            {% if obj.parsed_impact.allocations_affected %}
+              <span class="badge badge-amber">{{ obj.parsed_impact.allocations_affected }}</span>
+              <div class="text-muted">reserved at capture</div>
+            {% else %}<span class="text-muted">None</span>{% endif %}
+          </td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:order_amendment_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'sales:order_amendment_impact' obj.pk %}" class="btn-icon" title="Impact"><i data-lucide="gauge"></i></a>
+              {% if obj.is_open and obj.status != "approved" %}
+                <a href="{% url 'sales:order_amendment_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              {% endif %}
+              {% if obj.status == "draft" or obj.status == "pending" %}
+              <form method="post" action="{% url 'sales:order_amendment_delete' obj.pk %}" onsubmit="return confirm('Delete amendment {{ obj.number }}? This cannot be undone.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7"><div class="empty-state"><i data-lucide="file-diff"></i><h3>No amendments</h3><p>No change order has been raised against an order in this workspace. Propose one when a customer changes their mind about quantities, prices or the order itself.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
+
+    </form>
+  </div>
+</div>
