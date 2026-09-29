@@ -285,11 +285,14 @@ class OrderHold(TenantNumbered):
         ).exists()
 
     def clean(self):
-        # The same forward-compatibility rule the rule set uses: a snapshot is written by the
-        # server, but a malformed one must be a validation error rather than a 500 out of
-        # JSONField on save — and parsed_snapshot must not raise on it either.
-        if not isinstance(self.evaluation_snapshot or {}, dict):
-            raise ValidationError({"evaluation_snapshot": "The evaluation snapshot must be a JSON object."})
+        # NOTE the absent snapshot guard, and do not add one. `OrderHoldForm.Meta.fields` is
+        # ["sales_order","rule","party","hold_type","reason","clear_note"] and
+        # `evaluation_snapshot` is `editable=False` (frozen evidence, L22), so a ValidationError
+        # keyed on it routes through Django's `add_error(None, …)` and raises ValueError — a 500
+        # on BOTH create and edit, and a *data-dependent* one, so the same form saves for one hold
+        # and 500s for another depending on invisible prior state. That is the 0.20 close-out
+        # finding verbatim. The sibling `OrderAmendment` gets this right by normalising the
+        # equivalent field in `save()` instead; `save()` below does the same here.
         super().clean()
         if not self.tenant_id:
             return
@@ -301,6 +304,16 @@ class OrderHold(TenantNumbered):
             raise ValidationError({"rule": "The validation rule must belong to this workspace."})
         if not self._relation_belongs_to_tenant("party"):
             raise ValidationError({"party": "The customer must belong to this workspace."})
+
+    def save(self, *args, **kwargs):
+        # The one place a malformed snapshot is repaired, and deliberately NOT in ``clean()``:
+        # ``evaluation_snapshot`` is not on the form (it is frozen evidence, L22), so a
+        # ValidationError keyed on it routes through ``add_error(None, …)`` and raises ValueError
+        # — a 500 on both create and edit. Normalising here keeps the field out of the validation
+        # path while still guaranteeing every reader gets the mapping ``parsed_snapshot`` promises.
+        if not isinstance(self.evaluation_snapshot, dict):
+            self.evaluation_snapshot = {}
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         order_number = self.sales_order.number if self.sales_order_id else "—"
