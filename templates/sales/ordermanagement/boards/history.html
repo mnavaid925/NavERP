@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% comment %}
+  Order History board — every order this workspace has ever taken, and the Repeat button.
+
+  Deliberately the WIDEST of the boards: it filters on nothing but the tenant, because a history
+  that hid cancelled orders would be a history that lied. That is also why the stats strip splits
+  the register four ways rather than two — closed and cancelled are different commercial facts,
+  and collapsing them into one "done" number is how a cancellation rate becomes unknowable.
+
+  EVERY FIGURE IS DERIVED. The rows are SCM 4.5's own orders read through an FK; the shipment and
+  hold columns are 4.6's and 8.6's. 8.6 stores no order history of its own.
+
+  Repeat is the second POST verb, and it creates a NEW DRAFT through 4.5's own create path with
+  4.5's own recalc_totals(). Only the customer-facing facts carry over — the promised date, the
+  notification stamps and every allocation are left behind with the order they described, because
+  carrying a promise forward would be 8.6 rewriting a date a customer was already given.
+{% endcomment %}
+{% block title %}Order History{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Order History &amp; Reorder</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Order Management</span><span class="sep">&rsaquo;</span><span>History</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:reorder_customers_board' %}" class="btn btn-outline"><i data-lucide="repeat"></i> Reorder customers</a>
+    <a href="{% url 'scm:salesorder_list' %}" class="btn btn-primary"><i data-lucide="list"></i> SCM order register</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">DERIVED</span>
+      This is SCM 4.5's own order register, read through an FK. Nothing on this page is stored by
+      8.6 and nothing here can be edited &mdash; 8.6 keeps no order history of its own, because a
+      second copy of "what we sold" is a second thing to keep in step with the first. Repeat raises
+      a new <em>draft</em> through 4.5's own create path; it does not reopen or edit the original.
+      &nbsp;As of <strong>{{ stats.as_of }}</strong>.
+    </p>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">All orders ever</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="play"></i></div><div class="stat-value">{{ stats.open }}</div><div class="stat-label">Still open</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.closed }}</div><div class="stat-label">Closed</div></div>
+  <div class="stat-card"><div class="stat-icon red"><i data-lucide="ban"></i></div><div class="stat-value">{{ stats.cancelled }}</div><div class="stat-label">Cancelled</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="his-search">Search</label>
+        <input id="his-search" name="q" value="{{ q }}" class="form-input" placeholder="Order number, customer, or notes">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="his-status">Status</label>
+        <select id="his-status" name="status" class="form-select">
+          <option value="">All statuses</option>
+          {% for value, label in status_choices %}<option value="{{ value }}"{% if status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="his-channel">Channel</label>
+        <select id="his-channel" name="channel" class="form-select">
+          <option value="">All channels</option>
+          {% for value, label in channel_choices %}<option value="{{ value }}"{% if channel == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:order_history_board' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Order register</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Order</th><th>Customer</th><th>Channel</th><th>Status</th><th>Placed</th><th>Shipped</th><th>Holds</th><th>Total</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in orders %}
+        <tr>
+          <td><a href="{% url 'scm:salesorder_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+          <td>{{ obj.customer.name }}</td>
+          <td><span class="badge badge-slate">{{ obj.get_source_channel_display }}</span></td>
+          <td>
+            {% comment %} Every badge keys on the EXACT 4.5 choice value with a display fallback (L33). {% endcomment %}
+            {% if obj.status == "draft" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "submitted" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "on_hold" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "allocated" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "partially_fulfilled" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "fulfilled" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "invoiced" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "cancelled" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+          </td>
+          <td>
+            {% comment %}
+              A plain dash for a missing date, NOT "&mdash;": a filter argument is output escaped,
+              so the entity would render as the literal text "&mdash;" on the page.
+            {% endcomment %}
+            {{ obj.order_date|default_if_none:"-" }}
+          </td>
+          <td>
+            {% comment %}
+              The DERIVED delivery fact: 4.6 stamps actual_delivery_at from its own tracking ledger.
+              8.6 reads it and never writes it.
+            {% endcomment %}
+            {% for shipment in obj.board_shipments %}
+              {% if shipment.actual_delivery_at %}
+                <div>{{ shipment.actual_delivery_at|date:"M d, Y" }}</div>
+              {% endif %}
+            {% empty %}
+              <span class="text-muted">&mdash;</span>
+            {% endfor %}
+          </td>
+          <td>
+            {% if obj.open_hold_count %}
+              <span class="badge badge-red">{{ obj.open_hold_count }}</span>
+            {% else %}
+              <span class="text-muted">&mdash;</span>
+            {% endif %}
+          </td>
+          <td>{{ obj.total }}</td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:order_timeline' obj.pk %}" class="btn-icon" title="Timeline"><i data-lucide="history"></i></a>
+              <a href="{% url 'scm:salesorder_detail' obj.pk %}" class="btn-icon" title="View in SCM"><i data-lucide="eye"></i></a>
+              {% comment %}
+                Repeat is POST-only and creates a NEW DRAFT. The confirm() names {{ obj.number }},
+                the SYSTEM-assigned SO- document number, and never {{ obj.notes }}, which is free
+                text an author typed (L42).
+              {% endcomment %}
+              <form method="post" action="{% url 'sales:order_repeat' obj.pk %}" onsubmit="return confirm('Raise a new draft order repeating {{ obj.number }}? The original is not changed.');">
+                {% csrf_token %}<button class="btn-icon" type="submit" title="Repeat this order"><i data-lucide="repeat"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9"><div class="empty-state"><i data-lucide="history"></i><h3>No orders yet</h3><p>This workspace has not taken an order. Nothing is hidden here: cancelled and closed orders stay in this register on purpose, because a history that hid them would be a history that lied.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
