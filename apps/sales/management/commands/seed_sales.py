@@ -90,7 +90,18 @@ class Command(BaseCommand):
         self.stdout.write(self.style.WARNING("Sales 8.6 posts NO JournalEntry: RevenueSchedule.journal_entry is a reference-only FK (L29), so recognition figures stay a Sales-side schedule until Accounting consumes them."))
 
     def _seed_tenant(self, tenant, backfill=False):
-        owner = User.objects.filter(tenant=tenant, is_tenant_admin=True).first() or User.objects.filter(tenant=tenant, is_active=True).first()
+        # `.order_by("pk")` is load-bearing, NOT cosmetic. `requested_by_id` is part of the
+        # enrichment idempotency comparison (`_enrichment_request_matches`), so the owner must
+        # resolve to the SAME row on every run. An unordered `.first()` returns whatever row
+        # the database happens to emit first, which can change once a tenant gains a second
+        # admin -- and the next `seed_sales` then replays an identical key with a different
+        # requester and aborts with "That idempotency key was already used for different
+        # enrichment evidence." Lowest pk is the stable choice: it is the account the tenant
+        # was created with, and the same row a re-run will always pick.
+        owner = (
+            User.objects.filter(tenant=tenant, is_tenant_admin=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant, is_active=True).order_by("pk").first()
+        )
         leads = list(Lead.objects.filter(tenant=tenant).order_by("created_at")[:3])
         if owner is None:
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no active tenant user; skipped Sales 8.1, 8.2, and 8.3 seeding."))
