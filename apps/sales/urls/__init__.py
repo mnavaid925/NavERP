@@ -19,6 +19,10 @@ from .CompetitiveIntelligence.CompetitiveIntelligence import urlpatterns as _com
 from .OpportunityOutcomes.OpportunityOutcomes import urlpatterns as _outcomes
 from .Workspace.Workspace import urlpatterns as _workspace
 from .QuoteProposalCPQ import urlpatterns as _quote_cpq
+# 8.6 Order Management. The `orders/` prefix was verified free against every prefix already
+# mounted under `sales:`, and board_patterns is spliced in FIRST inside the package because it
+# carries the literal routes (Django resolves first-match-wins).
+from .OrderManagement import urlpatterns as _order_management
 
 app_name = "sales"
 
@@ -41,6 +45,8 @@ urlpatterns = [
     *_forecast_scenarios,
     # 8.5 Quote & Proposal Management (CPQ).
     *_quote_cpq,
+    # 8.6 Order Management.
+    *_order_management,
     *_pipelines,
     *_teams,
     *_competitors,
