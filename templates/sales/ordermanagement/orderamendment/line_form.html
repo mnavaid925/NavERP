@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% comment %}
+  Add / edit ONE proposed line change. A SECONDARY-ACTION page living inside the entity
+  folder, not a flat orderamendment_line_form.html.
+
+  Reached two ways: the Add button on the amendment\'s detail page (a bound form, empty), and
+  an invalid POST, which re-renders HERE with the errors attached and the amendment, its order
+  and the order\'s own lines still in context — so an author who mistyped a quantity comes back
+  to the screen they were on, not to a bare form.
+
+  The order lines table is the point of showing the current figures beside the dropdown: the
+  author is choosing among the lines of THIS order and needs to see what each one says now
+  before saying what it should say instead.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Proposed Line{% else %}Add Proposed Line{% endif %} &middot; {{ amendment.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Proposed Line{% else %}Add Proposed Line{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:order_amendment_list' %}">Order Amendments</a><span class="sep">&rsaquo;</span><a href="{% url 'sales:order_amendment_detail' amendment.pk %}">{{ amendment.number }}</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit line{% else %}New line{% endif %}</span></div>
+  </div>
+  <a href="{% url 'sales:order_amendment_detail' amendment.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to amendment</a>
+</div>
+
+<div class="layout-2col">
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Proposed line</h2></div>
+      <div class="card-body">
+        <p class="text-muted">
+          This records what the amendment PROPOSES. Nothing is written to the order until the
+          amendment is approved and applied &mdash; and then only through the amendment\'s own
+          apply path, which recalculates the order totals with SCM\'s logic.
+        </p>
+        <form method="post" action="{% if is_edit %}{% url 'sales:order_amendment_line_edit' amendment.pk line.pk %}{% else %}{% url 'sales:order_amendment_line_add' amendment.pk %}{% endif %}" novalidate>
+          {% csrf_token %}
+          {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+          <div class="form-grid">
+            {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save line{% else %}Add line{% endif %}</button>
+            <a href="{% url 'sales:order_amendment_detail' amendment.pk %}" class="btn btn-outline">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>How the three operations read</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Operation</th><th>Order line</th><th>New quantity</th><th>New unit price</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-green">add</span></td><td>Left blank &mdash; there is no original</td><td>Required: the quantity of the new line</td><td>Required: what it sells for</td></tr>
+            <tr><td><span class="badge badge-info">update</span></td><td>Required: the line being changed</td><td>Optional. Blank means &ldquo;unchanged&rdquo;</td><td>Optional. Blank means &ldquo;unchanged&rdquo;</td></tr>
+            <tr><td><span class="badge badge-red">remove</span></td><td>Required: the line being removed</td><td colspan="2">Must be blank. A removal that also carries a quantity is two instructions in one row.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Order {{ order.number }} as it stands</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Item</th><th>Quantity</th><th>Unit price</th></tr></thead>
+          <tbody>
+            {% for line in order_lines %}
+            <tr>
+              <td>{% if line.item_id %}{{ line.item.sku }}{% else %}{{ line.description|default_if_none:"unmapped line" }}{% endif %}</td>
+              <td>{{ line.quantity_ordered }}</td>
+              <td>{{ line.unit_price }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3"><p class="text-muted" style="padding:1rem;">This order has no lines. An Add amendment is the only kind that can proceed.</p></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
