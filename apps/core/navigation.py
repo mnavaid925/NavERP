@@ -2386,6 +2386,30 @@ LIVE_LINKS = {
         "Quote Approval Rules": "sales:quote_approval_rule_list",
         "CPQ Guided Selling": "sales:cpq_guided_selling",
     },
+    "8.6": {
+        # OWNERSHIP RULING (L36/L37) — one of the three durable places it is written down; the
+        # other two are the `apps/sales/models/OrderManagement/__init__.py` docstring and
+        # lessons.md. `apps.scm` OWNS the sales order: `scm.SalesOrder` / `SalesOrderLine` /
+        # `SalesOrderAllocation` are SCM 4.5's, and `SalesOrders.py` says so verbatim and
+        # reserves the amend/cancel flow for 8.6. Module 8.6 therefore EXTENDS that order by
+        # FK and DECLARES NO SECOND ORDER MASTER — there is no `sales.SalesOrder`, and a class
+        # by that name in this app would be a bug, not a variant. What this block links to is
+        # the commercial LAYER over 4.5's order: the typed validation rule set, the auditable
+        # hold, the change order, and the ASC 606 schedule.
+        # The five NavERP.md 8.6 bullet strings, verbatim — parse_catalog() keys the module
+        # tree off them, so a typo silently produces a dead bullet.
+        "Order Capture & Validation": "sales:order_capture_board",
+        "Order Fulfillment Tracking": "sales:order_fulfillment_board",
+        "Order Amendments & Cancellations": "sales:order_amendment_list",
+        "Revenue Recognition & Scheduling": "sales:revenue_schedule_list",
+        "Order History & Reorder": "sales:order_history_board",
+        # Extra live leaves (not NavERP.md bullets):
+        "Order Validation Rules": "sales:order_validation_rule_list",
+        "Order Hold Workbench": "sales:order_hold_list",
+        "Reorder & Renewal Watch": "sales:reorder_customers_board",
+        "Revenue Recognition Board": "sales:revenue_recognition_board",
+    },
+
 
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
