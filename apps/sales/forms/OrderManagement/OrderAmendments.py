@@ -70,7 +70,7 @@ class OrderAmendmentForm(TenantUniqueMixin, TenantModelForm):
         }
         help_texts = {
             "sales_order": "The live order this changes. 8.6 extends SCM's order; it never replaces it.",
-            "change_type": "What KIND of change this is. Cancel and close act on the whole order.",
+            "change_type": "What KIND of change this is. Cancel acts on the whole order.",
             "reason": "The commercial reason. This is what the approver reads first.",
             "document": "Optional — the customer's email, a signed change note, a credit memo.",
         }
@@ -239,10 +239,11 @@ class OrderAmendmentDecisionForm(forms.Form):
     the amendment's decision fields differently, and a change order whose rejection leaves a
     ``decided_by`` but no reason is worse than one that was never decided at all.
 
-    The field is named ``note``, not ``decision_note``: the model stores no decision note
-    column, and the view appends what is typed here to the amendment's ``notes`` — the
-    amendment's own running record — so the justification survives with the document rather
-    than in a parallel table.
+    The field is named ``decision_note`` to match the column it writes. It is kept SEPARATE from
+    the amendment's own ``notes`` (which the view appends the decision to as well): a later
+    application appends to ``notes``, and if the approver's reasoning lived only there it would
+    end up interleaved with operational chatter. It is not on any ModelForm — an approval
+    justification a later edit could rewrite is not evidence of why the approver said yes (L22).
     """
 
     decision = forms.ChoiceField(
@@ -250,7 +251,7 @@ class OrderAmendmentDecisionForm(forms.Form):
         choices=[("approved", "Approve"), ("rejected", "Reject")],
         widget=forms.RadioSelect(),
     )
-    note = forms.CharField(
+    decision_note = forms.CharField(
         label="Decision note",
         required=False,
         widget=forms.Textarea(attrs={
