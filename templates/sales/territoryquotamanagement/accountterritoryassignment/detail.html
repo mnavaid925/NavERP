@@ -29,7 +29,7 @@
   <div class="stat-card"><div class="stat-icon blue"><i data-lucide="hash"></i></div><div class="stat-value">{{ obj.number }}</div><div class="stat-label">Assignment number</div></div>
   <div class="stat-card"><div class="stat-icon {% if obj.effective_to %}slate{% else %}green{% endif %}"><i data-lucide="calendar-range"></i></div><div class="stat-value">{% if obj.effective_to %}Closed{% else %}Live{% endif %}</div><div class="stat-label">Window state</div></div>
   <div class="stat-card"><div class="stat-icon {% if obj.alignment_type == 'primary' %}green{% elif obj.alignment_type == 'overlay' %}orange{% else %}blue{% endif %}"><i data-lucide="layers"></i></div><div class="stat-value">{{ obj.get_alignment_type_display }}</div><div class="stat-label">Alignment</div></div>
-  <div class="stat-card"><div class="stat-icon {% if obj.territory %}blue{% else %}red{% endif %}"><i data-lucide="map-pin"></i></div><div class="stat-value">{% if obj.territory %}{{ obj.territory.number }}{% else %}&mdash;{% endif %}</div><div class="stat-label">Territory (CRM 1.2)</div></div>
+  <div class="stat-card"><div class="stat-icon {% if obj.territory %}blue{% else %}orange{% endif %}"><i data-lucide="map-pin"></i></div><div class="stat-value">{% if obj.territory %}{{ obj.territory.number }}{% else %}&mdash;{% endif %}</div><div class="stat-label">Territory (CRM 1.2)</div></div>
 </div>
 
 {% if caveats %}
