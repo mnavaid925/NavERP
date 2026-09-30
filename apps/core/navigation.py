@@ -2425,6 +2425,7 @@ LIVE_LINKS = {
         "Territory Rules": "sales:territory_rule_list",
         "Territory Members": "sales:territory_member_list",
         "Quota Plans": "sales:quota_plan_list",
+        "Account Territory Assignments": "sales:account_territory_assignment_list",
         "Rebalance Preview": "sales:territory_rebalance_preview",
         "Coverage Gaps": "sales:territory_coverage_gap",
         "Territory White Space": "sales:territory_white_space",
