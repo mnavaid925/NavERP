@@ -32,7 +32,13 @@ from .models import (
     OrderAmendmentLine,
     RevenueSchedule,
     PerformanceObligation,
+    # 8.7 Territory & Quota Management
+    TerritoryRule,
+    AccountTerritoryAssignment,
+    TerritoryMember,
+    QuotaPlan,
 )
+
 
 
 
@@ -534,6 +540,48 @@ class RevenueScheduleAdmin(admin.ModelAdmin):
     list_select_related = ("sales_order", "fiscal_period", "journal_entry", "tenant")
     raw_id_fields = ("sales_order", "fiscal_period", "journal_entry")
     inlines = [PerformanceObligationInline]
+
+
+# 8.7 Territory & Quota Management — all four models registered; the four boards get no admin.
+@admin.register(TerritoryRule)
+class TerritoryRuleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "segment_type", "match_mode", "alignment_type", "assignment_scope", "target_territory", "priority", "is_active", "tenant")
+    list_filter = ("segment_type", "match_mode", "alignment_type", "assignment_scope", "is_active", "is_catch_all", "tenant")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("tenant", "number", "last_run_at", "last_run_matched_count", "created_at", "updated_at")
+    list_select_related = ("target_territory", "tenant")
+    raw_id_fields = ("target_territory",)
+
+
+@admin.register(AccountTerritoryAssignment)
+class AccountTerritoryAssignmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "account", "territory", "rule", "owner", "alignment_type", "assignment_source", "effective_from", "effective_to", "tenant")
+    list_filter = ("alignment_type", "assignment_source", "tenant")
+    search_fields = ("number", "account__name", "notes")
+    readonly_fields = ("tenant", "number", "assigned_by", "created_at", "updated_at")
+    list_select_related = ("account", "territory", "rule", "owner", "assigned_by", "tenant")
+    raw_id_fields = ("account", "territory", "rule", "owner", "assigned_by")
+
+
+@admin.register(TerritoryMember)
+class TerritoryMemberAdmin(admin.ModelAdmin):
+    list_display = ("number", "territory", "user", "member_role", "assignment_type", "coverage_split_pct", "paired_user", "is_primary", "tenant")
+    list_filter = ("member_role", "assignment_type", "is_primary", "tenant")
+    search_fields = ("number", "user__username", "territory__name", "notes")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("territory", "user", "paired_user", "tenant")
+    raw_id_fields = ("territory", "user", "paired_user")
+
+
+@admin.register(QuotaPlan)
+class QuotaPlanAdmin(admin.ModelAdmin):
+    list_display = ("number", "quota_ref", "forecast_period", "owner", "territory", "method", "status", "growth_target_pct", "is_active", "tenant")
+    list_filter = ("method", "status", "allocation_basis", "baseline_source", "target_type", "phasing", "is_active", "tenant")
+    search_fields = ("number", "quota_ref__number", "owner__username", "notes")
+    readonly_fields = ("tenant", "number", "submitted_by", "submitted_at", "approved_by", "approved_at", "calculated_at", "created_at", "updated_at")
+    list_select_related = ("quota_ref", "forecast_period", "owner", "territory", "submitted_by", "approved_by", "tenant")
+    raw_id_fields = ("quota_ref", "forecast_period", "owner", "territory", "submitted_by", "approved_by")
+
 
 
 
