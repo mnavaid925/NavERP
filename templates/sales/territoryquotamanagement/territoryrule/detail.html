@@ -88,7 +88,7 @@
               <tr>
                 <td class="fw-600">{{ condition.field }}</td>
                 <td><span class="badge badge-slate">{{ condition.operator }}</span></td>
-                <td>{% if condition.value == None or condition.value == "" %}<span class="text-muted">&mdash;</span>{% else %}{{ condition.value|join:", " }}{% endif %}</td>
+                <td>{% if condition.value == None or condition.value == "" %}<span class="text-muted">&mdash;</span>{% elif condition.operator == "in" or condition.operator == "not_in" %}{{ condition.value|join:", " }}{% else %}{{ condition.value }}{% endif %}</td>
               </tr>
               {% endfor %}
             </tbody>
