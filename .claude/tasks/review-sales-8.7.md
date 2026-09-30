@@ -96,7 +96,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** `orphaned_pair_rows` query in `territory_coverage_gap` is missing `.filter(member_role="sdr")`. Without this filter, every active Hunter, Farmer, AE, Overlay Specialist, and Sales Engineer with `paired_user=None` is displayed in the "SDR pairings with no active account executive" table.
 - **Fix:** Add `.filter(member_role="sdr")` to `orphaned_pair_rows` in `TerritoryBoards.py:563`.
 
-### [I5] In-Loop `select_for_update` in `territory_rule_run`
+### [x] fixed — [I5] In-Loop `select_for_update` in `territory_rule_run`
+<!-- commit: perf(sales): batch prefetch and lock assignments in territory rule run (I5) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/TerritoryRules.py:246-281`
 - **Description:** For each diff entry, `territory_rule_run` issues a separate `select_for_update` on `AccountTerritoryAssignment` inside the loop, creating serial row locks and latency.
 - **Fix:** Prefetch and lock candidate assignments in batch or streamline assignment deactivations.
