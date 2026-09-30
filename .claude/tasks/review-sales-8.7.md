@@ -72,7 +72,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 
 ## Important
 
-### [I1] Unfiltered Foreign Key Dropdowns in Model Forms (Tenant Isolation Guard)
+### [x] fixed — [I1] Unfiltered Foreign Key Dropdowns in Model Forms (Tenant Isolation Guard)
+<!-- commit: fix(sales): filter foreign keys by tenant across territory quota model forms (I1) -->
 - **Location:** `apps/sales/forms/TerritoryQuotaManagement/TerritoryMembers.py:84-93`, `QuotaPlans.py:114-128`, `AccountTerritoryAssignments.py:81-103`
 - **Description:** `TerritoryMemberForm` fails to filter `self.fields["territory"].queryset`. `QuotaPlanForm` fails to filter `territory` and `owner` querysets and does not clear them when `self.tenant is None`. `AccountTerritoryAssignmentForm` leaves `owner` unfiltered when `self.tenant is None`.
 - **Fix:** Filter all FK querysets to `request.tenant` (and active status where applicable), and explicitly assign `.none()` to all FK fields when `self.tenant is None`.
