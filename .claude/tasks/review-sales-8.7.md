@@ -183,5 +183,21 @@ Review of `02d8aa79...HEAD` across the 6-reviewer sequence.
     - **Description:** Calling `str(instance)` when `account`, `territory`, or `user` are un-prefetched incurs additional queries.
     - **Fix:** Guard access or prefetch related FKs in list and board views.
 
+---
+
+## Pass 5: qa-smoke-tester
+
+### Important
+28. **HTTP 500 on Account Territory Assignment Edit POST (`AttributeError: save_m2m`)**
+    - **Location:** `apps/sales/views/TerritoryQuotaManagement/AccountTerritoryAssignments.py:215`
+    - **Description:** `account_territory_assignment_edit` updates fields manually on `locked` instead of calling `form.save(commit=False)`. Calling `form.save_m2m()` fails with `AttributeError: 'AccountTerritoryAssignmentForm' object has no attribute 'save_m2m'` because `save_m2m` is only bound when `form.save()` has been called. Also overwrites frozen origin evidence `locked.assigned_by = request.user`.
+    - **Fix:** Refactor `account_territory_assignment_edit` to delegate to `crud_edit(request, model=AccountTerritoryAssignment, pk=pk, form_class=AccountTerritoryAssignmentForm, template=FORM_TEMPLATE, success_url=..., extra_context=_form_context(request))` matching sibling entities.
+
+29. **Quota Plan Approval Workflow Bricked on Rejection (Cannot Resubmit Rejected Plan)**
+    - **Location:** `apps/sales/views/TerritoryQuotaManagement/QuotaPlans.py:270`
+    - **Description:** When a plan is rejected via `quota_plan_reject`, its status is set to `"rejected"`. `QuotaPlanForm` excludes `status` (action-driven), so saving edits preserves status `"rejected"`. Then `quota_plan_submit` checks `if obj.status != "draft":`, returning an error and permanently stranding rejected plans with no transition back to submitted.
+    - **Fix:** In `QuotaPlans.py:270`, change check to `if obj.status not in ("draft", "rejected"):` and update user message to indicate draft or rejected plans can be submitted.
+
+
 
 
