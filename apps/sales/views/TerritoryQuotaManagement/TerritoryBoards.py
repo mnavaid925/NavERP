@@ -619,6 +619,7 @@ def territory_performance(request):
     periods = (
         list(
             ForecastPeriod.objects.filter(tenant=tenant)
+            .select_related("reporting_currency")
             .order_by("-period_year", "-period_number", "period_type")[:MAX_PERIODS]
         )
         if tenant is not None
@@ -720,8 +721,9 @@ def territory_performance(request):
             "pipeline are withheld rather than added across currencies."
         )
     elif currency_ids and period.reporting_currency_id and currency_ids != {period.reporting_currency_id}:
+        reporting_curr_code = period.reporting_currency.code if period.reporting_currency else "—"
         caveats.append(
-            f"These deals are booked in one currency that is not {period.get_reporting_currency_display()}, "
+            f"These deals are booked in one currency that is not {reporting_curr_code}, "
             "the period's reporting currency."
         )
 
