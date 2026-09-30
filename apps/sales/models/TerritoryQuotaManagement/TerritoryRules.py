@@ -234,6 +234,11 @@ class TerritoryRule(TenantNumbered):
         # carrying match conditions would be a contradiction, not a stricter rule.
         if self.segment_type == "named_account" and self.conditions:
             errors["conditions"] = "A named-account rule picks accounts by hand and carries no conditions."
+        if self.assignment_scope == "subtree" and self.alignment_type == "primary":
+            errors["alignment_type"] = (
+                "A subtree rule assigns accounts across multiple territories and cannot create primary alignments. "
+                "Use secondary or overlay, or change assignment scope to this territory only."
+            )
         if errors:
             raise ValidationError(errors)
 
