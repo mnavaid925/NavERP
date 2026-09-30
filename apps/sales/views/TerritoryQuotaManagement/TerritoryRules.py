@@ -244,19 +244,33 @@ def territory_rule_run(request, pk):
     closed_history_skipped = 0
     claimed_elsewhere = 0
     with transaction.atomic():
+        candidate_account_ids = {
+            row["account"].pk
+            for row in actionable
+            if row.get("proposed_territory") and row["proposed_territory"].pk in target_ids
+        }
+        existing_assignments = (
+            list(
+                AccountTerritoryAssignment.objects.select_for_update().filter(
+                    tenant=request.tenant,
+                    account_id__in=candidate_account_ids,
+                    territory_id__in=target_ids,
+                )
+            )
+            if candidate_account_ids
+            else []
+        )
+        existing_map = {}
+        for assignment in existing_assignments:
+            key = (assignment.account_id, assignment.territory_id)
+            if key not in existing_map or (existing_map[key].effective_to is not None and assignment.effective_to is None):
+                existing_map[key] = assignment
+
         for row in actionable:
             territory = row["proposed_territory"]
             if territory is None or territory.pk not in target_ids:
                 continue
-            existing = (
-                AccountTerritoryAssignment.objects.select_for_update()
-                .filter(
-                    tenant=request.tenant,
-                    account_id=row["account"].pk,
-                    territory_id=territory.pk,
-                )
-                .first()
-            )
+            existing = existing_map.get((row["account"].pk, territory.pk))
             if existing is not None:
                 if existing.effective_to is not None:
                     # A CLOSED row is history. Re-opening it would rewrite a past coverage decision,
