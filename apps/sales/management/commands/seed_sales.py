@@ -1214,6 +1214,15 @@ class Command(BaseCommand):
             seeded_rules[spec["name"]] = rule
         credit_rule = seeded_rules["Credit Exposure Ceiling"]
 
+        if order is None:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"{tenant.name}: no amendable SCM sales order found; seeded validation rules only, "
+                    "skipping order holds, amendments, and schedules."
+                )
+            )
+            return
+
         # --- 2. OrderHold with a frozen evaluation_snapshot --------------
         # The snapshot is built by the MODEL's own `build_evaluation_snapshot`, and the
         # observed/threshold pair is the rule engine's own `_measure()` reading the real order
