@@ -126,7 +126,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** `self.quota_ref` and `self.forecast_period` are dereferenced directly in `clean()`. If foreign keys failed tenant validation, accessing them raises `crm.SalesQuota.DoesNotExist` instead of collecting clean validation errors.
 - **Fix:** Skip direct attribute access when foreign keys failed tenant validation.
 
-### [I10] Model-Level Frozen State Check in `QuotaPlan.clean()`
+### [x] fixed — [I10] Model-Level Frozen State Check in `QuotaPlan.clean()`
+<!-- commit: fix(sales): enforce immutability of frozen quota plans in QuotaPlan.clean (I10) -->
 - **Location:** `apps/sales/models/TerritoryQuotaManagement/QuotaPlans.py:167-204`
 - **Description:** While views guard frozen status, `QuotaPlan.clean()` does not enforce immutability of plans in `FROZEN_STATES` at the model level.
 - **Fix:** In `QuotaPlan.clean()`, check if `self.pk` and DB status is in `FROZEN_STATES`, and raise `ValidationError`.
