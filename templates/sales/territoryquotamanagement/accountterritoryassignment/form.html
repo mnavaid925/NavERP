@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% comment %}
+  Create / edit one AccountTerritoryAssignment. ONE template for both, driven by `is_edit`.
+
+  `assigned_by` is `editable=False` frozen evidence: who made the assignment is a fact about a
+  decision, not a field a later form edit may rewrite. That is why the create and edit views are
+  hand-written rather than delegated to `crud_create` / `crud_edit` — those know how to stamp a
+  tenant and an audit row, and nothing about a fact about itself. There is deliberately no input
+  for it on this form.
+
+  `assignment_source` and `rule` are bound to each other in the model: a rule-sourced row MUST
+  name the rule that made it and every other source FORBIDS one. A row that claimed a rule it did
+  not come from would make the audit trail lie about how an account was assigned, which is the
+  one thing this ledger exists to say.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Territory Assignment{% else %}New Territory Assignment{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Territory Assignment{% else %}New Territory Assignment{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:account_territory_assignment_list' %}">Account Territory Assignments</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:account_territory_assignment_detail' obj.pk %}{% else %}{% url 'sales:account_territory_assignment_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      One account's placement in one territory for one window of time. Leave the end date empty
+      and the row is live &mdash; the boards read live rows and nothing else. An annual rebalance
+      opens a new row and closes this one; it never overwrites it, so "which territory was this
+      account in last March" stays answerable after the territories have been re-cut.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save assignment{% else %}Create assignment{% endif %}</button>
+        <a href="{% if is_edit %}{% url 'sales:account_territory_assignment_detail' obj.pk %}{% else %}{% url 'sales:account_territory_assignment_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>What the server decides</h2></div>
+  <div class="card-body">
+    <table class="table">
+      <thead><tr><th>Field</th><th>Why it is not on this form</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-600">Number (TAS-)</td><td>System-assigned and sequential. A hand-typed number is how two books of coverage history end up sharing a document identity.</td></tr>
+        <tr><td class="fw-600">Assigned by</td><td>Frozen evidence, stamped once from the signed-in user at the moment the row is written. A form cannot carry a fact about itself, and a later edit must not be able to rewrite who made the call.</td></tr>
+        <tr><td class="fw-600">Territory</td><td>Owned by CRM 1.2. Sales reads <code>crm.Territory</code> through a FK and declares no second territory master. A deleted territory orphans its rows on purpose, so this register can show the gap instead of hiding it behind a cascade.</td></tr>
+        <tr><td class="fw-600">Is this row current?</td><td>Derived from the window: <code>effective_to IS NULL</code>. A stored "is current" flag is a second copy of the same fact, and two copies of one fact is how a register starts lying.</td></tr>
+        <tr><td class="fw-600">A second live primary</td><td>Refused by the model for the same account. Close the current primary window before opening another &mdash; an account with two live primaries has no single owner.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
