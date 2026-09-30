@@ -683,7 +683,7 @@ def territory_performance(request):
             period_type=period.period_type,
             period_year=period.period_year,
             period_number=period.period_number,
-        )
+        ).select_related("territory")
     )
     quota_by_territory = {territory_id: ZERO for territory_id in territory_ids}
     seen_quota_keys = {}
