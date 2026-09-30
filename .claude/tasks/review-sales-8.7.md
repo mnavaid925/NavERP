@@ -51,7 +51,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** `_paired_user_is_ae()` returns `None` when pairing cannot be judged. Line 131 uses `if self.paired_user_id and not self._paired_user_is_ae():`. In Python, `not None` evaluates to `True`, triggering a spurious `"A pairing must point at a member whose role is Account Executive."` validation error when the paired user cannot be found or is cross-tenant.
 - **Fix:** Change line 131 to `if self.paired_user_id and self._paired_user_is_ae() is False:`, and query `.filter(tenant_id=self.tenant_id, territory_id=self.territory_id, user_id=self.paired_user_id, member_role="ae").exists()`.
 
-### [C6] Quota Plan Workflow Bypass: Submitted Plans Editable and Rejected Plans Deadlocked
+### [x] fixed — [C6] Quota Plan Workflow Bypass: Submitted Plans Editable and Rejected Plans Deadlocked
+<!-- commit: fix(sales): guard quota plan edit on submitted status and allow resubmit for rejected plans (C6) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/QuotaPlans.py:243-286`, `apps/sales/models/TerritoryQuotaManagement/QuotaPlans.py:76-77`
 - **Description:**
   1. Plans awaiting approval (`status == "submitted"`) are not listed in `FROZEN_STATES = {"approved", "locked"}` and are editable in `quota_plan_edit`, allowing growth targets and parameters to be altered while in the admin queue without approval reset.
