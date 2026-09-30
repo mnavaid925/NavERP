@@ -30,7 +30,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** Seeded rules `rule_geo` and `rule_size` define conditions using `"operator": "equals"`. However, `ROUTING_OPERATORS` in `TerritoryRules.py:44-54` only permits `"eq"`, `"ne"`, `"gt"`, `"gte"`, `"lt"`, `"lte"`, `"in"`, `"not_in"`, `"contains"`. This causes `_condition_matches` to fail to recognize `"equals"`, silently returning `False` for all evaluated accounts, and any clean/save triggers `ValidationError: Unsupported territory operator: equals`.
 - **Fix:** Change `"operator": "equals"` to `"operator": "eq"` at lines 1429 and 1446 in `seed_sales.py`.
 
-### [C4] Broken Split Sum Validation in `TerritoryMember._check_split_sums`
+### [x] fixed — [C4] Broken Split Sum Validation in `TerritoryMember._check_split_sums`
+<!-- commit: fix(sales): correct direct split sum validation for shared territories (C4) -->
 - **Location:** `apps/sales/models/TerritoryQuotaManagement/TerritoryMembers.py:164-185`
 - **Description:** 
   1. `if not siblings.filter(assignment_type="shared").exists(): return` exits early without validating direct splits when creating the very first shared member on a territory.
