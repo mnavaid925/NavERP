@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% comment %}
+  8.7 Coverage gap board — every way coverage can be incomplete, SURFACED rather than hidden.
+
+  Six independent ways an account or a territory can end up uncovered, and they are deliberately
+  six separate tables rather than one merged list, because they have different owners and different
+  fixes:
+
+    * uncovered        — no active rule matched the account
+    * unassigned       — no live assignment row at all
+    * over-assigned    — more than one live primary, or auxiliary alignments over the cap
+    * manager-less     — an active crm.Territory with manager IS NULL
+    * orphans          — a live assignment whose territory was deleted (the SET_NULL case)
+    * orphaned pairs   — a live SDR membership pairing with no active account executive
+
+  The orphan tables exist because deleting a CRM territory orphans its assignment rows rather than
+  cascading them away. That is the right call for a record of a decision, and it has an
+  obligation attached: the orphans have to be visible somewhere, and this is somewhere.
+
+  LIVE DERIVATION, NOT A SNAPSHOT — recomputed on every load, never stored, and this page never
+  writes. Closing a gap is a separate act on the rule register or the assignment register.
+{% endcomment %}
+{% block title %}Territory Coverage Gaps{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Territory Coverage Gaps</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Territory &amp; Quota</span><span class="sep">&rsaquo;</span><span>Coverage gaps</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:territory_rule_list' %}" class="btn btn-outline"><i data-lucide="git-branch"></i> Rule register</a>
+    <a href="{% url 'sales:territory_rebalance_preview' %}" class="btn btn-outline"><i data-lucide="git-compare"></i> Rebalance preview</a>
+    <a href="{% url 'sales:account_white_space' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Account white space (8.3)</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">LIVE DERIVATION &mdash; NOT A SNAPSHOT</span>
+      Nothing on this page is stored and nothing on it is ever written. Every row is recomputed now
+      from the rules in force, the live assignment ledger and the CRM territories &mdash; so it is
+      never stale, and equally it is a report rather than a record. Closing a gap is a separate,
+      deliberate act on the rule register or the assignment register.
+    </p>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="scan"></i></div><div class="stat-value">{{ stats.accounts_total }}</div><div class="stat-label">Accounts scanned</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.uncovered %}orange{% else %}green{% endif %}"><i data-lucide="unlink"></i></div><div class="stat-value">{{ stats.uncovered }}</div><div class="stat-label">Matched by no rule</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.unassigned %}red{% else %}green{% endif %}"><i data-lucide="circle-off"></i></div><div class="stat-value">{{ stats.unassigned }}</div><div class="stat-label">Hold no live assignment</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.over_assigned %}orange{% else %}green{% endif %}"><i data-lucide="copy"></i></div><div class="stat-value">{{ stats.over_assigned }}</div><div class="stat-label">Over-assigned</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.manager_less %}orange{% else %}green{% endif %}"><i data-lucide="user-round-x"></i></div><div class="stat-value">{{ stats.manager_less }}</div><div class="stat-label">Territories with no manager</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.orphans %}red{% else %}green{% endif %}"><i data-lucide="file-x"></i></div><div class="stat-value">{{ stats.orphans }}</div><div class="stat-label">Orphaned rows and pairings</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="cg-search">Search</label>
+        <input id="cg-search" name="q" value="{{ q }}" class="form-input" placeholder="Account or territory name">
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:territory_coverage_gap' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+{% if caveats %}
+<div class="card">
+  <div class="card-header"><h2>How to read this</h2></div>
+  <div class="card-body">
+    <ul style="margin:0; padding-left:1.1rem;">
+      {% for caveat in caveats %}<li>{{ caveat }}</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header"><h2>Accounts no active rule matched</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Account</th><th>Profile</th><th>Classification</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for row in uncovered_rows %}
+        <tr>
+          <td class="fw-600">{{ row.account.name }}</td>
+          <td>{% if row.profile %}{{ row.profile.get_industry_display|default:row.profile.industry }}<div class="text-muted">{{ row.profile.annual_revenue }} &middot; {{ row.profile.employee_count }} staff</div>{% else %}<span class="text-muted">No profile</span>{% endif %}</td>
+          <td>{% if row.classification %}<span class="badge badge-slate">{{ row.classification.get_tier_display }}</span>{% else %}<span class="text-muted">Unclassified</span>{% endif %}</td>
+          <td><span class="badge badge-amber">No rule matched</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4"><div class="empty-state"><i data-lucide="check-circle"></i><h3>No uncovered accounts</h3><p>Every scanned account is claimed by a rule in force today.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Accounts holding no live assignment at all</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Account</th><th>Profile</th><th>Classification</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for row in unassigned_rows %}
+        <tr>
+          <td class="fw-600">{{ row.account.name }}</td>
+          <td>{% if row.profile %}{{ row.profile.get_industry_display|default:row.profile.industry }}<div class="text-muted">{{ row.profile.annual_revenue }} &middot; {{ row.profile.employee_count }} staff</div>{% else %}<span class="text-muted">No profile</span>{% endif %}</td>
+          <td>{% if row.classification %}<span class="badge badge-slate">{{ row.classification.get_tier_display }}</span>{% else %}<span class="text-muted">Unclassified</span>{% endif %}</td>
+          <td><span class="badge badge-red">Unassigned</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4"><div class="empty-state"><i data-lucide="check-circle"></i><h3>Everything is placed</h3><p>Every scanned account holds at least one live assignment row.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Over-assigned accounts</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Account</th><th>Live primaries</th><th>Live secondary &amp; overlay</th><th>Territories</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for row in over_assigned_rows %}
+        <tr>
+          <td class="fw-600">{{ row.account.name }}</td>
+          <td>{{ row.primary_count }}</td>
+          <td>{{ row.auxiliary_count }}</td>
+          <td>{% for number in row.territories %}<span class="badge badge-slate">{{ number }}</span>{% empty %}<span class="text-muted">&mdash;</span>{% endfor %}</td>
+          <td><span class="badge badge-red">Over-assigned</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5"><div class="empty-state"><i data-lucide="check-circle"></i><h3>No over-assignment</h3><p>No account carries more than one live primary, and none is over the cap on live secondary and overlay alignments.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <p class="text-muted">
+      An account may hold one live PRIMARY and a bounded number of SECONDARY and OVERLAY
+      alignments &mdash; that is the hunter/farmer split and the overlay specialist working
+      alongside a base rep. What this table catches is going past that: two live primaries leave an
+      account with no single owner.
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Active territories with no manager</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Territory</th><th>Region</th><th>Segment</th><th>Manager</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for territory in manager_less_rows %}
+        <tr>
+          <td class="fw-600">{{ territory.number }}<div class="text-muted">{{ territory.name }}</div></td>
+          <td>{% if territory.region %}{{ territory.region }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td>{% if territory.segment %}{{ territory.segment }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td><span class="text-muted">No manager on file</span></td>
+          <td><span class="badge badge-amber">Manager-less</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5"><div class="empty-state"><i data-lucide="check-circle"></i><h3>Every active territory has a manager</h3><p>Each active CRM territory names an accountable manager, so lead routing has somebody to hand a lead to.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <p class="text-muted">
+      The manager is <code>crm.Territory.manager</code>, owned by CRM 1.2 &mdash; 8.7 does not hold
+      a second copy of it. It is read here because a territory with nobody accountable is a gap
+      that 8.1's territory-manager routing has to report on.
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Live assignments pointing at no territory</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Assignment</th><th>Account</th><th>Alignment</th><th>Source</th><th>Since</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for row in orphan_rows %}
+        <tr>
+          <td><a href="{% url 'sales:account_territory_assignment_detail' row.pk %}" class="fw-600">{{ row.number }}</a></td>
+          <td>{{ row.account.name }}</td>
+          <td>{% if row.alignment_type == "primary" %}<span class="badge badge-green">{{ row.get_alignment_type_display }}</span>{% elif row.alignment_type == "overlay" %}<span class="badge badge-amber">{{ row.get_alignment_type_display }}</span>{% else %}<span class="badge badge-slate">{{ row.get_alignment_type_display }}</span>{% endif %}</td>
+          <td>{% if row.assignment_source == "rule" %}<span class="badge badge-info">{{ row.get_assignment_source_display }}</span>{% else %}<span class="badge badge-muted">{{ row.get_assignment_source_display }}</span>{% endif %}</td>
+          <td>{{ row.effective_from|date:"M d, Y" }}</td>
+          <td><span class="badge badge-red">Orphaned</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty-state"><i data-lucide="check-circle"></i><h3>No orphaned assignments</h3><p>Every live assignment points at a territory that still exists.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <p class="text-muted">
+      These rows are the SET_NULL orphans a deleted CRM territory leaves behind. They are kept
+      rather than cascaded away because an assignment is the record of a coverage decision, and
+      destroying a book's history to avoid an empty foreign key is the wrong trade. Re-point or
+      close them on the assignment register.
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>SDR pairings with no active account executive</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Member</th><th>Territory</th><th>Person</th><th>Paired with</th><th>Split</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for row in orphaned_pair_rows %}
+        <tr>
+          <td><a href="{% url 'sales:territory_member_detail' row.pk %}" class="fw-600">{{ row.number }}</a></td>
+          <td>{{ row.territory.number }}<div class="text-muted">{{ row.territory.name }}</div></td>
+          <td>{{ row.user.username }}</td>
+          <td>{% if row.paired_user %}{{ row.paired_user.username }}{% if not row.paired_user.is_active %}<div class="text-muted"><span class="badge badge-red">No longer active</span></div>{% endif %}{% else %}<span class="text-muted">No pairing</span>{% endif %}</td>
+          <td>{{ row.coverage_split_pct }}%</td>
+          <td><span class="badge badge-amber">Orphaned pairing</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty-state"><i data-lucide="check-circle"></i><h3>No orphaned pairings</h3><p>Every live SDR membership pairs with an active account executive on the same roster.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <p class="text-muted">
+      A pairing is the SDR-to-AE relationship, and the nullable foreign key IS the pairing. An SDR
+      with no live paired AE has nobody to hand qualified work to, which is a coverage gap wearing
+      a different hat &mdash; not a row that should have been cleaned up silently.
+    </p>
+  </div>
+</div>
+{% endblock %}
