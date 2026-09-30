@@ -560,7 +560,7 @@ def territory_coverage_gap(request):
         if not q or q.casefold() in str(row.account).casefold()
     ]
     orphaned_pair_rows = list(
-        TerritoryMember.objects.filter(tenant=tenant, effective_to__isnull=True)
+        TerritoryMember.objects.filter(tenant=tenant, effective_to__isnull=True, member_role="sdr")
         .filter(Q(paired_user__isnull=True) | Q(paired_user__is_active=False))
         .select_related("territory", "user", "paired_user")[:MAX_ROWS]
     )
