@@ -113,6 +113,7 @@ def territory_member_list(request):
 
 
 @login_required
+@tenant_admin_required
 def territory_member_create(request):
     return crud_create(
         request,
@@ -156,6 +157,7 @@ def territory_member_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def territory_member_edit(request, pk):
     obj = get_object_or_404(_member_queryset(request), pk=pk)
     if obj.effective_to and obj.effective_to < timezone.localdate():
