@@ -84,7 +84,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** Line 91 applies `|join:", "` unconditionally to `condition.value`. In `TerritoryRule.conditions`, `condition["value"]` is only a list for `in` and `not_in` operators; for all other operators it is a scalar. Applying `|join:", "` iterates strings character-by-character (e.g. `"Enterprise"` renders as `"E, n, t, e, r, p, r, i, s, e"`).
 - **Fix:** Check `{% elif condition.operator == "in" or condition.operator == "not_in" %}{{ condition.value|join:", " }}{% else %}{{ condition.value }}{% endif %}`.
 
-### [I3] Unapproved `stat-icon red` Across 8 Templates (Design System Violation)
+### [x] fixed — [I3] Unapproved `stat-icon red` Across 8 Templates (Design System Violation)
+<!-- commit: fix(sales): replace unapproved stat-icon red with orange across 8 templates (I3) -->
 - **Location:** `accountterritoryassignment/detail.html:32`, `accountterritoryassignment/list.html:33`, `coverage_gap.html:52,55`, `rebalance_preview.html:52`, `white_space.html:53`, `quotaplan/detail.html:38`, `territorymember/list.html:34`
 - **Description:** Under the NavERP design system (L33), stat icon colors are strictly limited to `blue`, `green`, `orange`, `purple`, and `slate`. `red` is unstyled.
 - **Fix:** Replace `red` with `orange` across all 8 stat-card declarations.
