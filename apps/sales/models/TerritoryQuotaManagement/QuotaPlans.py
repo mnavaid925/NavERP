@@ -166,6 +166,10 @@ class QuotaPlan(TenantNumbered):
 
     def clean(self):
         super().clean()
+        if self.pk:
+            db_status = type(self)._default_manager.filter(pk=self.pk).values_list("status", flat=True).first()
+            if db_status in self.FROZEN_STATES:
+                raise ValidationError("This quota plan is frozen and cannot be modified.")
         if not isinstance(self.parameters or {}, dict):
             raise ValidationError({"parameters": "Parameters must be a JSON object."})
         if not self.tenant_id:
