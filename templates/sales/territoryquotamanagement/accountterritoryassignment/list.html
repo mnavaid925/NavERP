@@ -30,7 +30,7 @@
 <div class="stat-grid">
   <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total rows</div></div>
   <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.current }}</div><div class="stat-label">Live now</div></div>
-  <div class="stat-card"><div class="stat-icon {% if stats.unassigned %}red{% else %}green{% endif %}"><i data-lucide="unlink"></i></div><div class="stat-value">{{ stats.unassigned }}</div><div class="stat-label">Point at no territory</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.unassigned %}orange{% else %}green{% endif %}"><i data-lucide="unlink"></i></div><div class="stat-value">{{ stats.unassigned }}</div><div class="stat-label">Point at no territory</div></div>
   <div class="stat-card"><div class="stat-icon orange"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.overlay }}</div><div class="stat-label">Live overlays</div></div>
 </div>
 
