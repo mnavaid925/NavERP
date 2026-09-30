@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% comment %}
+  Create / edit one TerritoryRule. ONE template serves both, driven by `is_edit`.
+
+  What is deliberately NOT on this form, and why — printed rather than implied, because a user
+  who cannot see why is a user who asks for it to be added:
+
+    * `target_territory` points at `crm.Territory`, owned by CRM 1.2. Sales never creates a
+      territory here, so the dropdown only ever offers active same-tenant rows (L29).
+    * `last_run_at` / `last_run_matched_count` are `editable=False` frozen evidence. They are on
+      no form in this module; the Run verb writes them inside the transaction that writes the
+      assignment rows, so a run's own receipt can never be hand-edited afterwards.
+    * The `conditions` JSON is validated by `validate_territory_conditions` against a CLOSED
+      allow-list — an unknown field is a form error, never a silently ignored key. The help text
+      below says so instead of leaving the author to discover it.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Territory Rule{% else %}New Territory Rule{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Territory Rule{% else %}New Territory Rule{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:territory_rule_list' %}">Territory Rules</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:territory_rule_detail' obj.pk %}{% else %}{% url 'sales:territory_rule_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      A rule decides which accounts land in which CRM territory, and nothing else. It does not
+      move an account by itself &mdash; the Run action on the rule's own page evaluates it and
+      writes the assignment rows, and the rebalance board shows what a run WOULD do first.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save rule{% else %}Create rule{% endif %}</button>
+        <a href="{% if is_edit %}{% url 'sales:territory_rule_detail' obj.pk %}{% else %}{% url 'sales:territory_rule_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>What the server decides</h2></div>
+  <div class="card-body">
+    <table class="table">
+      <thead><tr><th>Field</th><th>Why it is not on this form</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-600">Number (TRG-)</td><td>System-assigned and sequential. A hand-typed number is how two books of history end up sharing a document identity.</td></tr>
+        <tr><td class="fw-600">Territory</td><td>Owned by CRM 1.2. Sales reads <code>crm.Territory</code> through a FK and declares no second territory master; a territory is created and retired in CRM.</td></tr>
+        <tr><td class="fw-600">Last run / matched count</td><td>Frozen evidence, written only by the Run verb inside the transaction that writes the assignment rows. A receipt the person it describes can retype is not a receipt.</td></tr>
+        <tr><td class="fw-600">Conditions</td><td>Each condition is exactly <code>field</code>, <code>operator</code>, <code>value</code> against a closed allow-list. Anything outside it is refused rather than ignored, so a typo fails loudly instead of quietly matching everything.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
