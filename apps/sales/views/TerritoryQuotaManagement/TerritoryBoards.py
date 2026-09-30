@@ -857,13 +857,24 @@ def territory_white_space(request):
     selected_lifecycle_stage = request.GET.get("lifecycle_stage", "")
     if selected_lifecycle_stage not in dict(AccountClassification.LIFECYCLE_STAGE_CHOICES):
         selected_lifecycle_stage = ""
+    selected_industry = request.GET.get("industry", "").strip()
     caveats = []
 
+    accounts_qs = _tenant_organizations(tenant, q)
+    if selected_tier:
+        accounts_qs = accounts_qs.filter(sales_account_classification__tier=selected_tier)
+    if selected_lifecycle_stage:
+        accounts_qs = accounts_qs.filter(sales_account_classification__lifecycle_stage=selected_lifecycle_stage)
+    if selected_industry:
+        accounts_qs = accounts_qs.filter(crm_account_profile__industry=selected_industry)
+
     accounts = (
-        list(_tenant_organizations(tenant, q)[:MAX_BOARD_ACCOUNTS])
+        list(accounts_qs[:MAX_BOARD_ACCOUNTS])
         if tenant is not None
         else []
     )
+    if len(accounts) >= MAX_BOARD_ACCOUNTS:
+        caveats.append(f"Only the first {MAX_BOARD_ACCOUNTS} matching accounts by name were scanned.")
     account_ids = [account.pk for account in accounts]
     picture = assignment_picture(tenant, account_ids) if account_ids else {}
     by_pk, _ = territory_index(
@@ -931,6 +942,8 @@ def territory_white_space(request):
             classification is None or classification.lifecycle_stage != selected_lifecycle_stage
         ):
             continue
+        if selected_industry and (profiles.get(account.pk) is None or profiles.get(account.pk).industry != selected_industry):
+            continue
         rows.append({
             "account": account,
             "profile": profiles.get(account.pk),
@@ -979,6 +992,7 @@ def territory_white_space(request):
         "lifecycle_stage_choices": AccountClassification.LIFECYCLE_STAGE_CHOICES,
         "selected_tier": selected_tier,
         "selected_lifecycle_stage": selected_lifecycle_stage,
+        "selected_industry": selected_industry,
         "q": q,
         "stats": {
             "accounts_scanned": len(accounts),
