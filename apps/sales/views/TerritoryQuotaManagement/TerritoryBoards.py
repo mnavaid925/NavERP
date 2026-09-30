@@ -561,7 +561,7 @@ def territory_coverage_gap(request):
     ]
     orphaned_pair_rows = list(
         TerritoryMember.objects.filter(tenant=tenant, effective_to__isnull=True)
-        .filter(Q(paired_user__isnull=True) | Q(paired_user__isactive=False))
+        .filter(Q(paired_user__isnull=True) | Q(paired_user__is_active=False))
         .select_related("territory", "user", "paired_user")[:MAX_ROWS]
     )
 
@@ -688,7 +688,7 @@ def territory_performance(request):
     for quota in quota_rows:
         # (tenant, owner, period) is NOT unique on crm.SalesQuota when territory is NULL, so a
         # duplicate is REPORTED here rather than allowed to double a territory's quota (§6.6).
-        key = (territory.pk, quota.owner_id, quota.period_type, quota.period_year, quota.period_number)
+        key = (quota.territory_id, quota.owner_id, quota.period_type, quota.period_year, quota.period_number)
         if key in seen_quota_keys:
             duplicate_quota_warnings.append(
                 f"{quota.territory.number if quota.territory_id else '—'} has more than one quota for one "
@@ -696,7 +696,8 @@ def territory_performance(request):
             )
             continue
         seen_quota_keys[key] = quota.pk
-        quota_by_territory[territory.pk] += Decimal(quota.target_amount or ZERO)
+        if quota.territory_id in quota_by_territory:
+            quota_by_territory[quota.territory_id] += Decimal(quota.target_amount or ZERO)
     if duplicate_quota_warnings:
         caveats.append(duplicate_quota_warnings[0])
 
