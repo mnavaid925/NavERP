@@ -12,7 +12,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 
 ## Critical
 
-### [C1] HTTP 500 on Account Territory Assignment Edit POST (`AttributeError: save_m2m`) & Stamped Audit Field Overwrite
+### [x] fixed — [C1] HTTP 500 on Account Territory Assignment Edit POST (`AttributeError: save_m2m`) & Stamped Audit Field Overwrite
+<!-- commit: fix(sales): delegate account territory assignment edit to crud_edit (C1) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/AccountTerritoryAssignments.py:204-219`
 - **Description:** In `account_territory_assignment_edit`, the view manually assigns fields on `locked` instead of delegating to `form.save(commit=False)`. Calling `form.save_m2m()` at line 215 crashes with `AttributeError: 'AccountTerritoryAssignmentForm' object has no attribute 'save_m2m'` because `save_m2m` is only bound to `ModelForm` when `form.save()` is executed. Additionally, line 213 executes `locked.assigned_by = request.user`, overwriting immutable origin evidence stamped at creation.
 - **Fix:** Refactor `account_territory_assignment_edit` to delegate to `crud_edit(request, model=AccountTerritoryAssignment, pk=pk, form_class=AccountTerritoryAssignmentForm, template=FORM_TEMPLATE, success_url=reverse("sales:account_territory_assignment_detail", args=[pk]), extra_context=_form_context(request))` matching sibling entities, preserving `assigned_by` immutability and eliminating the 500.
