@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% comment %}
+  8.7 Territory rules — the typed rule register that decides which CRM territory an account
+  lands in.
+
+  The rule does NOT own a territory. `target_territory` is a FK to `crm.Territory` (CRM 1.2) and
+  the dropdown only ever offers active same-tenant rows, so nothing here can create one.
+
+  ENUM filter selection is reflected from the ECHO keys the view passes (`segment_type`, `match_mode`,
+  `alignment_type`, `assignment_scope`, `active`); FK selection follows the house rule and reads
+  `request.GET.target_territory` compared with `|stringformat:"d"` — never `|slugify` on a pk
+  (contract §11.1 rule 3, and the AGENTS.md filter rule).
+
+  Only badge-amber/green/info/muted/red/slate exist in theme.css; badge-success/warning/danger
+  do NOT and render unstyled. Every badge below keys on the EXACT choice value with an
+  {% else %} get_<field>_display fallback.
+
+  Delete is a POST form with a csrf token and a confirm naming {{ obj.number }} — the
+  SYSTEM-assigned TRG document number, never free text an author typed.
+{% endcomment %}
+{% block title %}Territory Rules{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Territory Rules</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Territory &amp; Quota</span><span class="sep">&rsaquo;</span><span>Rules</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:territory_rule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New rule</a>
+    <a href="{% url 'sales:territory_rebalance_preview' %}" class="btn btn-outline"><i data-lucide="git-compare"></i> Rebalance preview</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total rules</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="globe"></i></div><div class="stat-value">{{ stats.catch_all }}</div><div class="stat-label">Catch-all</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="play"></i></div><div class="stat-value">{{ stats.never_run }}</div><div class="stat-label">Never run</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="trg-search">Search</label>
+        <input id="trg-search" name="q" value="{{ q }}" class="form-input" placeholder="Rule number, name, or description">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="trg-segment">Segment type</label>
+        <select id="trg-segment" name="segment_type" class="form-select">
+          <option value="">All segment types</option>
+          {% for value, label in segment_type_choices %}<option value="{{ value }}"{% if segment_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="trg-match">Match mode</label>
+        <select id="trg-match" name="match_mode" class="form-select">
+          <option value="">Any match mode</option>
+          {% for value, label in match_mode_choices %}<option value="{{ value }}"{% if match_mode == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="trg-alignment">Alignment</label>
+        <select id="trg-alignment" name="alignment_type" class="form-select">
+          <option value="">Any alignment</option>
+          {% for value, label in alignment_type_choices %}<option value="{{ value }}"{% if alignment_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="trg-scope">Scope</label>
+        <select id="trg-scope" name="assignment_scope" class="form-select">
+          <option value="">Any scope</option>
+          {% for value, label in assignment_scope_choices %}<option value="{{ value }}"{% if assignment_scope == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="trg-territory">Target territory</label>
+        <select id="trg-territory" name="target_territory" class="form-select">
+          <option value="">Every territory</option>
+          {% for territory in territories %}<option value="{{ territory.pk|stringformat:"d" }}"{% if request.GET.target_territory == territory.pk|stringformat:"d" %} selected{% endif %}>{{ territory.number }} &middot; {{ territory.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="trg-active">State</label>
+        <select id="trg-active" name="active" class="form-select">
+          <option value="">Any state</option>
+          {% for value, label in active_choices %}<option value="{{ value }}"{% if active == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:territory_rule_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Rule register</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Rule</th><th>Segment</th><th>Target territory</th><th>Match</th><th>Alignment</th><th>Scope</th><th>Window</th><th>Last run</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td>
+            <a href="{% url 'sales:territory_rule_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            <div class="text-muted">{{ obj.name }}</div>
+          </td>
+          <td>
+            {% if obj.segment_type == "geographic" %}<span class="badge badge-info">{{ obj.get_segment_type_display }}</span>
+            {% elif obj.segment_type == "named_account" %}<span class="badge badge-green">{{ obj.get_segment_type_display }}</span>
+            {% elif obj.segment_type == "mixed" %}<span class="badge badge-amber">{{ obj.get_segment_type_display }}</span>
+            {% else %}<span class="badge badge-slate">{{ obj.get_segment_type_display }}</span>{% endif %}
+            {% if obj.is_catch_all %}<span class="badge badge-amber">Catch-all</span>{% endif %}
+          </td>
+          <td>{% if obj.target_territory %}{{ obj.target_territory.number }}<div class="text-muted">{{ obj.target_territory.name }}</div>{% else %}<span class="text-muted">No target &mdash; a coverage gap</span>{% endif %}</td>
+          <td><span class="badge badge-slate">{{ obj.get_match_mode_display }}</span><div class="text-muted">{{ obj.conditions|length }} condition{{ obj.conditions|length|pluralize }}</div></td>
+          <td>{% if obj.alignment_type == "primary" %}<span class="badge badge-green">{{ obj.get_alignment_type_display }}</span>{% elif obj.alignment_type == "overlay" %}<span class="badge badge-amber">{{ obj.get_alignment_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_alignment_type_display }}</span>{% endif %}</td>
+          <td>{% if obj.assignment_scope == "subtree" %}<span class="badge badge-amber">{{ obj.get_assignment_scope_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_assignment_scope_display }}</span>{% endif %}</td>
+          <td>{{ obj.effective_from|date:"M d, Y" }}<div class="text-muted">{% if obj.effective_to %}to {{ obj.effective_to|date:"M d, Y" }}{% else %}open-ended{% endif %}</div></td>
+          <td>
+            {% if obj.last_run_at %}
+              {{ obj.last_run_at|date:"M d, Y H:i" }}
+              <div class="text-muted">{{ obj.last_run_matched_count }} matched</div>
+            {% else %}
+              <span class="text-muted">Never run</span>
+            {% endif %}
+          </td>
+          <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:territory_rule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'sales:territory_rule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'sales:territory_rule_delete' obj.pk %}" onsubmit="return confirm('Delete rule {{ obj.number }}? Assignments it produced stay in the ledger. This cannot be undone.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="10"><div class="empty-state"><i data-lucide="git-branch"></i><h3>No territory rules</h3><p>No rule assigns accounts to a territory yet, so every account reads as uncovered. Write one, or assign by hand on the assignment register.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
