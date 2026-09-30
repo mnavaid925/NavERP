@@ -29,6 +29,7 @@ from apps.sales.forms._common import (
     TenantUniqueMixin,
     _reject_foreign,
     tenant_territories,
+    tenant_users,
 )
 from apps.sales.models.TerritoryQuotaManagement.AccountTerritoryAssignments import (
     AccountTerritoryAssignment,
@@ -100,6 +101,7 @@ class AccountTerritoryAssignmentForm(TenantUniqueMixin, TenantModelForm):
                 .order_by("priority", "name")
             )
         self.fields["territory"].queryset = tenant_territories(self.tenant).order_by("name")
+        self.fields["owner"].queryset = tenant_users(self.tenant).order_by("username")
 
     def clean(self):
         cleaned = super().clean()
