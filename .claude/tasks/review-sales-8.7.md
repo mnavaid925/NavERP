@@ -24,7 +24,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** Line 724 executes `period.get_reporting_currency_display()`. `ForecastPeriod.reporting_currency` is a ForeignKey to `accounting.Currency`, not a choice field. Calling `get_FIELD_display()` raises `AttributeError: 'ForecastPeriod' object has no attribute 'get_reporting_currency_display'`, crashing the territory performance board whenever deal currencies differ from reporting currency.
 - **Fix:** Change `period.get_reporting_currency_display()` to `(period.reporting_currency.code if period.reporting_currency else "—")`.
 
-### [C3] Invalid Rule Condition Operator `"equals"` in `seed_sales.py`
+### [x] fixed — [C3] Invalid Rule Condition Operator `"equals"` in `seed_sales.py`
+<!-- commit: fix(sales): use valid operator eq instead of equals in seeded territory rules (C3) -->
 - **Location:** `apps/sales/management/commands/seed_sales.py:1429, 1446`
 - **Description:** Seeded rules `rule_geo` and `rule_size` define conditions using `"operator": "equals"`. However, `ROUTING_OPERATORS` in `TerritoryRules.py:44-54` only permits `"eq"`, `"ne"`, `"gt"`, `"gte"`, `"lt"`, `"lte"`, `"in"`, `"not_in"`, `"contains"`. This causes `_condition_matches` to fail to recognize `"equals"`, silently returning `False` for all evaluated accounts, and any clean/save triggers `ValidationError: Unsupported territory operator: equals`.
 - **Fix:** Change `"operator": "equals"` to `"operator": "eq"` at lines 1429 and 1446 in `seed_sales.py`.
