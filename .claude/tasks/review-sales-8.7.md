@@ -144,7 +144,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** `quota_plan_edit` and `quota_plan_submit` only check `@login_required` without verifying that `request.user` is either the plan owner or a tenant admin.
 - **Fix:** Enforce ownership or tenant admin check in `quota_plan_edit` and `quota_plan_submit`: `if obj.owner_id and obj.owner_id != request.user.pk and not is_tenant_admin(request.user):`.
 
-### [I13] Missing `@tenant_admin_required` on `territory_member_create` and `territory_member_edit`
+### [x] fixed — [I13] Missing `@tenant_admin_required` on `territory_member_create` and `territory_member_edit`
+<!-- commit: fix(sales): require tenant admin on territory member create and edit (I13) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/TerritoryMembers.py:115, 158`
 - **Description:** While `territory_member_delete` enforces `@tenant_admin_required`, member create and edit only require `@login_required`, allowing non-admin users to alter territory rosters and split percentages.
 - **Fix:** Add `@tenant_admin_required` to `territory_member_create` and `territory_member_edit`.
