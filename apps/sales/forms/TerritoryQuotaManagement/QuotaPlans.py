@@ -37,7 +37,13 @@ import json
 from django import forms
 
 from apps.crm.models import SalesQuota
-from apps.sales.forms._common import TenantModelForm, TenantUniqueMixin, _reject_foreign
+from apps.sales.forms._common import (
+    TenantModelForm,
+    TenantUniqueMixin,
+    _reject_foreign,
+    tenant_territories,
+    tenant_users,
+)
 from apps.sales.models.SalesForecasting.ForecastPeriods import ForecastPeriod
 from apps.sales.models.TerritoryQuotaManagement.QuotaPlans import PLAN_PARAMETER_KEYS, QuotaPlan
 
@@ -119,6 +125,8 @@ class QuotaPlanForm(TenantUniqueMixin, TenantModelForm):
         if self.tenant is None:
             self.fields["quota_ref"].queryset = SalesQuota.objects.none()
             self.fields["forecast_period"].queryset = ForecastPeriod.objects.none()
+            self.fields["territory"].queryset = tenant_territories(None)
+            self.fields["owner"].queryset = tenant_users(None)
         else:
             self.fields["quota_ref"].queryset = SalesQuota.objects.filter(
                 tenant=self.tenant,
@@ -126,6 +134,8 @@ class QuotaPlanForm(TenantUniqueMixin, TenantModelForm):
             self.fields["forecast_period"].queryset = ForecastPeriod.objects.filter(
                 tenant=self.tenant,
             ).order_by("-period_year", "period_number", "name")
+            self.fields["territory"].queryset = tenant_territories(self.tenant).order_by("name")
+            self.fields["owner"].queryset = tenant_users(self.tenant).order_by("username")
         # An edit otherwise renders the stored DICT as a Python repr — single quotes, `False` —
         # which is not valid JSON and not something a JSON textarea should ever show.
         if not self.is_bound and self.instance.pk and isinstance(self.instance.parameters, dict):
