@@ -49,10 +49,10 @@
 <div class="stat-grid">
   <div class="stat-card"><div class="stat-icon blue"><i data-lucide="scan"></i></div><div class="stat-value">{{ stats.accounts_total }}</div><div class="stat-label">Accounts scanned</div></div>
   <div class="stat-card"><div class="stat-icon {% if stats.uncovered %}orange{% else %}green{% endif %}"><i data-lucide="unlink"></i></div><div class="stat-value">{{ stats.uncovered }}</div><div class="stat-label">Matched by no rule</div></div>
-  <div class="stat-card"><div class="stat-icon {% if stats.unassigned %}red{% else %}green{% endif %}"><i data-lucide="circle-off"></i></div><div class="stat-value">{{ stats.unassigned }}</div><div class="stat-label">Hold no live assignment</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.unassigned %}orange{% else %}green{% endif %}"><i data-lucide="circle-off"></i></div><div class="stat-value">{{ stats.unassigned }}</div><div class="stat-label">Hold no live assignment</div></div>
   <div class="stat-card"><div class="stat-icon {% if stats.over_assigned %}orange{% else %}green{% endif %}"><i data-lucide="copy"></i></div><div class="stat-value">{{ stats.over_assigned }}</div><div class="stat-label">Over-assigned</div></div>
   <div class="stat-card"><div class="stat-icon {% if stats.manager_less %}orange{% else %}green{% endif %}"><i data-lucide="user-round-x"></i></div><div class="stat-value">{{ stats.manager_less }}</div><div class="stat-label">Territories with no manager</div></div>
-  <div class="stat-card"><div class="stat-icon {% if stats.orphans %}red{% else %}green{% endif %}"><i data-lucide="file-x"></i></div><div class="stat-value">{{ stats.orphans }}</div><div class="stat-label">Orphaned rows and pairings</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.orphans %}orange{% else %}green{% endif %}"><i data-lucide="file-x"></i></div><div class="stat-value">{{ stats.orphans }}</div><div class="stat-label">Orphaned rows and pairings</div></div>
 </div>
 
 <div class="card">
