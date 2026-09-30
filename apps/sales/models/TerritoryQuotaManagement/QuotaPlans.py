@@ -131,7 +131,7 @@ class QuotaPlan(TenantNumbered):
     calculated_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
-        ordering = ["-forecast_period__period_year", "owner"]
+        ordering = ["-id"]
         constraints = [
             models.UniqueConstraint(fields=["tenant", "quota_ref"], name="sales_qplan_tenant_quota_uniq"),
         ]
