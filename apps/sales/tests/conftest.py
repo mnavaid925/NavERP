@@ -3042,3 +3042,333 @@ ORDERMANAGEMENT_MODEL_FIELDS = {
         "allocated_amount", "recognized_amount", "milestone_label",
     ),
 }
+
+
+# ==============================================================================
+# SALES 8.7 -- TERRITORY & QUOTA MANAGEMENT FIXTURES AND BUILDERS
+# ==============================================================================
+
+TERRITORYQUOTAMANAGEMENT_MODEL_CHOICES = {
+    "TerritoryRule": {
+        "SEGMENT_TYPE_CHOICES": [
+            ("geographic", "Geographic"),
+            ("named_account", "Named Account"),
+            ("industry", "Industry"),
+            ("mixed", "Mixed"),
+        ],
+        "MATCH_MODE_CHOICES": [
+            ("all", "All Conditions (AND)"),
+            ("any", "Any Condition (OR)"),
+        ],
+        "ALIGNMENT_TYPE_CHOICES": [
+            ("primary", "Primary Territory"),
+            ("overlay", "Overlay Specialist"),
+            ("secondary", "Secondary Territory"),
+        ],
+        "ASSIGNMENT_SCOPE_CHOICES": [
+            ("target_only", "Target Territory Only"),
+            ("subtree", "Target Territory And Children"),
+        ],
+    },
+    "AccountTerritoryAssignment": {
+        "ALIGNMENT_TYPE_CHOICES": [
+            ("primary", "Primary Territory"),
+            ("overlay", "Overlay Specialist"),
+            ("secondary", "Secondary Territory"),
+        ],
+        "ASSIGNMENT_SOURCE_CHOICES": [
+            ("manual", "Manual Assignment"),
+            ("rule", "Automated Rule Run"),
+            ("rebalance", "Territory Rebalance"),
+            ("import", "Data Import"),
+        ],
+    },
+    "TerritoryMember": {
+        "MEMBER_ROLE_CHOICES": [
+            ("ae", "Account Executive"),
+            ("sdr", "Sales Development Rep (SDR)"),
+            ("hunter", "Hunter (New Business)"),
+            ("farmer", "Farmer (Account Manager)"),
+            ("overlay", "Overlay Specialist"),
+            ("sales_engineer", "Sales Engineer / Solutions Architect"),
+        ],
+        "ASSIGNMENT_TYPE_CHOICES": [
+            ("direct", "Direct Named"),
+            ("shared", "Shared Territory Pool"),
+            ("overlay", "Overlay Specialist"),
+        ],
+    },
+    "QuotaPlan": {
+        "METHOD_CHOICES": [
+            ("top_down", "Top-Down"),
+            ("bottom_up", "Bottom-Up"),
+        ],
+        "ALLOCATION_BASIS_CHOICES": [
+            ("historical_revenue", "Historical Revenue"),
+            ("pipeline", "Open Pipeline"),
+            ("account_count", "Account Count"),
+            ("territory_potential", "Territory Potential"),
+            ("manual", "Manual"),
+        ],
+        "BASELINE_SOURCE_CHOICES": [
+            ("previous_period", "Previous Period"),
+            ("previous_year", "Previous Year"),
+            ("custom", "Custom"),
+        ],
+        "TARGET_TYPE_CHOICES": [
+            ("revenue", "Revenue"),
+            ("units", "Units"),
+            ("bookings", "Bookings"),
+        ],
+        "PHASING_CHOICES": [
+            ("equal", "Equal"),
+            ("seasonal", "Seasonal"),
+        ],
+        "STATUS_CHOICES": [
+            ("draft", "Draft"),
+            ("submitted", "Submitted for Approval"),
+            ("approved", "Approved"),
+            ("rejected", "Rejected"),
+            ("locked", "Locked"),
+        ],
+    },
+}
+
+TERRITORYQUOTAMANAGEMENT_MODEL_FIELDS = {
+    "TerritoryRule": (
+        "id", "tenant", "created_at", "updated_at", "number", "name",
+        "segment_type", "match_mode", "alignment_type", "assignment_scope",
+        "target_territory", "priority", "is_catch_all", "conditions",
+        "effective_from", "effective_to", "is_active", "description",
+        "last_run_at", "last_run_matched_count",
+    ),
+    "AccountTerritoryAssignment": (
+        "id", "tenant", "created_at", "updated_at", "number", "account",
+        "territory", "alignment_type", "assignment_source", "rule",
+        "owner", "effective_from", "effective_to", "assigned_by", "notes",
+    ),
+    "TerritoryMember": (
+        "id", "tenant", "created_at", "updated_at", "territory", "user",
+        "member_role", "assignment_type", "coverage_split_pct",
+        "paired_user", "is_primary", "effective_from", "effective_to", "notes",
+    ),
+    "QuotaPlan": (
+        "id", "tenant", "created_at", "updated_at", "number", "quota_ref",
+        "forecast_period", "territory", "owner", "method", "allocation_basis",
+        "baseline_source", "growth_target_pct", "attrition_relief_pct",
+        "market_expansion_pct", "status", "target_type", "phasing",
+        "stretch_target_pct", "parameters", "notes", "submitted_by",
+        "approved_by", "submitted_at", "approved_at", "calculated_at",
+    ),
+}
+
+
+def _territoryquotamanagement_crm_territory(tenant, name="Americas", **overrides):
+    from apps.crm.models import Territory
+
+    label = f"{timezone.now().timestamp():.6f}"[-6:]
+    defaults = {
+        "tenant": tenant,
+        "name": f"{name} {label}",
+        "code": f"TER-{label}",
+        "is_active": True,
+        "description": "CRM Territory for Sales 8.7 test suite.",
+    }
+    defaults.update(overrides)
+    return Territory.objects.create(**defaults)
+
+
+def _territoryquotamanagement_crm_quota(
+    tenant,
+    owner=None,
+    territory=None,
+    target_amount=Decimal("100000.00"),
+    period_type="quarter",
+    period_year=None,
+    period_number=1,
+    **overrides,
+):
+    from apps.crm.models import SalesQuota
+
+    if period_year is None:
+        period_year = timezone.localdate().year
+    defaults = {
+        "tenant": tenant,
+        "owner": owner,
+        "territory": territory,
+        "target_amount": target_amount,
+        "period_type": period_type,
+        "period_year": period_year,
+        "period_number": period_number,
+    }
+    defaults.update(overrides)
+    return SalesQuota.objects.create(**defaults)
+
+
+def _territoryquotamanagement_rule(
+    tenant,
+    target_territory=None,
+    name="Midwest Geo Rule",
+    segment_type="geographic",
+    match_mode="all",
+    alignment_type="primary",
+    assignment_scope="target_only",
+    conditions=None,
+    **overrides,
+):
+    from apps.sales.models.TerritoryQuotaManagement.TerritoryRules import TerritoryRule
+
+    if target_territory is None:
+        target_territory = _territoryquotamanagement_crm_territory(tenant)
+    if conditions is None and segment_type != "named_account" and not overrides.get("is_catch_all"):
+        conditions = [{"field": "state", "operator": "eq", "value": "IL"}]
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "target_territory": target_territory,
+        "segment_type": segment_type,
+        "match_mode": match_mode,
+        "alignment_type": alignment_type,
+        "assignment_scope": assignment_scope,
+        "priority": 100,
+        "is_active": True,
+        "conditions": conditions if conditions is not None else [],
+        "effective_from": timezone.localdate(),
+    }
+    defaults.update(overrides)
+    return TerritoryRule.objects.create(**defaults)
+
+
+def _territoryquotamanagement_assignment(
+    tenant,
+    account,
+    territory=None,
+    alignment_type="primary",
+    assignment_source="manual",
+    **overrides,
+):
+    from apps.sales.models.TerritoryQuotaManagement.AccountTerritoryAssignments import (
+        AccountTerritoryAssignment,
+    )
+
+    if territory is None:
+        territory = _territoryquotamanagement_crm_territory(tenant)
+    defaults = {
+        "tenant": tenant,
+        "account": account,
+        "territory": territory,
+        "alignment_type": alignment_type,
+        "assignment_source": assignment_source,
+        "effective_from": timezone.localdate(),
+    }
+    defaults.update(overrides)
+    return AccountTerritoryAssignment.objects.create(**defaults)
+
+
+def _territoryquotamanagement_member(
+    tenant,
+    territory,
+    user,
+    member_role="ae",
+    assignment_type="direct",
+    is_primary=True,
+    **overrides,
+):
+    from apps.sales.models.TerritoryQuotaManagement.TerritoryMembers import TerritoryMember
+
+    defaults = {
+        "tenant": tenant,
+        "territory": territory,
+        "user": user,
+        "member_role": member_role,
+        "assignment_type": assignment_type,
+        "is_primary": is_primary,
+        "coverage_split_pct": Decimal("100.00") if assignment_type == "direct" else None,
+        "effective_from": timezone.localdate(),
+    }
+    defaults.update(overrides)
+    return TerritoryMember.objects.create(**defaults)
+
+
+def _territoryquotamanagement_quotaplan(
+    tenant,
+    quota_ref=None,
+    forecast_period=None,
+    owner=None,
+    territory=None,
+    method="top_down",
+    allocation_basis="historical_revenue",
+    status="draft",
+    **overrides,
+):
+    from apps.sales.models.TerritoryQuotaManagement.QuotaPlans import QuotaPlan
+
+    if territory is None:
+        territory = _territoryquotamanagement_crm_territory(tenant)
+    if forecast_period is None:
+        forecast_period = _salesforecasting_period(tenant)
+    if quota_ref is None:
+        quota_ref = _territoryquotamanagement_crm_quota(
+            tenant,
+            owner=owner,
+            territory=territory,
+            period_type=forecast_period.period_type,
+            period_year=forecast_period.period_year,
+            period_number=forecast_period.period_number,
+        )
+    defaults = {
+        "tenant": tenant,
+        "quota_ref": quota_ref,
+        "forecast_period": forecast_period,
+        "territory": territory,
+        "owner": owner,
+        "method": method,
+        "allocation_basis": allocation_basis,
+        "baseline_source": "previous_year",
+        "growth_target_pct": Decimal("15.00"),
+        "attrition_relief_pct": Decimal("5.00"),
+        "status": status,
+        "target_type": "revenue",
+        "phasing": "equal",
+    }
+    defaults.update(overrides)
+    return QuotaPlan.objects.create(**defaults)
+
+
+@pytest.fixture
+def tqm_territory(tenant_primary):
+    return _territoryquotamanagement_crm_territory(tenant_primary)
+
+
+@pytest.fixture
+def tqm_quota(tenant_primary, tqm_territory, primary_admin):
+    return _territoryquotamanagement_crm_quota(
+        tenant_primary, territory=tqm_territory, owner=primary_admin
+    )
+
+
+@pytest.fixture
+def tqm_rule(tenant_primary, tqm_territory):
+    return _territoryquotamanagement_rule(tenant_primary, target_territory=tqm_territory)
+
+
+@pytest.fixture
+def tqm_assignment(tenant_primary, tqm_territory, party_customer):
+    return _territoryquotamanagement_assignment(
+        tenant_primary, account=party_customer, territory=tqm_territory
+    )
+
+
+@pytest.fixture
+def tqm_member(tenant_primary, tqm_territory, primary_admin):
+    return _territoryquotamanagement_member(
+        tenant_primary, territory=tqm_territory, user=primary_admin
+    )
+
+
+@pytest.fixture
+def tqm_quotaplan(tenant_primary, tqm_quota, tqm_territory, primary_admin):
+    return _territoryquotamanagement_quotaplan(
+        tenant_primary, quota_ref=tqm_quota, territory=tqm_territory, owner=primary_admin
+    )
+
