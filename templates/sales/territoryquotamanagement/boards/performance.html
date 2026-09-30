@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% comment %}
+  8.7 Territory performance — attainment per territory for ONE forecast period.
+
+  THE MONEY RULE. Every money and percentage figure on this page is a `Decimal` computed in PYTHON
+  in the view, over a fetched set. It is never `Sum()`, never `F()`, never a database-side
+  division, never a float. That matters here more than anywhere else in 8.7, because a board
+  query is exactly where the temptation appears: an aggregate is one line and a Python loop is
+  ten, and the SQLite integer-division trap SILENTLY drops fractional cents rather than raising
+  &mdash; so an aggregate board is not a slow board, it is a wrong one that renders. Nothing on
+  this page is calculated; figures are formatted, never computed.
+
+  A `None` figure is a MISSING DENOMINATOR, not a zero. There is no quota for this period, or the
+  deals are booked in more than one currency, and printing 0% in either case would assert an
+  attainment the board did not measure. It is printed as withheld, and the reason is in `caveats`.
+
+  PACING vs ATTAINMENT. Attainment is against the target; pacing is attainment against TIME. 120%
+  of target halfway through the period is ahead of pace, and attainment alone cannot say so. Both
+  are separate columns here for that reason.
+
+  `balance_profile` is an ACCEPTANCE SPEC, not a score: every axis is reported and no single
+  balance metric is invented, because equalising territories on one factor is the documented
+  failure mode.
+
+  LIVE DERIVATION, NOT A SNAPSHOT — recomputed on every load, never stored, and this page never
+  writes. The quota amount it reads is `crm.SalesQuota.target_amount`, owned by CRM 1.2; the
+  window is 8.4's `ForecastPeriod`. 8.7 writes neither.
+{% endcomment %}
+{% block title %}Territory Performance{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Territory Performance</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Territory &amp; Quota</span><span class="sep">&rsaquo;</span><span>Performance</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:territory_coverage_gap' %}" class="btn btn-outline"><i data-lucide="unlink"></i> Coverage gaps</a>
+    <a href="{% url 'sales:territory_rebalance_preview' %}" class="btn btn-outline"><i data-lucide="git-compare"></i> Rebalance preview</a>
+    <a href="{% url 'sales:quota_plan_list' %}" class="btn btn-outline"><i data-lucide="target"></i> Quota plans</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">LIVE DERIVATION &mdash; NOT A SNAPSHOT</span>
+      Nothing on this page is stored and nothing on it is ever written. Attainment, pipeline and
+      every percentage are recomputed now, in Python, over a fetched set &mdash; never by a
+      database aggregate, which on some engines silently drops fractional cents instead of raising.
+      The quota amounts are read from CRM 1.2's own quota and the window from 8.4's forecast period;
+      Sales writes neither.
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="pf-search">Search territories</label>
+        <input id="pf-search" name="q" value="{{ q }}" class="form-input" placeholder="Territory name">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="pf-period">Forecast period</label>
+        <select id="pf-period" name="period" class="form-select">
+          {% for period_pk, period_label in period_choices %}<option value="{{ period_pk|stringformat:"d" }}"{% if selected_period_id|stringformat:"d" == period_pk|stringformat:"d" %} selected{% endif %}>{{ period_label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Show</button>
+      <a href="{% url 'sales:territory_performance' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+{% if caveats %}
+<div class="card">
+  <div class="card-header"><h2>How to read this</h2></div>
+  <div class="card-body">
+    <ul style="margin:0; padding-left:1.1rem;">
+      {% for caveat in caveats %}<li>{{ caveat }}</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+{% if period %}
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="calendar-range"></i></div><div class="stat-value">{{ period.name }}</div><div class="stat-label">{{ period.get_period_type_display }} {{ period.period_year }}, number {{ period.period_number }}</div></div>
+  <div class="stat-card"><div class="stat-icon {% if summary.overall_attainment_pct != None %}green{% else %}slate{% endif %}"><i data-lucide="percent"></i></div><div class="stat-value">{% if summary.overall_attainment_pct != None %}{{ summary.overall_attainment_pct }}%{% else %}&mdash;{% endif %}</div><div class="stat-label">Overall attainment</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="target"></i></div><div class="stat-value">{% if summary.quota_amount != None %}{{ summary.quota_amount }}{% else %}&mdash;{% endif %}</div><div class="stat-label">Quota in scope (CRM 1.2)</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="trophy"></i></div><div class="stat-value">{% if summary.attainment_amount != None %}{{ summary.attainment_amount }}{% else %}&mdash;{% endif %}</div><div class="stat-label">Attained (closed won)</div></div>
+  <div class="stat-card"><div class="stat-icon {% if summary.period_elapsed_pct != None %}orange{% else %}slate{% endif %}"><i data-lucide="hourglass"></i></div><div class="stat-value">{% if summary.period_elapsed_pct != None %}{{ summary.period_elapsed_pct }}%{% else %}&mdash;{% endif %}</div><div class="stat-label">Period elapsed</div></div>
+</div>
+<p class="text-muted">
+  Period elapsed is READ from the forecast period (8.4's own property) and is the one figure on
+  this page that is read rather than computed. Everything else on this board is derived in Python
+  over a fetched set, because a database-side aggregate would quietly lose cents instead of
+  failing.
+</p>
+{% endif %}
+
+<div class="card">
+  <div class="card-header"><h2>Attainment by territory</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Territory</th><th>Quota</th><th>Attained</th><th>Open pipeline</th><th>Attainment</th><th>Quota share</th><th>Pacing</th><th>Accounts</th><th>Members</th><th>Balance profile</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="fw-600">{{ row.territory.number }}<div class="text-muted">{{ row.territory.name }}</div></td>
+          <td>{{ row.quota_amount }}</td>
+          <td>{% if row.attainment_amount != None %}{{ row.attainment_amount }}{% else %}<span class="text-muted">Withheld</span>{% endif %}</td>
+          <td>{% if row.pipeline_amount != None %}{{ row.pipeline_amount }}{% else %}<span class="text-muted">Withheld</span>{% endif %}</td>
+          <td>
+            {% if row.attainment_pct != None %}
+              {% if row.attainment_pct >= 100 %}<span class="badge badge-green">{{ row.attainment_pct }}%</span>
+              {% elif row.attainment_pct >= 75 %}<span class="badge badge-amber">{{ row.attainment_pct }}%</span>
+              {% else %}<span class="badge badge-red">{{ row.attainment_pct }}%</span>{% endif %}
+            {% else %}<span class="text-muted">No denominator</span>{% endif %}
+          </td>
+          <td>{% if row.attribution_pct != None %}{{ row.attribution_pct }}%{% else %}&mdash;{% endif %}</td>
+          <td>
+            {% if row.pacing_pct != None %}
+              {% if row.pacing_pct >= 100 %}<span class="badge badge-green">Ahead {{ row.pacing_pct }}%</span>
+              {% else %}<span class="badge badge-amber">Behind {{ row.pacing_pct }}%</span>{% endif %}
+            {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+          </td>
+          <td>{{ row.account_count }}</td>
+          <td>{{ row.member_count }}</td>
+          <td>
+            {% comment %}
+              The acceptance spec, every axis reported and no single score invented. Equalising on
+              one factor is the documented failure mode, so this cell refuses to pretend a
+              balance number exists.
+            {% endcomment %}
+            <span class="badge badge-slate">{{ row.balance_profile.account_count }} acct</span>
+            <span class="badge badge-slate">{{ row.balance_profile.member_count }} ppl</span>
+            {% if row.balance_profile.quota_share_pct != None %}<span class="badge badge-info">{{ row.balance_profile.quota_share_pct }}% of quota</span>{% endif %}
+            {% if row.balance_profile.open_pipeline_deals != None %}<span class="badge badge-muted">{{ row.balance_profile.open_pipeline_deals }} open</span>{% else %}<span class="badge badge-muted">open withheld</span>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="10"><div class="empty-state"><i data-lucide="gauge"></i><h3>No territory in scope</h3><p>There is no active territory to measure, or the filter matched none. Clear the search to see every territory.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <p class="text-muted">
+      The balance profile is an acceptance spec, not a score. Salesforce's own "balance your
+      territories" guidance requires every axis &mdash; account count, roster size, quota share,
+      open pipeline &mdash; to be reported, and explicitly refuses to pretend a single balance
+      metric exists: equalising territories on one of them is how a rebalance makes a book worse.
+    </p>
+  </div>
+</div>
+
+<div class="layout-2col">
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Ahead of the book</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Territory</th><th>Attainment</th><th>Pacing</th></tr></thead>
+          <tbody>
+            {% for row in top_bottom.top %}
+            <tr>
+              <td>{{ row.territory.name }}</td>
+              <td>{% if row.attainment_pct != None %}<span class="badge badge-green">{{ row.attainment_pct }}%</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>{% if row.pacing_pct != None %}{{ row.pacing_pct }}%{% else %}&mdash;{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="trending-up"></i><h3>Nothing to rank yet</h3><p>No territory has a measurable attainment figure for this period.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Behind the book</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Territory</th><th>Attainment</th><th>Pacing</th></tr></thead>
+          <tbody>
+            {% for row in top_bottom.bottom %}
+            <tr>
+              <td>{{ row.territory.name }}</td>
+              <td>{% if row.attainment_pct != None %}<span class="badge badge-red">{{ row.attainment_pct }}%</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>{% if row.pacing_pct != None %}{{ row.pacing_pct }}%{% else %}&mdash;{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="trending-down"></i><h3>Nothing to rank yet</h3><p>No territory has a measurable attainment figure for this period.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
