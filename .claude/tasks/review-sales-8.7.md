@@ -108,7 +108,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** `territory_performance` extracts all assignment IDs into a Python list and issues `party_id__in=assignment_account_ids` queries over deals and orders. On large tenants, this can exceed SQL parameter limits.
 - **Fix:** Use subquery `party_id__in=AccountTerritoryAssignment.objects.filter(...).values('account_id')` directly in the query.
 
-### [I7] Redundant Duplicate Queries on `AccountProfile` and `AccountClassification` Across Boards
+### [x] fixed — [I7] Redundant Duplicate Queries on `AccountProfile` and `AccountClassification` Across Boards
+<!-- commit: perf(sales): eliminate redundant duplicate account profile and classification queries across territory boards (I7) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/TerritoryBoards.py:138-147, 298-307, 423-432, 514-521`
 - **Description:** Helper functions `_build_account_profile_map` and `_build_account_classification_map` are invoked repeatedly across helper routines, creating duplicated queries for the same account IDs.
 - **Fix:** Pass cached/precomputed profile and classification maps through board helper functions.
