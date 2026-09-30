@@ -78,7 +78,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** `TerritoryMemberForm` fails to filter `self.fields["territory"].queryset`. `QuotaPlanForm` fails to filter `territory` and `owner` querysets and does not clear them when `self.tenant is None`. `AccountTerritoryAssignmentForm` leaves `owner` unfiltered when `self.tenant is None`.
 - **Fix:** Filter all FK querysets to `request.tenant` (and active status where applicable), and explicitly assign `.none()` to all FK fields when `self.tenant is None`.
 
-### [I2] Broken Condition Value Rendering in `territoryrule/detail.html` via `|join:", "` on Scalars
+### [x] fixed — [I2] Broken Condition Value Rendering in `territoryrule/detail.html` via `|join:", "` on Scalars
+<!-- commit: fix(sales): render scalar condition values without join in territory rule detail (I2) -->
 - **Location:** `templates/sales/territoryquotamanagement/territoryrule/detail.html:91`
 - **Description:** Line 91 applies `|join:", "` unconditionally to `condition.value`. In `TerritoryRule.conditions`, `condition["value"]` is only a list for `in` and `not_in` operators; for all other operators it is a scalar. Applying `|join:", "` iterates strings character-by-character (e.g. `"Enterprise"` renders as `"E, n, t, e, r, p, r, i, s, e"`).
 - **Fix:** Check `{% elif condition.operator == "in" or condition.operator == "not_in" %}{{ condition.value|join:", " }}{% else %}{{ condition.value }}{% endif %}`.
