@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% comment %}
+  8.7 Assignment detail — one row of the effective-dated coverage ledger.
+
+  The siblings table is the point: an account may carry one PRIMARY plus a bounded number of
+  SECONDARY and OVERLAY alignments at the same time, and reading one row in isolation hides the
+  thing that actually goes wrong (an account with two live primaries, or a secondary that quietly
+  outgrew the cap). At most one live PRIMARY is enforced by the model, so a duplicate here is
+  something to close, not something this page can fix by editing.
+
+  `rule` is the originating TerritoryRule, or None for a hand-made row. `caveats` states the
+  orphan case (territory IS NULL) in the terms the reader needs: the row is kept because it is the
+  record of a decision, not because the data is healthy.
+{% endcomment %}
+{% block title %}{{ obj.number }} &middot; Territory Assignment{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }} &middot; Territory Assignment</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:account_territory_assignment_list' %}">Account Territory Assignments</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:account_territory_assignment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to assignments</a>
+    <a href="{% url 'sales:account_territory_assignment_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="hash"></i></div><div class="stat-value">{{ obj.number }}</div><div class="stat-label">Assignment number</div></div>
+  <div class="stat-card"><div class="stat-icon {% if obj.effective_to %}slate{% else %}green{% endif %}"><i data-lucide="calendar-range"></i></div><div class="stat-value">{% if obj.effective_to %}Closed{% else %}Live{% endif %}</div><div class="stat-label">Window state</div></div>
+  <div class="stat-card"><div class="stat-icon {% if obj.alignment_type == 'primary' %}green{% elif obj.alignment_type == 'overlay' %}orange{% else %}blue{% endif %}"><i data-lucide="layers"></i></div><div class="stat-value">{{ obj.get_alignment_type_display }}</div><div class="stat-label">Alignment</div></div>
+  <div class="stat-card"><div class="stat-icon {% if obj.territory %}blue{% else %}red{% endif %}"><i data-lucide="map-pin"></i></div><div class="stat-value">{% if obj.territory %}{{ obj.territory.number }}{% else %}&mdash;{% endif %}</div><div class="stat-label">Territory (CRM 1.2)</div></div>
+</div>
+
+{% if caveats %}
+<div class="card">
+  <div class="card-body">
+    <p class="fw-600"><span class="badge badge-amber">Read this first</span></p>
+    <ul style="margin:.5rem 0 0; padding-left:1.1rem;">
+      {% for caveat in caveats %}<li>{{ caveat }}</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<div class="layout-2col">
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Assignment</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+          <div class="detail-item"><dt>Account</dt><dd>{{ obj.account.name }}<div class="text-muted">Organizations only &mdash; a person is not assignable to a territory.</div></dd></div>
+          <div class="detail-item"><dt>Territory</dt><dd>{% if obj.territory %}{{ obj.territory.number }} &middot; {{ obj.territory.name }}<div class="text-muted">Owned by CRM 1.2 &mdash; Sales reads it and never writes it.</div>{% else %}<span class="badge badge-red">No territory</span><div class="text-muted">This is the SET_NULL orphan a deleted CRM territory leaves behind.</div>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Alignment</dt><dd>{% if obj.alignment_type == "primary" %}<span class="badge badge-green">{{ obj.get_alignment_type_display }}</span>{% elif obj.alignment_type == "overlay" %}<span class="badge badge-amber">{{ obj.get_alignment_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_alignment_type_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Source</dt><dd>{% if obj.assignment_source == "rule" %}<span class="badge badge-info">{{ obj.get_assignment_source_display }}</span>{% elif obj.assignment_source == "named_account" %}<span class="badge badge-green">{{ obj.get_assignment_source_display }}</span>{% elif obj.assignment_source == "inherited" %}<span class="badge badge-slate">{{ obj.get_assignment_source_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_assignment_source_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Originating rule</dt><dd>{% if rule %}<a href="{% url 'sales:territory_rule_detail' rule.pk %}" class="fw-600">{{ rule.number }}</a> &middot; {{ rule.name }}{% else %}<span class="text-muted">Placed by hand &mdash; no rule produced this row</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Effective window</dt><dd>{{ obj.effective_from|date:"M d, Y" }} &rarr; {% if obj.effective_to %}{{ obj.effective_to|date:"M d, Y" }}{% else %}open-ended{% endif %}<div class="text-muted">{% if obj.effective_to %}Superseded &mdash; a later row takes over for this account and territory.{% else %}Live. This is the row the boards read as the account's current placement.{% endif %}</div></dd></div>
+          <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.username }}{% else %}<span class="text-muted">Unowned</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Notes</dt><dd>{% if obj.notes %}{{ obj.notes|linebreaksbr }}{% else %}<span class="text-muted">None recorded</span>{% endif %}</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Other live alignments on this account</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Assignment</th><th>Territory</th><th>Alignment</th><th>Source</th><th>Since</th></tr></thead>
+          <tbody>
+            {% for sibling in siblings %}
+            <tr>
+              <td><a href="{% url 'sales:account_territory_assignment_detail' sibling.pk %}" class="fw-600">{{ sibling.number }}</a></td>
+              <td>{% if sibling.territory %}{{ sibling.territory.number }} &middot; {{ sibling.territory.name }}{% else %}<span class="text-muted">Orphaned</span>{% endif %}</td>
+              <td>{% if sibling.alignment_type == "primary" %}<span class="badge badge-green">{{ sibling.get_alignment_type_display }}</span>{% elif sibling.alignment_type == "overlay" %}<span class="badge badge-amber">{{ sibling.get_alignment_type_display }}</span>{% else %}<span class="badge badge-slate">{{ sibling.get_alignment_type_display }}</span>{% endif %}</td>
+              <td>{% if sibling.assignment_source == "rule" %}<span class="badge badge-info">{{ sibling.get_assignment_source_display }}</span>{% else %}<span class="badge badge-muted">{{ sibling.get_assignment_source_display }}</span>{% endif %}</td>
+              <td>{{ sibling.effective_from|date:"M d, Y" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="check-circle"></i><h3>No other live alignments</h3><p>This is the account's only open placement. A primary row is unique while it is live, and secondary and overlay rows are counted on the coverage-gap board.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Actions</h2></div>
+      <div class="card-body" style="display:flex; flex-direction:column; gap:.6rem;">
+        {% comment %}
+          Delete is a POST form with a confirm. To SUPERSEDE rather than delete, set an end date
+          on this row instead: the ledger is meant to keep history, and a rebalance closes the old
+          window rather than erasing it.
+        {% endcomment %}
+        <a href="{% url 'sales:account_territory_assignment_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit assignment</a>
+        <form method="post" action="{% url 'sales:account_territory_assignment_delete' obj.pk %}" onsubmit="return confirm('Delete assignment {{ obj.number }}? This removes a row from the coverage history. This cannot be undone.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit" style="width:100%;"><i data-lucide="trash-2"></i> Delete assignment</button>
+        </form>
+        {% if rule %}
+        <a href="{% url 'sales:territory_rule_detail' rule.pk %}" class="btn btn-outline"><i data-lucide="git-branch"></i> Open rule {{ rule.number }}</a>
+        {% endif %}
+        <a href="{% url 'sales:territory_coverage_gap' %}" class="btn btn-outline"><i data-lucide="unlink"></i> Coverage gaps</a>
+        <a href="{% url 'sales:account_territory_assignment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to assignments</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Record</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Assigned by</dt><dd>{% if obj.assigned_by %}{{ obj.assigned_by.username }}{% else %}<span class="text-muted">Not recorded</span>{% endif %}<div class="text-muted">Frozen evidence &mdash; stamped once, never editable.</div></dd></div>
+          <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+          <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
