@@ -179,6 +179,8 @@ from .QuoteProposalCPQ import *
 # 8.6 Order Management. These EXTEND scm.SalesOrder (owned by SCM 4.5); none writes
 # SalesOrder.status directly, and the mutating paths delegate to 4.5's own logic.
 from .OrderManagement import *
+# 8.7 Territory & Quota Management. Extends crm.Territory and crm.SalesQuota by FK.
+from .TerritoryQuotaManagement import *
 
 # View functions exported for URLconf routing and external imports
 __all__ = [
@@ -192,7 +194,12 @@ __all__ = [
         "order_history_board", "order_timeline", "reorder_customers_board",
         "renewals_due_board", "revenue_recognition_board",
         "order_backorder_resolve", "order_repeat", "order_validate",
+        # 8.7 Territory & Quota Management
+        "territory_rule_", "account_territory_assignment_", "territory_member_",
+        "quota_plan_", "territory_rebalance_preview", "territory_coverage_gap",
+        "territory_performance", "territory_white_space",
     ))
 ]
+
 
 
