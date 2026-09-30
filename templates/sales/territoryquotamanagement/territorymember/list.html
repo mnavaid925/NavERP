@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% comment %}
+  8.7 Territory members — the coverage roster. WHO a person is (member_role: the hunter/farmer
+  split, the overlay specialist, the pre-sales engineer), whether they cover directly, shared or
+  as an overlay, and what share of the credit they carry.
+
+  `coverage_split_pct` is a PERCENTAGE, not a money column. 8.10 owns incentive compensation, so
+  8.7 must not store a "credit" figure that 8.10 would own.
+
+  Overlays are NOT a second territory subtree. An overlay is an overlay ALIGNMENT on the account
+  plus an overlay_specialist membership against the base territory &mdash; the data shape
+  reproduces the behaviour, so there is no second hierarchy to keep in step.
+
+  ENUM filters read their ECHO keys; FK dropdown compares are `|stringformat:"d"` against
+  `request.GET.territory` / `request.GET.user` — never `|slugify` on a pk (contract §11.1 rule 3).
+{% endcomment %}
+{% block title %}Territory Members{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Territory Members</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Territory &amp; Quota</span><span class="sep">&rsaquo;</span><span>Roster</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:territory_member_create' %}" class="btn btn-primary"><i data-lucide="user-plus"></i> Add member</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="users"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total memberships</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="user-check"></i></div><div class="stat-value">{{ stats.direct }}</div><div class="stat-label">Live direct</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="split"></i></div><div class="stat-value">{{ stats.shared }}</div><div class="stat-label">Live shared / split</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.overlay }}</div><div class="stat-label">Live overlay</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.orphaned_pairs %}red{% else %}slate{% endif %}"><i data-lucide="unlink"></i></div><div class="stat-value">{{ stats.orphaned_pairs }}</div><div class="stat-label">SDRs with no live paired AE</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="tmb-search">Search</label>
+        <input id="tmb-search" name="q" value="{{ q }}" class="form-input" placeholder="Membership number, person, or notes">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tmb-role">Member role</label>
+        <select id="tmb-role" name="member_role" class="form-select">
+          <option value="">Every role</option>
+          {% for value, label in member_role_choices %}<option value="{{ value }}"{% if member_role == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tmb-assignment">Coverage</label>
+        <select id="tmb-assignment" name="assignment_type" class="form-select">
+          <option value="">Any coverage type</option>
+          {% for value, label in assignment_type_choices %}<option value="{{ value }}"{% if assignment_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tmb-territory">Territory</label>
+        <select id="tmb-territory" name="territory" class="form-select">
+          <option value="">Every territory</option>
+          {% for territory in territories %}<option value="{{ territory.pk|stringformat:"d" }}"{% if request.GET.territory == territory.pk|stringformat:"d" %} selected{% endif %}>{{ territory.number }} &middot; {{ territory.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tmb-user">Person</label>
+        <select id="tmb-user" name="user" class="form-select">
+          <option value="">Anyone</option>
+          {% for member in users %}<option value="{{ member.pk|stringformat:"d" }}"{% if request.GET.user == member.pk|stringformat:"d" %} selected{% endif %}>{{ member.username }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tmb-active">Window</label>
+        <select id="tmb-active" name="active" class="form-select">
+          <option value="">Any window</option>
+          {% for value, label in active_choices %}<option value="{{ value }}"{% if active == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:territory_member_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Coverage roster</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Member</th><th>Territory</th><th>Role</th><th>Coverage</th><th>Split</th><th>Paired with</th><th>Window</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td>
+            <a href="{% url 'sales:territory_member_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            <div class="text-muted">{{ obj.user.username }}</div>
+          </td>
+          <td>{{ obj.territory.number }}<div class="text-muted">{{ obj.territory.name }}</div></td>
+          <td>{% if obj.member_role == "overlay_specialist" %}<span class="badge badge-amber">{{ obj.get_member_role_display }}</span>{% elif obj.member_role == "ae" %}<span class="badge badge-green">{{ obj.get_member_role_display }}</span>{% elif obj.member_role == "sdr" %}<span class="badge badge-info">{{ obj.get_member_role_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_member_role_display }}</span>{% endif %}</td>
+          <td>{% if obj.assignment_type == "direct" %}<span class="badge badge-green">{{ obj.get_assignment_type_display }}</span>{% elif obj.assignment_type == "shared" %}<span class="badge badge-info">{{ obj.get_assignment_type_display }}</span>{% else %}<span class="badge badge-amber">{{ obj.get_assignment_type_display }}</span>{% endif %}</td>
+          <td>{{ obj.coverage_split_pct }}%</td>
+          <td>{% if obj.paired_user %}{{ obj.paired_user.username }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td>{% if obj.effective_to %}{{ obj.effective_from|date:"M d, Y" }} &rarr; {{ obj.effective_to|date:"M d, Y" }}<div class="text-muted">Ended</div>{% else %}{{ obj.effective_from|date:"M d, Y" }}<div class="text-muted">Live</div>{% endif %}</td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:territory_member_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'sales:territory_member_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'sales:territory_member_delete' obj.pk %}" onsubmit="return confirm('Remove {{ obj.user.username }} from the roster on {{ obj.number }}? The coverage split will be re-checked. This cannot be undone.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8"><div class="empty-state"><i data-lucide="users"></i><h3>No roster entries</h3><p>Nobody is on a territory roster yet. A territory with no roster is a book with no one to sell it.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
