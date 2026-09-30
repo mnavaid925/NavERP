@@ -45,7 +45,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
   total = sum((row.coverage_split_pct or Decimal("0")) for row in siblings if row.assignment_type == "direct") + direct_self
   ```
 
-### [C5] Truthy Evaluation of `None` in `TerritoryMember._paired_user_is_ae`
+### [x] fixed — [C5] Truthy Evaluation of `None` in `TerritoryMember._paired_user_is_ae`
+<!-- commit: fix(sales): fix truthy evaluation of None in paired AE validation (C5) -->
 - **Location:** `apps/sales/models/TerritoryQuotaManagement/TerritoryMembers.py:131, 146-155`
 - **Description:** `_paired_user_is_ae()` returns `None` when pairing cannot be judged. Line 131 uses `if self.paired_user_id and not self._paired_user_is_ae():`. In Python, `not None` evaluates to `True`, triggering a spurious `"A pairing must point at a member whose role is Account Executive."` validation error when the paired user cannot be found or is cross-tenant.
 - **Fix:** Change line 131 to `if self.paired_user_id and self._paired_user_is_ae() is False:`, and query `.filter(tenant_id=self.tenant_id, territory_id=self.territory_id, user_id=self.paired_user_id, member_role="ae").exists()`.
