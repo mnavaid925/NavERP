@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% comment %}
+  Create / edit one QuotaPlan. ONE template for both, driven by `is_edit`.
+
+  There is deliberately NO money field on this form. The target amount is
+  `crm.SalesQuota.target_amount`, owned and edited by CRM 1.2; a money input here would be a
+  second source of truth for the same number (L37). What this form records is the DERIVATION: the
+  method, the basis, the baseline, the growth and relief percentages, whether uplift was permitted,
+  and how it phases.
+
+  `status` is off the form by decision, not by `editable=False`. It is moved by four POST verbs on
+  the detail page &mdash; draft -> submitted -> approved | rejected -> locked &mdash; so a status
+  dropdown would be a workflow engine written in a select element. The same reasoning puts
+  `calculated_at` off the form: it is a fact about a past calculation, not an input.
+
+  `quota_ref` and `forecast_period` are bound to each other in the model's clean(): both carry
+  their own period fields and nothing in either schema stops them disagreeing, so the mismatch is
+  refused here with a message naming both sides rather than surfacing later as a wrong attainment
+  number.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Quota Plan{% else %}New Quota Plan{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Quota Plan{% else %}New Quota Plan{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:quota_plan_list' %}">Quota Plans</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:quota_plan_detail' obj.pk %}{% else %}{% url 'sales:quota_plan_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      A plan records how one CRM quota target was derived &mdash; from what baseline, with what
+      growth and relief, whether uplift was permitted, and how it phases across the period. The
+      number itself stays where it is owned: on the CRM quota.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save plan{% else %}Create plan{% endif %}</button>
+        <a href="{% if is_edit %}{% url 'sales:quota_plan_detail' obj.pk %}{% else %}{% url 'sales:quota_plan_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>What the server decides</h2></div>
+  <div class="card-body">
+    <table class="table">
+      <thead><tr><th>Field</th><th>Why it is not on this form</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-600">Number (QPA-)</td><td>System-assigned and sequential.</td></tr>
+        <tr><td class="fw-600">Target amount</td><td>There is no money column on this model. The amount is <code>crm.SalesQuota.target_amount</code>, owned and edited by CRM 1.2; a second stored target would be a second source of truth for the same number.</td></tr>
+        <tr><td class="fw-600">Status</td><td>Workflow, not a preference. It is moved only by the Submit / Approve / Reject / Lock actions on the detail page, so a plan cannot be declared approved by the person who wrote it.</td></tr>
+        <tr><td class="fw-600">Period year / quarter / month</td><td>Not re-spelled here. The window is 8.4's <code>ForecastPeriod</code>, and a second copy of a window is how a Q2 quota ends up measured against a Q1 forecast.</td></tr>
+        <tr><td class="fw-600">Reporting currency</td><td>Inherited from the forecast period. <code>accounting.Currency</code> is a global master with no tenant FK, so it is never tenant-checked and must not be re-declared per plan.</td></tr>
+        <tr><td class="fw-600">Derived baseline / stretch</td><td>Computed in the view on every load. Storing them would freeze a number that stops being true the moment the quota is edited.</td></tr>
+        <tr><td class="fw-600">Submitted / approved / calculated stamps</td><td>Frozen evidence. Each is written by exactly one named action, inside that action's own transaction, and is never editable.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
