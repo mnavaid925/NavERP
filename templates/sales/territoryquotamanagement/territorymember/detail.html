@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% comment %}
+  8.7 Territory member detail — one person, one role, one share of the credit.
+
+  `is_frozen` is the view's own predicate: the window has passed, so the membership is history
+  rather than a roster line. It is read, never recomputed here, and it is why the Edit button
+  below is withheld rather than left to fail.
+
+  The peers table is the useful half. A single member says nothing; what a territory owner needs
+  to see is who else carries the book, what share each holds, and whether the splits still add up
+  to 100. The pairing (SDR -> AE) is shown per row rather than as a separate graph, because a
+  nullable FK IS the pairing and a second structure to keep consistent with the roster is a
+  liability.
+{% endcomment %}
+{% block title %}{{ obj.number }} &middot; Territory Member{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }} &middot; Territory Member</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:territory_member_list' %}">Territory Members</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:territory_member_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to roster</a>
+    {% if not is_frozen %}
+    <a href="{% url 'sales:territory_member_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="hash"></i></div><div class="stat-value">{{ obj.number }}</div><div class="stat-label">Membership number</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="map-pin"></i></div><div class="stat-value">{{ obj.territory.number }}</div><div class="stat-label">Territory (CRM 1.2)</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="percent"></i></div><div class="stat-value">{{ obj.coverage_split_pct }}%</div><div class="stat-label">Split credit</div></div>
+  <div class="stat-card"><div class="stat-icon {% if is_frozen %}slate{% else %}green{% endif %}"><i data-lucide="calendar-range"></i></div><div class="stat-value">{% if is_frozen %}Ended{% else %}Live{% endif %}</div><div class="stat-label">Window state</div></div>
+</div>
+
+{% if caveats %}
+<div class="card">
+  <div class="card-body">
+    <p class="fw-600"><span class="badge badge-amber">Read this first</span></p>
+    <ul style="margin:.5rem 0 0; padding-left:1.1rem;">
+      {% for caveat in caveats %}<li>{{ caveat }}</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<div class="layout-2col">
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Membership</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+          <div class="detail-item"><dt>Person</dt><dd>{{ obj.user.username }}<div class="text-muted">{{ obj.user.get_full_name|default:"" }}</div></dd></div>
+          <div class="detail-item"><dt>Territory</dt><dd>{{ obj.territory.number }} &middot; {{ obj.territory.name }}<div class="text-muted">Owned by CRM 1.2 &mdash; Sales reads it and never writes it.</div></dd></div>
+          <div class="detail-item"><dt>Member role</dt><dd>{% if obj.member_role == "overlay_specialist" %}<span class="badge badge-amber">{{ obj.get_member_role_display }}</span>{% elif obj.member_role == "ae" %}<span class="badge badge-green">{{ obj.get_member_role_display }}</span>{% elif obj.member_role == "sdr" %}<span class="badge badge-info">{{ obj.get_member_role_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_member_role_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Coverage type</dt><dd>{% if obj.assignment_type == "direct" %}<span class="badge badge-green">{{ obj.get_assignment_type_display }}</span>{% elif obj.assignment_type == "shared" %}<span class="badge badge-info">{{ obj.get_assignment_type_display }}</span>{% else %}<span class="badge badge-amber">{{ obj.get_assignment_type_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Split credit</dt><dd>{{ obj.coverage_split_pct }}%<div class="text-muted">A percentage, not a money figure &mdash; 8.10 owns incentive compensation.</div></dd></div>
+          <div class="detail-item"><dt>Paired with</dt><dd>{% if paired_user %}{{ paired_user.username }}<div class="text-muted">{% if not paired_user.is_active %}<span class="badge badge-red">No longer active</span>{% endif %}A pairing runs SDR &rarr; AE and must point at a member whose roster role is Account Executive.</div>{% else %}<span class="text-muted">No pairing</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Primary member</dt><dd>{% if obj.is_primary %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Effective window</dt><dd>{{ obj.effective_from|date:"M d, Y" }} &rarr; {% if obj.effective_to %}{{ obj.effective_to|date:"M d, Y" }}{% else %}open-ended{% endif %}{% if is_frozen %}<div class="text-muted">The window has passed, so this row is history rather than a roster line.</div>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Notes</dt><dd>{% if obj.notes %}{{ obj.notes|linebreaksbr }}{% else %}<span class="text-muted">None recorded</span>{% endif %}</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Everyone else on this territory</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Member</th><th>Person</th><th>Role</th><th>Coverage</th><th>Split</th><th>Paired with</th></tr></thead>
+          <tbody>
+            {% for peer in territory_peers %}
+            <tr>
+              <td><a href="{% url 'sales:territory_member_detail' peer.pk %}" class="fw-600">{{ peer.number }}</a></td>
+              <td>{{ peer.user.username }}</td>
+              <td>{% if peer.member_role == "overlay_specialist" %}<span class="badge badge-amber">{{ peer.get_member_role_display }}</span>{% elif peer.member_role == "ae" %}<span class="badge badge-green">{{ peer.get_member_role_display }}</span>{% else %}<span class="badge badge-slate">{{ peer.get_member_role_display }}</span>{% endif %}</td>
+              <td>{% if peer.assignment_type == "direct" %}<span class="badge badge-green">{{ peer.get_assignment_type_display }}</span>{% elif peer.assignment_type == "shared" %}<span class="badge badge-info">{{ peer.get_assignment_type_display }}</span>{% else %}<span class="badge badge-amber">{{ peer.get_assignment_type_display }}</span>{% endif %}</td>
+              <td>{{ peer.coverage_split_pct }}%</td>
+              <td>{% if peer.paired_user %}{{ peer.paired_user.username }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="user-round"></i><h3>Sole member</h3><p>{{ obj.user.username }} carries this territory alone, so there is no split to reconcile.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">
+          When any member is marked shared or split coverage, the direct members' shares must total
+          exactly 100.00%. The model checks that in Python over the fetched sibling rows &mdash; a
+          database-side total silently drops fractional cents on some engines instead of raising.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Actions</h2></div>
+      <div class="card-body" style="display:flex; flex-direction:column; gap:.6rem;">
+        {% if is_frozen %}
+        <p class="text-muted">This membership's window has passed, so it is a record rather than a roster line and is not editable here. Add a new membership to bring the person back onto the roster.</p>
+        {% else %}
+        <a href="{% url 'sales:territory_member_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit membership</a>
+        {% endif %}
+        <form method="post" action="{% url 'sales:territory_member_delete' obj.pk %}" onsubmit="return confirm('Remove {{ obj.user.username }} from the roster on {{ obj.number }}? The coverage split will be re-checked. This cannot be undone.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit" style="width:100%;"><i data-lucide="trash-2"></i> Remove from roster</button>
+        </form>
+        <a href="{% url 'sales:territory_performance' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Territory performance</a>
+        <a href="{% url 'sales:territory_member_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to roster</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Record</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+          <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+        </dl>
+        <p class="text-muted" style="margin-top:.75rem;">
+          A membership is removed with the territory itself. A membership in a deleted territory is
+          meaningless, so unlike an assignment row &mdash; which is kept as the record of a
+          coverage decision &mdash; this one cascades.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
