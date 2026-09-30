@@ -120,7 +120,27 @@ def _period_label(period):
 # =============================================================================
 
 
-def account_territory_values(tenant, accounts):
+def _build_account_profile_map(tenant, account_ids):
+    if not account_ids or tenant is None:
+        return {}
+    return {
+        profile.party_id: profile
+        for profile in AccountProfile.objects.filter(tenant=tenant, party_id__in=account_ids)
+    }
+
+
+def _build_account_classification_map(tenant, account_ids):
+    if not account_ids or tenant is None:
+        return {}
+    return {
+        classification.account_id: classification
+        for classification in AccountClassification.objects.filter(
+            tenant=tenant, account_id__in=account_ids
+        )
+    }
+
+
+def account_territory_values(tenant, accounts, profiles=None, classifications=None):
     """The ACCOUNT-side value map for ``TERRITORY_FIELDS``, over a fetched set of accounts.
 
     Built once per board and reused for every rule, because the map costs one query per source and
@@ -135,16 +155,10 @@ def account_territory_values(tenant, accounts):
     account_ids = [account.pk for account in accounts]
     if not account_ids:
         return {}
-    profiles = {
-        profile.party_id: profile
-        for profile in AccountProfile.objects.filter(tenant=tenant, party_id__in=account_ids)
-    }
-    classifications = {
-        classification.account_id: classification
-        for classification in AccountClassification.objects.filter(
-            tenant=tenant, account_id__in=account_ids
-        )
-    }
+    if profiles is None:
+        profiles = _build_account_profile_map(tenant, account_ids)
+    if classifications is None:
+        classifications = _build_account_classification_map(tenant, account_ids)
     open_ids = set(
         Opportunity.objects.filter(
             tenant=tenant, account_id__in=account_ids, stage__in=Opportunity.OPEN_STAGES
@@ -282,7 +296,10 @@ def effective_rules(rules, day):
     ]
 
 
-def evaluate_territory_rules(tenant, accounts, rules, by_pk, children, picture=None, values=None):
+def evaluate_territory_rules(
+    tenant, accounts, rules, by_pk, children, picture=None, values=None,
+    profiles=None, classifications=None,
+):
     """Every placement the given rules would write, plus the accounts no rule claimed.
 
     Returns ``(diff_rows, unmatched_accounts)``. One ``diff_rows`` entry per
@@ -291,20 +308,17 @@ def evaluate_territory_rules(tenant, accounts, rules, by_pk, children, picture=N
     row that under-reports it. A higher-priority rule claims an account outright: a lower-priority
     rule does not also get it.
     """
+    account_ids = [account.pk for account in accounts]
     if picture is None:
-        picture = assignment_picture(tenant, [account.pk for account in accounts])
+        picture = assignment_picture(tenant, account_ids)
+    if profiles is None:
+        profiles = _build_account_profile_map(tenant, account_ids)
+    if classifications is None:
+        classifications = _build_account_classification_map(tenant, account_ids)
     if values is None:
-        values = account_territory_values(tenant, accounts)
-    profiles = {
-        profile.party_id: profile
-        for profile in AccountProfile.objects.filter(tenant=tenant, party_id__in=[a.pk for a in accounts])
-    }
-    classifications = {
-        classification.account_id: classification
-        for classification in AccountClassification.objects.filter(
-            tenant=tenant, account_id__in=[a.pk for a in accounts]
+        values = account_territory_values(
+            tenant, accounts, profiles=profiles, classifications=classifications
         )
-    }
     day = timezone.localdate()
     diff_rows = []
     unmatched = []
@@ -415,21 +429,15 @@ def territory_rebalance_preview(request):
     territories = list(tenant_territories(tenant))
     by_pk, children = territory_index(territories)
     accounts = list(_tenant_organizations(tenant, q)[:MAX_BOARD_ACCOUNTS])
+    account_ids = [account.pk for account in accounts]
+    profiles = _build_account_profile_map(tenant, account_ids)
+    classifications = _build_account_classification_map(tenant, account_ids)
     diff_rows, unmatched_accounts = evaluate_territory_rules(
-        tenant, accounts, candidate_rules, by_pk, children
+        tenant, accounts, candidate_rules, by_pk, children,
+        profiles=profiles, classifications=classifications,
     )
     stats = _diff_stats(diff_rows, len(accounts))
 
-    profiles = {
-        profile.party_id: profile
-        for profile in AccountProfile.objects.filter(tenant=tenant, party_id__in=[a.pk for a in accounts])
-    }
-    classifications = {
-        classification.account_id: classification
-        for classification in AccountClassification.objects.filter(
-            tenant=tenant, account_id__in=[a.pk for a in accounts]
-        )
-    }
     unmatched_rows = [
         {
             "account": account,
@@ -508,17 +516,12 @@ def territory_coverage_gap(request):
         timezone.localdate(),
     )
     picture = assignment_picture(tenant, account_ids)
+    profiles = _build_account_profile_map(tenant, account_ids)
+    classifications = _build_account_classification_map(tenant, account_ids)
     _, unmatched_accounts = evaluate_territory_rules(
-        tenant, accounts, rules, by_pk, children, picture=picture
+        tenant, accounts, rules, by_pk, children, picture=picture,
+        profiles=profiles, classifications=classifications,
     )
-    profiles = {
-        profile.party_id: profile
-        for profile in AccountProfile.objects.filter(tenant=tenant, party_id__in=account_ids)
-    }
-    classifications = {
-        classification.account_id: classification
-        for classification in AccountClassification.objects.filter(tenant=tenant, account_id__in=account_ids)
-    }
 
     def _account_row(account):
         return {
@@ -884,14 +887,8 @@ def territory_white_space(request):
     by_pk, _ = territory_index(
         list(tenant_territories(tenant, active_only=False)[:MAX_ROWS]) if tenant else []
     )
-    profiles = {
-        profile.party_id: profile
-        for profile in AccountProfile.objects.filter(tenant=tenant, party_id__in=account_ids)
-    }
-    classifications = {
-        classification.account_id: classification
-        for classification in AccountClassification.objects.filter(tenant=tenant, account_id__in=account_ids)
-    }
+    profiles = _build_account_profile_map(tenant, account_ids)
+    classifications = _build_account_classification_map(tenant, account_ids)
     opportunities = (
         list(
             Opportunity.objects.filter(tenant=tenant, account_id__in=account_ids)
