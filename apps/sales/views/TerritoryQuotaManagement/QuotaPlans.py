@@ -99,10 +99,10 @@ def derive_baseline(plan):
         + Decimal(plan.growth_target_pct or 0)
         - Decimal(plan.attrition_relief_pct or 0)
     ) / HUNDRED
-    if multiplier == 0:
+    if multiplier <= 0:
         return None, (
-            "Growth and attrition relief cancel exactly, so the baseline behind this target is not "
-            "recoverable from it."
+            "Growth and attrition relief result in a non-positive multiplier, so the baseline behind "
+            "this target is not recoverable from it."
         )
     return (Decimal(plan.quota_ref.target_amount or 0) / multiplier).quantize(
         CENTS, rounding=ROUND_HALF_UP
