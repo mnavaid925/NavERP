@@ -22,7 +22,7 @@ from ``ForecastPeriod.reporting_currency``, and ``accounting.Currency`` is a GLO
 ``tenant`` FK, so it is never tenant-checked (L29). The performance board sums amounts only when the
 fetched rows share one reporting currency, and reports anything else as a **caveat, not a number**.
 """
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -175,24 +175,33 @@ class QuotaPlan(TenantNumbered):
             if not self._relation_belongs_to_tenant(field_name):
                 errors[field_name] = "That record must belong to this workspace."
         # A plan may not point at a different territory than the quota it annotates.
-        if self.territory_id and self.quota_ref_id and self.territory_id != self.quota_ref.territory_id:
-            errors["territory"] = "The plan territory must match the territory on the quota it annotates."
+        if "quota_ref" not in errors and "territory" not in errors:
+            if self.territory_id and self.quota_ref_id:
+                try:
+                    if self.territory_id != self.quota_ref.territory_id:
+                        errors["territory"] = "The plan territory must match the territory on the quota it annotates."
+                except ObjectDoesNotExist:
+                    errors["quota_ref"] = "The referenced quota does not exist."
         # --- THE BINDING CROSS-CHECK (research §5.3). Both sides are named in the message on
         # purpose: a silent mismatch is an attainment board quietly comparing Q2 to Q1, and the
         # reader has to be able to see WHICH pair of periods disagreed.
-        if self.quota_ref_id and self.forecast_period_id:
-            quota, period = self.quota_ref, self.forecast_period
-            if (
-                quota.period_type != period.period_type
-                or quota.period_year != period.period_year
-                or quota.period_number != period.period_number
-            ):
-                errors["forecast_period"] = (
-                    f"The quota covers {quota.get_period_type_display()} "
-                    f"{quota.period_year} number {quota.period_number}, but the forecast period "
-                    f"is {period.get_period_type_display()} {period.period_year} "
-                    f"number {period.period_number}. They must be the same window."
-                )
+        if "quota_ref" not in errors and "forecast_period" not in errors:
+            if self.quota_ref_id and self.forecast_period_id:
+                try:
+                    quota, period = self.quota_ref, self.forecast_period
+                    if (
+                        quota.period_type != period.period_type
+                        or quota.period_year != period.period_year
+                        or quota.period_number != period.period_number
+                    ):
+                        errors["forecast_period"] = (
+                            f"The quota covers {quota.get_period_type_display()} "
+                            f"{quota.period_year} number {quota.period_number}, but the forecast period "
+                            f"is {period.get_period_type_display()} {period.period_year} "
+                            f"number {period.period_number}. They must be the same window."
+                        )
+                except ObjectDoesNotExist:
+                    pass
         # Uplift is a top-down-only setting (SAP). A bottom-up plan that also claims uplift is
         # asserting two contradictory things about how its number was produced.
         if self.method == "bottom_up" and self.uplift_allowed:
