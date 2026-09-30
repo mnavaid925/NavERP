@@ -35,7 +35,7 @@
 <div class="stat-grid">
   <div class="stat-card"><div class="stat-icon blue"><i data-lucide="hash"></i></div><div class="stat-value">{{ obj.number }}</div><div class="stat-label">Plan number</div></div>
   <div class="stat-card"><div class="stat-icon purple"><i data-lucide="target"></i></div><div class="stat-value">{% if obj.method == "top_down" %}Top-down{% elif obj.method == "bottom_up" %}Bottom-up{% else %}&mdash;{% endif %}</div><div class="stat-label">Derivation method</div></div>
-  <div class="stat-card"><div class="stat-icon {% if obj.status == 'approved' or obj.status == 'locked' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'submitted' %}orange{% else %}slate{% endif %}"><i data-lucide="list-checks"></i></div><div class="stat-value">{{ obj.get_status_display }}</div><div class="stat-label">Workflow status</div></div>
+  <div class="stat-card"><div class="stat-icon {% if obj.status == 'approved' or obj.status == 'locked' %}green{% elif obj.status == 'rejected' %}orange{% elif obj.status == 'submitted' %}orange{% else %}slate{% endif %}"><i data-lucide="list-checks"></i></div><div class="stat-value">{{ obj.get_status_display }}</div><div class="stat-label">Workflow status</div></div>
   <div class="stat-card"><div class="stat-icon {% if is_frozen %}blue{% else %}green{% endif %}"><i data-lucide="lock"></i></div><div class="stat-value">{% if is_frozen %}Frozen{% else %}Editable{% endif %}</div><div class="stat-label">Field state</div></div>
 </div>
 
