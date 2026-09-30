@@ -170,14 +170,16 @@ class TerritoryMember(TenantNumbered):
         )
         if self.pk:
             siblings = siblings.exclude(pk=self.pk)
-        if not siblings.filter(assignment_type="shared").exists():
+        is_shared_territory = (self.assignment_type == "shared") or siblings.filter(assignment_type="shared").exists()
+        if not is_shared_territory:
             return
         # Fetch the rows and add the Decimals in PYTHON. NEVER `Sum("coverage_split_pct")` in SQL:
         # the SQLite integer-division trap silently drops fractional cents instead of raising, so a
         # database-side total here is a WRONG ANSWER, not a slow one.
+        direct_self = (self.coverage_split_pct or Decimal("0")) if self.assignment_type == "direct" else Decimal("0")
         total = sum(
             (row.coverage_split_pct or Decimal("0")) for row in siblings if row.assignment_type == "direct"
-        ) + (self.coverage_split_pct or Decimal("0"))
+        ) + direct_self
         if total != ONE_HUNDRED:
             errors["coverage_split_pct"] = (
                 "Direct members must sum to exactly 100.00% when any member is shared. "
