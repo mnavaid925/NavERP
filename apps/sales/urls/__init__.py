@@ -23,6 +23,8 @@ from .QuoteProposalCPQ import urlpatterns as _quote_cpq
 # mounted under `sales:`, and board_patterns is spliced in FIRST inside the package because it
 # carries the literal routes (Django resolves first-match-wins).
 from .OrderManagement import urlpatterns as _order_management
+# 8.7 Territory & Quota Management. Extends crm.Territory and crm.SalesQuota by FK.
+from .TerritoryQuotaManagement import urlpatterns as _territory_quota
 
 app_name = "sales"
 
@@ -47,11 +49,14 @@ urlpatterns = [
     *_quote_cpq,
     # 8.6 Order Management.
     *_order_management,
+    # 8.7 Territory & Quota Management.
+    *_territory_quota,
     *_pipelines,
     *_teams,
     *_competitors,
     *_outcomes,
     *_workspace,
 ]
+
 
 
