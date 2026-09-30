@@ -39,6 +39,13 @@ from .OrderManagement.OrderAmendments import (
 from .OrderManagement.OrderHolds import OrderHoldActionForm, OrderHoldForm
 from .OrderManagement.OrderValidationRules import OrderValidationRuleForm
 from .OrderManagement.RevenueSchedules import PerformanceObligationForm, RevenueScheduleForm
+# 8.7 Territory & Quota Management. Forms inherit (TenantUniqueMixin, TenantModelForm).
+from .TerritoryQuotaManagement import (
+    AccountTerritoryAssignmentForm,
+    QuotaPlanForm,
+    TerritoryMemberForm,
+    TerritoryRuleForm,
+)
 
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
@@ -60,6 +67,10 @@ __all__ = [
     "OrderHoldForm", "OrderHoldActionForm",
     "OrderAmendmentForm", "OrderAmendmentLineForm", "OrderAmendmentDecisionForm",
     "RevenueScheduleForm", "PerformanceObligationForm",
+    # 8.7 Territory & Quota Management
+    "TerritoryRuleForm", "AccountTerritoryAssignmentForm",
+    "TerritoryMemberForm", "QuotaPlanForm",
 ]
+
 
 
