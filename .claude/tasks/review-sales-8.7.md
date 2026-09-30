@@ -120,7 +120,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** When a rule has `assignment_scope="subtree"` and `alignment_type="primary"`, automated assignment execution can create multiple active primary assignments for the same account across the hierarchy.
 - **Fix:** In `TerritoryRule.clean()`, forbid `alignment_type == "primary"` when `assignment_scope == "subtree"`.
 
-### [I9] Potential Unhandled `DoesNotExist` in `QuotaPlan.clean()`
+### [x] fixed — [I9] Potential Unhandled `DoesNotExist` in `QuotaPlan.clean()`
+<!-- commit: fix(sales): guard DoesNotExist when validating foreign keys in QuotaPlan.clean (I9) -->
 - **Location:** `apps/sales/models/TerritoryQuotaManagement/QuotaPlans.py:178, 184`
 - **Description:** `self.quota_ref` and `self.forecast_period` are dereferenced directly in `clean()`. If foreign keys failed tenant validation, accessing them raises `crm.SalesQuota.DoesNotExist` instead of collecting clean validation errors.
 - **Fix:** Skip direct attribute access when foreign keys failed tenant validation.
