@@ -28,6 +28,7 @@ from apps.sales.forms._common import (
     TenantModelForm,
     TenantUniqueMixin,
     _reject_foreign,
+    tenant_territories,
     tenant_users,
 )
 from apps.sales.models.TerritoryQuotaManagement.TerritoryMembers import TerritoryMember
@@ -83,11 +84,7 @@ class TerritoryMemberForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, tenant=tenant, **kwargs)
-        # Active users only, for BOTH the member and the pairing. A deactivated rep must not be
-        # selectable as a new member, and — just as important — must not be pairable, because a
-        # pairing promises somebody live is closing the loop. `tenant_users` returns an empty
-        # queryset for a tenant-less form, so a form built without a tenant offers nothing rather
-        # than every user on the platform.
+        self.fields["territory"].queryset = tenant_territories(self.tenant).order_by("name")
         self.fields["user"].queryset = tenant_users(self.tenant).order_by("username")
         self.fields["paired_user"].queryset = tenant_users(self.tenant).order_by("username")
 
