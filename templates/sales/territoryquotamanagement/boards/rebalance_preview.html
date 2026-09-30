@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% comment %}
+  8.7 Rebalance preview — the DRY RUN. What the active rules WOULD write, before anything is
+  written.
+
+  This page NEVER writes and never has a write control on it. `can_run` is printed as a plain
+  statement of whether a run is possible, not as a button: the commit is the Run action on the
+  rule's own detail page, where the transaction and the frozen receipt are visible. A board that
+  could commit would make the preview a claim rather than a preview.
+
+  LIVE DERIVATION, NOT A SNAPSHOT. Every row here is recomputed on each page load from the rules
+  in force today, the accounts in this workspace and the live assignment ledger. Nothing is
+  stored, so this page can never be stale &mdash; and equally, nothing here is a record. The run
+  receipt on each rule is the record; this is the rehearsal.
+
+  `action` per row is one of unchanged | move | add | remove, and the badge keys on that exact
+  value with a fallback. Money and counts come from the view as computed values; nothing is
+  added up in this template.
+{% endcomment %}
+{% block title %}Territory Rebalance Preview{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Territory Rebalance Preview</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Territory &amp; Quota</span><span class="sep">&rsaquo;</span><span>Rebalance preview</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:territory_rule_list' %}" class="btn btn-outline"><i data-lucide="git-branch"></i> Rule register</a>
+    <a href="{% url 'sales:territory_coverage_gap' %}" class="btn btn-outline"><i data-lucide="unlink"></i> Coverage gaps</a>
+    <a href="{% url 'sales:account_coverage' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Account coverage (8.3)</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">LIVE DERIVATION &mdash; NOT A SNAPSHOT</span>
+      Nothing on this page is stored and nothing on it is ever written. Every row is recomputed now
+      from the rules in force today, the accounts in this workspace, and the live assignment
+      ledger &mdash; so it is never stale, and equally it is a rehearsal rather than a record. The
+      record is the run receipt on each rule's own page, written inside the transaction that wrote
+      the assignment rows. The commit is that rule's Run action, not this page.
+    </p>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="scan"></i></div><div class="stat-value">{{ stats.accounts_scanned }}</div><div class="stat-label">Accounts scanned</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="circle-check"></i></div><div class="stat-value">{{ stats.unchanged }}</div><div class="stat-label">Already correct</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="move-right"></i></div><div class="stat-value">{{ stats.moves }}</div><div class="stat-label">Would move</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="plus-circle"></i></div><div class="stat-value">{{ stats.adds }}</div><div class="stat-label">Would add</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.removes %}red{% else %}slate{% endif %}"><i data-lucide="minus-circle"></i></div><div class="stat-value">{{ stats.removes }}</div><div class="stat-label">No longer proposed</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="rb-search">Search accounts</label>
+        <input id="rb-search" name="q" value="{{ q }}" class="form-input" placeholder="Account name">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="rb-segment">Segment type</label>
+        <select id="rb-segment" name="segment_type" class="form-select">
+          <option value="">All segment types</option>
+          {% for value, label in segment_type_choices %}<option value="{{ value }}"{% if segment_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="rb-rule">Single rule</label>
+        <select id="rb-rule" name="rule" class="form-select">
+          <option value="">Every rule in force</option>
+          {% for rule in rules %}<option value="{{ rule.pk|stringformat:"d" }}"{% if selected_rule_id|stringformat:"d" == rule.pk|stringformat:"d" %} selected{% endif %}>{{ rule.number }} &middot; {{ rule.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:territory_rebalance_preview' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+{% if caveats %}
+<div class="card">
+  <div class="card-header"><h2>How to read this</h2></div>
+  <div class="card-body">
+    <ul style="margin:0; padding-left:1.1rem;">
+      {% for caveat in caveats %}<li>{{ caveat }}</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-body">
+    {% if can_run %}
+    <p class="text-muted">
+      A run is currently possible: at least one rule is in force and you hold the permission to
+      commit one. It is still not done from here &mdash; open the rule and press Run, so the
+      transaction and the receipt are on the same page as the write.
+    </p>
+    {% else %}
+    <p class="text-muted">
+      No run is possible from this state: either no rule is in force today, or you do not hold the
+      permission to commit one. Nothing here is blocked as a fault &mdash; it is the same guard the
+      rule's Run button applies.
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>What a run would change</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Account</th><th>Profile</th><th>Classification</th><th>Current territory</th><th>Proposed territory</th><th>Rule</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for row in diff_rows %}
+        <tr>
+          <td class="fw-600">{{ row.account.name }}</td>
+          <td>{% if row.profile %}{{ row.profile.get_industry_display|default:row.profile.industry }}<div class="text-muted">{{ row.profile.annual_revenue }} &middot; {{ row.profile.employee_count }} staff</div>{% else %}<span class="text-muted">No profile</span>{% endif %}</td>
+          <td>{% if row.classification %}<span class="badge badge-slate">{{ row.classification.get_tier_display }}</span>{% else %}<span class="text-muted">Unclassified</span>{% endif %}</td>
+          <td>{% if row.current_territory %}{{ row.current_territory.number }}<div class="text-muted">{{ row.current_territory.name }}</div>{% else %}<span class="text-muted">Not assigned</span>{% endif %}</td>
+          <td>{% if row.proposed_territory %}{{ row.proposed_territory.number }}<div class="text-muted">{{ row.proposed_territory.name }}</div>{% else %}<span class="text-muted">Nothing proposed</span>{% endif %}</td>
+          <td>{% if row.rule %}<a href="{% url 'sales:territory_rule_detail' row.rule.pk %}">{{ row.rule.number }}</a><div class="text-muted">{{ row.rule.name }}</div>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td>
+            {% if row.action == "unchanged" %}<span class="badge badge-green">Unchanged</span>
+            {% elif row.action == "move" %}<span class="badge badge-amber">Move</span>
+            {% elif row.action == "add" %}<span class="badge badge-slate">Add</span>
+            {% elif row.action == "remove" %}<span class="badge badge-red">Remove</span>
+            {% else %}<span class="badge badge-muted">{{ row.action }}</span>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7"><div class="empty-state"><i data-lucide="git-compare"></i><h3>Nothing to rebalance</h3><p>No rule claimed any scanned account, so there is no proposed placement to show. Check that a rule is active, dated today, and names a target territory.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Accounts no rule claimed</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Account</th><th>Profile</th><th>Classification</th><th>Current territory</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for row in unmatched_rows %}
+        <tr>
+          <td class="fw-600">{{ row.account.name }}</td>
+          <td>{% if row.profile %}{{ row.profile.get_industry_display|default:row.profile.industry }}<div class="text-muted">{{ row.profile.annual_revenue }} &middot; {{ row.profile.employee_count }} staff</div>{% else %}<span class="text-muted">No profile</span>{% endif %}</td>
+          <td>{% if row.classification %}<span class="badge badge-slate">{{ row.classification.get_tier_display }}</span>{% else %}<span class="text-muted">Unclassified</span>{% endif %}</td>
+          <td>{% if row.current_territory %}{{ row.current_territory.number }}<div class="text-muted">{{ row.current_territory.name }}</div>{% else %}<span class="text-muted">Not assigned</span>{% endif %}</td>
+          <td><span class="badge badge-amber">Unmatched</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5"><div class="empty-state"><i data-lucide="check-circle"></i><h3>Every scanned account is covered</h3><p>Every account in scope matched a rule in force.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
