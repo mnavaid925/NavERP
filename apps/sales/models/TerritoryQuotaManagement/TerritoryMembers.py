@@ -128,7 +128,7 @@ class TerritoryMember(TenantNumbered):
         # validator is cheaper than saying it in prose on the help text and hoping it is read.
         if self.paired_user_id and self.paired_user_id == self.user_id:
             errors["paired_user"] = "A member cannot be paired with themselves."
-        if self.paired_user_id and not self._paired_user_is_ae():
+        if self.paired_user_id and self._paired_user_is_ae() is False:
             errors["paired_user"] = "A pairing must point at a member whose role is Account Executive."
         if errors:
             raise ValidationError(errors)
@@ -143,15 +143,14 @@ class TerritoryMember(TenantNumbered):
         same-tenant check is a separate concern and reports its own error, so returning False here
         would emit a second, misleading message about the same field.
         """
-        pair = (
+        members = (
             type(self)._default_manager
             .filter(tenant_id=self.tenant_id, territory_id=self.territory_id, user_id=self.paired_user_id)
             .exclude(pk=self.pk)
-            .first()
         )
-        if pair is None:
+        if not members.exists():
             return None
-        return pair.member_role == "ae"
+        return members.filter(member_role="ae").exists()
 
     def _check_split_sums(self, errors):
         """The ``direct`` members' split must total exactly 100 — but ONLY when a ``shared`` sibling exists.
