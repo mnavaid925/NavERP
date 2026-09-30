@@ -50,7 +50,7 @@
 <div class="stat-grid">
   <div class="stat-card"><div class="stat-icon blue"><i data-lucide="scan"></i></div><div class="stat-value">{{ stats.accounts_scanned }}</div><div class="stat-label">Accounts scanned</div></div>
   <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.covered }}</div><div class="stat-label">Covered</div></div>
-  <div class="stat-card"><div class="stat-icon {% if stats.uncovered %}red{% else %}green{% endif %}"><i data-lucide="circle-off"></i></div><div class="stat-value">{{ stats.uncovered }}</div><div class="stat-label">Uncovered</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.uncovered %}orange{% else %}green{% endif %}"><i data-lucide="circle-off"></i></div><div class="stat-value">{{ stats.uncovered }}</div><div class="stat-label">Uncovered</div></div>
   <div class="stat-card"><div class="stat-icon {% if stats.overlay_only %}orange{% else %}green{% endif %}"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.overlay_only }}</div><div class="stat-label">Held by an overlay only</div></div>
 </div>
 
