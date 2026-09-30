@@ -10,6 +10,7 @@ but know nothing about who made the assignment, and a form cannot carry a fact a
 Every other field is ordinary form input.
 """
 from django.db import transaction
+from django.db.models import Count, Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -86,15 +87,12 @@ def account_territory_assignment_list(request):
     if owner_id:
         queryset = queryset.filter(owner_id=owner_id)
 
-    base = _assignment_queryset(request)
-    stats = {
-        "total": base.count(),
-        "current": base.filter(effective_to__isnull=True).count(),
-        # An assignment with no territory is the SET_NULL orphan; it is counted here so the
-        # register can never show a healthy "assigned" count while rows point at nothing.
-        "unassigned": base.filter(territory__isnull=True, effective_to__isnull=True).count(),
-        "overlay": base.filter(alignment_type="overlay", effective_to__isnull=True).count(),
-    }
+    stats = _assignment_queryset(request).aggregate(
+        total=Count("id"),
+        current=Count("id", filter=Q(effective_to__isnull=True)),
+        unassigned=Count("id", filter=Q(territory__isnull=True, effective_to__isnull=True)),
+        overlay=Count("id", filter=Q(alignment_type="overlay", effective_to__isnull=True)),
+    )
     return crud_list(
         request,
         queryset,
