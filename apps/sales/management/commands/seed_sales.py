@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from apps.accounting.models import Currency
 from apps.core.models import ConsentPurpose, Party, Tenant
-from apps.crm.models import AccountProfile, Campaign, ContactProfile, EmailCampaign, EmailTemplate, Lead, Opportunity, Territory
+from apps.crm.models import AccountProfile, Campaign, ContactProfile, EmailCampaign, EmailTemplate, Lead, Opportunity, SalesQuota, Territory
 from apps.sales.models import (
     AccountClassification,
     AccountPlan,
@@ -41,6 +41,11 @@ from apps.sales.models import (
     OrderAmendmentLine,
     RevenueSchedule,
     PerformanceObligation,
+    # 8.7 Territory & Quota Management
+    TerritoryRule,
+    AccountTerritoryAssignment,
+    TerritoryMember,
+    QuotaPlan,
 )
 from apps.sales.cpq_services import cpq_recalc_quote_totals, cpq_render_proposal_html, cpq_convert_to_sales_order
 from apps.sales.forecast_services import forecast_submission_snapshot
@@ -82,7 +87,7 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, backfill=backfill)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, and 8.6 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, and 8.7 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
@@ -111,6 +116,7 @@ class Command(BaseCommand):
         self._seed_sales_forecasting(tenant, owner)
         self._seed_cpq(tenant, owner)
         self._seed_order_management(tenant, owner)
+        self._seed_territory_quota(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -1373,5 +1379,335 @@ class Command(BaseCommand):
             f"{tenant.name}: Sales 8.6 order management demo rows ensured on {order.number} "
             f"(hold {hold.number}, amendment {amendment.number}, schedule {schedule.number})."
         )
+
+    def _seed_territory_quota(self, tenant, owner):
+        """8.7 Territory & Quota Management demo rows, idempotent by construction.
+
+        Reuses the existing crm.Territory and crm.SalesQuota rows (owned by CRM 1.2)
+        and declares neither again (L29/L36/L37).
+        """
+        amer = Territory.objects.filter(tenant=tenant, name="Americas").first()
+        if amer is None:
+            amer, _ = Territory.objects.get_or_create(
+                tenant=tenant,
+                name="Americas",
+                defaults={"region": "North America", "segment": "Mid-Market", "manager": owner},
+            )
+        emea = Territory.objects.filter(tenant=tenant, name="EMEA").first()
+        if emea is None:
+            emea, _ = Territory.objects.get_or_create(
+                tenant=tenant,
+                name="EMEA",
+                defaults={"region": "Europe", "segment": "Enterprise", "manager": owner},
+            )
+
+        # 1. Territory Rules (3 rules: geographic, account_size, catch-all)
+        rule_geo, _ = TerritoryRule.objects.get_or_create(
+            tenant=tenant,
+            name="North America Enterprise Territory",
+            defaults={
+                "segment_type": "geographic",
+                "match_mode": "all",
+                "alignment_type": "primary",
+                "assignment_scope": "exact",
+                "target_territory": amer,
+                "priority": 10,
+                "is_active": True,
+                "conditions": [
+                    {"field": "country", "operator": "equals", "value": "USA"},
+                ],
+                "description": "Routes accounts in the USA to Americas.",
+            },
+        )
+        rule_size, _ = TerritoryRule.objects.get_or_create(
+            tenant=tenant,
+            name="Tier 1 Strategic Accounts",
+            defaults={
+                "segment_type": "account_size",
+                "match_mode": "all",
+                "alignment_type": "primary",
+                "assignment_scope": "exact",
+                "target_territory": amer,
+                "priority": 20,
+                "is_active": True,
+                "conditions": [
+                    {"field": "tier", "operator": "equals", "value": "tier_1"},
+                ],
+                "description": "Aligns strategic Tier 1 accounts with primary Americas coverage.",
+            },
+        )
+        rule_catch, _ = TerritoryRule.objects.get_or_create(
+            tenant=tenant,
+            name="Default Global Coverage Rule",
+            defaults={
+                "segment_type": "geographic",
+                "match_mode": "all",
+                "alignment_type": "primary",
+                "assignment_scope": "exact",
+                "target_territory": emea,
+                "priority": 999,
+                "is_active": True,
+                "is_catch_all": True,
+                "conditions": [],
+                "description": "Fallback catch-all rule routing remaining accounts to EMEA.",
+            },
+        )
+
+        # 2. Account Territory Assignments (4-6 assignments)
+        accounts = list(Party.objects.filter(tenant=tenant, kind="organization").order_by("id")[:10])
+        if len(accounts) < 4:
+            names = ["Acme Subsidiary Corp", "Apex Global Logistics", "Zenith Technologies", "Pinnacle Partners"]
+            for name in names:
+                if len(accounts) >= 4:
+                    break
+                p, _ = Party.objects.get_or_create(
+                    tenant=tenant,
+                    name=name,
+                    defaults={"kind": "organization"},
+                )
+                if p not in accounts:
+                    accounts.append(p)
+
+        today = timezone.localdate()
+        if len(accounts) >= 1:
+            AccountTerritoryAssignment.objects.get_or_create(
+                tenant=tenant,
+                account=accounts[0],
+                territory=amer,
+                defaults={
+                    "rule": rule_geo,
+                    "owner": owner,
+                    "alignment_type": "primary",
+                    "assignment_source": "rule",
+                    "assigned_by": owner,
+                    "effective_from": today - timedelta(days=60),
+                    "notes": "Assigned via North America Enterprise rule.",
+                },
+            )
+        if len(accounts) >= 1 and emea is not None:
+            AccountTerritoryAssignment.objects.get_or_create(
+                tenant=tenant,
+                account=accounts[0],
+                territory=emea,
+                defaults={
+                    "rule": None,
+                    "owner": owner,
+                    "alignment_type": "overlay",
+                    "assignment_source": "manual",
+                    "assigned_by": owner,
+                    "effective_from": today - timedelta(days=30),
+                    "notes": "Secondary overlay coverage for EMEA expansion.",
+                },
+            )
+        if len(accounts) >= 2:
+            AccountTerritoryAssignment.objects.get_or_create(
+                tenant=tenant,
+                account=accounts[1],
+                territory=amer,
+                defaults={
+                    "rule": None,
+                    "owner": owner,
+                    "alignment_type": "primary",
+                    "assignment_source": "named_account",
+                    "assigned_by": owner,
+                    "effective_from": today - timedelta(days=45),
+                    "notes": "Designated named account assigned directly.",
+                },
+            )
+        if len(accounts) >= 3 and emea is not None:
+            AccountTerritoryAssignment.objects.get_or_create(
+                tenant=tenant,
+                account=accounts[2],
+                territory=emea,
+                defaults={
+                    "rule": None,
+                    "owner": owner,
+                    "alignment_type": "primary",
+                    "assignment_source": "manual",
+                    "assigned_by": owner,
+                    "effective_from": today - timedelta(days=120),
+                    "effective_to": today - timedelta(days=10),
+                    "notes": "Past contract period - expired coverage.",
+                },
+            )
+        if len(accounts) >= 4:
+            AccountTerritoryAssignment.objects.get_or_create(
+                tenant=tenant,
+                account=accounts[3],
+                territory=amer,
+                defaults={
+                    "rule": None,
+                    "owner": owner,
+                    "alignment_type": "primary",
+                    "assignment_source": "manual",
+                    "assigned_by": owner,
+                    "effective_from": today - timedelta(days=15),
+                    "notes": "Manual direct assignment for new mid-market client.",
+                },
+            )
+
+        # 3. Territory Members (3-4 members: hunter, farmer, SDR paired to AE, overlay specialist)
+        active_users = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id")[:4])
+        u_ae = owner
+        u_sdr = active_users[1] if len(active_users) > 1 and active_users[1] != owner else None
+        u_farmer = active_users[2] if len(active_users) > 2 else owner
+        u_overlay = active_users[3] if len(active_users) > 3 else (active_users[1] if len(active_users) > 1 else owner)
+
+        # Member 1: AE on amer (must exist before pairing an SDR to it)
+        TerritoryMember.objects.get_or_create(
+            tenant=tenant,
+            territory=amer,
+            user=u_ae,
+            member_role="ae",
+            defaults={
+                "assignment_type": "direct",
+                "coverage_split_pct": Decimal("100.00"),
+                "is_primary": True,
+                "effective_from": today - timedelta(days=90),
+                "notes": "Lead Account Executive for Americas territory.",
+            },
+        )
+        # Member 2: SDR paired to AE on amer (if distinct user available)
+        if u_sdr and u_sdr != u_ae:
+            TerritoryMember.objects.get_or_create(
+                tenant=tenant,
+                territory=amer,
+                user=u_sdr,
+                member_role="sdr",
+                defaults={
+                    "assignment_type": "direct",
+                    "coverage_split_pct": Decimal("100.00"),
+                    "paired_user": u_ae,
+                    "is_primary": False,
+                    "effective_from": today - timedelta(days=60),
+                    "notes": "Business development rep paired with AE.",
+                },
+            )
+        # Member 3: Hunter on emea
+        if emea is not None:
+            TerritoryMember.objects.get_or_create(
+                tenant=tenant,
+                territory=emea,
+                user=u_farmer,
+                member_role="hunter",
+                defaults={
+                    "assignment_type": "direct",
+                    "coverage_split_pct": Decimal("100.00"),
+                    "is_primary": True,
+                    "effective_from": today - timedelta(days=90),
+                    "notes": "New business development in EMEA.",
+                },
+            )
+        # Member 4: Overlay Specialist on amer
+        TerritoryMember.objects.get_or_create(
+            tenant=tenant,
+            territory=amer,
+            user=u_overlay,
+            member_role="overlay_specialist",
+            defaults={
+                "assignment_type": "overlay",
+                "coverage_split_pct": Decimal("100.00"),
+                "is_primary": False,
+                "effective_from": today - timedelta(days=45),
+                "notes": "Technical overlay specialist assisting on complex deals.",
+            },
+        )
+
+        # 4. Quota Plans (2 plans: one top_down/approved, one bottom_up/draft)
+        current_period = ForecastPeriod.objects.filter(
+            tenant=tenant,
+            period_type="quarter",
+            period_year=today.year,
+        ).order_by("-is_active", "-id").first()
+        if current_period is None:
+            current_quarter = (today.month - 1) // 3 + 1
+            current_period, _ = ForecastPeriod.objects.get_or_create(
+                tenant=tenant,
+                name="Current Forecast Quarter",
+                defaults={
+                    "period_type": "quarter",
+                    "period_year": today.year,
+                    "period_number": current_quarter,
+                    "is_active": True,
+                },
+            )
+
+        quota1, _ = SalesQuota.objects.get_or_create(
+            tenant=tenant,
+            owner=owner,
+            territory=amer,
+            period_type=current_period.period_type,
+            period_year=current_period.period_year,
+            period_number=current_period.period_number,
+            defaults={
+                "target_amount": Decimal("150000.00"),
+                "notes": "Seeded Americas quarterly quota",
+            },
+        )
+        quota2, _ = SalesQuota.objects.get_or_create(
+            tenant=tenant,
+            owner=owner,
+            territory=emea,
+            period_type=current_period.period_type,
+            period_year=current_period.period_year,
+            period_number=current_period.period_number,
+            defaults={
+                "target_amount": Decimal("100000.00"),
+                "notes": "Seeded EMEA quarterly quota",
+            },
+        )
+
+        # Plan 1: top_down, approved
+        QuotaPlan.objects.get_or_create(
+            tenant=tenant,
+            quota_ref=quota1,
+            defaults={
+                "forecast_period": current_period,
+                "owner": owner,
+                "territory": amer,
+                "method": "top_down",
+                "allocation_basis": "historical_revenue",
+                "baseline_source": "previous_year",
+                "growth_target_pct": Decimal("15.00"),
+                "attrition_relief_pct": Decimal("2.00"),
+                "uplift_allowed": True,
+                "stretch_target_pct": Decimal("5.00"),
+                "target_type": "revenue",
+                "phasing": "equal",
+                "status": "approved",
+                "is_active": True,
+                "approved_by": owner,
+                "approved_at": timezone.now(),
+                "notes": "Approved annual top-down allocation for Americas.",
+            },
+        )
+
+        # Plan 2: bottom_up, draft
+        QuotaPlan.objects.get_or_create(
+            tenant=tenant,
+            quota_ref=quota2,
+            defaults={
+                "forecast_period": current_period,
+                "owner": owner,
+                "territory": emea,
+                "method": "bottom_up",
+                "allocation_basis": "pipeline",
+                "baseline_source": "previous_period",
+                "growth_target_pct": Decimal("10.00"),
+                "attrition_relief_pct": Decimal("0.00"),
+                "uplift_allowed": False,
+                "stretch_target_pct": None,
+                "target_type": "revenue",
+                "phasing": "equal",
+                "status": "draft",
+                "is_active": True,
+                "notes": "Draft bottom-up territory quota proposal for EMEA.",
+            },
+        )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.7 territory and quota demo rows ensured."
+        )
+
 
 
