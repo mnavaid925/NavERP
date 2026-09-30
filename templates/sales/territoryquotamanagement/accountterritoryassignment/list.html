@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% comment %}
+  8.7 Account→territory assignments — the effective-dated LEDGER, not a pointer.
+
+  Every row carries its own window, so an annual rebalance supersedes the previous assignment
+  instead of overwriting it, and "which territory was this account in last March" stays answerable
+  after the territories have been re-cut. `effective_to IS NULL` is the live question; there is no
+  stored "is current" flag to drift.
+
+  A row with no territory is the SET_NULL ORPHAN a deleted CRM territory leaves behind. It is
+  surfaced here and on the coverage-gap board, not hidden behind a CASCADE — it is the record of
+  a decision about a book of coverage.
+
+  ENUM filters read their ECHO keys; FK dropdown compares are `|stringformat:"d"` against
+  `request.GET.territory` / `request.GET.owner` — never `|slugify` on a pk (contract §11.1 rule 3).
+{% endcomment %}
+{% block title %}Account Territory Assignments{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Account Territory Assignments</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Territory &amp; Quota</span><span class="sep">&rsaquo;</span><span>Assignments</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:account_territory_assignment_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New assignment</a>
+    <a href="{% url 'sales:territory_coverage_gap' %}" class="btn btn-outline"><i data-lucide="unlink"></i> Coverage gaps</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total rows</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.current }}</div><div class="stat-label">Live now</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.unassigned %}red{% else %}green{% endif %}"><i data-lucide="unlink"></i></div><div class="stat-value">{{ stats.unassigned }}</div><div class="stat-label">Point at no territory</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.overlay }}</div><div class="stat-label">Live overlays</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="tas-search">Search</label>
+        <input id="tas-search" name="q" value="{{ q }}" class="form-input" placeholder="Assignment number, account, territory, or notes">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tas-alignment">Alignment</label>
+        <select id="tas-alignment" name="alignment_type" class="form-select">
+          <option value="">Any alignment</option>
+          {% for value, label in alignment_type_choices %}<option value="{{ value }}"{% if alignment_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tas-source">Source</label>
+        <select id="tas-source" name="assignment_source" class="form-select">
+          <option value="">Any source</option>
+          {% for value, label in assignment_source_choices %}<option value="{{ value }}"{% if assignment_source == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tas-coverage">Coverage</label>
+        <select id="tas-coverage" name="coverage" class="form-select">
+          <option value="">Any window</option>
+          {% for value, label in coverage_choices %}<option value="{{ value }}"{% if coverage == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tas-territory">Territory</label>
+        <select id="tas-territory" name="territory" class="form-select">
+          <option value="">Every territory</option>
+          {% for territory in territories %}<option value="{{ territory.pk|stringformat:"d" }}"{% if request.GET.territory == territory.pk|stringformat:"d" %} selected{% endif %}>{{ territory.number }} &middot; {{ territory.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tas-owner">Owner</label>
+        <select id="tas-owner" name="owner" class="form-select">
+          <option value="">Anyone</option>
+          {% for owner in users %}<option value="{{ owner.pk|stringformat:"d" }}"{% if request.GET.owner == owner.pk|stringformat:"d" %} selected{% endif %}>{{ owner.username }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:account_territory_assignment_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Assignment ledger</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Assignment</th><th>Account</th><th>Territory</th><th>Alignment</th><th>Source</th><th>Window</th><th>Owner</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td>
+            <a href="{% url 'sales:account_territory_assignment_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            {% if obj.effective_to %}<span class="badge badge-muted">Superseded</span>{% else %}<span class="badge badge-green">Live</span>{% endif %}
+          </td>
+          <td>{{ obj.account.name }}</td>
+          <td>{% if obj.territory %}{{ obj.territory.number }}<div class="text-muted">{{ obj.territory.name }}</div>{% else %}<span class="badge badge-red">No territory</span><div class="text-muted">The territory was deleted; the row is kept as the record of the decision.</div>{% endif %}</td>
+          <td>{% if obj.alignment_type == "primary" %}<span class="badge badge-green">{{ obj.get_alignment_type_display }}</span>{% elif obj.alignment_type == "overlay" %}<span class="badge badge-amber">{{ obj.get_alignment_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_alignment_type_display }}</span>{% endif %}</td>
+          <td>{% if obj.assignment_source == "rule" %}<span class="badge badge-info">{{ obj.get_assignment_source_display }}</span>{% elif obj.assignment_source == "named_account" %}<span class="badge badge-green">{{ obj.get_assignment_source_display }}</span>{% elif obj.assignment_source == "inherited" %}<span class="badge badge-slate">{{ obj.get_assignment_source_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_assignment_source_display }}</span>{% endif %}</td>
+          <td>{{ obj.effective_from|date:"M d, Y" }}<div class="text-muted">{% if obj.effective_to %}to {{ obj.effective_to|date:"M d, Y" }}{% else %}open-ended{% endif %}</div></td>
+          <td>{% if obj.owner %}{{ obj.owner.username }}{% else %}<span class="text-muted">Unowned</span>{% endif %}</td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:account_territory_assignment_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'sales:account_territory_assignment_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'sales:account_territory_assignment_delete' obj.pk %}" onsubmit="return confirm('Delete assignment {{ obj.number }}? This removes a row from the coverage history. This cannot be undone.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8"><div class="empty-state"><i data-lucide="map"></i><h3>No assignments</h3><p>No account is placed in a territory yet. Run a rule, or assign one by hand here.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
