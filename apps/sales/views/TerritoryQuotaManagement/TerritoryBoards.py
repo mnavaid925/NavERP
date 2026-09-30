@@ -671,7 +671,6 @@ def territory_performance(request):
     account_ids_by_territory = {}
     for territory_id, account_id in open_assignments:
         account_ids_by_territory.setdefault(territory_id, set()).add(account_id)
-    all_account_ids = sorted({account_id for ids in account_ids_by_territory.values() for account_id in ids})
 
     # --- Quotas. `crm.SalesQuota.target_amount` is READ; 8.7 never writes a quota amount (§0.3).
     quota_rows = list(
@@ -702,13 +701,18 @@ def territory_performance(request):
     if duplicate_quota_warnings:
         caveats.append(duplicate_quota_warnings[0])
 
-    # --- Deals for the owned accounts, fetched once and grouped in Python.
+    # --- Deals for the owned accounts, fetched via subquery and grouped in Python.
+    assignment_accounts = AccountTerritoryAssignment.objects.filter(
+        tenant=tenant,
+        territory_id__in=territory_ids,
+        effective_to__isnull=True,
+    ).values("account_id")
     opportunities = (
         list(
-            Opportunity.objects.filter(tenant=tenant, account_id__in=all_account_ids)
+            Opportunity.objects.filter(tenant=tenant, account_id__in=assignment_accounts)
             .only("pk", "account_id", "stage", "amount", "currency_id", "close_date")
         )
-        if all_account_ids
+        if territory_ids
         else []
     )
     currency_ids = {o.currency_id for o in opportunities if o.currency_id}
