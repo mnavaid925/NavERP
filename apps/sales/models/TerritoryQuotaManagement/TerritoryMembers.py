@@ -88,7 +88,7 @@ class TerritoryMember(TenantNumbered):
     notes = models.CharField(max_length=255, blank=True)
 
     class Meta:
-        ordering = ["territory__name", "-is_primary", "member_role"]
+        ordering = ["-is_primary", "member_role", "-effective_from", "id"]
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "territory", "user", "member_role"],
@@ -98,6 +98,7 @@ class TerritoryMember(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "user"], name="sales_tmember_tnt_user_idx"),
             models.Index(fields=["tenant", "territory", "is_primary"], name="sales_tmember_tnt_terr_idx"),
+            models.Index(fields=["tenant", "territory", "effective_to"], name="sales_tmember_tnt_effto_idx"),
         ]
 
     def _relation_belongs_to_tenant(self, field_name):
@@ -187,5 +188,7 @@ class TerritoryMember(TenantNumbered):
 
     def __str__(self):
         role = self.get_member_role_display() if self.member_role else "—"
-        return f"{self.territory} · {self.user} · {role}"
+        terr_label = getattr(self.territory, "number", "—") if self.territory_id else "—"
+        user_label = getattr(self.user, "username", "—") if self.user_id else "—"
+        return f"{terr_label} · {user_label} · {role}"
 
