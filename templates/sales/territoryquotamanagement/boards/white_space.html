@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% comment %}
+  8.7 White space — the TERRITORY-scoped cut of 8.3's account-level view.
+
+  8.3 owns the account-level white space board, so this page CROSS-LINKS to it through the
+  `account_white_space_url` the view reverses rather than restating it (contract non-goal §1
+  item 9). Three states per account, and the third is the one that matters most:
+
+    * covered       — a primary territory, or more than one live alignment
+    * overlay_only  — held ONLY by an overlay alignment, so nobody is really carrying the account
+    * uncovered     — no live assignment at all
+
+  `classification_gap` is the second reason an account shows up here even when it IS covered: a
+  tier that has never been re-confirmed, or an account carrying open deals while still classified
+  dormant, is a coverage risk that the territory map alone would not show.
+
+  THE MONEY RULE. Pipeline is a `Decimal` summed in PYTHON in the view over a fetched set, and it
+  is WITHHELD entirely when the open deals are booked in more than one currency &mdash; adding
+  across currencies is a wrong number, not a slow one. Nothing is calculated here.
+
+  LIVE DERIVATION, NOT A SNAPSHOT — recomputed on every load, never stored, never written.
+{% endcomment %}
+{% block title %}Territory White Space{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Territory White Space</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Territory &amp; Quota</span><span class="sep">&rsaquo;</span><span>White space</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:territory_coverage_gap' %}" class="btn btn-outline"><i data-lucide="unlink"></i> Coverage gaps</a>
+    <a href="{{ account_white_space_url }}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Account white space (8.3)</a>
+    <a href="{% url 'sales:account_territory_assignment_list' %}" class="btn btn-outline"><i data-lucide="map"></i> Assignments</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p>
+      <span class="badge badge-info">LIVE DERIVATION &mdash; NOT A SNAPSHOT</span>
+      Nothing on this page is stored and nothing on it is ever written. Every account's coverage
+      state is recomputed now from the live assignment ledger, and open pipeline is summed in
+      Python over a fetched set rather than by a database aggregate. This is the TERRITORY-scoped
+      cut of the account-level board; the account-level view is 8.3's, and this page links to it
+      rather than restating it.
+    </p>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="scan"></i></div><div class="stat-value">{{ stats.accounts_scanned }}</div><div class="stat-label">Accounts scanned</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.covered }}</div><div class="stat-label">Covered</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.uncovered %}red{% else %}green{% endif %}"><i data-lucide="circle-off"></i></div><div class="stat-value">{{ stats.uncovered }}</div><div class="stat-label">Uncovered</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.overlay_only %}orange{% else %}green{% endif %}"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.overlay_only }}</div><div class="stat-label">Held by an overlay only</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="ws-search">Search accounts</label>
+        <input id="ws-search" name="q" value="{{ q }}" class="form-input" placeholder="Account name">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ws-tier">Tier</label>
+        <select id="ws-tier" name="tier" class="form-select">
+          <option value="">Every tier</option>
+          {% for value, label in tier_choices %}<option value="{{ value }}"{% if selected_tier == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ws-stage">Lifecycle stage</label>
+        <select id="ws-stage" name="lifecycle_stage" class="form-select">
+          <option value="">Every stage</option>
+          {% for value, label in lifecycle_stage_choices %}<option value="{{ value }}"{% if selected_lifecycle_stage == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:territory_white_space' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+{% if caveats %}
+<div class="card">
+  <div class="card-header"><h2>How to read this</h2></div>
+  <div class="card-body">
+    <ul style="margin:0; padding-left:1.1rem;">
+      {% for caveat in caveats %}<li>{{ caveat }}</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header"><h2>By tier</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Tier</th><th>Accounts</th><th>Covered</th><th>Uncovered</th><th>Overlay only</th><th>Open deals</th></tr></thead>
+      <tbody>
+        {% for segment in segments %}
+        <tr>
+          <td><span class="badge badge-slate">{{ segment.label }}</span></td>
+          <td>{{ segment.accounts }}</td>
+          <td>{% if segment.covered %}<span class="badge badge-green">{{ segment.covered }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+          <td>{% if segment.uncovered %}<span class="badge badge-red">{{ segment.uncovered }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+          <td>{% if segment.overlay_only %}<span class="badge badge-amber">{{ segment.overlay_only }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+          <td>{{ segment.opportunity_count }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty-state"><i data-lucide="layers"></i><h3>No accounts in scope</h3><p>No account matches the current search and classification filters.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <p class="text-muted">
+      An unclassified account groups under &ldquo;Unclassified&rdquo; rather than being dropped out
+      of the board. An account with no classification is precisely what this board is looking for,
+      so dropping it would hide the finding it exists to report.
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Accounts by coverage state</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Account</th><th>Profile</th><th>Classification</th><th>Territories holding it</th><th>Coverage</th><th>Open deals</th><th>Pipeline</th><th>Classification gap</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="fw-600">{{ row.account.name }}</td>
+          <td>{% if row.profile %}{{ row.profile.get_industry_display|default:row.profile.industry }}<div class="text-muted">{{ row.profile.annual_revenue }} &middot; {{ row.profile.employee_count }} staff</div>{% else %}<span class="text-muted">No profile</span>{% endif %}</td>
+          <td>{% if row.classification %}<span class="badge badge-slate">{{ row.classification.get_tier_display }}</span><div class="text-muted">{{ row.classification.get_lifecycle_stage_display }}</div>{% else %}<span class="badge badge-amber">Unclassified</span>{% endif %}</td>
+          <td>{% for territory in row.covered_territories %}<span class="badge badge-slate">{{ territory.number }}</span>{% empty %}<span class="text-muted">None</span>{% endfor %}</td>
+          <td>
+            {% if row.coverage_state == "covered" %}<span class="badge badge-green">Covered</span>
+            {% elif row.coverage_state == "overlay_only" %}<span class="badge badge-amber">Overlay only</span>
+            {% elif row.coverage_state == "uncovered" %}<span class="badge badge-red">Uncovered</span>
+            {% else %}<span class="badge badge-muted">{{ row.coverage_state }}</span>{% endif %}
+          </td>
+          <td>{{ row.opportunity_count }}</td>
+          <td>{% if row.pipeline_amount != None %}{{ row.pipeline_amount }}{% else %}<span class="text-muted">Withheld</span>{% endif %}</td>
+          <td>{% if row.classification_gap %}<span class="badge badge-amber">{{ row.classification_gap }}</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8"><div class="empty-state"><i data-lucide="check-circle"></i><h3>No accounts in scope</h3><p>Nothing matches the current search and classification filters. Clear them to see the whole book.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <p class="text-muted">
+      &ldquo;Overlay only&rdquo; is the state worth arguing about: the account is technically placed,
+      but the person carrying it is a specialist working alongside a base rep rather than the one
+      accountable for it. Open pipeline is withheld rather than added whenever the deals behind
+      these accounts are booked in more than one currency.
+    </p>
+  </div>
+</div>
+{% endblock %}
