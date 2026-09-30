@@ -18,6 +18,7 @@ used, so what the preview showed and what the run writes cannot disagree.
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Count, Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -93,13 +94,12 @@ def territory_rule_list(request):
     elif active == "inactive":
         queryset = queryset.filter(is_active=False)
 
-    base = _rule_queryset(request)
-    stats = {
-        "total": base.count(),
-        "active": base.filter(is_active=True).count(),
-        "catch_all": base.filter(is_catch_all=True).count(),
-        "never_run": base.filter(last_run_at__isnull=True).count(),
-    }
+    stats = _rule_queryset(request).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+        catch_all=Count("id", filter=Q(is_catch_all=True)),
+        never_run=Count("id", filter=Q(last_run_at__isnull=True)),
+    )
     return crud_list(
         request,
         queryset,
