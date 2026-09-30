@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% comment %}
+  Create / edit one TerritoryMember. ONE template for both, driven by `is_edit`.
+
+  Deliberately no `is_manager` and no `manager` field. `crm.Territory.manager` is CRM 1.2's single
+  accountable manager for a territory, and a second management field here would be a second source
+  of truth for the same fact.
+
+  The pairing is a nullable FK and that IS the pairing: SDR -> AE. There is no pairing graph on
+  this form, because a second structure to keep consistent with the roster is how a roster stops
+  matching reality.
+
+  `coverage_split_pct` is a percentage, never a money column. 8.10 owns incentive compensation.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Territory Member{% else %}Add Territory Member{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Territory Member{% else %}Add Territory Member{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:territory_member_list' %}">Territory Members</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:territory_member_detail' obj.pk %}{% else %}{% url 'sales:territory_member_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      A roster line says who this person is on this territory &mdash; hunter, farmer, SDR,
+      account executive, overlay specialist or sales engineer &mdash; whether they cover directly,
+      shared or as an overlay, and what share of the credit they carry. The territory itself
+      belongs to CRM 1.2; this register only says who is on it.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save member{% else %}Add member{% endif %}</button>
+        <a href="{% if is_edit %}{% url 'sales:territory_member_detail' obj.pk %}{% else %}{% url 'sales:territory_member_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>What the server decides</h2></div>
+  <div class="card-body">
+    <table class="table">
+      <thead><tr><th>Field</th><th>Why it is not on this form</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-600">Number (TMB-)</td><td>System-assigned and sequential.</td></tr>
+        <tr><td class="fw-600">Territory manager</td><td>There is no manager field here on purpose. <code>crm.Territory.manager</code> is CRM 1.2's single accountable manager for a territory; a second management field on this register would be a second source of truth for the same fact.</td></tr>
+        <tr><td class="fw-600">Default member role</td><td>None. Defaulting to "hunter" would let a roster of correctly-saved rows be completely wrong about what those rows mean &mdash; so the role is a declaration, not an inference.</td></tr>
+        <tr><td class="fw-600">Credit as money</td><td>The split is a percentage. 8.10 owns incentive compensation, and a stored "credit" figure here would be a second copy of a number another module owns.</td></tr>
+        <tr><td class="fw-600">Overlay subtree</td><td>An overlay is an overlay alignment on the account plus an overlay specialist on the base territory. It is not a second territory tree, so there is no overlay parent to choose.</td></tr>
+        <tr><td class="fw-600">The split summing to 100</td><td>Checked by the model, in Python, once any member is marked shared. A lone direct rep carrying the full 100 is the common case and is never scored against a total.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
