@@ -157,6 +157,13 @@ def territory_member_detail(request, pk):
 
 @login_required
 def territory_member_edit(request, pk):
+    obj = get_object_or_404(_member_queryset(request), pk=pk)
+    if obj.effective_to and obj.effective_to < timezone.localdate():
+        messages.error(
+            request,
+            "This territory membership has ended and can no longer be edited.",
+        )
+        return redirect("sales:territory_member_detail", pk=obj.pk)
     return crud_edit(
         request,
         model=TerritoryMember,
