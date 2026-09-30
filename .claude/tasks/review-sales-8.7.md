@@ -90,7 +90,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** Under the NavERP design system (L33), stat icon colors are strictly limited to `blue`, `green`, `orange`, `purple`, and `slate`. `red` is unstyled.
 - **Fix:** Replace `red` with `orange` across all 8 stat-card declarations.
 
-### [I4] Coverage Gap Board Falsely Flags All Non-SDR Members as Orphaned SDR Pairings
+### [x] fixed — [I4] Coverage Gap Board Falsely Flags All Non-SDR Members as Orphaned SDR Pairings
+<!-- commit: fix(sales): filter orphaned pairings to SDR role only in coverage gap board (I4) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/TerritoryBoards.py:562-566`
 - **Description:** `orphaned_pair_rows` query in `territory_coverage_gap` is missing `.filter(member_role="sdr")`. Without this filter, every active Hunter, Farmer, AE, Overlay Specialist, and Sales Engineer with `paired_user=None` is displayed in the "SDR pairings with no active account executive" table.
 - **Fix:** Add `.filter(member_role="sdr")` to `orphaned_pair_rows` in `TerritoryBoards.py:563`.
