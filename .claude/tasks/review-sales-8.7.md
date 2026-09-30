@@ -160,7 +160,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 
 ## Minor
 
-### [M1] Extraneous Pagination Partial on Detail Templates
+### [x] fixed — [M1] Extraneous Pagination Partial on Detail Templates
+<!-- commit: style(sales): remove extraneous pagination include from territory rule, assignment, member, quota plan detail templates (M1) -->
 - **Location:** `templates/sales/territoryquotamanagement/{territoryrule,accountterritoryassignment,territorymember,quotaplan}/detail.html`
 - **Description:** All four detail templates include `{% include "partials/pagination.html" %}`, rendering redundant pagination markup on single-record views.
 - **Fix:** Remove the include tag from the four detail templates.
@@ -171,27 +172,32 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** Evaluating `self.account` in `__str__` without guarding `self.account_id` raises `Party.DoesNotExist` on unpersisted or partially initialized instances.
 - **Fix:** Use `getattr(self.account, "name", "—") if self.account_id else "—"`.
 
-### [M3] Help Text Drift in `TerritoryRuleForm`
+### [x] fixed — [M3] Help Text Drift in `TerritoryRuleForm`
+<!-- commit: fix(sales): correct condition count and size limits in TerritoryRuleForm help text (M3) -->
 - **Location:** `apps/sales/forms/TerritoryQuotaManagement/TerritoryRules.py:94-96`
 - **Description:** Form help text cites "at most 50 conditions and at most 4 KiB", whereas `validate_territory_conditions` strictly enforces `MAX_ROUTING_CONDITIONS = 20` and `MAX_ROUTING_JSON_BYTES = 16 * 1024`.
 - **Fix:** Update help text to reflect 20 conditions and 16 KiB.
 
-### [M4] Multiplier Division Guard in `derive_baseline` Does Not Guard Negative Values
+### [x] fixed — [M4] Multiplier Division Guard in `derive_baseline` Does Not Guard Negative Values
+<!-- commit: fix(sales): guard against non-positive multiplier in derive_baseline (M4) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/QuotaPlans.py:102`
 - **Description:** `derive_baseline` checks `if multiplier == 0:`. If extreme parameters are entered where attrition relief exceeds `100 + growth_target_pct`, `multiplier` becomes negative.
 - **Fix:** Change `if multiplier == 0:` to `if multiplier <= 0:`.
 
-### [M5] Parity in Navigation Extra Live Leaves for Account Territory Assignments
+### [x] fixed — [M5] Parity in Navigation Extra Live Leaves for Account Territory Assignments
+<!-- commit: feat(navigation): add Account Territory Assignments live leaf for 8.7 (M5) -->
 - **Location:** `apps/core/navigation.py:2425-2430`
 - **Description:** `LIVE_LINKS["8.7"]` defines extra live leaves for "Territory Rules", "Territory Members", and "Quota Plans", but omits a direct noun extra leaf for "Account Territory Assignments".
 - **Fix:** Add `"Account Territory Assignments": "sales:account_territory_assignment_list"` to `LIVE_LINKS["8.7"]` in `apps/core/navigation.py`.
 
-### [M6] Multiple Serial `.count()` Round-trips for Header Statistics
+### [x] fixed — [M6] Multiple Serial `.count()` Round-trips for Header Statistics
+<!-- commit: perf(sales): optimize territory rules and account territory assignments list stats using conditional aggregate (M6) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/TerritoryRules.py:104-114`, `AccountTerritoryAssignments.py:112-120`
 - **Description:** 4 separate `.filter(...).count()` round-trips can be combined into conditional `aggregate()`.
 - **Fix:** Optimize to single aggregate query where appropriate.
 
-### [M7] Missing `select_related("territory")` in `territory_performance`
+### [x] fixed — [M7] Missing `select_related("territory")` in `territory_performance`
+<!-- commit: perf(sales): select related territory on quota rows in territory performance board (M7) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/TerritoryBoards.py:677-697`
 - **Description:** `plans_qs` does not `select_related("territory")`, resulting in N+1 queries when accessing `plan.territory`.
 - **Fix:** Add `select_related("territory", "quota_ref", "forecast_period__reporting_currency")` to `plans_qs`.
