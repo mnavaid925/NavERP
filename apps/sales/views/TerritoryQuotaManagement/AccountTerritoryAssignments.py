@@ -193,49 +193,15 @@ def account_territory_assignment_detail(request, pk):
 
 @login_required
 def account_territory_assignment_edit(request, pk):
-    obj = get_object_or_404(_assignment_queryset(request), pk=pk)
-    if request.method == "POST":
-        form = AccountTerritoryAssignmentForm(request.POST, instance=obj, tenant=request.tenant)
-        if form.is_valid():
-            with transaction.atomic():
-                locked = AccountTerritoryAssignment.objects.select_for_update().get(
-                    pk=obj.pk, tenant=request.tenant
-                )
-                form.instance = locked
-                for field_name in form._meta.fields:
-                    model_field = form.instance._meta.get_field(field_name)
-                    if (
-                        model_field.concrete
-                        and not model_field.many_to_many
-                        and field_name in form.cleaned_data
-                    ):
-                        setattr(form.instance, field_name, form.cleaned_data[field_name])
-                locked.assigned_by = request.user
-                locked.save()
-                form.save_m2m()
-                write_audit_log(
-                    request.user,
-                    locked,
-                    "update",
-                    {
-                        "action": "account_territory_assignment",
-                        "account_id": locked.account_id,
-                        "territory_id": locked.territory_id,
-                        "alignment_type": locked.alignment_type,
-                        "assignment_source": locked.assignment_source,
-                    },
-                    tenant=request.tenant,
-                )
-            messages.success(request, "Assignment updated.")
-            return redirect("sales:account_territory_assignment_detail", pk=obj.pk)
-    else:
-        form = AccountTerritoryAssignmentForm(instance=obj, tenant=request.tenant)
-    return render(request, FORM_TEMPLATE, {
-        "form": form,
-        "obj": obj,
-        "is_edit": True,
-        **_form_context(request),
-    })
+    return crud_edit(
+        request,
+        model=AccountTerritoryAssignment,
+        pk=pk,
+        form_class=AccountTerritoryAssignmentForm,
+        template=FORM_TEMPLATE,
+        success_url=reverse("sales:account_territory_assignment_detail", args=[pk]),
+        extra_context=_form_context(request),
+    )
 
 
 @require_POST
