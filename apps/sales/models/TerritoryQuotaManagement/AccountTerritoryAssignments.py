@@ -97,7 +97,7 @@ class AccountTerritoryAssignment(TenantNumbered):
     )
 
     class Meta:
-        ordering = ["account__name", "alignment_type", "-effective_from"]
+        ordering = ["alignment_type", "-effective_from", "id"]
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "account", "territory"],
@@ -108,6 +108,7 @@ class AccountTerritoryAssignment(TenantNumbered):
             models.Index(fields=["tenant", "account"], name="sales_atas_tnt_acct_idx"),
             models.Index(fields=["tenant", "territory", "alignment_type"], name="sales_atas_tnt_terr_align_idx"),
             models.Index(fields=["tenant", "effective_to"], name="sales_atas_tnt_effto_idx"),
+            models.Index(fields=["tenant", "territory", "effective_to"], name="sales_atas_tnt_terr_effto_idx"),
         ]
 
     # ------------------------------------------------------------------ helpers
@@ -189,6 +190,7 @@ class AccountTerritoryAssignment(TenantNumbered):
                 })
 
     def __str__(self):
-        label = self.territory.number if self.territory_id and self.territory else "—"
-        return f"{self.number or '—'} · {self.account} → {label}"
+        account_name = getattr(self.account, "name", "—") if self.account_id else "—"
+        label = getattr(self.territory, "number", "—") if self.territory_id else "—"
+        return f"{self.number or '—'} · {account_name} → {label}"
 
