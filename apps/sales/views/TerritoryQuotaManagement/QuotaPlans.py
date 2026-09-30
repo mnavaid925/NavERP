@@ -243,7 +243,7 @@ def quota_plan_detail(request, pk):
 @login_required
 def quota_plan_edit(request, pk):
     obj = get_object_or_404(_plan_queryset(request), pk=pk)
-    if obj.is_frozen:
+    if obj.status in ("submitted", "approved", "locked"):
         # The form disables its own fields in a frozen state; this is the SERVER-side re-check, so
         # the widgets are never the only guard (research §5.5 R9).
         messages.error(
@@ -251,24 +251,35 @@ def quota_plan_edit(request, pk):
             f"This plan is {obj.get_status_display()} and can no longer be edited.",
         )
         return redirect("sales:quota_plan_detail", pk=obj.pk)
-    return crud_edit(
-        request,
-        model=QuotaPlan,
-        pk=pk,
-        form_class=QuotaPlanForm,
-        template=FORM_TEMPLATE,
-        success_url=reverse("sales:quota_plan_detail", args=[pk]),
-        extra_context=_form_context(request),
-    )
+    if request.method == "POST":
+        form = QuotaPlanForm(request.POST, request.FILES, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            with transaction.atomic():
+                saved = form.save(commit=False)
+                if saved.status == "rejected":
+                    saved.status = "draft"
+                saved.save()
+                form.save_m2m()
+                write_audit_log(request.user, saved, "update")
+            messages.success(request, "Updated successfully.")
+            return redirect("sales:quota_plan_detail", pk=obj.pk)
+    else:
+        form = QuotaPlanForm(instance=obj, tenant=request.tenant)
+    return render(request, FORM_TEMPLATE, {
+        "form": form,
+        "obj": obj,
+        "is_edit": True,
+        **_form_context(request),
+    })
 
 
 @require_POST
 @login_required
 def quota_plan_submit(request, pk):
-    """``draft -> submitted``, stamping the frozen submission evidence."""
+    """``draft / rejected -> submitted``, stamping the frozen submission evidence."""
     obj = get_object_or_404(_plan_queryset(request), pk=pk)
-    if obj.status != "draft":
-        messages.error(request, f"Only a draft plan can be submitted; this one is {obj.get_status_display()}.")
+    if obj.status not in ("draft", "rejected"):
+        messages.error(request, f"Only a draft or rejected plan can be submitted; this one is {obj.get_status_display()}.")
         return redirect("sales:quota_plan_detail", pk=obj.pk)
     with transaction.atomic():
         locked = QuotaPlan.objects.select_for_update().get(pk=obj.pk, tenant=request.tenant)
