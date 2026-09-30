@@ -3052,8 +3052,10 @@ TERRITORYQUOTAMANAGEMENT_MODEL_CHOICES = {
     "TerritoryRule": {
         "SEGMENT_TYPE_CHOICES": [
             ("geographic", "Geographic"),
-            ("named_account", "Named Account"),
             ("industry", "Industry"),
+            ("account_size", "Account Size"),
+            ("product_line", "Product Line"),
+            ("named_account", "Named Account"),
             ("mixed", "Mixed"),
         ],
         "MATCH_MODE_CHOICES": [
@@ -3061,20 +3063,20 @@ TERRITORYQUOTAMANAGEMENT_MODEL_CHOICES = {
             ("any", "Any Condition (OR)"),
         ],
         "ALIGNMENT_TYPE_CHOICES": [
-            ("primary", "Primary Territory"),
-            ("overlay", "Overlay Specialist"),
-            ("secondary", "Secondary Territory"),
+            ("primary", "Primary"),
+            ("secondary", "Secondary"),
+            ("overlay", "Overlay"),
         ],
         "ASSIGNMENT_SCOPE_CHOICES": [
-            ("target_only", "Target Territory Only"),
-            ("subtree", "Target Territory And Children"),
+            ("exact", "This Territory Only"),
+            ("subtree", "This Territory And Children"),
         ],
     },
     "AccountTerritoryAssignment": {
         "ALIGNMENT_TYPE_CHOICES": [
-            ("primary", "Primary Territory"),
-            ("overlay", "Overlay Specialist"),
-            ("secondary", "Secondary Territory"),
+            ("primary", "Primary"),
+            ("secondary", "Secondary"),
+            ("overlay", "Overlay"),
         ],
         "ASSIGNMENT_SOURCE_CHOICES": [
             ("manual", "Manual Assignment"),
@@ -3156,11 +3158,24 @@ TERRITORYQUOTAMANAGEMENT_MODEL_FIELDS = {
         "id", "tenant", "created_at", "updated_at", "number", "quota_ref",
         "forecast_period", "territory", "owner", "method", "allocation_basis",
         "baseline_source", "growth_target_pct", "attrition_relief_pct",
-        "market_expansion_pct", "status", "target_type", "phasing",
-        "stretch_target_pct", "parameters", "notes", "submitted_by",
+        "stretch_target_pct", "uplift_allowed", "target_type", "phasing",
+        "parameters", "status", "is_active", "notes", "submitted_by",
         "approved_by", "submitted_at", "approved_at", "calculated_at",
     ),
 }
+
+
+def _territoryquotamanagement_account(tenant, name="Acme Customer Account", **overrides):
+    from apps.core.models import Party
+
+    label = f"{timezone.now().timestamp():.6f}"[-6:]
+    defaults = {
+        "tenant": tenant,
+        "name": f"{name} {label}",
+        "is_customer": True,
+    }
+    defaults.update(overrides)
+    return Party.objects.create(**defaults)
 
 
 def _territoryquotamanagement_crm_territory(tenant, name="Americas", **overrides):
@@ -3212,7 +3227,7 @@ def _territoryquotamanagement_rule(
     segment_type="geographic",
     match_mode="all",
     alignment_type="primary",
-    assignment_scope="target_only",
+    assignment_scope="exact",
     conditions=None,
     **overrides,
 ):
@@ -3336,39 +3351,64 @@ def _territoryquotamanagement_quotaplan(
 
 
 @pytest.fixture
-def tqm_territory(tenant_primary):
-    return _territoryquotamanagement_crm_territory(tenant_primary)
+def tqm_tenant_a(tenant_a):
+    return tenant_a
 
 
 @pytest.fixture
-def tqm_quota(tenant_primary, tqm_territory, primary_admin):
+def tqm_tenant_b(tenant_b):
+    return tenant_b
+
+
+@pytest.fixture
+def tqm_admin_a(admin_user):
+    return admin_user
+
+
+@pytest.fixture
+def tqm_member_a(member_user):
+    return member_user
+
+
+@pytest.fixture
+def tqm_account_a(tqm_tenant_a):
+    return _territoryquotamanagement_account(tqm_tenant_a)
+
+
+@pytest.fixture
+def tqm_territory(tqm_tenant_a):
+    return _territoryquotamanagement_crm_territory(tqm_tenant_a)
+
+
+@pytest.fixture
+def tqm_quota(tqm_tenant_a, tqm_territory, tqm_admin_a):
     return _territoryquotamanagement_crm_quota(
-        tenant_primary, territory=tqm_territory, owner=primary_admin
+        tqm_tenant_a, territory=tqm_territory, owner=tqm_admin_a
     )
 
 
 @pytest.fixture
-def tqm_rule(tenant_primary, tqm_territory):
-    return _territoryquotamanagement_rule(tenant_primary, target_territory=tqm_territory)
+def tqm_rule(tqm_tenant_a, tqm_territory):
+    return _territoryquotamanagement_rule(tqm_tenant_a, target_territory=tqm_territory)
 
 
 @pytest.fixture
-def tqm_assignment(tenant_primary, tqm_territory, party_customer):
+def tqm_assignment(tqm_tenant_a, tqm_territory, tqm_account_a):
     return _territoryquotamanagement_assignment(
-        tenant_primary, account=party_customer, territory=tqm_territory
+        tqm_tenant_a, account=tqm_account_a, territory=tqm_territory
     )
 
 
 @pytest.fixture
-def tqm_member(tenant_primary, tqm_territory, primary_admin):
+def tqm_member(tqm_tenant_a, tqm_territory, tqm_admin_a):
     return _territoryquotamanagement_member(
-        tenant_primary, territory=tqm_territory, user=primary_admin
+        tqm_tenant_a, territory=tqm_territory, user=tqm_admin_a
     )
 
 
 @pytest.fixture
-def tqm_quotaplan(tenant_primary, tqm_quota, tqm_territory, primary_admin):
+def tqm_quotaplan(tqm_tenant_a, tqm_quota, tqm_territory, tqm_admin_a):
     return _territoryquotamanagement_quotaplan(
-        tenant_primary, quota_ref=tqm_quota, territory=tqm_territory, owner=primary_admin
+        tqm_tenant_a, quota_ref=tqm_quota, territory=tqm_territory, owner=tqm_admin_a
     )
 
