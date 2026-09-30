@@ -150,7 +150,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** While `territory_member_delete` enforces `@tenant_admin_required`, member create and edit only require `@login_required`, allowing non-admin users to alter territory rosters and split percentages.
 - **Fix:** Add `@tenant_admin_required` to `territory_member_create` and `territory_member_edit`.
 
-### [I14] Cross-Table Foreign Key Lookups in `Meta.ordering`
+### [x] fixed — [I14] Cross-Table Foreign Key Lookups in `Meta.ordering`
+<!-- commit: perf(sales): use local id/columns for QuotaPlan, TerritoryMember, AccountTerritoryAssignment default ordering (I14) -->
 - **Location:** `apps/sales/models/TerritoryQuotaManagement/QuotaPlans.py:134`, `TerritoryMembers.py:91`, `AccountTerritoryAssignments.py:100`
 - **Description:** Ordering by foreign table columns (`territory__name`, `account__name`) forces automatic `INNER JOIN`s on all default queries.
 - **Fix:** Prefer primary model fields in default `ordering` (e.g. `("-effective_from", "id")`) and order by related fields explicitly in views where needed.
@@ -164,7 +165,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** All four detail templates include `{% include "partials/pagination.html" %}`, rendering redundant pagination markup on single-record views.
 - **Fix:** Remove the include tag from the four detail templates.
 
-### [M2] Potential `ObjectDoesNotExist` in `AccountTerritoryAssignment.__str__`
+### [x] fixed — [M2] Potential `ObjectDoesNotExist` in `AccountTerritoryAssignment.__str__`
+<!-- commit: perf(sales): use local ordering, composite index, and safe __str__ for AccountTerritoryAssignment (I14, M2, M8, M9) -->
 - **Location:** `apps/sales/models/TerritoryQuotaManagement/AccountTerritoryAssignments.py:192-193`
 - **Description:** Evaluating `self.account` in `__str__` without guarding `self.account_id` raises `Party.DoesNotExist` on unpersisted or partially initialized instances.
 - **Fix:** Use `getattr(self.account, "name", "—") if self.account_id else "—"`.
@@ -194,12 +196,14 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** `plans_qs` does not `select_related("territory")`, resulting in N+1 queries when accessing `plan.territory`.
 - **Fix:** Add `select_related("territory", "quota_ref", "forecast_period__reporting_currency")` to `plans_qs`.
 
-### [M8] Missing Composite Indexes on Hot Assignment and Member Lookups
+### [x] fixed — [M8] Missing Composite Indexes on Hot Assignment and Member Lookups
+<!-- commit: feat(sales): add migration 0015 for territory quota model ordering and indexes (M8) -->
 - **Location:** `apps/sales/models/TerritoryQuotaManagement/AccountTerritoryAssignments.py:107`, `TerritoryMembers.py:98`
 - **Description:** Queries frequently filter on `(tenant, territory, effective_to)`.
 - **Fix:** Ensure composite indexes cover common lookup combinations.
 
-### [M9] Chained N+1 Queries Through Model `__str__` Methods
+### [x] fixed — [M9] Chained N+1 Queries Through Model `__str__` Methods
+<!-- commit: perf(sales): safe relation access in TerritoryMember and AccountTerritoryAssignment __str__ (M9) -->
 - **Location:** `AccountTerritoryAssignments.py:192-195`, `TerritoryMembers.py:120-123`
 - **Description:** Calling `str(instance)` when `account`, `territory`, or `user` are un-prefetched incurs additional queries.
 - **Fix:** Guard access or prefetch related FKs in list and board views.
