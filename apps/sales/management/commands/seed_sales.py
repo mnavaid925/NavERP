@@ -441,9 +441,12 @@ class Command(BaseCommand):
             getattr(owner, "is_superuser", False) or getattr(owner, "is_tenant_admin", False)
         )
         for party, outcome, kind, source_kind, purpose, changes in event_specs:
+            key = f"seed-party-enrichment:{party.pk}:{kind}:{outcome}"
+            existing_event = PartyEnrichmentEvent.objects.filter(tenant=tenant, idempotency_key=key).first()
+            event_owner = existing_event.requested_by if existing_event and existing_event.requested_by else owner
             event = create_enrichment_event(
                 tenant,
-                owner,
+                event_owner,
                 party=party,
                 kind=kind,
                 source_kind=source_kind,
@@ -451,7 +454,7 @@ class Command(BaseCommand):
                 source_reference=f"seed:party-enrichment:{party.pk}:{kind}:{outcome}",
                 changes=changes,
                 legal_basis_purpose=purpose,
-                idempotency_key=f"seed-party-enrichment:{party.pk}:{kind}:{outcome}",
+                idempotency_key=key,
             )
             if not owner_is_admin:
                 continue
