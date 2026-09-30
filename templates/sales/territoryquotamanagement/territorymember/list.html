@@ -31,7 +31,7 @@
   <div class="stat-card"><div class="stat-icon green"><i data-lucide="user-check"></i></div><div class="stat-value">{{ stats.direct }}</div><div class="stat-label">Live direct</div></div>
   <div class="stat-card"><div class="stat-icon orange"><i data-lucide="split"></i></div><div class="stat-value">{{ stats.shared }}</div><div class="stat-label">Live shared / split</div></div>
   <div class="stat-card"><div class="stat-icon purple"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.overlay }}</div><div class="stat-label">Live overlay</div></div>
-  <div class="stat-card"><div class="stat-icon {% if stats.orphaned_pairs %}red{% else %}slate{% endif %}"><i data-lucide="unlink"></i></div><div class="stat-value">{{ stats.orphaned_pairs }}</div><div class="stat-label">SDRs with no live paired AE</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.orphaned_pairs %}orange{% else %}slate{% endif %}"><i data-lucide="unlink"></i></div><div class="stat-value">{{ stats.orphaned_pairs }}</div><div class="stat-label">SDRs with no live paired AE</div></div>
 </div>
 
 <div class="card">
