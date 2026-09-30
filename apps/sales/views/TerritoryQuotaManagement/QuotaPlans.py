@@ -243,6 +243,9 @@ def quota_plan_detail(request, pk):
 @login_required
 def quota_plan_edit(request, pk):
     obj = get_object_or_404(_plan_queryset(request), pk=pk)
+    if obj.owner_id and obj.owner_id != request.user.pk and not is_tenant_admin(request.user):
+        messages.error(request, "Only the plan owner or a tenant administrator may edit this quota plan.")
+        return redirect("sales:quota_plan_detail", pk=obj.pk)
     if obj.status in ("submitted", "approved", "locked"):
         # The form disables its own fields in a frozen state; this is the SERVER-side re-check, so
         # the widgets are never the only guard (research §5.5 R9).
@@ -278,6 +281,9 @@ def quota_plan_edit(request, pk):
 def quota_plan_submit(request, pk):
     """``draft / rejected -> submitted``, stamping the frozen submission evidence."""
     obj = get_object_or_404(_plan_queryset(request), pk=pk)
+    if obj.owner_id and obj.owner_id != request.user.pk and not is_tenant_admin(request.user):
+        messages.error(request, "Only the plan owner or a tenant administrator may submit this quota plan.")
+        return redirect("sales:quota_plan_detail", pk=obj.pk)
     if obj.status not in ("draft", "rejected"):
         messages.error(request, f"Only a draft or rejected plan can be submitted; this one is {obj.get_status_display()}.")
         return redirect("sales:quota_plan_detail", pk=obj.pk)
