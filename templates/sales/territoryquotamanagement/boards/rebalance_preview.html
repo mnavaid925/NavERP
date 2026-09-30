@@ -49,7 +49,7 @@
   <div class="stat-card"><div class="stat-icon green"><i data-lucide="circle-check"></i></div><div class="stat-value">{{ stats.unchanged }}</div><div class="stat-label">Already correct</div></div>
   <div class="stat-card"><div class="stat-icon orange"><i data-lucide="move-right"></i></div><div class="stat-value">{{ stats.moves }}</div><div class="stat-label">Would move</div></div>
   <div class="stat-card"><div class="stat-icon purple"><i data-lucide="plus-circle"></i></div><div class="stat-value">{{ stats.adds }}</div><div class="stat-label">Would add</div></div>
-  <div class="stat-card"><div class="stat-icon {% if stats.removes %}red{% else %}slate{% endif %}"><i data-lucide="minus-circle"></i></div><div class="stat-value">{{ stats.removes }}</div><div class="stat-label">No longer proposed</div></div>
+  <div class="stat-card"><div class="stat-icon {% if stats.removes %}orange{% else %}slate{% endif %}"><i data-lucide="minus-circle"></i></div><div class="stat-value">{{ stats.removes }}</div><div class="stat-label">No longer proposed</div></div>
 </div>
 
 <div class="card">
