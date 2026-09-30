@@ -62,7 +62,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
   - When saving an edit on a `"rejected"` plan, reset its status to `"draft"`.
   - In `quota_plan_submit`, allow submission if `obj.status in ("draft", "rejected")`.
 
-### [C7] In-Memory Post-Slice Filtering in Territory Boards Truncating Records
+### [x] fixed — [C7] In-Memory Post-Slice Filtering in Territory Boards Truncating Records
+<!-- commit: fix(sales): filter accounts at database level before slicing in territory white space board (C7) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/TerritoryBoards.py:860-932`
 - **Description:** `accounts = list(accounts_qs[:MAX_BOARD_ACCOUNTS])` slices the accounts first, and then in-memory loops apply coverage/tier/industry filtering. If the first `MAX_BOARD_ACCOUNTS` accounts do not match the filter, the board displays zero rows even when matching accounts exist beyond the slice.
 - **Fix:** Apply tier and industry filters directly to `accounts_qs` at the database level before applying `[:MAX_BOARD_ACCOUNTS]`.
