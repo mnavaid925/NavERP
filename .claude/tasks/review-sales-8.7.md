@@ -114,7 +114,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** Helper functions `_build_account_profile_map` and `_build_account_classification_map` are invoked repeatedly across helper routines, creating duplicated queries for the same account IDs.
 - **Fix:** Pass cached/precomputed profile and classification maps through board helper functions.
 
-### [I8] Invariant Guard on Subtree Primary Rules in `TerritoryRule.clean()`
+### [x] fixed — [I8] Invariant Guard on Subtree Primary Rules in `TerritoryRule.clean()`
+<!-- commit: fix(sales): forbid primary alignment on subtree territory rules (I8) -->
 - **Location:** `apps/sales/models/TerritoryQuotaManagement/TerritoryRules.py:120-140`
 - **Description:** When a rule has `assignment_scope="subtree"` and `alignment_type="primary"`, automated assignment execution can create multiple active primary assignments for the same account across the hierarchy.
 - **Fix:** In `TerritoryRule.clean()`, forbid `alignment_type == "primary"` when `assignment_scope == "subtree"`.
