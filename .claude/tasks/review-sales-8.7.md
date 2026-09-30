@@ -132,7 +132,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** While views guard frozen status, `QuotaPlan.clean()` does not enforce immutability of plans in `FROZEN_STATES` at the model level.
 - **Fix:** In `QuotaPlan.clean()`, check if `self.pk` and DB status is in `FROZEN_STATES`, and raise `ValidationError`.
 
-### [I11] Missing Server-Side Lifecycle Guard in `territory_member_edit`
+### [x] fixed — [I11] Missing Server-Side Lifecycle Guard in `territory_member_edit`
+<!-- commit: fix(sales): guard historical territory member edits on server side (I11) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/TerritoryMembers.py:158-169`
 - **Description:** While the detail template hides the edit button for ended memberships (`effective_to < timezone.localdate()`), `territory_member_edit` lacks a server-side check, allowing direct POST edits to historical roster records.
 - **Fix:** Add server-side check: if `obj.effective_to and obj.effective_to < timezone.localdate()`, redirect with an error message.
