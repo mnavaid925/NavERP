@@ -91,8 +91,8 @@ class TerritoryRuleForm(TenantUniqueMixin, TenantModelForm):
             ),
             "match_mode": "All conditions must match, or any one of them is enough.",
             "conditions": (
-                'A JSON list of {"field", "operator", "value"} objects — at most 50 of them, and '
-                f"at most 4 KiB. Allowed fields: {ALLOWED_CONDITION_FIELDS}."
+                'A JSON list of {"field", "operator", "value"} objects — at most 20 of them, and '
+                f"at most 16 KiB. Allowed fields: {ALLOWED_CONDITION_FIELDS}."
             ),
             "is_catch_all": "A rule with no conditions counts only when it is explicitly a catch-all.",
             "target_territory": (
