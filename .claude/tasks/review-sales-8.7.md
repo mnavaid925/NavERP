@@ -18,7 +18,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** In `account_territory_assignment_edit`, the view manually assigns fields on `locked` instead of delegating to `form.save(commit=False)`. Calling `form.save_m2m()` at line 215 crashes with `AttributeError: 'AccountTerritoryAssignmentForm' object has no attribute 'save_m2m'` because `save_m2m` is only bound to `ModelForm` when `form.save()` is executed. Additionally, line 213 executes `locked.assigned_by = request.user`, overwriting immutable origin evidence stamped at creation.
 - **Fix:** Refactor `account_territory_assignment_edit` to delegate to `crud_edit(request, model=AccountTerritoryAssignment, pk=pk, form_class=AccountTerritoryAssignmentForm, template=FORM_TEMPLATE, success_url=reverse("sales:account_territory_assignment_detail", args=[pk]), extra_context=_form_context(request))` matching sibling entities, preserving `assigned_by` immutability and eliminating the 500.
 
-### [C2] Foreign Key Display Crash in `territory_performance` Board
+### [x] fixed — [C2] Foreign Key Display Crash in `territory_performance` Board
+<!-- commit: fix(sales): fix foreign key reporting currency display in territory performance board (C2) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/TerritoryBoards.py:724`
 - **Description:** Line 724 executes `period.get_reporting_currency_display()`. `ForecastPeriod.reporting_currency` is a ForeignKey to `accounting.Currency`, not a choice field. Calling `get_FIELD_display()` raises `AttributeError: 'ForecastPeriod' object has no attribute 'get_reporting_currency_display'`, crashing the territory performance board whenever deal currencies differ from reporting currency.
 - **Fix:** Change `period.get_reporting_currency_display()` to `(period.reporting_currency.code if period.reporting_currency else "—")`.
