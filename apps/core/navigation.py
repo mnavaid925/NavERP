@@ -2409,6 +2409,27 @@ LIVE_LINKS = {
         "Reorder & Renewal Watch": "sales:reorder_customers_board",
         "Revenue Recognition Board": "sales:revenue_recognition_board",
     },
+    "8.7": {
+        # OWNERSHIP RULING (L36/L37) — one of the durable places it is written down; the other two
+        # are `apps/sales/models/TerritoryQuotaManagement/__init__.py` and the 8.7 build contract.
+        # `crm.Territory` / `crm.SalesQuota` are CRM 1.2's. 8.7 EXTENDS both by FK and declares NEITHER
+        # again. There is NO `class Territory` and NO `class SalesQuota` anywhere in `apps/sales` — a
+        # class by either name in this app is a bug, not a variant.
+        # The five NavERP.md 8.7 bullet strings, VERBATIM:
+        "Territory Design & Mapping": "sales:territory_rule_list",
+        "Territory Assignment & Rebalancing": "sales:account_territory_assignment_list",
+        "Quota Planning & Allocation": "sales:quota_plan_list",
+        "Coverage Model Optimization": "sales:territory_member_list",
+        "Territory Performance Analytics": "sales:territory_performance",
+        # Extra live leaves (not NavERP.md bullets):
+        "Territory Rules": "sales:territory_rule_list",
+        "Territory Members": "sales:territory_member_list",
+        "Quota Plans": "sales:quota_plan_list",
+        "Rebalance Preview": "sales:territory_rebalance_preview",
+        "Coverage Gaps": "sales:territory_coverage_gap",
+        "Territory White Space": "sales:territory_white_space",
+    },
+
 
 
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
