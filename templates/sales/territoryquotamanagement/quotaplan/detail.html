@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% comment %}
+  8.7 Quota plan detail — the derivation behind one CRM quota target.
+
+  THE MONEY RULE. `derived_baseline` and `derived_stretch_amount` are `Decimal`s computed in PYTHON
+  in the view. They are not stored columns and not `F()` expressions, and there is no money column
+  on this model at all: a second stored target is a second source of truth for the same number.
+  They are FORMATTED here, never calculated here.
+
+  THE WORKFLOW. Status is moved by four POST verbs and nothing else — draft -> submitted, submitted
+  -> approved or rejected, approved -> locked. Each verb is its own form with a csrf token and a
+  confirm, and each is offered only where the SAME guard in the view will let it through, so the
+  button and the refusal cannot disagree. Approve, Reject and Lock are tenant-admin only, which is
+  what `can_approve` reports.
+
+  `is_frozen` (approved or locked) withholds Edit here. That is a courtesy, not the guard —
+  `quota_plan_edit` re-checks the same condition server-side.
+
+  The quota and the forecast period are READ-ONLY on this page and are labelled as such: both
+  belong to other modules (CRM 1.2 and Sales 8.4), and 8.7 never writes either one.
+{% endcomment %}
+{% block title %}{{ obj.number }} &middot; Quota Plan{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }} &middot; Quota Plan</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:quota_plan_list' %}">Quota Plans</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:quota_plan_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to plans</a>
+    {% if not is_frozen %}<a href="{% url 'sales:quota_plan_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="hash"></i></div><div class="stat-value">{{ obj.number }}</div><div class="stat-label">Plan number</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="target"></i></div><div class="stat-value">{% if obj.method == "top_down" %}Top-down{% elif obj.method == "bottom_up" %}Bottom-up{% else %}&mdash;{% endif %}</div><div class="stat-label">Derivation method</div></div>
+  <div class="stat-card"><div class="stat-icon {% if obj.status == 'approved' or obj.status == 'locked' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'submitted' %}orange{% else %}slate{% endif %}"><i data-lucide="list-checks"></i></div><div class="stat-value">{{ obj.get_status_display }}</div><div class="stat-label">Workflow status</div></div>
+  <div class="stat-card"><div class="stat-icon {% if is_frozen %}blue{% else %}green{% endif %}"><i data-lucide="lock"></i></div><div class="stat-value">{% if is_frozen %}Frozen{% else %}Editable{% endif %}</div><div class="stat-label">Field state</div></div>
+</div>
+
+{% if caveats %}
+<div class="card">
+  <div class="card-body">
+    <p class="fw-600"><span class="badge badge-amber">Read this first</span></p>
+    <ul style="margin:.5rem 0 0; padding-left:1.1rem;">
+      {% for caveat in caveats %}<li>{{ caveat }}</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<div class="layout-2col">
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Derivation</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+          <div class="detail-item"><dt>Method</dt><dd>{% if obj.method == "top_down" %}<span class="badge badge-info">{{ obj.get_method_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_method_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Allocation basis</dt><dd><span class="badge badge-slate">{{ obj.get_allocation_basis_display }}</span></dd></div>
+          <div class="detail-item"><dt>Baseline source</dt><dd><span class="badge badge-slate">{{ obj.get_baseline_source_display }}</span></dd></div>
+          <div class="detail-item"><dt>Growth target</dt><dd>{{ obj.growth_target_pct }}%</dd></div>
+          <div class="detail-item"><dt>Attrition relief</dt><dd>{{ obj.attrition_relief_pct }}%</dd></div>
+          <div class="detail-item"><dt>Uplift permitted</dt><dd>{% if obj.uplift_allowed %}<span class="badge badge-amber">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}<div class="text-muted">Uplift is a top-down setting. A bottom-up plan that also claims uplift is asserting two contradictory things about how its number was produced.</div></dd></div>
+          <div class="detail-item"><dt>Stretch target</dt><dd>{% if obj.stretch_target_pct != None %}{{ obj.stretch_target_pct }}%{% else %}<span class="text-muted">Not set</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Target type</dt><dd><span class="badge badge-slate">{{ obj.get_target_type_display }}</span></dd></div>
+          <div class="detail-item"><dt>Phasing</dt><dd>{% if obj.phasing == "seasonal" %}<span class="badge badge-info">{{ obj.get_phasing_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_phasing_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.username }}{% else %}<span class="text-muted">Unowned</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Territory</dt><dd>{% if obj.territory %}{{ obj.territory.number }} &middot; {{ obj.territory.name }}<div class="text-muted">Owned by CRM 1.2 &mdash; Sales reads it and never writes it.</div>{% else %}<span class="text-muted">Not territory-specific</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Notes</dt><dd>{% if obj.notes %}{{ obj.notes|linebreaksbr }}{% else %}<span class="text-muted">None recorded</span>{% endif %}</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Derived figures</h2></div>
+      <div class="card-body">
+        {% comment %}
+          COMPUTED IN PYTHON in the view, over a fetched set, and never stored. There is no money
+          column on this model: a stored target would be a second source of truth for the same
+          number the CRM quota already owns. A `None` here means a missing denominator, not zero,
+          so it is printed as "not measurable" rather than as 0%.
+        {% endcomment %}
+        <p class="text-muted">
+          These two figures are derived on every page load from the CRM quota and this plan's own
+          percentages. They are not stored, and nothing on this page is added up here.
+        </p>
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Derived baseline</dt><dd><span class="fw-600">{% if derived_baseline != None %}{{ derived_baseline }}{% else %}Not measurable &mdash; the plan names no custom baseline{% endif %}</span></dd></div>
+          <div class="detail-item"><dt>Derived stretch amount</dt><dd><span class="fw-600">{% if derived_stretch_amount != None %}{{ derived_stretch_amount }}{% else %}Not measurable &mdash; no uplift is permitted, so there is no stretch{% endif %}</span></dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>The quota and the period this plan annotates</h2></div>
+      <div class="card-body">
+        {% comment %}
+          BOTH READ-ONLY and labelled as such. The target amount is CRM 1.2's column, edited in
+          CRM's form under CRM's permissions; the window is 8.4's ForecastPeriod. 8.7 records how
+          the number was derived and never writes the number or re-spells the window.
+        {% endcomment %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Quota</dt><dd>{% if quota_ref %}<span class="fw-600">{{ quota_ref.number }}</span><div class="text-muted">Target {{ quota_ref.target_amount }} &middot; {{ quota_ref.get_period_type_display }} {{ quota_ref.period_year }}, number {{ quota_ref.period_number }}</div><div class="text-muted">Read-only here. The amount is edited on the CRM quota.</div>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Forecast period</dt><dd>{% if forecast_period %}<span class="fw-600">{{ forecast_period.number }}</span> &middot; {{ forecast_period.name }}<div class="text-muted">{{ forecast_period.get_period_type_display }} {{ forecast_period.period_year }}, number {{ forecast_period.period_number }}</div><div class="text-muted">Read-only here. 8.7 never re-spells year, quarter or month.</div>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+        </dl>
+        <p class="text-muted" style="margin-top:.75rem;">
+          The plan is refused unless the quota and the forecast period cover the same window. Both
+          carry their own period fields and nothing in either schema stops them disagreeing &mdash;
+          a mismatch does not fail loudly, it produces an attainment board quietly comparing a Q2
+          quota against a Q1 forecast, which reads as a data problem rather than a schema one.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Actions</h2></div>
+      <div class="card-body" style="display:flex; flex-direction:column; gap:.6rem;">
+        {% comment %}
+          Four POST verbs, each its own form, each shown only where the view's own guard will let
+          it through. `can_approve` is the tenant-admin predicate: Approve, Reject and Lock are
+          tenant-admin only, so they are withheld rather than offered and refused.
+        {% endcomment %}
+        {% if obj.status == "draft" %}
+        <form method="post" action="{% url 'sales:quota_plan_submit' obj.pk %}" onsubmit="return confirm('Submit quota plan {{ obj.number }} for approval? It stops being a draft and can no longer be edited until it is decided.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit" style="width:100%;"><i data-lucide="send"></i> Submit for approval</button>
+        </form>
+        <p class="text-muted">A draft is a proposal. Submitting stamps who sent it and when, and the plan enters approval.</p>
+        {% elif obj.status == "submitted" %}
+        {% if can_approve %}
+        <form method="post" action="{% url 'sales:quota_plan_approve' obj.pk %}" onsubmit="return confirm('Approve quota plan {{ obj.number }}? Its fields freeze and it can no longer be edited.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit" style="width:100%;"><i data-lucide="check"></i> Approve</button>
+        </form>
+        <form method="post" action="{% url 'sales:quota_plan_reject' obj.pk %}" onsubmit="return confirm('Reject quota plan {{ obj.number }}? It goes back for rework: edit it and submit it again.');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit" style="width:100%;"><i data-lucide="x"></i> Reject for rework</button>
+        </form>
+        {% else %}
+        <p class="text-muted">This plan is in approval and is waiting on a tenant administrator. Approve and Reject are theirs to press, not yours.</p>
+        {% endif %}
+        <p class="text-muted">A rejection is never silent: the plan returns to the author with its status changed, rather than simply sitting there.</p>
+        {% elif obj.status == "approved" %}
+        {% if can_approve %}
+        <form method="post" action="{% url 'sales:quota_plan_lock' obj.pk %}" onsubmit="return confirm('Lock quota plan {{ obj.number }}? This is the terminal state: the plan becomes a record rather than a proposal.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit" style="width:100%;"><i data-lucide="lock"></i> Lock plan</button>
+        </form>
+        {% else %}
+        <p class="text-muted">This plan is approved. Locking it is a tenant administrator's call.</p>
+        {% endif %}
+        <p class="text-muted">Approved is already a frozen state, so the fields above can no longer be edited. Locking closes the workflow for good.</p>
+        {% elif obj.status == "locked" %}
+        <p class="text-muted">This plan is locked. It is a record, not a proposal, and nothing further can be done to it except read it.</p>
+        {% elif obj.status == "rejected" %}
+        {% if not is_frozen %}
+        <a href="{% url 'sales:quota_plan_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit and resubmit</a>
+        <p class="text-muted">A rejected plan is editable. Fix it and submit it again &mdash; the rejection stays in the history, which is the point of recording it.</p>
+        {% endif %}
+        {% else %}
+        <p class="text-muted">This plan is in the state <span class="badge badge-muted">{{ obj.get_status_display }}</span>, and no verb applies to it from here.</p>
+        {% endif %}
+
+        {% if not is_frozen %}
+        <a href="{% url 'sales:quota_plan_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit plan</a>
+        {% else %}
+        <p class="text-muted">The plan is frozen, so the edit form is closed. That is a courtesy, not the guard &mdash; the edit view re-checks the same condition server-side.</p>
+        {% endif %}
+
+        <form method="post" action="{% url 'sales:quota_plan_delete' obj.pk %}" onsubmit="return confirm('Delete quota plan {{ obj.number }}? The CRM quota it annotated is untouched, but this derivation is lost. This cannot be undone.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit" style="width:100%;"><i data-lucide="trash-2"></i> Delete plan</button>
+        </form>
+        <a href="{% url 'sales:quota_plan_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to plans</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Workflow record</h2></div>
+      <div class="card-body">
+        {% comment %}
+          FROZEN EVIDENCE. Submitted-by / submitted-at and approved-by / approved-at are
+          `editable=False`; only the four verbs above write them, and each one writes its own pair
+          inside its transaction. There is deliberately no input anywhere near these values.
+        {% endcomment %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Submitted by</dt><dd>{% if obj.submitted_by %}{{ obj.submitted_by.username }}{% else %}<span class="text-muted">Never submitted</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Submitted at</dt><dd>{% if obj.submitted_at %}{{ obj.submitted_at|date:"M d, Y H:i" }}{% else %}&mdash;{% endif %}</dd></div>
+          <div class="detail-item"><dt>Approved by</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.username }}{% else %}<span class="text-muted">Never approved</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Approved at</dt><dd>{% if obj.approved_at %}{{ obj.approved_at|date:"M d, Y H:i" }}{% else %}&mdash;{% endif %}</dd></div>
+          <div class="detail-item"><dt>Calculated at</dt><dd>{% if obj.calculated_at %}{{ obj.calculated_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never recorded</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+          <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
