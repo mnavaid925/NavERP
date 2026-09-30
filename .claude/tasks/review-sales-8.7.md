@@ -138,7 +138,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** While the detail template hides the edit button for ended memberships (`effective_to < timezone.localdate()`), `territory_member_edit` lacks a server-side check, allowing direct POST edits to historical roster records.
 - **Fix:** Add server-side check: if `obj.effective_to and obj.effective_to < timezone.localdate()`, redirect with an error message.
 
-### [I12] Missing Ownership / Admin Enforcement on Quota Plan Submission and Edits
+### [x] fixed — [I12] Missing Ownership / Admin Enforcement on Quota Plan Submission and Edits
+<!-- commit: fix(sales): enforce ownership or tenant admin in quota plan edit and submit (I12) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/QuotaPlans.py:243-286`
 - **Description:** `quota_plan_edit` and `quota_plan_submit` only check `@login_required` without verifying that `request.user` is either the plan owner or a tenant admin.
 - **Fix:** Enforce ownership or tenant admin check in `quota_plan_edit` and `quota_plan_submit`: `if obj.owner_id and obj.owner_id != request.user.pk and not is_tenant_admin(request.user):`.
