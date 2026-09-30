@@ -1426,7 +1426,7 @@ class Command(BaseCommand):
                 "priority": 10,
                 "is_active": True,
                 "conditions": [
-                    {"field": "country", "operator": "equals", "value": "USA"},
+                    {"field": "country", "operator": "eq", "value": "USA"},
                 ],
                 "description": "Routes accounts in the USA to Americas.",
             },
@@ -1443,7 +1443,7 @@ class Command(BaseCommand):
                 "priority": 20,
                 "is_active": True,
                 "conditions": [
-                    {"field": "tier", "operator": "equals", "value": "tier_1"},
+                    {"field": "tier", "operator": "eq", "value": "tier_1"},
                 ],
                 "description": "Aligns strategic Tier 1 accounts with primary Americas coverage.",
             },
