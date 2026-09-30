@@ -102,7 +102,8 @@ Review of `02d8aa79...HEAD` across all 6 review passes:
 - **Description:** For each diff entry, `territory_rule_run` issues a separate `select_for_update` on `AccountTerritoryAssignment` inside the loop, creating serial row locks and latency.
 - **Fix:** Prefetch and lock candidate assignments in batch or streamline assignment deactivations.
 
-### [I6] Subquery Optimization in `territory_performance` Board
+### [x] fixed — [I6] Subquery Optimization in `territory_performance` Board
+<!-- commit: perf(sales): use assignment account subquery in territory performance board (I6) -->
 - **Location:** `apps/sales/views/TerritoryQuotaManagement/TerritoryBoards.py:663-712`
 - **Description:** `territory_performance` extracts all assignment IDs into a Python list and issues `party_id__in=assignment_account_ids` queries over deals and orders. On large tenants, this can exceed SQL parameter limits.
 - **Fix:** Use subquery `party_id__in=AccountTerritoryAssignment.objects.filter(...).values('account_id')` directly in the query.
