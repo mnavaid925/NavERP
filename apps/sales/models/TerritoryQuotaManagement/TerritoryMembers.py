@@ -4,7 +4,8 @@ This is the whole of 8.7's answer to "Hunter/farmer splits, SDR/AE pairing, and 
 assignments", and it is deliberately **three columns, not a graph**:
 
 * ``member_role`` says WHO the member is (``hunter`` / ``farmer`` / ``sdr`` / ``ae`` /
-  ``overlay_specialist``), which is the hunter/farmer split and the overlay specialist.
+  ``overlay_specialist`` / ``sales_engineer``), which is the hunter/farmer split, the overlay
+  specialist and the pre-sales engineer.
 * ``paired_user`` is the SDR→AE pairing. **A nullable FK IS the pairing.** Building a pairing graph
   on top of it would be a second thing to keep consistent with the roster.
 * ``coverage_split_pct`` is the split credit, and it is a **percentage**, not a money column — 8.10
@@ -37,16 +38,21 @@ class TerritoryMember(TenantNumbered):
 
     NUMBER_PREFIX = "TMB"
 
+    # Verbatim from the frozen contract §5.1. Do not shorten a label or drop a value here:
+    # `sales_engineer` is a real roster role, and `overlay` is what makes an overlay membership
+    # countable (contract §9.7 `stats.overlay`) without inventing a second hierarchy.
     MEMBER_ROLE_CHOICES = [
-        ("hunter", "Hunter"),
-        ("farmer", "Farmer"),
-        ("sdr", "SDR"),
+        ("hunter", "Hunter / New Business"),
+        ("farmer", "Farmer / Existing Business"),
+        ("sdr", "SDR / Business Development"),
         ("ae", "Account Executive"),
         ("overlay_specialist", "Overlay Specialist"),
+        ("sales_engineer", "Sales Engineer"),
     ]
     ASSIGNMENT_TYPE_CHOICES = [
-        ("direct", "Direct"),
-        ("shared", "Shared"),
+        ("direct", "Direct Coverage"),
+        ("shared", "Shared / Split Coverage"),
+        ("overlay", "Overlay Coverage"),
     ]
 
     territory = models.ForeignKey(
