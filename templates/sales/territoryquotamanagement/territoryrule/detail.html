@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% comment %}
+  8.7 Territory rule detail — the page that explains what one rule will do before anyone runs it.
+
+  FROZEN EVIDENCE. `last_run_at` / `last_run_matched_count` are `editable=False`, so they are on
+  no form anywhere and are written ONLY by the Run verb inside the transaction that writes the
+  assignment rows. They are rendered here as a read-only receipt, and there is no input near them:
+  a human must never be able to back-date a run's own receipt.
+
+  Every verb is its OWN POST form with a csrf token and a confirm. Run is the commit that writes
+  the assignment ledger; Toggle flips the rule in or out of force. A GET link must never change a
+  coverage rule, so neither is a link. Run is offered only when `is_runnable` is true — the SAME
+  predicate the view checks (active, has a target, inside its effective window), so the button and
+  the refusal cannot disagree.
+
+  The territory named throughout is `crm.Territory`, owned by CRM 1.2. 8.7 does not declare a
+  territory and cannot create one.
+{% endcomment %}
+{% block title %}{{ obj.number }} &middot; Territory Rule{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }} &middot; Territory Rule</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:territory_rule_list' %}">Territory Rules</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:territory_rule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to rules</a>
+    <a href="{% url 'sales:territory_rule_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="hash"></i></div><div class="stat-value">{{ obj.number }}</div><div class="stat-label">Rule number</div></div>
+  <div class="stat-card"><div class="stat-icon {% if obj.is_active %}green{% else %}slate{% endif %}"><i data-lucide="toggle-right"></i></div><div class="stat-value">{% if obj.is_active %}In force{% else %}Off{% endif %}</div><div class="stat-label">Rule state</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="map-pin"></i></div><div class="stat-value">{% if obj.target_territory %}{{ obj.target_territory.number }}{% else %}&mdash;{% endif %}</div><div class="stat-label">Target territory (CRM 1.2)</div></div>
+  <div class="stat-card"><div class="stat-icon {% if is_runnable %}green{% else %}orange{% endif %}"><i data-lucide="play"></i></div><div class="stat-value">{% if is_runnable %}Runnable{% else %}Blocked{% endif %}</div><div class="stat-label">Run eligibility today</div></div>
+</div>
+
+{% if caveats %}
+<div class="card">
+  <div class="card-body">
+    <p class="fw-600"><span class="badge badge-amber">Read this first</span></p>
+    <ul style="margin:.5rem 0 0; padding-left:1.1rem;">
+      {% for caveat in caveats %}<li>{{ caveat }}</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<div class="layout-2col">
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Rule</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+          <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+          <div class="detail-item"><dt>Segment type</dt><dd>{% if obj.segment_type == "geographic" %}<span class="badge badge-info">{{ obj.get_segment_type_display }}</span>{% elif obj.segment_type == "named_account" %}<span class="badge badge-green">{{ obj.get_segment_type_display }}</span>{% elif obj.segment_type == "mixed" %}<span class="badge badge-amber">{{ obj.get_segment_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_segment_type_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Match mode</dt><dd><span class="badge badge-slate">{{ obj.get_match_mode_display }}</span></dd></div>
+          <div class="detail-item"><dt>Alignment</dt><dd>{% if obj.alignment_type == "primary" %}<span class="badge badge-green">{{ obj.get_alignment_type_display }}</span>{% elif obj.alignment_type == "overlay" %}<span class="badge badge-amber">{{ obj.get_alignment_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_alignment_type_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Scope</dt><dd>{% if obj.assignment_scope == "subtree" %}<span class="badge badge-amber">{{ obj.get_assignment_scope_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_assignment_scope_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Target territory</dt><dd>{% if obj.target_territory %}{{ obj.target_territory.number }} &middot; {{ obj.target_territory.name }}<div class="text-muted">Owned by CRM 1.2 &mdash; Sales reads it and never writes it.</div>{% else %}<span class="text-muted">No target</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Priority</dt><dd>{{ obj.priority }}</dd></div>
+          <div class="detail-item"><dt>Catch-all</dt><dd>{% if obj.is_catch_all %}<span class="badge badge-amber">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Effective window</dt><dd>{{ obj.effective_from|date:"M d, Y" }} &rarr; {% if obj.effective_to %}{{ obj.effective_to|date:"M d, Y" }}{% else %}open-ended{% endif %}</dd></div>
+          <div class="detail-item"><dt>State</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Description</dt><dd>{% if obj.description %}{{ obj.description|linebreaksbr }}{% else %}<span class="text-muted">None recorded</span>{% endif %}</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Match conditions</h2></div>
+      <div class="card-body">
+        {% comment %}
+          The conditions are the rule's closed allow-list: each is exactly field / operator /
+          value, and a field outside the allow-list is refused by the model, never ignored. A
+          catch-all carries none, and a named-account rule carries none by design.
+        {% endcomment %}
+        {% if obj.is_catch_all %}
+        <p class="text-muted">This is a catch-all rule: it claims every account no earlier rule matched. That is why it must be declared explicitly &mdash; an empty condition list that was an oversight would otherwise silently swallow the whole book.</p>
+        {% elif obj.conditions %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Field</th><th>Operator</th><th>Value</th></tr></thead>
+            <tbody>
+              {% for condition in obj.conditions %}
+              <tr>
+                <td class="fw-600">{{ condition.field }}</td>
+                <td><span class="badge badge-slate">{{ condition.operator }}</span></td>
+                <td>{% if condition.value == None or condition.value == "" %}<span class="text-muted">&mdash;</span>{% else %}{{ condition.value|join:", " }}{% endif %}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="text-muted" style="margin-top:.75rem;">All conditions must {% if obj.match_mode == "any" %}match at least one{% else %}match{% endif %} for the rule to claim an account.</p>
+        {% else %}
+        <p class="text-muted">This rule carries no conditions. A named-account rule picks its accounts by hand on the assignment register, which is what makes them named.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Assignments this rule produced</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Assignment</th><th>Account</th><th>Territory</th><th>Alignment</th><th>Window</th></tr></thead>
+          <tbody>
+            {% for assignment in generated_assignments %}
+            <tr>
+              <td><a href="{% url 'sales:account_territory_assignment_detail' assignment.pk %}" class="fw-600">{{ assignment.number }}</a></td>
+              <td>{{ assignment.account.name }}</td>
+              <td>{% if assignment.territory %}{{ assignment.territory.number }} &middot; {{ assignment.territory.name }}{% else %}<span class="text-muted">Orphaned &mdash; territory deleted</span>{% endif %}</td>
+              <td>{% if assignment.alignment_type == "primary" %}<span class="badge badge-green">{{ assignment.get_alignment_type_display }}</span>{% elif assignment.alignment_type == "overlay" %}<span class="badge badge-amber">{{ assignment.get_alignment_type_display }}</span>{% else %}<span class="badge badge-slate">{{ assignment.get_alignment_type_display }}</span>{% endif %}</td>
+              <td>{% if assignment.effective_to %}{{ assignment.effective_from|date:"M d, Y" }} &rarr; {{ assignment.effective_to|date:"M d, Y" }}<div class="text-muted">Superseded</div>{% else %}{{ assignment.effective_from|date:"M d, Y" }}<div class="text-muted">Live</div>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="inbox"></i><h3>No assignments yet</h3><p>This rule has not been run, or every account it matched already held that placement. Run it to evaluate the rule against the accounts now in force.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Actions</h2></div>
+      <div class="card-body" style="display:flex; flex-direction:column; gap:.6rem;">
+        {% comment %}
+          Every guard below is the SAME predicate the view enforces. Run appears only when
+          `is_runnable` is true; both verbs are POST forms, never GET links, because a GET link
+          that flips a coverage rule is a prefetch that rewrites a book.
+        {% endcomment %}
+        {% if is_runnable %}
+        <form method="post" action="{% url 'sales:territory_rule_run' obj.pk %}" onsubmit="return confirm('Run rule {{ obj.number }} now? It writes assignment rows to the ledger and stamps the run receipt. This cannot be undone by re-running.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit" style="width:100%;"><i data-lucide="play"></i> Run this rule</button>
+        </form>
+        <p class="text-muted">
+          Run evaluates the rule against the accounts in force today and writes the assignment
+          rows inside one transaction with the receipt below. It OPENS new rows; it never closes a
+          superseded one &mdash; closing a placement is a deliberate act about a book's history.
+        </p>
+        {% else %}
+        <p class="text-muted">
+          This rule cannot be run right now. The caveats above name the reason: it needs a target
+          territory, it must be active, and today must fall inside its effective window.
+        </p>
+        {% endif %}
+
+        <form method="post" action="{% url 'sales:territory_rule_toggle' obj.pk %}" onsubmit="return confirm('{% if obj.is_active %}Take rule {{ obj.number }} out of force?{% else %}Put rule {{ obj.number }} into force?{% endif %}');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit" style="width:100%;"><i data-lucide="toggle-{% if obj.is_active %}off{% else %}right{% endif %}"></i> {% if obj.is_active %}Take out of force{% else %}Put into force{% endif %}</button>
+        </form>
+        <p class="text-muted">
+          An out-of-force rule stays on the register and keeps its history. It is skipped by every
+          evaluation, so no new assignment can cite it.
+        </p>
+
+        <a href="{% url 'sales:territory_rule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit rule</a>
+        <form method="post" action="{% url 'sales:territory_rule_delete' obj.pk %}" onsubmit="return confirm('Delete rule {{ obj.number }}? The assignments it produced stay in the ledger as history. This cannot be undone.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit" style="width:100%;"><i data-lucide="trash-2"></i> Delete rule</button>
+        </form>
+        <a href="{% url 'sales:territory_rule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to rules</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Run receipt</h2></div>
+      <div class="card-body">
+        {% comment %}
+          FROZEN EVIDENCE — read-only by construction, not by convention. `last_run_at` and
+          `last_run_matched_count` are `editable=False`, so they are on no form in this module:
+          the only writer is the Run verb, inside the transaction that wrote the assignment rows.
+          There is deliberately no input next to these values.
+        {% endcomment %}
+        {% if obj.last_run_at %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Last run</dt><dd>{{ obj.last_run_at|date:"M d, Y H:i" }}</dd></div>
+          <div class="detail-item"><dt>Accounts matched</dt><dd>{{ obj.last_run_matched_count }}</dd></div>
+        </dl>
+        <p class="text-muted" style="margin-top:.75rem;">
+          Read-only. Written by the Run action above, never typed and never editable &mdash; a run's
+          own receipt must not be something the person it describes can rewrite.
+        </p>
+        {% else %}
+        <p class="text-muted">
+          This rule has never been run, so there is no receipt. The values above would appear here
+          after a run; they are not on the edit form and never will be.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Record</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+          <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
