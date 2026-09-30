@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% comment %}
+  8.7 Quota plans — the DERIVATION behind a CRM quota target.
+
+  8.7 declares no quota and writes no money. The number is `crm.SalesQuota.target_amount`, owned by
+  CRM 1.2, and this register only records HOW it was set: method, allocation basis, baseline,
+  growth, attrition relief, whether uplift was permitted, and how it phases. That is why there is
+  no money column on the form and why the status is moved only by the four POST verbs.
+
+  Status is ACTION-DRIVEN (draft -> submitted -> approved | rejected -> locked), never typed. A
+  status picker on a form is a workflow engine written in a dropdown. Every badge below keys on
+  the exact choice value with an {% else %} get_status_display fallback.
+
+  `is_frozen` is the view's own predicate (approved or locked) and is what withholds the Edit
+  button here. Hiding the button is a courtesy, not the guard: `quota_plan_edit` re-checks the
+  same condition server-side, so a crafted POST is refused too.
+
+  ENUM filters read their ECHO keys; FK dropdown compares are `|stringformat:"d"` against
+  `request.GET.territory` / `request.GET.owner` / `request.GET.forecast_period` — never `|slugify`
+  on a pk (contract §11.1 rule 3).
+{% endcomment %}
+{% block title %}Quota Plans{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Quota Plans</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Territory &amp; Quota</span><span class="sep">&rsaquo;</span><span>Quota plans</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:quota_plan_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New plan</a>
+    <a href="{% url 'sales:territory_performance' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Performance</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total plans</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="pencil-line"></i></div><div class="stat-value">{{ stats.draft }}</div><div class="stat-label">Draft</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ stats.in_approval }}</div><div class="stat-label">In approval</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.approved }}</div><div class="stat-label">Approved</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="lock"></i></div><div class="stat-value">{{ stats.frozen }}</div><div class="stat-label">Frozen (approved or locked)</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="qpa-search">Search</label>
+        <input id="qpa-search" name="q" value="{{ q }}" class="form-input" placeholder="Plan number, quota number, owner, or notes">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="qpa-status">Status</label>
+        <select id="qpa-status" name="status" class="form-select">
+          <option value="">All statuses</option>
+          {% for value, label in status_choices %}<option value="{{ value }}"{% if status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="qpa-method">Method</label>
+        <select id="qpa-method" name="method" class="form-select">
+          <option value="">Any method</option>
+          {% for value, label in method_choices %}<option value="{{ value }}"{% if method == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="qpa-basis">Allocation basis</label>
+        <select id="qpa-basis" name="allocation_basis" class="form-select">
+          <option value="">Any basis</option>
+          {% for value, label in allocation_basis_choices %}<option value="{{ value }}"{% if allocation_basis == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="qpa-baseline">Baseline source</label>
+        <select id="qpa-baseline" name="baseline_source" class="form-select">
+          <option value="">Any baseline</option>
+          {% for value, label in baseline_source_choices %}<option value="{{ value }}"{% if baseline_source == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="qpa-target">Target type</label>
+        <select id="qpa-target" name="target_type" class="form-select">
+          <option value="">Any target type</option>
+          {% for value, label in target_type_choices %}<option value="{{ value }}"{% if target_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="qpa-phasing">Phasing</label>
+        <select id="qpa-phasing" name="phasing" class="form-select">
+          <option value="">Any phasing</option>
+          {% for value, label in phasing_choices %}<option value="{{ value }}"{% if phasing == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="qpa-territory">Territory</label>
+        <select id="qpa-territory" name="territory" class="form-select">
+          <option value="">Every territory</option>
+          {% for territory in territories %}<option value="{{ territory.pk|stringformat:"d" }}"{% if request.GET.territory == territory.pk|stringformat:"d" %} selected{% endif %}>{{ territory.number }} &middot; {{ territory.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="qpa-owner">Owner</label>
+        <select id="qpa-owner" name="owner" class="form-select">
+          <option value="">Anyone</option>
+          {% for plan_owner in owners %}<option value="{{ plan_owner.pk|stringformat:"d" }}"{% if request.GET.owner == plan_owner.pk|stringformat:"d" %} selected{% endif %}>{{ plan_owner.username }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="qpa-period">Forecast period</label>
+        <select id="qpa-period" name="forecast_period" class="form-select">
+          <option value="">Every period</option>
+          {% for period in periods %}<option value="{{ period.pk|stringformat:"d" }}"{% if request.GET.forecast_period == period.pk|stringformat:"d" %} selected{% endif %}>{{ period.number }} &middot; {{ period.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="qpa-active">Active</label>
+        <select id="qpa-active" name="active" class="form-select">
+          <option value="">Any state</option>
+          {% for value, label in active_choices %}<option value="{{ value }}"{% if active == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:quota_plan_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Quota plan register</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Plan</th><th>Quota (CRM 1.2)</th><th>Method</th><th>Growth</th><th>Relief</th><th>Uplift</th><th>Period</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td>
+            <a href="{% url 'sales:quota_plan_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            <div class="text-muted">{{ obj.owner.username|default:"Unowned" }}{% if obj.territory %} &middot; {{ obj.territory.name }}{% endif %}</div>
+          </td>
+          <td>
+            {% if obj.quota_ref %}
+              {{ obj.quota_ref.number }}
+              <div class="text-muted">{{ obj.quota_ref.target_amount }} &middot; {{ obj.quota_ref.get_period_type_display }} {{ obj.quota_ref.period_year }}</div>
+            {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+          </td>
+          <td>{% if obj.method == "top_down" %}<span class="badge badge-info">{{ obj.get_method_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_method_display }}</span>{% endif %}</td>
+          <td>{{ obj.growth_target_pct }}%</td>
+          <td>{{ obj.attrition_relief_pct }}%</td>
+          <td>{% if obj.uplift_allowed %}<span class="badge badge-amber">Allowed{% if obj.stretch_target_pct %} &middot; {{ obj.stretch_target_pct }}%{% endif %}</span>{% else %}<span class="badge badge-muted">Not permitted</span>{% endif %}</td>
+          <td>{% if obj.forecast_period %}{{ obj.forecast_period.name }}<div class="text-muted">{{ obj.forecast_period.get_period_type_display }} {{ obj.forecast_period.period_year }}</div>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td>
+            {% if obj.status == "draft" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "submitted" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "approved" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "rejected" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "locked" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+          </td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:quota_plan_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              {% if not obj.is_frozen %}<a href="{% url 'sales:quota_plan_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>{% endif %}
+              <form method="post" action="{% url 'sales:quota_plan_delete' obj.pk %}" onsubmit="return confirm('Delete quota plan {{ obj.number }}? The CRM quota it annotated is untouched, but this derivation is lost. This cannot be undone.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9"><div class="empty-state"><i data-lucide="target"></i><h3>No quota plans</h3><p>No derivation is recorded behind any quota yet. The quota amount itself lives in CRM 1.2; a plan records how it was set.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
