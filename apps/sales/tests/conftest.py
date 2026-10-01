@@ -3167,7 +3167,7 @@ def _territoryquotamanagement_account(tenant, name="Acme Customer Account", **ov
     defaults = {
         "tenant": tenant,
         "name": f"{name} {label}",
-        "kind": "customer",
+        "kind": "organization",
     }
     defaults.update(overrides)
     return Party.objects.create(**defaults)
