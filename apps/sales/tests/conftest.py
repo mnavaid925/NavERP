@@ -3073,11 +3073,6 @@ TERRITORYQUOTAMANAGEMENT_MODEL_CHOICES = {
         ],
     },
     "AccountTerritoryAssignment": {
-        "ALIGNMENT_TYPE_CHOICES": [
-            ("primary", "Primary"),
-            ("secondary", "Secondary"),
-            ("overlay", "Overlay"),
-        ],
         "ASSIGNMENT_SOURCE_CHOICES": [
             ("manual", "Manual Assignment"),
             ("rule", "Automated Rule Run"),
@@ -3185,7 +3180,6 @@ def _territoryquotamanagement_crm_territory(tenant, name="Americas", **overrides
     defaults = {
         "tenant": tenant,
         "name": f"{name} {label}",
-        "code": f"TER-{label}",
         "is_active": True,
         "description": "CRM Territory for Sales 8.7 test suite.",
     }
