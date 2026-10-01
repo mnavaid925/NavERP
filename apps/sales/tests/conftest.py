@@ -3086,7 +3086,7 @@ TERRITORYQUOTAMANAGEMENT_MODEL_CHOICES = {
             ("sdr", "Sales Development Rep (SDR)"),
             ("hunter", "Hunter (New Business)"),
             ("farmer", "Farmer (Account Manager)"),
-            ("overlay", "Overlay Specialist"),
+            ("overlay_specialist", "Overlay Specialist"),
             ("sales_engineer", "Sales Engineer / Solutions Architect"),
         ],
         "ASSIGNMENT_TYPE_CHOICES": [
