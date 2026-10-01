@@ -3074,10 +3074,10 @@ TERRITORYQUOTAMANAGEMENT_MODEL_CHOICES = {
     },
     "AccountTerritoryAssignment": {
         "ASSIGNMENT_SOURCE_CHOICES": [
-            ("manual", "Manual Assignment"),
-            ("rule", "Automated Rule Run"),
-            ("rebalance", "Territory Rebalance"),
-            ("import", "Data Import"),
+            ("manual", "Manual"),
+            ("rule", "Assignment Rule"),
+            ("named_account", "Named Account"),
+            ("inherited", "Inherited From Parent"),
         ],
     },
     "TerritoryMember": {
@@ -3167,7 +3167,7 @@ def _territoryquotamanagement_account(tenant, name="Acme Customer Account", **ov
     defaults = {
         "tenant": tenant,
         "name": f"{name} {label}",
-        "is_customer": True,
+        "kind": "customer",
     }
     defaults.update(overrides)
     return Party.objects.create(**defaults)
