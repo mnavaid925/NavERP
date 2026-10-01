@@ -1,6 +1,6 @@
 ---
 name: sales
-description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting and 8.5 Quote & Proposal Management (CPQ). Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
+description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, and 8.7 Territory & Quota Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
 ---
 
 # Sales Management System (Module 8)
@@ -540,3 +540,67 @@ A full `apps/sales/tests` run builds the whole schema in SQLite in memory, so it
 - Lead Nurturing & Drip Campaigns → `sales:lead_nurture_enrollment_list`
 - Lead Conversion & Handoff → `sales:lead_overview#handoff`
 - Extras: Lead Operations Board, Score Events, Qualification Assessments, Routing Rules, Nurture Enrollments
+
+
+## 8.7 Territory & Quota Management
+
+8.7 provides enterprise territory assignment rules, multi-hierarchy rep-to-territory mapping, account-to-territory alignment, quota distribution and capacity planning, and live territory balancing and performance intelligence.
+
+### Ownership boundary & spine reuse
+- **Ownership boundary**: Canonical territory master is `crm.Territory` (`TER-`) and canonical quota master is `crm.SalesQuota` (`QUO-`). Sales 8.7 owns neither model and defines no duplicate territory or quota headers. Instead, 8.7 extends them via foreign keys:
+  - `TerritoryRule.territory -> crm.Territory`
+  - `AccountTerritoryAssignment.territory -> crm.Territory`
+  - `TerritoryMember.territory -> crm.Territory`
+  - `QuotaPlan.sales_quota -> crm.SalesQuota`
+- Canonical accounts: `core.Party` where `kind="organization"`.
+- Canonical sales users/reps: `accounts.User`.
+
+### 8.7 models
+All four models reside in `apps/sales/models/TerritoryQuotaManagement/`, inherit `TenantNumbered` (`unique_together = ("tenant", "number")`), and are indexed with composite `["tenant", ...]`:
+1. `TerritoryRule` (`TRL-`) — `TerritoryRules.py`: Dynamic rule-based territory assignment. Fields: `territory` (FK `crm.Territory`), `name`, `rule_type` (`geographic`, `industry`, `revenue_band`, `named_account`, `composite`), `criteria` (validated JSON with allowed field/operator specifications), `priority` (integer), `assignment_scope` (`exact`, `subtree`), `is_active`, `last_run_at`, `matched_count`. Methods: `evaluate(account)` evaluating postal code, country, state, industry, and annual revenue.
+2. `AccountTerritoryAssignment` (`ATA-`) — `AccountTerritoryAssignments.py`: Bridge record aligning an account to a territory. Fields: `account` (FK `core.Party`, `kind="organization"`), `territory` (FK `crm.Territory`), `assigned_by` (FK `accounts.User`), `assignment_source` (`manual`, `rule`, `named_account`, `inherited`), `assigned_rule` (FK `TerritoryRule`, `null=True`, `SET_NULL`), `alignment_type` (`primary`, `secondary`, `overlay`), `effective_from`, `effective_to`, `is_active`, `notes`. Constraint: unique active primary assignment per account/territory.
+3. `TerritoryMember` (`TRM-`): Sales rep roster for a territory. Fields: `territory` (FK `crm.Territory`), `user` (FK `accounts.User`), `member_role` (`territory_lead`, `account_executive`, `sdr`, `sales_engineer`, `overlay_specialist`, `channel_manager`), `quota_share_pct` (Decimal 0..100), `start_date`, `end_date`, `is_active`, `notes`.
+4. `QuotaPlan` (`QPL-`): Quota distribution, capacity modeling, and phasing plans. Fields: `name`, `sales_quota` (FK `crm.SalesQuota`), `period_type` (`monthly`, `quarterly`, `annual`), `plan_year`, `target_type` (`revenue`, `margin`, `unit`, `new_logo`), `phasing` (`flat`, `seasonality`, `front_loaded`, `back_loaded`), `stretch_target_pct` (Decimal 0..100), `uplift_allowed` (boolean), `status` (`draft`, `in_review`, `approved`, `active`, `archived`), `is_active`, `parameters` (JSON).
+
+### 8.7 routes and views
+URL namespace is `sales`, mounted under `/sales/` via `apps/sales/urls/TerritoryQuotaManagement/`:
+- **Territory Rules**: `sales:territory_rule_list`, `_create`, `_detail`, `_edit`, `_delete`, `_run` (POST), `_preview` (POST/GET dry-run).
+- **Account Territory Assignments**: `sales:account_territory_assignment_list`, `_create`, `_detail`, `_edit`, `_delete`, `_reassign` (POST).
+- **Territory Members**: `sales:territory_member_list`, `_create`, `_detail`, `_edit`, `_delete`.
+- **Quota Plans**: `sales:quota_plan_list`, `_create`, `_detail`, `_edit`, `_delete`, `_submit` (POST), `_approve` (POST, tenant-admin), `_activate` (POST), `_archive` (POST), `_distribute` (POST).
+- **Computed Intelligence Boards**:
+  - `sales:territory_rebalance_preview` — interactive preview of account shift impacts, workload balancing, and rep quota realignments.
+  - `sales:territory_coverage_gap` — detection of unassigned enterprise accounts, headless territories, and under-covered segments.
+  - `sales:territory_performance` — territory vs. quota attainment, closed revenue velocity, win rates, and ranking.
+  - `sales:territory_white_space` — cross-sell/upsell potential and underpenetrated accounts across assigned territories.
+
+### 8.7 templates
+Templates reside in `templates/sales/territoryquotamanagement/`:
+- `territoryrule/{list,detail,form}.html`
+- `accountterritoryassignment/{list,detail,form}.html`
+- `territorymember/{list,detail,form}.html`
+- `quotaplan/{list,detail,form}.html`
+- `boards/{rebalance_preview,coverage_gap,performance,white_space}.html`
+All templates adhere to design standards: strict color-named badges (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`), stat cards with allowable icon colors, full CRUD actions, `|stringformat:"d"` for PK comparisons, and zero multiline comment leaks.
+
+### 8.7 sidebar wiring (`apps/core/navigation.py`)
+`LIVE_LINKS["8.7"]` maps all 6 standard menu leaves to their views:
+- Geographic & Named Account Territories → `sales:territory_rule_list`
+- Quota Allocation & Distribution → `sales:quota_plan_list`
+- Account-to-Territory Assignment Rules → `sales:account_territory_assignment_list`
+- Territory Performance & Attainment → `sales:territory_performance`
+- Territory Balancing & Re-alignment → `sales:territory_rebalance_preview`
+- Territory Rep Assignment & Coverage → `sales:territory_member_list`
+
+### 8.7 migrations & seeder
+- Migrations: `apps/sales/migrations/0014_territoryrule_quotaplan_territorymember_and_more.py` and `0015_alter_accountterritoryassignment_options_and_more.py`.
+- Seeder: `python manage.py seed_sales` idempotently seeds sample rules, account assignments, rep assignments, quota plans, and board data for ACME and GLOBEX tenants.
+
+### 8.7 tests
+Full 4-lane test suite in `apps/sales/tests/`:
+- `test_territoryquotamanagement_models.py` (14 tests)
+- `test_territoryquotamanagement_forms.py` (8 tests)
+- `test_territoryquotamanagement_views.py` (10 tests)
+- `test_territoryquotamanagement_security.py` (6 tests)
+All 38 sub-module tests pass, and the full 1070-test sales suite is 100% green.
+
