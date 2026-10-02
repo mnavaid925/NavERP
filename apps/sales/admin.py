@@ -37,6 +37,13 @@ from .models import (
     AccountTerritoryAssignment,
     TerritoryMember,
     QuotaPlan,
+    # 8.8 Sales Activity & Task Management
+    ActivityType,
+    ActivityLog,
+    TaskTemplate,
+    TaskTemplateStep,
+    SalesPlanCycle,
+    ActivityGoal,
 )
 
 
@@ -585,3 +592,78 @@ class QuotaPlanAdmin(admin.ModelAdmin):
 
 
 
+
+
+# 8.8 Sales Activity & Task Management — all six models registered; the three boards get no admin.
+#
+# OWNERSHIP (L36/L37): there is no `Activity`/`Task`/`Meeting`/`EmailLog` admin here, because 8.8
+# declares no such master. `ActivityLog.communication_log` is a raw-id FK to CRM 1.5's
+# `CommunicationLog` and `ActivityLog.account` is a raw-id FK to `core.Party` — neither is edited
+# from this admin, and the frozen evidence columns are readonly so they cannot be typed either.
+@admin.register(ActivityType)
+class ActivityTypeAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "kind", "default_outcome", "default_duration_seconds", "default_priority", "requires_opportunity", "is_billable", "is_active", "tenant")
+    list_filter = ("kind", "default_priority", "requires_opportunity", "is_billable", "is_active", "tenant")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("tenant",)
+
+
+@admin.register(ActivityLog)
+class ActivityLogAdmin(admin.ModelAdmin):
+    list_display = ("number", "communication_log", "activity_type", "owner", "opportunity", "account", "territory", "capture_source", "occurred_on", "tenant")
+    list_filter = ("capture_source", "is_auto_captured", "activity_type", "territory", "tenant")
+    search_fields = ("number", "next_best_action", "communication_log__number")
+    # The seven frozen-evidence columns are readonly HERE as well as `editable=False` on the model.
+    # Two layers, because an admin is a second authoring surface: an admin who can hand-type
+    # "open_count = 47" bypasses the whole point of L20/L22, which is that a rep cannot.
+    readonly_fields = (
+        "tenant", "number", "occurred_on", "planned_minutes",
+        "opened_at", "open_count", "clicked_at", "click_count", "replied_at",
+        "created_at", "updated_at",
+    )
+    list_select_related = ("communication_log", "activity_type", "owner", "opportunity", "account", "territory", "tenant")
+    raw_id_fields = ("communication_log", "activity_type", "owner", "opportunity", "account", "territory")
+
+
+@admin.register(TaskTemplate)
+class TaskTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "cadence", "target_type", "task_type", "priority", "territory", "owner", "is_active", "last_generated_on", "tenant")
+    list_filter = ("cadence", "target_type", "task_type", "priority", "is_active", "tenant")
+    search_fields = ("number", "name", "description")
+    # `last_generated_on` / `generated_count` are the FROZEN RECEIPT. Readonly in admin too: the
+    # generate verb is their only writer, inside the transaction that creates the tasks.
+    readonly_fields = ("tenant", "number", "last_generated_on", "generated_count", "created_at", "updated_at")
+    list_select_related = ("activity_type", "territory", "owner", "tenant")
+    raw_id_fields = ("activity_type", "territory", "owner")
+
+
+@admin.register(TaskTemplateStep)
+class TaskTemplateStepAdmin(admin.ModelAdmin):
+    list_display = ("template", "order", "title", "task_type", "priority", "offset_days", "tenant")
+    list_filter = ("task_type", "priority", "tenant")
+    search_fields = ("title", "instructions")
+    readonly_fields = ("tenant", "created_at")
+    list_select_related = ("template", "tenant")
+    raw_id_fields = ("template",)
+
+
+@admin.register(SalesPlanCycle)
+class SalesPlanCycleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "cadence", "period_start", "period_end", "owner", "territory", "status", "suggestion_mode", "closed_at", "tenant")
+    list_filter = ("cadence", "status", "suggestion_mode", "tenant")
+    search_fields = ("number", "name", "notes")
+    # `closed_at` is SYSTEM-SET on the transition. Readonly here so an admin cannot type a closing
+    # date either — the same rule that keeps it off the ModelForm (L22).
+    readonly_fields = ("tenant", "number", "closed_at", "created_at", "updated_at")
+    list_select_related = ("owner", "territory", "tenant")
+    raw_id_fields = ("owner", "territory")
+
+
+@admin.register(ActivityGoal)
+class ActivityGoalAdmin(admin.ModelAdmin):
+    list_display = ("cycle", "metric", "target_count", "tenant")
+    list_filter = ("metric", "tenant")
+    readonly_fields = ("tenant", "created_at")
+    list_select_related = ("cycle", "tenant")
+    raw_id_fields = ("cycle",)
