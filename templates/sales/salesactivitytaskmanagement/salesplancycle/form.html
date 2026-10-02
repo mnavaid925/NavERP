@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% comment %}
+  Create / edit one SalesPlanCycle. ONE template serves both, driven by `is_edit`.
+
+  The period-end help text is REWRITTEN PER CADENCE rather than stated once. A single static sentence
+  is wrong for half the cadences — telling someone a weekly plan must end six days after it starts,
+  on a form where they just picked "Daily", is worse than saying nothing (the L13/L40 family).
+
+  What the server decides, printed rather than implied:
+
+    * G11 — the end date must not fall before the start.
+    * G12 — a DAILY plan must have its end on its start. Both dates are individually valid on every
+      call and the PAIR is a category error; this is the textbook case of checking that a feature's
+      preconditions can be true at the same time.
+    * `closed_at` is `editable=False` SYSTEM-SET: stamped on the transition into closed and cleared
+      on re-open. A period-closing timestamp is an accounting fact, not a field a user types.
+    * The actual counts are NOT on this form and are NOT stored anywhere — they are counted from
+      logged activities when the page is read (L37).
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Plan Cycle{% else %}New Plan Cycle{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Plan Cycle{% else %}New Plan Cycle{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% if is_edit %}{% url 'sales:sales_plan_cycle_detail' obj.pk %}{% else %}{% url 'sales:sales_plan_cycle_list' %}{% endif %}">Plan Cycles</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:sales_plan_cycle_detail' obj.pk %}{% else %}{% url 'sales:sales_plan_cycle_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      A plan cycle is one day or one week with activity goals on it. Add the goals on the cycle's own
+      page &mdash; the actuals are counted from logged activities as you read, never stored, so they
+      cannot drift.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save plan{% else %}Create plan{% endif %}</button>
+        <a href="{% if is_edit %}{% url 'sales:sales_plan_cycle_detail' obj.pk %}{% else %}{% url 'sales:sales_plan_cycle_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>What the server decides</h2></div>
+  <div class="card-body">
+    <table class="table">
+      <thead><tr><th>Field</th><th>Why it is not on this form</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-600">Number (SPC-)</td><td>System-assigned and sequential, allocated by <code>next_number</code>.</td></tr>
+        <tr><td class="fw-600">Closed at</td><td>System-set. Stamped when the cycle closes and cleared when it re-opens, following the same shape as a CRM task's completion stamp. The person who types a closing date is the person the date is meant to hold them to.</td></tr>
+        <tr><td class="fw-600">Actuals and attainment</td><td>Never stored. Counted from logged activities and CRM tasks inside the window when the page is read, so a deleted task or a backdated activity cannot leave a stale figure reading as authoritative.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
