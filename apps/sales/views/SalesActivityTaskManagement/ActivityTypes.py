@@ -59,7 +59,7 @@ def activity_type_list(request):
     )
     return crud_list(
         request,
-        _type_queryset(request).annotate(_usage=Count("activity_logs")),
+        _type_queryset(request).annotate(usage_total=Count("activity_logs")).order_by("display_order", "name", "pk"),
         LIST_TEMPLATE,
         search_fields=["number", "name", "description"],
         # Declared HERE, not just handed to the template — L54's third rule.
