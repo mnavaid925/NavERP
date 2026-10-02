@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% comment %}
+  8.8 Next Best Actions board. Serves bullet 5.
+
+  THESE ARE RULES, NOT A MODEL, AND THE PAGE SAYS SO. Every row comes from one of the five named
+  rules printed under the table, each of which is a fixed, deterministic test over tables that
+  already exist. No language model is involved and nothing is called externally — which is why
+  `SalesPlanCycle.suggestion_mode` defaults to "Manual" and why an "AI-suggested" label would be a
+  lie on this page.
+
+  Ordering is `(-weight, due_date, pk)` applied once in the view, with an explicit pk tie-break: an
+  unordered rank would reshuffle equal-weight suggestions on every request (L61).
+
+  `truncated` is published, not hidden — a capped list that reads as a complete one is L40's failure.
+{% endcomment %}
+{% block title %}Next Best Actions{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Next Best Actions</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Activity &amp; Tasks</span><span class="sep">&rsaquo;</span><span>Next Best Actions</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:sales_activity_plan' %}" class="btn btn-outline"><i data-lucide="calendar-days"></i> My Plan</a>
+    <a href="{% url 'sales:activity_log_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Log activity</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      These suggestions come from five fixed rules over your own records &mdash; not from a language
+      model, and nothing here leaves this workspace. Each row names the rule that produced it, so you
+      can see exactly why it was suggested.
+    </p>
+    {% if truncated %}
+    <p class="text-muted" style="color:var(--color-warn);">
+      <i data-lucide="alert-triangle"></i>
+      More than {{ caps.suggestions }} suggestions qualified. This is the cap, not the total &mdash;
+      narrow the list by working the top rows first.
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>{{ suggestions|length }} suggestion{{ suggestions|length|pluralize }}</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Rule</th><th>Suggested action</th><th>Why</th><th>Due</th></tr></thead>
+      <tbody>
+        {% for s in suggestions %}
+        <tr>
+          <td><span class="badge {% if s.rule == 'overdue_task' %}badge-red{% elif s.rule == 'stale_opportunity' %}badge-amber{% elif s.rule == 'opened_not_clicked' %}badge-info{% elif s.rule == 'event_prep' %}badge-slate{% else %}badge-muted{% endif %}">{{ s.rule|replace:"_"," " }}</span></td>
+          <td class="fw-600">{{ s.title }}</td>
+          <td class="text-muted">{{ s.detail }}</td>
+          <td>{% if s.due_date %}{{ s.due_date|date:"M d, Y" }}{% else %}&mdash;{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4"><div class="empty-state"><i data-lucide="sparkles"></i><h3>Nothing to suggest</h3><p>No task is overdue, no open deal has gone quiet, no email is sitting unclicked, and nothing booked needs preparing. That is a good day, not a broken board.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <p class="text-muted">Ranked at {{ suggested_at|date:"M d, Y H:i" }}. Showing at most {{ caps.suggestions }}.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>The rules behind these</h2></div>
+  <div class="card-body">
+    <table class="table">
+      <thead><tr><th>Rule</th><th>What it checks</th></tr></thead>
+      <tbody>
+        {% for name, description in rules %}
+        <tr><td class="fw-600">{{ name|replace:"_"," " }}</td><td class="text-muted">{{ description }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
