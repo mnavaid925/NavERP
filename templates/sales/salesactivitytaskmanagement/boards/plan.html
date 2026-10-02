@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% comment %}
+  8.8 "My Plan" board — goals against DERIVED actuals, open tasks, booked events, logged activity.
+
+  Serves NavERP bullets 3 and 5 together. Bullet 3 (calendar & meeting scheduling) is served by
+  LINKING to CRM 1.5's CalendarEvent rather than rebuilding a calendar: `sync_source` already covers
+  Google/Outlook/iCal and `public_token` already is the login-free invite/RSVP surface (L36).
+
+  Every cap is PUBLISHED beside the figure it limits, because a silently truncated panel reads as a
+  complete one — which is the failure L40 was written about. `caps` comes from the view's `_caps()`.
+
+  `cycle` may be None when no plan exists yet. The page says so rather than rendering an empty board
+  that looks like a rep who logged nothing.
+{% endcomment %}
+{% block title %}My Plan{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">My Plan</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Activity &amp; Tasks</span><span class="sep">&rsaquo;</span><span>My Plan</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:sales_next_best_actions' %}" class="btn btn-outline"><i data-lucide="sparkles"></i> Next Best Actions</a>
+    <a href="{% url 'sales:sales_plan_cycle_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New plan</a>
+  </div>
+</div>
+
+{% if cycle %}
+<div class="card">
+  <div class="card-header">
+    <h2>{{ cycle.name }}</h2>
+    <form method="get" class="filter-bar" style="padding:0; border:0; background:none;">
+      <label class="form-label" for="plan-cycle">Plan cycle</label>
+      <select id="plan-cycle" name="cycle" class="form-select" onchange="this.form.submit();">
+        <option value="">The current plan</option>
+        {% for c in cycles %}
+        <option value="{{ c.pk }}"{% if c.pk == cycle.pk %} selected{% endif %}>{{ c.name }} &middot; {{ c.period_start|date:"M d" }}&ndash;{{ c.period_end|date:"M d" }}</option>
+        {% endfor %}
+      </select>
+      <noscript><button class="btn btn-outline" type="submit">Switch</button></noscript>
+    </form>
+  </div>
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Window</dt><dd>{{ cycle.period_start|date:"M d, Y" }} &ndash; {{ cycle.period_end|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Cadence</dt><dd>{{ cycle.get_cadence_display }}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if cycle.owner %}{{ cycle.owner.username }}{% else %}Team plan{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{{ cycle.get_status_display }}</dd></div>
+      <div class="detail-item"><dt>Today</dt><dd>{{ today|date:"M d, Y" }}</dd></div>
+    </dl>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Goals against actuals</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Metric</th><th>Target</th><th>Actual</th><th>Attainment</th></tr></thead>
+      <tbody>
+        {% for row in progress_rows %}
+        <tr>
+          <td class="fw-600">{{ row.goal.get_metric_display }}</td>
+          <td>{{ row.target }}</td>
+          <td>{{ row.actual }}</td>
+          <td style="min-width:180px;">
+            {% if row.percent is None %}
+              <span class="text-muted">No target set</span>
+            {% else %}
+              <div class="progress"><div class="progress-bar" style="width: {{ row.percent }}%;"></div></div>
+              <div class="text-muted">{{ row.percent }}%</div>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4"><p class="text-muted" style="padding:1rem;">No goals set on this cycle. Add them on the cycle's own page.</p></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <p class="text-muted">
+      Actuals are counted from logged activities and CRM tasks inside the window <em>as this page is
+      read</em>. Nothing is stored, so a deleted task or a backdated activity cannot leave a stale
+      figure behind reading as authoritative.
+    </p>
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div class="card-body">
+    <div class="empty-state">
+      <i data-lucide="calendar-range"></i>
+      <h3>No plan cycle covers today</h3>
+      <p>There is no active plan for today, so there are no goals to measure against. Create one and set its activity goals &mdash; calls made, emails sent, meetings held.</p>
+      <p><a href="{% url 'sales:sales_plan_cycle_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New plan cycle</a></p>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><h2>Open tasks{% if cycle %} in this window{% endif %}</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Subject</th><th>Due</th><th>Priority</th></tr></thead>
+        <tbody>
+          {% for task in open_tasks %}
+          <tr>
+            <td>{% if task.is_overdue %}<span class="badge badge-red">Overdue</span> {% endif %}{{ task.subject }}</td>
+            <td>{{ task.due_date|date:"M d, Y"|default:"&mdash;" }}</td>
+            <td>{{ task.get_priority_display }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3"><p class="text-muted" style="padding:1rem;">No open tasks due in this window.</p></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body"><p class="text-muted">Showing at most {{ caps.tasks }} tasks.</p></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Booked next</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Event</th><th>Starts</th><th>Account</th></tr></thead>
+        <tbody>
+          {% for event in upcoming_events %}
+          <tr>
+            <td>{{ event.title }}</td>
+            <td>{{ event.start|date:"M d, Y H:i" }}</td>
+            <td>{% if event.party %}{{ event.party.name|truncatechars:24 }}{% else %}&mdash;{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3"><p class="text-muted" style="padding:1rem;">Nothing is booked in the next {{ caps.stale_activity_days }} days.</p></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">
+        Showing at most {{ caps.events }} events. These are CRM 1.5 calendar events; invites and RSVPs
+        live on the CRM record, and {{ caps.events }} is the board's cap &mdash; not the total in your
+        calendar.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Logged activity{% if cycle %} in this window{% endif %}</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Activity</th><th>Channel</th><th>Date</th><th>Opportunity</th><th>Engagement</th></tr></thead>
+      <tbody>
+        {% for log in logged %}
+        <tr>
+          <td><a href="{% url 'sales:activity_log_detail' log.pk %}">{{ log.number }}</a></td>
+          <td>{{ log.channel|title }}</td>
+          <td>{{ log.occurred_on|date:"M d, Y" }}</td>
+          <td>{% if log.opportunity %}{{ log.opportunity.name|truncatechars:28 }}{% else %}&mdash;{% endif %}</td>
+          <td>{% if log.engagement_level == "replied" %}<span class="badge badge-green">Replied</span>{% elif log.engagement_level == "clicked" %}<span class="badge badge-amber">Clicked</span>{% elif log.engagement_level == "opened" %}<span class="badge badge-info">Opened</span>{% else %}<span class="badge badge-muted">None</span>{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5"><div class="empty-state"><i data-lucide="list-checks"></i><h3>Nothing logged</h3><p>No sales activity has been attributed inside this window. The plan counts what is on the sales activity register, not what is on the CRM interaction log.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body"><p class="text-muted">Showing at most {{ caps.activities }} activities.</p></div>
+</div>
+{% endblock %}
