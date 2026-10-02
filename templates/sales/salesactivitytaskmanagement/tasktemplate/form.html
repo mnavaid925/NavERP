@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% comment %}
+  Create / edit one TaskTemplate. ONE template serves both, driven by `is_edit`.
+
+  The server decides, and says so rather than implying it:
+
+    * `territory` switches OFF unless the target type is Territory (G9), and becomes REQUIRED when
+      it is (G8). Both directions are enforced, because "every account in a territory" is
+      unreachable without the territory, and "every open opportunity" plus a territory is ambiguous
+      about which of the two narrows the set. Disabled means Django reads the field from the
+      instance, never the POST, so a crafted request cannot attach one anyway.
+    * `cadence_interval` locks at 1 for a One-Off (G6) — "one-off" and "every seven" are two valid
+      fields describing a contradiction.
+    * The task-type and priority lists are IMPORTED from CRM 1.5's CrmTask, never re-spelled here.
+    * `last_generated_on` / `generated_count` are `editable=False` FROZEN RECEIPT. The Run action on
+      the template's own page is their only writer, inside the transaction that creates the tasks —
+      a template's page must not be able to claim a run it did not have.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Task Template{% else %}New Task Template{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Task Template{% else %}New Task Template{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% if is_edit %}{% url 'sales:task_template_detail' obj.pk %}{% else %}{% url 'sales:task_template_list' %}{% endif %}">Task Templates</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:task_template_detail' obj.pk %}{% else %}{% url 'sales:task_template_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      A template describes a motion you repeat. Add steps on its own page once it exists, then use
+      the <strong>Run</strong> action there to create the dated tasks &mdash; it is idempotent, so
+      running it twice on the same day creates nothing the second time.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save template{% else %}Create template{% endif %}</button>
+        <a href="{% if is_edit %}{% url 'sales:task_template_detail' obj.pk %}{% else %}{% url 'sales:task_template_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>What the server decides</h2></div>
+  <div class="card-body">
+    <table class="table">
+      <thead><tr><th>Field</th><th>Why it is not on this form</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-600">Number (TTPL-)</td><td>System-assigned and sequential, allocated by <code>next_number</code>.</td></tr>
+        <tr><td class="fw-600">Last generated / generated count</td><td>Frozen receipt, written only by the Run verb inside the transaction that creates the tasks. A receipt the person it describes can retype is not a receipt.</td></tr>
+        <tr><td class="fw-600">The tasks themselves</td><td>Created as <code>crm.CrmTask</code> rows &mdash; CRM 1.5's table. 8.8 generates into it and declares no second task master (L36).</td></tr>
+        <tr><td class="fw-600">Steps</td><td>Added on the template's own page. A playbook with no steps would generate nothing, so the Run action refuses it rather than reporting a successful run of zero tasks.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
