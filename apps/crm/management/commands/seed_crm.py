@@ -740,9 +740,17 @@ class Command(BaseCommand):
         """Idempotently seed 1.5 Activity & Communication data — a recurring task + its next
         spawned occurrence, calendar events with attendees (incl. RSVPs), and a unified
         call/email/note/SMS communication history. Reuses the tenant's owner / Party /
-        Opportunity. Guard: skip if a CalendarEvent already exists for the tenant."""
-        if CalendarEvent.objects.filter(tenant=tenant).exists():
-            return
+        Opportunity.
+
+        GUARD: each creation block below is guarded INDIVIDUALLY, on the entity it creates. A
+        single method-level predicate cannot do this job. The previous version guarded all four
+        things on ``CalendarEvent.objects.filter(tenant=tenant).exists()``, so a tenant that already
+        had ONE calendar event permanently skipped its tasks and its ENTIRE communication history,
+        silently and forever. That matters well beyond CRM: NavERP 8.8 attributes
+        ``crm.CommunicationLog`` and all three of its boards read these tables, so with zero
+        interaction rows the whole sub-module renders empty — a figure that is structurally zero
+        rather than wrong, which reads as a broken feature. Per-block guards keep idempotency just
+        as strictly: no block ever writes a second copy of its own rows."""
         owner = (User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
                  or User.objects.filter(tenant=tenant).first())
         if owner is None:
@@ -757,51 +765,55 @@ class Command(BaseCommand):
 
         # --- Recurring task (weekly) + a manually-created "next occurrence" (demo of the series).
         # Both start status="open", so CrmTask.save() does NOT trigger the spawn-on-done path.
-        parent_task = CrmTask.objects.create(
-            tenant=tenant, subject="Weekly check-in call", type="call", priority="medium",
-            status="open", due_date=today + td(days=7), owner=owner, party=person,
-            related_opportunity=opp, recurrence="weekly", recurrence_interval=1,
-            recurrence_until=today + td(days=90),
-            description="Recurring weekly touch-base with the account.")
-        CrmTask.objects.create(
-            tenant=tenant, subject="Weekly check-in call", type="call", priority="medium",
-            status="open", due_date=today + td(days=14), owner=owner, party=person,
-            related_opportunity=opp, recurrence="weekly", recurrence_interval=1,
-            recurrence_until=today + td(days=90), recurrence_parent=parent_task,
-            description="Recurring weekly touch-base with the account.")
+        if not CrmTask.objects.filter(tenant=tenant).exists():
+            parent_task = CrmTask.objects.create(
+                tenant=tenant, subject="Weekly check-in call", type="call", priority="medium",
+                status="open", due_date=today + td(days=7), owner=owner, party=person,
+                related_opportunity=opp, recurrence="weekly", recurrence_interval=1,
+                recurrence_until=today + td(days=90),
+                description="Recurring weekly touch-base with the account.")
+            CrmTask.objects.create(
+                tenant=tenant, subject="Weekly check-in call", type="call", priority="medium",
+                status="open", due_date=today + td(days=14), owner=owner, party=person,
+                related_opportunity=opp, recurrence="weekly", recurrence_interval=1,
+                recurrence_until=today + td(days=90), recurrence_parent=parent_task,
+                description="Recurring weekly touch-base with the account.")
 
         # --- Calendar events (varied types/statuses) + attendees with RSVPs.
-        events_spec = [
-            ("Kickoff Meeting", "meeting", "confirmed", now + td(days=2), 60, org),
-            ("Product Demo", "demo", "scheduled", now + td(days=7), 45, org),
-            ("Quarterly Business Review", "meeting", "completed", now - td(days=14), 90, org),
-            ("Follow-up Call", "call", "scheduled", now + td(days=3), 30, person),
-        ]
-        first_event = None
-        for title, etype, status, start, dur, evt_party in events_spec:
-            ev = CalendarEvent.objects.create(
-                tenant=tenant, title=f"{title} — {org_name}", event_type=etype, status=status,
-                start=start, end=start + td(minutes=dur), location="Online",
-                video_url="https://meet.example.com/naverp-demo", sync_source="manual",
-                reminder_minutes=15, owner=owner, party=evt_party, related_opportunity=opp,
-                description=f"{title} with {org_name}.")
-            first_event = first_event or ev
-            EventAttendee.objects.create(
-                tenant=tenant, event=ev, party=None,
-                name=(owner.get_full_name() or owner.username),
-                email=(owner.email or "rep@naverp.example"),
-                rsvp_status="accepted", is_organizer=True)
-            EventAttendee.objects.create(
-                tenant=tenant, event=ev, party=org, name=org_name,
-                email="contact@example.com",
-                rsvp_status="tentative" if status == "scheduled" else "accepted")
-        # A third (no-response) attendee on the first event.
-        if first_event is not None and person is not None:
-            EventAttendee.objects.create(
-                tenant=tenant, event=first_event, party=person, name=person.name,
-                email="contact2@example.com", rsvp_status="no_response")
+        if not CalendarEvent.objects.filter(tenant=tenant).exists():
+            events_spec = [
+                ("Kickoff Meeting", "meeting", "confirmed", now + td(days=2), 60, org),
+                ("Product Demo", "demo", "scheduled", now + td(days=7), 45, org),
+                ("Quarterly Business Review", "meeting", "completed", now - td(days=14), 90, org),
+                ("Follow-up Call", "call", "scheduled", now + td(days=3), 30, person),
+            ]
+            first_event = None
+            for title, etype, status, start, dur, evt_party in events_spec:
+                ev = CalendarEvent.objects.create(
+                    tenant=tenant, title=f"{title} — {org_name}", event_type=etype, status=status,
+                    start=start, end=start + td(minutes=dur), location="Online",
+                    video_url="https://meet.example.com/naverp-demo", sync_source="manual",
+                    reminder_minutes=15, owner=owner, party=evt_party, related_opportunity=opp,
+                    description=f"{title} with {org_name}.")
+                first_event = first_event or ev
+                EventAttendee.objects.create(
+                    tenant=tenant, event=ev, party=None,
+                    name=(owner.get_full_name() or owner.username),
+                    email=(owner.email or "rep@naverp.example"),
+                    rsvp_status="accepted", is_organizer=True)
+                EventAttendee.objects.create(
+                    tenant=tenant, event=ev, party=org, name=org_name,
+                    email="contact@example.com",
+                    rsvp_status="tentative" if status == "scheduled" else "accepted")
+            # A third (no-response) attendee on the first event.
+            if first_event is not None and person is not None:
+                EventAttendee.objects.create(
+                    tenant=tenant, event=first_event, party=person, name=person.name,
+                    email="contact2@example.com", rsvp_status="no_response")
 
         # --- Communication history (calls w/ duration+outcome, BCC-synced emails, a note, an SMS).
+        # Guarded on its OWN entity: this is the block NavERP 8.8 attributes, and under the old
+        # blanket guard it was the one most often silently skipped.
         comms = [
             ("call", "outbound", "Cold call — intro", "", 243, "connected", "voip", now - td(days=5)),
             ("call", "outbound", "Follow-up call", "", None, "voicemail", "voip", now - td(days=3)),
@@ -814,11 +826,12 @@ class Command(BaseCommand):
             ("sms", "outbound", "Reminder: demo tomorrow", "See you at 2pm!",
              None, "", "manual", now - td(days=6)),
         ]
-        for channel, direction, subject, body, dur, outcome, via, occurred in comms:
-            CommunicationLog.objects.create(
-                tenant=tenant, channel=channel, direction=direction, subject=subject, body=body,
-                party=org, owner=owner, related_opportunity=opp, occurred_at=occurred,
-                duration_seconds=dur, outcome=outcome, logged_via=via)
+        if not CommunicationLog.objects.filter(tenant=tenant).exists():
+            for channel, direction, subject, body, dur, outcome, via, occurred in comms:
+                CommunicationLog.objects.create(
+                    tenant=tenant, channel=channel, direction=direction, subject=subject, body=body,
+                    party=org, owner=owner, related_opportunity=opp, occurred_at=occurred,
+                    duration_seconds=dur, outcome=outcome, logged_via=via)
 
         self.stdout.write(self.style.SUCCESS(
             f"{tenant.name}: seeded CRM 1.5 activity & communication data"))
