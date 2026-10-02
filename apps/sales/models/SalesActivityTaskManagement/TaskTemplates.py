@@ -33,7 +33,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from apps.crm.models import CrmTask
-from apps.sales.models._base import TenantEventOwned, TenantNumbered
+from apps.sales.models._base import TenantEventOwned, TenantNumbered, settings
 
 #: The cadences a playbook can repeat on. `biweekly` is spelled out rather than left as an
 #: `interval=2` special case because "every two weeks" and "twice a week" are different instructions
