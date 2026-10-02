@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% comment %}
+  8.8 Activity types — the tenant's configurable activity-type catalogue.
+
+  An ActivityType does NOT own the interaction. `crm.CommunicationLog` (CRM 1.5) records the call,
+  the email and the meeting; this catalogue says which KIND of activity it was and what defaults a
+  rep should not retype. `kind` and `default_outcome` are the CRM 1.5 vocabularies IMPORTED, not
+  copied (L36) — there is no second channel list anywhere in 8.8.
+
+  ENUM filter selection is reflected from the ECHO keys the view passes (`kind`, `active`); every
+  control rendered here is a control the view actually APPLIES — they are declared in
+  `crud_list`'s `filters` spec, not merely handed to the template (L54's third rule).
+
+  Only badge-green/amber/info/muted/red/slate exist in theme.css; badge-success/warning/danger do NOT
+  and render unstyled (L33). Every badge below keys on the EXACT choice value with an
+  {% else %} get_<field>_display fallback.
+
+  Delete is a POST form with a csrf token and a confirm naming {{ obj.number }} — the SYSTEM-assigned
+  ATY document number, never free text an author typed. The server refuses the delete outright when
+  history still points at the type, and says so.
+{% endcomment %}
+{% block title %}Activity Types{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Activity Types</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Activity &amp; Tasks</span><span class="sep">&rsaquo;</span><span>Types</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:activity_log_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Sales Activity</a>
+    <a href="{% url 'sales:activity_type_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New type</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total types</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="archive"></i></div><div class="stat-value">{{ stats.retired }}</div><div class="stat-label">Retired</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="unlink"></i></div><div class="stat-value">{{ stats.unused }}</div><div class="stat-label">Never used</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <label class="form-label" for="aty-search">Search</label>
+        <input id="aty-search" name="q" value="{{ q }}" class="form-input" placeholder="Type number, name, or description">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="aty-kind">Channel</label>
+        <select id="aty-kind" name="kind" class="form-select">
+          <option value="">All channels</option>
+          {% for value, label in kind_choices %}<option value="{{ value }}"{% if request.GET.kind == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="aty-priority">Default priority</label>
+        <select id="aty-priority" name="default_priority" class="form-select">
+          <option value="">Any priority</option>
+          {% for value, label in priority_choices %}<option value="{{ value }}"{% if request.GET.default_priority == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="aty-active">State</label>
+        <select id="aty-active" name="active" class="form-select">
+          <option value="">Any state</option>
+          {% for value, label in active_choices %}<option value="{{ value }}"{% if request.GET.active == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:activity_type_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Type catalogue</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Type</th><th>Channel</th><th>Default outcome</th><th>Default length</th><th>Default priority</th><th>Rules</th><th>Uses</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td>
+            <a href="{% url 'sales:activity_type_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            <div class="text-muted">{{ obj.name }}</div>
+          </td>
+          <td>{% if obj.kind == "call" %}<span class="badge badge-green">{{ obj.get_kind_display }}</span>{% elif obj.kind == "email" %}<span class="badge badge-info">{{ obj.get_kind_display }}</span>{% elif obj.kind == "meeting" %}<span class="badge badge-amber">{{ obj.get_kind_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_kind_display }}</span>{% endif %}</td>
+          <td>{% if obj.default_outcome %}{{ obj.get_default_outcome_display }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td>{% if obj.default_duration_seconds %}{{ obj.default_duration_minutes }} min{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td>{% if obj.default_priority == "high" %}<span class="badge badge-red">{{ obj.get_default_priority_display }}</span>{% elif obj.default_priority == "medium" %}<span class="badge badge-amber">{{ obj.get_default_priority_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_default_priority_display }}</span>{% endif %}</td>
+          <td>
+            {% if obj.requires_opportunity %}<span class="badge badge-amber">Needs a deal</span>{% endif %}
+            {% if obj.is_billable %}<span class="badge badge-info">Billable</span>{% endif %}
+            {% if not obj.requires_opportunity and not obj.is_billable %}<span class="text-muted">&mdash;</span>{% endif %}
+          </td>
+          <td>{{ obj._usage }} activit{{ obj._usage|pluralize:"y,ies" }}</td>
+          <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Retired</span>{% endif %}</td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:activity_type_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'sales:activity_type_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'sales:activity_type_delete' obj.pk %}" onsubmit="return confirm('Delete activity type {{ obj.number }}? Types with logged activity cannot be deleted — retire them instead.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9"><div class="empty-state"><i data-lucide="tags"></i><h3>No activity types</h3><p>Sales activities will still log against the CRM's five built-in channels, but there is no catalogue to pick a house vocabulary from. Add one to get started.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
