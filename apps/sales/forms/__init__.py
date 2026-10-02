@@ -46,6 +46,17 @@ from .TerritoryQuotaManagement import (
     TerritoryMemberForm,
     TerritoryRuleForm,
 )
+# 8.8 Sales Activity & Task Management. These forms ATTRIBUTE an existing crm.CommunicationLog and
+# author playbooks/plans — none of them edits a CRM 1.5 task or calendar record (L36/L37 ruling; see
+# the models package docstring for the full statement).
+from .SalesActivityTaskManagement import (
+    ActivityGoalForm,
+    ActivityLogForm,
+    ActivityTypeForm,
+    SalesPlanCycleForm,
+    TaskTemplateForm,
+    TaskTemplateStepForm,
+)
 
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
@@ -70,6 +81,10 @@ __all__ = [
     # 8.7 Territory & Quota Management
     "TerritoryRuleForm", "AccountTerritoryAssignmentForm",
     "TerritoryMemberForm", "QuotaPlanForm",
+    # 8.8 Sales Activity & Task Management
+    "ActivityTypeForm", "ActivityLogForm",
+    "TaskTemplateForm", "TaskTemplateStepForm",
+    "SalesPlanCycleForm", "ActivityGoalForm",
 ]
 
 
