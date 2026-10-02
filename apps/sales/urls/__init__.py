@@ -25,6 +25,14 @@ from .QuoteProposalCPQ import urlpatterns as _quote_cpq
 from .OrderManagement import urlpatterns as _order_management
 # 8.7 Territory & Quota Management. Extends crm.Territory and crm.SalesQuota by FK.
 from .TerritoryQuotaManagement import urlpatterns as _territory_quota
+# 8.8 Sales Activity & Task Management. Extends the CRM 1.5 activity stack (crm.CommunicationLog /
+# crm.CrmTask / crm.CalendarEvent) by FK or by generating into it; declares no second activity, task
+# or calendar master.
+#
+# BOTH of the next two edits are required and neither is sufficient alone: the import here without
+# the `+ _sales_activity` concatenation below is a complete no-op that still leaves `manage.py check`
+# perfectly clean while every reverse() for these names raises NoReverseMatch (L54's second rule).
+from .SalesActivityTaskManagement import urlpatterns as _sales_activity
 
 app_name = "sales"
 
@@ -51,6 +59,8 @@ urlpatterns = [
     *_order_management,
     # 8.7 Territory & Quota Management.
     *_territory_quota,
+    # 8.8 Sales Activity & Task Management.
+    *_sales_activity,
     *_pipelines,
     *_teams,
     *_competitors,
