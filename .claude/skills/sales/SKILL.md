@@ -1,6 +1,6 @@
 ---
 name: sales
-description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, and 8.7 Territory & Quota Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
+description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, and 8.8 Sales Activity & Task Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
 ---
 
 # Sales Management System (Module 8)
@@ -604,3 +604,120 @@ Full 4-lane test suite in `apps/sales/tests/`:
 - `test_territoryquotamanagement_security.py` (6 tests)
 All 38 sub-module tests pass, and the full 1070-test sales suite is 100% green.
 
+## 8.8 Sales Activity & Task Management
+
+8.8 is the rep-facing activity layer: a configurable activity-type catalogue, the sales attribution of each logged interaction, recurring task playbooks that generate CRM tasks, email open/click/reply tracking, and day/week plans with activity goals and rule-based next-best-actions.
+
+### Ownership boundary & spine reuse — READ THIS BEFORE ADDING ANY MODEL HERE
+
+**8.8 EXTENDS the CRM 1.5 activity stack. It declares no second activity, task, or calendar master.**
+
+CRM 1.5 ("Activity & Communication Management", `LIVE_LINKS["1.5"]`) shipped first and is fully live. Its three models are the owners:
+
+| CRM 1.5 model | prefix | What 8.8 does with it |
+|---|---|---|
+| `crm.CommunicationLog` | `COM-` | `ActivityLog.communication_log` — **required 1:1 FK**. 8.8 holds **no** `channel`/`subject`/`body`/`direction`/`occurred_at`/`duration_seconds`/`outcome` of its own. |
+| `crm.CrmTask` | `TASK-` | `TaskTemplate` **generates** these rows. `task_type`/`priority` are IMPORTED from `CrmTask.TYPE_CHOICES`/`PRIORITY_CHOICES`. The existing single-task recurrence engine (`_spawn_next_occurrence`) is NOT re-implemented. |
+| `crm.CalendarEvent` + `EventAttendee` | `EVT-` | Read-only, by the plan board. `sync_source` (google/outlook/ical) and the login-free `public_token` invite/RSVP/`.ics` surface already exist and are **not** duplicated. |
+| `core.Activity` | — | Untouched. |
+| `core.Party` | — | `ActivityLog.account` FKs it (`kind="organization"`). |
+| `crm.Opportunity`, `crm.Territory` | — | FK'd for attribution and plan scoping. |
+
+**This is the most tempting L36 application in the project**, because 8.8's title and CRM 1.5's title are near-synonyms. **The module with "Activity" in its title does not get to re-declare the activity.**
+
+**A `class Activity`, `class Task`, `class Meeting`, `class Call` or `class EmailLog` with its own `channel`/`due_date`/`start`/`end` columns anywhere under `apps/sales/models/` is a bug, not a variant.** The four durable places this ruling is written down: this section, `apps/sales/models/SalesActivityTaskManagement/__init__.py`, the `LIVE_LINKS["8.8"]` comment in `apps/core/navigation.py`, and `.claude/tasks/contract-sales-8.8.md`.
+
+**Vocabulary is IMPORTED, never re-spelled** — the `ROUTING_OPERATORS` rule 8.7 followed against 8.1:
+
+- `ActivityType.KIND_CHOICES` <- `CommunicationLog.CHANNEL_CHOICES`
+- `ActivityType.OUTCOME_CHOICES` <- `CommunicationLog.OUTCOME_CHOICES`
+- `TaskTemplate.TASK_TYPE_CHOICES` <- `CrmTask.TYPE_CHOICES`
+- `TaskTemplate.PRIORITY_CHOICES` <- `CrmTask.PRIORITY_CHOICES`
+
+`ActivityLog.capture_source` deliberately mirrors `logged_via` with a *different* meaning (where the sales layer learned of it), which is what makes the `is_auto_captured` agreement guard a real two-field invariant.
+
+### 8.8 models
+
+All in `apps/sales/models/SalesActivityTaskManagement/`. Primaries inherit `TenantNumbered`; children inherit `TenantEventOwned`.
+
+1. `ActivityType` (`ATY-`) — `ActivityTypes.py`: the configurable type catalogue. `name`, `description`, `kind`, `default_outcome`, `default_duration_seconds` (0-86400), `default_priority`, `requires_opportunity`, `is_billable`, `is_active`, `display_order`. Unique `(tenant, name)`. **G1**: `default_outcome` is refused on any non-call kind.
+2. `ActivityLog` (`SAL-`) — `ActivityLogs.py`: the sales attribution + frozen email engagement. Required 1:1 `communication_log`; `activity_type` (**`PROTECT`** — retire, never delete), `owner`, `opportunity`, `account`, `territory`, `capture_source`, `is_auto_captured`, `next_best_action`, `next_best_action_due`. **FROZEN (`editable=False`)**: `occurred_on`, `planned_minutes`, `opened_at`, `open_count`, `clicked_at`, `click_count`, `replied_at`. **Derived, never stored**: the `engagement_level` property (replied > clicked > opened > none). `advance_email_engagement()` is **monotonic** — increments and first-stamps, never decrements or clears. **G3**: `is_auto_captured` must equal `capture_source in AUTO_CAPTURE_SOURCES`.
+3. `TaskTemplate` (`TTPL-`) — `TaskTemplates.py`: a repeating playbook that materialises `crm.CrmTask` rows. `name`, `description`, `task_type`, `priority`, `cadence` (`once/daily/weekly/biweekly/monthly/quarterly`), `cadence_interval` (1-12), `default_offset_days`, `target_type` (`opportunity/account/territory`), `activity_type`, `territory`, `owner`, `is_active`. **FROZEN receipt**: `last_generated_on`, `generated_count`. **G6** `once` implies interval 1. **G8/G9** `target_type="territory"` iff `territory` is set — enforced **both ways**. Child `TaskTemplateStep`: `order`, `title`, `instructions`, `task_type`, `priority`, `offset_days` (-365..+365, signed: -2 means two days *before* the anchor).
+4. `SalesPlanCycle` (`SPC-`) — `SalesPlanCycles.py`: a day or week with goals. `name`, `cadence` (`daily/weekly`), `period_start`, `period_end`, `owner`, `territory`, `status` (`draft/active/closed`), `suggestion_mode` (`manual/assisted/automatic`), `notes`. **FROZEN** `closed_at`, stamped on the transition into closed and **cleared** on re-open. Unique `(tenant, owner, period_start, cadence)`. **G11** `period_end >= period_start`. **G12** `cadence="daily"` implies `period_end == period_start` — the textbook L39 trap: both dates are individually valid, the pair is not. Child `ActivityGoal`: `metric` (`call/email/meeting/task/logged_total`), `target_count` (0-1000), unique `(cycle, metric)`.
+
+**Actuals are DERIVED, never stored (L37).** `ActivityGoal` holds `target_count` only. `SalesPlanCycle.actual_for(metric)` counts `ActivityLog` / `crm.CrmTask` in the window at read time, and `progress_for()` returns `(actual, target, percent)`.
+
+### 8.8 routes and views
+
+Namespace `sales`, under `/sales/`, from `apps/sales/urls/SalesActivityTaskManagement/`:
+
+- **Activity Types** (`activity-types/`): `activity_type_list`, `_create`, `_detail`, `_edit`, `_delete`. Delete refuses outright when history references the type.
+- **Sales Activity** (`activity-log/`): `activity_log_list`, `_create`, `_detail`, `_edit`, `_delete`, plus three **POST-only** engagement verbs: `_mark_opened`, `_mark_clicked`, `_mark_replied` — the ONLY writers of the frozen counters.
+- **Task Templates** (`task-templates/`): `task_template_list`, `_create`, `_detail`, `_edit`, `_delete`, `_generate` (**POST-only**; creates `crm.CrmTask` rows and stamps the receipt in ONE `transaction.atomic()`, and is **idempotent** per (step, target, due_date)).
+- **Plan Cycles** (`plan-cycles/`): `sales_plan_cycle_list`, `_create`, `_detail`, `_edit`, `_delete`, `_toggle` (POST), `sales_plan_goal_add` (POST), `sales_plan_goal_delete` (POST, takes `(pk, goal_pk)`).
+- **Read-only boards**: `sales_activity_plan` (`plan/`), `sales_next_best_actions` (`next-best-actions/`), `sales_email_engagement` (`email-engagement/`).
+
+**Route order is behaviour**: every `.../add/` literal precedes its `<int:pk>/`, and `plan-cycles/<int:pk>/goals/<int:goal_pk>/delete/` precedes `plan-cycles/<int:pk>/`.
+
+**The next-best-actions board is RULES, not a model.** Five named deterministic rules (overdue task, stale opportunity at 14 days, opened-not-clicked at 7 days, event prep at 3 days, own next step), ordered `(-weight, due_date, pk)`. Nothing calls an external service; the page says so, and `suggestion_mode` defaults to `"manual"` because calling a hard-coded conditional "AI" would be a lie.
+
+**Every board cap is named, published in a `caps` dict, and printed next to the figure it limits** — a silently truncated panel reads as a complete one (L40).
+
+### 8.8 templates
+
+`templates/sales/salesactivitytaskmanagement/`:
+
+- `activitytype/{list,detail,form}.html`
+- `activitylog/{list,detail,form}.html`
+- `tasktemplate/{list,detail,form}.html`
+- `salesplancycle/{list,detail,form}.html`
+- `boards/{plan,next_best_actions,email_engagement}.html`
+
+**Template traps this module already hit — do not reintroduce them:**
+
+- `badge-purple` does **not** exist in `theme.css`. Only `badge-green/red/amber/info/muted/slate` (L33).
+- A template variable may **not** start with an underscore — `{{ obj._usage }}` raises `TemplateSyntaxError`. Annotations are named `usage_total` / `step_total` / `goal_total`.
+- `replace`, `abs` and `times` are **not** Django built-in filters. An unknown filter is a template **parse** error that takes the whole page down. Rule labels and products are computed in the view instead.
+- `annotate()` drops `Meta.ordering`, so every annotated list needs an explicit `.order_by(...)` with a `pk` tie-break or pagination warns and can repeat rows.
+- FK filter selects compare with `|stringformat:"d"`; enum selects compare against the echoed GET key.
+
+### 8.8 sidebar wiring (`apps/core/navigation.py`)
+
+`LIVE_LINKS["8.8"]` maps the five NavERP.md bullets verbatim plus four extra leaves:
+
+- Activity Logging & Tracking -> `sales:activity_log_list`
+- Task & Follow-up Management -> `sales:task_template_list`
+- Calendar & Meeting Scheduling -> `sales:sales_activity_plan`
+- Email Integration & Tracking -> `sales:sales_email_engagement`
+- Daily/Weekly Sales Planning -> `sales:sales_plan_cycle_list`
+- Extras: Activity Types, My Plan (day/week board), Next Best Actions, Email Engagement Rollup.
+
+Bullet 3 is served by **linking to** CRM 1.5's `CalendarEvent`, which is why no 8.8 template builds a calendar.
+
+### 8.8 migrations & seeder
+
+- Migration: `apps/sales/migrations/0016_activitytype_activitylog_salesplancycle_activitygoal_and_more.py`.
+- Seeder: `python manage.py seed_sales` -> `_seed_activity_tasks()` seeds 3 activity types, attributes up to 6 **existing** `crm.CommunicationLog` rows (it never creates one), a 3-step fortnightly playbook, a weekly + a daily plan cycle with goals, and advances the frozen email counters through `advance_email_engagement()`.
+- **The seeder has NO blanket "already exists" guard**, deliberately. An earlier version returned early on `ActivityType.exists()`, which stranded any tenant seeded before its CRM interactions existed — its catalogue was written once and the attribution pass never ran again, even after `seed_crm` populated the interactions. Every write is individually `get_or_create`/existence-checked, so idempotency does not need the blanket guard.
+- **The seeder backdates `CommunicationLog.occurred_at`** via a queryset `.update()` (bypassing the `pre_save` hook — the only honest way), then re-reads the instance. Without it the 14-day stale sweep and the 7-day "opened but not clicked" rule find nothing and the boards read as broken.
+- **The seeder creates NO `CalendarEvent`.** CRM 1.5 owns and seeds that table; an earlier version creating one also tripped CRM's blanket seed guard.
+
+### 8.8 related CRM seeder fix
+
+`apps/crm/management/commands/seed_crm.py::_seed_activities` now guards **each** creation block on its own entity. It previously guarded all four things on `CalendarEvent.exists()`, so a tenant with one calendar event permanently skipped its tasks and its entire `CommunicationLog` history — which made every 8.8 board structurally zero.
+
+### 8.8 tests
+
+Four-lane suite in `apps/sales/tests/`, named `test_salesactivitytaskmanagement_*`:
+
+- `test_salesactivitytaskmanagement_models.py`
+- `test_salesactivitytaskmanagement_forms.py`
+- `test_salesactivitytaskmanagement_views.py`
+- `test_salesactivitytaskmanagement_security.py`
+
+### 8.8 common tasks
+
+- **Add a field to an activity type**: edit `ActivityTypes.py`, then add it to `ActivityTypeForm.Meta.fields`, then `makemigrations sales` (next number), then extend the seeder's `get_or_create` defaults.
+- **Add a new board**: add a view to `views/SalesActivityTaskManagement/Boards.py` with a named `MAX_BOARD_*` cap published through `_caps()`, add a template under `boards/`, add the route, and add a bullet or extra leaf in `LIVE_LINKS["8.8"]`. No model needed.
+- **Change the suggestion rules**: edit the five blocks in `sales_next_best_actions`, bump its weight, and add the label to `RULE_LABELS` — the template reads `rule_label`/`rule_badge` from there and must not derive them itself.
+- **Extend the frozen evidence**: a new counter needs `editable=False` on the model, an `advance_email_engagement()` branch, a POST verb, an admin `readonly_fields` entry, and an engagement property update — in all five places, or it becomes hand-editable through one of them (L20/L22).
