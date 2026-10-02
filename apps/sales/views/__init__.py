@@ -181,6 +181,41 @@ from .QuoteProposalCPQ import *
 from .OrderManagement import *
 # 8.7 Territory & Quota Management. Extends crm.Territory and crm.SalesQuota by FK.
 from .TerritoryQuotaManagement import *
+# 8.8 Sales Activity & Task Management. Extends the CRM 1.5 activity stack (crm.CommunicationLog /
+# crm.CrmTask / crm.CalendarEvent) by FK or by generating into it; declares no second activity, task
+# or calendar master. See the models package docstring for the full L36/L37 ruling.
+from .SalesActivityTaskManagement import (
+    activity_log_create,
+    activity_log_delete,
+    activity_log_detail,
+    activity_log_edit,
+    activity_log_list,
+    activity_log_mark_clicked,
+    activity_log_mark_opened,
+    activity_log_mark_replied,
+    activity_type_create,
+    activity_type_delete,
+    activity_type_detail,
+    activity_type_edit,
+    activity_type_list,
+    sales_activity_plan,
+    sales_email_engagement,
+    sales_next_best_actions,
+    sales_plan_cycle_create,
+    sales_plan_cycle_delete,
+    sales_plan_cycle_detail,
+    sales_plan_cycle_edit,
+    sales_plan_cycle_list,
+    sales_plan_cycle_toggle,
+    sales_plan_goal_add,
+    sales_plan_goal_delete,
+    task_template_create,
+    task_template_delete,
+    task_template_detail,
+    task_template_edit,
+    task_template_generate,
+    task_template_list,
+)
 
 # View functions exported for URLconf routing and external imports
 __all__ = [
@@ -198,6 +233,9 @@ __all__ = [
         "territory_rule_", "account_territory_assignment_", "territory_member_",
         "quota_plan_", "territory_rebalance_preview", "territory_coverage_gap",
         "territory_performance", "territory_white_space",
+        # 8.8 Sales Activity & Task Management
+        "activity_type_", "activity_log_", "task_template_", "sales_plan_",
+        "sales_activity_plan", "sales_next_best_actions", "sales_email_engagement",
     ))
 ]
 
