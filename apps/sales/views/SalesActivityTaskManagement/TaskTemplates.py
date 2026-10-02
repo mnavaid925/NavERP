@@ -162,7 +162,7 @@ def task_template_list(request):
     )
     return crud_list(
         request,
-        _template_queryset(request).annotate(_step_count=Count("steps", distinct=True)),
+        _template_queryset(request).annotate(step_total=Count("steps", distinct=True)).order_by("name", "pk"),
         LIST_TEMPLATE,
         search_fields=["number", "name", "description"],
         filters=[
@@ -231,6 +231,10 @@ def task_template_detail(request, pk):
         "preview_total": len(preview_targets),
         "preview_truncated": truncated,
         "preview_cap": MAX_TEMPLATE_TARGETS,
+        # Computed HERE, not with a `|times:` filter in the template: `times` is NOT a Django
+        # built-in filter, and an unknown filter is a TEMPLATE PARSE error that takes the whole page
+        # down rather than degrading one cell.
+        "preview_task_count": len(preview_targets) * steps.count(),
         "next_anchor": anchor,
         "owner_open_tasks": owner_open_tasks,
         "owner_open_task_cap": MAX_OWNER_OPEN_TASKS,
