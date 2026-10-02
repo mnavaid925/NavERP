@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% comment %}
+  8.8 Email Engagement board. Serves bullet 4.
+
+  Every figure here is a SUM over `ActivityLog`'s frozen counters. There is no separate engagement
+  EVENT table anywhere in the project, which is exactly why those counters live on the sales activity
+  row — and why the counters are `editable=False`: a rep could not hand-type "opened 47 times", and
+  the only way they move is one of three audited POST verbs that only ever increment.
+
+  `engagement_level` itself is NOT stored anywhere — it is a property derived from those counters
+  (replied > clicked > opened > none), so it cannot drift from the five fields it summarises (L37).
+  The per-row columns below count rows meeting each bar, not disjoint buckets: a replied email is
+  also opened and clicked, so "replied" is a subset of "clicked" and they do not add up to the total.
+{% endcomment %}
+{% block title %}Email Engagement{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Email Engagement</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Activity &amp; Tasks</span><span class="sep">&rsaquo;</span><span>Email Engagement</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:activity_log_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Sales Activity</a>
+    <a href="{% url 'sales:sales_next_best_actions' %}" class="btn btn-primary"><i data-lucide="sparkles"></i> Next Best Actions</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ totals.activities }}</div><div class="stat-label">Activities</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="mail-open"></i></div><div class="stat-value">{{ totals.opens }}</div><div class="stat-label">Total opens</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="mouse-pointer-click"></i></div><div class="stat-value">{{ totals.clicks }}</div><div class="stat-label">Total clicks</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="reply"></i></div><div class="stat-value">{{ totals.replied }}</div><div class="stat-label">Replied</div></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>By rep</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Rep</th><th>Activities</th><th>Opened</th><th>Clicked</th><th>Replied</th><th>Total opens</th><th>Total clicks</th></tr></thead>
+      <tbody>
+        {% for row in by_owner %}
+        <tr>
+          <td class="fw-600">{{ row.owner__username }}</td>
+          <td>{{ row.activities }}</td>
+          <td>{{ row.opened }}</td>
+          <td>{{ row.clicked }}</td>
+          <td>{{ row.replied }}</td>
+          <td>{{ row.total_opens }}</td>
+          <td>{{ row.total_clicks }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7"><div class="empty-state"><i data-lucide="mail"></i><h3>No attributed activity yet</h3><p>Engagement is counted against the sales activity register. Nothing is attributed to a rep yet, so there is nothing to roll up.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <p class="text-muted">
+      Opened, clicked and replied count ROWS meeting each bar, not separate buckets &mdash; a replied
+      email is also opened and clicked, so these three columns deliberately do not sum to the total.
+      Showing at most {{ caps.engagement_rows }} reps.
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>By activity type</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Activity type</th><th>Activities</th><th>Opened</th><th>Clicked</th><th>Replied</th></tr></thead>
+      <tbody>
+        {% for row in by_type %}
+        <tr>
+          <td class="fw-600">{% if row.activity_type__name %}{{ row.activity_type__name }}{% else %}&mdash;{% endif %}</td>
+          <td>{{ row.activities }}</td>
+          <td>{{ row.opened }}</td>
+          <td>{{ row.clicked }}</td>
+          <td>{{ row.replied }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5"><p class="text-muted" style="padding:1rem;">No activity has been classified with a type yet.</p></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body"><p class="text-muted">Showing at most {{ caps.engagement_rows }} activity types.</p></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Where these numbers come from</h2></div>
+  <div class="card-body">
+    <p class="text-muted">
+      Open, click and reply counters sit on the sales activity row as frozen evidence. They are not
+      on any form in this module: they move only through three audited POST actions on an activity's
+      own page, and they only ever move <em>up</em> &mdash; a later click never un-opens an email, so
+      "was it ever opened" cannot be un-answered.
+    </p>
+  </div>
+</div>
+{% endblock %}
