@@ -47,6 +47,16 @@ from .TerritoryQuotaManagement.TerritoryRules import (
     TerritoryRule,
     validate_territory_conditions,
 )
+# 8.8 Sales Activity & Task Management. These EXTEND the CRM 1.5 activity stack by FK or by
+# generating into it — none is a second activity/task/calendar master. See the package docstring.
+from .SalesActivityTaskManagement.ActivityTypes import ActivityType
+from .SalesActivityTaskManagement.ActivityLogs import (
+    AUTO_CAPTURE_SOURCES,
+    CAPTURE_SOURCE_CHOICES,
+    ActivityLog,
+)
+from .SalesActivityTaskManagement.TaskTemplates import TaskTemplate, TaskTemplateStep
+from .SalesActivityTaskManagement.SalesPlanCycles import ActivityGoal, SalesPlanCycle
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
@@ -65,6 +75,11 @@ __all__ = [
     # 8.7 Territory & Quota Management
     "TerritoryRule", "TERRITORY_FIELDS", "validate_territory_conditions",
     "AccountTerritoryAssignment", "TerritoryMember", "QuotaPlan", "PLAN_PARAMETER_KEYS",
+    # 8.8 Sales Activity & Task Management. These EXTEND the CRM 1.5 activity stack
+    # (crm.CommunicationLog / crm.CrmTask / crm.CalendarEvent) by FK or by generating into it — none
+    # of them is a second activity, task or calendar master. See the package docstring for L36/L37.
+    "ActivityType", "ActivityLog", "CAPTURE_SOURCE_CHOICES", "AUTO_CAPTURE_SOURCES",
+    "TaskTemplate", "TaskTemplateStep", "SalesPlanCycle", "ActivityGoal",
 ]
 
 
