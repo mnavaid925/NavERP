@@ -8,7 +8,10 @@ from django.utils import timezone
 
 from apps.accounting.models import Currency
 from apps.core.models import ConsentPurpose, Party, Tenant
-from apps.crm.models import AccountProfile, Campaign, ContactProfile, EmailCampaign, EmailTemplate, Lead, Opportunity, SalesQuota, Territory
+from apps.crm.models import (
+    AccountProfile, Campaign, CommunicationLog, ContactProfile, CrmTask,
+    EmailCampaign, EmailTemplate, Lead, Opportunity, SalesQuota, Territory,
+)
 from apps.sales.models import (
     AccountClassification,
     AccountPlan,
@@ -46,10 +49,18 @@ from apps.sales.models import (
     AccountTerritoryAssignment,
     TerritoryMember,
     QuotaPlan,
+    # 8.8 Sales Activity & Task Management
+    ActivityType,
+    ActivityLog,
+    TaskTemplate,
+    TaskTemplateStep,
+    SalesPlanCycle,
+    ActivityGoal,
 )
 from apps.sales.cpq_services import cpq_recalc_quote_totals, cpq_render_proposal_html, cpq_convert_to_sales_order
 from apps.sales.forecast_services import forecast_submission_snapshot
 from apps.sales.models.OrderManagement.OrderHolds import build_evaluation_snapshot
+from apps.sales.views.SalesActivityTaskManagement.Boards import STALE_ACTIVITY_DAYS
 
 from apps.sales.opportunity_services import opportunity_pipeline_baseline_stages
 from apps.sales.services import (
@@ -87,7 +98,7 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, backfill=backfill)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, and 8.7 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, and 8.8 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
@@ -117,6 +128,7 @@ class Command(BaseCommand):
         self._seed_cpq(tenant, owner)
         self._seed_order_management(tenant, owner)
         self._seed_territory_quota(tenant, owner)
+        self._seed_activity_tasks(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -261,7 +273,19 @@ class Command(BaseCommand):
                 status="pending",
                 notes="Enrollment state only; no outbound delivery is configured.",
             )
-            activate_nurture(enrollment, tenant, owner, next_touch_at=timezone.now() + timedelta(days=1))
+            # `activate_nurture` refuses a non-admin actor by design (services.py, `_is_admin`). The
+            # `owner` selection above deliberately falls back to any active user when a tenant has
+            # no tenant admin, so on such a tenant this call raised ValidationError and — because
+            # `handle` is wrapped in ONE `transaction.atomic` — aborted and rolled back the ENTIRE
+            # seed, every tenant, including the sub-modules seeded before this point. Skip the
+            # activation instead, and say so, rather than losing the whole run to one row.
+            if owner is not None and owner.is_tenant_admin:
+                activate_nurture(enrollment, tenant, owner, next_touch_at=timezone.now() + timedelta(days=1))
+            else:
+                self.stdout.write(
+                    f"{tenant.name}: no tenant administrator, so the nurture enrollment was left "
+                    "pending (activation requires one). Re-run seed_accounts to promote a user."
+                )
         if len(leads) > 1 and not LeadNurtureEnrollment.objects.filter(tenant=tenant, lead=leads[1], email_campaign=drip).exists():
             LeadNurtureEnrollment.objects.create(
                 tenant=tenant,
@@ -1723,3 +1747,234 @@ class Command(BaseCommand):
 
 
 
+
+
+    def _seed_activity_tasks(self, tenant, owner):
+        """8.8 Sales Activity & Task Management demo rows, idempotent by construction.
+
+        OWNERSHIP (L36/L37): this block ATTRIBUTES existing ``crm.CommunicationLog`` rows and
+        generates into ``crm.CrmTask``. It declares no activity, task or calendar master of its own,
+        and it reuses the CRM 1.5 rows the earlier seeders already created rather than inventing
+        duplicates.
+
+        **WHY THE BACKDATING BELOW IS NOT OPTIONAL.** ``ActivityLog.occurred_on`` is stamped from
+        ``communication_log.occurred_at`` at creation, and the stale-deal board asks
+        ``occurred_on < today - 14``. A freshly seeded workspace therefore has zero stale
+        opportunities and a zero engagement rollup, which reads as "the feature is broken" rather
+        than "no time has passed". ``created_at`` is ``auto_now_add`` and cannot be passed to the
+        constructor, and a queryset ``.update()`` bypasses the ``pre_save`` hook, so the UPDATE is the
+        only honest way to give a seeded row a past (L54's sixth rule). The value is assigned back
+        onto the in-memory instance too, or the next line reads the un-backdated one.
+        """
+        # NO blanket "already exists" early return here, and that is deliberate. An earlier version
+        # guarded the whole block on `ActivityType.objects.filter(tenant=tenant).exists()`, which
+        # STRANDED a tenant permanently: seeded while it had no CRM 1.5 interactions, it recorded
+        # its three catalogue types and then, on every later run, returned before the attribution
+        # pass — so the day `seed_crm` populated `crm.CommunicationLog`, this workspace still showed
+        # an empty activity register and three zero figures that read as a broken feature.
+        #
+        # Idempotency does not need that guard, because every write below is individually
+        # idempotent: the catalogue and the templates are `get_or_create` on their unique keys, the
+        # attribution pass skips any `communication_log` that already has a sales layer, the goal
+        # pass is `get_or_create` on (cycle, metric), and the plan cycles are `get_or_create` on
+        # (owner, period_start, cadence). A second run therefore writes nothing and says so below.
+        already_seeded = ActivityType.objects.filter(tenant=tenant).exists()
+
+        today = timezone.localdate()
+        now = timezone.now()
+
+        # ---- 1. Activity types (ATY-). The vocabularies are CRM 1.5's, imported not re-spelled. --
+        discovery, _ = ActivityType.objects.get_or_create(
+            tenant=tenant,
+            name="Discovery call",
+            defaults={
+                "description": "First structured conversation with a qualified contact.",
+                "kind": "call",
+                "default_outcome": "connected",
+                "default_duration_seconds": 1800,
+                "default_priority": "high",
+                "requires_opportunity": True,
+                "display_order": 10,
+            },
+        )
+        nurture_email, _ = ActivityType.objects.get_or_create(
+            tenant=tenant,
+            name="Nurture email",
+            defaults={
+                "description": "Scheduled outbound touch with no deal attached.",
+                "kind": "email",
+                "default_priority": "medium",
+                "display_order": 20,
+            },
+        )
+        # NOTE: no ``default_outcome`` here. G1 refuses an outcome on a non-call, so this seed is
+        # the positive half of that pair and the ``clean()`` guard is the negative half.
+        demo_meeting, _ = ActivityType.objects.get_or_create(
+            tenant=tenant,
+            name="Product demo",
+            defaults={
+                "description": "Walked-through of the platform for a live prospect.",
+                "kind": "meeting",
+                "default_duration_seconds": 3600,
+                "default_priority": "high",
+                "requires_opportunity": True,
+                "display_order": 30,
+            },
+        )
+
+        # ---- 2. Attribute EXISTING CRM 1.5 interactions. Never create a CommunicationLog. -------
+        comm_logs = list(
+            CommunicationLog.objects.filter(tenant=tenant).order_by("-occurred_at")[:6]
+        )
+        accounts = list(
+            Party.objects.filter(tenant=tenant, kind="organization").order_by("name")[:3]
+        )
+        opportunities = list(
+            Opportunity.objects.filter(tenant=tenant)
+            .exclude(stage__in=["closed_won", "closed_lost"])
+            .order_by("name")[:3]
+        )
+        territory = Territory.objects.filter(tenant=tenant).order_by("name").first()
+
+        for index, comm_log in enumerate(comm_logs):
+            # Backdate so the 14-day stale sweep and the 7-day "opened but not clicked" rule have
+            # something real to find on day one rather than an empty board that reads as broken.
+            CommunicationLog.objects.filter(pk=comm_log.pk).update(
+                occurred_at=now - timedelta(days=STALE_ACTIVITY_DAYS + index + 1)
+            )
+            comm_log.refresh_from_db()
+            if ActivityLog.objects.filter(tenant=tenant, communication_log=comm_log).exists():
+                continue
+            activity = ActivityLog(
+                tenant=tenant,
+                communication_log=comm_log,
+                owner=owner,
+                territory=territory,
+                account=accounts[index % len(accounts)] if accounts else None,
+                opportunity=opportunities[index % len(opportunities)] if opportunities else None,
+                next_best_action="Confirm the technical evaluation window",
+                next_best_action_due=today + timedelta(days=3),
+            )
+            # G3: capture_source and is_auto_captured must AGREE. Half the seeds are manual and half
+            # automatic, so the seeder exercises both sides of the invariant rather than one.
+            if index % 2 == 0:
+                activity.activity_type = discovery
+                activity.capture_source = "manual"
+                activity.is_auto_captured = False
+            else:
+                activity.activity_type = (
+                    demo_meeting if comm_log.channel == "meeting" else nurture_email
+                )
+                activity.capture_source = "bcc_dropbox"
+                activity.is_auto_captured = True
+            activity.save()
+            # The counters are FROZEN, so the seeder advances them through the model's OWN monotonic
+            # helper rather than assigning them - the same path the POST verbs use.
+            if comm_log.channel == "email":
+                with transaction.atomic():
+                    locked = ActivityLog.objects.select_for_update().get(pk=activity.pk)
+                    locked.advance_email_engagement(opened=True)
+                    if index % 3 == 0:
+                        locked.advance_email_engagement(clicked=True)
+                    if index == 1:
+                        locked.advance_email_engagement(replied=True)
+                    locked.save()
+                    activity.refresh_from_db()
+
+        # ---- 3. A recurring task playbook (TTPL-). target_type="opportunity" so NO territory: G9
+        #         refuses a territory on a non-territory template, so seeding one would be refused.
+        template, _ = TaskTemplate.objects.get_or_create(
+            tenant=tenant,
+            name="Fortnightly discovery cadence",
+            defaults={
+                "description": "Two-week motion run against every open opportunity.",
+                "task_type": "call",
+                "priority": "high",
+                "cadence": "biweekly",
+                "cadence_interval": 1,
+                "default_offset_days": 0,
+                "target_type": "opportunity",
+                "activity_type": discovery,
+                "owner": owner,
+                "is_active": True,
+            },
+        )
+        for order, (title, offset, task_type) in enumerate(
+            [
+                ("Send the recap email", -2, "email"),
+                ("Discovery call", 0, "call"),
+                ("Log the outcome on the deal", 1, "todo"),
+            ],
+            start=1,
+        ):
+            TaskTemplateStep.objects.get_or_create(
+                tenant=tenant,
+                template=template,
+                order=order,
+                defaults={
+                    "title": title,
+                    "instructions": f"Part {order} of the fortnightly discovery cadence.",
+                    "task_type": task_type,
+                    "priority": "high" if order == 2 else "medium",
+                    "offset_days": offset,
+                },
+            )
+
+        # ---- 4. This week, and today, with derived actuals to beat ------------------------------
+        #     G12: a DAILY cycle's period_end EQUALS its period_start. A seven-day "daily" plan is
+        #     exactly the pair the model refuses, so the seeder must not create one.
+        week_start = today - timedelta(days=today.weekday())
+        weekly, _ = SalesPlanCycle.objects.get_or_create(
+            tenant=tenant,
+            owner=owner,
+            period_start=week_start,
+            cadence="weekly",
+            defaults={
+                "name": f"Week of {week_start:%d %b %Y}",
+                "period_end": week_start + timedelta(days=6),
+                "territory": territory,
+                "status": "active",
+                "suggestion_mode": "assisted",
+                "notes": "Seed plan. Actuals are counted from logged activities, never stored.",
+            },
+        )
+        for metric, target in [("call", 8), ("email", 12), ("meeting", 2), ("logged_total", 20)]:
+            ActivityGoal.objects.get_or_create(
+                tenant=tenant,
+                cycle=weekly,
+                metric=metric,
+                defaults={"target_count": target},
+            )
+
+        daily, _ = SalesPlanCycle.objects.get_or_create(
+            tenant=tenant,
+            owner=owner,
+            period_start=today,
+            cadence="daily",
+            defaults={
+                "name": f"{today:%d %b %Y}",
+                "period_end": today,
+                "territory": territory,
+                "status": "active",
+                "suggestion_mode": "manual",
+                "notes": "Seed daily plan - start and end are the same day on purpose.",
+            },
+        )
+        ActivityGoal.objects.get_or_create(
+            tenant=tenant, cycle=daily, metric="logged_total", defaults={"target_count": 5}
+        )
+
+        # ---- 5. NO CalendarEvent is created here. -------------------------------------------------
+        # The plan board's Booked-next panel reads `crm.CalendarEvent`, which is CRM 1.5's table
+        # and CRM 1.5's seeder owns (L36/L37: 8.8 EXTENDS the calendar, it does not seed or
+        # duplicate it). An earlier version of this block created one "so the panel is not
+        # empty" — that was 8.8 writing another module's master, and it had the second-order
+        # effect of tripping CRM's blanket seed guard. `seed_crm` provides the events.
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.8 activity and task demo rows "
+            f"{'already present; re-checked for gaps' if already_seeded else 'ensured'} "
+            f"({ActivityType.objects.filter(tenant=tenant).count()} types, "
+            f"{ActivityLog.objects.filter(tenant=tenant).count()} activities, "
+            f"{SalesPlanCycle.objects.filter(tenant=tenant).count()} plan cycles)."
+        )
