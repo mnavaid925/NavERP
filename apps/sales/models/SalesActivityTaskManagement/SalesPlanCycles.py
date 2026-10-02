@@ -27,7 +27,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
-from apps.sales.models._base import TenantEventOwned, TenantNumbered
+from apps.sales.models._base import TenantEventOwned, TenantNumbered, settings
 
 #: A day or a week. Bullet 5 names exactly these two; a monthly plan is 8.4's `ForecastPeriod`, and
 #: shipping a third cadence here would put the two modules' period definitions in competition.
