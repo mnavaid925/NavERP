@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% comment %}
+  8.8 Sales Activity — the register of sales attributions over CRM 1.5's CommunicationLog.
+
+  A row here is NOT an activity. `obj.channel` is a READ-THROUGH PROPERTY to the CRM log, not a
+  column on 8.8's own model — grep ActivityLogs.py and there is no `channel`, no `subject`, no
+  `occurred_at`. That is the visible proof of the L36 ruling: 8.8 extends CRM 1.5's interaction
+  stack and declares no second one.
+
+  FK filter selects compare with `|stringformat:"d"` — NEVER `|slugify` on a pk (the house rule).
+  Every enum control here is declared in `crud_list`'s `filters` spec, so every control rendered is
+  a control the view actually applies (L54's third rule).
+
+  Engagement is a DERIVED property (replied > clicked > opened > none) and never a filter: it is not
+  a column, so there is nothing for a GET param to narrow on.
+{% endcomment %}
+{% block title %}Sales Activity{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Sales Activity</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Activity &amp; Tasks</span><span class="sep">&rsaquo;</span><span>Activity Log</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:sales_activity_plan' %}" class="btn btn-outline"><i data-lucide="calendar-days"></i> My Plan</a>
+    <a href="{% url 'sales:sales_next_best_actions' %}" class="btn btn-outline"><i data-lucide="sparkles"></i> Next Best Actions</a>
+    <a href="{% url 'sales:activity_log_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Log activity</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total activities</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="zap"></i></div><div class="stat-value">{{ stats.auto_captured }}</div><div class="stat-label">Auto-captured</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="mail-open"></i></div><div class="stat-value">{{ stats.opened }}</div><div class="stat-label">Opened</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="mouse-pointer-click"></i></div><div class="stat-value">{{ stats.clicked }}</div><div class="stat-label">Clicked</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="reply"></i></div><div class="stat-value">{{ stats.replied }}</div><div class="stat-label">Replied</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <label class="form-label" for="sal-search">Search</label>
+        <input id="sal-search" name="q" value="{{ q }}" class="form-input" placeholder="Activity number or next best action">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sal-source">Capture source</label>
+        <select id="sal-source" name="capture_source" class="form-select">
+          <option value="">Any source</option>
+          {% for value, label in capture_source_choices %}<option value="{{ value }}"{% if request.GET.capture_source == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sal-owner">Owner</label>
+        <select id="sal-owner" name="owner" class="form-select">
+          <option value="">Every owner</option>
+          {% for u in owners %}<option value="{{ u.pk|stringformat:"d" }}"{% if request.GET.owner == u.pk|stringformat:"d" %} selected{% endif %}>{{ u.username }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sal-type">Activity type</label>
+        <select id="sal-type" name="activity_type" class="form-select">
+          <option value="">Every type</option>
+          {% for t in activity_types %}<option value="{{ t.pk|stringformat:"d" }}"{% if request.GET.activity_type == t.pk|stringformat:"d" %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sal-opp">Opportunity</label>
+        <select id="sal-opp" name="opportunity" class="form-select">
+          <option value="">Every opportunity</option>
+          {% for o in opportunities %}<option value="{{ o.pk|stringformat:"d" }}"{% if request.GET.opportunity == o.pk|stringformat:"d" %} selected{% endif %}>{{ o.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sal-account">Account</label>
+        <select id="sal-account" name="account" class="form-select">
+          <option value="">Every account</option>
+          {% for a in accounts %}<option value="{{ a.pk|stringformat:"d" }}"{% if request.GET.account == a.pk|stringformat:"d" %} selected{% endif %}>{{ a.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sal-terr">Territory</label>
+        <select id="sal-terr" name="territory" class="form-select">
+          <option value="">Every territory</option>
+          {% for t in territories %}<option value="{{ t.pk|stringformat:"d" }}"{% if request.GET.territory == t.pk|stringformat:"d" %} selected{% endif %}>{{ t.number }} &middot; {{ t.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:activity_log_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Activity register</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Activity</th><th>Channel</th><th>Type</th><th>Date</th><th>Opportunity</th><th>Territory</th><th>Engagement</th><th>Capture</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td>
+            <a href="{% url 'sales:activity_log_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            {% if obj.is_auto_captured %}<span class="badge badge-info"><i data-lucide="zap"></i> Auto</span>{% endif %}
+            {% if obj.next_best_action %}<div class="text-muted">{{ obj.next_best_action }}</div>{% endif %}
+          </td>
+          <td>{% if obj.channel == "call" %}<span class="badge badge-green">{{ obj.channel|title }}</span>{% elif obj.channel == "email" %}<span class="badge badge-info">{{ obj.channel|title }}</span>{% elif obj.channel == "meeting" %}<span class="badge badge-amber">{{ obj.channel|title }}</span>{% else %}<span class="badge badge-slate">{{ obj.channel|title }}</span>{% endif %}</td>
+          <td>{% if obj.activity_type %}{{ obj.activity_type.name }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td>{{ obj.occurred_on|date:"M d, Y" }}</td>
+          <td>{% if obj.opportunity %}{{ obj.opportunity.name|truncatechars:28 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td>{% if obj.territory %}{{ obj.territory.name|truncatechars:22 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td>
+            {% if obj.engagement_level == "replied" %}<span class="badge badge-green">Replied</span>
+            {% elif obj.engagement_level == "clicked" %}<span class="badge badge-amber">Clicked &middot; {{ obj.click_count }}</span>
+            {% elif obj.engagement_level == "opened" %}<span class="badge badge-info">Opened &middot; {{ obj.open_count }}</span>
+            {% else %}<span class="badge badge-muted">None</span>{% endif %}
+          </td>
+          <td><span class="badge badge-slate">{{ obj.get_capture_source_display }}</span></td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:activity_log_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'sales:activity_log_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'sales:activity_log_delete' obj.pk %}" onsubmit="return confirm('Delete sales activity {{ obj.number }}? The underlying CRM interaction stays. This cannot be undone.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No sales activities yet</h3><p>Interactions logged on the CRM are not attributed to a rep, a deal or a territory until they are logged here. Start from an un-attributed interaction.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
