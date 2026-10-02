@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% comment %}
+  One SalesPlanCycle in full — the window, the goals against DERIVED actuals, the open tasks and
+  booked events inside it, and the close/re-open verb.
+
+  The progress bar's figure is computed by `SalesPlanCycle.progress_for` at read time. There is no
+  `actual_count` column on ActivityGoal and no attainment column anywhere in this sub-module (L37):
+  a stored number is one more thing that can disagree with the rows it summarises while still
+  reading as authoritative.
+
+  The goal add/delete forms are POST forms with a csrf token and a confirm naming the metric.
+{% endcomment %}
+{% block title %}{{ obj.number }} &middot; {{ obj.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.name }}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:sales_plan_cycle_list' %}">Plan Cycles</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:sales_activity_plan' %}?cycle={{ obj.pk }}" class="btn btn-outline"><i data-lucide="calendar-days"></i> Open in My Plan</a>
+    <a href="{% url 'sales:sales_plan_cycle_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    {% if can_close %}
+    <form method="post" action="{% url 'sales:sales_plan_cycle_toggle' obj.pk %}" onsubmit="return confirm('Close plan cycle {{ obj.number }}? Its window and goals are kept, and it can be re-opened.');">
+      {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="lock"></i> Close cycle</button>
+    </form>
+    {% else %}
+    <form method="post" action="{% url 'sales:sales_plan_cycle_toggle' obj.pk %}" onsubmit="return confirm('Re-open plan cycle {{ obj.number }}?');">
+      {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="unlock"></i> Re-open</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if caveats %}
+<div class="card">
+  <div class="card-header"><h2>Worth knowing</h2></div>
+  <div class="card-body">
+    <ul class="text-muted" style="margin:0; padding-left:1.1rem;">
+      {% for caveat in caveats %}<li>{{ caveat }}</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><h2>Window</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Cadence</dt><dd>{{ obj.get_cadence_display }}</dd></div>
+        <div class="detail-item"><dt>Starts</dt><dd>{{ obj.period_start|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Ends</dt><dd>{{ obj.period_end|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.username }}{% else %}Team plan{% endif %}</dd></div>
+        <div class="detail-item"><dt>Territory</dt><dd>{% if obj.territory %}{{ obj.territory.name }}{% else %}&mdash;{% endif %}</dd></div>
+        <div class="detail-item"><dt>Suggestion mode</dt><dd>{{ obj.get_suggestion_mode_display }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{{ obj.get_status_display }}{% if obj.closed_at %} <span class="text-muted">since {{ obj.closed_at|date:"M d, Y H:i" }}</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Add a goal</h2></div>
+    <div class="card-body">
+      {% if obj.status == "closed" %}
+      <p class="text-muted">This cycle is closed, so its goals can no longer be changed.</p>
+      {% else %}
+      <p class="text-muted">One goal per metric. Re-posting a metric revises its target rather than failing.</p>
+      <form method="post" action="{% url 'sales:sales_plan_goal_add' obj.pk %}" novalidate>
+        {% csrf_token %}
+        <div class="form-group">
+          <label class="form-label" for="goal-metric">Metric</label>
+          <select id="goal-metric" name="metric" class="form-select" required>
+            {% for value, label in metric_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="goal-target">Target</label>
+          <input id="goal-target" name="target_count" type="number" min="0" max="1000" step="1" value="0" class="form-input" required>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Save goal</button>
+        </div>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Goals against actuals</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Metric</th><th>Target</th><th>Actual</th><th>Attainment</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for row in progress_rows %}
+        <tr>
+          <td class="fw-600">{{ row.goal.get_metric_display }}</td>
+          <td>{{ row.target }}</td>
+          <td>{{ row.actual }}</td>
+          <td style="min-width:180px;">
+            {% if row.percent is None %}
+              <span class="text-muted">No target set</span>
+            {% else %}
+              <div class="progress"><div class="progress-bar" style="width: {{ row.percent }}%;"></div></div>
+              <div class="text-muted">{{ row.percent }}%</div>
+            {% endif %}
+          </td>
+          <td>
+            <div class="table-actions">
+              {% if obj.status != "closed" %}
+              <form method="post" action="{% url 'sales:sales_plan_goal_delete' obj.pk row.goal.pk %}" onsubmit="return confirm('Remove the {{ row.goal.get_metric_display }} goal? The activities it counted are not deleted.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5"><div class="empty-state"><i data-lucide="target"></i><h3>No goals set</h3><p>Add a target on the left. The actual column counts logged activities as you read this page — it is never stored, so it cannot drift out of step with the records it summarises.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><h2>Open tasks in this window</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Subject</th><th>Due</th><th>Priority</th></tr></thead>
+        <tbody>
+          {% for task in open_tasks %}
+          <tr><td>{{ task.subject }}</td><td>{{ task.due_date|date:"M d, Y"|default:"&mdash;" }}</td><td>{{ task.get_priority_display }}</td></tr>
+          {% empty %}
+          <tr><td colspan="3"><p class="text-muted" style="padding:1rem;">No open tasks due inside this window.</p></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body"><p class="text-muted">Showing at most {{ open_task_cap }} tasks.</p></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Booked next</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Event</th><th>Starts</th></tr></thead>
+        <tbody>
+          {% for event in upcoming_events %}
+          <tr><td>{{ event.title }}</td><td>{{ event.start|date:"M d, Y H:i" }}</td></tr>
+          {% empty %}
+          <tr><td colspan="2"><p class="text-muted" style="padding:1rem;">Nothing is booked between now and the end of this window.</p></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">
+        Showing at most {{ event_cap }} events. These are CRM 1.5 calendar events &mdash; 8.8 reads them
+        rather than keeping a second calendar, and the invite and RSVP links live on the CRM record.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Record</h2></div>
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+  </div>
+</div>
+{% endblock %}
