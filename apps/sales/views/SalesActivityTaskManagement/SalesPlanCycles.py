@@ -76,7 +76,7 @@ def sales_plan_cycle_list(request):
     )
     return crud_list(
         request,
-        _cycle_queryset(request).annotate(_goal_count=Count("goals", distinct=True)),
+        _cycle_queryset(request).annotate(goal_total=Count("goals", distinct=True)).order_by("-period_start", "-pk"),
         LIST_TEMPLATE,
         search_fields=["number", "name", "notes"],
         filters=[
@@ -165,7 +165,6 @@ def sales_plan_cycle_detail(request, pk):
         "event_cap": MAX_DETAIL_EVENTS,
         "can_close": obj.status != "closed",
         "caveats": caveats,
-        "goal_form": ActivityGoalForm(),
         **_choice_context(request),
     })
 
