@@ -94,7 +94,7 @@
             {% if obj.is_billable %}<span class="badge badge-info">Billable</span>{% endif %}
             {% if not obj.requires_opportunity and not obj.is_billable %}<span class="text-muted">&mdash;</span>{% endif %}
           </td>
-          <td>{{ obj._usage }} activit{{ obj._usage|pluralize:"y,ies" }}</td>
+          <td>{{ obj.usage_total }} activit{{ obj.usage_total|pluralize:"y,ies" }}</td>
           <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Retired</span>{% endif %}</td>
           <td>
             <div class="table-actions">
