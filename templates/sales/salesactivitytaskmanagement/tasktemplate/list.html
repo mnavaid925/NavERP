@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% comment %}
+  8.8 Task Templates — the playbook register.
+
+  A TaskTemplate does NOT declare a task. It GENERATES `crm.CrmTask` rows (CRM 1.5's table) when the
+  Run action on its own page is used. There is no `class SalesTask` anywhere in this app, and the
+  `task_type` / `priority` vocabularies on every row are IMPORTED from CRM 1.5 rather than re-spelled
+  (L36) — so a generated task ranks identically to a hand-typed one.
+
+  Every control rendered here is declared in `crud_list`'s `filters` spec, so every control is a
+  control the view actually applies (L54's third rule).
+
+  Badges are colour-named only (L33): green/red/amber/info/muted/slate exist; badge-success and
+  badge-warning do NOT and render unstyled.
+{% endcomment %}
+{% block title %}Task Templates{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Task Templates</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Activity &amp; Tasks</span><span class="sep">&rsaquo;</span><span>Templates</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:sales_activity_plan' %}" class="btn btn-outline"><i data-lucide="calendar-days"></i> My Plan</a>
+    <a href="{% url 'sales:task_template_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New template</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="workflow"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total templates</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="list-checks"></i></div><div class="stat-value">{{ stats.with_steps }}</div><div class="stat-label">With steps</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="play"></i></div><div class="stat-value">{{ stats.never_generated }}</div><div class="stat-label">Never run</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <label class="form-label" for="tpl-search">Search</label>
+        <input id="tpl-search" name="q" value="{{ q }}" class="form-input" placeholder="Template number, name, or description">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tpl-cadence">Cadence</label>
+        <select id="tpl-cadence" name="cadence" class="form-select">
+          <option value="">Any cadence</option>
+          {% for value, label in cadence_choices %}<option value="{{ value }}"{% if request.GET.cadence == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tpl-target">Target</label>
+        <select id="tpl-target" name="target_type" class="form-select">
+          <option value="">Any target</option>
+          {% for value, label in target_type_choices %}<option value="{{ value }}"{% if request.GET.target_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tpl-type">Task type</label>
+        <select id="tpl-type" name="task_type" class="form-select">
+          <option value="">Any task type</option>
+          {% for value, label in task_type_choices %}<option value="{{ value }}"{% if request.GET.task_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tpl-priority">Priority</label>
+        <select id="tpl-priority" name="priority" class="form-select">
+          <option value="">Any priority</option>
+          {% for value, label in priority_choices %}<option value="{{ value }}"{% if request.GET.priority == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tpl-active">State</label>
+        <select id="tpl-active" name="active" class="form-select">
+          <option value="">Any state</option>
+          {% for value, label in active_choices %}<option value="{{ value }}"{% if request.GET.active == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:task_template_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Playbook register</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Template</th><th>Cadence</th><th>Target</th><th>Task type</th><th>Priority</th><th>Steps</th><th>Last run</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td>
+            <a href="{% url 'sales:task_template_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            <div class="text-muted">{{ obj.name }}</div>
+          </td>
+          <td><span class="badge {% if obj.cadence == 'once' %}badge-muted{% elif obj.cadence == 'daily' %}badge-amber{% else %}badge-slate{% endif %}">{{ obj.cadence_display }}</span></td>
+          <td><span class="badge badge-slate">{{ obj.get_target_type_display }}</span>{% if obj.territory %}<div class="text-muted">{{ obj.territory.name }}</div>{% endif %}</td>
+          <td>{{ obj.get_task_type_display }}</td>
+          <td>{% if obj.priority == "high" %}<span class="badge badge-red">{{ obj.get_priority_display }}</span>{% elif obj.priority == "medium" %}<span class="badge badge-amber">{{ obj.get_priority_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_priority_display }}</span>{% endif %}</td>
+          <td>{{ obj._step_count }} step{{ obj._step_count|pluralize }}</td>
+          <td>
+            {% if obj.last_generated_on %}
+              {{ obj.last_generated_on|date:"M d, Y" }}
+              <div class="text-muted">{{ obj.generated_count }} task{{ obj.generated_count|pluralize }} generated</div>
+            {% else %}
+              <span class="text-muted">Never run</span>
+            {% endif %}
+          </td>
+          <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Paused</span>{% endif %}</td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:task_template_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'sales:task_template_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'sales:task_template_delete' obj.pk %}" onsubmit="return confirm('Delete template {{ obj.number }}? Any tasks it generated stay in the CRM task list. This cannot be undone.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9"><div class="empty-state"><i data-lucide="workflow"></i><h3>No task templates</h3><p>Playbooks turn one instruction into many dated tasks across a book of business. Write one to describe the motion you repeat every week.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
