@@ -95,7 +95,7 @@
           <td><span class="badge {% if obj.cadence == 'daily' %}badge-amber{% else %}badge-slate{% endif %}">{{ obj.get_cadence_display }}</span></td>
           <td>{% if obj.owner %}{{ obj.owner.username }}{% else %}<span class="text-muted">Team</span>{% endif %}</td>
           <td>{% if obj.territory %}{{ obj.territory.name|truncatechars:22 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
-          <td>{{ obj._goal_count }} goal{{ obj._goal_count|pluralize }}</td>
+          <td>{{ obj.goal_total }} goal{{ obj.goal_total|pluralize }}</td>
           <td><span class="badge badge-slate">{{ obj.get_suggestion_mode_display }}</span></td>
           <td>
             {% if obj.status == "active" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
