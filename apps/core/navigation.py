@@ -2430,6 +2430,38 @@ LIVE_LINKS = {
         "Coverage Gaps": "sales:territory_coverage_gap",
         "Territory White Space": "sales:territory_white_space",
     },
+    "8.8": {
+        # OWNERSHIP RULING (L36/L37) — one of the four durable places it is written down; the other
+        # three are `apps/sales/models/SalesActivityTaskManagement/__init__.py`, the 8.8 build
+        # contract, and `.claude/tasks/lessons.md`.
+        #
+        # `crm.CommunicationLog` / `crm.CrmTask` / `crm.CalendarEvent` are CRM 1.5's. 8.8 EXTENDS
+        # that stack — it FKs the first, GENERATES `crm.CrmTask` rows from a playbook, and reads the
+        # third — and declares NEITHER again. There is NO `class Activity`, `class Task`,
+        # `class Meeting`, `class Call` or `class EmailLog` anywhere in `apps/sales`; a class by one
+        # of those names in that app is a bug, not a variant.
+        #
+        # THIS IS THE MOST TEMPTING APPLICATION OF L36 IN THE PROJECT SO FAR, because 8.8's title
+        # and CRM 1.5's title are near-synonyms — "Sales Activity & Task Management" against
+        # "Activity & Communication Management". The module with "Activity" in its title does not
+        # get to re-declare the activity. That is L37 applied to a NAME collision rather than a
+        # domain one.
+        #
+        # What is genuinely new, and un-owned anywhere in the project: the activity-type CATALOGUE
+        # (both CRM fields are closed five-value vocabularies), recurring task TEMPLATES that fan
+        # out to many tasks, email open/click/reply TRACKING, and day/week plans with activity
+        # GOALS. The five NavERP.md 8.8 bullet strings, VERBATIM:
+        "Activity Logging & Tracking": "sales:activity_log_list",
+        "Task & Follow-up Management": "sales:task_template_list",
+        "Calendar & Meeting Scheduling": "sales:sales_activity_plan",
+        "Email Integration & Tracking": "sales:sales_email_engagement",
+        "Daily/Weekly Sales Planning": "sales:sales_plan_cycle_list",
+        # Extra live leaves (not NavERP.md bullets):
+        "Activity Types": "sales:activity_type_list",
+        "My Plan (day/week board)": "sales:sales_activity_plan",
+        "Next Best Actions": "sales:sales_next_best_actions",
+        "Email Engagement Rollup": "sales:sales_email_engagement",
+    },
 
 
 
