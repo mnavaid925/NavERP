@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% comment %}
+  8.8 Plan Cycles — a rep's (or a territory's) day or week, with activity goals.
+
+  THERE IS NO ATTAINMENT COLUMN IN THIS REGISTER, and that is the point. The actuals are DERIVED at
+  read time from `ActivityLog` and `crm.CrmTask` rows inside each cycle's window (L37). A stored
+  actual would be a sixth number to keep in step with the rows it summarises, and the first deleted
+  task or backdated activity would make it disagree with the ledger it claims to summarise while
+  still reading as authoritative.
+
+  Every control rendered here is declared in `crud_list`'s `filters` spec (L54's third rule).
+  Badges are colour-named only (L33).
+{% endcomment %}
+{% block title %}Plan Cycles{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Plan Cycles</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">&rsaquo;</span><span>Activity &amp; Tasks</span><span class="sep">&rsaquo;</span><span>Plan Cycles</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:sales_activity_plan' %}" class="btn btn-outline"><i data-lucide="calendar-days"></i> My Plan</a>
+    <a href="{% url 'sales:sales_plan_cycle_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New plan</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="calendar-range"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total cycles</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="play"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="archive"></i></div><div class="stat-value">{{ stats.closed }}</div><div class="stat-label">Closed</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="target"></i></div><div class="stat-value">{{ stats.with_goals }}</div><div class="stat-label">With goals</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <label class="form-label" for="spc-search">Search</label>
+        <input id="spc-search" name="q" value="{{ q }}" class="form-input" placeholder="Cycle number, name, or notes">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="spc-cadence">Cadence</label>
+        <select id="spc-cadence" name="cadence" class="form-select">
+          <option value="">Any cadence</option>
+          {% for value, label in cadence_choices %}<option value="{{ value }}"{% if request.GET.cadence == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="spc-status">Status</label>
+        <select id="spc-status" name="status" class="form-select">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}"{% if request.GET.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="spc-suggest">Suggestions</label>
+        <select id="spc-suggest" name="suggestion_mode" class="form-select">
+          <option value="">Any mode</option>
+          {% for value, label in suggestion_mode_choices %}<option value="{{ value }}"{% if request.GET.suggestion_mode == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="spc-owner">Owner</label>
+        <select id="spc-owner" name="owner" class="form-select">
+          <option value="">Every owner</option>
+          {% for u in owners %}<option value="{{ u.pk|stringformat:"d" }}"{% if request.GET.owner == u.pk|stringformat:"d" %} selected{% endif %}>{{ u.username }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="spc-terr">Territory</label>
+        <select id="spc-terr" name="territory" class="form-select">
+          <option value="">Every territory</option>
+          {% for t in territories %}<option value="{{ t.pk|stringformat:"d" }}"{% if request.GET.territory == t.pk|stringformat:"d" %} selected{% endif %}>{{ t.number }} &middot; {{ t.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:sales_plan_cycle_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Plan register</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Plan</th><th>Window</th><th>Cadence</th><th>Owner</th><th>Territory</th><th>Goals</th><th>Suggestions</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td>
+            <a href="{% url 'sales:sales_plan_cycle_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+            <div class="text-muted">{{ obj.name }}</div>
+          </td>
+          <td>{{ obj.period_start|date:"M d" }} &ndash; {{ obj.period_end|date:"M d, Y" }}</td>
+          <td><span class="badge {% if obj.cadence == 'daily' %}badge-amber{% else %}badge-slate{% endif %}">{{ obj.get_cadence_display }}</span></td>
+          <td>{% if obj.owner %}{{ obj.owner.username }}{% else %}<span class="text-muted">Team</span>{% endif %}</td>
+          <td>{% if obj.territory %}{{ obj.territory.name|truncatechars:22 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td>{{ obj._goal_count }} goal{{ obj._goal_count|pluralize }}</td>
+          <td><span class="badge badge-slate">{{ obj.get_suggestion_mode_display }}</span></td>
+          <td>
+            {% if obj.status == "active" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "closed" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% else %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% endif %}
+          </td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:sales_plan_cycle_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'sales:sales_plan_cycle_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'sales:sales_plan_cycle_delete' obj.pk %}" onsubmit="return confirm('Delete plan cycle {{ obj.number }}? Its goals go with it; the logged activities and tasks it counted do not. This cannot be undone.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9"><div class="empty-state"><i data-lucide="calendar-range"></i><h3>No plan cycles</h3><p>A plan cycle is a day or a week with activity goals on it. Without one, "how am I doing against my targets" has nothing to measure against.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
