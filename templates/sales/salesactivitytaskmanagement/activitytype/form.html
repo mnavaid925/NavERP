@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% comment %}
+  Create / edit one ActivityType. ONE template serves both, driven by `is_edit`.
+
+  What is deliberately NOT on this form, and why — printed rather than implied, because a user who
+  cannot see why is a user who asks for it to be added:
+
+    * The channel and outcome vocabularies are IMPORTED from CRM 1.5's CommunicationLog, not
+      re-spelled here (L36). If CRM adds a channel, this catalogue follows it automatically.
+    * `default_outcome` switches OFF for any kind that is not a call. The model refuses that pair
+      outright (G1) — "default outcome: Connected" on an email type is a category error a rep would
+      read as "the system logged my email as a connected call". Disabled, not hidden, so the reason
+      stays on the page; and disabled means Django reads it from the instance, never the POST, so a
+      crafted request cannot smuggle one through.
+    * `number` is `editable=False` and allocated by `next_number` (L22).
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Activity Type{% else %}New Activity Type{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Activity Type{% else %}New Activity Type{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% if is_edit %}{% url 'sales:activity_type_detail' obj.pk %}{% else %}{% url 'sales:activity_type_list' %}{% endif %}">Activity Types</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:activity_type_detail' obj.pk %}{% else %}{% url 'sales:activity_type_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      A type names the <em>kind</em> of activity and the defaults a rep should not retype. The call,
+      email or meeting itself is recorded on the CRM record &mdash; this entry never holds one.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save type{% else %}Create type{% endif %}</button>
+        <a href="{% if is_edit %}{% url 'sales:activity_type_detail' obj.pk %}{% else %}{% url 'sales:activity_type_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>What the server decides</h2></div>
+  <div class="card-body">
+    <table class="table">
+      <thead><tr><th>Field</th><th>Why it is not on this form</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-600">Number (ATY-)</td><td>System-assigned and sequential. A hand-typed number is how two catalogues end up sharing a document identity.</td></tr>
+        <tr><td class="fw-600">Channel and outcome lists</td><td>Read straight from CRM 1.5's <code>CommunicationLog</code> by import, never re-spelled here (L36). A copied list is how two vocabularies drift apart until one quietly stops rejecting what the other rejects.</td></tr>
+        <tr><td class="fw-600">Planned minutes on an activity</td><td>Written once, when the activity is first saved, from this type's default duration. It is frozen evidence: an edit must not silently re-time a rep's logged week.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
