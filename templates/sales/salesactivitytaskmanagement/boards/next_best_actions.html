@@ -51,7 +51,7 @@
       <tbody>
         {% for s in suggestions %}
         <tr>
-          <td><span class="badge {% if s.rule == 'overdue_task' %}badge-red{% elif s.rule == 'stale_opportunity' %}badge-amber{% elif s.rule == 'opened_not_clicked' %}badge-info{% elif s.rule == 'event_prep' %}badge-slate{% else %}badge-muted{% endif %}">{{ s.rule|replace:"_"," " }}</span></td>
+          <td><span class="badge {{ s.rule_badge }}">{{ s.rule_label }}</span></td>
           <td class="fw-600">{{ s.title }}</td>
           <td class="text-muted">{{ s.detail }}</td>
           <td>{% if s.due_date %}{{ s.due_date|date:"M d, Y" }}{% else %}&mdash;{% endif %}</td>
@@ -73,8 +73,8 @@
     <table class="table">
       <thead><tr><th>Rule</th><th>What it checks</th></tr></thead>
       <tbody>
-        {% for name, description in rules %}
-        <tr><td class="fw-600">{{ name|replace:"_"," " }}</td><td class="text-muted">{{ description }}</td></tr>
+        {% for label, description in rules %}
+        <tr><td class="fw-600">{{ label }}</td><td class="text-muted">{{ description }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
