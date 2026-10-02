@@ -32,7 +32,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
-from apps.sales.models._base import TenantNumbered
+from apps.sales.models._base import TenantNumbered, settings
 
 #: The sales-side mirror of `crm.CommunicationLog.LOGGED_VIA_CHOICES`.
 #:
