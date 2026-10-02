@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% comment %}
+  One ActivityType in full, plus the caveat list.
+
+  `usage_count` and `recent_activities` come from the view. A mismatch here is exactly L8's silent
+  blank region: the view returns 200 and renders an empty panel, so every key below is pinned in the
+  build contract.
+
+  The caveats panel is not decoration. `is_generatable`-style refusals (an inactive type, an outcome
+  on a non-call) are conditions the SERVER enforces, and an author who cannot see why a change was
+  rejected will simply ask for it to be allowed.
+{% endcomment %}
+{% block title %}{{ obj.number }} &middot; {{ obj.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.name }}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:activity_type_list' %}">Activity Types</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:activity_type_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Retired</span>{% endif %}
+  </div>
+</div>
+
+{% if caveats %}
+<div class="card">
+  <div class="card-header"><h2>Worth knowing</h2></div>
+  <div class="card-body">
+    <ul class="text-muted" style="margin:0; padding-left:1.1rem;">
+      {% for caveat in caveats %}<li>{{ caveat }}</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><h2>Definition</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Channel</dt><dd>{{ obj.get_kind_display }}</dd></div>
+        <div class="detail-item"><dt>Default outcome</dt><dd>{% if obj.default_outcome %}{{ obj.get_default_outcome_display }}{% else %}&mdash;{% endif %}</dd></div>
+        <div class="detail-item"><dt>Default length</dt><dd>{% if obj.default_duration_seconds %}{{ obj.default_duration_minutes }} min{% else %}&mdash;{% endif %}</dd></div>
+        <div class="detail-item"><dt>Default priority</dt><dd>{{ obj.get_default_priority_display }}</dd></div>
+        <div class="detail-item"><dt>Order</dt><dd>{{ obj.display_order }}</dd></div>
+        <div class="detail-item"><dt>Needs an opportunity</dt><dd>{% if obj.requires_opportunity %}Yes{% else %}No{% endif %}</dd></div>
+        <div class="detail-item"><dt>Billable</dt><dd>{% if obj.is_billable %}Yes{% else %}No{% endif %}</dd></div>
+      </dl>
+      {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Usage</h2></div>
+    <div class="card-body">
+      <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list-checks"></i></div><div class="stat-value">{{ usage_count }}</div><div class="stat-label">Logged activities</div></div>
+        <div class="stat-card"><div class="stat-icon purple"><i data-lucide="workflow"></i></div><div class="stat-value">{{ template_count }}</div><div class="stat-label">Task templates</div></div>
+      </div>
+      <p class="text-muted" style="margin-top:1rem;">
+        A type that history points at cannot be deleted &mdash; the server refuses it and tells you to
+        retire the type instead. Retiring keeps every past activity readable and only takes the entry
+        off the picker.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Playbooks using this type</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Template</th><th>State</th></tr></thead>
+      <tbody>
+        {% for tpl in used_by_templates %}
+        <tr>
+          <td><a href="{% url 'sales:task_template_detail' tpl.pk %}">{{ tpl.number }}</a> <span class="text-muted">{{ tpl.name }}</span></td>
+          <td>{% if tpl.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Paused</span>{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2"><p class="text-muted" style="padding:1rem;">No playbook classifies its generated tasks by this type.</p></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Recent sales activities</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Activity</th><th>Channel</th><th>Date</th><th>Opportunity</th><th>Engagement</th></tr></thead>
+      <tbody>
+        {% for log in recent_activities %}
+        <tr>
+          <td><a href="{% url 'sales:activity_log_detail' log.pk %}">{{ log.number }}</a></td>
+          <td>{{ log.get_channel_display|default:log.channel }}</td>
+          <td>{{ log.occurred_on|date:"M d, Y" }}</td>
+          <td>{% if log.opportunity %}{{ log.opportunity.name }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td>{% if log.engagement_level == "replied" %}<span class="badge badge-green">Replied</span>{% elif log.engagement_level == "clicked" %}<span class="badge badge-amber">Clicked</span>{% elif log.engagement_level == "opened" %}<span class="badge badge-info">Opened</span>{% else %}<span class="badge badge-muted">None</span>{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5"><div class="empty-state"><i data-lucide="list-checks"></i><h3>Not used yet</h3><p>No sales activity has been classified with this type. That is fine &mdash; the catalogue does not have to be used on day one.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Record</h2></div>
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+  </div>
+</div>
+{% endblock %}
