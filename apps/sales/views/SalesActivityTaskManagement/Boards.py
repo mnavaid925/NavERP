@@ -49,6 +49,21 @@ EVENT_PREP_DAYS = 3
 #: Opportunity stages that are finished — a closed deal is never "stale", it is done.
 CLOSED_STAGES = ["closed_won", "closed_lost"]
 
+#: Human labels for the five rules, AND the badge colour each one gets in the template.
+#:
+#: These live here rather than being built in the template with a `replace:"_"," "` filter because
+#: `replace` is NOT a Django built-in filter — a template using it raises TemplateSyntaxError at
+#: PARSE time, which takes the whole page down rather than degrading one cell. The label is also
+#: just better here: "Opened but not clicked" reads better than "opened not clicked" on either side
+#: of the screen, and the template gets one name to trust instead of re-deriving one per row.
+RULE_LABELS = {
+    "overdue_task": ("Overdue task", "badge-red"),
+    "stale_opportunity": ("Stale opportunity", "badge-amber"),
+    "opened_not_clicked": ("Opened, not clicked", "badge-info"),
+    "event_prep": ("Meeting prep", "badge-slate"),
+    "own_next_step": ("Own next step", "badge-muted"),
+}
+
 
 def _caps(**extra):
     """The single source for every cap a board publishes. One dict, every template."""
@@ -283,17 +298,27 @@ def sales_next_best_actions(request):
     # The ONE ordering, applied once, with an explicit tie-break on pk.
     suggestions.sort(key=lambda s: (-s["weight"], s["due_date"] or today, s["pk"]))
     truncated = len(suggestions) > MAX_SUGGESTIONS
+    # Label + badge colour attached HERE, so the template never derives them (see RULE_LABELS).
+    for suggestion in suggestions:
+        label, badge = RULE_LABELS.get(suggestion["rule"], (suggestion["rule"], "badge-slate"))
+        suggestion["rule_label"] = label
+        suggestion["rule_badge"] = badge
     return render(request, SUGGESTIONS_TEMPLATE, {
         "suggestions": suggestions[:MAX_SUGGESTIONS],
         "suggested_at": timezone.now(),
         "truncated": truncated,
         "rules": [
-            ("overdue_task", "An open task whose due date has passed."),
-            ("stale_opportunity", f"An open deal with no logged activity in {STALE_ACTIVITY_DAYS} days."),
-            ("opened_not_clicked", f"An email opened but never clicked over {STALE_EMAIL_DAYS} days ago."),
-            ("event_prep", f"A meeting within {EVENT_PREP_DAYS} days with nothing logged against it."),
-            ("own_next_step", "An activity that named its own next step, now due."),
+            (RULE_LABELS["overdue_task"][0], "An open task whose due date has passed."),
+            (RULE_LABELS["stale_opportunity"][0],
+             f"An open deal with no logged activity in {STALE_ACTIVITY_DAYS} days."),
+            (RULE_LABELS["opened_not_clicked"][0],
+             f"An email opened but never clicked over {STALE_EMAIL_DAYS} days ago."),
+            (RULE_LABELS["event_prep"][0],
+             f"A meeting within {EVENT_PREP_DAYS} days with nothing logged against it."),
+            (RULE_LABELS["own_next_step"][0],
+             "An activity that named its own next step, now due."),
         ],
+        "rule_labels": RULE_LABELS,
         "caps": _caps(),
     })
 
