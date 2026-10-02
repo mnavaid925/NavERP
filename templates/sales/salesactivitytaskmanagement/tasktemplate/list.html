@@ -97,7 +97,7 @@
           <td><span class="badge badge-slate">{{ obj.get_target_type_display }}</span>{% if obj.territory %}<div class="text-muted">{{ obj.territory.name }}</div>{% endif %}</td>
           <td>{{ obj.get_task_type_display }}</td>
           <td>{% if obj.priority == "high" %}<span class="badge badge-red">{{ obj.get_priority_display }}</span>{% elif obj.priority == "medium" %}<span class="badge badge-amber">{{ obj.get_priority_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_priority_display }}</span>{% endif %}</td>
-          <td>{{ obj._step_count }} step{{ obj._step_count|pluralize }}</td>
+          <td>{{ obj.step_total }} step{{ obj.step_total|pluralize }}</td>
           <td>
             {% if obj.last_generated_on %}
               {{ obj.last_generated_on|date:"M d, Y" }}
