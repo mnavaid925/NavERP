@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% comment %}
+  Create / edit one ActivityLog. ONE template serves both, driven by `is_edit`.
+
+  There is deliberately NO channel, subject, duration or outcome control here. The interaction was
+  recorded on the CRM record and 8.8 does not get a second set of controls for it (L36) — a rep who
+  can edit the channel here can put "Email" on a row whose underlying log says "Call", and the two
+  would then disagree on every rollup.
+
+  What the server decides, printed rather than implied:
+
+    * The email counters (opened / clicked / replied) are `editable=False` FROZEN EVIDENCE, so Django
+      excludes them from this form without being asked. They move only through the three POST verbs
+      on the detail page. A rep is precisely the one party with an incentive to type "opened 47
+      times", which is why a typed counter would be worthless.
+    * `capture_source` and `is_auto_captured` must agree (G3). The checkbox is pre-written from the
+      chosen source on POST, and the model refuses the pair if they ever disagree.
+    * `occurred_on` and `planned_minutes` are stamped once, by the model, when the row is first saved.
+      An edit must not re-time a rep's logged week.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Sales Activity{% else %}Log Sales Activity{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Sales Activity{% else %}Log Sales Activity{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% if is_edit %}{% url 'sales:activity_log_detail' obj.pk %}{% else %}{% url 'sales:activity_log_list' %}{% endif %}">Sales Activity</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div>
+  <a href="{% if is_edit %}{% url 'sales:activity_log_detail' obj.pk %}{% else %}{% url 'sales:activity_log_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted">
+      The call, email or meeting itself already lives on the CRM record. What you add here is the
+      <em>sales attribution</em> &mdash; the rep, the deal, the account, the territory &mdash; and, if
+      nobody has logged it yet, the next step it implies.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save activity{% else %}Log activity{% endif %}</button>
+        <a href="{% if is_edit %}{% url 'sales:activity_log_detail' obj.pk %}{% else %}{% url 'sales:activity_log_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>What the server decides</h2></div>
+  <div class="card-body">
+    <table class="table">
+      <thead><tr><th>Field</th><th>Why it is not on this form</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-600">Channel, subject, body, duration, outcome</td><td>Owned by CRM 1.5's <code>CommunicationLog</code>. 8.8 FKs that record and adds attribution; it declares no second activity vocabulary (L36). A control here would let the two disagree.</td></tr>
+        <tr><td class="fw-600">Number (SAL-)</td><td>System-assigned and sequential, allocated by <code>next_number</code>.</td></tr>
+        <tr><td class="fw-600">Opened / clicked / replied</td><td>Frozen evidence written only by the three POST verbs on the detail page, and audited. Never typed, never editable.</td></tr>
+        <tr><td class="fw-600">Occurrence date, planned minutes</td><td>Stamped once when the row is first saved, from the CRM interaction's timestamp and this type's default duration.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
