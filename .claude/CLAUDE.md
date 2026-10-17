@@ -165,9 +165,8 @@ each file on its own. (See **Per-Module Skill (MANDATORY)** below.)
   flight, one entity at a time, one reviewer at a time, one test file at a time.
 * **Never use the `Workflow` tool** for any of this, and never launch two agents in the same message.
 * Phase 1 produces `.claude/tasks/research-<slug>-<N.M>.md`, Phase 2 produces `.claude/tasks/todo.md`, Phase 4
-  produces `.claude/tasks/review-<slug>-<N.M>.md`. Each is committed as its own file.
-* **All review findings live in the `.md` file, never only in the transcript.** If an agent returns findings and
-  you do not write them to `.claude/tasks/`, the phase is not done.
+  produces `.claude/tasks/review-<slug>-<N.M>.md`, and any incomplete scope or deferred items are recorded in `.agents/tasks/gaps-<slug>-<N.M>.md` (or `.claude/tasks/gaps-<slug>-<N.M>.md`). Each is committed as its own file.
+* **All review findings and gaps live in their respective `.md` files, never only in the transcript.** If an agent returns findings, skips an item, or leaves work incomplete without updating the task/gap files, the phase is not done.
 * Single-writer work stays in the main session or in one dedicated agent: migrations, the seeder,
   `navigation.py`, `settings.py`, `urls.py`, package `__init__.py` re-export blocks, and app-level `conftest.py`.
 * Never **full-rewrite** a shared file from an agent — surgical `Edit` only. Another session may be building a
@@ -213,6 +212,33 @@ Every time you finish a **new module** (a Django app under `apps/<slug>`), you M
 4. **Explain Changes**: High-level summary at each step
 5. **Document Results**: Add review section to `.claude/tasks/todo.md`
 6. **Capture Lessons**: Update `.claude/tasks/lessons.md` after corrections
+7. **Track Gaps (MANDATORY)**: Record any uncompleted feature, skipped review finding, blocked dependency, or client decision in `.agents/tasks/gaps-<slug>-<N.M>.md` (or `.claude/tasks/gaps-<slug>-<N.M>.md`). Never leave gaps undocumented. Link in `todo.md`.
+
+---
+
+### **Gap Tracking & Management (MANDATORY)**
+
+Whatever an implementation, review, or testing run leaves undone — a domain feature the research, spec, or pre-build contract lists but the build lacks, a review finding skipped (`[~]`) or deferred, an ERP cross-module dependency or hand-off (e.g. waiting for `accounting` financial ledger posting, `inventory` StockMove ledger, `scm` purchase flows, or `core` Party/Role changes), a business/tax/accounting rule waiting for client clarification, an integration test or verification that was not completed, or a defect observed in upstream or sibling code — **MUST go into its own dedicated gap file**:
+
+* **File Location & Naming**:
+  * **Per sub-module run**: `.agents/tasks/gaps-<slug>-<N.M>.md` (e.g., `.agents/tasks/gaps-sales-8.7.md`, `.agents/tasks/gaps-procurement-6.19.md`, `.agents/tasks/gaps-scm-4.18.md`) or `.claude/tasks/gaps-<slug>-<N.M>.md`.
+  * **Module-wide / cross-cutting topics**: If a topic belongs to no single sub-module, create/use `gaps-<topic>.md` (e.g., `.agents/tasks/gaps-stockmove-ledger.md`, `.agents/tasks/gaps-tax-calculation.md`).
+  * **No duplicates**: If a related gap file already exists for that sub-module or topic, append new entries to it instead of starting a duplicate file.
+* **Gap Entry Anatomy**:
+  Every gap entry in the file must have:
+  1. **ID**: Deterministic identifier (e.g., `GAP-<slug>-<N.M>-01`, `GAP-01`).
+  2. **Owner**: Owning module/sub-module, agent role, or session responsible for the resolution.
+  3. **Waiting For / Blocked On**: Exact dependency, blocking condition, external decision, or upstream prerequisite (e.g., "Waiting for Module 5 Inventory StockMove table to land", "Client approval needed on tax rounding rules", "Deferred to next sub-module pass").
+  4. **Status Checkbox**:
+     - `- [ ]` = Open / Unresolved
+     - `- [x]` = Closed / Completed (must include the resolving commit SHA or passing test)
+     - `- [~]` = Deferred / Transferred / Superseded (with documented reason)
+  5. **Done When**: Clear, unambiguous, testable acceptance criteria required to mark the gap done.
+  6. **Immutable History**: Close a gap by ticking `- [x]` along with the commit hash or test that verified the fix — **NEVER delete a gap entry**.
+* **Strict Discipline**:
+  * A gap is **never** left only in chat conversation transcripts, transient review scratchpads, or `# TODO` code comments.
+  * Every gap file MUST be explicitly linked from the sub-module's review/close-out block in `.claude/tasks/todo.md`.
+  * **No Gaps? Declare it**: If a run finishes with zero incomplete features and zero skipped/deferred items, explicitly state `**Gaps**: None` in the `todo.md` review section.
 
 ---
 
