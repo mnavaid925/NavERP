@@ -216,6 +216,36 @@ from .SalesActivityTaskManagement import (
     task_template_generate,
     task_template_list,
 )
+# 8.9 Sales Enablement
+from .SalesEnablement import (
+    coaching_scorecard_acknowledge,
+    coaching_scorecard_create,
+    coaching_scorecard_delete,
+    coaching_scorecard_detail,
+    coaching_scorecard_edit,
+    coaching_scorecard_list,
+    enablement_content_create,
+    enablement_content_delete,
+    enablement_content_detail,
+    enablement_content_edit,
+    enablement_content_list,
+    enablement_content_share,
+    sales_certification_create,
+    sales_certification_delete,
+    sales_certification_detail,
+    sales_certification_edit,
+    sales_certification_list,
+    sales_coaching_workbench,
+    sales_competitive_intelligence_library,
+    sales_enablement_content_hub,
+    sales_playbook_board,
+    sales_playbook_create,
+    sales_playbook_delete,
+    sales_playbook_detail,
+    sales_playbook_edit,
+    sales_playbook_list,
+    sales_readiness_board,
+)
 
 # View functions exported for URLconf routing and external imports
 __all__ = [
@@ -236,8 +266,13 @@ __all__ = [
         # 8.8 Sales Activity & Task Management
         "activity_type_", "activity_log_", "task_template_", "sales_plan_",
         "sales_activity_plan", "sales_next_best_actions", "sales_email_engagement",
+        # 8.9 Sales Enablement
+        "enablement_content_", "sales_playbook_", "sales_certification_", "coaching_scorecard_",
+        "sales_enablement_content_hub", "sales_readiness_board", "sales_coaching_workbench",
+        "sales_competitive_intelligence_library",
     ))
 ]
+
 
 
 
