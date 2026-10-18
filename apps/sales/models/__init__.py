@@ -64,6 +64,12 @@ from .SalesEnablement.SalesPlaybooks import SalesPlaybook
 from .SalesEnablement.SalesCertifications import SalesCertification
 from .SalesEnablement.CoachingScorecards import CoachingScorecard
 
+# 8.10 Incentive Compensation Management.
+from .IncentiveCompensation.CommissionPlans import CommissionPlan
+from .IncentiveCompensation.CommissionEarnings import CommissionEarning
+from .IncentiveCompensation.CommissionStatements import CommissionStatement
+from .IncentiveCompensation.CommissionAdjustments import CommissionAdjustment
+
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
     "LeadQualification", "LeadRoutingRule", "LeadNurtureEnrollment", "validate_routing_conditions",
@@ -88,7 +94,10 @@ __all__ = [
     "TaskTemplate", "TaskTemplateStep", "SalesPlanCycle", "ActivityGoal",
     # 8.9 Sales Enablement
     "EnablementContent", "SalesPlaybook", "SalesCertification", "CoachingScorecard",
+    # 8.10 Incentive Compensation Management
+    "CommissionPlan", "CommissionEarning", "CommissionStatement", "CommissionAdjustment",
 ]
+
 
 
 
