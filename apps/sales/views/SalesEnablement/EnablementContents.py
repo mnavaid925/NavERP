@@ -109,7 +109,11 @@ def enablement_content_create(request):
             messages.success(request, f"Enablement content '{obj.title}' created.")
             return redirect("sales:enablement_content_detail", pk=obj.pk)
     else:
-        form = EnablementContentForm(tenant=request.tenant)
+        initial = {}
+        comp_id = request.GET.get("competitor")
+        if comp_id and comp_id.isdecimal():
+            initial["competitor"] = int(comp_id)
+        form = EnablementContentForm(initial=initial, tenant=request.tenant)
 
     context = {"form": form, "content": None, "is_edit": False}
     return render(request, "sales/salesenablement/enablementcontent/form.html", context)
