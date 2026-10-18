@@ -81,7 +81,7 @@
                         <p class="text-xs text-slate-600 line-clamp-3 mb-3">{{ pb.summary|default:pb.target_audience }}</p>
                     </div>
                     <div class="pt-3 border-t border-slate-200 flex items-center justify-between text-xs">
-                        <span class="text-slate-500">{{ pb.owner.get_full_name|default:pb.owner.username|default:"Team" }}</span>
+                        <span class="text-slate-500">{% if pb.owner %}{{ pb.owner.get_full_name|default:pb.owner.username }}{% else %}—{% endif %}</span>
                         <a href="{% url 'sales:sales_playbook_detail' pb.pk %}" class="btn btn-outline btn-sm">
                             Open Playbook &rarr;
                         </a>
