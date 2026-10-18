@@ -22,7 +22,7 @@ from apps.sales.models.SalesEnablement.EnablementContents import (
 def enablement_content_list(request):
     qs = (
         EnablementContent.objects.filter(tenant=request.tenant)
-        .select_related("competitor", "document", "pipeline_stage", "author")
+        .select_related("competitor__party", "document", "pipeline_stage", "author")
         .order_by("-updated_at")
     )
 
@@ -77,7 +77,7 @@ def enablement_content_list(request):
 def enablement_content_detail(request, pk):
     content = get_object_or_404(
         EnablementContent.objects.filter(tenant=request.tenant).select_related(
-            "competitor", "document", "pipeline_stage", "author"
+            "competitor__party", "document", "pipeline_stage", "author"
         ),
         pk=pk,
     )
