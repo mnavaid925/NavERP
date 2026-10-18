@@ -8,7 +8,366 @@
 > Do not mass-tick the backlog.
 ---
 
+### 8.9 — Sales Enablement (app `sales`, extends `core.Document` + `sales.CompetitorProfile` + `crm.CommunicationLog` + `sales.ActivityLog`) — plan from `research-sales-8.9.md` (2026-10-18)
+
+> **This plan EXTENDS an existing app.** `apps/sales/` is live with 8.1–8.8. **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.** Migration is **incremental**: the leaf today is `0016_activitytype_activitylog_salesplancycle_activitygoal_and_more.py`, so **8.9 claims `0017`**.
+> Plan written from `.claude/tasks/research-sales-8.9.md` (Phase 1, 438 lines). **Every load-bearing claim below was re-verified by grep at plan time, not taken from research prose.**
+
+**THE OWNERSHIP RULINGS — read this before writing a single line of 8.9 (L29 / L36 / L37).**
+
+1. **Competitors**: **REUSE `sales.CompetitorProfile` (Sales 8.2, `CMP-`)**. 8.2 already owns `CompetitorProfile` (`CMP-`), `OpportunityCompetitor`, `WinLossReason` (`WLR-`), and `OpportunityOutcome` (`OUT-`). Declaring a `sales.Competitor` or `sales.BattleCardMaster` table would be a direct violation of L36/L37. 8.9 coordinates with 8.2 by linking battlecard collateral (`EnablementContent.competitor`) and playbooks to `sales.CompetitorProfile`.
+2. **Customer Interactions & Sales Activities**: **REUSE `crm.CommunicationLog` (CRM 1.5, `COM-`) & `sales.ActivityLog` (Sales 8.8, `SAL-`)**. 8.9 coaching scorecards evaluate calls and meetings already captured in `crm.CommunicationLog` and attributed in `sales.ActivityLog`. 8.9 declares **NO second call log, activity, meeting or email table**.
+3. **Collateral File Binaries**: **REUSE `core.Document` (Core 0)**. Collateral files (PDF decks, case studies, product sheets) are stored via `core.Document`. 8.9 provides the sales categorization, tagging, persona/stage targeting, and guided selling layer above it.
+4. **Pipelines & Stages**: **REUSE `sales.Pipeline` & `sales.PipelineStage` (Sales 8.2)**. Playbooks and collateral stage recommendations FK into existing 8.2 pipeline stages.
+5. **Users & Sales Reps**: **REUSE `accounts.User`**. Coachees, coaches, reps, and certifiers are `accounts.User` rows.
+6. **Enterprise LMS Bridge**: **REUSE `hrm.TrainingCourse` (HRM 3.22, `TRC-`)** as an optional nullable FK for enterprise course cross-referencing.
+
+- [ ] **There is NO duplicate competitor master, NO duplicate activity table, and NO custom binary file storage engine in 8.9.**
+- [ ] Every 8.9 FK to sibling or external modules is declared **by string** (`'sales.CompetitorProfile'`, `'crm.CommunicationLog'`, `'sales.ActivityLog'`, `'core.Document'`, `'sales.Pipeline'`, `'sales.PipelineStage'`, `'hrm.TrainingCourse'`), never by module-scope class imports where cycles are possible.
+
+**Repo state re-verified by the todo agent at plan time (L28 — the grep is the truth):**
+
+| Claim | Verification | Result |
+|---|---|---|
+| `TenantNumbered` base | `apps\sales\models\_base.py` | `TenantNumbered` provides `tenant` FK + `number` CharField (`editable=False`) + `NUMBER_PREFIX` + timestamps. **Base for all 4 models.** |
+| 8.2 owns `CompetitorProfile` | `apps\sales\models\CompetitiveIntelligence\CompetitiveIntelligence.py:7` | `CompetitorProfile` (`CMP-`) owns `party`, `market_positioning`, `strengths`, `weaknesses`, `differentiators`, `objection_handling`. **Confirmed 8.2's.** |
+| CRM 1.5 owns `CommunicationLog` | `apps\crm\models\ActivityManagement\CommunicationLogs.py:5` | `CommunicationLog` (`COM-`) owns `channel`, `duration_seconds`, `outcome`, `occurred_at`, `related_opportunity`. **Confirmed CRM 1.5's.** |
+| 8.8 owns `ActivityLog` | `apps\sales\models\SalesActivityTaskManagement\ActivityLogs.py:1` | `ActivityLog` (`SAL-`) attributes CRM communication logs. **Confirmed 8.8's.** |
+| Core owns `Document` | `apps\core\models\Document.py:5` | `Document` owns `file`, `name`, `classification`, `version`. **Confirmed Core 0's.** |
+| 8.2 owns `Pipeline` & `Stage` | `apps\sales\models\OpportunityPipeline\Pipelines.py` | `Pipeline` (`PIPE-`) and `PipelineStage`. **Confirmed 8.2's.** |
+| HRM owns `TrainingCourse` | `apps\hrm\models\TrainingManagement\Trainingcourse.py:26` | `TrainingCourse` (`TRC-`). **Confirmed HRM 3.22's.** |
+| Next migration | `Get-ChildItem apps\sales\migrations` | Leaf is `0016_activitytype_activitylog_salesplancycle_activitygoal_and_more.py`. **8.9 claims `0017`.** |
+| Prefix collisions | sweep across all `apps/*/models/**/*.py` | `ECN`, `SPB`, `SCTF`, `CSC` — **zero hits, all four free.** |
+| `related_name` collisions | sweep across all `apps/*/models/**/*.py` | `enablement_contents`, `sales_playbooks`, `sales_certifications`, `issued_sales_certifications`, `sales_coaching_scorecards`, `coached_scorecards`, `given_coaching_scorecards`, `coaching_scorecards` — **zero hits, free.** |
+| `sales:` URL prefixes in use | `apps/sales/urls/` sweep | `enablement/` prefix is **100% free under `sales:`.** |
+| 8.9 packages absent | `Test-Path` checks | `apps/sales/{models,forms,views,urls}/SalesEnablement/` all **False**. `templates/sales/salesenablement/` **False**. Nothing to overwrite. |
+| Badge classes | CSS grep | Only `.badge-amber .badge-green .badge-info .badge-muted .badge-red .badge-slate`. Semantic `-success/-danger` do **not** exist (L33). |
+
+**Scope: Exactly 4 models + 5 derived read-only boards. Prefixes `ECN` / `SPB` / `SCTF` / `CSC`.**
+
+### 8.9-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+
+- [ ] **NO second competitor master** — `sales.CompetitorProfile` (8.2) owns competitor profiles; 8.9 links battlecards to it and displays SWOT/win-loss in the CI library board.
+- [ ] **NO second customer interaction / call logging master** — `crm.CommunicationLog` (CRM 1.5) and `sales.ActivityLog` (Sales 8.8) own call records.
+- [ ] **NO second file storage engine** — `core.Document` (Core 0) handles binary file uploads; 8.9 adds sales categorization, persona/stage targeting, and external cloud URLs.
+- [ ] **NO real-time telephony bot / live audio streaming engine** — VoIP media recording bots and live Zoom/Teams webhooks belong to external telephony integrations. 8.9 captures `call_recording_url` and transcription summaries.
+- [ ] **NO real-time speech-to-text AI transcription engine** — Whisper/Deepgram pipelines belong to external worker integrations. 8.9 stores transcript summaries and sentiment metadata.
+- [ ] **NO automated web scraper / competitive price scraping engine** — Web scraping crawlers belong to an integration worker.
+- [ ] **NO AI roleplay avatar simulator** — Virtual pitch simulation belongs to future AI interactive training.
+- [ ] **NO enterprise LMS course delivery engine** — HRM 3.22–3.25 owns company-wide course rosters, classrooms, and HR certificates. 8.9 tracks sales readiness and pitch certifications.
+- [ ] **The 5 boards get NO table, NO seeder row, NO admin registration** — Boards are pure query projections over existing models.
+
+### 8.9-1 — Model (1) `EnablementContent` — `ECN` — `EnablementContents.py`
+
+Serves **Bullet 1** (Content Repository & Search) and **Bullet 5** (Battlecards and competitive positioning collateral).
+- [ ] `class EnablementContent(TenantNumbered)`, `NUMBER_PREFIX = "ECN"`.
+- [ ] `CONTENT_TYPE_CHOICES = [("battle_card", "Battle Card"), ("pitch_deck", "Pitch Deck"), ("case_study", "Case Study"), ("product_sheet", "Product Sheet"), ("whitepaper", "Whitepaper"), ("objection_script", "Objection Script"), ("solution_brief", "Solution Brief"), ("demo_guide", "Demo Guide"), ("email_template", "Email Template")]`.
+- [ ] `STATUS_CHOICES = [("draft", "Draft"), ("published", "Published"), ("archived", "Archived")]`.
+- [ ] Fields:
+  * `title`: `CharField(max_length=255)`
+  * `description`: `TextField(blank=True)`
+  * `content_type`: `CharField(max_length=30, choices=CONTENT_TYPE_CHOICES)`
+  * `document`: `ForeignKey("core.Document", on_delete=models.SET_NULL, null=True, blank=True, related_name="enablement_contents")`
+  * `external_url`: `URLField(max_length=500, blank=True)`
+  * `competitor`: `ForeignKey("sales.CompetitorProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="enablement_contents")`
+  * `pipeline_stage`: `ForeignKey("sales.PipelineStage", on_delete=models.SET_NULL, null=True, blank=True, related_name="enablement_contents")`
+  * `target_persona`: `CharField(max_length=120, blank=True)`
+  * `tags`: `TextField(blank=True)` (comma-separated keywords)
+  * `is_client_facing`: `BooleanField(default=False)`
+  * `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="published")`
+  * `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="owned_enablement_contents")`
+  * `version`: `CharField(max_length=20, default="1.0")`
+  * `expires_on`: `DateField(null=True, blank=True)`
+  * `view_count`: `PositiveIntegerField(default=0, editable=False)` (frozen evidence L22)
+  * `share_count`: `PositiveIntegerField(default=0, editable=False)` (frozen evidence L22)
+- [ ] Excluded from form: `tenant`, `number`, `view_count`, `share_count`.
+- [ ] Meta: `ordering = ["-created_at"]`, `UniqueConstraint(["tenant", "number"], name="sales_ecn_tenant_number_uniq")`, indexes: `(tenant, content_type)`, `(tenant, status)`, `(tenant, competitor)`, `(tenant, is_client_facing)` (all ≤ 30 chars).
+- [ ] `clean()` enforces:
+  * G1: `content_type == "battle_card"` requires `competitor is not None`.
+  * G3: `content_type == "battle_card"` forbids `is_client_facing == True` (battlecards are internal-only guidance).
+  * G4: At least one asset source must be non-empty (`document`, `external_url`, or non-empty `description`).
+  * G5: Cross-tenant isolation check on `document`, `competitor`, and `pipeline_stage`.
+
+### 8.9-2 — Model (2) `SalesPlaybook` — `SPB` — `SalesPlaybooks.py`
+
+Serves **Bullet 2** (Sales Playbooks & Guidance: stage talk tracks, discovery questions, and objection handling scripts).
+- [ ] `class SalesPlaybook(TenantNumbered)`, `NUMBER_PREFIX = "SPB"`.
+- [ ] `DEAL_TYPE_CHOICES = [("new_business", "New Business"), ("expansion", "Expansion / Upsell"), ("renewal", "Renewal"), ("competitive_displacement", "Competitive Displacement"), ("general", "General Motion")]`.
+- [ ] `STATUS_CHOICES = [("draft", "Draft"), ("active", "Active"), ("archived", "Archived")]`.
+- [ ] Fields:
+  * `name`: `CharField(max_length=255)`
+  * `code`: `SlugField(max_length=60)`
+  * `description`: `TextField(blank=True)`
+  * `deal_type`: `CharField(max_length=30, choices=DEAL_TYPE_CHOICES, default="new_business")`
+  * `target_pipeline`: `ForeignKey("sales.Pipeline", on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_playbooks")`
+  * `target_stage`: `ForeignKey("sales.PipelineStage", on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_playbooks")`
+  * `selling_motion`: `CharField(max_length=120, blank=True)` (e.g. "Inbound SMB", "Enterprise MEDDPICC")
+  * `talk_tracks`: `TextField(blank=True)` (verbatim talk tracks)
+  * `discovery_questions`: `TextField(blank=True)` (qualifying discovery questions)
+  * `objection_scripts`: `TextField(blank=True)` (common buyer objections and counters)
+  * `do_and_dont`: `TextField(blank=True)` (do's and don'ts field guide)
+  * `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="active")`
+  * `is_active`: `BooleanField(default=True)`
+  * `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="owned_sales_playbooks")`
+- [ ] Excluded from form: `tenant`, `number`.
+- [ ] Meta: `ordering = ["name"]`, `UniqueConstraint(["tenant", "number"], name="sales_spb_tenant_number_uniq")`, `UniqueConstraint(["tenant", "code"], name="sales_spb_tenant_code_uniq")`, indexes: `(tenant, is_active)`, `(tenant, target_pipeline)`, `(tenant, target_stage)` (all ≤ 30 chars).
+- [ ] `clean()` enforces:
+  * G6: `target_stage`, if set along with `target_pipeline`, must belong to `target_pipeline`.
+  * G7: Tenant isolation on `target_pipeline`, `target_stage`, and `owner`.
+
+### 8.9-3 — Model (3) `SalesCertification` — `SCTF` — `SalesCertifications.py`
+
+Serves **Bullet 3** (Training & Certification Tracking: onboarding curricula, product certification, and compliance training records).
+- [ ] `class SalesCertification(TenantNumbered)`, `NUMBER_PREFIX = "SCTF"`.
+- [ ] `CATEGORY_CHOICES = [("onboarding", "New Hire Onboarding"), ("product_certification", "Product Certification"), ("methodology", "Sales Methodology (e.g. MEDDPICC)"), ("compliance", "Commercial Compliance / Legal"), ("pitch_accreditation", "Pitch & Demo Accreditation")]`.
+- [ ] `STATUS_CHOICES = [("assigned", "Assigned"), ("in_progress", "In Progress"), ("certified", "Certified"), ("failed", "Failed"), ("expired", "Expired"), ("waived", "Waived")]`.
+- [ ] Fields:
+  * `rep`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sales_certifications")`
+  * `name`: `CharField(max_length=255)`
+  * `category`: `CharField(max_length=30, choices=CATEGORY_CHOICES, default="product_certification")`
+  * `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="assigned")`
+  * `score`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)])`
+  * `passed`: `BooleanField(default=False)`
+  * `assigned_date`: `DateField(default=timezone.localdate)`
+  * `completed_date`: `DateField(null=True, blank=True)`
+  * `expires_on`: `DateField(null=True, blank=True)`
+  * `certified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="issued_sales_certifications")`
+  * `training_course`: `ForeignKey("hrm.TrainingCourse", on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_certifications")`
+  * `notes`: `TextField(blank=True)`
+- [ ] Excluded from form: `tenant`, `number`.
+- [ ] Meta: `ordering = ["-assigned_date", "rep__email"]`, `UniqueConstraint(["tenant", "number"], name="sales_sctf_tenant_number_uniq")`, indexes: `(tenant, rep)`, `(tenant, status)`, `(tenant, category)`, `(tenant, expires_on)` (all ≤ 30 chars).
+- [ ] `clean()` enforces:
+  * G8: `status == "certified"` requires `completed_date is not None` and `passed == True`.
+  * G9: `status in ("assigned", "in_progress")` requires `completed_date is None`.
+  * G10: If both `completed_date` and `expires_on` are set, `expires_on > completed_date`.
+  * G11: Score must be between 0.00 and 100.00. Same-tenant checks on `rep`, `certified_by`, `training_course`.
+
+### 8.9-4 — Model (4) `CoachingScorecard` — `CSC` — `CoachingScorecards.py`
+
+Serves **Bullet 4** (Coaching & Call Recording: conversation intelligence metadata, manager coaching scorecards, call transcription reviews).
+- [ ] `class CoachingScorecard(TenantNumbered)`, `NUMBER_PREFIX = "CSC"`.
+- [ ] `SENTIMENT_CHOICES = [("positive", "Positive"), ("neutral", "Neutral"), ("negative", "Negative"), ("mixed", "Mixed")]`.
+- [ ] `STATUS_CHOICES = [("draft", "Draft"), ("shared", "Shared with Rep"), ("acknowledged", "Acknowledged by Rep")]`.
+- [ ] Fields:
+  * `communication_log`: `ForeignKey("crm.CommunicationLog", on_delete=models.CASCADE, related_name="sales_coaching_scorecards")`
+  * `activity_log`: `ForeignKey("sales.ActivityLog", on_delete=models.SET_NULL, null=True, blank=True, related_name="coaching_scorecards")`
+  * `coachee`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="coached_scorecards")`
+  * `coach`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="given_coaching_scorecards")`
+  * `call_recording_url`: `URLField(max_length=500, blank=True)`
+  * `transcript_summary`: `TextField(blank=True)`
+  * `sentiment`: `CharField(max_length=20, choices=SENTIMENT_CHOICES, blank=True)`
+  * `talk_ratio_pct`: `PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(100)])`
+  * `discovery_score`: `PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)])`
+  * `value_prop_score`: `PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)])`
+  * `objection_handling_score`: `PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)])`
+  * `next_steps_score`: `PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)])`
+  * `overall_score`: `PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(100)])`
+  * `strengths`: `TextField(blank=True)`
+  * `growth_areas`: `TextField(blank=True)`
+  * `action_items`: `TextField(blank=True)`
+  * `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft")`
+  * `coached_at`: `DateTimeField(default=timezone.now)`
+- [ ] Excluded from form: `tenant`, `number`.
+- [ ] Meta: `ordering = ["-coached_at"]`, `UniqueConstraint(["tenant", "number"], name="sales_csc_tenant_number_uniq")`, indexes: `(tenant, coachee)`, `(tenant, coach)`, `(tenant, communication_log)`, `(tenant, status)` (all ≤ 30 chars).
+- [ ] `clean()` enforces:
+  * G12: Cross-tenant isolation check on `communication_log`, `activity_log`, `coachee`, `coach`.
+  * G13: If `activity_log` is set, `activity_log.communication_log_id == communication_log_id`.
+  * G14: `coach != coachee` (manager coaching vs self-review).
+  * G15: Rubric scores (1 to 5) and `talk_ratio_pct` (0 to 100).
+  * G16: `overall_score` (1 to 100).
+
+### 8.9-5 — Derived Read-Only Boards (`EnablementBoards.py`)
+
+No tables, no migrations, no seeder rows. Pure query projections over existing models.
+- [ ] **Board 1: `sales_enablement_content_hub`** (Content Repository & Search)  
+  Serves **Bullet 1**. Collateral repository with visual asset cards, filters by `content_type`, `stage`, `competitor`, `target_persona`, `is_client_facing`, and keyword search over `title`, `description`, `tags`. Shows view/share engagement counts and download/external links.
+- [ ] **Board 2: `sales_playbook_board`** (Sales Playbooks & Guidance)  
+  Serves **Bullet 2**. Interactive guided selling workbench. Rep selects a deal motion / stage to view verbatim talk tracks, discovery questions, objection rebuttal scripts, do's & don'ts, and recommended battlecards.
+- [ ] **Board 3: `sales_readiness_board`** (Training & Certification Tracking)  
+  Serves **Bullet 3**. Team readiness matrix. Rep-by-category grid (`onboarding`, `product_certification`, `methodology`, `compliance`, `pitch_accreditation`) showing certification badges, scores, expiration warnings (within 30 days), and overdue certifications.
+- [ ] **Board 4: `sales_coaching_workbench`** (Coaching & Call Recording)  
+  Serves **Bullet 4**. Manager coaching dashboard showing recent interaction reviews, rubric averages (discovery, value prop, objection handling, closing), talk ratio benchmark (target ~45% talk / 55% listen), uncoached calls queue, and coachee performance rollup.
+- [ ] **Board 5: `sales_competitive_intelligence_library`** (Competitive Intelligence Library)  
+  Serves **Bullet 5**. Hub bringing together 8.2 `CompetitorProfile` records, their linked battlecard collateral (`EnablementContent`), SWOT matrices (strengths, weaknesses, differentiators, objection handling), and historical win/loss stats from `sales.OpportunityOutcome` + `sales.OpportunityCompetitor`.
+
+### 8.9-6 — Forms (`apps/sales/forms/SalesEnablement/`)
+
+All forms inherit `(TenantUniqueMixin, TenantModelForm)` from `apps.sales.forms._common`.
+- [ ] **`EnablementContentForm`** (`EnablementContents.py`):
+  * `Meta.fields = ["title", "description", "content_type", "document", "external_url", "competitor", "pipeline_stage", "target_persona", "tags", "is_client_facing", "status", "owner", "version", "expires_on"]`.
+  * Excluded: `tenant`, `number`, `view_count`, `share_count` (frozen evidence L22).
+  * `__init__` scopes: `document` to same-tenant `core.Document`, `competitor` to same-tenant active `CompetitorProfile`, `pipeline_stage` to same-tenant `PipelineStage`, `owner` to same-tenant active users.
+- [ ] **`SalesPlaybookForm`** (`SalesPlaybooks.py`):
+  * `Meta.fields = ["name", "code", "description", "deal_type", "target_pipeline", "target_stage", "selling_motion", "talk_tracks", "discovery_questions", "objection_scripts", "do_and_dont", "status", "is_active", "owner"]`.
+  * Excluded: `tenant`, `number`.
+  * `__init__` scopes: `target_pipeline` to same-tenant active `Pipeline`, `target_stage` to same-tenant `PipelineStage`, `owner` to same-tenant active users.
+- [ ] **`SalesCertificationForm`** (`SalesCertifications.py`):
+  * `Meta.fields = ["rep", "name", "category", "status", "score", "passed", "assigned_date", "completed_date", "expires_on", "certified_by", "training_course", "notes"]`.
+  * Excluded: `tenant`, `number`.
+  * `__init__` scopes: `rep` and `certified_by` to same-tenant active users, `training_course` to same-tenant `TrainingCourse`.
+- [ ] **`CoachingScorecardForm`** (`CoachingScorecards.py`):
+  * `Meta.fields = ["communication_log", "activity_log", "coachee", "coach", "call_recording_url", "transcript_summary", "sentiment", "talk_ratio_pct", "discovery_score", "value_prop_score", "objection_handling_score", "next_steps_score", "overall_score", "strengths", "growth_areas", "action_items", "status", "coached_at"]`.
+  * Excluded: `tenant`, `number`.
+  * `__init__` scopes: `communication_log` to same-tenant `crm.CommunicationLog`, `activity_log` to same-tenant `sales.ActivityLog`, `coachee` and `coach` to same-tenant active users.
+
+### 8.9-7 — URL Names and Routes (`apps/sales/urls/SalesEnablement/`)
+
+Literal routes before `<int:pk>`. Board routes concatenated first.
+- [ ] **Boards** (`EnablementBoards.py`):
+  * `enablement/hub/` → `enablement_content_hub`
+  * `enablement/playbooks/guidance-board/` → `sales_playbook_board`
+  * `enablement/readiness-board/` → `sales_readiness_board`
+  * `enablement/coaching-workbench/` → `sales_coaching_workbench`
+  * `enablement/competitive-intelligence/` → `sales_competitive_intelligence_library`
+- [ ] **Content** (`EnablementContents.py`):
+  * `enablement/content/` → `enablement_content_list`
+  * `enablement/content/add/` → `enablement_content_create`
+  * `enablement/content/<int:pk>/edit/` → `enablement_content_edit`
+  * `enablement/content/<int:pk>/delete/` → `enablement_content_delete` (POST-only, `@tenant_admin_required`)
+  * `enablement/content/<int:pk>/track-view/` → `enablement_content_track_view` (POST-only)
+  * `enablement/content/<int:pk>/track-share/` → `enablement_content_track_share` (POST-only)
+  * `enablement/content/<int:pk>/` → `enablement_content_detail`
+- [ ] **Playbooks** (`SalesPlaybooks.py`):
+  * `enablement/playbooks/` → `sales_playbook_list`
+  * `enablement/playbooks/add/` → `sales_playbook_create`
+  * `enablement/playbooks/<int:pk>/edit/` → `sales_playbook_edit`
+  * `enablement/playbooks/<int:pk>/delete/` → `sales_playbook_delete` (POST-only, `@tenant_admin_required`)
+  * `enablement/playbooks/<int:pk>/toggle/` → `sales_playbook_toggle` (POST-only)
+  * `enablement/playbooks/<int:pk>/` → `sales_playbook_detail`
+- [ ] **Certifications** (`SalesCertifications.py`):
+  * `enablement/certifications/` → `sales_certification_list`
+  * `enablement/certifications/add/` → `sales_certification_create`
+  * `enablement/certifications/<int:pk>/edit/` → `sales_certification_edit`
+  * `enablement/certifications/<int:pk>/delete/` → `sales_certification_delete` (POST-only, `@tenant_admin_required`)
+  * `enablement/certifications/<int:pk>/` → `sales_certification_detail`
+- [ ] **Scorecards** (`CoachingScorecards.py`):
+  * `enablement/coaching/` → `coaching_scorecard_list`
+  * `enablement/coaching/add/` → `coaching_scorecard_create`
+  * `enablement/coaching/<int:pk>/edit/` → `coaching_scorecard_edit`
+  * `enablement/coaching/<int:pk>/delete/` → `coaching_scorecard_delete` (POST-only, `@tenant_admin_required`)
+  * `enablement/coaching/<int:pk>/share/` → `coaching_scorecard_share` (POST-only)
+  * `enablement/coaching/<int:pk>/acknowledge/` → `coaching_scorecard_acknowledge` (POST-only)
+  * `enablement/coaching/<int:pk>/` → `coaching_scorecard_detail`
+
+### 8.9-8 — Views, URL Names, and Context Keys
+
+Every view is `@login_required`, tenant-scoped (`filter(tenant=request.tenant)`), uses `write_audit_log` (or `crud_*`), and gracefully handles tenantless superusers.
+- [ ] **`enablement_content_list`** → `object_list`, `page_obj`, `q`, `content_type_choices`, `status_choices`, `competitors`, `stages`, `is_client_facing_choices`, `stats` (dict: `total`, `published`, `battle_cards`, `client_facing`).
+- [ ] **`enablement_content_detail`** → `obj`, `content_type_display`, `status_display`, `can_track`.
+- [ ] **`enablement_content_create` / `_edit`** → `form`, `obj`, `is_edit`, `content_type_choices`.
+- [ ] **`sales_playbook_list`** → `object_list`, `page_obj`, `q`, `deal_type_choices`, `status_choices`, `pipelines`, `stages`, `stats` (dict: `total`, `active`, `new_business`, `competitive`).
+- [ ] **`sales_playbook_detail`** → `obj`, `deal_type_display`, `status_display`, `recommended_collateral`.
+- [ ] **`sales_playbook_create` / `_edit`** → `form`, `obj`, `is_edit`, `deal_type_choices`.
+- [ ] **`sales_certification_list`** → `object_list`, `page_obj`, `q`, `category_choices`, `status_choices`, `reps`, `stats` (dict: `total`, `certified`, `in_progress`, `expiring_soon`).
+- [ ] **`sales_certification_detail`** → `obj`, `category_display`, `status_display`.
+- [ ] **`sales_certification_create` / `_edit`** → `form`, `obj`, `is_edit`, `category_choices`.
+- [ ] **`coaching_scorecard_list`** → `object_list`, `page_obj`, `q`, `status_choices`, `sentiment_choices`, `coaches`, `coachees`, `stats` (dict: `total`, `avg_overall_score`, `shared`, `acknowledged`).
+- [ ] **`coaching_scorecard_detail`** → `obj`, `status_display`, `sentiment_display`, `rubric_dimensions`.
+- [ ] **`coaching_scorecard_create` / `_edit`** → `form`, `obj`, `is_edit`.
+- [ ] **`enablement_content_hub`** (Board 1) → `items`, `content_type_choices`, `competitors`, `stages`, `selected_type`, `selected_competitor`, `stats`.
+- [ ] **`sales_playbook_board`** (Board 2) → `playbooks`, `deal_type_choices`, `selected_deal_type`, `pipelines`, `selected_pipeline`, `stages`.
+- [ ] **`sales_readiness_board`** (Board 3) → `rep_matrix` (reps with per-category status), `category_choices`, `stats` (`total_reps`, `certified_pct`, `expiring_count`).
+- [ ] **`sales_coaching_workbench`** (Board 4) → `recent_scorecards`, `rubric_averages` (`avg_discovery`, `avg_value_prop`, `avg_objections`, `avg_closing`), `talk_ratio_stats`, `uncoached_calls` (recent `CommunicationLog` rows without scorecards).
+- [ ] **`sales_competitive_intelligence_library`** (Board 5) → `competitors` (with linked battlecards, SWOT summaries, win/loss stats aggregated from `sales.OpportunityOutcome` + `sales.OpportunityCompetitor`).
+
+### 8.9-9 — Backend Layout & Re-Exports
+
+- [ ] Create `apps/sales/models/SalesEnablement/__init__.py` (re-exports `EnablementContent`, `SalesPlaybook`, `SalesCertification`, `CoachingScorecard`, plus choices & helpers) + `EnablementContents.py`, `SalesPlaybooks.py`, `SalesCertifications.py`, `CoachingScorecards.py`.
+- [ ] Create `apps/sales/forms/SalesEnablement/__init__.py` + 4 form files.
+- [ ] Create `apps/sales/views/SalesEnablement/__init__.py` + 4 entity view files + `EnablementBoards.py`.
+- [ ] Create `apps/sales/urls/SalesEnablement/__init__.py` + 4 entity URL files + `EnablementBoards.py`.
+- [ ] Update `apps/sales/models/__init__.py`: import and re-export the 4 models, choices, and add to `__all__`.
+- [ ] Update `apps/sales/forms/__init__.py`: import and re-export the 4 forms.
+- [ ] Update `apps/sales/views/__init__.py`: import and re-export the views, update `__all__` prefix tuple with `"enablement_"`, `"sales_playbook_"`, `"sales_certification_"`, `"coaching_scorecard_"`.
+- [ ] Update `apps/sales/urls/__init__.py`: import `urlpatterns as _sales_enablement` from `.SalesEnablement` and concatenate `*_sales_enablement` into `urlpatterns`.
+- [ ] Update `apps/sales/admin.py`: register `EnablementContent`, `SalesPlaybook`, `SalesCertification`, `CoachingScorecard` with proper `list_display`, `list_filter`, `search_fields`, `readonly_fields`.
+- [ ] Incremental migration `0017`: `python manage.py makemigrations sales` → claims `0017`.
+- [ ] Seeder: extend `apps/sales/management/commands/seed_sales.py`:
+  * Add `_seed_sales_enablement(tenant, owner)` called from `handle()`.
+  * Create idempotent sample records:
+    - 4 `EnablementContent` (battle card for top competitor from 8.2 `CompetitorProfile`, client-facing pitch deck, case study, internal objection script).
+    - 2 `SalesPlaybook` (Enterprise MEDDPICC motion, Inbound SMB quick-close) with talk tracks, discovery questions, objection scripts, do's & don'ts.
+    - 3 `SalesCertification` across categories (`onboarding`, `product_certification`, `compliance`) with scores, completion/expiry dates, certifier user.
+    - 2 `CoachingScorecard` over existing `crm.CommunicationLog` rows, rubric scores (1–5 on discovery, value prop, objections, closing), talk ratio, transcript summaries, and feedback.
+  * Update summary banner to include 8.9.
+
+### 8.9-10 — Templates Layout (`templates/sales/salesenablement/`)
+
+Lowercase folder names, bare file names:
+- [ ] `templates/sales/salesenablement/enablementcontent/{list,detail,form}.html`
+- [ ] `templates/sales/salesenablement/salesplaybook/{list,detail,form}.html`
+- [ ] `templates/sales/salesenablement/salescertification/{list,detail,form}.html`
+- [ ] `templates/sales/salesenablement/coachingscorecard/{list,detail,form}.html`
+- [ ] `templates/sales/salesenablement/boards/content_hub.html`
+- [ ] `templates/sales/salesenablement/boards/playbook_board.html`
+- [ ] `templates/sales/salesenablement/boards/readiness_board.html`
+- [ ] `templates/sales/salesenablement/boards/coaching_workbench.html`
+- [ ] `templates/sales/salesenablement/boards/competitive_intelligence_library.html`
+All lists feature filter bar reflecting `request.GET`, Actions column with view/edit/delete (POST+confirm+csrf), pagination with `has_previous`/`has_next` guards (L9), empty states, and standard badge classes (`.badge-green`, `.badge-amber`, `.badge-red`, `.badge-info`, `.badge-muted`, `.badge-slate` — no `-success/-danger`).
+
+### 8.9-11 — Wire-Up (`apps/core/navigation.py`)
+
+- [ ] Add `LIVE_LINKS["8.9"]` with the 5 exact NavERP.md feature bullet names:
+```python
+    "8.9": {
+        # OWNERSHIP RULINGS (L29/L36/L37):
+        # - Competitor profiles are owned by Sales 8.2 (`sales.CompetitorProfile` `CMP-`); 8.9 links battlecards to them.
+        # - Call logs and interactions are owned by CRM 1.5 (`crm.CommunicationLog`) and Sales 8.8 (`sales.ActivityLog`).
+        # - Collateral binary files are owned by Core 0 (`core.Document`).
+        # The five NavERP.md 8.9 bullet strings, VERBATIM:
+        "Content Repository & Search": "sales:enablement_content_hub",
+        "Sales Playbooks & Guidance": "sales:sales_playbook_board",
+        "Training & Certification Tracking": "sales:sales_readiness_board",
+        "Coaching & Call Recording": "sales:sales_coaching_workbench",
+        "Competitive Intelligence Library": "sales:sales_competitive_intelligence_library",
+        # Extra live leaves:
+        "Enablement Content": "sales:enablement_content_list",
+        "Sales Playbooks": "sales:sales_playbook_list",
+        "Sales Certifications": "sales:sales_certification_list",
+        "Coaching Scorecards": "sales:coaching_scorecard_list",
+    },
+```
+
+### 8.9-12 — Verify
+
+- [ ] `python manage.py makemigrations sales` → generates `0017_...`
+- [ ] `python manage.py migrate` → applies cleanly.
+- [ ] `python manage.py seed_sales` × 2 → idempotent execution, zero crashes or duplicates.
+- [ ] `python manage.py check` → zero system check errors.
+- [ ] Smoke test script (`temp/smoke_sales_8_9.py`) executed as `admin_acme` / `password`:
+  * Every new `sales:*` URL returns HTTP 200 (or expected 302 on POST/actions).
+  * Assert content presence (no unrendered `{#` or `{% comment` template tags).
+  * Page titles render and seeded records are present.
+  * Cross-tenant IDOR checks: attempting to read or mutate another tenant's record yields HTTP 404.
+- [ ] Sidebar verification: navigate to Sales > 8.9 Sales Enablement, confirm all 5 feature bullets show "Live" and open their respective boards/views.
+
+### 8.9-13 — Close-Out
+
+- [ ] Run the 7 review passes in sequence:
+  1. `code-reviewer`
+  2. `explorer`
+  3. `frontend-reviewer`
+  4. `performance-reviewer`
+  5. `qa-smoke-tester`
+  6. `security-reviewer`
+  7. `test-writer` (4 test lanes in `apps/sales/tests/`: models, forms, views, security)
+- [ ] Update `.claude/skills/sales/SKILL.md` with 8.9 entities, rulings, and patterns.
+- [ ] Update `README.md` if applicable.
+
+### 8.9-14 — Later passes / Deferred
+
+- Real-Time Telephony Recording & Web Meeting Bots (Zoom/Teams bots, live VoIP media streaming) — external telephony integration.
+- Automated AI Speech-to-Text Transcription Engine (Whisper/Deepgram background transcription pipeline) — external worker integration.
+- Automated Web & Market Signal Scraper (competitor website changes, price scraping) — external crawler worker.
+- AI Virtual Pitch Practice & Roleplay Simulator — future interactive AI sales readiness pass.
+
+### 8.9-15 — Review notes
+(to be filled in during Phase 7 close-out)
+
+---
+
 ### 8.7 — Territory & Quota Management (app `sales`, extends `crm.Territory` + `crm.SalesQuota`)
+
 
 > **This plan EXTENDS an existing app.** `apps/sales/` is live with 8.1–8.6. **NO scaffold step. NO
 > `config/settings.py` edit. NO `config/urls.py` edit.** Migration is **incremental**: the leaf today is
