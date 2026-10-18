@@ -86,24 +86,30 @@ def sales_commission_earnings_dashboard(request):
 
     recent_earnings = earnings[:12]
 
-    # Aggregate by payee
+    # Aggregate by payee using grouped annotation
+    grouped = (
+        earnings.values("payee")
+        .annotate(
+            volume=Sum("credited_volume"),
+            gross=Sum("gross_commission"),
+            spif=Sum("spif_amount"),
+            attainment=Avg("attainment_pct_at_close"),
+        )
+        .order_by("-gross")
+    )
+    payee_ids = [g["payee"] for g in grouped if g["payee"]]
+    users_by_id = {u.id: u for u in User.objects.filter(id__in=payee_ids)}
+
     payee_summary = []
-    reps = User.objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "last_name")
-    for rep in reps:
-        rep_earnings = earnings.filter(payee=rep)
-        if rep_earnings.exists():
-            totals = rep_earnings.aggregate(
-                vol=Sum("credited_volume"),
-                gross=Sum("gross_commission"),
-                spif=Sum("spif_amount"),
-                avg_attainment=Avg("attainment_pct_at_close"),
-            )
+    for g in grouped:
+        user = users_by_id.get(g["payee"])
+        if user:
             payee_summary.append({
-                "payee": rep,
-                "volume": totals["vol"] or Decimal("0.00"),
-                "gross": totals["gross"] or Decimal("0.00"),
-                "spif": totals["spif"] or Decimal("0.00"),
-                "attainment": round(totals["avg_attainment"] or Decimal("0.00"), 1),
+                "payee": user,
+                "volume": g["volume"] or Decimal("0.00"),
+                "gross": g["gross"] or Decimal("0.00"),
+                "spif": g["spif"] or Decimal("0.00"),
+                "attainment": round(g["attainment"] or Decimal("0.00"), 1),
             })
 
     # Overall attainment gauge metrics
