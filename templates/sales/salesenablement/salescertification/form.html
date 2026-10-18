@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ certification.curriculum_name }}{% else %}Add Sales Certification{% endif %} — Sales Enablement — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_readiness_board' %}">Readiness Matrix</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_certification_list' %}">Certifications</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Record{% else %}New Record{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Certification: {{ certification.curriculum_name }}{% else %}Add Sales Certification Record{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label font-medium" for="{{ form.curriculum_name.id_for_label }}">Curriculum / Course Title *</label>
+                    {{ form.curriculum_name }}
+                    {% if form.curriculum_name.errors %}<div class="form-error">{{ form.curriculum_name.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.category.id_for_label }}">Certification Category *</label>
+                    {{ form.category }}
+                    {% if form.category.errors %}<div class="form-error">{{ form.category.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.rep.id_for_label }}">Sales Rep / Candidate *</label>
+                    {{ form.rep }}
+                    {% if form.rep.errors %}<div class="form-error">{{ form.rep.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Certification Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.hrm_course.id_for_label }}">HRM Course Master (LMS Bridge)</label>
+                    {{ form.hrm_course }}
+                    {% if form.hrm_course.errors %}<div class="form-error">{{ form.hrm_course.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Optional bridge to Module 3.22 Training course.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.score_percent.id_for_label }}">Achieved Score (%)</label>
+                    {{ form.score_percent }}
+                    {% if form.score_percent.errors %}<div class="form-error">{{ form.score_percent.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Enter percentage (e.g. 88.50).</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.passing_score_percent.id_for_label }}">Passing Score Threshold (%)</label>
+                    {{ form.passing_score_percent }}
+                    {% if form.passing_score_percent.errors %}<div class="form-error">{{ form.passing_score_percent.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Default is 80.00%.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.certified_by.id_for_label }}">Evaluator / Certified By</label>
+                    {{ form.certified_by }}
+                    {% if form.certified_by.errors %}<div class="form-error">{{ form.certified_by.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.certified_at.id_for_label }}">Accreditation Date</label>
+                    {{ form.certified_at }}
+                    {% if form.certified_at.errors %}<div class="form-error">{{ form.certified_at.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.expires_at.id_for_label }}">Expiration Date</label>
+                    {{ form.expires_at }}
+                    {% if form.expires_at.errors %}<div class="form-error">{{ form.expires_at.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Leave blank for lifetime validity.</span>
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.accreditation_notes.id_for_label }}">Evaluator Notes / Accreditation Feedback</label>
+                    {{ form.accreditation_notes }}
+                    {% if form.accreditation_notes.errors %}<div class="form-error">{{ form.accreditation_notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'sales:sales_certification_detail' certification.pk %}{% else %}{% url 'sales:sales_certification_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Record Certification{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
