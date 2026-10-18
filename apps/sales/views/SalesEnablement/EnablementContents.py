@@ -5,6 +5,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.utils import write_audit_log
@@ -162,8 +163,15 @@ def enablement_content_delete(request, pk):
 @require_POST
 def enablement_content_share(request, pk):
     obj = get_object_or_404(EnablementContent.objects.filter(tenant=request.tenant), pk=pk)
+    if not obj.is_active:
+        messages.error(request, f"Cannot share '{obj.title}' because this content asset is inactive.")
+        return redirect("sales:enablement_content_detail", pk=obj.pk)
+    if obj.expires_on and obj.expires_on < timezone.now().date():
+        messages.error(request, f"Cannot share '{obj.title}' because this content asset has expired.")
+        return redirect("sales:enablement_content_detail", pk=obj.pk)
     with transaction.atomic():
         obj.record_share()
     messages.info(request, f"Link copied / share recorded for '{obj.title}'.")
     return redirect("sales:enablement_content_detail", pk=obj.pk)
+
 
