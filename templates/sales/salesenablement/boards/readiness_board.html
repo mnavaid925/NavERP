@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Sales Rep Readiness & Accreditation Matrix — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Readiness Matrix</span>
+        </div>
+        <h1 class="page-title">Sales Readiness & Certification Matrix</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:sales_certification_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>Browse All Certifications</span>
+        </a>
+        <a href="{% url 'sales:sales_certification_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Add Accreditation</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="card p-6 flex items-center gap-4">
+        <div class="p-4 bg-blue-50 text-blue-600 rounded-lg">
+            <i data-lucide="award" class="w-8 h-8"></i>
+        </div>
+        <div>
+            <div class="text-3xl font-bold text-slate-900">{{ total_certifications }}</div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Enrolled Modules</div>
+        </div>
+    </div>
+    <div class="card p-6 flex items-center gap-4">
+        <div class="p-4 bg-emerald-50 text-emerald-600 rounded-lg">
+            <i data-lucide="check-circle-2" class="w-8 h-8"></i>
+        </div>
+        <div>
+            <div class="text-3xl font-bold text-emerald-700">{{ completed_count }}</div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Passed Accreditations</div>
+        </div>
+    </div>
+    <div class="card p-6 flex items-center gap-4">
+        <div class="p-4 bg-purple-50 text-purple-600 rounded-lg">
+            <i data-lucide="clock" class="w-8 h-8"></i>
+        </div>
+        <div>
+            <div class="text-3xl font-bold text-purple-700">{{ in_progress_count }}</div>
+            <div class="text-xs font-medium text-slate-500 uppercase">In Training / Enrolled</div>
+        </div>
+    </div>
+    <div class="card p-6 flex items-center gap-4">
+        <div class="p-4 bg-amber-50 text-amber-600 rounded-lg">
+            <i data-lucide="pie-chart" class="w-8 h-8"></i>
+        </div>
+        <div>
+            <div class="text-3xl font-bold text-slate-900">{{ completion_rate }}%</div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Overall Readiness Rate</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="font-semibold text-slate-800">Sales Representative Competency Matrix</h2>
+        <span class="text-xs text-slate-500">Live Team Readiness</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Sales Representative</th>
+                        <th>Total Assigned</th>
+                        <th>Completed</th>
+                        <th>In Progress</th>
+                        <th>Avg Exam Score</th>
+                        <th>Readiness Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rep_matrix %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ row.rep.get_full_name|default:row.rep.username }}</div>
+                            <div class="text-xs text-slate-500 font-mono">{{ row.rep.email|default:row.rep.username }}</div>
+                        </td>
+                        <td>
+                            <span class="font-medium text-slate-800">{{ row.total }}</span>
+                        </td>
+                        <td>
+                            <span class="badge badge-green">{{ row.completed }}</span>
+                        </td>
+                        <td>
+                            {% if row.in_progress > 0 %}
+                            <span class="badge badge-info">{{ row.in_progress }}</span>
+                            {% else %}
+                            <span class="text-slate-400 text-xs">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.avg_score %}
+                            <span class="font-bold text-slate-800">{{ row.avg_score }}%</span>
+                            {% else %}
+                            <span class="text-slate-400 text-xs">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.completed > 0 and row.in_progress == 0 %}
+                            <span class="badge badge-green">Fully Certified</span>
+                            {% elif row.completed > 0 %}
+                            <span class="badge badge-amber">Partial Accreditation</span>
+                            {% elif row.total > 0 %}
+                            <span class="badge badge-info">Onboarding</span>
+                            {% else %}
+                            <span class="badge badge-slate">Unassigned</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right table-actions">
+                            <a href="{% url 'sales:sales_certification_list' %}?rep={{ row.rep.pk }}" class="btn btn-outline btn-sm">
+                                View Records &rarr;
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-6 text-slate-500 text-sm">
+                            No sales representatives found in workspace.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
