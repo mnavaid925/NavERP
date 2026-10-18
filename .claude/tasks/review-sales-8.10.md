@@ -150,9 +150,64 @@ FAIL (Critical Runtime Defects Found — Commit after fixing Critical + Importan
 ---
 
 ## 6. Security & Multi-Tenancy Review (`security-reviewer`)
-*Pending review run...*
+
+### Verdict
+FAIL / CONDITIONAL PASS REQUIRED (Commit after fixing Critical + Important).
+
+### Critical
+- `apps/sales/views/IncentiveCompensation/CommissionStatements.py:176-192` — Privileged AuthZ & Self-Approval in Statement Approval: `commission_statement_approve` lacks `@tenant_admin_required` or manager gating, and permits sales rep payees to self-approve their own statements (`obj.payee == request.user`). Fix: Add `@tenant_admin_required`, block self-approval with `if obj.payee == request.user and not request.user.is_superuser: return HttpResponseForbidden(...)`, and guard status `if obj.status not in ("draft", "under_review"): return redirect(...)`.
+- `apps/sales/views/IncentiveCompensation/CommissionAdjustments.py:166-195` — Privileged AuthZ & Self-Approval in Dispute Ticket Resolution: `commission_adjustment_resolve_dispute` lacks authorization gating and allows sales rep payees/claimants to self-approve their own dispute claims. Fix: Add `@tenant_admin_required` and block self-approval `if (obj.payee == request.user or obj.requested_by == request.user) and not request.user.is_superuser: return HttpResponseForbidden(...)`.
+- `apps/sales/forms/IncentiveCompensation/CommissionStatements.py`, `CommissionAdjustments.py`, `CommissionEarnings.py` — Mass Assignment of `status`: Exposing `status` in `Meta.fields` allows direct POST manipulation of lifecycle states (`approved`, `locked`, `paid`). Fix: Remove `status` from `Meta.fields` in all 3 forms and manage state transitions via action endpoints.
+- `apps/sales/views/IncentiveCompensation/CommissionStatements.py:194, 212` — Missing Privileged AuthZ on Statement Locking & Batch Generation: `commission_statement_lock` and `commission_statement_generate_batch` allow any logged-in user to finalize statements and execute tenant-wide batch calculations. Fix: Add `@tenant_admin_required` to both endpoints.
+
+### Important
+- `apps/sales/views/IncentiveCompensation/CommissionEarnings.py:143-170, 172-188` — Missing Status Progression Guards on Paid Earnings: Paid earnings or earnings attached to locked/paid statements can be modified or deleted. Fix: Guard edit and delete views against mutating records in `approved`, `paid`, or `clawed_back` status.
+- `apps/sales/views/IncentiveCompensation/CommissionBoards.py:234-275` — Unhandled `Decimal` Exceptions & NaN/Infinity in What-If Simulator: Parameters parsed with `Decimal(...)` without exception handling or `.is_finite()` checks trigger 500s on `?deal_amount=abc` or `NaN`. Fix: Wrap in exception handling and return HTTP 400.
+- `apps/sales/views/IncentiveCompensation/CommissionStatements.py:212-270` — Missing Audit Logging on Batch Statement Generation: Batch generation mutates statements and earnings across the tenant without writing an audit log. Fix: Add `write_audit_log`.
+- `apps/sales/views/IncentiveCompensation/*.py` — Horizontal Information Disclosure & Rep Mutability: Regular reps can view and edit other reps' earnings and statements. Fix: Restrict non-admin queries and edit permissions to `payee=request.user`.
+
+### Minor
+- `apps/sales/views/IncentiveCompensation/CommissionStatements.py:249` — Unvalidated date string slicing in batch statement code generation. Fix: Parse dates with `datetime.date.fromisoformat`.
+- `apps/sales/views/IncentiveCompensation/CommissionPlans.py:110` & `CommissionEarnings.py:110` — Unrestricted plan and manual earning creation. Fix: Restrict plan creation to admins/managers.
+
+### Done well
+- Strict multi-tenant scoping (`tenant=request.tenant`) across all querysets in models and boards.
+- Double-layered foreign key cross-tenant rejection in both forms and model `clean()`.
+- HTTP verb enforcement (`@require_POST`) and CSRF tokens across all action endpoints.
+- Server-side deterministic waterfall calculations in model `clean()`.
 
 ---
 
 ## Deduplicated & Prioritized Action Items
-*To be compiled after all 6 passes...*
+
+### Critical (Must Fix Before Merge)
+- [ ] **C1**: Fix `write_audit_log` signature across all 8.10 views (`CommissionPlans.py`, `CommissionEarnings.py`, `CommissionStatements.py`, `CommissionAdjustments.py`) by passing the model instance `obj` instead of string `"sales.<Model>"` to prevent systematic HTTP 500 crashes.
+- [ ] **C2**: Add `@tenant_admin_required`, self-approval block (`obj.payee == request.user`), and status progression guard (`obj.status in ('draft', 'under_review')`) to `commission_statement_approve` in `CommissionStatements.py`.
+- [ ] **C3**: Add `@tenant_admin_required`, status guard (`obj.status == 'approved'`), and payee self-locking block to `commission_statement_lock` in `CommissionStatements.py`.
+- [ ] **C4**: Add `@tenant_admin_required`, self-approval block (`obj.payee == request.user or obj.requested_by == request.user`), and status guard (`obj.status == 'disputed'`) to `commission_adjustment_resolve_dispute` in `CommissionAdjustments.py`.
+- [ ] **C5**: Remove `"status"` from `Meta.fields` in `CommissionStatementForm`, `CommissionAdjustmentForm`, and `CommissionEarningForm` to prevent mass assignment lifecycle bypass. Update templates to remove status input widgets.
+- [ ] **C6**: Fix `CommissionPlanForm` field name mapping: align field to `tiers_config` (or remap in form `clean()`) to prevent `ValueError: 'CommissionPlanForm' has no field named 'tiers_config'` on validation failure.
+- [ ] **C7**: Fix hardcoded `<option value="1">` in `payout_processing.html:178` and pass `plans = CommissionPlan.objects.filter(tenant=request.tenant, status='active')` from `sales_commission_payout_processing` in `CommissionBoards.py`.
+- [ ] **C8**: Fix double minus formatting bug (`-$ -250.00`) on negative amounts in `commissionstatement/detail.html:104, 193`, `commissionadjustment/list.html:136`, and `commissionadjustment/detail.html:62`.
+- [ ] **C9**: Add `@tenant_admin_required`, `plan_id.isdecimal()` check, `net_payout = max(Decimal('0.00'), gross - draw_recovered)` calculation, and `write_audit_log` call to `commission_statement_generate_batch` in `CommissionStatements.py`.
+- [ ] **C10**: Add status mutation guards to `commission_earning_edit`, `commission_earning_delete`, and `commission_adjustment_edit` preventing modification/deletion of records in `approved`, `paid`, or `clawed_back` status, or on locked statements.
+- [ ] **C11**: Replace $O(N)$ rep aggregation loop in `sales_commission_earnings_dashboard` (`CommissionBoards.py:90-107`) with a single grouped `.values('payee').annotate(...)` query.
+- [ ] **C12**: Add cross-payee validation in model `clean()`: ensure `CommissionAdjustment.earning.payee == self.payee` and `statement.payee == self.payee`, and `CommissionEarning.statement.payee == self.payee`.
+
+### Important (High Priority Improvements)
+- [ ] **I1**: In `sales_commission_what_if_calc` (`CommissionBoards.py:236-244`), wrap `Decimal(...)` parsing in `try...except (InvalidOperation, TypeError, ValueError)`, validate `.is_finite()`, enforce bounds, return HTTP 400 on error, and add `.select_related('currency')` to `plan`.
+- [ ] **I2**: Replace illegal `stat-icon red` (L33) with `stat-icon slate` or `stat-icon orange` in `commissionadjustment/list.html:41` and `boards/adjustment_workbench.html:32`.
+- [ ] **I3**: Add Back-to-List button and status-conditional POST-only delete button with CSRF and confirm dialog on all 4 detail templates (`commissionplan`, `commissionearning`, `commissionstatement`, `commissionadjustment`).
+- [ ] **I4**: Preserve active filter GET parameters in pagination links across `commissionplan/list.html`, `commissionearning/list.html`, and `commissionadjustment/list.html`.
+- [ ] **I5**: Fix template N+1 queries by adding `.select_related('currency')` in `sales_commission_earnings_dashboard`, and `.select_related('deal_currency')` in `commission_plan_detail`.
+- [ ] **I6**: Consolidate fragmented KPI aggregate queries in boards and list views into batched `.aggregate()` calls.
+- [ ] **I7**: Add composite database indexes `(tenant, status)`, `(tenant, plan)`, and `(tenant, statement)` to `CommissionEarning`, `CommissionAdjustment`, and `CommissionStatement`. Run `makemigrations` and `migrate`.
+- [ ] **I8**: Enforce horizontal data scoping: non-admin users only view/edit their own payee records in list and detail views.
+- [ ] **I9**: Clean up unused `CommissionDisputeTicketForm` in `CommissionAdjustments.py`.
+
+### Minor (Clean-up & Polish)
+- [ ] **M1**: Update badge fallback rendering to use `{{ obj.get_status_display }}` instead of hardcoded text.
+- [ ] **M2**: Fix brittle string slicing `slice:"1:"` in `adjustment_workbench.html:142`.
+- [ ] **M3**: Update `seed_sales.py:93` help string to include 8.7 through 8.10.
+- [ ] **M4**: Use tenant currency or plan currency code instead of hardcoded `$` symbol in multi-currency templates.
+
