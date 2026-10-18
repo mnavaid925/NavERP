@@ -182,7 +182,7 @@ FAIL / CONDITIONAL PASS REQUIRED (Commit after fixing Critical + Important).
 
 ### Critical (Must Fix Before Merge)
 - [x] fixed — fix(sales): pass model instance to write_audit_log across 8.10 views **C1**: Fix `write_audit_log` signature across all 8.10 views (`CommissionPlans.py`, `CommissionEarnings.py`, `CommissionStatements.py`, `CommissionAdjustments.py`) by passing the model instance `obj` instead of string `"sales.<Model>"` to prevent systematic HTTP 500 crashes.
-- [ ] **C2**: Add `@tenant_admin_required`, self-approval block (`obj.payee == request.user`), and status progression guard (`obj.status in ('draft', 'under_review')`) to `commission_statement_approve` in `CommissionStatements.py`.
+- [x] fixed — fix(sales): add authz, self-approval block, and status guard to commission_statement_approve **C2**: Add `@tenant_admin_required`, self-approval block (`obj.payee == request.user`), and status progression guard (`obj.status in ('draft', 'under_review')`) to `commission_statement_approve` in `CommissionStatements.py`.
 - [ ] **C3**: Add `@tenant_admin_required`, status guard (`obj.status == 'approved'`), and payee self-locking block to `commission_statement_lock` in `CommissionStatements.py`.
 - [ ] **C4**: Add `@tenant_admin_required`, self-approval block (`obj.payee == request.user or obj.requested_by == request.user`), and status guard (`obj.status == 'disputed'`) to `commission_adjustment_resolve_dispute` in `CommissionAdjustments.py`.
 - [ ] **C5**: Remove `"status"` from `Meta.fields` in `CommissionStatementForm`, `CommissionAdjustmentForm`, and `CommissionEarningForm` to prevent mass assignment lifecycle bypass. Update templates to remove status input widgets.
