@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q, Sum
+from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -164,8 +165,14 @@ def commission_adjustment_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def commission_adjustment_resolve_dispute(request, pk):
     obj = get_object_or_404(CommissionAdjustment.objects.filter(tenant=request.tenant), pk=pk)
+    if (obj.payee == request.user or obj.requested_by == request.user) and not request.user.is_superuser:
+        return HttpResponseForbidden("You cannot resolve a dispute for your own adjustment or claim.")
+    if obj.status != "disputed":
+        messages.error(request, f"Adjustment cannot be resolved because it is in '{obj.get_status_display()}' status.")
+        return redirect("sales:commission_adjustment_detail", pk=obj.pk)
     decision = request.POST.get("decision")
     notes = request.POST.get("resolution_notes", "").strip()
 
