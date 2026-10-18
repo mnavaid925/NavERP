@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Competitive Intelligence Library — Sales Enablement — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Competitive Intelligence Library</span>
+        </div>
+        <h1 class="page-title">Competitive Intelligence & Battlecard Library</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:competitor_profile_list' %}" class="btn btn-outline">
+            <i data-lucide="shield"></i>
+            <span>8.2 Competitor Profiles</span>
+        </a>
+        <a href="{% url 'sales:enablement_content_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Create Battlecard</span>
+        </a>
+    </div>
+</div>
+
+<div class="card p-6 mb-8 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-lg">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-xl font-bold mb-1">Win-Loss & Battlecard Central</h2>
+            <p class="text-slate-300 text-sm max-w-2xl">
+                Real-time competitor positioning, objection handling rebuttals, battlecard collateral, and win/loss records powered by the canonical 8.2 competitor spine.
+            </p>
+        </div>
+        <div class="text-right">
+            <div class="text-3xl font-extrabold text-blue-400">{{ total_competitors }}</div>
+            <div class="text-xs text-slate-400 uppercase tracking-wider">Tracked Competitors</div>
+        </div>
+    </div>
+</div>
+
+<div class="space-y-6">
+    {% for item in competitor_data %}
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-amber-50 text-amber-700 rounded font-mono font-bold text-sm">
+                    {{ item.profile.number }}
+                </div>
+                <div>
+                    <h2 class="font-bold text-slate-900 text-base">
+                        <a href="{% url 'sales:competitor_profile_detail' item.profile.pk %}" class="hover:text-blue-600">
+                            {{ item.profile.party.name }}
+                        </a>
+                    </h2>
+                    {% if item.profile.website_url %}
+                    <a href="{{ item.profile.website_url }}" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-400 hover:underline">
+                        {{ item.profile.website_url }}
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="text-xs text-slate-500">
+                    <span class="font-bold text-green-700">{{ item.wins }}W</span> - <span class="font-bold text-red-600">{{ item.losses }}L</span>
+                </div>
+                <a href="{% url 'sales:competitor_profile_detail' item.profile.pk %}" class="btn btn-outline btn-sm">
+                    <span>Full Profile &rarr;</span>
+                </a>
+            </div>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                    <div class="text-xs font-semibold text-slate-600 uppercase mb-1">Market Positioning</div>
+                    <p class="text-sm text-slate-700 leading-snug">{{ item.profile.market_positioning|default:"No market positioning recorded yet." }}</p>
+                </div>
+                <div class="p-3 bg-emerald-50/50 rounded border border-emerald-100">
+                    <div class="text-xs font-semibold text-emerald-800 uppercase mb-1">Our Differentiators</div>
+                    <p class="text-sm text-slate-700 leading-snug">{{ item.profile.differentiators|default:"No key differentiators recorded." }}</p>
+                </div>
+                <div class="p-3 bg-amber-50/50 rounded border border-amber-100">
+                    <div class="text-xs font-semibold text-amber-800 uppercase mb-1">Objection Rebuttals</div>
+                    <p class="text-sm text-slate-700 leading-snug">{{ item.profile.objection_handling|default:"No objection handling notes recorded." }}</p>
+                </div>
+            </div>
+
+            <!-- Associated Enablement Battlecards -->
+            <div class="pt-3 border-t border-slate-200">
+                <div class="text-xs font-semibold text-slate-600 uppercase mb-2 flex items-center justify-between">
+                    <span>Associated Battlecards & Collateral ({{ item.battlecards.count }})</span>
+                    <a href="{% url 'sales:enablement_content_create' %}?competitor={{ item.profile.pk }}" class="text-blue-600 hover:underline lowercase font-normal">
+                        + add battlecard
+                    </a>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {% for bc in item.battlecards %}
+                    <div class="p-3 bg-white rounded border border-slate-200 hover:border-blue-400 transition flex items-center justify-between">
+                        <div class="truncate mr-2">
+                            <a href="{% url 'sales:enablement_content_detail' bc.pk %}" class="font-medium text-sm text-slate-900 hover:text-blue-600 truncate block">
+                                {{ bc.title }}
+                            </a>
+                            <span class="text-xs text-slate-500">{{ bc.number }} • v{{ bc.version }}</span>
+                        </div>
+                        <a href="{% url 'sales:enablement_content_detail' bc.pk %}" class="btn btn-icon btn-sm text-blue-600">
+                            <i data-lucide="arrow-right"></i>
+                        </a>
+                    </div>
+                    {% empty %}
+                    <div class="col-span-3 text-xs text-slate-400 py-1 italic">
+                        No specific battlecards attached. Click "+ add battlecard" to upload competitive collateral.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="card p-8 text-center">
+        <i data-lucide="shield-alert" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+        <h3 class="font-medium text-slate-700 mb-1">No Competitor Profiles Found</h3>
+        <p class="text-slate-500 text-sm mb-4">Competitors are defined in Module 8.2 and linked to sales enablement battlecards.</p>
+        <a href="{% url 'sales:competitor_profile_create' %}" class="btn btn-primary">
+            <span>Create 8.2 Competitor Profile</span>
+        </a>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
