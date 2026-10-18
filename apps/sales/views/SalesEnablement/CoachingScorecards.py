@@ -13,6 +13,8 @@ from apps.sales.models.SalesEnablement.CoachingScorecards import (
     SCORECARD_STATUS_CHOICES,
     CoachingScorecard,
 )
+from apps.sales.views._helpers import is_tenant_admin
+
 
 
 @login_required
@@ -152,6 +154,9 @@ def coaching_scorecard_delete(request, pk):
 @require_POST
 def coaching_scorecard_acknowledge(request, pk):
     obj = get_object_or_404(CoachingScorecard.objects.filter(tenant=request.tenant), pk=pk)
+    if obj.coachee_id != request.user.pk and not is_tenant_admin(request.user):
+        messages.error(request, "Only the coachee or a tenant administrator may acknowledge this scorecard.")
+        return redirect("sales:coaching_scorecard_detail", pk=obj.pk)
     obj.review_status = "acknowledged"
     obj.save(update_fields=["review_status", "updated_at"])
     write_audit_log(
@@ -162,3 +167,4 @@ def coaching_scorecard_acknowledge(request, pk):
     )
     messages.success(request, "Coaching evaluation acknowledged.")
     return redirect("sales:coaching_scorecard_detail", pk=obj.pk)
+
