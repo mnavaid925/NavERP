@@ -153,6 +153,10 @@ class CommissionStatement(TenantNumbered):
                 fields=["tenant", "payee"],
                 name="sales_cst_payee_idx",
             ),
+            models.Index(
+                fields=["tenant", "plan"],
+                name="sales_cst_ten_plan_idx",
+            ),
         ]
 
     def __str__(self):
