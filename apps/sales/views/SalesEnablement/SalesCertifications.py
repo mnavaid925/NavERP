@@ -88,12 +88,10 @@ def sales_certification_create(request):
                 obj.certified_by = request.user
             obj.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="SalesCertification",
-                object_id=str(obj.pk),
-                details=f"Created sales certification {obj.number}: {obj.curriculum_name} for {obj.rep}",
+                request.user,
+                obj,
+                "create",
+                changes={"curriculum": obj.curriculum_name, "number": obj.number},
             )
             messages.success(request, f"Certification record '{obj.curriculum_name}' created.")
             return redirect("sales:sales_certification_detail", pk=obj.pk)
@@ -112,12 +110,10 @@ def sales_certification_edit(request, pk):
         if form.is_valid():
             form.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="SalesCertification",
-                object_id=str(obj.pk),
-                details=f"Updated sales certification {obj.number}: {obj.curriculum_name} for {obj.rep}",
+                request.user,
+                obj,
+                "update",
+                changes={"curriculum": obj.curriculum_name, "number": obj.number},
             )
             messages.success(request, f"Certification record '{obj.curriculum_name}' updated.")
             return redirect("sales:sales_certification_detail", pk=obj.pk)
@@ -134,14 +130,12 @@ def sales_certification_delete(request, pk):
     obj = get_object_or_404(SalesCertification.objects.filter(tenant=request.tenant), pk=pk)
     name = obj.curriculum_name
     number = obj.number
-    obj.delete()
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="SalesCertification",
-        object_id=str(pk),
-        details=f"Deleted sales certification {number}: {name}",
+        request.user,
+        obj,
+        "delete",
+        changes={"curriculum": name, "number": number},
     )
+    obj.delete()
     messages.success(request, f"Certification '{name}' deleted.")
     return redirect("sales:sales_certification_list")
