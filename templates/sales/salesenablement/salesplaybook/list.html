@@ -125,7 +125,7 @@
                             {% endif %}
                         </td>
                         <td>
-                            <span class="text-sm text-slate-700">{{ item.owner.get_full_name|default:item.owner.username|default:"—" }}</span>
+                            <span class="text-sm text-slate-700">{% if item.owner %}{{ item.owner.get_full_name|default:item.owner.username }}{% else %}—{% endif %}</span>
                         </td>
                         <td>
                             {% if item.is_active %}
