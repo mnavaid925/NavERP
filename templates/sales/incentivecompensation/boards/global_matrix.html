@@ -68,11 +68,11 @@
                             <td class="text-xs font-semibold text-slate-600">{{ p.tax_withholding_pct }}%</td>
                             <td>
                                 {% if p.status == 'active' %}
-                                <span class="badge badge-green">Active</span>
+                                <span class="badge badge-green">{{ p.get_status_display }}</span>
                                 {% elif p.status == 'draft' %}
-                                <span class="badge badge-amber">Draft</span>
+                                <span class="badge badge-amber">{{ p.get_status_display }}</span>
                                 {% else %}
-                                <span class="badge badge-slate">Archived</span>
+                                <span class="badge badge-slate">{{ p.get_status_display }}</span>
                                 {% endif %}
                             </td>
                         </tr>
