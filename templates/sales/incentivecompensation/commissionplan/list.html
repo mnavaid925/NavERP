@@ -158,11 +158,11 @@
                     </td>
                     <td>
                         {% if plan.status == 'active' %}
-                        <span class="badge badge-green">Active</span>
+                        <span class="badge badge-green">{{ plan.get_status_display }}</span>
                         {% elif plan.status == 'draft' %}
-                        <span class="badge badge-amber">Draft</span>
+                        <span class="badge badge-amber">{{ plan.get_status_display }}</span>
                         {% else %}
-                        <span class="badge badge-slate">Archived</span>
+                        <span class="badge badge-slate">{{ plan.get_status_display }}</span>
                         {% endif %}
                     </td>
                     <td class="text-right table-actions">
