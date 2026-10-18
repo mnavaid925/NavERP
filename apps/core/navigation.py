@@ -2478,6 +2478,23 @@ LIVE_LINKS = {
         "Sales Certifications": "sales:sales_certification_list",
         "Coaching Scorecards": "sales:coaching_scorecard_list",
     },
+    "8.10": {
+        # OWNERSHIP RULING (L36/L37)
+        # Reuses CRM 1.3 Opportunity (OPP-) and OpportunitySplit; reuses CRM 1.8 SalesQuota (QTA-);
+        # reuses Sales 8.7 QuotaPlan (QPA-); reuses SCM 4.5 SalesOrder (SO-); reuses Accounting 2.2 Currency;
+        # links statements directly to Accounting 2.8 PayrollRun (PRUN-).
+        # Zero duplicate deals, orders, quotas, currencies, or payroll runs declared.
+        "Commission Plan Design": "sales:sales_commission_plan_hub",
+        "Real-Time Earnings Tracking": "sales:sales_commission_earnings_dashboard",
+        "Clawbacks & Adjustments": "sales:sales_commission_adjustment_workbench",
+        "Multi-Currency & Global Plans": "sales:sales_global_compensation_matrix",
+        "Payout Processing & Integration": "sales:sales_commission_payout_processing",
+        # Extra live leaves
+        "Commission Plans": "sales:commission_plan_list",
+        "Commission Earnings": "sales:commission_earning_list",
+        "Commission Statements": "sales:commission_statement_list",
+        "Commission Adjustments": "sales:commission_adjustment_list",
+    },
 
 
 
