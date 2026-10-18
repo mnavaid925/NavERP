@@ -56,6 +56,9 @@
                     {% endfor %}
                 </select>
             </div>
+            {% if target_persona %}
+            <input type="hidden" name="target_persona" value="{{ target_persona }}">
+            {% endif %}
             <div class="flex items-center gap-2">
                 <button type="submit" class="btn btn-outline flex-1">
                     <i data-lucide="filter"></i>
@@ -182,10 +185,10 @@
         </div>
         <div class="pagination flex gap-1">
             {% if contents.has_previous %}
-            <a href="?page={{ contents.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if content_type %}&content_type={{ content_type }}{% endif %}{% if target_stage %}&target_stage={{ target_stage }}{% endif %}{% if competitor_id %}&competitor={{ competitor_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            <a href="?page={{ contents.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if content_type %}&content_type={{ content_type }}{% endif %}{% if target_stage %}&target_stage={{ target_stage }}{% endif %}{% if target_persona %}&target_persona={{ target_persona }}{% endif %}{% if competitor_id %}&competitor={{ competitor_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
             {% endif %}
             {% if contents.has_next %}
-            <a href="?page={{ contents.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if content_type %}&content_type={{ content_type }}{% endif %}{% if target_stage %}&target_stage={{ target_stage }}{% endif %}{% if competitor_id %}&competitor={{ competitor_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ contents.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if content_type %}&content_type={{ content_type }}{% endif %}{% if target_stage %}&target_stage={{ target_stage }}{% endif %}{% if target_persona %}&target_persona={{ target_persona }}{% endif %}{% if competitor_id %}&competitor={{ competitor_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
             {% endif %}
         </div>
     </div>
