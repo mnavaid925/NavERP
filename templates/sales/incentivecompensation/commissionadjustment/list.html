@@ -133,7 +133,7 @@
                         <span class="badge badge-info">{{ adj.get_adjustment_type_display }}</span>
                     </td>
                     <td class="text-sm font-bold {% if adj.amount < 0 %}text-red-600{% else %}text-slate-900{% endif %}">
-                        {% if adj.amount >= 0 %}+${{ adj.amount|floatformat:2 }}{% else %}-${{ adj.amount|floatformat:2 }}{% endif %}
+                        {% if adj.amount >= 0 %}+${{ adj.amount|floatformat:2 }}{% else %}${{ adj.amount|floatformat:2 }}{% endif %}
                     </td>
                     <td class="text-xs text-slate-600">
                         {{ adj.effective_date|date:"M d, Y" }}
