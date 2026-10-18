@@ -2462,6 +2462,23 @@ LIVE_LINKS = {
         "Next Best Actions": "sales:sales_next_best_actions",
         "Email Engagement Rollup": "sales:sales_email_engagement",
     },
+    "8.9": {
+        # OWNERSHIP RULING (L36/L37)
+        # Reuses 8.2 CompetitorProfile (CMP-) for competitor battlecards; reuses CRM 1.5 CommunicationLog (COM-)
+        # and Sales 8.8 ActivityLog (SAL-) for coaching scorecards; reuses core.Document for collateral files.
+        # Zero duplicate competitor, call log, activity, or document models declared.
+        "Content Repository & Search": "sales:enablement_content_hub",
+        "Sales Playbooks & Guidance": "sales:sales_playbook_board",
+        "Training & Certification Tracking": "sales:sales_readiness_board",
+        "Coaching & Call Recording": "sales:sales_coaching_workbench",
+        "Competitive Intelligence Library": "sales:sales_competitive_intelligence_library",
+        # Extra live leaves
+        "Content Assets": "sales:enablement_content_list",
+        "Sales Playbooks": "sales:sales_playbook_list",
+        "Sales Certifications": "sales:sales_certification_list",
+        "Coaching Scorecards": "sales:coaching_scorecard_list",
+    },
+
 
 
 
