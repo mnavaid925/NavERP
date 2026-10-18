@@ -45,7 +45,7 @@ def sales_playbook_list(request):
         qs = qs.filter(status=status)
 
     pipeline_id = request.GET.get("pipeline", "").strip()
-    if pipeline_id.isdigit():
+    if pipeline_id.isdecimal():
         qs = qs.filter(pipeline_id=int(pipeline_id))
 
     paginator = Paginator(qs, 15)
