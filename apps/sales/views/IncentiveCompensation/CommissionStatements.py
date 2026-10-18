@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -48,20 +48,22 @@ def commission_statement_list(request):
     if payee_id.isdecimal():
         qs = qs.filter(payee_id=int(payee_id))
 
-    total_net = qs.aggregate(val=Sum("net_payout"))["val"] or 0.00
-    locked_count = qs.filter(status__in=["locked", "exported", "paid"]).count()
-    pending_approval = qs.filter(status="under_review").count()
-    draws_rec = qs.aggregate(val=Sum("draw_recovered"))["val"] or 0.00
+    stats_agg = qs.aggregate(
+        total_net=Sum("net_payout"),
+        locked_count=Count("id", filter=Q(status__in=["locked", "exported", "paid"])),
+        pending_approval=Count("id", filter=Q(status="under_review")),
+        draws_rec=Sum("draw_recovered"),
+    )
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
     stats = {
-        "total_net_payout": total_net,
-        "locked_count": locked_count,
-        "pending_approval": pending_approval,
-        "total_draws_recovered": draws_rec,
+        "total_net_payout": stats_agg["total_net"] or Decimal("0.00"),
+        "locked_count": stats_agg["locked_count"] or 0,
+        "pending_approval": stats_agg["pending_approval"] or 0,
+        "total_draws_recovered": stats_agg["draws_rec"] or Decimal("0.00"),
     }
 
     payees = User.objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "last_name")
