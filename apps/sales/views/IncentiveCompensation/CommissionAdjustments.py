@@ -106,7 +106,7 @@ def commission_adjustment_create(request):
             obj.save()
             write_audit_log(
                 request.user,
-                "sales.CommissionAdjustment",
+                obj,
                 "create",
                 {"pk": obj.pk, "number": obj.number, "amount": str(obj.amount)},
                 tenant=request.tenant,
@@ -143,7 +143,7 @@ def commission_adjustment_edit(request, pk):
             obj = form.save()
             write_audit_log(
                 request.user,
-                "sales.CommissionAdjustment",
+                obj,
                 "update",
                 {"pk": obj.pk, "number": obj.number, "amount": str(obj.amount)},
                 tenant=request.tenant,
@@ -185,7 +185,7 @@ def commission_adjustment_resolve_dispute(request, pk):
     obj.save()
     write_audit_log(
         request.user,
-        "sales.CommissionAdjustment",
+        obj,
         "update",
         {"pk": obj.pk, "action": f"dispute_{decision}", "notes": notes},
         tenant=request.tenant,
@@ -206,7 +206,7 @@ def commission_adjustment_delete(request, pk):
     num = obj.number
     write_audit_log(
         request.user,
-        "sales.CommissionAdjustment",
+        obj,
         "delete",
         {"pk": obj.pk, "number": num},
         tenant=request.tenant,
