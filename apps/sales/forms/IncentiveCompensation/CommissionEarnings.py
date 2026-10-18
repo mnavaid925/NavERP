@@ -27,7 +27,6 @@ class CommissionEarningForm(TenantUniqueMixin, TenantModelForm):
             "spif_amount",
             "deal_currency",
             "exchange_rate",
-            "status",
             "earned_date",
             "clawback_parent",
         ]
@@ -44,7 +43,6 @@ class CommissionEarningForm(TenantUniqueMixin, TenantModelForm):
             "spif_amount": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
             "deal_currency": forms.Select(attrs={"class": "form-select"}),
             "exchange_rate": forms.NumberInput(attrs={"class": "form-input", "step": "0.000001"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
             "earned_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "clawback_parent": forms.Select(attrs={"class": "form-select"}),
         }
