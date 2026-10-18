@@ -151,15 +151,15 @@
                         </td>
                         <td class="text-right table-actions">
                             <div class="flex items-center justify-end gap-1">
-                                <a href="{% url 'sales:coaching_scorecard_detail' item.pk %}" class="btn btn-icon" title="View Evaluation">
+                                <a href="{% url 'sales:coaching_scorecard_detail' item.pk %}" class="btn btn-icon" title="View Evaluation" aria-label="View Evaluation">
                                     <i data-lucide="eye"></i>
                                 </a>
-                                <a href="{% url 'sales:coaching_scorecard_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                                <a href="{% url 'sales:coaching_scorecard_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit">
                                     <i data-lucide="pencil"></i>
                                 </a>
                                 <form method="post" action="{% url 'sales:coaching_scorecard_delete' item.pk %}" onsubmit="return confirm('Delete this coaching scorecard?');" class="inline">
                                     {% csrf_token %}
-                                    <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                    <button type="submit" class="btn btn-icon danger" title="Delete" aria-label="Delete">
                                         <i data-lucide="trash-2"></i>
                                     </button>
                                 </form>
