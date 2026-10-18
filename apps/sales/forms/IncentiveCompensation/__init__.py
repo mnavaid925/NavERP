@@ -1,7 +1,6 @@
 """Sales 8.10 — IncentiveCompensation forms package re-exports."""
 from apps.sales.forms.IncentiveCompensation.CommissionAdjustments import (
     CommissionAdjustmentForm,
-    CommissionDisputeTicketForm,
 )
 from apps.sales.forms.IncentiveCompensation.CommissionEarnings import CommissionEarningForm
 from apps.sales.forms.IncentiveCompensation.CommissionPlans import CommissionPlanForm
@@ -12,5 +11,4 @@ __all__ = [
     "CommissionEarningForm",
     "CommissionStatementForm",
     "CommissionAdjustmentForm",
-    "CommissionDisputeTicketForm",
 ]
