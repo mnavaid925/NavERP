@@ -247,6 +247,40 @@ from .SalesEnablement import (
     sales_readiness_board,
 )
 
+# 8.10 Incentive Compensation Management
+from .IncentiveCompensation import (
+    commission_adjustment_create,
+    commission_adjustment_delete,
+    commission_adjustment_detail,
+    commission_adjustment_edit,
+    commission_adjustment_list,
+    commission_adjustment_resolve_dispute,
+    commission_earning_create,
+    commission_earning_delete,
+    commission_earning_detail,
+    commission_earning_edit,
+    commission_earning_list,
+    commission_plan_create,
+    commission_plan_delete,
+    commission_plan_detail,
+    commission_plan_edit,
+    commission_plan_list,
+    commission_statement_approve,
+    commission_statement_create,
+    commission_statement_delete,
+    commission_statement_detail,
+    commission_statement_edit,
+    commission_statement_generate_batch,
+    commission_statement_list,
+    commission_statement_lock,
+    sales_commission_adjustment_workbench,
+    sales_commission_earnings_dashboard,
+    sales_commission_payout_processing,
+    sales_commission_plan_hub,
+    sales_commission_what_if_calc,
+    sales_global_compensation_matrix,
+)
+
 # View functions exported for URLconf routing and external imports
 __all__ = [
     name for name in globals()
@@ -270,8 +304,12 @@ __all__ = [
         "enablement_content_", "sales_playbook_", "sales_certification_", "coaching_scorecard_",
         "sales_enablement_content_hub", "sales_readiness_board", "sales_coaching_workbench",
         "sales_competitive_intelligence_library",
+        # 8.10 Incentive Compensation Management
+        "commission_plan_", "commission_earning_", "commission_statement_", "commission_adjustment_",
+        "sales_commission_", "sales_global_compensation_",
     ))
 ]
+
 
 
 
