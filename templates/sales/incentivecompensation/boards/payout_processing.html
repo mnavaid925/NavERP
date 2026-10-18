@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Payout Processing & Payroll Integration — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <span>Payout Processing</span>
+        </div>
+        <h1 class="page-title">Payout Processing & Payroll Integration</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:commission_statement_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>All Statements</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Approved Payout Total</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_payout_due|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Statements Ready</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.statements_ready }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="send"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Payroll Integrated</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.payroll_integrated }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Ready Statements & Approvals -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Ready for Payout Statements -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">Statements Approved & Ready for Settlement</h3>
+                <span class="badge badge-green">{{ ready_statements|length }} finalized</span>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Payee</th>
+                            <th>Period</th>
+                            <th>Net Payout</th>
+                            <th>Status</th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in ready_statements %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'sales:commission_statement_detail' s.pk %}" class="text-primary hover:underline">
+                                    {{ s.statement_number }}
+                                </a>
+                            </td>
+                            <td class="text-sm font-medium text-slate-900">{{ s.payee.get_full_name|default:s.payee.email }}</td>
+                            <td class="text-xs text-slate-600">{{ s.period_start|date:"M d" }} – {{ s.period_end|date:"M d, Y" }}</td>
+                            <td class="text-sm font-black text-slate-900">${{ s.net_payout|floatformat:2 }}</td>
+                            <td>
+                                {% if s.status == 'locked' %}
+                                <span class="badge badge-green">Locked</span>
+                                {% else %}
+                                <span class="badge badge-info">Approved</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right table-actions">
+                                <a href="{% url 'sales:commission_statement_detail' s.pk %}" class="btn btn-outline text-xs">
+                                    View
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-6 text-sm text-slate-400">
+                                No finalized statements queued for payout.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pending Manager Review Statements -->
+        {% if pending_approvals %}
+        <div class="card">
+            <div class="card-header flex justify-between items-center bg-amber-50/50">
+                <h3 class="font-semibold text-slate-900">Statements Pending Manager Review</h3>
+                <span class="badge badge-amber">{{ pending_approvals|length }} pending</span>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Payee</th>
+                            <th>Period</th>
+                            <th>Gross</th>
+                            <th>Net Payout</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in pending_approvals %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">{{ p.statement_number }}</td>
+                            <td class="text-sm font-medium text-slate-900">{{ p.payee.get_full_name|default:p.payee.email }}</td>
+                            <td class="text-xs text-slate-600">{{ p.period_start|date:"M d" }} – {{ p.period_end|date:"M d, Y" }}</td>
+                            <td class="text-sm text-slate-700">${{ p.gross_earnings|floatformat:2 }}</td>
+                            <td class="text-sm font-bold text-slate-900">${{ p.net_payout|floatformat:2 }}</td>
+                            <td class="text-right table-actions">
+                                <a href="{% url 'sales:commission_statement_detail' p.pk %}" class="btn btn-outline text-xs">
+                                    Review
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Column: Batch Statement Generator & Accounting Payroll Runs -->
+    <div class="space-y-6">
+        <!-- Batch Statement Generator Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Batch Statement Generation</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'sales:commission_statement_generate_batch' %}" class="space-y-3">
+                    {% csrf_token %}
+                    <div>
+                        <label class="form-label text-xs">Settlement Start Date</label>
+                        <input type="date" name="period_start" required class="form-input text-sm w-full">
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Settlement End Date</label>
+                        <input type="date" name="period_end" required class="form-input text-sm w-full">
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Compensation Plan</label>
+                        <select name="plan_id" required class="form-select text-sm w-full">
+                            <option value="">Select plan...</option>
+                            {% for s in ready_statements|slice:":1" %}
+                            {% endfor %}
+                            <option value="1">Active Plan Envelope</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full justify-center">
+                        <i data-lucide="refresh-cw"></i>
+                        <span>Generate Period Batch</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Accounting Module 2.8 Payroll Runs -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Accounting Payroll Batches</h3>
+            </div>
+            <div class="card-body">
+                <ul class="divide-y divide-slate-100 text-xs">
+                    {% for pr in payroll_runs %}
+                    <li class="py-2.5 flex justify-between items-center">
+                        <div>
+                            <div class="font-mono font-semibold text-slate-800">{{ pr.number }}</div>
+                            <div class="text-slate-400">Pay Date: {{ pr.pay_date|date:"M d, Y" }}</div>
+                        </div>
+                        <span class="badge badge-info">{{ pr.status }}</span>
+                    </li>
+                    {% empty %}
+                    <li class="text-slate-400 py-2">No linked payroll runs found.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
