@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}{{ certification.curriculum_name }} — Sales Certification — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_readiness_board' %}">Readiness Matrix</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_certification_list' %}">Certifications</a>
+            <span>/</span>
+            <span>{{ certification.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ certification.curriculum_name }}</h1>
+            <span class="badge badge-slate">{{ certification.get_category_display }}</span>
+            {% if certification.status == 'completed' %}
+            <span class="badge badge-green">Completed / Passed</span>
+            {% elif certification.status == 'enrolled' %}
+            <span class="badge badge-info">In Progress</span>
+            {% elif certification.status == 'failed' %}
+            <span class="badge badge-red">Failed</span>
+            {% else %}
+            <span class="badge badge-muted">Expired</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:sales_certification_edit' certification.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Record</span>
+        </a>
+        <form method="post" action="{% url 'sales:sales_certification_delete' certification.pk %}" onsubmit="return confirm('Delete this sales certification record?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Accreditation Summary</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Achieved Score</div>
+                        <div class="text-3xl font-bold {% if certification.score_percent and certification.score_percent >= certification.passing_score_percent %}text-green-700{% else %}text-slate-800{% endif %}">
+                            {{ certification.score_percent|default:"—" }}%
+                        </div>
+                    </div>
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Passing Threshold</div>
+                        <div class="text-3xl font-bold text-slate-700">
+                            {{ certification.passing_score_percent }}%
+                        </div>
+                    </div>
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Outcome</div>
+                        <div class="text-base font-bold mt-2">
+                            {% if certification.status == 'completed' %}
+                            <span class="text-green-600">Passed Accreditation</span>
+                            {% elif certification.status == 'failed' %}
+                            <span class="text-red-600">Retake Required</span>
+                            {% elif certification.status == 'expired' %}
+                            <span class="text-amber-600">Expired</span>
+                            {% else %}
+                            <span class="text-blue-600">In Training</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if certification.accreditation_notes %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Evaluator Notes & Accreditation Feedback</h3>
+                    <div class="text-sm text-slate-800 whitespace-pre-wrap bg-slate-50 p-4 rounded border border-slate-200">
+                        {{ certification.accreditation_notes }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if certification.hrm_course %}
+                <div class="p-4 bg-purple-50 border border-purple-200 rounded flex items-center justify-between mt-4">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="graduation-cap" class="w-8 h-8 text-purple-600"></i>
+                        <div>
+                            <div class="font-medium text-slate-900">{{ certification.hrm_course.title }}</div>
+                            <div class="text-xs text-slate-500">HRM Training Module 3.22 Integration • {{ certification.hrm_course.number }}</div>
+                        </div>
+                    </div>
+                    <span class="badge badge-purple">HRM Course Master</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Candidate & Evaluator</h2>
+            </div>
+            <div class="card-body p-0">
+                <dl class="divide-y divide-slate-200 text-sm">
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Record #</dt>
+                        <dd class="font-mono font-medium text-slate-800">{{ certification.number }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Sales Rep</dt>
+                        <dd class="font-medium text-slate-800">{{ certification.rep.get_full_name|default:certification.rep.username }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Certified By</dt>
+                        <dd class="text-slate-800">{{ certification.certified_by.get_full_name|default:certification.certified_by.username|default:"—" }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Accreditation Date</dt>
+                        <dd class="text-slate-800">{{ certification.certified_at|date:"M d, Y"|default:"Not Yet Certified" }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Expires On</dt>
+                        <dd class="text-slate-800">
+                            {% if certification.expires_at %}
+                            {{ certification.expires_at|date:"M d, Y" }}
+                            {% else %}
+                            <span class="text-slate-500">Lifetime Validity</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Created At</dt>
+                        <dd class="text-slate-800">{{ certification.created_at|date:"M d, Y" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
