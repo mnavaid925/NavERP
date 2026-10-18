@@ -117,7 +117,7 @@ def commission_earning_create(request):
             obj.save()
             write_audit_log(
                 request.user,
-                "sales.CommissionEarning",
+                obj,
                 "create",
                 {"pk": obj.pk, "number": obj.number, "gross": str(obj.gross_commission)},
                 tenant=request.tenant,
@@ -149,7 +149,7 @@ def commission_earning_edit(request, pk):
             obj = form.save()
             write_audit_log(
                 request.user,
-                "sales.CommissionEarning",
+                obj,
                 "update",
                 {"pk": obj.pk, "number": obj.number, "gross": str(obj.gross_commission)},
                 tenant=request.tenant,
@@ -177,7 +177,7 @@ def commission_earning_delete(request, pk):
     num = obj.number
     write_audit_log(
         request.user,
-        "sales.CommissionEarning",
+        obj,
         "delete",
         {"pk": obj.pk, "number": num},
         tenant=request.tenant,
