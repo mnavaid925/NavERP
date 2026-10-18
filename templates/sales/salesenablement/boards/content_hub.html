@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Sales Content Hub & Repository — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Enablement Hub</span>
+        </div>
+        <h1 class="page-title">Sales Content Repository & Enablement Hub</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:enablement_content_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>Browse All Collateral</span>
+        </a>
+        <a href="{% url 'sales:enablement_content_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Upload Collateral</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="card p-6 flex items-center gap-4">
+        <div class="p-4 bg-blue-50 text-blue-600 rounded-lg">
+            <i data-lucide="file-text" class="w-8 h-8"></i>
+        </div>
+        <div>
+            <div class="text-3xl font-bold text-slate-900">{{ total_contents }}</div>
+            <div class="text-sm font-medium text-slate-500">Total Active Collateral</div>
+        </div>
+    </div>
+    <div class="card p-6 flex items-center gap-4">
+        <div class="p-4 bg-amber-50 text-amber-600 rounded-lg">
+            <i data-lucide="swords" class="w-8 h-8"></i>
+        </div>
+        <div>
+            <div class="text-3xl font-bold text-slate-900">{{ total_battlecards }}</div>
+            <div class="text-sm font-medium text-slate-500">Competitor Battlecards</div>
+        </div>
+    </div>
+    <div class="card p-6 flex items-center gap-4">
+        <div class="p-4 bg-emerald-50 text-emerald-600 rounded-lg">
+            <i data-lucide="send" class="w-8 h-8"></i>
+        </div>
+        <div>
+            <div class="text-3xl font-bold text-slate-900">{{ total_client_facing }}</div>
+            <div class="text-sm font-medium text-slate-500">Client-Facing Approved</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Battle Cards Section -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="swords" class="w-5 h-5 text-amber-600"></i>
+                    <h2 class="font-semibold text-slate-800">Featured Competitor Battlecards</h2>
+                </div>
+                <a href="{% url 'sales:sales_competitive_intelligence_library' %}" class="text-xs text-blue-600 hover:underline">
+                    View CI Library &rarr;
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% for item in battlecards %}
+                    <div class="p-4 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="badge badge-amber text-xs">vs {{ item.competitor.party.name|default:"General" }}</span>
+                                <span class="text-xs text-slate-400">v{{ item.version }}</span>
+                            </div>
+                            <h3 class="font-medium text-slate-900 text-sm mb-1">
+                                <a href="{% url 'sales:enablement_content_detail' item.pk %}" class="hover:text-blue-600">
+                                    {{ item.title }}
+                                </a>
+                            </h3>
+                            <p class="text-xs text-slate-500 line-clamp-2 mb-3">{{ item.description }}</p>
+                        </div>
+                        <div class="flex items-center justify-between pt-2 border-t border-slate-200 text-xs text-slate-500">
+                            <span>Stage: {{ item.get_target_stage_display }}</span>
+                            <a href="{% url 'sales:enablement_content_detail' item.pk %}" class="text-blue-600 font-medium">Open &rarr;</a>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="col-span-2 text-center py-6 text-slate-500 text-sm">
+                        No competitor battlecards published yet.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Pitch Decks & Solution Sheets -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="presentation" class="w-5 h-5 text-blue-600"></i>
+                    <h2 class="font-semibold text-slate-800">Pitch Decks & Solution Sheets</h2>
+                </div>
+                <a href="{% url 'sales:enablement_content_list' %}?content_type=pitch_deck" class="text-xs text-blue-600 hover:underline">
+                    All Decks &rarr;
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% for item in decks %}
+                    <div class="p-4 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="badge badge-info text-xs">{{ item.get_target_persona_display }}</span>
+                                {% if item.is_client_facing %}
+                                <span class="badge badge-green text-xs">Client-Facing</span>
+                                {% endif %}
+                            </div>
+                            <h3 class="font-medium text-slate-900 text-sm mb-1">
+                                <a href="{% url 'sales:enablement_content_detail' item.pk %}" class="hover:text-blue-600">
+                                    {{ item.title }}
+                                </a>
+                            </h3>
+                            <p class="text-xs text-slate-500 line-clamp-2 mb-3">{{ item.description }}</p>
+                        </div>
+                        <div class="flex items-center justify-between pt-2 border-t border-slate-200 text-xs text-slate-500">
+                            <span>{{ item.view_count }} views</span>
+                            <a href="{% url 'sales:enablement_content_detail' item.pk %}" class="text-blue-600 font-medium">Open &rarr;</a>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="col-span-2 text-center py-6 text-slate-500 text-sm">
+                        No pitch decks registered yet.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar: Popular & Fast Filters -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Most Utilized Collateral</h2>
+            </div>
+            <div class="card-body p-0">
+                <ul class="divide-y divide-slate-200 text-sm">
+                    {% for item in popular_contents %}
+                    <li class="p-3 hover:bg-slate-50">
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'sales:enablement_content_detail' item.pk %}" class="hover:text-blue-600">
+                                {{ item.title }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500 flex items-center justify-between mt-1">
+                            <span class="badge badge-slate text-xs py-0">{{ item.get_content_type_display }}</span>
+                            <span>{{ item.view_count }} views • {{ item.share_count }} shares</span>
+                        </div>
+                    </li>
+                    {% empty %}
+                    <li class="p-4 text-center text-slate-500 text-xs">No engagement data recorded yet.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Quick Filters by Persona</h2>
+            </div>
+            <div class="card-body p-2">
+                <div class="flex flex-col gap-1">
+                    {% for val, label in persona_choices %}
+                    {% if val != 'all' %}
+                    <a href="{% url 'sales:enablement_content_list' %}?target_persona={{ val }}" class="px-3 py-2 rounded text-sm text-slate-700 hover:bg-slate-100 flex items-center justify-between">
+                        <span>{{ label }}</span>
+                        <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+                    </a>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
