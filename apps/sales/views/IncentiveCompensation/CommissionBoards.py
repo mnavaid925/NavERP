@@ -264,6 +264,7 @@ def sales_commission_what_if_calc(request):
     projected_gross = round(base_comm + spif_bonus, 2)
 
     return JsonResponse({
+        "ok": True,
         "attributed_volume": float(attributed_vol),
         "applied_rate_pct": float(applied_rate),
         "tier_bracket_name": tier_name,
