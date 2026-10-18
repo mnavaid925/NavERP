@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Commission Statements & Settlements — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <span>Statements</span>
+        </div>
+        <h1 class="page-title">Commission Statements & Settlements</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:sales_commission_payout_processing' %}" class="btn btn-outline">
+            <i data-lucide="send"></i>
+            <span>Payout Workbench</span>
+        </a>
+        <a href="{% url 'sales:commission_statement_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Create Statement</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Net Payable</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_net_payout|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="lock"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Locked / Finalized</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.locked_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Pending Review</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.pending_approval }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="refresh-cw"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Draws Recovered</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_draws_recovered|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ q }}" placeholder="Search statement code, rep name, number..." class="form-input w-full">
+            </div>
+            <div>
+                <select name="payee" class="form-select w-full">
+                    <option value="">All Reps / Payees</option>
+                    {% for p in payees %}
+                    <option value="{{ p.pk|stringformat:'d' }}" {% if request.GET.payee == p.pk|stringformat:'d' %}selected{% endif %}>{{ p.get_full_name|default:p.email }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <select name="status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Statement Code</th>
+                    <th>Payee</th>
+                    <th>Plan</th>
+                    <th>Settlement Period</th>
+                    <th>Gross Earnings</th>
+                    <th>Draw Recov.</th>
+                    <th>Clawbacks</th>
+                    <th>Net Payout</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stmt in object_list %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        <a href="{% url 'sales:commission_statement_detail' stmt.pk %}" class="text-primary hover:underline">
+                            {{ stmt.statement_number }}
+                        </a>
+                        <div class="text-slate-400 font-normal">{{ stmt.number }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ stmt.payee.get_full_name|default:stmt.payee.email }}</div>
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ stmt.plan.name }}
+                    </td>
+                    <td class="text-xs text-slate-700">
+                        {{ stmt.period_start|date:"M d, Y" }} – {{ stmt.period_end|date:"M d, Y" }}
+                    </td>
+                    <td class="text-sm font-semibold text-slate-900">
+                        ${{ stmt.gross_earnings|floatformat:2 }}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {% if stmt.draw_recovered > 0 %}
+                        -${{ stmt.draw_recovered|floatformat:2 }}
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-red-600">
+                        {% if stmt.clawbacks_deducted > 0 %}
+                        -${{ stmt.clawbacks_deducted|floatformat:2 }}
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm font-black text-slate-900">
+                        ${{ stmt.net_payout|floatformat:2 }}
+                    </td>
+                    <td>
+                        {% if stmt.status == 'approved' or stmt.status == 'locked' %}
+                        <span class="badge badge-green">{{ stmt.get_status_display }}</span>
+                        {% elif stmt.status == 'paid' or stmt.status == 'exported' %}
+                        <span class="badge badge-info">{{ stmt.get_status_display }}</span>
+                        {% elif stmt.status == 'under_review' %}
+                        <span class="badge badge-amber">Under Review</span>
+                        {% else %}
+                        <span class="badge badge-slate">Draft</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'sales:commission_statement_detail' stmt.pk %}" class="btn btn-outline btn-icon" title="View Details" aria-label="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if stmt.status != 'locked' and stmt.status != 'exported' and stmt.status != 'paid' %}
+                        <a href="{% url 'sales:commission_statement_edit' stmt.pk %}" class="btn btn-outline btn-icon" title="Edit Statement" aria-label="Edit Statement">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'sales:commission_statement_delete' stmt.pk %}" class="inline" onsubmit="return confirm('Delete this statement?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Statement" aria-label="Delete Statement">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="p-8 text-center">
+                        <div class="empty-state">
+                            <i data-lucide="file-text" class="mx-auto h-12 w-12 text-slate-300"></i>
+                            <h3 class="mt-2 text-sm font-semibold text-slate-900">No commission statements generated</h3>
+                            <p class="mt-1 text-sm text-slate-500">Roll up credited earnings into period statements with draw and clawback waterfall deductions.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'sales:commission_statement_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Statement</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-xs text-slate-500">
+            Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} total)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.payee %}&payee={{ request.GET.payee }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.payee %}&payee={{ request.GET.payee }}{% endif %}" class="btn btn-outline text-xs">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
