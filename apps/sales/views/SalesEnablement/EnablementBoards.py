@@ -77,14 +77,18 @@ def sales_playbook_board(request):
     total_playbooks = playbooks_qs.count()
     total_published = playbooks_qs.filter(status="published").count()
 
-    # Group playbooks by motion
+    # Group playbooks by motion in-memory
+    items_by_motion = {}
+    for pb in playbooks_qs.order_by("-updated_at"):
+        items_by_motion.setdefault(pb.motion_type, []).append(pb)
+
     playbooks_by_motion = []
     for motion_code, motion_name in SELLING_MOTION_CHOICES:
-        motion_items = playbooks_qs.filter(motion_type=motion_code)
+        motion_items = items_by_motion.get(motion_code, [])
         playbooks_by_motion.append({
             "code": motion_code,
             "name": motion_name,
-            "count": motion_items.count(),
+            "count": len(motion_items),
             "items": motion_items[:5],
         })
 
