@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}{{ playbook.name }} — Sales Playbook — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_playbook_board' %}">Playbook Board</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_playbook_list' %}">Playbooks</a>
+            <span>/</span>
+            <span>{{ playbook.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ playbook.name }}</h1>
+            <span class="badge badge-info">{{ playbook.get_motion_type_display }}</span>
+            {% if playbook.status == 'published' %}
+            <span class="badge badge-green">Published</span>
+            {% elif playbook.status == 'under_review' %}
+            <span class="badge badge-amber">Under Review</span>
+            {% elif playbook.status == 'archived' %}
+            <span class="badge badge-muted">Archived</span>
+            {% else %}
+            <span class="badge badge-slate">Draft</span>
+            {% endif %}
+            {% if not playbook.is_active %}
+            <span class="badge badge-red">Inactive</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:sales_playbook_edit' playbook.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Playbook</span>
+        </a>
+        <form method="post" action="{% url 'sales:sales_playbook_delete' playbook.pk %}" onsubmit="return confirm('Delete this sales playbook?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        {% if playbook.summary %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Executive Summary & Motion Objective</h2>
+            </div>
+            <div class="card-body">
+                <p class="text-sm text-slate-700 leading-relaxed">{{ playbook.summary }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if playbook.discovery_questions %}
+        <div class="card border-l-4 border-l-blue-600">
+            <div class="card-header flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="help-circle" class="w-5 h-5 text-blue-600"></i>
+                    <h2 class="font-semibold text-slate-800">Diagnostic Discovery Questions</h2>
+                </div>
+                <span class="text-xs text-slate-500">Qualification & Pain Probing</span>
+            </div>
+            <div class="card-body">
+                <div class="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed bg-blue-50/50 p-4 rounded border border-blue-100 font-sans">
+                    {{ playbook.discovery_questions }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if playbook.talk_tracks %}
+        <div class="card border-l-4 border-l-emerald-600">
+            <div class="card-header flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="message-square" class="w-5 h-5 text-emerald-600"></i>
+                    <h2 class="font-semibold text-slate-800">Verbatim Talk Tracks & Value Positioning</h2>
+                </div>
+                <span class="text-xs text-slate-500">Elevator Pitch & Customer Stories</span>
+            </div>
+            <div class="card-body">
+                <div class="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed bg-emerald-50/50 p-4 rounded border border-emerald-100 font-sans">
+                    {{ playbook.talk_tracks }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if playbook.objection_scripts %}
+        <div class="card border-l-4 border-l-amber-500">
+            <div class="card-header flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="shield-alert" class="w-5 h-5 text-amber-600"></i>
+                    <h2 class="font-semibold text-slate-800">Objection Handling & Rebuttal Scripts</h2>
+                </div>
+                <span class="text-xs text-slate-500">Battle-Tested Counter-Arguments</span>
+            </div>
+            <div class="card-body">
+                <div class="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed bg-amber-50/50 p-4 rounded border border-amber-100 font-sans">
+                    {{ playbook.objection_scripts }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {% if playbook.dos_and_donts %}
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="font-semibold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="check-circle-2" class="w-4 h-4 text-green-600"></i>
+                        <span>Do's & Don'ts</span>
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <div class="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 p-3 rounded border border-slate-200">
+                        {{ playbook.dos_and_donts }}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if playbook.exit_criteria %}
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="font-semibold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="door-open" class="w-4 h-4 text-purple-600"></i>
+                        <span>Stage Exit Criteria</span>
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <div class="text-sm text-slate-700 whitespace-pre-wrap bg-purple-50/50 p-3 rounded border border-purple-100">
+                        {{ playbook.exit_criteria }}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Playbook Alignment</h2>
+            </div>
+            <div class="card-body p-0">
+                <dl class="divide-y divide-slate-200 text-sm">
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Playbook #</dt>
+                        <dd class="font-mono font-medium text-slate-800">{{ playbook.number }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Selling Motion</dt>
+                        <dd class="font-medium text-slate-800">{{ playbook.get_motion_type_display }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Associated Pipeline</dt>
+                        <dd class="font-medium text-slate-800">
+                            {% if playbook.pipeline %}
+                            {{ playbook.pipeline.name }}
+                            {% else %}
+                            <span class="text-slate-400">Universal / All</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Target ICP</dt>
+                        <dd class="text-slate-800 text-right">{{ playbook.target_audience|default:"General" }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Owner</dt>
+                        <dd class="text-slate-800">{{ playbook.owner.get_full_name|default:playbook.owner.username|default:"System" }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Version</dt>
+                        <dd class="font-mono text-slate-800">v{{ playbook.version }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Last Modified</dt>
+                        <dd class="text-slate-800">{{ playbook.updated_at|date:"M d, Y" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card bg-slate-50 border border-slate-200">
+            <div class="card-body text-center p-6">
+                <i data-lucide="lightbulb" class="w-10 h-10 text-amber-500 mx-auto mb-2"></i>
+                <h3 class="font-semibold text-slate-800 text-sm mb-1">Rep Field Tip</h3>
+                <p class="text-xs text-slate-600">Review the talk tracks and objection handling scripts immediately prior to live prospect demos and executive alignment calls.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
