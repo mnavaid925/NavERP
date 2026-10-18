@@ -33,6 +33,8 @@ from .TerritoryQuotaManagement import urlpatterns as _territory_quota
 # the `+ _sales_activity` concatenation below is a complete no-op that still leaves `manage.py check`
 # perfectly clean while every reverse() for these names raises NoReverseMatch (L54's second rule).
 from .SalesActivityTaskManagement import urlpatterns as _sales_activity
+# 8.9 Sales Enablement
+from .SalesEnablement import urlpatterns as _sales_enablement
 
 app_name = "sales"
 
@@ -61,12 +63,15 @@ urlpatterns = [
     *_territory_quota,
     # 8.8 Sales Activity & Task Management.
     *_sales_activity,
+    # 8.9 Sales Enablement.
+    *_sales_enablement,
     *_pipelines,
     *_teams,
     *_competitors,
     *_outcomes,
     *_workspace,
 ]
+
 
 
 
