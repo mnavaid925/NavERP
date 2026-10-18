@@ -180,10 +180,10 @@ def sales_competitive_intelligence_library(request):
         )
         # Check 8.2 opportunity outcomes against this competitor if any
         outcomes = OpportunityOutcome.objects.filter(
-            tenant=tenant, competitor=comp
+            tenant=tenant, competitor_link__competitor_profile=comp
         )
-        wins = outcomes.filter(outcome="won").count()
-        losses = outcomes.filter(outcome="lost").count()
+        wins = outcomes.filter(result="won").count()
+        losses = outcomes.filter(result="lost").count()
         competitor_data.append({
             "profile": comp,
             "battlecards": battlecards,
