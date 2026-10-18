@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Commission Statement — {{ obj.statement_number }}{% else %}Create Commission Statement{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <a href="{% url 'sales:commission_statement_list' %}">Statements</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.statement_number }}{% else %}New Statement{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Statement: {{ obj.statement_number }}{% else %}Create Commission Statement{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:commission_statement_detail' obj.pk %}{% else %}{% url 'sales:commission_statement_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card border-red-300 bg-red-50 p-4">
+        <div class="text-sm text-red-700">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Statement Envelope & Settlement Period</h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.statement_number.id_for_label }}">Statement Code *</label>
+                    {{ form.statement_number }}
+                    {% if form.statement_number.errors %}<div class="form-error">{{ form.statement_number.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.payee.id_for_label }}">Sales Rep / Payee *</label>
+                    {{ form.payee }}
+                    {% if form.payee.errors %}<div class="form-error">{{ form.payee.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.plan.id_for_label }}">Compensation Plan *</label>
+                    {{ form.plan }}
+                    {% if form.plan.errors %}<div class="form-error">{{ form.plan.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.period_start.id_for_label }}">Period Start Date *</label>
+                    {{ form.period_start }}
+                    {% if form.period_start.errors %}<div class="form-error">{{ form.period_start.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.period_end.id_for_label }}">Period End Date *</label>
+                    {{ form.period_end }}
+                    {% if form.period_end.errors %}<div class="form-error">{{ form.period_end.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.draw_advance_paid.id_for_label }}">Draw Advance Paid</label>
+                    {{ form.draw_advance_paid }}
+                    {% if form.draw_advance_paid.errors %}<div class="form-error">{{ form.draw_advance_paid.errors }}</div>{% endif %}
+                </div>
+            </div>
+            <div class="form-group mt-4">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Statement Notes & Reconciliations</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+        <div class="card-footer flex justify-end gap-3 p-4 bg-slate-50 border-t border-slate-200">
+            <a href="{% if is_edit %}{% url 'sales:commission_statement_detail' obj.pk %}{% else %}{% url 'sales:commission_statement_list' %}{% endif %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check"></i>
+                <span>{% if is_edit %}Save Changes{% else %}Create Statement{% endif %}</span>
+            </button>
+        </div>
+    </div>
+</form>
+{% endblock %}
