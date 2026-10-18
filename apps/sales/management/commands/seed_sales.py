@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -61,6 +61,11 @@ from apps.sales.models import (
     SalesPlaybook,
     SalesCertification,
     CoachingScorecard,
+    # 8.10 Incentive Compensation Management
+    CommissionPlan,
+    CommissionEarning,
+    CommissionStatement,
+    CommissionAdjustment,
 )
 
 from apps.sales.cpq_services import cpq_recalc_quote_totals, cpq_render_proposal_html, cpq_convert_to_sales_order
@@ -104,7 +109,7 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, backfill=backfill)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, and 8.9 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, and 8.10 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
@@ -136,6 +141,7 @@ class Command(BaseCommand):
         self._seed_territory_quota(tenant, owner)
         self._seed_activity_tasks(tenant, owner)
         self._seed_sales_enablement(tenant, owner)
+        self._seed_incentive_compensation(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -2202,5 +2208,302 @@ class Command(BaseCommand):
             f"{SalesPlaybook.objects.filter(tenant=tenant).count()} playbooks, "
             f"{SalesCertification.objects.filter(tenant=tenant).count()} certifications, "
             f"{CoachingScorecard.objects.filter(tenant=tenant).count()} coaching scorecards)."
+        )
+
+    def _seed_incentive_compensation(self, tenant, owner):
+        """Seed Sales 8.10 Incentive Compensation Management demo rows idempotently."""
+        from apps.scm.models import SalesOrder
+
+        currency, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "symbol": "$"})
+        already_seeded = CommissionPlan.objects.filter(tenant=tenant).exists()
+
+        # ---- 1. CommissionPlan ------------------------------------------------------------------
+        if not CommissionPlan.objects.filter(tenant=tenant).exists():
+            plan_ent = CommissionPlan.objects.create(
+                tenant=tenant,
+                name="FY2026 Enterprise AE Plan",
+                code="plan-ent-2026",
+                description="Tiered accelerator commission plan for Enterprise Account Executives with quarterly quota hurdles.",
+                plan_type="tiered_quota",
+                tier_mode="incremental",
+                status="active",
+                payout_frequency="monthly",
+                effective_start=date(2026, 1, 1),
+                effective_end=date(2026, 12, 31),
+                currency=currency,
+                target_region="North America & EMEA",
+                base_rate_pct=Decimal("10.00"),
+                tiers_config=[
+                    {"min_pct": 0, "max_pct": 100, "rate_pct": 10.0},
+                    {"min_pct": 100, "max_pct": 150, "rate_pct": 15.0},
+                    {"min_pct": 150, "max_pct": 300, "rate_pct": 20.0},
+                ],
+                spif_config=[
+                    {"name": "Early Bird Q1", "bonus_amount": 1000.0, "criteria": "close_before_march"}
+                ],
+                draw_amount=Decimal("5000.00"),
+                is_draw_recoverable=True,
+                clawback_window_days=90,
+                tax_withholding_pct=Decimal("22.00"),
+                owner=owner,
+            )
+            plan_mm = CommissionPlan.objects.create(
+                tenant=tenant,
+                name="Mid-Market Growth Plan",
+                code="plan-mm-2026",
+                description="Flat revenue commission plan for Mid-Market reps with non-recoverable draw.",
+                plan_type="flat_revenue",
+                tier_mode="not_applicable",
+                status="active",
+                payout_frequency="monthly",
+                effective_start=date(2026, 1, 1),
+                effective_end=date(2026, 12, 31),
+                currency=currency,
+                target_region="Global Mid-Market",
+                base_rate_pct=Decimal("8.00"),
+                tiers_config=[],
+                spif_config=[],
+                draw_amount=Decimal("2000.00"),
+                is_draw_recoverable=False,
+                clawback_window_days=60,
+                tax_withholding_pct=Decimal("20.00"),
+                owner=owner,
+            )
+            plan_spif = CommissionPlan.objects.create(
+                tenant=tenant,
+                name="Q1 Cloud Security SPIF",
+                code="plan-spif-q1",
+                description="Tactical SPIF campaign for Cloud Security multi-year contract closures.",
+                plan_type="spif_only",
+                tier_mode="not_applicable",
+                status="active",
+                payout_frequency="monthly",
+                effective_start=date(2026, 1, 1),
+                effective_end=date(2026, 3, 31),
+                currency=currency,
+                target_region="All Regions",
+                base_rate_pct=Decimal("0.00"),
+                tiers_config=[],
+                spif_config=[
+                    {"name": "3-Year Contract Incentive", "bonus_amount": 2500.0, "criteria": "term_gte_36_months"}
+                ],
+                draw_amount=Decimal("0.00"),
+                is_draw_recoverable=False,
+                clawback_window_days=90,
+                tax_withholding_pct=Decimal("25.00"),
+                owner=owner,
+            )
+        else:
+            plan_ent = CommissionPlan.objects.filter(tenant=tenant, code="plan-ent-2026").first() or CommissionPlan.objects.filter(tenant=tenant).first()
+            plan_mm = CommissionPlan.objects.filter(tenant=tenant, code="plan-mm-2026").first() or plan_ent
+            plan_spif = CommissionPlan.objects.filter(tenant=tenant, code="plan-spif-q1").first() or plan_ent
+
+        # ---- 2. CommissionStatement -------------------------------------------------------------
+        stmt1 = CommissionStatement.objects.filter(tenant=tenant, statement_number="STMT-2026-M01-DEMO").first()
+        if stmt1 is None:
+            stmt1 = CommissionStatement.objects.create(
+                tenant=tenant,
+                statement_number="STMT-2026-M01-DEMO",
+                payee=owner,
+                plan=plan_ent,
+                period_start=date(2026, 1, 1),
+                period_end=date(2026, 1, 31),
+                status="paid",
+                total_credited_volume=Decimal("120000.00"),
+                total_base_commission=Decimal("12000.00"),
+                total_accelerator_amount=Decimal("0.00"),
+                total_spif_amount=Decimal("2500.00"),
+                gross_earnings=Decimal("14500.00"),
+                draw_advance_paid=Decimal("5000.00"),
+                draw_recovered=Decimal("5000.00"),
+                adjustments_amount=Decimal("0.00"),
+                clawbacks_deducted=Decimal("0.00"),
+                tax_withholding_amount=Decimal("3190.00"),
+                net_payout=Decimal("6310.00"),
+                approved_by=owner,
+                approved_at=timezone.now() - timedelta(days=20),
+                locked_at=timezone.now() - timedelta(days=20),
+                notes="January 2026 commission settlement cycle. Full payout processed.",
+            )
+
+        stmt2 = CommissionStatement.objects.filter(tenant=tenant, statement_number="STMT-2026-M02-DEMO").first()
+        if stmt2 is None:
+            stmt2 = CommissionStatement.objects.create(
+                tenant=tenant,
+                statement_number="STMT-2026-M02-DEMO",
+                payee=owner,
+                plan=plan_ent,
+                period_start=date(2026, 2, 1),
+                period_end=date(2026, 2, 28),
+                status="approved",
+                total_credited_volume=Decimal("60000.00"),
+                total_base_commission=Decimal("6000.00"),
+                total_accelerator_amount=Decimal("0.00"),
+                total_spif_amount=Decimal("0.00"),
+                gross_earnings=Decimal("6000.00"),
+                draw_advance_paid=Decimal("0.00"),
+                draw_recovered=Decimal("0.00"),
+                adjustments_amount=Decimal("-1200.00"),
+                clawbacks_deducted=Decimal("0.00"),
+                tax_withholding_amount=Decimal("1056.00"),
+                net_payout=Decimal("3744.00"),
+                approved_by=owner,
+                approved_at=timezone.now() - timedelta(days=2),
+                notes="February 2026 statement approved, pending batch export to payroll.",
+            )
+
+        # ---- 3. CommissionEarning ---------------------------------------------------------------
+        opp1 = Opportunity.objects.filter(tenant=tenant).first()
+        opp2 = Opportunity.objects.filter(tenant=tenant).order_by("-pk").first() or opp1
+        sales_order = SalesOrder.objects.filter(tenant=tenant).first()
+
+        earning1 = CommissionEarning.objects.filter(tenant=tenant, plan=plan_ent, payee=owner, deal_amount=Decimal("120000.00")).first()
+        if earning1 is None:
+            earning1 = CommissionEarning.objects.create(
+                tenant=tenant,
+                plan=plan_ent,
+                payee=owner,
+                opportunity=opp1,
+                sales_order=sales_order,
+                credit_type="direct",
+                split_percentage=Decimal("100.00"),
+                deal_amount=Decimal("120000.00"),
+                credited_volume=Decimal("120000.00"),
+                attainment_pct_at_close=Decimal("85.00"),
+                applied_rate_pct=Decimal("10.00"),
+                base_commission_amount=Decimal("12000.00"),
+                spif_amount=Decimal("0.00"),
+                gross_commission=Decimal("12000.00"),
+                deal_currency=currency,
+                exchange_rate=Decimal("1.000000"),
+                functional_amount=Decimal("12000.00"),
+                status="paid",
+                earned_date=date(2026, 1, 15),
+                statement=stmt1,
+            )
+
+        if not CommissionEarning.objects.filter(tenant=tenant, plan=plan_spif, payee=owner).exists():
+            CommissionEarning.objects.create(
+                tenant=tenant,
+                plan=plan_spif,
+                payee=owner,
+                opportunity=opp1,
+                sales_order=sales_order,
+                credit_type="direct",
+                split_percentage=Decimal("100.00"),
+                deal_amount=Decimal("120000.00"),
+                credited_volume=Decimal("120000.00"),
+                attainment_pct_at_close=Decimal("85.00"),
+                applied_rate_pct=Decimal("0.00"),
+                base_commission_amount=Decimal("0.00"),
+                spif_amount=Decimal("2500.00"),
+                gross_commission=Decimal("2500.00"),
+                deal_currency=currency,
+                exchange_rate=Decimal("1.000000"),
+                functional_amount=Decimal("2500.00"),
+                status="paid",
+                earned_date=date(2026, 1, 15),
+                statement=stmt1,
+            )
+
+        if not CommissionEarning.objects.filter(tenant=tenant, plan=plan_mm, payee=owner).exists():
+            CommissionEarning.objects.create(
+                tenant=tenant,
+                plan=plan_mm,
+                payee=owner,
+                opportunity=opp2,
+                credit_type="direct",
+                split_percentage=Decimal("100.00"),
+                deal_amount=Decimal("60000.00"),
+                credited_volume=Decimal("60000.00"),
+                attainment_pct_at_close=Decimal("110.00"),
+                applied_rate_pct=Decimal("8.00"),
+                base_commission_amount=Decimal("4800.00"),
+                spif_amount=Decimal("0.00"),
+                gross_commission=Decimal("4800.00"),
+                deal_currency=currency,
+                exchange_rate=Decimal("1.000000"),
+                functional_amount=Decimal("4800.00"),
+                status="approved",
+                earned_date=date(2026, 2, 10),
+                statement=stmt2,
+            )
+
+        if not CommissionEarning.objects.filter(tenant=tenant, credit_type="overlay").exists():
+            CommissionEarning.objects.create(
+                tenant=tenant,
+                plan=plan_ent,
+                payee=owner,
+                opportunity=opp2,
+                credit_type="overlay",
+                split_percentage=Decimal("50.00"),
+                deal_amount=Decimal("80000.00"),
+                credited_volume=Decimal("40000.00"),
+                attainment_pct_at_close=Decimal("125.00"),
+                applied_rate_pct=Decimal("15.00"),
+                base_commission_amount=Decimal("6000.00"),
+                spif_amount=Decimal("0.00"),
+                gross_commission=Decimal("6000.00"),
+                deal_currency=currency,
+                exchange_rate=Decimal("1.000000"),
+                functional_amount=Decimal("6000.00"),
+                status="calculated",
+                earned_date=date(2026, 2, 25),
+                statement=None,
+            )
+
+        # ---- 4. CommissionAdjustment ------------------------------------------------------------
+        if not CommissionAdjustment.objects.filter(tenant=tenant, adjustment_type="cancellation_clawback").exists():
+            CommissionAdjustment.objects.create(
+                tenant=tenant,
+                statement=stmt2,
+                earning=earning1,
+                payee=owner,
+                adjustment_type="cancellation_clawback",
+                amount=Decimal("-1200.00"),
+                status="approved",
+                reason="Client cancelled license subscription during 90-day grace period; clawback applied per contract terms.",
+                requested_by=owner,
+                approved_by=owner,
+                effective_date=date(2026, 2, 18),
+            )
+
+        if not CommissionAdjustment.objects.filter(tenant=tenant, adjustment_type="tier_true_up").exists():
+            CommissionAdjustment.objects.create(
+                tenant=tenant,
+                statement=None,
+                earning=None,
+                payee=owner,
+                adjustment_type="tier_true_up",
+                amount=Decimal("500.00"),
+                status="approved",
+                reason="Retroactive accelerator bump from Q4 delayed invoice settlement.",
+                requested_by=owner,
+                approved_by=owner,
+                effective_date=date(2026, 2, 20),
+            )
+
+        if not CommissionAdjustment.objects.filter(tenant=tenant, adjustment_type="manual_override").exists():
+            CommissionAdjustment.objects.create(
+                tenant=tenant,
+                statement=None,
+                earning=None,
+                payee=owner,
+                adjustment_type="manual_override",
+                amount=Decimal("750.00"),
+                status="draft",
+                reason="VP discretionary SPIF award for strategic displacement of incumbent competitor.",
+                dispute_comments="Rep submitted proof of executive sponsor presentation.",
+                requested_by=owner,
+                effective_date=date(2026, 2, 26),
+            )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.10 incentive compensation demo rows "
+            f"{'already present; re-checked for gaps' if already_seeded else 'ensured'} "
+            f"({CommissionPlan.objects.filter(tenant=tenant).count()} plans, "
+            f"{CommissionEarning.objects.filter(tenant=tenant).count()} earnings, "
+            f"{CommissionStatement.objects.filter(tenant=tenant).count()} statements, "
+            f"{CommissionAdjustment.objects.filter(tenant=tenant).count()} adjustments)."
         )
 
