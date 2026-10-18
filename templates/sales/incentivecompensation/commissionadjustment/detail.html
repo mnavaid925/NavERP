@@ -29,11 +29,22 @@
         </div>
     </div>
     <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'sales:commission_adjustment_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Adjustments</span>
+        </a>
         {% if obj.status != 'applied' %}
         <a href="{% url 'sales:commission_adjustment_edit' obj.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i>
             <span>Edit</span>
         </a>
+        <form method="post" action="{% url 'sales:commission_adjustment_delete' obj.pk %}" onsubmit="return confirm('Are you sure you want to delete this adjustment?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
         {% endif %}
     </div>
 </div>
