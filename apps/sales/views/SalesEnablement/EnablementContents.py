@@ -42,6 +42,10 @@ def enablement_content_list(request):
     if target_stage:
         qs = qs.filter(target_stage=target_stage)
 
+    target_persona = request.GET.get("target_persona", "").strip()
+    if target_persona:
+        qs = qs.filter(target_persona=target_persona)
+
     competitor_id = request.GET.get("competitor", "").strip()
     if competitor_id.isdigit():
         qs = qs.filter(competitor_id=int(competitor_id))
@@ -61,9 +65,11 @@ def enablement_content_list(request):
         "q": q,
         "content_type": content_type,
         "target_stage": target_stage,
+        "target_persona": target_persona,
         "competitor_id": competitor_id,
     }
     return render(request, "sales/salesenablement/enablementcontent/list.html", context)
+
 
 
 @login_required
