@@ -26,7 +26,11 @@
             <span class="badge badge-info">{{ plan_type_display }}</span>
         </div>
     </div>
-    <div class="page-actions">
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'sales:commission_plan_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Plans</span>
+        </a>
         <a href="{% url 'sales:commission_plan_edit' obj.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i>
             <span>Edit Plan</span>
@@ -35,6 +39,15 @@
             <i data-lucide="plus"></i>
             <span>Record Earning</span>
         </a>
+        {% if obj.status != 'active' %}
+        <form method="post" action="{% url 'sales:commission_plan_delete' obj.pk %}" onsubmit="return confirm('Are you sure you want to delete this commission plan?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
     </div>
 </div>
 
