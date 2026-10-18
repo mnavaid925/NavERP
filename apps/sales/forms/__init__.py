@@ -65,6 +65,15 @@ from .SalesEnablement import (
     SalesPlaybookForm,
 )
 
+# 8.10 Incentive Compensation Management
+from .IncentiveCompensation import (
+    CommissionAdjustmentForm,
+    CommissionDisputeTicketForm,
+    CommissionEarningForm,
+    CommissionPlanForm,
+    CommissionStatementForm,
+)
+
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
     "LeadQualificationForm", "LeadRoutingPreviewForm", "LeadRoutingRuleForm", "LeadRoutingRunForm",
@@ -95,7 +104,12 @@ __all__ = [
     # 8.9 Sales Enablement
     "EnablementContentForm", "SalesPlaybookForm",
     "SalesCertificationForm", "CoachingScorecardForm",
+    # 8.10 Incentive Compensation Management
+    "CommissionPlanForm", "CommissionEarningForm",
+    "CommissionStatementForm", "CommissionAdjustmentForm",
+    "CommissionDisputeTicketForm",
 ]
+
 
 
 
