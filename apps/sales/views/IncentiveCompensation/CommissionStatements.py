@@ -27,7 +27,7 @@ from apps.sales.views._helpers import is_admin_or_manager
 def commission_statement_list(request):
     qs = (
         CommissionStatement.objects.filter(tenant=request.tenant)
-        .select_related("payee", "plan", "approved_by", "payroll_run")
+        .select_related("payee", "plan__currency", "approved_by", "payroll_run")
         .order_by("-period_end", "payee__email")
     )
     is_admin = is_admin_or_manager(request.user)
@@ -75,6 +75,13 @@ def commission_statement_list(request):
     else:
         payees = User.objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "last_name")
 
+    first_stmt = qs.first()
+    currency_code = (
+        first_stmt.plan.currency.code
+        if first_stmt and first_stmt.plan and first_stmt.plan.currency
+        else "USD"
+    )
+
     context = {
         "object_list": page_obj.object_list,
         "page_obj": page_obj,
@@ -82,6 +89,7 @@ def commission_statement_list(request):
         "status_choices": STATEMENT_STATUS_CHOICES,
         "payees": payees,
         "stats": stats,
+        "currency_code": currency_code,
     }
     return render(request, "sales/incentivecompensation/commissionstatement/list.html", context)
 
