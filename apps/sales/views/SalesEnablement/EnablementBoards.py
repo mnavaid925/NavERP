@@ -45,10 +45,10 @@ def sales_enablement_content_hub(request):
     total_battlecards = contents_qs.filter(content_type="battle_card").count()
     total_client_facing = contents_qs.filter(is_client_facing=True).count()
 
-    recent_contents = contents_qs.select_related("competitor", "document", "author").order_by("-created_at")[:6]
+    recent_contents = contents_qs.select_related("competitor__party", "document", "author").order_by("-created_at")[:6]
     popular_contents = contents_qs.order_by("-view_count", "-share_count")[:5]
 
-    battlecards = contents_qs.filter(content_type="battle_card").select_related("competitor")[:4]
+    battlecards = contents_qs.filter(content_type="battle_card").select_related("competitor__party")[:4]
     decks = contents_qs.filter(content_type="pitch_deck")[:4]
     case_studies = contents_qs.filter(content_type="case_study")[:4]
 
