@@ -207,10 +207,14 @@ class CommissionEarning(TenantNumbered):
             if self.sales_order.tenant_id != self.tenant_id:
                 raise ValidationError({"sales_order": "Sales order belongs to another workspace."})
 
-        # Statement tenant isolation
+        # Statement tenant isolation & cross-payee validation
         if self.statement_id and self.tenant_id:
             if self.statement.tenant_id != self.tenant_id:
                 raise ValidationError({"statement": "Statement belongs to another workspace."})
+
+        if self.statement_id and self.payee_id:
+            if self.statement.payee_id != self.payee_id:
+                raise ValidationError({"statement": "Attached statement must belong to the same payee."})
 
         # G8: Math verification: credited_volume
         if self.deal_amount is not None and self.split_percentage is not None:
