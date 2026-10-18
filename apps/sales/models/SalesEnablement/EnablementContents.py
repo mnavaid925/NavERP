@@ -136,6 +136,9 @@ class EnablementContent(TenantNumbered):
         if self.pipeline_stage_id and self.tenant_id:
             if getattr(self.pipeline_stage, "tenant_id", None) != self.tenant_id:
                 raise ValidationError({"pipeline_stage": "Pipeline stage must belong to the same workspace."})
+        if self.author_id and self.tenant_id:
+            if getattr(self.author, "tenant_id", None) != self.tenant_id:
+                raise ValidationError({"author": "Author must belong to the same workspace."})
 
     def record_view(self):
         type(self).objects.filter(pk=self.pk).update(view_count=models.F("view_count") + 1)
