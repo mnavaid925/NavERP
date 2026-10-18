@@ -126,7 +126,26 @@ Needs Improvement (Commit after fixing Critical + Important).
 ---
 
 ## 5. QA & Runtime Verification Review (`qa-smoke-tester`)
-*Pending review run...*
+
+### Verdict
+FAIL (Critical Runtime Defects Found — Commit after fixing Critical + Important).
+
+### Critical
+- `apps/sales/views/IncentiveCompensation/CommissionPlans.py` (lines 118, 147, 175), `CommissionEarnings.py` (lines 118, 150, 178), `CommissionStatements.py` (lines 122, 154, 183, 201, 283), `CommissionAdjustments.py` (lines 107, 144, 186, 207) — `write_audit_log` Signature Mismatch: Developers passed strings (e.g. `"sales.CommissionPlan"`) as the 2nd argument instead of the model instance `obj`. In `apps/core/utils.py`, `write_audit_log` attempts `ContentType.objects.get_for_model(obj.__class__)`, crashing with `AttributeError: type object 'str' has no attribute '_meta'`. This causes a systematic HTTP 500 on ALL write/action operations (create, edit, delete, approve, lock, dispute resolution) across all 4 models. Fix: Pass the actual model instance `obj` (or `None` with `tenant=request.tenant`) to `write_audit_log`.
+- `apps/sales/forms/IncentiveCompensation/CommissionPlans.py` & `CommissionPlans.py:160-164` — `ValueError: 'CommissionPlanForm' has no field named 'tiers_config'`: Model `clean()` raises `ValidationError({'tiers_config': ...})`, but `CommissionPlanForm` declared the field as `tiers_json`. When Django's `_post_clean` routes the error to form fields, it raises a fatal `ValueError` (HTTP 500) instead of displaying the validation error. Fix: Align the field name in the form to `tiers_config` or remap errors in form `clean()`.
+
+### Important
+- `apps/sales/views/IncentiveCompensation/CommissionBoards.py:236-238` — `decimal.InvalidOperation` on Malformed What-If Calculator Query Parameters: Parameters `deal_amount`, `split_pct`, and `current_attainment` are parsed with `Decimal(...)` without `try...except (InvalidOperation, TypeError, ValueError)`. Submitting `?deal_amount=abc` triggers an unhandled HTTP 500 instead of HTTP 400. Fix: Wrap in exception handling and return `JsonResponse({'ok': False, 'error': 'Invalid numeric parameters'}, status=400)`.
+
+### Minor
+- `apps/sales/views/IncentiveCompensation/CommissionBoards.py:236` — `deal_amount=NaN` outputs `{"projected_gross": NaN}` in JSON, violating RFC 8259. Fix: Check `.is_finite()` on parsed decimals.
+- `apps/sales/views/IncentiveCompensation/CommissionStatements.py:223` — `commission_statement_generate_batch` lacks type checking on `plan_id` before querying `pk=plan_id`, causing `ValueError` if non-numeric string is submitted. Fix: Validate `plan_id.isdecimal()`.
+
+### Done well
+- Multi-Tenant IDOR Isolation: 100% pass across all 18 cross-tenant test cases (detail, edit, delete, actions, simulator) cleanly returning HTTP 404 (or 405 on blocked GET).
+- All 5 board views returned 200 OK with zero unrendered template leaks.
+- All 4 model list views handle arbitrary filters, valid choices, junk query strings, and pagination safely with 200 OK.
+- Action and deletion endpoints enforce `@require_POST`, returning 405 on GET.
 
 ---
 
