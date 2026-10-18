@@ -46,7 +46,7 @@ def sales_certification_list(request):
         qs = qs.filter(status=status)
 
     rep_id = request.GET.get("rep", "").strip()
-    if rep_id.isdigit():
+    if rep_id.isdecimal():
         qs = qs.filter(rep_id=int(rep_id))
 
     paginator = Paginator(qs, 15)
