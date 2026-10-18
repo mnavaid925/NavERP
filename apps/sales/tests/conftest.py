@@ -3550,7 +3550,6 @@ def _salesenablement_document(tenant, name="Collateral Doc", **overrides):
     defaults = {
         "tenant": tenant,
         "name": f"{name} {label}",
-        "description": "Sales collateral binary stand-in",
     }
     defaults.update(overrides)
     return Document.objects.create(**defaults)
