@@ -90,12 +90,10 @@ def enablement_content_create(request):
                 obj.author = request.user
             obj.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="EnablementContent",
-                object_id=str(obj.pk),
-                details=f"Created enablement content {obj.number}: {obj.title}",
+                request.user,
+                obj,
+                "create",
+                changes={"title": obj.title, "number": obj.number},
             )
             messages.success(request, f"Enablement content '{obj.title}' created.")
             return redirect("sales:enablement_content_detail", pk=obj.pk)
@@ -114,12 +112,10 @@ def enablement_content_edit(request, pk):
         if form.is_valid():
             form.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="EnablementContent",
-                object_id=str(obj.pk),
-                details=f"Updated enablement content {obj.number}: {obj.title}",
+                request.user,
+                obj,
+                "update",
+                changes={"title": obj.title, "number": obj.number},
             )
             messages.success(request, f"Enablement content '{obj.title}' updated.")
             return redirect("sales:enablement_content_detail", pk=obj.pk)
@@ -136,15 +132,13 @@ def enablement_content_delete(request, pk):
     obj = get_object_or_404(EnablementContent.objects.filter(tenant=request.tenant), pk=pk)
     title = obj.title
     number = obj.number
-    obj.delete()
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="EnablementContent",
-        object_id=str(pk),
-        details=f"Deleted enablement content {number}: {title}",
+        request.user,
+        obj,
+        "delete",
+        changes={"title": title, "number": number},
     )
+    obj.delete()
     messages.success(request, f"Enablement content '{title}' deleted.")
     return redirect("sales:enablement_content_list")
 
