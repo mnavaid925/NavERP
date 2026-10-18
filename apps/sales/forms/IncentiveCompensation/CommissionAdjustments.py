@@ -18,7 +18,6 @@ class CommissionAdjustmentForm(TenantUniqueMixin, TenantModelForm):
             "payee",
             "adjustment_type",
             "amount",
-            "status",
             "reason",
             "effective_date",
         ]
@@ -28,7 +27,6 @@ class CommissionAdjustmentForm(TenantUniqueMixin, TenantModelForm):
             "payee": forms.Select(attrs={"class": "form-select"}),
             "adjustment_type": forms.Select(attrs={"class": "form-select"}),
             "amount": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "placeholder": "Negative for clawbacks, positive for credits"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
             "reason": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
             "effective_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
         }
