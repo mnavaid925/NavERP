@@ -180,6 +180,18 @@ class CommissionEarning(TenantNumbered):
                 fields=["tenant", "opportunity"],
                 name="sales_cer_opp_idx",
             ),
+            models.Index(
+                fields=["tenant", "status"],
+                name="sales_cer_ten_stat_idx",
+            ),
+            models.Index(
+                fields=["tenant", "plan"],
+                name="sales_cer_ten_plan_idx",
+            ),
+            models.Index(
+                fields=["tenant", "statement"],
+                name="sales_cer_ten_stmt_idx",
+            ),
         ]
 
     def __str__(self):
