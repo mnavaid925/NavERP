@@ -28,7 +28,11 @@
             <span class="badge badge-slate">{{ credit_type_display }}</span>
         </div>
     </div>
-    <div class="page-actions">
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'sales:commission_earning_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Earnings</span>
+        </a>
         <a href="{% url 'sales:commission_earning_edit' obj.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i>
             <span>Edit Earning</span>
@@ -37,6 +41,15 @@
             <i data-lucide="plus"></i>
             <span>Add Adjustment / Clawback</span>
         </a>
+        {% if obj.status != 'approved' and obj.status != 'paid' and obj.status != 'clawed_back' %}
+        <form method="post" action="{% url 'sales:commission_earning_delete' obj.pk %}" onsubmit="return confirm('Are you sure you want to delete this commission earning?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
     </div>
 </div>
 
