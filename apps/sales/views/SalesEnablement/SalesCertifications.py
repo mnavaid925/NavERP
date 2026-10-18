@@ -15,6 +15,8 @@ from apps.sales.models.SalesEnablement.SalesCertifications import (
     CERTIFICATION_STATUS_CHOICES,
     SalesCertification,
 )
+from apps.sales.views._helpers import is_tenant_admin
+
 
 
 @login_required
@@ -131,6 +133,9 @@ def sales_certification_edit(request, pk):
 @require_POST
 def sales_certification_delete(request, pk):
     obj = get_object_or_404(SalesCertification.objects.filter(tenant=request.tenant), pk=pk)
+    if not is_tenant_admin(request.user) and obj.certified_by_id != request.user.pk:
+        messages.error(request, "Only the certifying manager or a tenant administrator may delete this certification record.")
+        return redirect("sales:sales_certification_detail", pk=obj.pk)
     name = obj.curriculum_name
     number = obj.number
     with transaction.atomic():
