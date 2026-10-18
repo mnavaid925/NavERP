@@ -136,15 +136,15 @@
                         </td>
                         <td class="text-right table-actions">
                             <div class="flex items-center justify-end gap-1">
-                                <a href="{% url 'sales:sales_playbook_detail' item.pk %}" class="btn btn-icon" title="View Playbook">
+                                <a href="{% url 'sales:sales_playbook_detail' item.pk %}" class="btn btn-icon" title="View Playbook" aria-label="View Playbook">
                                     <i data-lucide="eye"></i>
                                 </a>
-                                <a href="{% url 'sales:sales_playbook_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                                <a href="{% url 'sales:sales_playbook_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit">
                                     <i data-lucide="pencil"></i>
                                 </a>
                                 <form method="post" action="{% url 'sales:sales_playbook_delete' item.pk %}" onsubmit="return confirm('Delete this sales playbook?');" class="inline">
                                     {% csrf_token %}
-                                    <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                    <button type="submit" class="btn btn-icon danger" title="Delete" aria-label="Delete">
                                         <i data-lucide="trash-2"></i>
                                     </button>
                                 </form>
