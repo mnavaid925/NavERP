@@ -86,7 +86,7 @@ def commission_plan_detail(request, pk):
 
     recent_earnings = (
         obj.earnings.filter(tenant=request.tenant)
-        .select_related("payee", "opportunity")
+        .select_related("payee", "opportunity", "deal_currency")
         .order_by("-earned_date")[:10]
     )
 
