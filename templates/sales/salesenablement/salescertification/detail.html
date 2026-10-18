@@ -121,7 +121,7 @@
                     </div>
                     <div class="px-4 py-2.5 flex justify-between">
                         <dt class="text-slate-500">Certified By</dt>
-                        <dd class="text-slate-800">{{ certification.certified_by.get_full_name|default:certification.certified_by.username|default:"—" }}</dd>
+                        <dd class="text-slate-800">{% if certification.certified_by %}{{ certification.certified_by.get_full_name|default:certification.certified_by.username }}{% else %}—{% endif %}</dd>
                     </div>
                     <div class="px-4 py-2.5 flex justify-between">
                         <dt class="text-slate-500">Accreditation Date</dt>
