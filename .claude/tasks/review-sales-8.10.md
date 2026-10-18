@@ -98,7 +98,30 @@ Changes Requested (Commit after fixing Critical + Important).
 ---
 
 ## 4. Performance & Query Review (`performance-reviewer`)
-*Pending review run...*
+
+### Verdict
+Needs Improvement (Commit after fixing Critical + Important).
+
+### Critical
+- `apps/sales/views/IncentiveCompensation/CommissionBoards.py:90-107` — $O(N)$ Per-Rep Aggregation Loop in `sales_commission_earnings_dashboard`: loops over all active tenant reps running `.exists()` and 4 separate aggregates per rep ($1 + 2N$ queries). Fix: Replace loop with a single grouped aggregation `earnings.values('payee__id', 'payee__first_name', 'payee__last_name', 'payee__email').annotate(volume=Sum('credited_volume'), gross=Sum('gross_commission'), spif=Sum('spif_amount'), attainment=Avg('attainment_pct_at_close'))`.
+- `apps/sales/views/IncentiveCompensation/CommissionStatements.py:228-248` — $O(R)$ Query Explosion in `commission_statement_generate_batch`: executes 4 separate `.aggregate()` calls on unattached earnings per rep ($5 \times R$ read queries). Fix: Consolidate the 4 calls into a single `.aggregate(vol=Sum(...), base=Sum(...), spif=Sum(...), gross=Sum(...))` per rep.
+- `apps/sales/views/IncentiveCompensation/CommissionBoards.py:122` & `templates/sales/incentivecompensation/boards/earnings_dashboard.html:175` — Template N+1 query leak on `plan.currency.code`: `plans` lacks `.select_related('currency')`, triggering a separate query per plan rendered in the dropdown. Fix: Add `.select_related('currency')` to `plans`.
+- `apps/sales/views/IncentiveCompensation/CommissionPlans.py:87-91` & `templates/sales/incentivecompensation/commissionplan/detail.html:195` — Template N+1 on `earn.deal_currency.code`: `recent_earnings` omits `deal_currency` from `.select_related()`. Fix: Update view to `.select_related('payee', 'opportunity', 'deal_currency')`.
+
+### Important
+- `apps/sales/views/IncentiveCompensation/CommissionBoards.py:244` — Missing `select_related('currency')` in `sales_commission_what_if_calc`, causing an extra DB query when accessing `plan.currency.code` on every AJAX simulation. Fix: Add `.select_related('currency')`.
+- `apps/sales/views/IncentiveCompensation/CommissionBoards.py` (lines 34, 110, 215) & list views (`CommissionPlans.py:50`, `CommissionEarnings.py:55`, `CommissionStatements.py:50`, `CommissionAdjustments.py:51`) — Fragmented KPI aggregate queries: firing multiple sequential `.aggregate()` and `.count()` calls instead of a single batched query using `Count('id', filter=Q(...))` and `Sum(...)`. Fix: Combine KPI queries into single batched `.aggregate()` statements.
+- `apps/sales/models/IncentiveCompensation/*.py` — Missing compound database indexes on high-traffic filter combinations: `CommissionEarning` missing `(tenant, status)`, `(tenant, plan)`, `(tenant, statement)`; `CommissionAdjustment` missing `(tenant, status)`, `(tenant, statement)`; `CommissionStatement` missing `(tenant, plan)`. Fix: Add indexes to model `Meta.indexes`.
+
+### Minor
+- `apps/sales/models/IncentiveCompensation/CommissionEarnings.py:185` — Chained FK traversal in `__str__` accesses `self.deal_currency.code`. If stringified without `deal_currency` prefetched, triggers an extra query.
+- `apps/sales/views/IncentiveCompensation/CommissionBoards.py:36-41` — `distinct().count()` on payee values in plan hub can be heavy on large tables.
+
+### Done well
+- Consistent pagination enforcement with `Paginator(qs, 15)` across all list views.
+- Comprehensive foreign key pre-fetching on core list and detail views (`commission_earning_list` selects all 6 FKs).
+- Zero template-level manager queries (`.all()` or `.count()` in loops) across all 17 templates.
+- Strict multi-tenant isolation with `tenant=request.tenant` on all ORM queries.
 
 ---
 
