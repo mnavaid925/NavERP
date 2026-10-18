@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}{{ obj.name }} — Commission Plan Detail — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <a href="{% url 'sales:commission_plan_list' %}">Plans</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ obj.name }}</h1>
+            {% if obj.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+            {% elif obj.status == 'draft' %}
+            <span class="badge badge-amber">Draft</span>
+            {% else %}
+            <span class="badge badge-slate">Archived</span>
+            {% endif %}
+            <span class="badge badge-info">{{ plan_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:commission_plan_edit' obj.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Plan</span>
+        </a>
+        <a href="{% url 'sales:commission_earning_create' %}?plan={{ obj.pk }}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Record Earning</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Specs & Rates -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Core Plan Terms Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">Plan Structure & Terms</h3>
+                <span class="font-mono text-xs text-slate-500">{{ obj.number }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Plan Code</div>
+                        <div class="font-mono font-medium text-slate-900 mt-0.5">{{ obj.code }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Settlement Frequency</div>
+                        <div class="text-slate-900 mt-0.5 capitalize">{{ obj.get_payout_frequency_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Base Commission Rate</div>
+                        <div class="text-xl font-bold text-slate-900 mt-0.5">{{ obj.base_rate_pct }}%</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Tier Mode</div>
+                        <div class="text-slate-900 mt-0.5">{{ tier_mode_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Plan Currency & Region</div>
+                        <div class="text-slate-900 mt-0.5 font-medium">{{ obj.currency.code }} ({{ obj.currency.symbol }}) — {{ obj.target_region|default:"Global" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Clawback Window</div>
+                        <div class="text-slate-900 mt-0.5">{{ obj.clawback_window_days }} days post-close</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Draw Advance Schedule</div>
+                        <div class="text-slate-900 mt-0.5 font-medium">
+                            {% if obj.draw_amount > 0 %}
+                            {{ obj.currency.code }} {{ obj.draw_amount|floatformat:2 }}
+                            <span class="text-xs text-slate-500 font-normal">({% if obj.is_draw_recoverable %}Recoverable{% else %}Non-Recoverable{% endif %})</span>
+                            {% else %}
+                            <span class="text-slate-400">No Draw Advance</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Est. Tax Withholding</div>
+                        <div class="text-slate-900 mt-0.5 font-medium">{{ obj.tax_withholding_pct }}%</div>
+                    </div>
+                </div>
+
+                {% if obj.description %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Description & Policy Notes</div>
+                    <p class="text-sm text-slate-700 leading-relaxed">{{ obj.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Tiered Accelerator Table Card -->
+        {% if obj.tiers_config %}
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">Quota Attainment Tier Accelerators</h3>
+                <span class="badge badge-slate">{{ tier_mode_display }}</span>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Tier Bracket</th>
+                            <th>Min Attainment %</th>
+                            <th>Max Attainment %</th>
+                            <th>Commission Rate %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tier in obj.tiers_config %}
+                        <tr>
+                            <td class="font-medium text-slate-900">Tier {{ forloop.counter }}</td>
+                            <td>{{ tier.min_pct }}%</td>
+                            <td>{{ tier.max_pct }}%</td>
+                            <td class="font-bold text-primary">{{ tier.rate_pct }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- SPIF Campaigns Card -->
+        {% if obj.spif_config %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Active SPIF & Tactical Bonus Campaigns</h3>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Campaign Name</th>
+                            <th>Bonus Amount</th>
+                            <th>Qualification Criteria</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for spif in obj.spif_config %}
+                        <tr>
+                            <td class="font-medium text-slate-900">{{ spif.name }}</td>
+                            <td class="font-bold text-slate-900">{{ obj.currency.code }} {{ spif.bonus_amount|floatformat:2 }}</td>
+                            <td class="text-sm text-slate-600">{{ spif.criteria|default:"Standard" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Recent Credited Earnings Table -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">Recent Credited Deal Earnings</h3>
+                <a href="{% url 'sales:commission_earning_list' %}?plan={{ obj.pk }}" class="text-xs text-primary font-medium hover:underline">View All</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Payee</th>
+                            <th>Deal / Opp</th>
+                            <th>Deal Volume</th>
+                            <th>Attainment</th>
+                            <th>Rate</th>
+                            <th>Gross Payout</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for earn in recent_earnings %}
+                        <tr>
+                            <td class="font-mono text-xs">
+                                <a href="{% url 'sales:commission_earning_detail' earn.pk %}" class="text-primary hover:underline">
+                                    {{ earn.number }}
+                                </a>
+                            </td>
+                            <td class="text-sm font-medium text-slate-900">{{ earn.payee.get_full_name|default:earn.payee.email }}</td>
+                            <td class="text-xs text-slate-600">
+                                {% if earn.opportunity %}{{ earn.opportunity.name }}{% else %}<span class="text-slate-400">—</span>{% endif %}
+                            </td>
+                            <td class="text-sm text-slate-700">{{ earn.deal_currency.code }} {{ earn.deal_amount|floatformat:2 }}</td>
+                            <td class="text-xs font-semibold text-slate-700">{{ earn.attainment_pct_at_close }}%</td>
+                            <td class="text-xs font-bold text-primary">{{ earn.applied_rate_pct }}%</td>
+                            <td class="text-sm font-bold text-slate-900">{{ obj.currency.code }} {{ earn.gross_commission|floatformat:2 }}</td>
+                            <td>
+                                {% if earn.status == 'calculated' or earn.status == 'approved' %}
+                                <span class="badge badge-green">{{ earn.get_status_display }}</span>
+                                {% elif earn.status == 'paid' %}
+                                <span class="badge badge-info">Paid</span>
+                                {% else %}
+                                <span class="badge badge-slate">{{ earn.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-6 text-sm text-slate-400">
+                                No credited deal earnings recorded under this plan yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Metadata & Assigned Reps -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Governance & Assignment</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Plan Administrator</div>
+                    <div class="text-sm text-slate-900 mt-1 font-medium">
+                        {% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}<span class="text-slate-400">Unassigned</span>{% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Linked Target Quota</div>
+                    <div class="text-sm text-slate-900 mt-1 font-medium">
+                        {% if obj.sales_quota %}{{ obj.sales_quota.number }} ({{ obj.sales_quota.target_amount|floatformat:2 }}){% else %}<span class="text-slate-400">None</span>{% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Effective Validity Window</div>
+                    <div class="text-xs text-slate-700 mt-1">
+                        {{ obj.effective_start|date:"F d, Y" }}
+                        {% if obj.effective_end %}
+                        – {{ obj.effective_end|date:"F d, Y" }}
+                        {% else %}
+                        (Ongoing indefinitely)
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="pt-3 border-t border-slate-100 text-xs text-slate-400 space-y-1">
+                    <div>Created: {{ obj.created_at|date:"M d, Y H:i" }}</div>
+                    <div>Last Updated: {{ obj.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Participants Enrolled</h3>
+            </div>
+            <div class="card-body">
+                {% if assigned_reps %}
+                <ul class="divide-y divide-slate-100 text-sm">
+                    {% for fn, ln, email in assigned_reps %}
+                    <li class="py-2 flex items-center justify-between">
+                        <span class="font-medium text-slate-800">{{ fn }} {{ ln }}</span>
+                        <span class="text-xs text-slate-400 font-mono">{{ email }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-xs text-slate-400">No participant statements generated yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
