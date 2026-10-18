@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Sales Training & Certifications — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_readiness_board' %}">Readiness Matrix</a>
+            <span>/</span>
+            <span>Certifications</span>
+        </div>
+        <h1 class="page-title">Training & Certification Records</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:sales_readiness_board' %}" class="btn btn-outline">
+            <i data-lucide="award"></i>
+            <span>Readiness Matrix</span>
+        </a>
+        <a href="{% url 'sales:sales_certification_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Add Certification</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="filter-bar grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ q }}" placeholder="Search curriculum, rep, number..." class="form-input w-full">
+            </div>
+            <div>
+                <select name="category" class="form-select w-full">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="rep" class="form-select w-full">
+                    <option value="">All Sales Reps</option>
+                    {% for u in reps %}
+                    <option value="{{ u.pk|stringformat:'d' }}" {% if rep_id == u.pk|stringformat:'d' %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'sales:sales_certification_list' %}" class="btn btn-outline text-slate-500" title="Clear Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Curriculum / Course</th>
+                        <th>Category</th>
+                        <th>Sales Rep</th>
+                        <th>Status</th>
+                        <th>Score %</th>
+                        <th>Certified Date</th>
+                        <th>Expiry Date</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in certifications %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">
+                                <a href="{% url 'sales:sales_certification_detail' item.pk %}" class="hover:text-blue-600">
+                                    {{ item.curriculum_name }}
+                                </a>
+                            </div>
+                            <div class="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                                <span>{{ item.number }}</span>
+                                {% if item.hrm_course %}
+                                <span>•</span>
+                                <span class="badge badge-purple text-xs py-0">LMS: {{ item.hrm_course.title }}</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge badge-slate text-xs">{{ item.get_category_display }}</span>
+                        </td>
+                        <td>
+                            <span class="font-medium text-sm text-slate-800">{{ item.rep.get_full_name|default:item.rep.username }}</span>
+                        </td>
+                        <td>
+                            {% if item.status == 'completed' %}
+                            <span class="badge badge-green">Completed / Passed</span>
+                            {% elif item.status == 'enrolled' %}
+                            <span class="badge badge-info">In Progress</span>
+                            {% elif item.status == 'failed' %}
+                            <span class="badge badge-red">Failed</span>
+                            {% else %}
+                            <span class="badge badge-muted">Expired</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.score_percent %}
+                            <span class="font-mono text-sm font-semibold {% if item.score_percent >= item.passing_score_percent %}text-green-700{% else %}text-red-600{% endif %}">
+                                {{ item.score_percent }}%
+                            </span>
+                            <span class="text-xs text-slate-400">/ {{ item.passing_score_percent }}%</span>
+                            {% else %}
+                            <span class="text-xs text-slate-400">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="text-xs text-slate-600">{{ item.certified_at|date:"M d, Y"|default:"—" }}</span>
+                        </td>
+                        <td>
+                            {% if item.expires_at %}
+                            <span class="text-xs text-slate-600">{{ item.expires_at|date:"M d, Y" }}</span>
+                            {% else %}
+                            <span class="text-xs text-slate-400">Lifetime</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right table-actions">
+                            <div class="flex items-center justify-end gap-1">
+                                <a href="{% url 'sales:sales_certification_detail' item.pk %}" class="btn btn-icon" title="View Detail">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'sales:sales_certification_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                                <form method="post" action="{% url 'sales:sales_certification_delete' item.pk %}" onsubmit="return confirm('Delete this certification record?');" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                        <i data-lucide="trash-2"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state py-8">
+                                <i data-lucide="award" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                                <h3 class="font-medium text-slate-700 mb-1">No sales certification records found</h3>
+                                <p class="text-slate-500 text-sm mb-4">Track onboarding, product mastery, methodology (MEDDPICC) and demo accreditations.</p>
+                                <a href="{% url 'sales:sales_certification_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Add Certification Record</span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% if certifications.has_other_pages %}
+    <div class="card-footer border-t border-slate-200 px-4 py-3 flex items-center justify-between">
+        <div class="text-xs text-slate-500">
+            Showing page {{ certifications.number }} of {{ certifications.paginator.num_pages }}
+        </div>
+        <div class="pagination flex gap-1">
+            {% if certifications.has_previous %}
+            <a href="?page={{ certifications.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if rep_id %}&rep={{ rep_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            {% if certifications.has_next %}
+            <a href="?page={{ certifications.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if rep_id %}&rep={{ rep_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
