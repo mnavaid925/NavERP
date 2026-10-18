@@ -24,18 +24,27 @@
     </div>
 </div>
 
-<div class="card p-6 mb-8 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-lg">
-    <div class="flex items-center justify-between">
-        <div>
-            <h2 class="text-xl font-bold mb-1">Win-Loss & Battlecard Central</h2>
-            <p class="text-slate-300 text-sm max-w-2xl">
-                Real-time competitor positioning, objection handling rebuttals, battlecard collateral, and win/loss records powered by the canonical 8.2 competitor spine.
-            </p>
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="shield"></i>
         </div>
-        <div class="text-right">
-            <div class="text-3xl font-extrabold text-blue-400">{{ total_competitors }}</div>
-            <div class="text-xs text-slate-400 uppercase tracking-wider">Tracked Competitors</div>
+        <div class="stat-value">{{ total_competitors }}</div>
+        <div class="stat-label">Tracked Competitors</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="trophy"></i>
         </div>
+        <div class="stat-value">{{ win_loss_outcomes.won|default:0 }}</div>
+        <div class="stat-label">Total Competitive Wins</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div class="stat-value">{{ win_loss_outcomes.lost|default:0 }}</div>
+        <div class="stat-label">Total Competitive Losses</div>
     </div>
 </div>
 
