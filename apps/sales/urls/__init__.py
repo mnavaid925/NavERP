@@ -35,6 +35,8 @@ from .TerritoryQuotaManagement import urlpatterns as _territory_quota
 from .SalesActivityTaskManagement import urlpatterns as _sales_activity
 # 8.9 Sales Enablement
 from .SalesEnablement import urlpatterns as _sales_enablement
+# 8.10 Incentive Compensation Management
+from .IncentiveCompensation import urlpatterns as _incentive_compensation
 
 app_name = "sales"
 
@@ -65,6 +67,8 @@ urlpatterns = [
     *_sales_activity,
     # 8.9 Sales Enablement.
     *_sales_enablement,
+    # 8.10 Incentive Compensation Management.
+    *_incentive_compensation,
     *_pipelines,
     *_teams,
     *_competitors,
