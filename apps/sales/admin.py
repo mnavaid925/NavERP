@@ -49,6 +49,11 @@ from .models import (
     SalesPlaybook,
     SalesCertification,
     CoachingScorecard,
+    # 8.10 Incentive Compensation Management
+    CommissionPlan,
+    CommissionEarning,
+    CommissionStatement,
+    CommissionAdjustment,
 )
 
 
@@ -714,4 +719,46 @@ class CoachingScorecardAdmin(admin.ModelAdmin):
     readonly_fields = ("tenant", "number", "overall_score", "created_at", "updated_at")
     list_select_related = ("communication_log", "activity_log", "coach", "coachee", "tenant")
     raw_id_fields = ("communication_log", "activity_log", "coach", "coachee")
+
+
+# 8.10 Incentive Compensation Management
+@admin.register(CommissionPlan)
+class CommissionPlanAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "plan_type", "tier_mode", "base_rate_pct", "currency", "target_region", "status", "effective_start", "tenant")
+    list_filter = ("plan_type", "tier_mode", "status", "tenant")
+    search_fields = ("number", "name", "code", "description", "target_region")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("currency", "sales_quota", "owner", "tenant")
+    raw_id_fields = ("sales_quota", "owner", "currency")
+
+
+@admin.register(CommissionEarning)
+class CommissionEarningAdmin(admin.ModelAdmin):
+    list_display = ("number", "payee", "plan", "opportunity", "deal_amount", "credited_volume", "applied_rate_pct", "gross_commission", "status", "earned_date", "tenant")
+    list_filter = ("status", "credit_type", "tenant")
+    search_fields = ("number", "payee__username", "payee__first_name", "payee__last_name", "opportunity__name")
+    readonly_fields = ("tenant", "number", "credited_volume", "base_commission_amount", "gross_commission", "functional_amount", "created_at", "updated_at")
+    list_select_related = ("plan", "payee", "opportunity", "sales_order", "clawback_parent", "statement", "deal_currency", "tenant")
+    raw_id_fields = ("plan", "payee", "opportunity", "sales_order", "clawback_parent", "statement", "deal_currency")
+
+
+@admin.register(CommissionStatement)
+class CommissionStatementAdmin(admin.ModelAdmin):
+    list_display = ("statement_number", "payee", "plan", "period_start", "period_end", "gross_earnings", "draw_recovered", "net_payout", "status", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("statement_number", "number", "payee__username", "payee__first_name", "payee__last_name")
+    readonly_fields = ("tenant", "number", "total_credited_volume", "total_base_commission", "total_accelerator_amount", "total_spif_amount", "gross_earnings", "draw_recovered", "net_payout", "approved_at", "locked_at", "created_at", "updated_at")
+    list_select_related = ("payee", "plan", "approved_by", "payroll_run", "tenant")
+    raw_id_fields = ("payee", "plan", "approved_by", "payroll_run")
+
+
+@admin.register(CommissionAdjustment)
+class CommissionAdjustmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "payee", "adjustment_type", "amount", "status", "effective_date", "tenant")
+    list_filter = ("adjustment_type", "status", "tenant")
+    search_fields = ("number", "reason", "payee__username", "payee__first_name", "payee__last_name")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("statement", "earning", "payee", "requested_by", "approved_by", "tenant")
+    raw_id_fields = ("statement", "earning", "payee", "requested_by", "approved_by")
+
 
