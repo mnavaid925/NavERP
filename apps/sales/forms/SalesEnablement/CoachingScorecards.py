@@ -57,9 +57,11 @@ class CoachingScorecardForm(TenantUniqueMixin, TenantModelForm):
             self.fields["communication_log"].queryset = CommunicationLog.objects.filter(
                 tenant=self.tenant
             ).order_by("-occurred_at")
-            self.fields["activity_log"].queryset = ActivityLog.objects.filter(
-                tenant=self.tenant
-            ).order_by("-created_at")
+            self.fields["activity_log"].queryset = (
+                ActivityLog.objects.filter(tenant=self.tenant)
+                .select_related("communication_log")
+                .order_by("-created_at")
+            )
             self.fields["coach"].queryset = User.objects.filter(tenant=self.tenant, is_active=True)
             self.fields["coachee"].queryset = User.objects.filter(tenant=self.tenant, is_active=True)
         else:
