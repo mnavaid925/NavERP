@@ -132,11 +132,15 @@ def sales_commission_earnings_dashboard(request):
         .order_by("name")
     )
 
+    first_plan = plans.first()
+    currency_code = first_plan.currency.code if first_plan and first_plan.currency else "USD"
+
     context = {
         "payee_summary": payee_summary,
         "recent_earnings": recent_earnings,
         "attainment_gauge": attainment_gauge,
         "plans": plans,
+        "currency_code": currency_code,
     }
     return render(request, "sales/incentivecompensation/boards/earnings_dashboard.html", context)
 
