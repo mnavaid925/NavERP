@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}Statement {{ obj.statement_number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <a href="{% url 'sales:commission_statement_list' %}">Statements</a>
+            <span>/</span>
+            <span>{{ obj.statement_number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Statement: {{ obj.statement_number }}</h1>
+            {% if obj.status == 'approved' or obj.status == 'locked' %}
+            <span class="badge badge-green">{{ status_display }}</span>
+            {% elif obj.status == 'paid' or obj.status == 'exported' %}
+            <span class="badge badge-info">{{ status_display }}</span>
+            {% elif obj.status == 'under_review' %}
+            <span class="badge badge-amber">Under Review</span>
+            {% else %}
+            <span class="badge badge-slate">Draft</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if can_approve %}
+        <form method="post" action="{% url 'sales:commission_statement_approve' obj.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="check"></i>
+                <span>Approve Statement</span>
+            </button>
+        </form>
+        {% endif %}
+        {% if can_lock %}
+        <form method="post" action="{% url 'sales:commission_statement_lock' obj.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="lock"></i>
+                <span>Finalize & Lock</span>
+            </button>
+        </form>
+        {% endif %}
+        {% if obj.status != 'locked' and obj.status != 'exported' and obj.status != 'paid' %}
+        <a href="{% url 'sales:commission_statement_edit' obj.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Waterfall Math & Line Items -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Settlement Waterfall Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">Gross-to-Net Waterfall Breakdown</h3>
+                <span class="text-xs text-slate-500">{{ obj.period_start|date:"M d, Y" }} – {{ obj.period_end|date:"M d, Y" }}</span>
+            </div>
+            <div class="card-body">
+                <div class="space-y-3 font-mono text-sm">
+                    <div class="flex justify-between py-2 border-b border-slate-100">
+                        <span class="text-slate-600 font-sans">Total Credited Sales Volume:</span>
+                        <span class="font-semibold text-slate-900">${{ obj.total_credited_volume|floatformat:2 }}</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-slate-100">
+                        <span class="text-slate-600 font-sans">Base Commission Amount:</span>
+                        <span class="text-slate-800">${{ obj.total_base_commission|floatformat:2 }}</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-slate-100">
+                        <span class="text-slate-600 font-sans">Tier Accelerator Bonuses:</span>
+                        <span class="text-slate-800">+${{ obj.total_accelerator_amount|floatformat:2 }}</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-slate-100">
+                        <span class="text-slate-600 font-sans">Tactical SPIF Campaign Bonuses:</span>
+                        <span class="text-orange-600 font-semibold">+${{ obj.total_spif_amount|floatformat:2 }}</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-slate-200 bg-slate-50 px-2 rounded">
+                        <span class="text-slate-800 font-sans font-semibold">Total Gross Commission Earnings:</span>
+                        <span class="font-bold text-slate-900">${{ obj.gross_earnings|floatformat:2 }}</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-slate-100 text-slate-600">
+                        <span class="font-sans">Recoverable Draw Deduction:</span>
+                        <span class="{% if obj.draw_recovered > 0 %}text-red-600{% endif %}">
+                            {% if obj.draw_recovered > 0 %}-${{ obj.draw_recovered|floatformat:2 }}{% else %}$0.00{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-slate-100 text-slate-600">
+                        <span class="font-sans">Cancellations & Clawback Deductions:</span>
+                        <span class="{% if obj.clawbacks_deducted > 0 %}text-red-600{% endif %}">
+                            {% if obj.clawbacks_deducted > 0 %}-${{ obj.clawbacks_deducted|floatformat:2 }}{% else %}$0.00{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-slate-100 text-slate-600">
+                        <span class="font-sans">Manual / Dispute Adjustments:</span>
+                        <span>
+                            {% if obj.adjustments_amount >= 0 %}+${{ obj.adjustments_amount|floatformat:2 }}{% else %}-${{ obj.adjustments_amount|floatformat:2 }}{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-slate-100 text-slate-600">
+                        <span class="font-sans">Tax Withholding Estimate:</span>
+                        <span class="{% if obj.tax_withholding_amount > 0 %}text-red-600{% endif %}">
+                            {% if obj.tax_withholding_amount > 0 %}-${{ obj.tax_withholding_amount|floatformat:2 }}{% else %}$0.00{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex justify-between py-3 bg-emerald-50 text-emerald-950 px-3 rounded text-base font-sans">
+                        <span class="font-bold">Net Payout Due:</span>
+                        <span class="font-mono font-black text-xl text-emerald-800">${{ obj.net_payout|floatformat:2 }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attached Earnings Table -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">Included Deal Earnings</h3>
+                <span class="text-xs text-slate-500 font-mono">{{ earnings_list|length }} deals</span>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Opportunity</th>
+                            <th>Volume</th>
+                            <th>Split</th>
+                            <th>Rate</th>
+                            <th>Gross Commission</th>
+                            <th>Earned Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for earn in earnings_list %}
+                        <tr>
+                            <td class="font-mono text-xs">
+                                <a href="{% url 'sales:commission_earning_detail' earn.pk %}" class="text-primary hover:underline">
+                                    {{ earn.number }}
+                                </a>
+                            </td>
+                            <td class="text-sm text-slate-800 font-medium">
+                                {% if earn.opportunity %}{{ earn.opportunity.name }}{% else %}—{% endif %}
+                            </td>
+                            <td class="text-sm text-slate-700">${{ earn.credited_volume|floatformat:2 }}</td>
+                            <td class="text-xs text-slate-600">{{ earn.split_percentage }}%</td>
+                            <td class="text-xs font-semibold text-primary">{{ earn.applied_rate_pct }}%</td>
+                            <td class="text-sm font-bold text-slate-900">${{ earn.gross_commission|floatformat:2 }}</td>
+                            <td class="text-xs text-slate-600">{{ earn.earned_date|date:"M d, Y" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-6 text-sm text-slate-400">
+                                No specific deal earnings attached to this statement yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Adjustments & Clawbacks Table -->
+        {% if adjustments_list %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Adjustments, True-Ups & Clawbacks</h3>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Reason</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for adj in adjustments_list %}
+                        <tr>
+                            <td class="font-mono text-xs">{{ adj.number }}</td>
+                            <td class="text-xs text-slate-700">{{ adj.get_adjustment_type_display }}</td>
+                            <td class="text-sm font-bold {% if adj.amount < 0 %}text-red-600{% else %}text-slate-900{% endif %}">
+                                {% if adj.amount >= 0 %}+${{ adj.amount|floatformat:2 }}{% else %}-${{ adj.amount|floatformat:2 }}{% endif %}
+                            </td>
+                            <td class="text-xs text-slate-600">{{ adj.reason|truncatewords:8 }}</td>
+                            <td><span class="badge badge-green">{{ adj.get_status_display }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Column: Approvals & Audit -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Statement Governance</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Payee Rep</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">{{ obj.payee.get_full_name|default:obj.payee.email }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Plan</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">
+                        <a href="{% url 'sales:commission_plan_detail' obj.plan.pk %}" class="text-primary hover:underline">
+                            {{ obj.plan.name }}
+                        </a>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Manager Approval</div>
+                    <div class="text-sm text-slate-800 mt-1">
+                        {% if obj.approved_by %}
+                        <div class="font-medium text-slate-900">{{ obj.approved_by.get_full_name|default:obj.approved_by.email }}</div>
+                        <div class="text-xs text-slate-400">{{ obj.approved_at|date:"M d, Y H:i" }}</div>
+                        {% else %}
+                        <span class="text-slate-400">Pending Review</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Statement Lock</div>
+                    <div class="text-sm text-slate-800 mt-1">
+                        {% if obj.locked_at %}
+                        <span class="text-emerald-700 font-semibold">Locked on {{ obj.locked_at|date:"M d, Y H:i" }}</span>
+                        {% else %}
+                        <span class="text-slate-400">Open for edits</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Accounting Payroll Run</div>
+                    <div class="text-sm text-slate-800 mt-1">
+                        {% if obj.payroll_run %}
+                        <span class="font-mono text-primary font-medium">{{ obj.payroll_run.number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">Not queued in payroll</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if obj.notes %}
+                <div class="pt-3 border-t border-slate-100">
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Statement Notes</div>
+                    <p class="text-xs text-slate-700 mt-1">{{ obj.notes }}</p>
+                </div>
+                {% endif %}
+                <div class="pt-3 border-t border-slate-100 text-xs text-slate-400 space-y-1">
+                    <div>Created: {{ obj.created_at|date:"M d, Y H:i" }}</div>
+                    <div>Updated: {{ obj.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
