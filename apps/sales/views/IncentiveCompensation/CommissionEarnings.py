@@ -16,6 +16,7 @@ from apps.sales.models.IncentiveCompensation.CommissionEarnings import (
     CommissionEarning,
 )
 from apps.sales.models.IncentiveCompensation.CommissionPlans import CommissionPlan
+from apps.sales.views._helpers import is_admin_or_manager
 
 
 @login_required
@@ -25,6 +26,9 @@ def commission_earning_list(request):
         .select_related("plan", "payee", "opportunity", "sales_order", "deal_currency", "statement")
         .order_by("-earned_date", "-created_at")
     )
+    is_admin = is_admin_or_manager(request.user)
+    if not is_admin:
+        qs = qs.filter(payee=request.user)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -70,7 +74,10 @@ def commission_earning_list(request):
         "paid_count": stats_agg["paid_count"] or 0,
     }
 
-    payees = User.objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "last_name")
+    if not is_admin:
+        payees = User.objects.filter(pk=request.user.pk)
+    else:
+        payees = User.objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "last_name")
     plans = CommissionPlan.objects.filter(tenant=request.tenant).order_by("name")
 
     context = {
@@ -88,8 +95,11 @@ def commission_earning_list(request):
 
 @login_required
 def commission_earning_detail(request, pk):
+    detail_qs = CommissionEarning.objects.filter(tenant=request.tenant)
+    if not is_admin_or_manager(request.user):
+        detail_qs = detail_qs.filter(payee=request.user)
     obj = get_object_or_404(
-        CommissionEarning.objects.filter(tenant=request.tenant).select_related(
+        detail_qs.select_related(
             "plan", "payee", "opportunity", "sales_order", "deal_currency", "statement", "clawback_parent"
         ),
         pk=pk,
@@ -144,7 +154,10 @@ def commission_earning_create(request):
 
 @login_required
 def commission_earning_edit(request, pk):
-    obj = get_object_or_404(CommissionEarning.objects.filter(tenant=request.tenant), pk=pk)
+    edit_qs = CommissionEarning.objects.filter(tenant=request.tenant)
+    if not is_admin_or_manager(request.user):
+        edit_qs = edit_qs.filter(payee=request.user)
+    obj = get_object_or_404(edit_qs, pk=pk)
     if obj.status in ("approved", "paid", "clawed_back") or (
         obj.statement and obj.statement.status in ("locked", "exported", "paid")
     ):
