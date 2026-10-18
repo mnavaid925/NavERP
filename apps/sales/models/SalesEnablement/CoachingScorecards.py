@@ -161,6 +161,15 @@ class CoachingScorecard(TenantNumbered):
             if getattr(self.activity_log, "tenant_id", None) != self.tenant_id:
                 raise ValidationError({"activity_log": "Activity log must belong to the same workspace."})
 
+        if self.coachee_id and self.tenant_id:
+            if getattr(self.coachee, "tenant_id", None) != self.tenant_id:
+                raise ValidationError({"coachee": "Coachee must belong to the same workspace."})
+
+        if self.coach_id and self.tenant_id:
+            if getattr(self.coach, "tenant_id", None) != self.tenant_id:
+                raise ValidationError({"coach": "Coach must belong to the same workspace."})
+
+
     def save(self, *args, **kwargs):
         rubric_sum = (
             self.discovery_score
