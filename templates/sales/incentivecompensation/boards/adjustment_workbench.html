@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Clawbacks, Disputes & Reconciliation Workbench — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <span>Adjustment Workbench</span>
+        </div>
+        <h1 class="page-title">Clawbacks, Disputes & Reconciliation Workbench</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:commission_adjustment_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>All Adjustments</span>
+        </a>
+        <a href="{% url 'sales:commission_adjustment_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Adjustment</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="rotate-ccw"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Pending Clawbacks</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.pending_clawback_amount|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Rep Disputes</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.open_disputes_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="check-square"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Queue Work Items</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_queue_items }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="space-y-6">
+    <!-- Active Disputes Triage -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center bg-amber-50/50">
+            <div class="flex items-center gap-2">
+                <i data-lucide="alert-circle" class="text-amber-600 h-5 w-5"></i>
+                <h3 class="font-semibold text-slate-900">Active Rep Dispute Tickets</h3>
+            </div>
+            <span class="badge badge-amber">{{ active_disputes|length }} open</span>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Ticket</th>
+                        <th>Payee</th>
+                        <th>Disputed Amount</th>
+                        <th>Reason / Ticket Notes</th>
+                        <th>Effective Date</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in active_disputes %}
+                    <tr>
+                        <td class="font-mono text-xs font-semibold">
+                            <a href="{% url 'sales:commission_adjustment_detail' d.pk %}" class="text-primary hover:underline">
+                                {{ d.number }}
+                            </a>
+                        </td>
+                        <td class="text-sm font-medium text-slate-900">{{ d.payee.get_full_name|default:d.payee.email }}</td>
+                        <td class="text-sm font-bold text-slate-900">${{ d.amount|floatformat:2 }}</td>
+                        <td class="text-xs text-slate-700 max-w-sm truncate">{{ d.reason }}</td>
+                        <td class="text-xs text-slate-500">{{ d.effective_date|date:"M d, Y" }}</td>
+                        <td class="text-right table-actions">
+                            <a href="{% url 'sales:commission_adjustment_detail' d.pk %}" class="btn btn-outline text-xs">
+                                Review & Resolve
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-6 text-sm text-slate-400">
+                            No open rep disputes requiring management review.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Cancellation Clawbacks Queue -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center bg-red-50/50">
+            <div class="flex items-center gap-2">
+                <i data-lucide="rotate-ccw" class="text-red-600 h-5 w-5"></i>
+                <h3 class="font-semibold text-slate-900">Order Cancellation & Churn Clawbacks Queue</h3>
+            </div>
+            <span class="badge badge-red">{{ pending_clawbacks|length }} pending</span>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Adjustment</th>
+                        <th>Payee</th>
+                        <th>Clawback Amount</th>
+                        <th>Cancellation Justification</th>
+                        <th>Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in pending_clawbacks %}
+                    <tr>
+                        <td class="font-mono text-xs font-semibold">
+                            <a href="{% url 'sales:commission_adjustment_detail' c.pk %}" class="text-primary hover:underline">
+                                {{ c.number }}
+                            </a>
+                        </td>
+                        <td class="text-sm font-medium text-slate-900">{{ c.payee.get_full_name|default:c.payee.email }}</td>
+                        <td class="text-sm font-bold text-red-600">-${{ c.amount|floatformat:2|slice:"1:" }}</td>
+                        <td class="text-xs text-slate-700">{{ c.reason }}</td>
+                        <td><span class="badge badge-amber">{{ c.get_status_display }}</span></td>
+                        <td class="text-right table-actions">
+                            <a href="{% url 'sales:commission_adjustment_detail' c.pk %}" class="btn btn-outline btn-icon" title="View Details" aria-label="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-6 text-sm text-slate-400">
+                            No pending cancellation clawbacks.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Draw True-Up Reconciliations -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="font-semibold text-slate-900">Draw Advance & Tier True-Up Reconciliations</h3>
+            <span class="badge badge-slate">{{ draw_reconciliation_queue|length }} items</span>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Number</th>
+                        <th>Payee</th>
+                        <th>Type</th>
+                        <th>True-Up Amount</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in draw_reconciliation_queue %}
+                    <tr>
+                        <td class="font-mono text-xs">{{ r.number }}</td>
+                        <td class="text-sm text-slate-900 font-medium">{{ r.payee.get_full_name|default:r.payee.email }}</td>
+                        <td class="text-xs text-slate-600">{{ r.get_adjustment_type_display }}</td>
+                        <td class="text-sm font-bold text-slate-900">${{ r.amount|floatformat:2 }}</td>
+                        <td class="text-xs text-slate-600">{{ r.reason }}</td>
+                        <td><span class="badge badge-green">{{ r.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-6 text-sm text-slate-400">
+                            No draw or tier true-ups queued.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
