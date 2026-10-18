@@ -109,18 +109,29 @@ def sales_readiness_board(request):
 
     # Rep readiness matrix
     reps = User.objects.filter(tenant=tenant, is_active=True).order_by("first_name", "username")
+    rep_stats = (
+        certs_qs.values("rep")
+        .annotate(
+            total=Count("id"),
+            completed=Count("id", filter=Q(status="completed")),
+            in_progress=Count("id", filter=Q(status="enrolled")),
+            avg_score=Avg("score_percent", filter=Q(status="completed", score_percent__isnull=False)),
+        )
+    )
+    stats_by_rep = {s["rep"]: s for s in rep_stats}
+
     rep_matrix = []
     for rep in reps:
-        rep_certs = certs_qs.filter(rep=rep)
-        rep_completed = rep_certs.filter(status="completed").count()
-        rep_avg = rep_certs.filter(status="completed", score_percent__isnull=False).aggregate(avg=Avg("score_percent"))["avg"]
+        stats = stats_by_rep.get(rep.pk, {})
+        avg_val = stats.get("avg_score")
         rep_matrix.append({
             "rep": rep,
-            "total": rep_certs.count(),
-            "completed": rep_completed,
-            "avg_score": round(rep_avg, 1) if rep_avg else None,
-            "in_progress": rep_certs.filter(status="enrolled").count(),
+            "total": stats.get("total", 0),
+            "completed": stats.get("completed", 0),
+            "avg_score": round(avg_val, 1) if avg_val is not None else None,
+            "in_progress": stats.get("in_progress", 0),
         })
+
 
     context = {
         "total_certifications": total_certifications,
