@@ -24,24 +24,20 @@
     </div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-    <div class="card p-6 flex items-center gap-4">
-        <div class="p-4 bg-blue-50 text-blue-600 rounded-lg">
-            <i data-lucide="book-open" class="w-8 h-8"></i>
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="book-open"></i>
         </div>
-        <div>
-            <div class="text-3xl font-bold text-slate-900">{{ total_playbooks }}</div>
-            <div class="text-sm font-medium text-slate-500">Total Playbooks Formulated</div>
-        </div>
+        <div class="stat-value">{{ total_playbooks }}</div>
+        <div class="stat-label">Total Playbooks Formulated</div>
     </div>
-    <div class="card p-6 flex items-center gap-4">
-        <div class="p-4 bg-emerald-50 text-emerald-600 rounded-lg">
-            <i data-lucide="check-circle" class="w-8 h-8"></i>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
         </div>
-        <div>
-            <div class="text-3xl font-bold text-slate-900">{{ total_published }}</div>
-            <div class="text-sm font-medium text-slate-500">Published Active Motions</div>
-        </div>
+        <div class="stat-value">{{ total_published }}</div>
+        <div class="stat-label">Published Active Motions</div>
     </div>
 </div>
 
