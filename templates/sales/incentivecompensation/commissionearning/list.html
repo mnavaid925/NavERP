@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}Commission Earnings Ledger — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <span>Commission Earnings</span>
+        </div>
+        <h1 class="page-title">Commission Earnings Ledger</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:sales_commission_earnings_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="gauge"></i>
+            <span>Attainment Dashboard</span>
+        </a>
+        <a href="{% url 'sales:commission_earning_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Record Earning</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Gross Credited</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_gross|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="zap"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">SPIF Bonuses</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_spif|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="calculator"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Calculated / Verified</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.calculated_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Paid Out</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.paid_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ q }}" placeholder="Search number, rep, deal..." class="form-input w-full">
+            </div>
+            <div>
+                <select name="payee" class="form-select w-full">
+                    <option value="">All Reps / Payees</option>
+                    {% for p in payees %}
+                    <option value="{{ p.pk|stringformat:'d' }}" {% if request.GET.payee == p.pk|stringformat:'d' %}selected{% endif %}>{{ p.get_full_name|default:p.email }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="plan" class="form-select w-full">
+                    <option value="">All Plans</option>
+                    {% for pl in plans %}
+                    <option value="{{ pl.pk|stringformat:'d' }}" {% if request.GET.plan == pl.pk|stringformat:'d' %}selected{% endif %}>{{ pl.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="credit_type" class="form-select w-full">
+                    <option value="">All Credit Channels</option>
+                    {% for val, label in credit_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.credit_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <select name="status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Payee</th>
+                    <th>Deal / Opp</th>
+                    <th>Deal Volume</th>
+                    <th>Split %</th>
+                    <th>Attainment</th>
+                    <th>Rate</th>
+                    <th>Gross Commission</th>
+                    <th>Earned Date</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for earn in object_list %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        <a href="{% url 'sales:commission_earning_detail' earn.pk %}" class="text-primary hover:underline">
+                            {{ earn.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ earn.payee.get_full_name|default:earn.payee.email }}</div>
+                        <div class="text-xs text-slate-500">{{ earn.get_credit_type_display }}</div>
+                    </td>
+                    <td>
+                        {% if earn.opportunity %}
+                        <div class="text-sm text-slate-800 font-medium">{{ earn.opportunity.name }}</div>
+                        <div class="text-xs text-slate-400 font-mono">{{ earn.opportunity.number }}</div>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-slate-900 font-semibold">
+                        {{ earn.deal_currency.code }} {{ earn.deal_amount|floatformat:2 }}
+                    </td>
+                    <td class="text-xs text-slate-700">
+                        {{ earn.split_percentage }}%
+                    </td>
+                    <td class="text-xs font-semibold text-slate-700">
+                        {{ earn.attainment_pct_at_close }}%
+                    </td>
+                    <td class="text-xs font-bold text-primary">
+                        {{ earn.applied_rate_pct }}%
+                    </td>
+                    <td>
+                        <div class="font-bold text-slate-900">{{ earn.deal_currency.code }} {{ earn.gross_commission|floatformat:2 }}</div>
+                        {% if earn.spif_amount > 0 %}
+                        <div class="text-xs text-orange-600 font-medium">+{{ earn.spif_amount|floatformat:2 }} SPIF</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ earn.earned_date|date:"M d, Y" }}
+                    </td>
+                    <td>
+                        {% if earn.status == 'calculated' or earn.status == 'approved' %}
+                        <span class="badge badge-green">{{ earn.get_status_display }}</span>
+                        {% elif earn.status == 'paid' %}
+                        <span class="badge badge-info">Paid</span>
+                        {% elif earn.status == 'pending' %}
+                        <span class="badge badge-amber">Pending</span>
+                        {% else %}
+                        <span class="badge badge-red">{{ earn.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'sales:commission_earning_detail' earn.pk %}" class="btn btn-outline btn-icon" title="View Details" aria-label="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:commission_earning_edit' earn.pk %}" class="btn btn-outline btn-icon" title="Edit Earning" aria-label="Edit Earning">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'sales:commission_earning_delete' earn.pk %}" class="inline" onsubmit="return confirm('Delete this commission earning entry?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Earning" aria-label="Delete Earning">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="11" class="p-8 text-center">
+                        <div class="empty-state">
+                            <i data-lucide="dollar-sign" class="mx-auto h-12 w-12 text-slate-300"></i>
+                            <h3 class="mt-2 text-sm font-semibold text-slate-900">No commission earnings recorded</h3>
+                            <p class="mt-1 text-sm text-slate-500">Record closed-won deal credits and calculated commission payouts.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'sales:commission_earning_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Record Earning</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-xs text-slate-500">
+            Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} total)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.payee %}&payee={{ request.GET.payee }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.payee %}&payee={{ request.GET.payee }}{% endif %}" class="btn btn-outline text-xs">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
