@@ -133,6 +133,14 @@ class CoachingScorecard(TenantNumbered):
                 fields=["tenant", "coachee", "review_status"],
                 name="sales_csc_coachee_stat_idx",
             ),
+            models.Index(
+                fields=["tenant", "-evaluated_on"],
+                name="sales_csc_tenant_eval_idx",
+            ),
+            models.Index(
+                fields=["tenant", "coach"],
+                name="sales_csc_tenant_coach_idx",
+            ),
         ]
 
     def __str__(self):
