@@ -88,12 +88,10 @@ def coaching_scorecard_create(request):
                 obj.coach = request.user
             obj.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="CoachingScorecard",
-                object_id=str(obj.pk),
-                details=f"Created coaching scorecard {obj.number} for {obj.coachee} (Score: {obj.overall_score}%)",
+                request.user,
+                obj,
+                "create",
+                changes={"coachee": str(obj.coachee), "number": obj.number, "score": obj.overall_score},
             )
             messages.success(request, f"Coaching scorecard for '{obj.coachee}' created.")
             return redirect("sales:coaching_scorecard_detail", pk=obj.pk)
@@ -119,12 +117,10 @@ def coaching_scorecard_edit(request, pk):
         if form.is_valid():
             form.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="CoachingScorecard",
-                object_id=str(obj.pk),
-                details=f"Updated coaching scorecard {obj.number} for {obj.coachee}",
+                request.user,
+                obj,
+                "update",
+                changes={"coachee": str(obj.coachee), "number": obj.number},
             )
             messages.success(request, f"Coaching scorecard {obj.number} updated.")
             return redirect("sales:coaching_scorecard_detail", pk=obj.pk)
@@ -141,15 +137,13 @@ def coaching_scorecard_delete(request, pk):
     obj = get_object_or_404(CoachingScorecard.objects.filter(tenant=request.tenant), pk=pk)
     number = obj.number
     coachee_str = str(obj.coachee)
-    obj.delete()
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="CoachingScorecard",
-        object_id=str(pk),
-        details=f"Deleted coaching scorecard {number} for {coachee_str}",
+        request.user,
+        obj,
+        "delete",
+        changes={"coachee": coachee_str, "number": number},
     )
+    obj.delete()
     messages.success(request, f"Coaching scorecard {number} deleted.")
     return redirect("sales:coaching_scorecard_list")
 
@@ -161,12 +155,10 @@ def coaching_scorecard_acknowledge(request, pk):
     obj.review_status = "acknowledged"
     obj.save(update_fields=["review_status", "updated_at"])
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="update",
-        model_name="CoachingScorecard",
-        object_id=str(obj.pk),
-        details=f"Acknowledged coaching scorecard {obj.number}",
+        request.user,
+        obj,
+        "update",
+        changes={"review_status": "acknowledged", "number": obj.number},
     )
     messages.success(request, "Coaching evaluation acknowledged.")
     return redirect("sales:coaching_scorecard_detail", pk=obj.pk)
