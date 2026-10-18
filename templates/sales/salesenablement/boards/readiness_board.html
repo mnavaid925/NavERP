@@ -24,42 +24,34 @@
     </div>
 </div>
 
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-    <div class="card p-6 flex items-center gap-4">
-        <div class="p-4 bg-blue-50 text-blue-600 rounded-lg">
-            <i data-lucide="award" class="w-8 h-8"></i>
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="award"></i>
         </div>
-        <div>
-            <div class="text-3xl font-bold text-slate-900">{{ total_certifications }}</div>
-            <div class="text-xs font-medium text-slate-500 uppercase">Enrolled Modules</div>
-        </div>
+        <div class="stat-value">{{ total_certifications }}</div>
+        <div class="stat-label">Enrolled Modules</div>
     </div>
-    <div class="card p-6 flex items-center gap-4">
-        <div class="p-4 bg-emerald-50 text-emerald-600 rounded-lg">
-            <i data-lucide="check-circle-2" class="w-8 h-8"></i>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
         </div>
-        <div>
-            <div class="text-3xl font-bold text-emerald-700">{{ completed_count }}</div>
-            <div class="text-xs font-medium text-slate-500 uppercase">Passed Accreditations</div>
-        </div>
+        <div class="stat-value">{{ completed_count }}</div>
+        <div class="stat-label">Passed Accreditations</div>
     </div>
-    <div class="card p-6 flex items-center gap-4">
-        <div class="p-4 bg-purple-50 text-purple-600 rounded-lg">
-            <i data-lucide="clock" class="w-8 h-8"></i>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="clock"></i>
         </div>
-        <div>
-            <div class="text-3xl font-bold text-purple-700">{{ in_progress_count }}</div>
-            <div class="text-xs font-medium text-slate-500 uppercase">In Training / Enrolled</div>
-        </div>
+        <div class="stat-value">{{ in_progress_count }}</div>
+        <div class="stat-label">In Training / Enrolled</div>
     </div>
-    <div class="card p-6 flex items-center gap-4">
-        <div class="p-4 bg-amber-50 text-amber-600 rounded-lg">
-            <i data-lucide="pie-chart" class="w-8 h-8"></i>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="pie-chart"></i>
         </div>
-        <div>
-            <div class="text-3xl font-bold text-slate-900">{{ completion_rate }}%</div>
-            <div class="text-xs font-medium text-slate-500 uppercase">Overall Readiness Rate</div>
-        </div>
+        <div class="stat-value">{{ completion_rate }}%</div>
+        <div class="stat-label">Overall Readiness Rate</div>
     </div>
 </div>
 
