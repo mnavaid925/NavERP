@@ -7,9 +7,12 @@ Provides the 5 functional surfaces mapping directly to the NavERP.md feature bul
 4. `sales_coaching_workbench`: Coaching & Call Recording
 5. `sales_competitive_intelligence_library`: Competitive Intelligence Library
 """
+from datetime import timedelta
+
 from django.contrib.auth.decorators import login_required
 from django.db.models import Avg, Count, Q
 from django.shortcuts import render
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.crm.models.ActivityManagement.CommunicationLogs import CommunicationLog
@@ -58,6 +61,7 @@ def sales_enablement_content_hub(request):
         "battlecards": battlecards,
         "decks": decks,
         "case_studies": case_studies,
+        "sheets": case_studies,
         "content_type_choices": CONTENT_TYPE_CHOICES,
         "stage_choices": TARGET_STAGE_CHOICES,
         "persona_choices": TARGET_PERSONA_CHOICES,
@@ -107,6 +111,23 @@ def sales_readiness_board(request):
 
     completion_rate = int(round((completed_count / total_certifications * 100))) if total_certifications > 0 else 0
 
+    today = timezone.now().date()
+    expiring_soon_count = certs_qs.filter(
+        status="completed",
+        expires_at__isnull=False,
+        expires_at__gte=today,
+        expires_at__lte=today + timedelta(days=30),
+    ).count()
+
+    certifications_summary = {
+        "total": total_certifications,
+        "completed": completed_count,
+        "in_progress": in_progress_count,
+        "failed": failed_count,
+        "completion_rate": completion_rate,
+        "expiring_soon": expiring_soon_count,
+    }
+
     # Rep readiness matrix
     reps = User.objects.filter(tenant=tenant, is_active=True).order_by("first_name", "username")
     rep_stats = (
@@ -132,7 +153,6 @@ def sales_readiness_board(request):
             "in_progress": stats.get("in_progress", 0),
         })
 
-
     context = {
         "total_certifications": total_certifications,
         "completed_count": completed_count,
@@ -140,6 +160,9 @@ def sales_readiness_board(request):
         "failed_count": failed_count,
         "completion_rate": completion_rate,
         "rep_matrix": rep_matrix,
+        "rep_readiness_matrix": rep_matrix,
+        "certifications_summary": certifications_summary,
+        "expiring_soon_count": expiring_soon_count,
         "categories": CERTIFICATION_CATEGORY_CHOICES,
     }
     return render(request, "sales/salesenablement/boards/readiness_board.html", context)
@@ -157,6 +180,19 @@ def sales_coaching_workbench(request):
     talk_avg = scorecards_qs.filter(talk_listen_ratio_percent__isnull=False).aggregate(avg=Avg("talk_listen_ratio_percent"))["avg"]
     avg_talk_ratio = round(talk_avg, 1) if talk_avg else 0
 
+    rubric_avgs = scorecards_qs.aggregate(
+        discovery=Avg("discovery_score"),
+        value_prop=Avg("value_prop_score"),
+        objection=Avg("objection_handling_score"),
+        next_steps=Avg("next_steps_score"),
+    )
+    strengths_distribution = {
+        "discovery": round(rubric_avgs["discovery"], 1) if rubric_avgs["discovery"] else 0,
+        "value_prop": round(rubric_avgs["value_prop"], 1) if rubric_avgs["value_prop"] else 0,
+        "objection_handling": round(rubric_avgs["objection"], 1) if rubric_avgs["objection"] else 0,
+        "next_steps": round(rubric_avgs["next_steps"], 1) if rubric_avgs["next_steps"] else 0,
+    }
+
     recent_scorecards = scorecards_qs.select_related("coachee", "coach", "communication_log").order_by("-evaluated_on")[:6]
 
     # Find unreviewed recent communication logs
@@ -171,8 +207,10 @@ def sales_coaching_workbench(request):
         "total_evaluations": total_evaluations,
         "avg_overall_score": avg_overall_score,
         "avg_talk_ratio": avg_talk_ratio,
+        "talk_ratio_avg": avg_talk_ratio,
         "recent_scorecards": recent_scorecards,
         "unreviewed_logs": unreviewed_logs,
+        "strengths_distribution": strengths_distribution,
     }
     return render(request, "sales/salesenablement/boards/coaching_workbench.html", context)
 
@@ -219,9 +257,22 @@ def sales_competitive_intelligence_library(request):
             "losses": outcomes.get("losses", 0),
         })
 
+    total_wins = sum(c["wins"] for c in competitor_data)
+    total_losses = sum(c["losses"] for c in competitor_data)
+    total_outcomes = total_wins + total_losses
+    win_loss_outcomes = {
+        "total": total_outcomes,
+        "wins": total_wins,
+        "losses": total_losses,
+        "win_rate": int(round((total_wins / total_outcomes * 100))) if total_outcomes > 0 else 0,
+    }
+
     context = {
         "total_competitors": total_competitors,
         "competitor_data": competitor_data,
+        "competitors_with_battlecards": competitor_data,
+        "win_loss_outcomes": win_loss_outcomes,
     }
     return render(request, "sales/salesenablement/boards/competitive_intelligence_library.html", context)
+
 
