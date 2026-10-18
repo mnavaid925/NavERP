@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Adjustment {{ obj.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <a href="{% url 'sales:commission_adjustment_list' %}">Adjustments</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Adjustment: {{ obj.number }}</h1>
+            {% if obj.status == 'approved' or obj.status == 'applied' %}
+            <span class="badge badge-green">{{ status_display }}</span>
+            {% elif obj.status == 'disputed' %}
+            <span class="badge badge-red">Disputed</span>
+            {% elif obj.status == 'rejected' %}
+            <span class="badge badge-muted">Rejected</span>
+            {% else %}
+            <span class="badge badge-slate">Draft</span>
+            {% endif %}
+            <span class="badge badge-info">{{ adjustment_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if obj.status != 'applied' %}
+        <a href="{% url 'sales:commission_adjustment_edit' obj.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Adjustment Details Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">Adjustment Impact & Classification</h3>
+                <span class="font-mono text-xs text-slate-500">{{ obj.number }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Payee Rep</div>
+                        <div class="font-medium text-slate-900 mt-1">{{ obj.payee.get_full_name|default:obj.payee.email }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Effective Ledger Date</div>
+                        <div class="text-slate-900 mt-1">{{ obj.effective_date|date:"F d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Financial Impact</div>
+                        <div class="text-2xl font-black mt-1 {% if obj.amount < 0 %}text-red-600{% else %}text-slate-900{% endif %}">
+                            {% if obj.amount >= 0 %}+${{ obj.amount|floatformat:2 }}{% else %}-${{ obj.amount|floatformat:2 }}{% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Adjustment Type</div>
+                        <div class="text-slate-900 mt-1 font-medium">{{ adjustment_type_display }}</div>
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-slate-100">
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Reason & Justification</div>
+                    <p class="text-sm text-slate-800 leading-relaxed bg-slate-50 p-4 rounded">{{ obj.reason }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dispute Ticket Workflow Resolution Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">Dispute Review & Resolution Workflow</h3>
+                {% if obj.status == 'disputed' %}
+                <span class="badge badge-red">Action Required</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if obj.dispute_comments %}
+                <div class="mb-4">
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Dispute Audit Log & Exchange</div>
+                    <pre class="bg-slate-50 p-3 rounded text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{{ obj.dispute_comments }}</pre>
+                </div>
+                {% endif %}
+
+                {% if obj.status == 'disputed' or obj.status == 'draft' %}
+                <form method="post" action="{% url 'sales:commission_adjustment_resolve_dispute' obj.pk %}" class="space-y-4 pt-4 border-t border-slate-100">
+                    {% csrf_token %}
+                    <div>
+                        <label class="form-label font-semibold text-xs uppercase text-slate-600">Resolution Decision</label>
+                        <div class="flex gap-4 mt-1">
+                            <label class="flex items-center gap-2 cursor-pointer text-sm">
+                                <input type="radio" name="decision" value="approve" checked>
+                                <span class="text-emerald-700 font-semibold">Approve Adjustment</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer text-sm">
+                                <input type="radio" name="decision" value="reject">
+                                <span class="text-red-700 font-semibold">Reject / Dismiss</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_resolution_notes">Manager Resolution Comments</label>
+                        <textarea id="id_resolution_notes" name="resolution_notes" rows="2" class="form-textarea" placeholder="Provide context on approved amount or rationale for rejection..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>Submit Decision</span>
+                    </button>
+                </form>
+                {% else %}
+                <p class="text-xs text-slate-500">This adjustment is in status <strong class="text-slate-800">{{ status_display }}</strong> and dispute resolution is closed.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Associated Entities -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Associated Records</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Target Statement</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">
+                        {% if obj.statement %}
+                        <a href="{% url 'sales:commission_statement_detail' obj.statement.pk %}" class="text-primary hover:underline font-mono">
+                            {{ obj.statement.statement_number }}
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400">Unsettled</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Related Earning</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">
+                        {% if obj.earning %}
+                        <a href="{% url 'sales:commission_earning_detail' obj.earning.pk %}" class="text-primary hover:underline font-mono">
+                            {{ obj.earning.number }}
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400">None</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Requested By</div>
+                    <div class="text-sm text-slate-900 mt-1">
+                        {% if obj.requested_by %}{{ obj.requested_by.get_full_name|default:obj.requested_by.email }}{% else %}—{% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Approved By</div>
+                    <div class="text-sm text-slate-900 mt-1">
+                        {% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.email }}{% else %}<span class="text-slate-400">Unapproved</span>{% endif %}
+                    </div>
+                </div>
+                <div class="pt-3 border-t border-slate-100 text-xs text-slate-400 space-y-1">
+                    <div>Created: {{ obj.created_at|date:"M d, Y H:i" }}</div>
+                    <div>Updated: {{ obj.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
