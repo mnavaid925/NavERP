@@ -38,7 +38,35 @@ Commit after fixing Critical+Important.
 ---
 
 ## 2. Architecture & Exploration Review (`explorer`)
-*Pending review run...*
+
+### Verdict
+Commit after fixing Critical + Important.
+
+### Critical
+- `apps/sales/views/IncentiveCompensation/CommissionStatements.py:177` & `196` — `commission_statement_approve` and `commission_statement_lock` lack `@tenant_admin_required` / manager authorization, permit self-approval by payees (`obj.payee == request.user`), and fail to check status state machine preconditions (e.g. approving an already locked/paid statement, or locking a non-approved statement).
+- `apps/sales/views/IncentiveCompensation/CommissionAdjustments.py:167` — `commission_adjustment_resolve_dispute` lacks authorization checks and allows payees to self-resolve their own disputes.
+- `apps/sales/views/IncentiveCompensation/CommissionEarnings.py:145` & `175` — `commission_earning_edit` and `commission_earning_delete` do not prevent editing or deletion of earnings that are `paid` or attached to a `locked`/`paid` statement.
+- `apps/sales/models/IncentiveCompensation/CommissionAdjustments.py:155` & `CommissionEarnings.py:210` — Cross-payee relational leakage: `CommissionAdjustment.clean()` does not verify that `self.earning.payee == self.payee` or `self.statement.payee == self.payee` when linked; similarly, `CommissionEarning.clean()` does not verify `self.statement.payee == self.payee`.
+
+### Important
+- `templates/sales/incentivecompensation/boards/payout_processing.html:178` & `apps/sales/views/IncentiveCompensation/CommissionBoards.py:204` — `sales_commission_payout_processing` omits `plans` from context, while the template has a hardcoded `<option value="1">Active Plan Envelope</option>` fallback which breaks multi-tenancy. Context must provide `plans = CommissionPlan.objects.filter(tenant=request.tenant, status="active")`.
+- `apps/sales/views/IncentiveCompensation/CommissionStatements.py:264` — `commission_statement_generate_batch` creates statements bypassing draw deductions (`net_payout = gross` instead of `max(Decimal('0.00'), gross - draw_recovered)`).
+- `apps/sales/views/IncentiveCompensation/CommissionBoards.py:236` — `sales_commission_what_if_calc` parses raw numeric GET parameters (`deal_amount`, `split_pct`, `current_attainment`) via `Decimal(...)` without `InvalidOperation` handling, `is_finite()` checks, or magnitude limits, risking 500s on bad inputs (L35).
+- `apps/sales/forms/IncentiveCompensation/CommissionStatements.py:20` & `CommissionAdjustments.py:21` — Exposing `status` in `Meta.fields` allows direct POST manipulation of lifecycle states.
+- `templates/sales/incentivecompensation/commissionplan/detail.html:30` (and `commissionearning`, `commissionstatement`, `commissionadjustment`) — Detail views omit Back-to-List link and status-guarded POST-only delete button with modal confirmation.
+- `templates/sales/incentivecompensation/commissionplan/list.html:211` — Active filter GET parameters are dropped in pagination links across list templates.
+- `apps/sales/forms/IncentiveCompensation/CommissionAdjustments.py:44` — `CommissionDisputeTicketForm` is defined but unused across views.
+
+### Minor
+- Status badge fallbacks use hardcoded text instead of `{{ obj.get_status_display }}`.
+- Negative clawback formatting uses string slicing in `adjustment_workbench.html:142`.
+- Command help text in `seed_sales.py:93` omits 8.7-8.10.
+
+### Done well
+- Backend package structure strictly adheres to the 4-layer architecture (`models`, `forms`, `views`, `urls`).
+- Zero duplicate spine models declared; full reuse of `crm.Opportunity`, `crm.SalesQuota`, `scm.SalesOrder`, `accounting.Currency`, `accounting.ExchangeRate`, `accounting.PayrollRun` (L29/L36/L37).
+- `LIVE_LINKS["8.10"]` in `apps/core/navigation.py` accurately represents all 5 NavERP.md 8.10 bullets with 0 dead links.
+- All 17 templates present on disk and correctly aligned with views.
 
 ---
 
