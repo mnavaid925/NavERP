@@ -156,9 +156,9 @@
                         {% elif stmt.status == 'paid' or stmt.status == 'exported' %}
                         <span class="badge badge-info">{{ stmt.get_status_display }}</span>
                         {% elif stmt.status == 'under_review' %}
-                        <span class="badge badge-amber">Under Review</span>
+                        <span class="badge badge-amber">{{ stmt.get_status_display }}</span>
                         {% else %}
-                        <span class="badge badge-slate">Draft</span>
+                        <span class="badge badge-slate">{{ stmt.get_status_display }}</span>
                         {% endif %}
                     </td>
                     <td class="text-right table-actions">
