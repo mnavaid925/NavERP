@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}Real-Time Commission Earnings & Attainment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <span>Earnings Dashboard</span>
+        </div>
+        <h1 class="page-title">Real-Time Earnings & What-If Calculator</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:commission_earning_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>All Earnings</span>
+        </a>
+        <a href="{% url 'sales:commission_earning_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Record Earning</span>
+        </a>
+    </div>
+</div>
+
+<!-- Team Attainment & Earnings Gauge Row -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Gross Commission Earned</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ attainment_gauge.total_gross_earned|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="target"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Average Team Attainment</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ attainment_gauge.avg_team_attainment }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="zap"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Tactical SPIF Bonuses</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ attainment_gauge.total_spif_earned|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Rep Attainment Leaderboard & Recent Deals -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Rep Attainment Leaderboard -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Sales Representative Attainment & Payouts</h3>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Rep / Payee</th>
+                            <th>Attributed Volume</th>
+                            <th>Attainment %</th>
+                            <th>SPIF Earned</th>
+                            <th>Total Gross</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in payee_summary %}
+                        <tr>
+                            <td>
+                                <div class="font-medium text-slate-900">{{ row.payee.get_full_name|default:row.payee.email }}</div>
+                                <div class="text-xs text-slate-400 font-mono">{{ row.payee.email }}</div>
+                            </td>
+                            <td class="text-sm text-slate-800">${{ row.volume|floatformat:2 }}</td>
+                            <td>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-16 bg-slate-200 rounded-full h-2 overflow-hidden">
+                                        <div class="bg-primary h-2" style="width: {% if row.attainment > 100 %}100{% else %}{{ row.attainment }}{% endif %}%"></div>
+                                    </div>
+                                    <span class="text-xs font-bold text-slate-700">{{ row.attainment }}%</span>
+                                </div>
+                            </td>
+                            <td class="text-xs font-semibold text-orange-600">${{ row.spif|floatformat:2 }}</td>
+                            <td class="text-sm font-bold text-slate-900">${{ row.gross|floatformat:2 }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-6 text-sm text-slate-400">
+                                No rep earning records calculated yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent Deal Earnings -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">Recent Credited Deal Events</h3>
+                <a href="{% url 'sales:commission_earning_list' %}" class="text-xs text-primary font-medium hover:underline">View All</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Payee</th>
+                            <th>Deal</th>
+                            <th>Volume</th>
+                            <th>Rate</th>
+                            <th>Gross Payout</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for earn in recent_earnings %}
+                        <tr>
+                            <td class="font-mono text-xs">
+                                <a href="{% url 'sales:commission_earning_detail' earn.pk %}" class="text-primary hover:underline">
+                                    {{ earn.number }}
+                                </a>
+                            </td>
+                            <td class="text-sm font-medium text-slate-900">{{ earn.payee.get_full_name|default:earn.payee.email }}</td>
+                            <td class="text-xs text-slate-700">
+                                {% if earn.opportunity %}{{ earn.opportunity.name }}{% else %}—{% endif %}
+                            </td>
+                            <td class="text-sm text-slate-800">${{ earn.credited_volume|floatformat:2 }}</td>
+                            <td class="text-xs font-bold text-primary">{{ earn.applied_rate_pct }}%</td>
+                            <td class="text-sm font-bold text-slate-900">${{ earn.gross_commission|floatformat:2 }}</td>
+                            <td class="text-xs text-slate-500">{{ earn.earned_date|date:"M d, Y" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-6 text-sm text-slate-400">
+                                No recent transactions recorded.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Interactive What-If Calculator -->
+    <div class="space-y-6">
+        <div class="card border-primary/30 shadow-sm">
+            <div class="card-header bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+                <i data-lucide="calculator" class="text-primary h-5 w-5"></i>
+                <h3 class="font-semibold text-slate-900">"What-If" Deal Commission Simulator</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <p class="text-xs text-slate-500">
+                    Model projected commission earnings and tier accelerator bumps before closing a deal.
+                </p>
+
+                <div class="form-group">
+                    <label class="form-label text-xs">Select Plan</label>
+                    <select id="sim_plan" class="form-select text-sm w-full">
+                        {% for plan in plans %}
+                        <option value="{{ plan.pk }}">{{ plan.name }} ({{ plan.currency.code }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label text-xs">Expected Deal Size ($)</label>
+                    <input type="number" id="sim_deal_amount" value="50000" step="1000" class="form-input text-sm w-full">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="form-group">
+                        <label class="form-label text-xs">Split Share %</label>
+                        <input type="number" id="sim_split" value="100" min="1" max="100" class="form-input text-sm w-full">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-xs">Current Attainment %</label>
+                        <input type="number" id="sim_attainment" value="90" min="0" class="form-input text-sm w-full">
+                    </div>
+                </div>
+
+                <button type="button" id="btn_simulate" class="btn btn-primary w-full justify-center">
+                    <i data-lucide="play"></i>
+                    <span>Simulate Deal Payout</span>
+                </button>
+
+                <!-- Simulator Output Box -->
+                <div id="sim_result" class="mt-4 p-4 bg-slate-50 rounded border border-slate-200 space-y-2 text-xs hidden">
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">Attributed Deal Volume:</span>
+                        <span id="res_vol" class="font-bold text-slate-900">$0.00</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">Applied Commission Rate:</span>
+                        <span id="res_rate" class="font-bold text-primary">0%</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">Applicable Tier:</span>
+                        <span id="res_tier" class="font-medium text-slate-700">Base</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">Base Commission:</span>
+                        <span id="res_base" class="font-semibold text-slate-900">$0.00</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">SPIF Campaign Bonus:</span>
+                        <span id="res_spif" class="font-semibold text-orange-600">+$0.00</span>
+                    </div>
+                    <div class="pt-2 border-t border-slate-200 flex justify-between text-sm">
+                        <span class="font-bold text-slate-900">Projected Commission:</span>
+                        <span id="res_gross" class="font-black text-emerald-700 text-base">$0.00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btn = document.getElementById('btn_simulate');
+    if (!btn) return;
+
+    btn.addEventListener('click', function() {
+        const planId = document.getElementById('sim_plan').value;
+        const dealAmt = document.getElementById('sim_deal_amount').value;
+        const splitPct = document.getElementById('sim_split').value;
+        const attainment = document.getElementById('sim_attainment').value;
+
+        const url = `{% url 'sales:sales_commission_what_if_calc' %}?plan_id=${planId}&deal_amount=${dealAmt}&split_pct=${splitPct}&current_attainment=${attainment}`;
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                const resBox = document.getElementById('sim_result');
+                resBox.classList.remove('hidden');
+
+                document.getElementById('res_vol').textContent = `${data.currency} ${data.attributed_volume.toFixed(2)}`;
+                document.getElementById('res_rate').textContent = `${data.applied_rate_pct}%`;
+                document.getElementById('res_tier').textContent = data.tier_bracket_name;
+                document.getElementById('res_base').textContent = `${data.currency} ${data.base_commission.toFixed(2)}`;
+                document.getElementById('res_spif').textContent = `+${data.currency} ${data.spif_bonus.toFixed(2)}`;
+                document.getElementById('res_gross').textContent = `${data.currency} ${data.projected_gross.toFixed(2)}`;
+            })
+            .catch(err => console.error(err));
+    });
+});
+</script>
+{% endblock %}
