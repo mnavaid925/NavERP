@@ -121,7 +121,7 @@ def commission_statement_create(request):
             obj.save()
             write_audit_log(
                 request.user,
-                "sales.CommissionStatement",
+                obj,
                 "create",
                 {"pk": obj.pk, "number": obj.number, "statement_number": obj.statement_number},
                 tenant=request.tenant,
@@ -153,7 +153,7 @@ def commission_statement_edit(request, pk):
             obj = form.save()
             write_audit_log(
                 request.user,
-                "sales.CommissionStatement",
+                obj,
                 "update",
                 {"pk": obj.pk, "statement_number": obj.statement_number},
                 tenant=request.tenant,
@@ -182,7 +182,7 @@ def commission_statement_approve(request, pk):
     obj.save()
     write_audit_log(
         request.user,
-        "sales.CommissionStatement",
+        obj,
         "update",
         {"pk": obj.pk, "action": "approve"},
         tenant=request.tenant,
@@ -200,7 +200,7 @@ def commission_statement_lock(request, pk):
     obj.save()
     write_audit_log(
         request.user,
-        "sales.CommissionStatement",
+        obj,
         "update",
         {"pk": obj.pk, "action": "lock"},
         tenant=request.tenant,
@@ -282,7 +282,7 @@ def commission_statement_delete(request, pk):
     stmt_num = obj.statement_number
     write_audit_log(
         request.user,
-        "sales.CommissionStatement",
+        obj,
         "delete",
         {"pk": obj.pk, "statement_number": stmt_num},
         tenant=request.tenant,
