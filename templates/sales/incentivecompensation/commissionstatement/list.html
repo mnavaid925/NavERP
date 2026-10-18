@@ -34,7 +34,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Net Payable</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_net_payout|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ currency_code|default:"USD" }} {{ stats.total_net_payout|floatformat:2 }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -61,7 +61,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Draws Recovered</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_draws_recovered|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ currency_code|default:"USD" }} {{ stats.total_draws_recovered|floatformat:2 }}</div>
         </div>
     </div>
 </div>
@@ -131,24 +131,24 @@
                         {{ stmt.period_start|date:"M d, Y" }} – {{ stmt.period_end|date:"M d, Y" }}
                     </td>
                     <td class="text-sm font-semibold text-slate-900">
-                        ${{ stmt.gross_earnings|floatformat:2 }}
+                        {{ stmt.plan.currency.code|default:"USD" }} {{ stmt.gross_earnings|floatformat:2 }}
                     </td>
                     <td class="text-xs text-slate-600">
                         {% if stmt.draw_recovered > 0 %}
-                        -${{ stmt.draw_recovered|floatformat:2 }}
+                        -{{ stmt.plan.currency.code|default:"USD" }} {{ stmt.draw_recovered|floatformat:2 }}
                         {% else %}
                         <span class="text-slate-400">—</span>
                         {% endif %}
                     </td>
                     <td class="text-xs text-red-600">
                         {% if stmt.clawbacks_deducted > 0 %}
-                        -${{ stmt.clawbacks_deducted|floatformat:2 }}
+                        -{{ stmt.plan.currency.code|default:"USD" }} {{ stmt.clawbacks_deducted|floatformat:2 }}
                         {% else %}
                         <span class="text-slate-400">—</span>
                         {% endif %}
                     </td>
                     <td class="text-sm font-black text-slate-900">
-                        ${{ stmt.net_payout|floatformat:2 }}
+                        {{ stmt.plan.currency.code|default:"USD" }} {{ stmt.net_payout|floatformat:2 }}
                     </td>
                     <td>
                         {% if stmt.status == 'approved' or stmt.status == 'locked' %}
