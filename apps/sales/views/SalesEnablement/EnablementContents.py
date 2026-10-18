@@ -2,6 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -90,17 +91,18 @@ def enablement_content_create(request):
     if request.method == "POST":
         form = EnablementContentForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            obj = form.save(commit=False)
-            obj.tenant = request.tenant
-            if not obj.author_id:
-                obj.author = request.user
-            obj.save()
-            write_audit_log(
-                request.user,
-                obj,
-                "create",
-                changes={"title": obj.title, "number": obj.number},
-            )
+            with transaction.atomic():
+                obj = form.save(commit=False)
+                obj.tenant = request.tenant
+                if not obj.author_id:
+                    obj.author = request.user
+                obj.save()
+                write_audit_log(
+                    request.user,
+                    obj,
+                    "create",
+                    changes={"title": obj.title, "number": obj.number},
+                )
             messages.success(request, f"Enablement content '{obj.title}' created.")
             return redirect("sales:enablement_content_detail", pk=obj.pk)
     else:
@@ -116,13 +118,14 @@ def enablement_content_edit(request, pk):
     if request.method == "POST":
         form = EnablementContentForm(request.POST, instance=obj, tenant=request.tenant)
         if form.is_valid():
-            form.save()
-            write_audit_log(
-                request.user,
-                obj,
-                "update",
-                changes={"title": obj.title, "number": obj.number},
-            )
+            with transaction.atomic():
+                form.save()
+                write_audit_log(
+                    request.user,
+                    obj,
+                    "update",
+                    changes={"title": obj.title, "number": obj.number},
+                )
             messages.success(request, f"Enablement content '{obj.title}' updated.")
             return redirect("sales:enablement_content_detail", pk=obj.pk)
     else:
@@ -138,13 +141,14 @@ def enablement_content_delete(request, pk):
     obj = get_object_or_404(EnablementContent.objects.filter(tenant=request.tenant), pk=pk)
     title = obj.title
     number = obj.number
-    write_audit_log(
-        request.user,
-        obj,
-        "delete",
-        changes={"title": title, "number": number},
-    )
-    obj.delete()
+    with transaction.atomic():
+        write_audit_log(
+            request.user,
+            obj,
+            "delete",
+            changes={"title": title, "number": number},
+        )
+        obj.delete()
     messages.success(request, f"Enablement content '{title}' deleted.")
     return redirect("sales:enablement_content_list")
 
@@ -153,6 +157,8 @@ def enablement_content_delete(request, pk):
 @require_POST
 def enablement_content_share(request, pk):
     obj = get_object_or_404(EnablementContent.objects.filter(tenant=request.tenant), pk=pk)
-    obj.record_share()
+    with transaction.atomic():
+        obj.record_share()
     messages.info(request, f"Link copied / share recorded for '{obj.title}'.")
     return redirect("sales:enablement_content_detail", pk=obj.pk)
+
