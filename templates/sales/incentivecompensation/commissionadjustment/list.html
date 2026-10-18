@@ -145,11 +145,11 @@
                         {% if adj.status == 'approved' or adj.status == 'applied' %}
                         <span class="badge badge-green">{{ adj.get_status_display }}</span>
                         {% elif adj.status == 'disputed' %}
-                        <span class="badge badge-red">Disputed</span>
+                        <span class="badge badge-red">{{ adj.get_status_display }}</span>
                         {% elif adj.status == 'rejected' %}
-                        <span class="badge badge-muted">Rejected</span>
+                        <span class="badge badge-muted">{{ adj.get_status_display }}</span>
                         {% else %}
-                        <span class="badge badge-slate">Draft</span>
+                        <span class="badge badge-slate">{{ adj.get_status_display }}</span>
                         {% endif %}
                     </td>
                     <td class="text-right table-actions">
