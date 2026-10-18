@@ -146,3 +146,12 @@ class CommissionAdjustment(TenantNumbered):
         if self.statement_id:
             if self.statement.status in ("locked", "exported", "paid"):
                 raise ValidationError({"statement": "Cannot attach adjustments to a locked or exported statement. Adjustments must roll into the next draft statement."})
+
+        # G17: Cross-payee relational isolation
+        if self.earning_id and self.payee_id:
+            if self.earning.payee_id != self.payee_id:
+                raise ValidationError({"earning": "Linked commission earning must belong to the same payee."})
+
+        if self.statement_id and self.payee_id:
+            if self.statement.payee_id != self.payee_id:
+                raise ValidationError({"statement": "Linked statement must belong to the same payee."})
