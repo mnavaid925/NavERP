@@ -128,3 +128,12 @@ class SalesCertification(TenantNumbered):
         if self.hrm_course_id and self.tenant_id:
             if getattr(self.hrm_course, "tenant_id", None) != self.tenant_id:
                 raise ValidationError({"hrm_course": "Associated HRM training course must belong to the same workspace."})
+
+        if self.rep_id and self.tenant_id:
+            if getattr(self.rep, "tenant_id", None) != self.tenant_id:
+                raise ValidationError({"rep": "Assigned representative must belong to the same workspace."})
+
+        if self.certified_by_id and self.tenant_id:
+            if getattr(self.certified_by, "tenant_id", None) != self.tenant_id:
+                raise ValidationError({"certified_by": "Certifying user must belong to the same workspace."})
+
