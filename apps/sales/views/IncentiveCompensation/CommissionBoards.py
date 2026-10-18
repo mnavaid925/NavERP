@@ -125,7 +125,11 @@ def sales_commission_earnings_dashboard(request):
         "total_spif_earned": total_spif_earned,
     }
 
-    plans = CommissionPlan.objects.filter(tenant=request.tenant, status="active").order_by("name")
+    plans = (
+        CommissionPlan.objects.filter(tenant=request.tenant, status="active")
+        .select_related("currency")
+        .order_by("name")
+    )
 
     context = {
         "payee_summary": payee_summary,
