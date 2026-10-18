@@ -174,9 +174,9 @@
                         {% if earn.status == 'calculated' or earn.status == 'approved' %}
                         <span class="badge badge-green">{{ earn.get_status_display }}</span>
                         {% elif earn.status == 'paid' %}
-                        <span class="badge badge-info">Paid</span>
+                        <span class="badge badge-info">{{ earn.get_status_display }}</span>
                         {% elif earn.status == 'pending' %}
-                        <span class="badge badge-amber">Pending</span>
+                        <span class="badge badge-amber">{{ earn.get_status_display }}</span>
                         {% else %}
                         <span class="badge badge-red">{{ earn.get_status_display }}</span>
                         {% endif %}
