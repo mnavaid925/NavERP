@@ -2,7 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -52,20 +52,22 @@ def commission_earning_list(request):
     if plan_id.isdecimal():
         qs = qs.filter(plan_id=int(plan_id))
 
-    total_gross = qs.aggregate(val=Sum("gross_commission"))["val"] or 0.00
-    total_spif = qs.aggregate(val=Sum("spif_amount"))["val"] or 0.00
-    calculated_count = qs.filter(status="calculated").count()
-    paid_count = qs.filter(status="paid").count()
+    stats_agg = qs.aggregate(
+        total_gross=Sum("gross_commission"),
+        total_spif=Sum("spif_amount"),
+        calculated_count=Count("id", filter=Q(status="calculated")),
+        paid_count=Count("id", filter=Q(status="paid")),
+    )
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
     stats = {
-        "total_gross": total_gross,
-        "total_spif": total_spif,
-        "calculated_count": calculated_count,
-        "paid_count": paid_count,
+        "total_gross": stats_agg["total_gross"] or 0.00,
+        "total_spif": stats_agg["total_spif"] or 0.00,
+        "calculated_count": stats_agg["calculated_count"] or 0,
+        "paid_count": stats_agg["paid_count"] or 0,
     }
 
     payees = User.objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "last_name")
