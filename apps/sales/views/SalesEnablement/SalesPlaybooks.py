@@ -15,6 +15,8 @@ from apps.sales.models.SalesEnablement.SalesPlaybooks import (
     SELLING_MOTION_CHOICES,
     SalesPlaybook,
 )
+from apps.sales.views._helpers import is_tenant_admin
+
 
 
 @login_required
@@ -130,6 +132,9 @@ def sales_playbook_edit(request, pk):
 @require_POST
 def sales_playbook_delete(request, pk):
     obj = get_object_or_404(SalesPlaybook.objects.filter(tenant=request.tenant), pk=pk)
+    if not is_tenant_admin(request.user) and obj.owner_id != request.user.pk:
+        messages.error(request, "Only the playbook owner or a tenant administrator may delete this playbook.")
+        return redirect("sales:sales_playbook_detail", pk=obj.pk)
     name = obj.name
     number = obj.number
     with transaction.atomic():
