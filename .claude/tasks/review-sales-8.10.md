@@ -206,7 +206,7 @@ FAIL / CONDITIONAL PASS REQUIRED (Commit after fixing Critical + Important).
 - [x] fixed — refactor(sales): remove unused CommissionDisputeTicketForm **I9**: Clean up unused `CommissionDisputeTicketForm` in `CommissionAdjustments.py`.
 
 ### Minor (Clean-up & Polish)
-- [ ] **M1**: Update badge fallback rendering to use `{{ obj.get_status_display }}` instead of hardcoded text.
+- [x] fixed — fix(sales): use get_status_display in badge fallbacks across templates **M1**: Update badge fallback rendering to use `{{ obj.get_status_display }}` instead of hardcoded text.
 - [ ] **M2**: Fix brittle string slicing `slice:"1:"` in `adjustment_workbench.html:142`.
 - [ ] **M3**: Update `seed_sales.py:93` help string to include 8.7 through 8.10.
 - [ ] **M4**: Use tenant currency or plan currency code instead of hardcoded `$` symbol in multi-currency templates.
