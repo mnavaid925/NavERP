@@ -7,7 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounting.models import Currency
-from apps.core.models import ConsentPurpose, Party, Tenant
+from apps.core.models import ConsentPurpose, Document, Party, Tenant
 from apps.crm.models import (
     AccountProfile, Campaign, CommunicationLog, ContactProfile, CrmTask,
     EmailCampaign, EmailTemplate, Lead, Opportunity, SalesQuota, Territory,
@@ -56,7 +56,13 @@ from apps.sales.models import (
     TaskTemplateStep,
     SalesPlanCycle,
     ActivityGoal,
+    # 8.9 Sales Enablement
+    EnablementContent,
+    SalesPlaybook,
+    SalesCertification,
+    CoachingScorecard,
 )
+
 from apps.sales.cpq_services import cpq_recalc_quote_totals, cpq_render_proposal_html, cpq_convert_to_sales_order
 from apps.sales.forecast_services import forecast_submission_snapshot
 from apps.sales.models.OrderManagement.OrderHolds import build_evaluation_snapshot
@@ -129,6 +135,7 @@ class Command(BaseCommand):
         self._seed_order_management(tenant, owner)
         self._seed_territory_quota(tenant, owner)
         self._seed_activity_tasks(tenant, owner)
+        self._seed_sales_enablement(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -1978,3 +1985,222 @@ class Command(BaseCommand):
             f"{ActivityLog.objects.filter(tenant=tenant).count()} activities, "
             f"{SalesPlanCycle.objects.filter(tenant=tenant).count()} plan cycles)."
         )
+
+    def _seed_sales_enablement(self, tenant, owner):
+        already_seeded = EnablementContent.objects.filter(tenant=tenant).exists()
+        today = timezone.now().date()
+
+        # ---- 1. EnablementContent -----------------------------------------------------------------
+        if not already_seeded:
+            comp = CompetitorProfile.objects.filter(tenant=tenant).first()
+            pipe_stage = PipelineStage.objects.filter(tenant=tenant).first()
+            doc = Document.objects.filter(tenant=tenant).first()
+
+            EnablementContent.objects.create(
+                tenant=tenant,
+                title="Enterprise Battlecard: Overcoming Incumbent Objections",
+                description="Detailed objection handling, pricing comparison, and technical differentiators vs key incumbents.",
+                content_type="battle_card",
+                competitor=comp,
+                pipeline_stage=pipe_stage,
+                document=doc,
+                target_stage="demo_eval",
+                target_persona="technical_buyer",
+                author=owner,
+                tags="battlecard, enterprise, competitive, objection",
+                version="1.2",
+                is_client_facing=False,
+                is_active=True,
+                view_count=14,
+                share_count=5,
+            )
+            EnablementContent.objects.create(
+                tenant=tenant,
+                title="Executive Solution Overview & Pitch Deck Q4",
+                description="Standard 15-slide master executive presentation covering platform capabilities, enterprise security, and ROI metrics.",
+                content_type="pitch_deck",
+                external_url="https://docs.google.com/presentation/d/sample-pitch-deck-2026",
+                target_stage="prospecting",
+                target_persona="c_level",
+                author=owner,
+                tags="pitch, executive, overview, slides",
+                version="2.0",
+                is_client_facing=True,
+                is_active=True,
+                view_count=28,
+                share_count=12,
+            )
+            EnablementContent.objects.create(
+                tenant=tenant,
+                title="Customer Case Study: Global Logistics Corp",
+                description="How a Fortune 500 logistics enterprise reduced supply chain latency by 35% with NavERP.",
+                content_type="case_study",
+                document=doc,
+                target_stage="proposal_neg",
+                target_persona="vp_director",
+                author=owner,
+                tags="case-study, logistics, enterprise, roi",
+                version="1.0",
+                is_client_facing=True,
+                is_active=True,
+                view_count=9,
+                share_count=4,
+            )
+            EnablementContent.objects.create(
+                tenant=tenant,
+                title="Product Architecture & Security One-Pager",
+                description="SOC2 Type II, ISO 27001, tenant-isolation architecture overview for security and legal reviews.",
+                content_type="product_sheet",
+                external_url="https://nav-erp.internal/docs/security-architecture.pdf",
+                target_stage="demo_eval",
+                target_persona="procurement",
+                author=owner,
+                tags="security, architecture, compliance, legal",
+                version="1.1",
+                is_client_facing=True,
+                is_active=True,
+                view_count=19,
+                share_count=8,
+            )
+
+        # ---- 2. SalesPlaybook ---------------------------------------------------------------------
+        if not SalesPlaybook.objects.filter(tenant=tenant).exists():
+            pipe = Pipeline.objects.filter(tenant=tenant).first()
+            SalesPlaybook.objects.create(
+                tenant=tenant,
+                name="Enterprise Outbound New Logo Acquisition",
+                summary="Systematic outbound selling motion for mid-market and enterprise prospects with 500+ employees.",
+                motion_type="new_business",
+                pipeline=pipe,
+                status="published",
+                target_audience="VP of IT, CIO, COO in manufacturing & logistics",
+                discovery_questions="1. What is your current system latency during peak order processing?\n2. How do you handle multi-entity cross-border ledger consolidations?\n3. What compliance or data residency mandates do you operate under?",
+                talk_tracks="NavERP unifies financials, supply chain, and CRM on a single multi-tenant data model, eliminating reconciliation overhead and manual Excel exports.",
+                objection_scripts="Objection: 'We are locked into an ERP contract for another 18 months.'\nRebuttal: 'We can deploy the Sales and CRM module in parallel today, delivering immediate pipeline visibility without disrupting core ledger operations.'",
+                dos_and_donts="DO: Quantify manual reconciliation hours saved.\nDON'T: Trash incumbent ERP systems; highlight modern cloud agility instead.",
+                exit_criteria="Confirmed economic buyer sponsor, identified pain metrics, and scheduled solution architecture evaluation.",
+                owner=owner,
+                version="1.0",
+                is_active=True,
+            )
+            SalesPlaybook.objects.create(
+                tenant=tenant,
+                name="Competitive Takeout: Incumbent Replacement",
+                summary="Tactical displacement motion targeting legacy legacy on-premise ERP and fragmented SaaS point solutions.",
+                motion_type="competitive_displacement",
+                pipeline=pipe,
+                status="published",
+                target_audience="Companies facing expensive renewal price hikes or forced cloud migrations",
+                discovery_questions="1. What is your maintenance and professional services cost for legacy customization upgrades?\n2. Are you experiencing integration breaks between your standalone CRM and finance systems?",
+                talk_tracks="NavERP provides native function-based simplicity and transparent subscription pricing with zero vendor lock-in.",
+                objection_scripts="Objection: 'Migration risk is too high.'\nRebuttal: 'Our automated seeder and schema migration tooling allows dual-run simulation before final cutover.'",
+                dos_and_donts="DO: Focus on TCO reduction.\nDON'T: Over-promise custom code porting without architectural review.",
+                exit_criteria="Technical feasibility sign-off from IT and TCO ROI model approval from Finance.",
+                owner=owner,
+                version="1.1",
+                is_active=True,
+            )
+
+        # ---- 3. SalesCertification ----------------------------------------------------------------
+        if not SalesCertification.objects.filter(tenant=tenant).exists():
+            reps = list(User.objects.filter(tenant=tenant, is_active=True).order_by("pk")[:3])
+            rep_primary = reps[0] if reps else owner
+            rep_secondary = reps[1] if len(reps) > 1 else owner
+
+            SalesCertification.objects.create(
+                tenant=tenant,
+                curriculum_name="NavERP Core Platform & Architecture Certification",
+                category="product_certification",
+                rep=rep_primary,
+                status="completed",
+                score_percent=Decimal("94.50"),
+                passing_score_percent=Decimal("80.00"),
+                certified_by=owner,
+                certified_at=today - timedelta(days=45),
+                expires_at=today + timedelta(days=320),
+                accreditation_notes="Excellence in multi-tenant data model, inventory ledger, and CPQ quoting workflow.",
+            )
+            SalesCertification.objects.create(
+                tenant=tenant,
+                curriculum_name="Enterprise MEDDPICC Opportunity Qualification",
+                category="methodology",
+                rep=rep_primary,
+                status="completed",
+                score_percent=Decimal("88.00"),
+                passing_score_percent=Decimal("80.00"),
+                certified_by=owner,
+                certified_at=today - timedelta(days=30),
+                expires_at=today + timedelta(days=335),
+                accreditation_notes="Demonstrated rigorous economic buyer identification and paper process mapping.",
+            )
+            SalesCertification.objects.create(
+                tenant=tenant,
+                curriculum_name="New Hire Commercial Sales Onboarding Bootcamp",
+                category="onboarding",
+                rep=rep_secondary,
+                status="enrolled",
+                score_percent=Decimal("72.00"),
+                passing_score_percent=Decimal("80.00"),
+                certified_by=owner,
+                accreditation_notes="Completed modules 1-3. Final demo pitch exam scheduled for next week.",
+            )
+
+        # ---- 4. CoachingScorecard -----------------------------------------------------------------
+        if not CoachingScorecard.objects.filter(tenant=tenant).exists():
+            comm_logs = list(CommunicationLog.objects.filter(tenant=tenant).order_by("-occurred_at")[:3])
+            act_logs = list(ActivityLog.objects.filter(tenant=tenant).order_by("-created_at")[:3])
+            reps = list(User.objects.filter(tenant=tenant, is_active=True).order_by("pk")[:2])
+            coachee = reps[1] if len(reps) > 1 else owner
+
+            if comm_logs:
+                CoachingScorecard.objects.create(
+                    tenant=tenant,
+                    communication_log=comm_logs[0],
+                    activity_log=act_logs[0] if act_logs else None,
+                    coach=owner,
+                    coachee=coachee,
+                    recording_url="https://zoom.us/rec/sample-demo-recording-001",
+                    discovery_score=4,
+                    value_prop_score=4,
+                    objection_handling_score=3,
+                    next_steps_score=4,
+                    talk_listen_ratio_percent=46,
+                    call_sentiment="positive",
+                    transcript_summary="Customer prospect asked about multi-currency consolidation. Rep demonstrated live conversion and highlighted real-time reporting.",
+                    key_strengths="Strong conversational pacing, active listening, and clear ROI justification.",
+                    areas_for_improvement="Could have pushed harder for a definitive procurement decision date.",
+                    action_items="Follow up with the security architecture whitepaper and schedule technical deep-dive.",
+                    review_status="acknowledged",
+                    evaluated_on=today - timedelta(days=5),
+                )
+            if len(comm_logs) >= 2:
+                CoachingScorecard.objects.create(
+                    tenant=tenant,
+                    communication_log=comm_logs[1],
+                    activity_log=act_logs[1] if len(act_logs) > 1 else None,
+                    coach=owner,
+                    coachee=coachee,
+                    recording_url="https://loom.com/share/sample-discovery-call-002",
+                    discovery_score=3,
+                    value_prop_score=3,
+                    objection_handling_score=4,
+                    next_steps_score=3,
+                    talk_listen_ratio_percent=58,
+                    call_sentiment="skeptical",
+                    transcript_summary="Initial qualification call with procurement manager. Discussion focused on licensing models and implementation timelines.",
+                    key_strengths="Handled pricing objections professionally with transparent tier breakdowns.",
+                    areas_for_improvement="Talk ratio was 58% (target <55%). Allow prospect more room to elaborate on operational bottlenecks.",
+                    action_items="Practice 3-second pause after asking open-ended questions.",
+                    review_status="shared",
+                    evaluated_on=today - timedelta(days=2),
+                )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.9 enablement demo rows "
+            f"{'already present; re-checked for gaps' if already_seeded else 'ensured'} "
+            f"({EnablementContent.objects.filter(tenant=tenant).count()} contents, "
+            f"{SalesPlaybook.objects.filter(tenant=tenant).count()} playbooks, "
+            f"{SalesCertification.objects.filter(tenant=tenant).count()} certifications, "
+            f"{CoachingScorecard.objects.filter(tenant=tenant).count()} coaching scorecards)."
+        )
+
