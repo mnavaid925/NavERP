@@ -224,13 +224,14 @@ def commission_statement_lock(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def commission_statement_generate_batch(request):
     period_start = request.POST.get("period_start")
     period_end = request.POST.get("period_end")
     plan_id = request.POST.get("plan_id")
 
-    if not period_start or not period_end or not plan_id:
-        messages.error(request, "Please specify period start, period end, and compensation plan.")
+    if not period_start or not period_end or not plan_id or not str(plan_id).isdecimal():
+        messages.error(request, "Please specify period start, period end, and a valid compensation plan.")
         return redirect("sales:commission_statement_list")
 
     plan = get_object_or_404(CommissionPlan.objects.filter(tenant=request.tenant), pk=plan_id)
@@ -254,12 +255,21 @@ def commission_statement_generate_batch(request):
                 statement__isnull=True,
             )
 
-            vol = unattached.aggregate(s=Sum("credited_volume"))["s"] or Decimal("0.00")
-            base = unattached.aggregate(s=Sum("base_commission_amount"))["s"] or Decimal("0.00")
-            spif = unattached.aggregate(s=Sum("spif_amount"))["s"] or Decimal("0.00")
-            gross = unattached.aggregate(s=Sum("gross_commission"))["s"] or Decimal("0.00")
+            agg = unattached.aggregate(
+                vol=Sum("credited_volume"),
+                base=Sum("base_commission_amount"),
+                spif=Sum("spif_amount"),
+                gross=Sum("gross_commission"),
+            )
+            vol = agg["vol"] or Decimal("0.00")
+            base = agg["base"] or Decimal("0.00")
+            spif = agg["spif"] or Decimal("0.00")
+            gross = agg["gross"] or Decimal("0.00")
 
-            code = f"STMT-{period_end[:7]}-{rep.id}"
+            draw_rec = min(gross, plan.draw_amount) if plan.is_draw_recoverable else Decimal("0.00")
+            net_amt = max(Decimal("0.00"), gross - draw_rec)
+
+            code = f"STMT-{str(period_end)[:7]}-{rep.id}"
             stmt = CommissionStatement.objects.create(
                 tenant=request.tenant,
                 statement_number=code,
@@ -273,11 +283,25 @@ def commission_statement_generate_batch(request):
                 total_spif_amount=spif,
                 gross_earnings=gross,
                 draw_advance_paid=plan.draw_amount,
-                draw_recovered=min(gross, plan.draw_amount) if plan.is_draw_recoverable else Decimal("0.00"),
-                net_payout=gross,
+                draw_recovered=draw_rec,
+                net_payout=net_amt,
             )
             unattached.update(statement=stmt)
             created_count += 1
+
+    write_audit_log(
+        request.user,
+        None,
+        "create",
+        {
+            "action": "batch_generate_statements",
+            "created_count": created_count,
+            "period_start": str(period_start),
+            "period_end": str(period_end),
+            "plan_id": plan.pk,
+        },
+        tenant=request.tenant,
+    )
 
     messages.success(request, f"Batch generated {created_count} statement(s) for {period_start} to {period_end}.")
     return redirect("sales:commission_statement_list")
