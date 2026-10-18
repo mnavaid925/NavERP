@@ -20,6 +20,7 @@ from apps.sales.models.IncentiveCompensation.CommissionStatements import (
     STATEMENT_STATUS_CHOICES,
     CommissionStatement,
 )
+from apps.sales.views._helpers import is_admin_or_manager
 
 
 @login_required
@@ -29,6 +30,9 @@ def commission_statement_list(request):
         .select_related("payee", "plan", "approved_by", "payroll_run")
         .order_by("-period_end", "payee__email")
     )
+    is_admin = is_admin_or_manager(request.user)
+    if not is_admin:
+        qs = qs.filter(payee=request.user)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -66,7 +70,10 @@ def commission_statement_list(request):
         "total_draws_recovered": stats_agg["draws_rec"] or Decimal("0.00"),
     }
 
-    payees = User.objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "last_name")
+    if not is_admin:
+        payees = User.objects.filter(pk=request.user.pk)
+    else:
+        payees = User.objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "last_name")
 
     context = {
         "object_list": page_obj.object_list,
@@ -81,8 +88,11 @@ def commission_statement_list(request):
 
 @login_required
 def commission_statement_detail(request, pk):
+    stmt_qs = CommissionStatement.objects.filter(tenant=request.tenant)
+    if not is_admin_or_manager(request.user):
+        stmt_qs = stmt_qs.filter(payee=request.user)
     obj = get_object_or_404(
-        CommissionStatement.objects.filter(tenant=request.tenant).select_related(
+        stmt_qs.select_related(
             "payee", "plan", "approved_by", "payroll_run"
         ),
         pk=pk,
@@ -145,7 +155,10 @@ def commission_statement_create(request):
 
 @login_required
 def commission_statement_edit(request, pk):
-    obj = get_object_or_404(CommissionStatement.objects.filter(tenant=request.tenant), pk=pk)
+    stmt_qs = CommissionStatement.objects.filter(tenant=request.tenant)
+    if not is_admin_or_manager(request.user):
+        stmt_qs = stmt_qs.filter(payee=request.user)
+    obj = get_object_or_404(stmt_qs, pk=pk)
     if obj.status in ("locked", "exported", "paid"):
         messages.error(request, "Locked or exported statements cannot be edited directly.")
         return redirect("sales:commission_statement_detail", pk=obj.pk)
