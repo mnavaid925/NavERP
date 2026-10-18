@@ -68,11 +68,6 @@
                     {% if form.period_end.errors %}<div class="form-error">{{ form.period_end.errors }}</div>{% endif %}
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
-                    {{ form.status }}
-                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
-                </div>
-                <div class="form-group">
                     <label class="form-label" for="{{ form.draw_advance_paid.id_for_label }}">Draw Advance Paid</label>
                     {{ form.draw_advance_paid }}
                     {% if form.draw_advance_paid.errors %}<div class="form-error">{{ form.draw_advance_paid.errors }}</div>{% endif %}
