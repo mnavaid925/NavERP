@@ -101,7 +101,7 @@
                     <div class="flex justify-between py-2 border-b border-slate-100 text-slate-600">
                         <span class="font-sans">Manual / Dispute Adjustments:</span>
                         <span>
-                            {% if obj.adjustments_amount >= 0 %}+${{ obj.adjustments_amount|floatformat:2 }}{% else %}-${{ obj.adjustments_amount|floatformat:2 }}{% endif %}
+                            {% if obj.adjustments_amount >= 0 %}+${{ obj.adjustments_amount|floatformat:2 }}{% else %}${{ obj.adjustments_amount|floatformat:2 }}{% endif %}
                         </span>
                     </div>
                     <div class="flex justify-between py-2 border-b border-slate-100 text-slate-600">
@@ -189,7 +189,7 @@
                             <td class="font-mono text-xs">{{ adj.number }}</td>
                             <td class="text-xs text-slate-700">{{ adj.get_adjustment_type_display }}</td>
                             <td class="text-sm font-bold {% if adj.amount < 0 %}text-red-600{% else %}text-slate-900{% endif %}">
-                                {% if adj.amount >= 0 %}+${{ adj.amount|floatformat:2 }}{% else %}-${{ adj.amount|floatformat:2 }}{% endif %}
+                                {% if adj.amount >= 0 %}+${{ adj.amount|floatformat:2 }}{% else %}${{ adj.amount|floatformat:2 }}{% endif %}
                             </td>
                             <td class="text-xs text-slate-600">{{ adj.reason|truncatewords:8 }}</td>
                             <td><span class="badge badge-green">{{ adj.get_status_display }}</span></td>
