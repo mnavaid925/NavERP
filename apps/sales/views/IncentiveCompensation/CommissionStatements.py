@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q, Sum
+from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -174,8 +175,14 @@ def commission_statement_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def commission_statement_approve(request, pk):
     obj = get_object_or_404(CommissionStatement.objects.filter(tenant=request.tenant), pk=pk)
+    if obj.payee == request.user and not request.user.is_superuser:
+        return HttpResponseForbidden("Payees cannot approve their own commission statements.")
+    if obj.status not in ("draft", "under_review"):
+        messages.error(request, f"Statement cannot be approved in '{obj.get_status_display()}' status.")
+        return redirect("sales:commission_statement_detail", pk=obj.pk)
     obj.status = "approved"
     obj.approved_by = request.user
     obj.approved_at = timezone.now()
