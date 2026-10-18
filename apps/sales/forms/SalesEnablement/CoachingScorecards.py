@@ -28,7 +28,6 @@ class CoachingScorecardForm(TenantUniqueMixin, TenantModelForm):
             "key_strengths",
             "areas_for_improvement",
             "action_items",
-            "review_status",
             "evaluated_on",
         ]
         widgets = {
@@ -47,7 +46,6 @@ class CoachingScorecardForm(TenantUniqueMixin, TenantModelForm):
             "key_strengths": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Effective questions asked, strong rapport, confident value framing"}),
             "areas_for_improvement": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Missed budget confirmation, spoke too fast during pricing"}),
             "action_items": forms.Textarea(attrs={"class": "form-textarea", "rows": 2, "placeholder": "Send follow-up one-pager, practice objection drill"}),
-            "review_status": forms.Select(attrs={"class": "form-select"}),
             "evaluated_on": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
         }
 
