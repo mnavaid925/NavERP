@@ -47,11 +47,11 @@ class SalesCertificationForm(TenantUniqueMixin, TenantModelForm):
             if TrainingCourse:
                 self.fields["hrm_course"].queryset = TrainingCourse.objects.filter(tenant=self.tenant, is_active=True)
             else:
-                self.fields["hrm_course"].queryset = apps.get_model("hrm", "TrainingCourse").objects.none()
+                self.fields["hrm_course"].queryset = self.fields["hrm_course"].queryset.none()
         else:
             self.fields["rep"].queryset = User.objects.none()
             self.fields["certified_by"].queryset = User.objects.none()
-            self.fields["hrm_course"].queryset = apps.get_model("hrm", "TrainingCourse").objects.none()
+            self.fields["hrm_course"].queryset = self.fields["hrm_course"].queryset.none()
 
     def clean(self):
         cleaned = super().clean()
