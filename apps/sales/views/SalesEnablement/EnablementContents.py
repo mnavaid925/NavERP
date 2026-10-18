@@ -16,6 +16,8 @@ from apps.sales.models.SalesEnablement.EnablementContents import (
     TARGET_STAGE_CHOICES,
     EnablementContent,
 )
+from apps.sales.views._helpers import is_tenant_admin
+
 
 
 @login_required
@@ -139,6 +141,9 @@ def enablement_content_edit(request, pk):
 @require_POST
 def enablement_content_delete(request, pk):
     obj = get_object_or_404(EnablementContent.objects.filter(tenant=request.tenant), pk=pk)
+    if not is_tenant_admin(request.user) and obj.author_id != request.user.pk:
+        messages.error(request, "Only the author or a tenant administrator may delete this enablement content.")
+        return redirect("sales:enablement_content_detail", pk=obj.pk)
     title = obj.title
     number = obj.number
     with transaction.atomic():
