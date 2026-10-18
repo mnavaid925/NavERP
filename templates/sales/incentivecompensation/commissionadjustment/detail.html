@@ -19,11 +19,11 @@
             {% if obj.status == 'approved' or obj.status == 'applied' %}
             <span class="badge badge-green">{{ status_display }}</span>
             {% elif obj.status == 'disputed' %}
-            <span class="badge badge-red">Disputed</span>
+            <span class="badge badge-red">{{ status_display }}</span>
             {% elif obj.status == 'rejected' %}
-            <span class="badge badge-muted">Rejected</span>
+            <span class="badge badge-muted">{{ status_display }}</span>
             {% else %}
-            <span class="badge badge-slate">Draft</span>
+            <span class="badge badge-slate">{{ status_display }}</span>
             {% endif %}
             <span class="badge badge-info">{{ adjustment_type_display }}</span>
         </div>
