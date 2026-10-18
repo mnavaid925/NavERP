@@ -31,8 +31,9 @@ def sales_commission_plan_hub(request):
     )
 
     active_plans = plans.filter(status="active")
-    active_plans_count = active_plans.count()
-    avg_base_rate = active_plans.aggregate(avg=Avg("base_rate_pct"))["avg"] or 0.00
+    plan_stats = active_plans.aggregate(count=Count("id"), avg=Avg("base_rate_pct"))
+    active_plans_count = plan_stats["count"] or 0
+    avg_base_rate = plan_stats["avg"] or 0.00
     reps_enrolled = (
         CommissionStatement.objects.filter(tenant=request.tenant)
         .values("payee")
@@ -113,16 +114,16 @@ def sales_commission_earnings_dashboard(request):
             })
 
     # Overall attainment gauge metrics
-    avg_team_attainment = (
-        earnings.aggregate(avg=Avg("attainment_pct_at_close"))["avg"] or Decimal("0.00")
+    gauge_stats = earnings.aggregate(
+        avg=Avg("attainment_pct_at_close"),
+        gross=Sum("gross_commission"),
+        spif=Sum("spif_amount"),
     )
-    total_gross_earned = earnings.aggregate(gross=Sum("gross_commission"))["gross"] or Decimal("0.00")
-    total_spif_earned = earnings.aggregate(spif=Sum("spif_amount"))["spif"] or Decimal("0.00")
 
     attainment_gauge = {
-        "avg_team_attainment": round(avg_team_attainment, 1),
-        "total_gross_earned": total_gross_earned,
-        "total_spif_earned": total_spif_earned,
+        "avg_team_attainment": round(gauge_stats["avg"] or Decimal("0.00"), 1),
+        "total_gross_earned": gauge_stats["gross"] or Decimal("0.00"),
+        "total_spif_earned": gauge_stats["spif"] or Decimal("0.00"),
     }
 
     plans = (
@@ -223,8 +224,9 @@ def sales_commission_payout_processing(request):
     payroll_runs = PayrollRun.objects.filter(tenant=request.tenant).order_by("-pay_date")[:5]
     plans = CommissionPlan.objects.filter(tenant=request.tenant, status="active").order_by("name")
 
-    total_payout_due = ready_statements.aggregate(s=Sum("net_payout"))["s"] or Decimal("0.00")
-    statements_ready = ready_statements.count()
+    ready_agg = ready_statements.aggregate(s=Sum("net_payout"), c=Count("id"))
+    total_payout_due = ready_agg["s"] or Decimal("0.00")
+    statements_ready = ready_agg["c"] or 0
     payroll_integrated = statements.filter(payroll_run__isnull=False).count()
 
     stats = {
