@@ -208,10 +208,10 @@
         </div>
         <div class="flex gap-1">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.plan_type %}&plan_type={{ request.GET.plan_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.plan_type %}&plan_type={{ request.GET.plan_type }}{% endif %}{% if request.GET.tier_mode %}&tier_mode={{ request.GET.tier_mode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
             {% endif %}
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.plan_type %}&plan_type={{ request.GET.plan_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline text-xs">Next</a>
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.plan_type %}&plan_type={{ request.GET.plan_type }}{% endif %}{% if request.GET.tier_mode %}&tier_mode={{ request.GET.tier_mode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline text-xs">Next</a>
             {% endif %}
         </div>
     </div>
