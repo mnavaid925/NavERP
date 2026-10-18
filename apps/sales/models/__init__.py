@@ -58,6 +58,12 @@ from .SalesActivityTaskManagement.ActivityLogs import (
 from .SalesActivityTaskManagement.TaskTemplates import TaskTemplate, TaskTemplateStep
 from .SalesActivityTaskManagement.SalesPlanCycles import ActivityGoal, SalesPlanCycle
 
+# 8.9 Sales Enablement. Extends 8.2 CompetitorProfile and CRM 1.5 CommunicationLog.
+from .SalesEnablement.EnablementContents import EnablementContent
+from .SalesEnablement.SalesPlaybooks import SalesPlaybook
+from .SalesEnablement.SalesCertifications import SalesCertification
+from .SalesEnablement.CoachingScorecards import CoachingScorecard
+
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
     "LeadQualification", "LeadRoutingRule", "LeadNurtureEnrollment", "validate_routing_conditions",
@@ -80,6 +86,9 @@ __all__ = [
     # of them is a second activity, task or calendar master. See the package docstring for L36/L37.
     "ActivityType", "ActivityLog", "CAPTURE_SOURCE_CHOICES", "AUTO_CAPTURE_SOURCES",
     "TaskTemplate", "TaskTemplateStep", "SalesPlanCycle", "ActivityGoal",
+    # 8.9 Sales Enablement
+    "EnablementContent", "SalesPlaybook", "SalesCertification", "CoachingScorecard",
 ]
+
 
 
