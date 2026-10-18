@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ content.title }}{% else %}Add Sales Collateral{% endif %} — Sales Enablement — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:enablement_content_hub' %}">Enablement Hub</a>
+            <span>/</span>
+            <a href="{% url 'sales:enablement_content_list' %}">Content Repository</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Asset{% else %}New Asset{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Collateral Asset: {{ content.title }}{% else %}Add Sales Collateral Asset{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label font-medium" for="{{ form.title.id_for_label }}">Asset Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.content_type.id_for_label }}">Content Type *</label>
+                    {{ form.content_type }}
+                    {% if form.content_type.errors %}<div class="form-error">{{ form.content_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.version.id_for_label }}">Asset Version</label>
+                    {{ form.version }}
+                    {% if form.version.errors %}<div class="form-error">{{ form.version.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Description / Talk Track Guidance</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Provide executive summary, sales context, or script snippet.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.document.id_for_label }}">Document Asset (Core Document)</label>
+                    {{ form.document }}
+                    {% if form.document.errors %}<div class="form-error">{{ form.document.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Attach an uploaded file from core documents library.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.external_url.id_for_label }}">Cloud URL (Slides, Loom, Notion)</label>
+                    {{ form.external_url }}
+                    {% if form.external_url.errors %}<div class="form-error">{{ form.external_url.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Or link directly to an external presentation or video.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.competitor.id_for_label }}">Target Competitor (Battlecard Focus)</label>
+                    {{ form.competitor }}
+                    {% if form.competitor.errors %}<div class="form-error">{{ form.competitor.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Link to an 8.2 competitor profile if this is a battlecard.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.pipeline_stage.id_for_label }}">Granular Pipeline Stage</label>
+                    {{ form.pipeline_stage }}
+                    {% if form.pipeline_stage.errors %}<div class="form-error">{{ form.pipeline_stage.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_stage.id_for_label }}">Target Funnel Stage</label>
+                    {{ form.target_stage }}
+                    {% if form.target_stage.errors %}<div class="form-error">{{ form.target_stage.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_persona.id_for_label }}">Target Buyer Persona</label>
+                    {{ form.target_persona }}
+                    {% if form.target_persona.errors %}<div class="form-error">{{ form.target_persona.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.author.id_for_label }}">Content Author / Specialist</label>
+                    {{ form.author }}
+                    {% if form.author.errors %}<div class="form-error">{{ form.author.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.expires_on.id_for_label }}">Expiration Date</label>
+                    {{ form.expires_on }}
+                    {% if form.expires_on.errors %}<div class="form-error">{{ form.expires_on.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.tags.id_for_label }}">Tags / Search Keywords</label>
+                    {{ form.tags }}
+                    {% if form.tags.errors %}<div class="form-error">{{ form.tags.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Comma-separated tags (e.g. enterprise, healthcare, pricing, meddpicc).</span>
+                </div>
+
+                <div class="md:col-span-2 flex items-center gap-6 pt-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_client_facing }}
+                        <span class="text-sm font-medium text-slate-700">Client Facing (Approved to send directly to prospects)</span>
+                    </label>
+
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_active }}
+                        <span class="text-sm font-medium text-slate-700">Active</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'sales:enablement_content_detail' content.pk %}{% else %}{% url 'sales:enablement_content_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Collateral Asset{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
