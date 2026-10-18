@@ -100,6 +100,14 @@ class SalesCertification(TenantNumbered):
                 fields=["tenant", "category", "status"],
                 name="sales_sctf_cat_stat_idx",
             ),
+            models.Index(
+                fields=["tenant", "rep", "status"],
+                name="sales_crt_tenant_rep_stat_idx",
+            ),
+            models.Index(
+                fields=["tenant", "-certified_at"],
+                name="sales_crt_tenant_cert_idx",
+            ),
         ]
 
     def __str__(self):
