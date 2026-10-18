@@ -2,6 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -84,17 +85,18 @@ def coaching_scorecard_create(request):
     if request.method == "POST":
         form = CoachingScorecardForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            obj = form.save(commit=False)
-            obj.tenant = request.tenant
-            if not obj.coach_id:
-                obj.coach = request.user
-            obj.save()
-            write_audit_log(
-                request.user,
-                obj,
-                "create",
-                changes={"coachee": str(obj.coachee), "number": obj.number, "score": obj.overall_score},
-            )
+            with transaction.atomic():
+                obj = form.save(commit=False)
+                obj.tenant = request.tenant
+                if not obj.coach_id:
+                    obj.coach = request.user
+                obj.save()
+                write_audit_log(
+                    request.user,
+                    obj,
+                    "create",
+                    changes={"coachee": str(obj.coachee), "number": obj.number, "score": obj.overall_score},
+                )
             messages.success(request, f"Coaching scorecard for '{obj.coachee}' created.")
             return redirect("sales:coaching_scorecard_detail", pk=obj.pk)
     else:
@@ -117,13 +119,14 @@ def coaching_scorecard_edit(request, pk):
     if request.method == "POST":
         form = CoachingScorecardForm(request.POST, instance=obj, tenant=request.tenant)
         if form.is_valid():
-            form.save()
-            write_audit_log(
-                request.user,
-                obj,
-                "update",
-                changes={"coachee": str(obj.coachee), "number": obj.number},
-            )
+            with transaction.atomic():
+                form.save()
+                write_audit_log(
+                    request.user,
+                    obj,
+                    "update",
+                    changes={"coachee": str(obj.coachee), "number": obj.number},
+                )
             messages.success(request, f"Coaching scorecard {obj.number} updated.")
             return redirect("sales:coaching_scorecard_detail", pk=obj.pk)
     else:
@@ -139,13 +142,14 @@ def coaching_scorecard_delete(request, pk):
     obj = get_object_or_404(CoachingScorecard.objects.filter(tenant=request.tenant), pk=pk)
     number = obj.number
     coachee_str = str(obj.coachee)
-    write_audit_log(
-        request.user,
-        obj,
-        "delete",
-        changes={"coachee": coachee_str, "number": number},
-    )
-    obj.delete()
+    with transaction.atomic():
+        write_audit_log(
+            request.user,
+            obj,
+            "delete",
+            changes={"coachee": coachee_str, "number": number},
+        )
+        obj.delete()
     messages.success(request, f"Coaching scorecard {number} deleted.")
     return redirect("sales:coaching_scorecard_list")
 
@@ -157,14 +161,16 @@ def coaching_scorecard_acknowledge(request, pk):
     if obj.coachee_id != request.user.pk and not is_tenant_admin(request.user):
         messages.error(request, "Only the coachee or a tenant administrator may acknowledge this scorecard.")
         return redirect("sales:coaching_scorecard_detail", pk=obj.pk)
-    obj.review_status = "acknowledged"
-    obj.save(update_fields=["review_status", "updated_at"])
-    write_audit_log(
-        request.user,
-        obj,
-        "update",
-        changes={"review_status": "acknowledged", "number": obj.number},
-    )
+    with transaction.atomic():
+        obj.review_status = "acknowledged"
+        obj.save(update_fields=["review_status", "updated_at"])
+        write_audit_log(
+            request.user,
+            obj,
+            "update",
+            changes={"review_status": "acknowledged", "number": obj.number},
+        )
     messages.success(request, "Coaching evaluation acknowledged.")
     return redirect("sales:coaching_scorecard_detail", pk=obj.pk)
+
 
