@@ -176,7 +176,7 @@
                     </div>
                     <div class="px-4 py-2.5 flex justify-between">
                         <dt class="text-slate-500">Owner</dt>
-                        <dd class="text-slate-800">{{ playbook.owner.get_full_name|default:playbook.owner.username|default:"System" }}</dd>
+                        <dd class="text-slate-800">{% if playbook.owner %}{{ playbook.owner.get_full_name|default:playbook.owner.username }}{% else %}—{% endif %}</dd>
                     </div>
                     <div class="px-4 py-2.5 flex justify-between">
                         <dt class="text-slate-500">Version</dt>
