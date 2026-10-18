@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Coaching Evaluation #{{ scorecard.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_coaching_workbench' %}">Coaching Workbench</a>
+            <span>/</span>
+            <a href="{% url 'sales:coaching_scorecard_list' %}">Scorecards</a>
+            <span>/</span>
+            <span>{{ scorecard.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Coaching Evaluation: {{ scorecard.coachee.get_full_name|default:scorecard.coachee.username }}</h1>
+            <span class="badge {% if scorecard.overall_score >= 80 %}badge-green{% elif scorecard.overall_score >= 60 %}badge-info{% else %}badge-amber{% endif %} text-sm">
+                Overall: {{ scorecard.overall_score }}%
+            </span>
+            {% if scorecard.review_status == 'acknowledged' %}
+            <span class="badge badge-green">Acknowledged</span>
+            {% elif scorecard.review_status == 'shared' %}
+            <span class="badge badge-info">Shared</span>
+            {% else %}
+            <span class="badge badge-slate">Draft</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if scorecard.review_status != 'acknowledged' and request.user == scorecard.coachee %}
+        <form method="post" action="{% url 'sales:coaching_scorecard_acknowledge' scorecard.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-check"></i>
+                <span>Acknowledge Feedback</span>
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'sales:coaching_scorecard_edit' scorecard.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Evaluation</span>
+        </a>
+        <form method="post" action="{% url 'sales:coaching_scorecard_delete' scorecard.pk %}" onsubmit="return confirm('Delete this coaching scorecard?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Competency Rubric Assessment</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-center">
+                        <div class="text-xs font-semibold text-slate-500 uppercase">1. Discovery</div>
+                        <div class="text-2xl font-bold text-blue-700 mt-1">{{ scorecard.discovery_score }} / 5</div>
+                        <div class="text-xs text-slate-400 mt-1">Pain Diagnosis</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-center">
+                        <div class="text-xs font-semibold text-slate-500 uppercase">2. Value Prop</div>
+                        <div class="text-2xl font-bold text-emerald-700 mt-1">{{ scorecard.value_prop_score }} / 5</div>
+                        <div class="text-xs text-slate-400 mt-1">Solution Fit</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-center">
+                        <div class="text-xs font-semibold text-slate-500 uppercase">3. Objections</div>
+                        <div class="text-2xl font-bold text-amber-700 mt-1">{{ scorecard.objection_handling_score }} / 5</div>
+                        <div class="text-xs text-slate-400 mt-1">Confidence</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-center">
+                        <div class="text-xs font-semibold text-slate-500 uppercase">4. Next Steps</div>
+                        <div class="text-2xl font-bold text-purple-700 mt-1">{{ scorecard.next_steps_score }} / 5</div>
+                        <div class="text-xs text-slate-400 mt-1">Action Plan</div>
+                    </div>
+                </div>
+
+                {% if scorecard.recording_url %}
+                <div class="p-4 bg-purple-50 border border-purple-200 rounded flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="video" class="w-8 h-8 text-purple-600"></i>
+                        <div>
+                            <div class="font-medium text-slate-900">Call Video / Audio Recording</div>
+                            <div class="text-xs text-slate-500 truncate max-w-md">{{ scorecard.recording_url }}</div>
+                        </div>
+                    </div>
+                    <a href="{{ scorecard.recording_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm text-purple-700 border-purple-300 hover:bg-purple-100">
+                        <i data-lucide="play"></i>
+                        <span>Listen / Watch</span>
+                    </a>
+                </div>
+                {% endif %}
+
+                {% if scorecard.transcript_summary %}
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Conversation Highlights & Quotes</h3>
+                    <div class="text-sm text-slate-800 whitespace-pre-wrap bg-slate-50 p-4 rounded border border-slate-200 leading-relaxed">
+                        {{ scorecard.transcript_summary }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {% if scorecard.key_strengths %}
+            <div class="card border-l-4 border-l-emerald-600">
+                <div class="card-header">
+                    <h2 class="font-semibold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="thumbs-up" class="w-4 h-4 text-emerald-600"></i>
+                        <span>Key Strengths</span>
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <div class="text-sm text-slate-700 whitespace-pre-wrap">
+                        {{ scorecard.key_strengths }}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if scorecard.areas_for_improvement %}
+            <div class="card border-l-4 border-l-amber-500">
+                <div class="card-header">
+                    <h2 class="font-semibold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="target" class="w-4 h-4 text-amber-600"></i>
+                        <span>Areas for Improvement</span>
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <div class="text-sm text-slate-700 whitespace-pre-wrap">
+                        {{ scorecard.areas_for_improvement }}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if scorecard.action_items %}
+        <div class="card border-l-4 border-l-blue-600">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="list-checks" class="w-4 h-4 text-blue-600"></i>
+                    <span>Coaching Action Plan & Skill Drills</span>
+                </h2>
+            </div>
+            <div class="card-body">
+                <div class="text-sm text-slate-700 whitespace-pre-wrap bg-blue-50/50 p-4 rounded border border-blue-100">
+                    {{ scorecard.action_items }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Interaction & Telemetry</h2>
+            </div>
+            <div class="card-body p-0">
+                <dl class="divide-y divide-slate-200 text-sm">
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Scorecard #</dt>
+                        <dd class="font-mono font-medium text-slate-800">{{ scorecard.number }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Sales Rep</dt>
+                        <dd class="font-medium text-slate-800">{{ scorecard.coachee.get_full_name|default:scorecard.coachee.username }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Coach</dt>
+                        <dd class="text-slate-800">{{ scorecard.coach.get_full_name|default:scorecard.coach.username|default:"—" }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Evaluated On</dt>
+                        <dd class="text-slate-800">{{ scorecard.evaluated_on|date:"M d, Y" }}</dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Talk Ratio</dt>
+                        <dd class="font-medium {% if scorecard.talk_listen_ratio_percent and scorecard.talk_listen_ratio_percent <= 55 %}text-green-700{% else %}text-amber-600{% endif %}">
+                            {{ scorecard.talk_listen_ratio_percent|default:"—" }}%
+                        </dd>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                        <dt class="text-slate-500">Client Sentiment</dt>
+                        <dd>
+                            {% if scorecard.call_sentiment == 'positive' %}
+                            <span class="badge badge-green">Positive</span>
+                            {% elif scorecard.call_sentiment == 'negative' %}
+                            <span class="badge badge-red">Negative</span>
+                            {% elif scorecard.call_sentiment == 'skeptical' %}
+                            <span class="badge badge-amber">Skeptical</span>
+                            {% else %}
+                            <span class="badge badge-slate">Neutral</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="font-semibold text-slate-800">Anchored CRM Log</h2>
+                <span class="badge badge-info">CRM 1.5</span>
+            </div>
+            <div class="card-body space-y-2">
+                <div class="font-medium text-slate-900 text-sm">
+                    {{ scorecard.communication_log.subject|default:"Client Interaction" }}
+                </div>
+                <div class="text-xs text-slate-500">
+                    Logged via {{ scorecard.communication_log.get_channel_display }} • {{ scorecard.communication_log.occurred_at|date:"M d, Y H:i" }}
+                </div>
+                <div class="pt-2">
+                    <a href="{% url 'crm:communicationlog_detail' scorecard.communication_log.pk %}" class="btn btn-outline btn-sm w-full">
+                        <i data-lucide="external-link"></i>
+                        <span>View CRM Communication Log</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
