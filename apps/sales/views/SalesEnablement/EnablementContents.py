@@ -51,7 +51,7 @@ def enablement_content_list(request):
         qs = qs.filter(target_persona=target_persona)
 
     competitor_id = request.GET.get("competitor", "").strip()
-    if competitor_id.isdigit():
+    if competitor_id.isdecimal():
         qs = qs.filter(competitor_id=int(competitor_id))
 
     paginator = Paginator(qs, 15)
