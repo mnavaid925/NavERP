@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Sales Coaching & Conversation Intelligence Workbench — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Coaching Workbench</span>
+        </div>
+        <h1 class="page-title">Coaching & Conversation Intelligence Workbench</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:coaching_scorecard_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>Browse All Evaluations</span>
+        </a>
+        <a href="{% url 'sales:coaching_scorecard_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Call Evaluation</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+    <div class="card p-6 flex items-center gap-4">
+        <div class="p-4 bg-blue-50 text-blue-600 rounded-lg">
+            <i data-lucide="headphones" class="w-8 h-8"></i>
+        </div>
+        <div>
+            <div class="text-3xl font-bold text-slate-900">{{ total_evaluations }}</div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Evaluations Completed</div>
+        </div>
+    </div>
+    <div class="card p-6 flex items-center gap-4">
+        <div class="p-4 bg-emerald-50 text-emerald-600 rounded-lg">
+            <i data-lucide="trending-up" class="w-8 h-8"></i>
+        </div>
+        <div>
+            <div class="text-3xl font-bold text-emerald-700">{{ avg_overall_score }}%</div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Team Avg Competency Score</div>
+        </div>
+    </div>
+    <div class="card p-6 flex items-center gap-4">
+        <div class="p-4 bg-purple-50 text-purple-600 rounded-lg">
+            <i data-lucide="mic" class="w-8 h-8"></i>
+        </div>
+        <div>
+            <div class="text-3xl font-bold text-purple-700">{{ avg_talk_ratio }}%</div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Avg Rep Talk Ratio (Benchmark: 40-55%)</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+    <!-- Unreviewed Call Logs Queue -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i data-lucide="clock" class="w-5 h-5 text-amber-600"></i>
+                <h2 class="font-semibold text-slate-800">Unreviewed Client Interactions (CRM 1.5 Queue)</h2>
+            </div>
+            <a href="{% url 'crm:communicationlog_list' %}" class="text-xs text-blue-600 hover:underline">
+                All CRM Logs &rarr;
+            </a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Interaction / Subject</th>
+                            <th>Channel</th>
+                            <th>Occurred</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in unreviewed_logs %}
+                        <tr>
+                            <td>
+                                <div class="font-medium text-slate-900 text-sm">
+                                    {{ log.subject|default:"Client Interaction Call" }}
+                                </div>
+                                <div class="text-xs text-slate-500">
+                                    {{ log.owner.get_full_name|default:log.owner.username }} • {{ log.party.name|default:"Unattached Party" }}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge badge-slate text-xs">{{ log.get_channel_display }}</span>
+                            </td>
+                            <td>
+                                <span class="text-xs text-slate-600">{{ log.occurred_at|date:"M d, H:i" }}</span>
+                            </td>
+                            <td class="text-right table-actions">
+                                <a href="{% url 'sales:coaching_scorecard_create' %}?communication_log={{ log.pk }}" class="btn btn-primary btn-sm">
+                                    <i data-lucide="award"></i>
+                                    <span>Score Call</span>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center py-6 text-slate-500 text-sm">
+                                All recent CRM communication logs have been reviewed!
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Evaluations -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i data-lucide="check-check" class="w-5 h-5 text-emerald-600"></i>
+                <h2 class="font-semibold text-slate-800">Recent Coaching Evaluations</h2>
+            </div>
+            <a href="{% url 'sales:coaching_scorecard_list' %}" class="text-xs text-blue-600 hover:underline">
+                View All &rarr;
+            </a>
+        </div>
+        <div class="card-body p-0">
+            <ul class="divide-y divide-slate-200">
+                {% for sc in recent_scorecards %}
+                <li class="p-4 hover:bg-slate-50 flex items-center justify-between">
+                    <div>
+                        <div class="font-medium text-slate-900 text-sm">
+                            <a href="{% url 'sales:coaching_scorecard_detail' sc.pk %}" class="hover:text-blue-600">
+                                {{ sc.coachee.get_full_name|default:sc.coachee.username }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500 mt-0.5">
+                            Coach: {{ sc.coach.get_full_name|default:sc.coach.username|default:"System" }} • {{ sc.evaluated_on|date:"M d, Y" }}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold text-sm {% if sc.overall_score >= 80 %}text-green-700{% elif sc.overall_score >= 60 %}text-blue-700{% else %}text-amber-700{% endif %}">
+                            {{ sc.overall_score }}%
+                        </span>
+                        {% if sc.review_status == 'acknowledged' %}
+                        <span class="badge badge-green text-xs">Acknowledged</span>
+                        {% else %}
+                        <span class="badge badge-slate text-xs">{{ sc.get_review_status_display }}</span>
+                        {% endif %}
+                        <a href="{% url 'sales:coaching_scorecard_detail' sc.pk %}" class="btn btn-icon">
+                            <i data-lucide="chevron-right"></i>
+                        </a>
+                    </div>
+                </li>
+                {% empty %}
+                <li class="p-6 text-center text-slate-500 text-sm">No recent evaluations recorded.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
