@@ -17,11 +17,11 @@
         <div class="flex items-center gap-3">
             <h1 class="page-title">{{ obj.name }}</h1>
             {% if obj.status == 'active' %}
-            <span class="badge badge-green">Active</span>
+            <span class="badge badge-green">{{ status_display }}</span>
             {% elif obj.status == 'draft' %}
-            <span class="badge badge-amber">Draft</span>
+            <span class="badge badge-amber">{{ status_display }}</span>
             {% else %}
-            <span class="badge badge-slate">Archived</span>
+            <span class="badge badge-slate">{{ status_display }}</span>
             {% endif %}
             <span class="badge badge-info">{{ plan_type_display }}</span>
         </div>
@@ -213,7 +213,7 @@
                                 {% if earn.status == 'calculated' or earn.status == 'approved' %}
                                 <span class="badge badge-green">{{ earn.get_status_display }}</span>
                                 {% elif earn.status == 'paid' %}
-                                <span class="badge badge-info">Paid</span>
+                                <span class="badge badge-info">{{ earn.get_status_display }}</span>
                                 {% else %}
                                 <span class="badge badge-slate">{{ earn.get_status_display }}</span>
                                 {% endif %}
