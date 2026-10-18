@@ -108,6 +108,14 @@ class CommissionAdjustment(TenantNumbered):
                 fields=["tenant", "adjustment_type"],
                 name="sales_cadj_type_idx",
             ),
+            models.Index(
+                fields=["tenant", "status"],
+                name="sales_cadj_ten_stat_idx",
+            ),
+            models.Index(
+                fields=["tenant", "statement"],
+                name="sales_cadj_ten_stmt_idx",
+            ),
         ]
 
     def __str__(self):
