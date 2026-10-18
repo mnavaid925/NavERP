@@ -8,7 +8,7 @@ and CommissionAdjustment mapping directly to the 5 NavERP.md 8.10 feature bullet
 4. sales_global_compensation_matrix (Bullet 4: Multi-Currency & Global Plans)
 5. sales_commission_payout_processing (Bullet 5: Payout Processing & Integration)
 """
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.contrib.auth.decorators import login_required
 from django.db.models import Avg, Count, Q, Sum
 from django.http import JsonResponse
@@ -241,15 +241,29 @@ def sales_commission_payout_processing(request):
 
 @login_required
 def sales_commission_what_if_calc(request):
-    deal_amount = Decimal(str(request.GET.get("deal_amount") or 0))
-    split_pct = Decimal(str(request.GET.get("split_pct") or 100))
-    current_attainment = Decimal(str(request.GET.get("current_attainment") or 0))
+    try:
+        deal_amount = Decimal(str(request.GET.get("deal_amount") or 0))
+        split_pct = Decimal(str(request.GET.get("split_pct") or 100))
+        current_attainment = Decimal(str(request.GET.get("current_attainment") or 0))
+        if not (deal_amount.is_finite() and split_pct.is_finite() and current_attainment.is_finite()):
+            return JsonResponse({"ok": False, "error": "Parameters must be finite numbers"}, status=400)
+        if deal_amount < 0 or deal_amount > Decimal("1000000000000"):
+            return JsonResponse({"ok": False, "error": "Deal amount out of bounds"}, status=400)
+        if split_pct < 0 or split_pct > Decimal("100"):
+            return JsonResponse({"ok": False, "error": "Split percentage must be between 0 and 100"}, status=400)
+        if current_attainment < 0 or current_attainment > Decimal("100000"):
+            return JsonResponse({"ok": False, "error": "Current attainment out of bounds"}, status=400)
+    except (InvalidOperation, TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid numeric parameters"}, status=400)
+
     plan_id = request.GET.get("plan_id")
-
     if not plan_id or not plan_id.isdecimal():
-        return JsonResponse({"error": "Valid plan required"}, status=400)
+        return JsonResponse({"ok": False, "error": "Valid plan required"}, status=400)
 
-    plan = get_object_or_404(CommissionPlan.objects.filter(tenant=request.tenant), pk=int(plan_id))
+    plan = get_object_or_404(
+        CommissionPlan.objects.filter(tenant=request.tenant).select_related("currency"),
+        pk=int(plan_id),
+    )
 
     attributed_vol = round(deal_amount * split_pct / Decimal("100"), 2)
 
