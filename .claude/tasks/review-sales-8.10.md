@@ -71,7 +71,29 @@ Commit after fixing Critical + Important.
 ---
 
 ## 3. Frontend & Template Review (`frontend-reviewer`)
-*Pending review run...*
+
+### Verdict
+Changes Requested (Commit after fixing Critical + Important).
+
+### Critical
+- `templates/sales/incentivecompensation/boards/payout_processing.html:174-180` — Hardcoded Plan Option `<option value="1">Active Plan Envelope</option>` in Batch Statement Generator while `sales_commission_payout_processing` (`CommissionBoards.py:204`) omits `plans` from context, causing 404s or invalid tenant submissions. Fix: Query `plans = CommissionPlan.objects.filter(tenant=request.tenant, status="active")` in view and loop dynamically `{% for p in plans %}<option value="{{ p.pk }}">{{ p.name }}</option>{% endfor %}`.
+- `templates/sales/incentivecompensation/commissionstatement/detail.html:104, 193`, `commissionadjustment/list.html:136`, `commissionadjustment/detail.html:62` — Double minus formatting bug on negative amounts: `{% if obj.amount >= 0 %}+${{ obj.amount|floatformat:2 }}{% else %}-${{ obj.amount|floatformat:2 }}{% endif %}` renders `-$ -250.00` because `|floatformat:2` already includes the negative sign. Fix: Render `${{ obj.amount|floatformat:2 }}` in the negative branch or format cleanly.
+
+### Important
+- `templates/sales/incentivecompensation/commissionadjustment/list.html:41` & `boards/adjustment_workbench.html:32` — Design system violation: illegal `stat-icon red` (L33). Stat icons must be one of `blue/green/orange/purple/slate`. Fix: Change `stat-icon red` to `stat-icon slate` or `stat-icon orange`.
+- `templates/sales/incentivecompensation/commissionplan/detail.html:29`, `commissionearning/detail.html:31`, `commissionstatement/detail.html:30`, `commissionadjustment/detail.html:31` — CRUD Incompleteness: Missing POST-Delete form and Back-to-List button on all 4 detail pages. Fix: Add Back to List link and POST delete button with CSRF token and confirm dialog.
+- `templates/sales/incentivecompensation/commissionplan/list.html:211, 215` (drops `tier_mode`), `commissionearning/list.html:228, 231` (drops `plan`, `credit_type`), `commissionadjustment/list.html:200, 203` (drops `payee`) — Active filter GET parameters are dropped during pagination navigation. Fix: Append `{% if request.GET.<param> %}&<param>={{ request.GET.<param> }}{% endif %}` to pagination links.
+
+### Minor
+- `templates/sales/incentivecompensation/boards/adjustment_workbench.html:142` — Brittle string slicing `-${{ c.amount|floatformat:2|slice:"1:" }}` drops first digit if amount is non-negative. Fix: Avoid string slicing on numbers.
+- `templates/sales/incentivecompensation/boards/earnings_dashboard.html` & `commissionstatement/list.html` — Hardcoded `$` currency symbol across multi-currency boards. Fix: Use currency code/symbol context.
+
+### Done well
+- Zero multiline `{# ... #}` comment leaks (L2) across all 17 templates.
+- Strict badge color naming compliance: approved color-named classes (`badge-green`, `badge-amber`, `badge-red`, `badge-info`, `badge-slate`, `badge-muted`) with zero `-success/-danger/-warning`.
+- Comprehensive None-safe foreign key lookups (L10) for nullable relationships (`opportunity`, `sales_order`, `sales_quota`, `owner`, `payroll_run`, `statement`, `approved_by`).
+- Safe PK dropdown comparisons using `|stringformat:'d'`.
+- Responsive design with `.table-wrap`, empty states with `.empty-state`, and full accessibility attributes (`aria-label`, `title`).
 
 ---
 
