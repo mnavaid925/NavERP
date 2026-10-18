@@ -18,7 +18,6 @@ from apps.accounts.models import User
 from apps.crm.models.ActivityManagement.CommunicationLogs import CommunicationLog
 from apps.sales.models.CompetitiveIntelligence.CompetitiveIntelligence import CompetitorProfile
 from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import OpportunityOutcome
-from apps.sales.models.OpportunityPipeline.Pipelines import Pipeline
 from apps.sales.models.SalesEnablement.CoachingScorecards import CoachingScorecard
 from apps.sales.models.SalesEnablement.EnablementContents import (
     CONTENT_TYPE_CHOICES,
@@ -26,10 +25,7 @@ from apps.sales.models.SalesEnablement.EnablementContents import (
     TARGET_STAGE_CHOICES,
     EnablementContent,
 )
-from apps.sales.models.SalesEnablement.SalesCertifications import (
-    CERTIFICATION_CATEGORY_CHOICES,
-    SalesCertification,
-)
+from apps.sales.models.SalesEnablement.SalesCertifications import SalesCertification
 from apps.sales.models.SalesEnablement.SalesPlaybooks import (
     SELLING_MOTION_CHOICES,
     SalesPlaybook,
@@ -50,7 +46,6 @@ def sales_enablement_content_hub(request):
 
     battlecards = contents_qs.filter(content_type="battle_card").select_related("competitor__party")[:4]
     decks = contents_qs.filter(content_type="pitch_deck")[:4]
-    case_studies = contents_qs.filter(content_type="case_study")[:4]
 
     context = {
         "total_contents": total_contents,
@@ -60,8 +55,7 @@ def sales_enablement_content_hub(request):
         "popular_contents": popular_contents,
         "battlecards": battlecards,
         "decks": decks,
-        "case_studies": case_studies,
-        "sheets": case_studies,
+        "sheets": [],
         "content_type_choices": CONTENT_TYPE_CHOICES,
         "stage_choices": TARGET_STAGE_CHOICES,
         "persona_choices": TARGET_PERSONA_CHOICES,
@@ -92,13 +86,10 @@ def sales_playbook_board(request):
             "items": motion_items[:5],
         })
 
-    pipelines = Pipeline.objects.filter(tenant=tenant, is_active=True)
-
     context = {
         "total_playbooks": total_playbooks,
         "total_published": total_published,
         "playbooks_by_motion": playbooks_by_motion,
-        "pipelines": pipelines,
     }
     return render(request, "sales/salesenablement/boards/playbook_board.html", context)
 
@@ -111,8 +102,6 @@ def sales_readiness_board(request):
     total_certifications = certs_qs.count()
     completed_count = certs_qs.filter(status="completed").count()
     in_progress_count = certs_qs.filter(status="enrolled").count()
-    failed_count = certs_qs.filter(status="failed").count()
-
     completion_rate = int(round((completed_count / total_certifications * 100))) if total_certifications > 0 else 0
 
     today = timezone.now().date()
@@ -127,7 +116,7 @@ def sales_readiness_board(request):
         "total": total_certifications,
         "completed": completed_count,
         "in_progress": in_progress_count,
-        "failed": failed_count,
+        "failed": max(0, total_certifications - completed_count - in_progress_count),
         "completion_rate": completion_rate,
         "expiring_soon": expiring_soon_count,
     }
@@ -161,13 +150,11 @@ def sales_readiness_board(request):
         "total_certifications": total_certifications,
         "completed_count": completed_count,
         "in_progress_count": in_progress_count,
-        "failed_count": failed_count,
         "completion_rate": completion_rate,
         "rep_matrix": rep_matrix,
         "rep_readiness_matrix": rep_matrix,
         "certifications_summary": certifications_summary,
         "expiring_soon_count": expiring_soon_count,
-        "categories": CERTIFICATION_CATEGORY_CHOICES,
     }
     return render(request, "sales/salesenablement/boards/readiness_board.html", context)
 
