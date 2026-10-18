@@ -14,7 +14,7 @@ from django.shortcuts import render
 from apps.accounts.models import User
 from apps.crm.models.ActivityManagement.CommunicationLogs import CommunicationLog
 from apps.sales.models.CompetitiveIntelligence.CompetitiveIntelligence import CompetitorProfile
-from apps.sales.models.OpportunityOutcome.OpportunityOutcomes import OpportunityOutcome
+from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import OpportunityOutcome
 from apps.sales.models.OpportunityPipeline.Pipelines import Pipeline
 from apps.sales.models.SalesEnablement.CoachingScorecards import CoachingScorecard
 from apps.sales.models.SalesEnablement.EnablementContents import (
