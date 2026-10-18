@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Sales Playbooks & Guidance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_playbook_board' %}">Playbook Board</a>
+            <span>/</span>
+            <span>Playbooks</span>
+        </div>
+        <h1 class="page-title">Sales Playbooks & Tactical Guidance</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:sales_playbook_board' %}" class="btn btn-outline">
+            <i data-lucide="columns-3"></i>
+            <span>Playbook Board</span>
+        </a>
+        <a href="{% url 'sales:sales_playbook_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Create Playbook</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="filter-bar grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ q }}" placeholder="Search title, motion, audience..." class="form-input w-full">
+            </div>
+            <div>
+                <select name="motion_type" class="form-select w-full">
+                    <option value="">All Selling Motions</option>
+                    {% for val, label in motion_type_choices %}
+                    <option value="{{ val }}" {% if motion_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="pipeline" class="form-select w-full">
+                    <option value="">All Opportunity Pipelines</option>
+                    {% for pipe in pipelines %}
+                    <option value="{{ pipe.pk|stringformat:'d' }}" {% if pipeline_id == pipe.pk|stringformat:'d' %}selected{% endif %}>{{ pipe.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'sales:sales_playbook_list' %}" class="btn btn-outline text-slate-500" title="Clear Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Playbook / Motion</th>
+                        <th>Motion Type</th>
+                        <th>Pipeline</th>
+                        <th>Target Audience / ICP</th>
+                        <th>Status</th>
+                        <th>Owner</th>
+                        <th>Active</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in playbooks %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">
+                                <a href="{% url 'sales:sales_playbook_detail' item.pk %}" class="hover:text-blue-600">
+                                    {{ item.name }}
+                                </a>
+                            </div>
+                            <div class="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                                <span>{{ item.number }}</span>
+                                <span>•</span>
+                                <span>v{{ item.version }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge badge-info">{{ item.get_motion_type_display }}</span>
+                        </td>
+                        <td>
+                            {% if item.pipeline %}
+                            <span class="font-medium text-sm text-slate-800">{{ item.pipeline.name }}</span>
+                            {% else %}
+                            <span class="text-slate-400 text-xs">All Pipelines</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="text-sm text-slate-600">{{ item.target_audience|default:"General ICP" }}</span>
+                        </td>
+                        <td>
+                            {% if item.status == 'published' %}
+                            <span class="badge badge-green">Published</span>
+                            {% elif item.status == 'under_review' %}
+                            <span class="badge badge-amber">Under Review</span>
+                            {% elif item.status == 'archived' %}
+                            <span class="badge badge-muted">Archived</span>
+                            {% else %}
+                            <span class="badge badge-slate">Draft</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="text-sm text-slate-700">{{ item.owner.get_full_name|default:item.owner.username|default:"—" }}</span>
+                        </td>
+                        <td>
+                            {% if item.is_active %}
+                            <span class="badge badge-green">Active</span>
+                            {% else %}
+                            <span class="badge badge-muted">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right table-actions">
+                            <div class="flex items-center justify-end gap-1">
+                                <a href="{% url 'sales:sales_playbook_detail' item.pk %}" class="btn btn-icon" title="View Playbook">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'sales:sales_playbook_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                                <form method="post" action="{% url 'sales:sales_playbook_delete' item.pk %}" onsubmit="return confirm('Delete this sales playbook?');" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                        <i data-lucide="trash-2"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state py-8">
+                                <i data-lucide="book-open" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                                <h3 class="font-medium text-slate-700 mb-1">No sales playbooks found</h3>
+                                <p class="text-slate-500 text-sm mb-4">Create selling motions with talk tracks, objection handling, and exit criteria.</p>
+                                <a href="{% url 'sales:sales_playbook_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create First Playbook</span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% if playbooks.has_other_pages %}
+    <div class="card-footer border-t border-slate-200 px-4 py-3 flex items-center justify-between">
+        <div class="text-xs text-slate-500">
+            Showing page {{ playbooks.number }} of {{ playbooks.paginator.num_pages }}
+        </div>
+        <div class="pagination flex gap-1">
+            {% if playbooks.has_previous %}
+            <a href="?page={{ playbooks.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if motion_type %}&motion_type={{ motion_type }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if pipeline_id %}&pipeline={{ pipeline_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            {% if playbooks.has_next %}
+            <a href="?page={{ playbooks.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if motion_type %}&motion_type={{ motion_type }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if pipeline_id %}&pipeline={{ pipeline_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
