@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Multi-Currency & Global Plan Matrix — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <span>Global Matrix</span>
+        </div>
+        <h1 class="page-title">Multi-Currency & Global Compensation Matrix</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:commission_plan_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Add Regional Plan</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Regional Plan Grid -->
+    <div class="lg:col-span-2 space-y-6">
+        {% for region, plans in regional_plans.items %}
+        <div class="card">
+            <div class="card-header flex justify-between items-center bg-slate-50/50">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="globe" class="text-primary h-5 w-5"></i>
+                    <h3 class="font-semibold text-slate-900">{{ region }} Region</h3>
+                </div>
+                <span class="badge badge-info">{{ plans|length }} plan(s)</span>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Plan Name</th>
+                            <th>Code</th>
+                            <th>Currency</th>
+                            <th>Base Rate</th>
+                            <th>Draw Advance</th>
+                            <th>Est. Tax %</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in plans %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'sales:commission_plan_detail' p.pk %}" class="font-semibold text-slate-900 hover:text-primary">
+                                    {{ p.name }}
+                                </a>
+                            </td>
+                            <td class="font-mono text-xs text-slate-500">{{ p.code }}</td>
+                            <td class="font-bold text-slate-800">{{ p.currency.code }}</td>
+                            <td class="font-bold text-primary">{{ p.base_rate_pct }}%</td>
+                            <td class="text-sm text-slate-700">
+                                {% if p.draw_amount > 0 %}
+                                {{ p.currency.code }} {{ p.draw_amount|floatformat:2 }}
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                            <td class="text-xs font-semibold text-slate-600">{{ p.tax_withholding_pct }}%</td>
+                            <td>
+                                {% if p.status == 'active' %}
+                                <span class="badge badge-green">Active</span>
+                                {% elif p.status == 'draft' %}
+                                <span class="badge badge-amber">Draft</span>
+                                {% else %}
+                                <span class="badge badge-slate">Archived</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% empty %}
+        <div class="card p-8 text-center text-sm text-slate-400">
+            No regional plan matrices defined.
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Right Column: Currencies, Spot Rates & Tax Withholding -->
+    <div class="space-y-6">
+        <!-- Tax Withholding Estimates by Region -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Regional Statutory Withholding</h3>
+            </div>
+            <div class="card-body">
+                <ul class="divide-y divide-slate-100 text-sm">
+                    {% for item in tax_withholding_summary %}
+                    <li class="py-2.5 flex items-center justify-between">
+                        <span class="font-medium text-slate-800">{{ item.target_region|default:"Global" }}</span>
+                        <div class="text-right">
+                            <span class="font-bold text-slate-900">{{ item.avg_tax|floatformat:1 }}%</span>
+                            <span class="text-xs text-slate-400 block">{{ item.plan_count }} plan(s)</span>
+                        </div>
+                    </li>
+                    {% empty %}
+                    <li class="text-xs text-slate-400 py-2">No regional tax benchmarks configured.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Recent Spot Exchange Rates -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">Daily Spot FX Rates</h3>
+                <span class="text-xs text-slate-400">Accounting Module 2.2</span>
+            </div>
+            <div class="table-wrap">
+                <table class="table text-xs">
+                    <thead>
+                        <tr>
+                            <th>Currency</th>
+                            <th>Spot Rate</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for xr in recent_exchange_rates %}
+                        <tr>
+                            <td class="font-bold text-slate-900">{{ xr.currency.code }}</td>
+                            <td class="font-mono">{{ xr.rate }}</td>
+                            <td class="text-slate-500">{{ xr.rate_date|date:"M d" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="3" class="text-center py-4 text-slate-400">
+                                No spot rates recorded.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
