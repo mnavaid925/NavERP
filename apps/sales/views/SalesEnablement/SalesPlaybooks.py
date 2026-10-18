@@ -87,12 +87,10 @@ def sales_playbook_create(request):
                 obj.owner = request.user
             obj.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="SalesPlaybook",
-                object_id=str(obj.pk),
-                details=f"Created sales playbook {obj.number}: {obj.name}",
+                request.user,
+                obj,
+                "create",
+                changes={"name": obj.name, "number": obj.number},
             )
             messages.success(request, f"Sales playbook '{obj.name}' created.")
             return redirect("sales:sales_playbook_detail", pk=obj.pk)
@@ -111,12 +109,10 @@ def sales_playbook_edit(request, pk):
         if form.is_valid():
             form.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="SalesPlaybook",
-                object_id=str(obj.pk),
-                details=f"Updated sales playbook {obj.number}: {obj.name}",
+                request.user,
+                obj,
+                "update",
+                changes={"name": obj.name, "number": obj.number},
             )
             messages.success(request, f"Sales playbook '{obj.name}' updated.")
             return redirect("sales:sales_playbook_detail", pk=obj.pk)
@@ -133,14 +129,12 @@ def sales_playbook_delete(request, pk):
     obj = get_object_or_404(SalesPlaybook.objects.filter(tenant=request.tenant), pk=pk)
     name = obj.name
     number = obj.number
-    obj.delete()
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="SalesPlaybook",
-        object_id=str(pk),
-        details=f"Deleted sales playbook {number}: {name}",
+        request.user,
+        obj,
+        "delete",
+        changes={"name": name, "number": number},
     )
+    obj.delete()
     messages.success(request, f"Sales playbook '{name}' deleted.")
     return redirect("sales:sales_playbook_list")
