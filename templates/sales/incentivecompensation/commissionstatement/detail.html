@@ -28,6 +28,10 @@
         </div>
     </div>
     <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'sales:commission_statement_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Statements</span>
+        </a>
         {% if can_approve %}
         <form method="post" action="{% url 'sales:commission_statement_approve' obj.pk %}" class="inline">
             {% csrf_token %}
@@ -51,6 +55,13 @@
             <i data-lucide="pencil"></i>
             <span>Edit</span>
         </a>
+        <form method="post" action="{% url 'sales:commission_statement_delete' obj.pk %}" onsubmit="return confirm('Are you sure you want to delete this commission statement?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
         {% endif %}
     </div>
 </div>
