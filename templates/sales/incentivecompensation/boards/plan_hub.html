@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Commission Plan Designer Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Incentive Compensation</span>
+            <span>/</span>
+            <span>Plan Hub</span>
+        </div>
+        <h1 class="page-title">Commission Plan Design & Accelerator Hub</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:commission_plan_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>All Plans</span>
+        </a>
+        <a href="{% url 'sales:commission_plan_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Plan</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Compensation Plans</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.active_plans_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="percent"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Average Base Commission</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.avg_base_rate }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="users"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Participants Enrolled</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.reps_enrolled }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Active Plan Architecture Cards -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">Active Commission Plans & Rate Structures</h3>
+                <span class="text-xs text-slate-500">{{ plans|length }} plans configured</span>
+            </div>
+            <div class="divide-y divide-slate-100">
+                {% for plan in plans %}
+                <div class="p-4 hover:bg-slate-50 transition-colors">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <a href="{% url 'sales:commission_plan_detail' plan.pk %}" class="font-semibold text-slate-900 hover:text-primary">
+                                    {{ plan.name }}
+                                </a>
+                                {% if plan.status == 'active' %}
+                                <span class="badge badge-green">Active</span>
+                                {% elif plan.status == 'draft' %}
+                                <span class="badge badge-amber">Draft</span>
+                                {% else %}
+                                <span class="badge badge-slate">Archived</span>
+                                {% endif %}
+                                <span class="badge badge-info">{{ plan.get_plan_type_display }}</span>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-1 font-mono">
+                                {{ plan.number }} · {{ plan.currency.code }} · {{ plan.target_region|default:"Global" }} · Frequency: {{ plan.get_payout_frequency_display }}
+                            </div>
+                            {% if plan.description %}
+                            <p class="text-xs text-slate-600 mt-2 line-clamp-2">{{ plan.description }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="text-right">
+                            <div class="text-lg font-bold text-slate-900">{{ plan.base_rate_pct }}%</div>
+                            <div class="text-xs text-slate-400">Base Rate</div>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="p-8 text-center text-sm text-slate-400">
+                    No compensation plans designed yet.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Tier Accelerator Benchmarks -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Tiered Accelerator Brackets & Quota Steps</h3>
+            </div>
+            <div class="p-4 space-y-4">
+                {% for b in tier_accelerator_benchmarks %}
+                <div class="border border-slate-200 rounded p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="font-semibold text-slate-900">{{ b.plan_name }}</span>
+                        <span class="badge badge-slate">{{ b.tier_mode }}</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {% for t in b.tiers %}
+                        <div class="bg-slate-50 p-3 rounded text-center border border-slate-100">
+                            <div class="text-xs text-slate-500 font-medium">Attainment {{ t.min_pct }}% – {{ t.max_pct }}%</div>
+                            <div class="text-xl font-black text-primary mt-1">{{ t.rate_pct }}%</div>
+                            <div class="text-xs text-slate-400 mt-0.5">Tier {{ forloop.counter }} Accelerator</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-xs text-slate-400 text-center py-4">No tiered accelerator plans configured.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: SPIF Campaigns -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Active SPIF Incentive Campaigns</h3>
+            </div>
+            <div class="card-body space-y-4">
+                {% for spif in active_spifs %}
+                <div class="p-3 bg-amber-50 border border-amber-200 rounded">
+                    <div class="flex justify-between items-start">
+                        <span class="font-semibold text-amber-950 text-sm">{{ spif.campaign }}</span>
+                        <span class="text-xs font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded">
+                            +{{ spif.currency }} {{ spif.bonus }}
+                        </span>
+                    </div>
+                    <div class="text-xs text-amber-800 mt-1">Plan: {{ spif.plan_name }}</div>
+                    <div class="text-xs text-amber-700 mt-1 italic">{{ spif.criteria }}</div>
+                </div>
+                {% empty %}
+                <p class="text-xs text-slate-400">No active SPIF campaigns running.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
