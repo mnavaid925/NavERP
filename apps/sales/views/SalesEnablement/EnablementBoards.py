@@ -180,26 +180,43 @@ def sales_coaching_workbench(request):
 @login_required
 def sales_competitive_intelligence_library(request):
     tenant = request.tenant
-    competitors = CompetitorProfile.objects.filter(tenant=tenant).select_related("party").order_by("party__name")
+    competitors = list(CompetitorProfile.objects.filter(tenant=tenant).select_related("party").order_by("party__name"))
 
-    total_competitors = competitors.count()
+    total_competitors = len(competitors)
+    competitor_ids = [comp.pk for comp in competitors]
+
+    all_battlecards = EnablementContent.objects.filter(
+        tenant=tenant, competitor_id__in=competitor_ids, is_active=True
+    ).order_by("title")
+    battlecards_by_comp = {}
+    for bc in all_battlecards:
+        battlecards_by_comp.setdefault(bc.competitor_id, []).append(bc)
+
+    outcome_stats = (
+        OpportunityOutcome.objects.filter(
+            tenant=tenant,
+            competitor_link__competitor_profile_id__in=competitor_ids,
+        )
+        .values("competitor_link__competitor_profile")
+        .annotate(
+            wins=Count("id", filter=Q(result="won")),
+            losses=Count("id", filter=Q(result="lost")),
+        )
+    )
+    outcomes_by_comp = {
+        s["competitor_link__competitor_profile"]: s
+        for s in outcome_stats
+    }
 
     competitor_data = []
     for comp in competitors:
-        battlecards = EnablementContent.objects.filter(
-            tenant=tenant, competitor=comp, is_active=True
-        )
-        # Check 8.2 opportunity outcomes against this competitor if any
-        outcomes = OpportunityOutcome.objects.filter(
-            tenant=tenant, competitor_link__competitor_profile=comp
-        )
-        wins = outcomes.filter(result="won").count()
-        losses = outcomes.filter(result="lost").count()
+        bcs = battlecards_by_comp.get(comp.pk, [])
+        outcomes = outcomes_by_comp.get(comp.pk, {})
         competitor_data.append({
             "profile": comp,
-            "battlecards": battlecards,
-            "wins": wins,
-            "losses": losses,
+            "battlecards": bcs,
+            "wins": outcomes.get("wins", 0),
+            "losses": outcomes.get("losses", 0),
         })
 
     context = {
@@ -207,3 +224,4 @@ def sales_competitive_intelligence_library(request):
         "competitor_data": competitor_data,
     }
     return render(request, "sales/salesenablement/boards/competitive_intelligence_library.html", context)
+
