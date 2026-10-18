@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Commission Plan — {{ obj.name }}{% else %}Create Commission Plan{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <a href="{% url 'sales:commission_plan_list' %}">Plans</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Plan{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Commission Plan: {{ obj.name }}{% else %}Create Commission Plan{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:commission_plan_detail' obj.pk %}{% else %}{% url 'sales:commission_plan_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card border-red-300 bg-red-50 p-4">
+        <div class="text-sm text-red-700">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Card 1: Core Details -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Plan Identification & Schedule</h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Plan Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.code.id_for_label }}">Code Slug *</label>
+                    {{ form.code }}
+                    {% if form.code.errors %}<div class="form-error">{{ form.code.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.plan_type.id_for_label }}">Plan Type *</label>
+                    {{ form.plan_type }}
+                    {% if form.plan_type.errors %}<div class="form-error">{{ form.plan_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.tier_mode.id_for_label }}">Tier Mode</label>
+                    {{ form.tier_mode }}
+                    {% if form.tier_mode.errors %}<div class="form-error">{{ form.tier_mode.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.payout_frequency.id_for_label }}">Payout Frequency</label>
+                    {{ form.payout_frequency }}
+                    {% if form.payout_frequency.errors %}<div class="form-error">{{ form.payout_frequency.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.effective_start.id_for_label }}">Effective Start Date *</label>
+                    {{ form.effective_start }}
+                    {% if form.effective_start.errors %}<div class="form-error">{{ form.effective_start.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.effective_end.id_for_label }}">Effective End Date (Optional)</label>
+                    {{ form.effective_end }}
+                    {% if form.effective_end.errors %}<div class="form-error">{{ form.effective_end.errors }}</div>{% endif %}
+                </div>
+            </div>
+            <div class="form-group mt-4">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description & Governance Notes</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Financial Terms & Draws -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Commission Rates, Draws & Regional Parameters</h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Currency *</label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_region.id_for_label }}">Target Region</label>
+                    {{ form.target_region }}
+                    {% if form.target_region.errors %}<div class="form-error">{{ form.target_region.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.base_rate_pct.id_for_label }}">Base Commission Rate %</label>
+                    {{ form.base_rate_pct }}
+                    {% if form.base_rate_pct.errors %}<div class="form-error">{{ form.base_rate_pct.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.draw_amount.id_for_label }}">Draw Advance Amount</label>
+                    {{ form.draw_amount }}
+                    {% if form.draw_amount.errors %}<div class="form-error">{{ form.draw_amount.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group flex items-center pt-6">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_draw_recoverable }}
+                        <span class="text-sm font-medium text-slate-800">Draw is Recoverable from Earnings</span>
+                    </label>
+                    {% if form.is_draw_recoverable.errors %}<div class="form-error">{{ form.is_draw_recoverable.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.clawback_window_days.id_for_label }}">Clawback Window (Days)</label>
+                    {{ form.clawback_window_days }}
+                    {% if form.clawback_window_days.errors %}<div class="form-error">{{ form.clawback_window_days.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.tax_withholding_pct.id_for_label }}">Est. Tax Withholding %</label>
+                    {{ form.tax_withholding_pct }}
+                    {% if form.tax_withholding_pct.errors %}<div class="form-error">{{ form.tax_withholding_pct.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sales_quota.id_for_label }}">Benchmark Sales Quota</label>
+                    {{ form.sales_quota }}
+                    {% if form.sales_quota.errors %}<div class="form-error">{{ form.sales_quota.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Plan Administrator</label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 3: Tier Accelerators & SPIF JSON Configurations -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Accelerators & SPIF Rules Configuration</h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.tiers_json.id_for_label }}">{{ form.tiers_json.label }}</label>
+                {{ form.tiers_json }}
+                <p class="text-xs text-slate-500 mt-1">{{ form.tiers_json.help_text }}</p>
+                {% if form.tiers_json.errors %}<div class="form-error">{{ form.tiers_json.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.spif_json.id_for_label }}">{{ form.spif_json.label }}</label>
+                {{ form.spif_json }}
+                <p class="text-xs text-slate-500 mt-1">{{ form.spif_json.help_text }}</p>
+                {% if form.spif_json.errors %}<div class="form-error">{{ form.spif_json.errors }}</div>{% endif %}
+            </div>
+        </div>
+        <div class="card-footer flex justify-end gap-3 p-4 bg-slate-50 border-t border-slate-200">
+            <a href="{% if is_edit %}{% url 'sales:commission_plan_detail' obj.pk %}{% else %}{% url 'sales:commission_plan_list' %}{% endif %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check"></i>
+                <span>{% if is_edit %}Save Changes{% else %}Create Plan{% endif %}</span>
+            </button>
+        </div>
+    </div>
+</form>
+{% endblock %}
