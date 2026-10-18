@@ -117,3 +117,31 @@ class CommissionPlanForm(TenantUniqueMixin, TenantModelForm):
         if spifs is not None:
             self.instance.spif_config = spifs
         return cleaned
+
+    def _post_clean(self):
+        opts = self._meta
+        exclude = self._get_validation_exclusions()
+
+        for name, field in self.fields.items():
+            if isinstance(field, forms.models.InlineForeignKeyField):
+                exclude.append(name)
+
+        try:
+            self.instance = forms.models.construct_instance(self, self.instance, opts.fields, opts.exclude)
+        except ValidationError as e:
+            self._update_errors(e)
+
+        try:
+            self.instance.full_clean(exclude=exclude, validate_unique=False)
+        except ValidationError as e:
+            if hasattr(e, "error_dict"):
+                err_dict = dict(e.error_dict)
+                if "tiers_config" in err_dict:
+                    err_dict["tiers_json"] = err_dict.pop("tiers_config")
+                if "spif_config" in err_dict:
+                    err_dict["spif_json"] = err_dict.pop("spif_config")
+                e = ValidationError(err_dict)
+            self._update_errors(e)
+
+        if self._validate_unique:
+            self.validate_unique()
