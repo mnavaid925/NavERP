@@ -139,7 +139,7 @@
                             </a>
                         </td>
                         <td class="text-sm font-medium text-slate-900">{{ c.payee.get_full_name|default:c.payee.email }}</td>
-                        <td class="text-sm font-bold text-red-600">-${{ c.amount|floatformat:2|slice:"1:" }}</td>
+                        <td class="text-sm font-bold text-red-600">-${{ c.amount|floatformat:2|cut:"-" }}</td>
                         <td class="text-xs text-slate-700">{{ c.reason }}</td>
                         <td><span class="badge badge-amber">{{ c.get_status_display }}</span></td>
                         <td class="text-right table-actions">
