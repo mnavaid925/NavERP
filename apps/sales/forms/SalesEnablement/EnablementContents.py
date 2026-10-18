@@ -52,7 +52,7 @@ class EnablementContentForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             self.fields["document"].queryset = Document.objects.filter(tenant=self.tenant)
-            self.fields["competitor"].queryset = CompetitorProfile.objects.filter(tenant=self.tenant, is_active=True)
+            self.fields["competitor"].queryset = CompetitorProfile.objects.filter(tenant=self.tenant, is_active=True).select_related("party")
             self.fields["pipeline_stage"].queryset = PipelineStage.objects.filter(tenant=self.tenant)
             self.fields["author"].queryset = User.objects.filter(tenant=self.tenant, is_active=True)
         else:
