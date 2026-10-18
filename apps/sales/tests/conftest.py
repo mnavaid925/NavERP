@@ -3689,3 +3689,279 @@ def coaching_scorecard_b(tenant_b, admin_b):
     return _salesenablement_scorecard(tenant_b, coach=admin_b, coachee=admin_b)
 
 
+# ==============================================================================
+# SUB-MODULE 8.10 — INCENTIVE COMPENSATION MANAGEMENT TEST CONTRACT & FIXTURES
+# ==============================================================================
+
+INCENTIVECOMPENSATION_PAGE_SIZE = 15
+
+INCENTIVECOMPENSATION_MODEL_FIELDS = {
+    "CommissionPlan": (
+        "id", "tenant", "created_at", "updated_at", "number", "name", "code",
+        "description", "plan_type", "tier_mode", "status", "payout_frequency",
+        "effective_start", "effective_end", "currency", "target_region",
+        "base_rate_pct", "tiers_config", "spif_config", "draw_amount",
+        "is_draw_recoverable", "clawback_window_days", "tax_withholding_pct",
+        "sales_quota", "owner",
+    ),
+    "CommissionEarning": (
+        "id", "tenant", "created_at", "updated_at", "number", "plan", "payee",
+        "opportunity", "sales_order", "credit_type", "split_percentage",
+        "deal_amount", "credited_volume", "attainment_pct_at_close",
+        "applied_rate_pct", "base_commission_amount", "spif_amount",
+        "gross_commission", "deal_currency", "exchange_rate", "functional_amount",
+        "status", "earned_date", "clawback_parent", "statement",
+    ),
+    "CommissionStatement": (
+        "id", "tenant", "created_at", "updated_at", "number", "statement_number",
+        "payee", "plan", "period_start", "period_end", "status",
+        "total_credited_volume", "total_base_commission", "total_accelerator_amount",
+        "total_spif_amount", "gross_earnings", "draw_advance_paid", "draw_recovered",
+        "adjustments_amount", "clawbacks_deducted", "tax_withholding_amount",
+        "net_payout", "approved_by", "approved_at", "locked_at", "payroll_run",
+        "notes",
+    ),
+    "CommissionAdjustment": (
+        "id", "tenant", "created_at", "updated_at", "number", "statement",
+        "earning", "payee", "adjustment_type", "amount", "status", "reason",
+        "dispute_comments", "requested_by", "approved_by", "effective_date",
+    ),
+}
+
+INCENTIVECOMPENSATION_CHOICES = {
+    "CommissionPlan": {
+        "plan_type": (
+            ("flat_revenue", "Flat Revenue %"),
+            ("gross_margin", "Gross Margin %"),
+            ("tiered_quota", "Tiered Quota Attainment"),
+            ("spif_only", "SPIF / Bonus Only"),
+            ("hybrid", "Hybrid (Revenue + Tier + SPIF)"),
+        ),
+        "tier_mode": (
+            ("incremental", "Incremental / Marginal Brackets"),
+            ("retroactive", "Retroactive / All-In Payout"),
+            ("not_applicable", "Not Applicable (Flat/No Tiers)"),
+        ),
+        "status": (
+            ("draft", "Draft"),
+            ("active", "Active"),
+            ("archived", "Archived"),
+        ),
+        "payout_frequency": (
+            ("monthly", "Monthly"),
+            ("quarterly", "Quarterly"),
+            ("semi_annual", "Semi-Annual"),
+            ("annual", "Annual"),
+        ),
+    },
+    "CommissionEarning": {
+        "credit_type": (
+            ("direct", "Direct Rep Credit"),
+            ("split", "Team Deal Split"),
+            ("overlay", "Overlay / Specialist Credit"),
+            ("manager_override", "Manager Rollup / Override"),
+            ("spif_bonus", "SPIF Campaign Bonus"),
+        ),
+        "status": (
+            ("pending", "Pending Calculation"),
+            ("calculated", "Calculated / Verified"),
+            ("approved", "Approved for Payout"),
+            ("paid", "Paid out"),
+            ("clawed_back", "Clawed Back"),
+        ),
+    },
+    "CommissionStatement": {
+        "status": (
+            ("draft", "Draft / Calculation"),
+            ("under_review", "Under Rep Review"),
+            ("approved", "Approved by Manager"),
+            ("locked", "Locked / Finalized"),
+            ("exported", "Exported to Payroll"),
+            ("paid", "Settled / Paid"),
+        ),
+    },
+    "CommissionAdjustment": {
+        "adjustment_type": (
+            ("clawback_cancellation", "Clawback — Deal Cancelled"),
+            ("dispute_resolution", "Dispute Resolution"),
+            ("manual_bonus", "Discretionary / Manual Bonus"),
+            ("draw_recovery", "Draw Recovery Deduction"),
+            ("split_correction", "Deal Split Correction"),
+            ("true_up_reconciliation", "Period True-up Reconciliation"),
+        ),
+        "status": (
+            ("draft", "Draft"),
+            ("submitted", "Submitted / Disputed"),
+            ("under_review", "Under Review"),
+            ("disputed", "Active Dispute"),
+            ("approved", "Approved"),
+            ("applied", "Applied to Statement"),
+            ("rejected", "Rejected"),
+        ),
+    },
+}
+
+
+def _incentivecompensation_currency(code="USD", name="US Dollar", symbol="$"):
+    from apps.accounting.models import Currency
+    currency, _ = Currency.objects.get_or_create(
+        code=code,
+        defaults={"name": name, "symbol": symbol, "is_active": True},
+    )
+    return currency
+
+
+def _incentivecompensation_plan(tenant, currency=None, owner=None, **overrides):
+    from apps.sales.models import CommissionPlan
+    if currency is None:
+        currency = _incentivecompensation_currency()
+    defaults = {
+        "tenant": tenant,
+        "name": "Standard Enterprise Quota Plan",
+        "code": f"std-plan-{tenant.id}-{timezone.now().timestamp()}",
+        "description": "Standard AE baseline compensation plan.",
+        "plan_type": "flat_revenue",
+        "tier_mode": "not_applicable",
+        "status": "active",
+        "payout_frequency": "monthly",
+        "effective_start": timezone.now().date(),
+        "currency": currency,
+        "base_rate_pct": Decimal("8.50"),
+        "tiers_config": [],
+        "spif_config": [],
+        "draw_amount": Decimal("0.00"),
+        "is_draw_recoverable": True,
+        "clawback_window_days": 90,
+        "tax_withholding_pct": Decimal("20.00"),
+        "owner": owner,
+    }
+    defaults.update(overrides)
+    return CommissionPlan.objects.create(**defaults)
+
+
+def _incentivecompensation_earning(tenant, plan=None, payee=None, currency=None, **overrides):
+    from apps.sales.models import CommissionEarning
+    if currency is None:
+        currency = _incentivecompensation_currency()
+    if plan is None:
+        plan = _incentivecompensation_plan(tenant, currency=currency)
+    defaults = {
+        "tenant": tenant,
+        "plan": plan,
+        "payee": payee,
+        "credit_type": "direct",
+        "split_percentage": Decimal("100.00"),
+        "deal_amount": Decimal("50000.00"),
+        "deal_currency": currency,
+        "credited_volume": Decimal("50000.00"),
+        "attainment_pct_at_close": Decimal("100.00"),
+        "applied_rate_pct": Decimal("8.50"),
+        "base_commission_amount": Decimal("4250.00"),
+        "spif_amount": Decimal("0.00"),
+        "gross_commission": Decimal("4250.00"),
+        "exchange_rate": Decimal("1.000000"),
+        "functional_amount": Decimal("4250.00"),
+        "status": "calculated",
+        "earned_date": timezone.now().date(),
+    }
+    defaults.update(overrides)
+    return CommissionEarning.objects.create(**defaults)
+
+
+def _incentivecompensation_statement(tenant, plan=None, payee=None, **overrides):
+    from apps.sales.models import CommissionStatement
+    if plan is None:
+        plan = _incentivecompensation_plan(tenant)
+    today = timezone.now().date()
+    p_start = today.replace(day=1)
+    defaults = {
+        "tenant": tenant,
+        "statement_number": f"STMT-{p_start.strftime('%Y%m')}-{payee.id if payee else 1}",
+        "payee": payee,
+        "plan": plan,
+        "period_start": p_start,
+        "period_end": today,
+        "status": "draft",
+        "total_credited_volume": Decimal("50000.00"),
+        "total_base_commission": Decimal("4250.00"),
+        "total_accelerator_amount": Decimal("0.00"),
+        "total_spif_amount": Decimal("0.00"),
+        "gross_earnings": Decimal("4250.00"),
+        "draw_advance_paid": Decimal("0.00"),
+        "draw_recovered": Decimal("0.00"),
+        "adjustments_amount": Decimal("0.00"),
+        "clawbacks_deducted": Decimal("0.00"),
+        "tax_withholding_amount": Decimal("850.00"),
+        "net_payout": Decimal("3400.00"),
+    }
+    defaults.update(overrides)
+    return CommissionStatement.objects.create(**defaults)
+
+
+def _incentivecompensation_adjustment(tenant, payee=None, statement=None, earning=None, **overrides):
+    from apps.sales.models import CommissionAdjustment
+    defaults = {
+        "tenant": tenant,
+        "statement": statement,
+        "earning": earning,
+        "payee": payee,
+        "adjustment_type": "manual_bonus",
+        "amount": Decimal("500.00"),
+        "status": "draft",
+        "reason": "Quarterly performance bonus adjustment.",
+        "effective_date": timezone.now().date(),
+    }
+    defaults.update(overrides)
+    return CommissionAdjustment.objects.create(**defaults)
+
+
+@pytest.fixture
+def icm_currency(db):
+    return _incentivecompensation_currency()
+
+
+@pytest.fixture
+def commission_plan_a(tenant_a, icm_currency, admin_user):
+    return _incentivecompensation_plan(tenant_a, currency=icm_currency, owner=admin_user)
+
+
+@pytest.fixture
+def commission_plan_b(tenant_b, icm_currency, admin_b):
+    return _incentivecompensation_plan(tenant_b, currency=icm_currency, owner=admin_b)
+
+
+@pytest.fixture
+def commission_earning_a(tenant_a, commission_plan_a, member_user, icm_currency):
+    return _incentivecompensation_earning(tenant_a, plan=commission_plan_a, payee=member_user, currency=icm_currency)
+
+
+@pytest.fixture
+def commission_earning_b(tenant_b, commission_plan_b, admin_b, icm_currency):
+    return _incentivecompensation_earning(tenant_b, plan=commission_plan_b, payee=admin_b, currency=icm_currency)
+
+
+@pytest.fixture
+def commission_statement_a(tenant_a, commission_plan_a, member_user):
+    return _incentivecompensation_statement(tenant_a, plan=commission_plan_a, payee=member_user)
+
+
+@pytest.fixture
+def commission_statement_b(tenant_b, commission_plan_b, admin_b):
+    return _incentivecompensation_statement(tenant_b, plan=commission_plan_b, payee=admin_b)
+
+
+@pytest.fixture
+def commission_adjustment_a(tenant_a, member_user, commission_statement_a, commission_earning_a):
+    return _incentivecompensation_adjustment(
+        tenant_a, payee=member_user, statement=commission_statement_a, earning=commission_earning_a
+    )
+
+
+@pytest.fixture
+def commission_adjustment_b(tenant_b, admin_b, commission_statement_b, commission_earning_b):
+    return _incentivecompensation_adjustment(
+        tenant_b, payee=admin_b, statement=commission_statement_b, earning=commission_earning_b
+    )
+
+
+
