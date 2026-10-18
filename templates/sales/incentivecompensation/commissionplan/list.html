@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Commission Plans — Incentive Compensation — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <span>Commission Plans</span>
+        </div>
+        <h1 class="page-title">Commission Plans</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:sales_commission_plan_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-grid"></i>
+            <span>Plan Hub</span>
+        </a>
+        <a href="{% url 'sales:commission_plan_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Create Plan</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Plans</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Plans</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.active }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Tiered Accelerators</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.tiered }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="zap"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">SPIF Campaigns</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.spif }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ q }}" placeholder="Search plan name, code, region..." class="form-input w-full">
+            </div>
+            <div>
+                <select name="plan_type" class="form-select w-full">
+                    <option value="">All Plan Types</option>
+                    {% for val, label in plan_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.plan_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="tier_mode" class="form-select w-full">
+                    <option value="">All Tier Modes</option>
+                    {% for val, label in tier_mode_choices %}
+                    <option value="{{ val }}" {% if request.GET.tier_mode == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <select name="status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Plan Name</th>
+                    <th>Type</th>
+                    <th>Base Rate</th>
+                    <th>Region</th>
+                    <th>Draw Advance</th>
+                    <th>Effective Period</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for plan in object_list %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        <a href="{% url 'sales:commission_plan_detail' plan.pk %}" class="text-primary hover:underline">
+                            {{ plan.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ plan.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ plan.code }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ plan.get_plan_type_display }}</span>
+                    </td>
+                    <td class="font-semibold text-slate-900">
+                        {{ plan.base_rate_pct }}%
+                    </td>
+                    <td class="text-sm text-slate-600">
+                        {{ plan.target_region|default:"Global" }}
+                    </td>
+                    <td class="text-sm text-slate-600">
+                        {% if plan.draw_amount > 0 %}
+                        {{ plan.currency.code }} {{ plan.draw_amount|floatformat:2 }}
+                        <span class="text-xs text-slate-400">({% if plan.is_draw_recoverable %}Recov.{% else %}Non-rec.{% endif %})</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ plan.effective_start|date:"M d, Y" }}
+                        {% if plan.effective_end %}
+                        – {{ plan.effective_end|date:"M d, Y" }}
+                        {% else %}
+                        <span class="text-slate-400">(Ongoing)</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if plan.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif plan.status == 'draft' %}
+                        <span class="badge badge-amber">Draft</span>
+                        {% else %}
+                        <span class="badge badge-slate">Archived</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'sales:commission_plan_detail' plan.pk %}" class="btn btn-outline btn-icon" title="View Details" aria-label="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:commission_plan_edit' plan.pk %}" class="btn btn-outline btn-icon" title="Edit Plan" aria-label="Edit Plan">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'sales:commission_plan_delete' plan.pk %}" class="inline" onsubmit="return confirm('Delete this commission plan?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Plan" aria-label="Delete Plan">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="p-8 text-center">
+                        <div class="empty-state">
+                            <i data-lucide="award" class="mx-auto h-12 w-12 text-slate-300"></i>
+                            <h3 class="mt-2 text-sm font-semibold text-slate-900">No commission plans found</h3>
+                            <p class="mt-1 text-sm text-slate-500">Create incentive plans with tiered accelerators, SPIFs, and draw schedules.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'sales:commission_plan_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Plan</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-xs text-slate-500">
+            Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} total)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.plan_type %}&plan_type={{ request.GET.plan_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.plan_type %}&plan_type={{ request.GET.plan_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline text-xs">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
