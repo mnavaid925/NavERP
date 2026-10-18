@@ -24,33 +24,27 @@
     </div>
 </div>
 
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
-    <div class="card p-6 flex items-center gap-4">
-        <div class="p-4 bg-blue-50 text-blue-600 rounded-lg">
-            <i data-lucide="headphones" class="w-8 h-8"></i>
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="headphones"></i>
         </div>
-        <div>
-            <div class="text-3xl font-bold text-slate-900">{{ total_evaluations }}</div>
-            <div class="text-xs font-medium text-slate-500 uppercase">Evaluations Completed</div>
-        </div>
+        <div class="stat-value">{{ total_evaluations }}</div>
+        <div class="stat-label">Evaluations Completed</div>
     </div>
-    <div class="card p-6 flex items-center gap-4">
-        <div class="p-4 bg-emerald-50 text-emerald-600 rounded-lg">
-            <i data-lucide="trending-up" class="w-8 h-8"></i>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="trending-up"></i>
         </div>
-        <div>
-            <div class="text-3xl font-bold text-emerald-700">{{ avg_overall_score }}%</div>
-            <div class="text-xs font-medium text-slate-500 uppercase">Team Avg Competency Score</div>
-        </div>
+        <div class="stat-value">{{ avg_overall_score }}%</div>
+        <div class="stat-label">Team Avg Competency Score</div>
     </div>
-    <div class="card p-6 flex items-center gap-4">
-        <div class="p-4 bg-purple-50 text-purple-600 rounded-lg">
-            <i data-lucide="mic" class="w-8 h-8"></i>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="mic"></i>
         </div>
-        <div>
-            <div class="text-3xl font-bold text-purple-700">{{ avg_talk_ratio }}%</div>
-            <div class="text-xs font-medium text-slate-500 uppercase">Avg Rep Talk Ratio (Benchmark: 40-55%)</div>
-        </div>
+        <div class="stat-value">{{ avg_talk_ratio }}%</div>
+        <div class="stat-label">Avg Rep Talk Ratio (Benchmark: 40-55%)</div>
     </div>
 </div>
 
