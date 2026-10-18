@@ -44,7 +44,13 @@ from .models import (
     TaskTemplateStep,
     SalesPlanCycle,
     ActivityGoal,
+    # 8.9 Sales Enablement
+    EnablementContent,
+    SalesPlaybook,
+    SalesCertification,
+    CoachingScorecard,
 )
+
 
 
 
@@ -667,3 +673,45 @@ class ActivityGoalAdmin(admin.ModelAdmin):
     readonly_fields = ("tenant", "created_at")
     list_select_related = ("cycle", "tenant")
     raw_id_fields = ("cycle",)
+
+
+# 8.9 Sales Enablement
+@admin.register(EnablementContent)
+class EnablementContentAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "content_type", "target_stage", "target_persona", "competitor", "is_client_facing", "is_active", "view_count", "share_count", "tenant")
+    list_filter = ("content_type", "target_stage", "target_persona", "is_client_facing", "is_active", "tenant")
+    search_fields = ("number", "title", "description", "tags")
+    readonly_fields = ("tenant", "number", "view_count", "share_count", "created_at", "updated_at")
+    list_select_related = ("competitor", "document", "pipeline_stage", "author", "tenant")
+    raw_id_fields = ("competitor", "document", "pipeline_stage", "author")
+
+
+@admin.register(SalesPlaybook)
+class SalesPlaybookAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "motion_type", "pipeline", "status", "target_audience", "owner", "version", "is_active", "tenant")
+    list_filter = ("motion_type", "status", "is_active", "tenant")
+    search_fields = ("number", "name", "summary", "target_audience")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("pipeline", "owner", "tenant")
+    raw_id_fields = ("pipeline", "owner")
+
+
+@admin.register(SalesCertification)
+class SalesCertificationAdmin(admin.ModelAdmin):
+    list_display = ("number", "curriculum_name", "category", "rep", "status", "score_percent", "passing_score_percent", "certified_at", "expires_at", "tenant")
+    list_filter = ("category", "status", "tenant")
+    search_fields = ("number", "curriculum_name", "rep__username", "rep__first_name", "rep__last_name")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("rep", "certified_by", "hrm_course", "tenant")
+    raw_id_fields = ("rep", "certified_by", "hrm_course")
+
+
+@admin.register(CoachingScorecard)
+class CoachingScorecardAdmin(admin.ModelAdmin):
+    list_display = ("number", "coachee", "coach", "overall_score", "discovery_score", "value_prop_score", "objection_handling_score", "next_steps_score", "talk_listen_ratio_percent", "call_sentiment", "review_status", "evaluated_on", "tenant")
+    list_filter = ("review_status", "call_sentiment", "tenant")
+    search_fields = ("number", "coachee__username", "coachee__first_name", "coachee__last_name", "coach__username", "transcript_summary")
+    readonly_fields = ("tenant", "number", "overall_score", "created_at", "updated_at")
+    list_select_related = ("communication_log", "activity_log", "coach", "coachee", "tenant")
+    raw_id_fields = ("communication_log", "activity_log", "coach", "coachee")
+
