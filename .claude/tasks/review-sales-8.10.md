@@ -203,7 +203,7 @@ FAIL / CONDITIONAL PASS REQUIRED (Commit after fixing Critical + Important).
 - [x] fixed — perf(sales): batch KPI aggregate queries across boards and lists **I6**: Consolidate fragmented KPI aggregate queries in boards and list views into batched `.aggregate()` calls.
 - [x] fixed — feat(sales): add composite database indexes to CommissionEarning, CommissionAdjustment, CommissionStatement **I7**: Add composite database indexes `(tenant, status)`, `(tenant, plan)`, and `(tenant, statement)` to `CommissionEarning`, `CommissionAdjustment`, and `CommissionStatement`. Run `makemigrations` and `migrate`.
 - [x] fixed — fix(sales): enforce horizontal data scoping on incentive compensation views **I8**: Enforce horizontal data scoping: non-admin users only view/edit their own payee records in list and detail views.
-- [ ] **I9**: Clean up unused `CommissionDisputeTicketForm` in `CommissionAdjustments.py`.
+- [x] fixed — refactor(sales): remove unused CommissionDisputeTicketForm **I9**: Clean up unused `CommissionDisputeTicketForm` in `CommissionAdjustments.py`.
 
 ### Minor (Clean-up & Polish)
 - [ ] **M1**: Update badge fallback rendering to use `{{ obj.get_status_display }}` instead of hardcoded text.
