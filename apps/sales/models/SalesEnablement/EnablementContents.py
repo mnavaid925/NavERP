@@ -116,6 +116,14 @@ class EnablementContent(TenantNumbered):
                 fields=["tenant", "content_type", "is_active"],
                 name="sales_ecn_type_active_idx",
             ),
+            models.Index(
+                fields=["tenant", "is_active", "-updated_at"],
+                name="sales_ecn_act_upd_idx",
+            ),
+            models.Index(
+                fields=["tenant", "target_stage"],
+                name="sales_ecn_stage_idx",
+            ),
         ]
 
     def __str__(self):
