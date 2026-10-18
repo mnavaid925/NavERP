@@ -200,8 +200,14 @@ def commission_statement_approve(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def commission_statement_lock(request, pk):
     obj = get_object_or_404(CommissionStatement.objects.filter(tenant=request.tenant), pk=pk)
+    if obj.payee == request.user and not request.user.is_superuser:
+        return HttpResponseForbidden("Payees cannot lock their own commission statements.")
+    if obj.status != "approved":
+        messages.error(request, "Only approved statements can be locked.")
+        return redirect("sales:commission_statement_detail", pk=obj.pk)
     obj.status = "locked"
     obj.locked_at = timezone.now()
     obj.save()
