@@ -90,7 +90,7 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Seed Sales 8.1, 8.2, 8.3, 8.4, 8.5, and 8.6 data idempotently."
+    help = "Seed Sales 8.1 through 8.10 data idempotently."
 
     def add_arguments(self, parser):
         parser.add_argument(
