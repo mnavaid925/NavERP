@@ -3406,3 +3406,269 @@ def tqm_quotaplan(tqm_tenant_a, tqm_quota, tqm_territory, tqm_admin_a):
         tqm_tenant_a, quota_ref=tqm_quota, territory=tqm_territory, owner=tqm_admin_a
     )
 
+
+# ==============================================================================
+# SUB-MODULE 8.9 — SALES ENABLEMENT TEST CONTRACT & FIXTURES
+# ==============================================================================
+
+SALESENABLEMENT_PAGE_SIZE = 15
+
+SALESENABLEMENT_MODEL_FIELDS = {
+    "EnablementContent": (
+        "id", "tenant", "created_at", "updated_at", "number", "title",
+        "content_type", "version", "target_stage", "target_persona", "competitor",
+        "document", "external_url", "description", "tags", "is_client_facing",
+        "is_active", "expires_on", "view_count", "share_count", "author",
+    ),
+    "SalesPlaybook": (
+        "id", "tenant", "created_at", "updated_at", "number", "name",
+        "motion_type", "version", "pipeline", "summary", "target_audience",
+        "qualification_criteria", "stage_guidance", "objection_scripts",
+        "competitive_positioning", "exit_criteria", "status", "is_active",
+        "owner",
+    ),
+    "SalesCertification": (
+        "id", "tenant", "created_at", "updated_at", "number", "curriculum_name",
+        "category", "rep", "status", "passing_score_percent", "score_percent",
+        "certified_at", "expires_at", "hrm_course", "accreditation_body",
+        "credential_id", "certificate_url", "certified_by", "notes",
+    ),
+    "CoachingScorecard": (
+        "id", "tenant", "created_at", "updated_at", "number", "evaluation_name",
+        "evaluated_on", "coach", "coachee", "communication_log", "activity_log",
+        "discovery_score", "value_prop_score", "objection_handling_score",
+        "next_steps_score", "overall_score", "talk_ratio_rep_percent",
+        "call_sentiment", "strengths", "areas_for_improvement", "action_items",
+        "review_status",
+    ),
+}
+
+SALESENABLEMENT_CHOICES = {
+    "EnablementContent": {
+        "content_type": (
+            ("battlecard", "Competitor Battlecard"),
+            ("pitch_deck", "Pitch Deck"),
+            ("case_study", "Case Study"),
+            ("product_sheet", "Product One-Pager / Spec"),
+            ("demo_script", "Demo Script"),
+            ("pricing_guide", "Pricing & Packaging Guide"),
+            ("security_whitepaper", "Security / Compliance Whitepaper"),
+            ("email_template", "Outreach Email Template"),
+        ),
+        "target_persona": (
+            ("executive", "C-Level / VP Executive"),
+            ("finance", "Finance & Procurement"),
+            ("technical", "Technical / Architect / IT"),
+            ("operations", "Operations / Line Manager"),
+            ("end_user", "End-User / Daily Practitioner"),
+            ("general", "Cross-Persona / General"),
+        ),
+    },
+    "SalesPlaybook": {
+        "motion_type": (
+            ("new_logo", "New Logo Acquisition"),
+            ("expansion", "Account Expansion & Upsell"),
+            ("renewal", "Renewal & Churn Prevention"),
+            ("competitive_displacement", "Competitive Displacement"),
+            ("channel_partner", "Channel & Partner Co-Sell"),
+        ),
+        "status": (
+            ("draft", "Draft"),
+            ("review", "In Review"),
+            ("published", "Published / Live"),
+            ("archived", "Archived"),
+        ),
+    },
+    "SalesCertification": {
+        "category": (
+            ("onboarding", "New Hire Sales Onboarding"),
+            ("product", "Product Knowledge & Architecture"),
+            ("methodology", "Sales Methodology (MEDDPICC / Command)"),
+            ("compliance", "Security & Regulatory Compliance"),
+            ("pitch", "Pitch & Demo Certification"),
+        ),
+        "status": (
+            ("enrolled", "Enrolled / In Progress"),
+            ("completed", "Certified / Passed"),
+            ("failed", "Failed / Remediation Required"),
+            ("expired", "Expired"),
+        ),
+    },
+    "CoachingScorecard": {
+        "call_sentiment": (
+            ("positive", "Positive / High Engagement"),
+            ("neutral", "Neutral / Fact Finding"),
+            ("hesitant", "Hesitant / Guarded"),
+            ("challenging", "Challenging / High Friction"),
+        ),
+        "review_status": (
+            ("draft", "Draft Evaluation"),
+            ("shared", "Shared with Coachee"),
+            ("acknowledged", "Acknowledged by Coachee"),
+        ),
+    },
+}
+
+
+def _salesenablement_competitor(tenant, name="Alpha Corp", **overrides):
+    from apps.core.models import Party
+    from apps.sales.models import CompetitorProfile
+
+    label = f"{timezone.now().timestamp():.6f}"[-6:]
+    party = Party.objects.create(
+        tenant=tenant,
+        name=f"{name} {label}",
+        kind="organization",
+    )
+    defaults = {
+        "tenant": tenant,
+        "party": party,
+        "market_position": "Tier 1 Enterprise Competitor",
+        "strengths": "Brand legacy, large salesforce",
+        "weaknesses": "Outdated UI, high implementation cost",
+        "win_strategy": "Highlight modern API and total cost of ownership",
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return CompetitorProfile.objects.create(**defaults)
+
+
+def _salesenablement_document(tenant, name="Collateral Doc", **overrides):
+    from apps.core.models import Document
+
+    label = f"{timezone.now().timestamp():.6f}"[-6:]
+    defaults = {
+        "tenant": tenant,
+        "name": f"{name} {label}",
+        "description": "Sales collateral binary stand-in",
+    }
+    defaults.update(overrides)
+    return Document.objects.create(**defaults)
+
+
+def _salesenablement_content(tenant, author=None, **overrides):
+    from apps.sales.models import EnablementContent
+
+    label = f"{timezone.now().timestamp():.6f}"[-6:]
+    defaults = {
+        "tenant": tenant,
+        "title": f"Enterprise Pitch Deck {label}",
+        "content_type": "pitch_deck",
+        "version": "1.0",
+        "target_persona": "executive",
+        "description": "Standard enterprise executive presentation.",
+        "tags": "enterprise,pitch,deck",
+        "is_client_facing": True,
+        "is_active": True,
+        "author": author,
+    }
+    defaults.update(overrides)
+    return EnablementContent.objects.create(**defaults)
+
+
+def _salesenablement_playbook(tenant, owner=None, **overrides):
+    from apps.sales.models import SalesPlaybook
+
+    label = f"{timezone.now().timestamp():.6f}"[-6:]
+    defaults = {
+        "tenant": tenant,
+        "name": f"Enterprise New Logo Playbook {label}",
+        "motion_type": "new_logo",
+        "version": "1.0",
+        "summary": "Step-by-step guidance for acquiring Fortune 500 accounts.",
+        "target_audience": "Enterprise Account Executives",
+        "qualification_criteria": "MEDDPICC: Metrics, Economic Buyer, Decision Criteria",
+        "stage_guidance": "Stage 1: Discovery. Stage 2: Tech Validation.",
+        "objection_scripts": "Pricing objection: Anchor on ROI.",
+        "competitive_positioning": "Emphasize multi-tenant security architecture.",
+        "exit_criteria": "Signed MSA and Security Addendum.",
+        "status": "published",
+        "is_active": True,
+        "owner": owner,
+    }
+    defaults.update(overrides)
+    return SalesPlaybook.objects.create(**defaults)
+
+
+def _salesenablement_certification(tenant, rep=None, certified_by=None, **overrides):
+    from apps.sales.models import SalesCertification
+
+    label = f"{timezone.now().timestamp():.6f}"[-6:]
+    defaults = {
+        "tenant": tenant,
+        "curriculum_name": f"Enterprise Sales Methodology {label}",
+        "category": "methodology",
+        "rep": rep,
+        "status": "enrolled",
+        "passing_score_percent": Decimal("80.00"),
+        "accreditation_body": "Internal Sales Academy",
+    }
+    defaults.update(overrides)
+    return SalesCertification.objects.create(**defaults)
+
+
+def _salesenablement_scorecard(tenant, coach=None, coachee=None, **overrides):
+    from apps.sales.models import CoachingScorecard
+
+    label = f"{timezone.now().timestamp():.6f}"[-6:]
+    defaults = {
+        "tenant": tenant,
+        "evaluation_name": f"Discovery Call Review {label}",
+        "evaluated_on": timezone.now().date(),
+        "coach": coach,
+        "coachee": coachee,
+        "discovery_score": 4,
+        "value_prop_score": 4,
+        "objection_handling_score": 4,
+        "next_steps_score": 4,
+        "talk_ratio_rep_percent": 45,
+        "call_sentiment": "positive",
+        "strengths": "Great active listening and pain point qualification.",
+        "areas_for_improvement": "More concrete next step timelines.",
+        "action_items": "Send follow-up recap email within 2 hours.",
+        "review_status": "draft",
+    }
+    defaults.update(overrides)
+    return CoachingScorecard.objects.create(**defaults)
+
+
+@pytest.fixture
+def enablement_content_a(tenant_a, admin_user):
+    return _salesenablement_content(tenant_a, author=admin_user)
+
+
+@pytest.fixture
+def enablement_content_b(tenant_b, admin_b):
+    return _salesenablement_content(tenant_b, author=admin_b)
+
+
+@pytest.fixture
+def sales_playbook_a(tenant_a, admin_user):
+    return _salesenablement_playbook(tenant_a, owner=admin_user)
+
+
+@pytest.fixture
+def sales_playbook_b(tenant_b, admin_b):
+    return _salesenablement_playbook(tenant_b, owner=admin_b)
+
+
+@pytest.fixture
+def sales_certification_a(tenant_a, member_user, admin_user):
+    return _salesenablement_certification(tenant_a, rep=member_user, certified_by=admin_user)
+
+
+@pytest.fixture
+def sales_certification_b(tenant_b, admin_b):
+    return _salesenablement_certification(tenant_b, rep=admin_b, certified_by=admin_b)
+
+
+@pytest.fixture
+def coaching_scorecard_a(tenant_a, admin_user, member_user):
+    return _salesenablement_scorecard(tenant_a, coach=admin_user, coachee=member_user)
+
+
+@pytest.fixture
+def coaching_scorecard_b(tenant_b, admin_b):
+    return _salesenablement_scorecard(tenant_b, coach=admin_b, coachee=admin_b)
+
+
