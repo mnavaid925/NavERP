@@ -19,9 +19,9 @@
             {% if obj.status == 'calculated' or obj.status == 'approved' %}
             <span class="badge badge-green">{{ status_display }}</span>
             {% elif obj.status == 'paid' %}
-            <span class="badge badge-info">Paid</span>
+            <span class="badge badge-info">{{ status_display }}</span>
             {% elif obj.status == 'pending' %}
-            <span class="badge badge-amber">Pending</span>
+            <span class="badge badge-amber">{{ status_display }}</span>
             {% else %}
             <span class="badge badge-red">{{ status_display }}</span>
             {% endif %}
