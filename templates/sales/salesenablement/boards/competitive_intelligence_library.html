@@ -13,7 +13,7 @@
         <h1 class="page-title">Competitive Intelligence & Battlecard Library</h1>
     </div>
     <div class="page-actions">
-        <a href="{% url 'sales:competitor_profile_list' %}" class="btn btn-outline">
+        <a href="{% url 'sales:opportunity_competitor_profile_list' %}" class="btn btn-outline">
             <i data-lucide="shield"></i>
             <span>8.2 Competitor Profiles</span>
         </a>
@@ -49,7 +49,7 @@
                 </div>
                 <div>
                     <h2 class="font-bold text-slate-900 text-base">
-                        <a href="{% url 'sales:competitor_profile_detail' item.profile.pk %}" class="hover:text-blue-600">
+                        <a href="{% url 'sales:opportunity_competitor_profile_detail' item.profile.pk %}" class="hover:text-blue-600">
                             {{ item.profile.party.name }}
                         </a>
                     </h2>
@@ -64,7 +64,7 @@
                 <div class="text-xs text-slate-500">
                     <span class="font-bold text-green-700">{{ item.wins }}W</span> - <span class="font-bold text-red-600">{{ item.losses }}L</span>
                 </div>
-                <a href="{% url 'sales:competitor_profile_detail' item.profile.pk %}" class="btn btn-outline btn-sm">
+                <a href="{% url 'sales:opportunity_competitor_profile_detail' item.profile.pk %}" class="btn btn-outline btn-sm">
                     <span>Full Profile &rarr;</span>
                 </a>
             </div>
@@ -120,7 +120,7 @@
         <i data-lucide="shield-alert" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
         <h3 class="font-medium text-slate-700 mb-1">No Competitor Profiles Found</h3>
         <p class="text-slate-500 text-sm mb-4">Competitors are defined in Module 8.2 and linked to sales enablement battlecards.</p>
-        <a href="{% url 'sales:competitor_profile_create' %}" class="btn btn-primary">
+        <a href="{% url 'sales:opportunity_competitor_profile_create' %}" class="btn btn-primary">
             <span>Create 8.2 Competitor Profile</span>
         </a>
     </div>
