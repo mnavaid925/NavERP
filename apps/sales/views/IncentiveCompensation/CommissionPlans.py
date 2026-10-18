@@ -117,7 +117,7 @@ def commission_plan_create(request):
             obj.save()
             write_audit_log(
                 request.user,
-                "sales.CommissionPlan",
+                obj,
                 "create",
                 {"pk": obj.pk, "number": obj.number, "name": obj.name},
                 tenant=request.tenant,
@@ -146,7 +146,7 @@ def commission_plan_edit(request, pk):
             obj = form.save()
             write_audit_log(
                 request.user,
-                "sales.CommissionPlan",
+                obj,
                 "update",
                 {"pk": obj.pk, "number": obj.number, "name": obj.name},
                 tenant=request.tenant,
@@ -174,7 +174,7 @@ def commission_plan_delete(request, pk):
     name = obj.name
     write_audit_log(
         request.user,
-        "sales.CommissionPlan",
+        obj,
         "delete",
         {"pk": obj.pk, "number": obj.number, "name": name},
         tenant=request.tenant,
