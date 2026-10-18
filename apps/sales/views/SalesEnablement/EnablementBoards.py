@@ -200,6 +200,7 @@ def sales_coaching_workbench(request):
     unreviewed_logs = (
         CommunicationLog.objects.filter(tenant=tenant)
         .exclude(pk__in=reviewed_log_ids)
+        .select_related("owner", "party")
         .order_by("-occurred_at")[:6]
     )
 
