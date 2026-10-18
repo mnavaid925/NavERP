@@ -17,6 +17,7 @@ from apps.sales.models.IncentiveCompensation.CommissionAdjustments import (
     STATUS_CHOICES,
     CommissionAdjustment,
 )
+from apps.sales.views._helpers import is_admin_or_manager
 
 
 @login_required
@@ -26,6 +27,9 @@ def commission_adjustment_list(request):
         .select_related("statement", "earning", "payee", "approved_by")
         .order_by("-effective_date", "-created_at")
     )
+    is_admin = is_admin_or_manager(request.user)
+    if not is_admin:
+        qs = qs.filter(payee=request.user)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -67,7 +71,10 @@ def commission_adjustment_list(request):
         "approved_count": stats_agg["approved_count"] or 0,
     }
 
-    payees = User.objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "last_name")
+    if not is_admin:
+        payees = User.objects.filter(pk=request.user.pk)
+    else:
+        payees = User.objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "last_name")
 
     context = {
         "object_list": page_obj.object_list,
@@ -83,8 +90,11 @@ def commission_adjustment_list(request):
 
 @login_required
 def commission_adjustment_detail(request, pk):
+    adj_qs = CommissionAdjustment.objects.filter(tenant=request.tenant)
+    if not is_admin_or_manager(request.user):
+        adj_qs = adj_qs.filter(payee=request.user)
     obj = get_object_or_404(
-        CommissionAdjustment.objects.filter(tenant=request.tenant).select_related(
+        adj_qs.select_related(
             "statement", "earning", "payee", "requested_by", "approved_by"
         ),
         pk=pk,
@@ -135,7 +145,10 @@ def commission_adjustment_create(request):
 
 @login_required
 def commission_adjustment_edit(request, pk):
-    obj = get_object_or_404(CommissionAdjustment.objects.filter(tenant=request.tenant), pk=pk)
+    adj_qs = CommissionAdjustment.objects.filter(tenant=request.tenant)
+    if not is_admin_or_manager(request.user):
+        adj_qs = adj_qs.filter(payee=request.user)
+    obj = get_object_or_404(adj_qs, pk=pk)
     if obj.status in ("approved", "applied") or (
         obj.statement and obj.statement.status in ("locked", "exported", "paid")
     ):
