@@ -140,6 +140,9 @@ def coaching_scorecard_edit(request, pk):
 @require_POST
 def coaching_scorecard_delete(request, pk):
     obj = get_object_or_404(CoachingScorecard.objects.filter(tenant=request.tenant), pk=pk)
+    if not is_tenant_admin(request.user) and obj.coach_id != request.user.pk:
+        messages.error(request, "Only the evaluating coach or a tenant administrator may delete this scorecard.")
+        return redirect("sales:coaching_scorecard_detail", pk=obj.pk)
     number = obj.number
     coachee_str = str(obj.coachee)
     with transaction.atomic():
