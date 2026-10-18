@@ -134,8 +134,13 @@ def commission_adjustment_create(request):
 @login_required
 def commission_adjustment_edit(request, pk):
     obj = get_object_or_404(CommissionAdjustment.objects.filter(tenant=request.tenant), pk=pk)
-    if obj.status == "applied":
-        messages.error(request, "Applied adjustments cannot be edited.")
+    if obj.status in ("approved", "applied") or (
+        obj.statement and obj.statement.status in ("locked", "exported", "paid")
+    ):
+        messages.error(
+            request,
+            f"Adjustment {obj.number} cannot be edited in '{obj.get_status_display()}' status or when attached to a locked statement.",
+        )
         return redirect("sales:commission_adjustment_detail", pk=obj.pk)
 
     if request.method == "POST":
@@ -206,8 +211,13 @@ def commission_adjustment_resolve_dispute(request, pk):
 @tenant_admin_required
 def commission_adjustment_delete(request, pk):
     obj = get_object_or_404(CommissionAdjustment.objects.filter(tenant=request.tenant), pk=pk)
-    if obj.status == "applied":
-        messages.error(request, "Cannot delete an adjustment that has been applied to a statement.")
+    if obj.status in ("approved", "applied") or (
+        obj.statement and obj.statement.status in ("locked", "exported", "paid")
+    ):
+        messages.error(
+            request,
+            f"Cannot delete an adjustment in '{obj.get_status_display()}' status or when attached to a locked statement.",
+        )
         return redirect("sales:commission_adjustment_detail", pk=obj.pk)
 
     num = obj.number
