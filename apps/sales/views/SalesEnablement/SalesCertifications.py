@@ -85,8 +85,13 @@ def sales_certification_create(request):
     if request.method == "POST":
         form = SalesCertificationForm(request.POST, tenant=request.tenant)
         if form.is_valid():
+            obj = form.save(commit=False)
+            if obj.status == "completed" and obj.rep_id == request.user.pk and not is_tenant_admin(request.user):
+                messages.error(request, "Sales representatives cannot self-certify or approve their own completed certifications.")
+                form.add_error("status", "Sales representatives cannot self-certify or approve their own completed certifications.")
+                context = {"form": form, "certification": None, "is_edit": False}
+                return render(request, "sales/salesenablement/salescertification/form.html", context)
             with transaction.atomic():
-                obj = form.save(commit=False)
                 obj.tenant = request.tenant
                 if not obj.certified_by_id and obj.status == "completed":
                     obj.certified_by = request.user
@@ -112,6 +117,12 @@ def sales_certification_edit(request, pk):
     if request.method == "POST":
         form = SalesCertificationForm(request.POST, instance=obj, tenant=request.tenant)
         if form.is_valid():
+            updated_obj = form.save(commit=False)
+            if updated_obj.status == "completed" and updated_obj.rep_id == request.user.pk and not is_tenant_admin(request.user):
+                messages.error(request, "Sales representatives cannot self-certify or approve their own completed certifications.")
+                form.add_error("status", "Sales representatives cannot self-certify or approve their own completed certifications.")
+                context = {"form": form, "certification": obj, "is_edit": True}
+                return render(request, "sales/salesenablement/salescertification/form.html", context)
             with transaction.atomic():
                 form.save()
                 write_audit_log(
@@ -127,6 +138,7 @@ def sales_certification_edit(request, pk):
 
     context = {"form": form, "certification": obj, "is_edit": True}
     return render(request, "sales/salesenablement/salescertification/form.html", context)
+
 
 
 @login_required
