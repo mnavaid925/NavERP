@@ -2,7 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -49,20 +49,22 @@ def commission_adjustment_list(request):
     if payee_id.isdecimal():
         qs = qs.filter(payee_id=int(payee_id))
 
-    total_adj = qs.aggregate(val=Sum("amount"))["val"] or 0.00
-    clawbacks_sum = qs.filter(adjustment_type="cancellation_clawback").aggregate(val=Sum("amount"))["val"] or 0.00
-    disputes_count = qs.filter(status="disputed").count()
-    approved_count = qs.filter(status__in=["approved", "applied"]).count()
+    stats_agg = qs.aggregate(
+        total_adj=Sum("amount"),
+        clawbacks_sum=Sum("amount", filter=Q(adjustment_type="cancellation_clawback")),
+        disputes_count=Count("id", filter=Q(status="disputed")),
+        approved_count=Count("id", filter=Q(status__in=["approved", "applied"])),
+    )
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
     stats = {
-        "total_adjustments": total_adj,
-        "clawbacks_total": clawbacks_sum,
-        "disputes_count": disputes_count,
-        "approved_count": approved_count,
+        "total_adjustments": stats_agg["total_adj"] or 0.00,
+        "clawbacks_total": stats_agg["clawbacks_sum"] or 0.00,
+        "disputes_count": stats_agg["disputes_count"] or 0,
+        "approved_count": stats_agg["approved_count"] or 0,
     }
 
     payees = User.objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "last_name")
