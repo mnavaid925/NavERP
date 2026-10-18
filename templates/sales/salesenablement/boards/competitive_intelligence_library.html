@@ -88,7 +88,7 @@
             <!-- Associated Enablement Battlecards -->
             <div class="pt-3 border-t border-slate-200">
                 <div class="text-xs font-semibold text-slate-600 uppercase mb-2 flex items-center justify-between">
-                    <span>Associated Battlecards & Collateral ({{ item.battlecards.count }})</span>
+                    <span>Associated Battlecards & Collateral ({{ item.battlecards|length }})</span>
                     <a href="{% url 'sales:enablement_content_create' %}?competitor={{ item.profile.pk }}" class="text-blue-600 hover:underline lowercase font-normal">
                         + add battlecard
                     </a>
