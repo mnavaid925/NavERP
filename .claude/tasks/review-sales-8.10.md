@@ -195,7 +195,7 @@ FAIL / CONDITIONAL PASS REQUIRED (Commit after fixing Critical + Important).
 - [x] fixed — fix(sales): add cross-payee validation to CommissionAdjustment and CommissionEarning clean **C12**: Add cross-payee validation in model `clean()`: ensure `CommissionAdjustment.earning.payee == self.payee` and `statement.payee == self.payee`, and `CommissionEarning.statement.payee == self.payee`.
 
 ### Important (High Priority Improvements)
-- [ ] **I1**: In `sales_commission_what_if_calc` (`CommissionBoards.py:236-244`), wrap `Decimal(...)` parsing in `try...except (InvalidOperation, TypeError, ValueError)`, validate `.is_finite()`, enforce bounds, return HTTP 400 on error, and add `.select_related('currency')` to `plan`.
+- [x] fixed — fix(sales): validate parameters and add select_related currency in what-if calc **I1**: In `sales_commission_what_if_calc` (`CommissionBoards.py:236-244`), wrap `Decimal(...)` parsing in `try...except (InvalidOperation, TypeError, ValueError)`, validate `.is_finite()`, enforce bounds, return HTTP 400 on error, and add `.select_related('currency')` to `plan`.
 - [ ] **I2**: Replace illegal `stat-icon red` (L33) with `stat-icon slate` or `stat-icon orange` in `commissionadjustment/list.html:41` and `boards/adjustment_workbench.html:32`.
 - [ ] **I3**: Add Back-to-List button and status-conditional POST-only delete button with CSRF and confirm dialog on all 4 detail templates (`commissionplan`, `commissionearning`, `commissionstatement`, `commissionadjustment`).
 - [ ] **I4**: Preserve active filter GET parameters in pagination links across `commissionplan/list.html`, `commissionearning/list.html`, and `commissionadjustment/list.html`.
