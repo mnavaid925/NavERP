@@ -17,7 +17,6 @@ class CommissionStatementForm(TenantUniqueMixin, TenantModelForm):
             "plan",
             "period_start",
             "period_end",
-            "status",
             "draw_advance_paid",
             "notes",
         ]
@@ -27,7 +26,6 @@ class CommissionStatementForm(TenantUniqueMixin, TenantModelForm):
             "plan": forms.Select(attrs={"class": "form-select"}),
             "period_start": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "period_end": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
             "draw_advance_paid": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
