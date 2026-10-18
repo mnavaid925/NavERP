@@ -197,10 +197,10 @@
         </div>
         <div class="flex gap-1">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.adjustment_type %}&adjustment_type={{ request.GET.adjustment_type }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.adjustment_type %}&adjustment_type={{ request.GET.adjustment_type }}{% endif %}{% if request.GET.payee %}&payee={{ request.GET.payee }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
             {% endif %}
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.adjustment_type %}&adjustment_type={{ request.GET.adjustment_type }}{% endif %}" class="btn btn-outline text-xs">Next</a>
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.adjustment_type %}&adjustment_type={{ request.GET.adjustment_type }}{% endif %}{% if request.GET.payee %}&payee={{ request.GET.payee }}{% endif %}" class="btn btn-outline text-xs">Next</a>
             {% endif %}
         </div>
     </div>
