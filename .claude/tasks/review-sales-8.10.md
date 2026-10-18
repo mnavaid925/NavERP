@@ -202,7 +202,7 @@ FAIL / CONDITIONAL PASS REQUIRED (Commit after fixing Critical + Important).
 - [x] fixed — perf(sales): fix template N+1 queries by adding select_related currency and deal_currency **I5**: Fix template N+1 queries by adding `.select_related('currency')` in `sales_commission_earnings_dashboard`, and `.select_related('deal_currency')` in `commission_plan_detail`.
 - [x] fixed — perf(sales): batch KPI aggregate queries across boards and lists **I6**: Consolidate fragmented KPI aggregate queries in boards and list views into batched `.aggregate()` calls.
 - [x] fixed — feat(sales): add composite database indexes to CommissionEarning, CommissionAdjustment, CommissionStatement **I7**: Add composite database indexes `(tenant, status)`, `(tenant, plan)`, and `(tenant, statement)` to `CommissionEarning`, `CommissionAdjustment`, and `CommissionStatement`. Run `makemigrations` and `migrate`.
-- [ ] **I8**: Enforce horizontal data scoping: non-admin users only view/edit their own payee records in list and detail views.
+- [x] fixed — fix(sales): enforce horizontal data scoping on incentive compensation views **I8**: Enforce horizontal data scoping: non-admin users only view/edit their own payee records in list and detail views.
 - [ ] **I9**: Clean up unused `CommissionDisputeTicketForm` in `CommissionAdjustments.py`.
 
 ### Minor (Clean-up & Polish)
