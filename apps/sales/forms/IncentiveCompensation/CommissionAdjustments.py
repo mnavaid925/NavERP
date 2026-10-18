@@ -49,16 +49,3 @@ class CommissionAdjustmentForm(TenantUniqueMixin, TenantModelForm):
         _reject_foreign(self, cleaned, ["statement", "earning", "payee"])
         return cleaned
 
-
-class CommissionDisputeTicketForm(forms.Form):
-    earning_id = forms.IntegerField(widget=forms.HiddenInput(), required=False)
-    disputed_amount = forms.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        widget=forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
-        label="Disputed Amount",
-    )
-    dispute_reason = forms.CharField(
-        widget=forms.Textarea(attrs={"class": "form-textarea", "rows": 4, "placeholder": "Explain the discrepancy in attainment, deal split, or rate calculation..."}),
-        label="Dispute Justification",
-    )
