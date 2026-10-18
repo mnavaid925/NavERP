@@ -2,7 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -47,20 +47,22 @@ def commission_plan_list(request):
     if status:
         qs = qs.filter(status=status)
 
-    total_count = qs.count()
-    active_count = qs.filter(status="active").count()
-    tiered_count = qs.filter(plan_type__in=["tiered_quota", "hybrid"]).count()
-    spif_count = qs.filter(plan_type__in=["spif_only", "hybrid"]).count()
+    stats_agg = qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+        tiered=Count("id", filter=Q(plan_type__in=["tiered_quota", "hybrid"])),
+        spif=Count("id", filter=Q(plan_type__in=["spif_only", "hybrid"])),
+    )
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
     stats = {
-        "total": total_count,
-        "active": active_count,
-        "tiered": tiered_count,
-        "spif": spif_count,
+        "total": stats_agg["total"] or 0,
+        "active": stats_agg["active"] or 0,
+        "tiered": stats_agg["tiered"] or 0,
+        "spif": stats_agg["spif"] or 0,
     }
 
     context = {
