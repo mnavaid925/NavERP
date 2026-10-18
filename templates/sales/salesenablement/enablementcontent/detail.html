@@ -127,7 +127,7 @@
                         <p class="text-sm text-slate-600 mt-1">{{ content.competitor.market_positioning }}</p>
                         {% endif %}
                     </div>
-                    <a href="{% url 'sales:competitor_profile_detail' content.competitor.pk %}" class="btn btn-outline btn-sm">
+                    <a href="{% url 'sales:opportunity_competitor_profile_detail' content.competitor.pk %}" class="btn btn-outline btn-sm">
                         <i data-lucide="shield-alert"></i>
                         <span>View Competitor Profile</span>
                     </a>
