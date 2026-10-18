@@ -18,3 +18,18 @@ def is_tenant_admin(user):
     neither attribute, and this must answer False rather than raise.
     """
     return bool(getattr(user, "is_superuser", False) or getattr(user, "is_tenant_admin", False))
+
+
+def is_admin_or_manager(user):
+    """Check if user is superuser, tenant admin, or has manager/admin role."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if bool(getattr(user, "is_superuser", False) or getattr(user, "is_tenant_admin", False)):
+        return True
+    role = getattr(user, "role", None)
+    if role:
+        role_name = getattr(role, "name", str(role)).lower()
+        if "admin" in role_name or "manager" in role_name:
+            return True
+    return False
+
