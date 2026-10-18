@@ -8,6 +8,462 @@
 > Do not mass-tick the backlog.
 ---
 
+### 8.10 — Incentive Compensation Management (app `sales`, extends `crm.Opportunity` + `crm.OpportunitySplit` + `crm.SalesQuota` + `sales.QuotaPlan` + `scm.SalesOrder` + `accounting.Currency` + `accounting.ExchangeRate` + `accounting.PayrollRun`) — plan from `research-sales-8.10.md` (2026-10-18)
+
+> **This plan EXTENDS an existing app.** `apps/sales/` is live with 8.1–8.9. **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.** Migration is **incremental**: the leaf today is `0018_coachingscorecard_sales_csc_tenant_eval_idx_and_more.py`, so **8.10 claims `0019`**.
+> Plan written from `.claude/tasks/research-sales-8.10.md` (Phase 1, 514 lines). **Every load-bearing claim below was re-verified by grep and runtime inspection at plan time, not taken from research prose.**
+
+**THE OWNERSHIP RULINGS — read this before writing a single line of 8.10 (L29 / L36 / L37).**
+
+1. **Opportunities & Closed Deals**: **REUSE `crm.Opportunity` (CRM 1.2, `OPP-`)**. 8.10 attaches commission earnings directly to closed-won opportunities. Declaring a second opportunity or deal table violates L36/L37.
+2. **Sales Team Credit Splits**: **REUSE `crm.OpportunitySplit` (CRM 1.2)**. 8.10 consumes existing team credit split percentages (`split_type="revenue"|"overlay"`, `percentage`, `user`). Declaring a duplicate deal split model is strictly forbidden.
+3. **Sales Quotas & Targets**: **REUSE `crm.SalesQuota` (CRM 1.2, `QTA-`) & `sales.QuotaPlan` (Sales 8.7, `QPA-`)**. 8.10 evaluates rep attainment against these established quotas. Declaring a duplicate quota or territory model is strictly forbidden.
+4. **Sales Orders & Billed Execution**: **REUSE `scm.SalesOrder` (SCM 4.5, `SO-`)**. 8.10 supports order- and billing-triggered commissions by referencing SCM sales orders and tracking cancellation clawbacks from order amendments (`sales.OrderAmendment`).
+5. **Multi-Currency & Daily Spot Rates**: **REUSE `accounting.Currency` & `accounting.ExchangeRate` (Accounting 2.2)**. Plan targets and transaction earnings convert foreign amounts to functional currency via tenant daily spot rates. Declaring a private currency or FX table violates L36/L37.
+6. **Payroll Posting & Disbursement**: **INTEGRATE INTO `accounting.PayrollRun` (Accounting 2.8, `PRUN-`)**. Approved and locked commission statements link directly to payroll runs for general ledger accrual. 8.10 does NOT duplicate GL journal posting or tax engine logic.
+7. **Payees, Managers & Reviewers**: **REUSE `accounts.User` (`settings.AUTH_USER_MODEL`)**. Sales reps, managers, plan administrators, and dispute reviewers are `accounts.User` rows.
+
+- [ ] **There is NO duplicate opportunity table, NO duplicate credit split table, NO duplicate quota model, NO duplicate order model, NO private currency/FX table, and NO duplicate GL payroll posting engine in 8.10.**
+- [ ] Every 8.10 FK to sibling or external modules is declared **by string** (`'crm.Opportunity'`, `'crm.OpportunitySplit'`, `'crm.SalesQuota'`, `'sales.QuotaPlan'`, `'scm.SalesOrder'`, `'accounting.Currency'`, `'accounting.ExchangeRate'`, `'accounting.PayrollRun'`), never by module-scope class imports where cycles are possible.
+
+**Repo state re-verified by the todo agent at plan time (L28 — the grep is the truth):**
+
+| Claim | Verification | Result |
+|---|---|---|
+| `TenantNumbered` base | `apps\sales\models\_base.py` | `TenantNumbered` provides `tenant` FK + `number` CharField (`editable=False`) + `NUMBER_PREFIX` + timestamps. **Base for all 4 models.** |
+| CRM 1.2 owns `Opportunity` & `Split` | `apps\crm\models\SalesForceAutomation\Opportunities.py` | `Opportunity` (`OPP-`) and `OpportunitySplit` (`split_type`, `percentage`, `user`). **Confirmed CRM 1.2's.** |
+| CRM 1.2 owns `SalesQuota` | `apps\crm\models\SalesForceAutomation\SalesQuotas.py` | `SalesQuota` (`QTA-`) (`period_type`, `period_year`, `period_number`, `target_amount`, `owner`). **Confirmed CRM 1.2's.** |
+| 8.7 owns `QuotaPlan` | `apps\sales\models\TerritoryQuotaManagement\QuotaPlans.py` | `QuotaPlan` (`QPA-`) links quotas to forecast periods. **Confirmed 8.7's.** |
+| SCM 4.5 owns `SalesOrder` | `apps\scm\models\OrderManagement\SalesOrders.py` | `SalesOrder` (`SO-`). **Confirmed SCM 4.5's.** |
+| Accounting owns `Currency` & `ExchangeRate` | `apps\accounting\models\GeneralLedger\` | `Currency` (global ISO 4217) & `ExchangeRate` (`rate_date`, `rate`, `source`). **Confirmed Accounting 2.2's.** |
+| Accounting owns `PayrollRun` | `apps\accounting\models\PayrollIntegration\PayrollRuns.py` | `PayrollRun` (`PRUN-`) (`gross_wages`, `employee_tax`, `net_pay`, `status`). **Confirmed Accounting 2.8's.** |
+| Next migration | `Get-ChildItem apps\sales\migrations` | Leaf is `0018_coachingscorecard_sales_csc_tenant_eval_idx_and_more.py`. **8.10 claims `0019`.** |
+| Prefix collisions | sweep across all `apps/*/models/**/*.py` | `CMPL`, `CER`, `CST`, `CADJ` — **zero hits, all four free.** |
+| `related_name` collisions | sweep across all `apps/*/models/**/*.py` | `sales_commission_plans`, `commission_earnings`, `sales_commission_earnings`, `commission_statements`, `approved_commission_statements`, `commission_adjustments`, `reviewed_commission_adjustments`, `clawback_children` — **zero hits, all free.** |
+| `sales:` URL prefixes in use | `apps/sales/urls/` sweep | `commissions/` prefix is **100% free under `sales:`.** |
+| 8.10 packages absent | `Test-Path` checks | `apps/sales/{models,forms,views,urls}/IncentiveCompensation/` all **False**. `templates/sales/incentivecompensation/` **False**. Nothing to overwrite. |
+| Badge classes | CSS grep | Only `.badge-amber .badge-green .badge-info .badge-muted .badge-red .badge-slate`. Semantic `-success/-danger` do **not** exist (L33). |
+
+**Scope: Exactly 4 models + 5 derived read-only boards. Prefixes `CMPL` / `CER` / `CST` / `CADJ`.**
+
+### 8.10-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+
+- [ ] **NO second opportunity or deal master** — `crm.Opportunity` (CRM 1.2) owns closed deals; 8.10 attaches commission records and reads deal values.
+- [ ] **NO second sales credit split table** — `crm.OpportunitySplit` (CRM 1.2) owns rep revenue and overlay split percentages.
+- [ ] **NO second quota or territory master** — `crm.SalesQuota` (CRM 1.2) and `sales.QuotaPlan` (Sales 8.7) own quota targets and derivations.
+- [ ] **NO second sales order or amendment master** — `scm.SalesOrder` (SCM 4.5) and `sales.OrderAmendment` (Sales 8.6) own orders, items, and contract changes.
+- [ ] **NO private currency or exchange rate table** — `accounting.Currency` and `accounting.ExchangeRate` (Accounting 2.2) own ISO codes and daily spot rates.
+- [ ] **NO duplicate GL posting or payroll run engine** — `accounting.PayrollRun` (Accounting 2.8) owns payroll accruals and general ledger journal posting; 8.10 statements link directly into it.
+- [ ] **NO direct banking clearing or ACH/wire disbursement** — Automated bank payouts belong in treasury integrations (Accounting Module 2).
+- [ ] **NO external payroll webhook listeners** — Bi-directional API sync to external payroll providers (ADP, Workday, Gusto) belongs in Module 20; 8.10 generates pre-formatted CSV exports.
+- [ ] **NO AI commission gaming anomaly detector** — Anomaly detection is deferred to Sales Analytics & Intelligence (8.12).
+- [ ] **NO ASC 606 commission amortization schedules** — Expense capitalization is handled via 8.6 `RevenueSchedule` and Accounting 2.10.
+- [ ] **The 5 boards get NO table, NO seeder row, NO admin registration** — Boards are pure query projections over existing models.
+
+### 8.10-1 — Model (1) `CommissionPlan` — `CMPL` — `CommissionPlans.py`
+
+Serves **Bullet 1** (Commission Plan Design) and **Bullet 4** (Multi-Currency & Global Plans).
+- [ ] `class CommissionPlan(TenantNumbered)`, `NUMBER_PREFIX = "CMPL"`.
+- [ ] `PLAN_TYPE_CHOICES = [("revenue_percentage", "Flat Revenue Percentage"), ("quota_tiered", "Quota-Attainment Tiered Accelerators"), ("gross_margin", "Gross Margin Percentage"), ("spif_only", "Targeted SPIF Bonus Program"), ("hybrid", "Hybrid (Base Commission + Quota Accelerators + SPIF)")]`.
+- [ ] `FREQUENCY_CHOICES = [("monthly", "Monthly"), ("quarterly", "Quarterly"), ("semi_annual", "Semi-Annual"), ("annual", "Annual")]`.
+- [ ] `TIER_MODE_CHOICES = [("incremental", "Incremental / Marginal (Rate applies solely to revenue within tier)"), ("retroactive", "Retroactive / All-In (Rate applies to all revenue once threshold is reached)")]`.
+- [ ] `STATUS_CHOICES = [("draft", "Draft"), ("active", "Active"), ("archived", "Archived")]`.
+- [ ] `DRAW_TYPE_CHOICES = [("none", "No Draw"), ("recoverable", "Recoverable Draw (Advanced loan against future commissions)"), ("non_recoverable", "Non-Recoverable Draw (Guaranteed minimum income floor)")]`.
+- [ ] `CLAWBACK_POLICY_CHOICES = [("full", "100% Cliff Clawback"), ("pro_rated", "Pro-Rated based on unfulfilled duration"), ("none", "No Clawback")]`.
+- [ ] Fields:
+  * `name`: `CharField(max_length=160)`
+  * `code`: `CharField(max_length=40, db_index=True)`
+  * `description`: `TextField(blank=True)`
+  * `plan_type`: `CharField(max_length=25, choices=PLAN_TYPE_CHOICES, default="quota_tiered")`
+  * `calculation_frequency`: `CharField(max_length=15, choices=FREQUENCY_CHOICES, default="monthly")`
+  * `tier_mode`: `CharField(max_length=15, choices=TIER_MODE_CHOICES, default="incremental")`
+  * `currency`: `ForeignKey("accounting.Currency", on_delete=models.PROTECT, related_name="sales_commission_plans")` (global ISO 4217 currency master)
+  * `target_role`: `CharField(max_length=60, blank=True)` (e.g. "Account Executive", "SDR", "Enterprise AE")
+  * `effective_start_date`: `DateField(default=timezone.localdate)`
+  * `effective_end_date`: `DateField(null=True, blank=True)`
+  * `status`: `CharField(max_length=15, choices=STATUS_CHOICES, default="draft")`
+  * `is_global`: `BooleanField(default=False)`
+  * `regional_scope`: `CharField(max_length=60, blank=True)` (e.g. "North America", "EMEA", "APAC", "Global")
+  * `local_tax_withholding_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0), MaxValueValidator(100)])`
+  * `tiers_config`: `JSONField(default=list, blank=True)` (bracket array: `[{"tier": 1, "min_attainment_pct": 0, "max_attainment_pct": 80, "rate_pct": 5.0, "accelerator_factor": 1.0}, ...]`)
+  * `spif_config`: `JSONField(default=dict, blank=True)` (tactical bonus rules: `{"title": "Q4 Cloud Push", "bonus_type": "flat", "bonus_amount": 500.00, "multiplier": 1.25, ...}`)
+  * `draw_type`: `CharField(max_length=20, choices=DRAW_TYPE_CHOICES, default="none")`
+  * `draw_amount`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(Decimal("0.00"))])`
+  * `clawback_window_days`: `PositiveIntegerField(default=90, help_text="Number of days post-closing during which cancellation or refund triggers clawback")`
+  * `clawback_policy`: `CharField(max_length=20, choices=CLAWBACK_POLICY_CHOICES, default="full")`
+  * `notes`: `TextField(blank=True)`
+- [ ] Excluded from form: `tenant`, `number`.
+- [ ] Meta: `ordering = ["name"]`, `UniqueConstraint(["tenant", "number"], name="sales_cmpl_tenant_number_uniq")`, `UniqueConstraint(["tenant", "code"], name="sales_cmpl_tenant_code_uniq")`, indexes: `(tenant, status)`, `(tenant, plan_type)`, `(tenant, effective_start_date)` (all ≤ 30 chars).
+- [ ] `clean()` enforces:
+  * G1: If `effective_end_date` is set, `effective_end_date >= effective_start_date`.
+  * G2: `0.00 <= local_tax_withholding_pct <= 100.00`.
+  * G3: If `draw_type == "none"`, `draw_amount` must be `Decimal("0.00")`; if `draw_amount > 0`, `draw_type` must be `"recoverable"` or `"non_recoverable"`.
+  * G4: `tiers_config` validation: must be a list. When non-empty, each tier entry must contain `tier` (int), `min_attainment_pct` (>= 0), `max_attainment_pct` (number or None), `rate_pct` (>= 0), and `accelerator_factor` (>= 1.0). Tiers must have monotonic non-overlapping min/max bounds.
+  * G5: `spif_config` validation: must be a dict. If non-empty, validate `bonus_type` is valid and `bonus_amount >= 0` if specified.
+
+### 8.10-2 — Model (2) `CommissionEarning` — `CER` — `CommissionEarnings.py`
+
+Serves **Bullet 1** (Commission Plan Design) and **Bullet 2** (Real-Time Earnings Tracking).
+- [ ] `class CommissionEarning(TenantNumbered)`, `NUMBER_PREFIX = "CER"`.
+- [ ] `EARNING_TYPE_CHOICES = [("deal_won", "Closed-Won Opportunity Commission"), ("order_billed", "Sales Order Execution / Billing"), ("spif_bonus", "SPIF Incentive Bonus"), ("accelerator_bonus", "Tiered Quota Accelerator Payout"), ("manual_credit", "Manager Approved Override Credit"), ("draw_advance", "Draw Advance Issued"), ("clawback_deduction", "Clawback / Cancellation Chargeback")]`.
+- [ ] `STATUS_CHOICES = [("accrued", "Accrued / Calculated"), ("approved", "Manager Approved"), ("locked", "Locked in Statement"), ("paid", "Disbursed / Paid"), ("clawed_back", "Reversed / Clawed Back")]`.
+- [ ] Fields:
+  * `plan`: `ForeignKey("CommissionPlan", on_delete=models.PROTECT, related_name="earnings")`
+  * `payee`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="sales_commission_earnings")`
+  * `opportunity`: `ForeignKey("crm.Opportunity", on_delete=models.SET_NULL, null=True, blank=True, related_name="commission_earnings")` (CRM 1.2 deal)
+  * `opportunity_split`: `ForeignKey("crm.OpportunitySplit", on_delete=models.SET_NULL, null=True, blank=True, related_name="commission_earnings")` (CRM 1.2 credit split)
+  * `sales_order`: `ForeignKey("scm.SalesOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_commission_earnings")` (SCM 4.5 order)
+  * `sales_quota`: `ForeignKey("crm.SalesQuota", on_delete=models.SET_NULL, null=True, blank=True, related_name="commission_earnings")` (CRM 1.2 quota evaluated)
+  * `statement`: `ForeignKey("CommissionStatement", on_delete=models.SET_NULL, null=True, blank=True, related_name="line_items")` (period statement batch rollup)
+  * `earning_type`: `CharField(max_length=25, choices=EARNING_TYPE_CHOICES, default="deal_won")`
+  * `deal_amount`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` (originating gross deal/order amount)
+  * `split_percentage`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("100.00"), validators=[MinValueValidator(Decimal("0.01")), MaxValueValidator(100)])`
+  * `credited_amount`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"), help_text="deal_amount * (split_percentage / 100)")`
+  * `attainment_pct_at_close`: `DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"), help_text="Cumulative quota attainment at close")`
+  * `commission_rate_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))` (base plan commission rate applied)
+  * `accelerator_rate_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))` (incremental tier accelerator rate applied)
+  * `spif_amount`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` (tactical SPIF bonus addition)
+  * `gross_commission`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` (calculated payout in transaction currency; signed, negative for clawback)
+  * `currency`: `ForeignKey("accounting.Currency", on_delete=models.PROTECT, related_name="commission_earnings")` (transaction currency)
+  * `exchange_rate`: `DecimalField(max_digits=18, decimal_places=8, default=Decimal("1.00000000"))` (spot FX to functional currency)
+  * `functional_currency_amount`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` (gross commission in functional currency)
+  * `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="accrued")`
+  * `event_date`: `DateField(default=timezone.localdate)` (deal close or order booking date)
+  * `clawback_parent`: `ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="clawback_children", help_text="Original historical earning reversed by this clawback")`
+  * `calculation_notes`: `TextField(blank=True, help_text="Detailed mathematical audit trace")`
+- [ ] Excluded from form: `tenant`, `number`.
+- [ ] Meta: `ordering = ["-event_date", "-created_at"]`, `UniqueConstraint(["tenant", "number"], name="sales_cer_tenant_number_uniq")`, indexes: `(tenant, payee)`, `(tenant, plan)`, `(tenant, opportunity)`, `(tenant, statement)`, `(tenant, status)`, `(tenant, event_date)` (all ≤ 30 chars).
+- [ ] `clean()` enforces:
+  * G6: Cross-tenant isolation check: `plan.tenant_id == tenant_id`, and if set: `opportunity.tenant_id == tenant_id`, `sales_order.tenant_id == tenant_id`, `sales_quota.tenant_id == tenant_id`, `statement.tenant_id == tenant_id`.
+  * G7: Split percentage validation: `0 < split_percentage <= 100.00`.
+  * G8: Deal crediting arithmetic integrity: `credited_amount == round(deal_amount * (split_percentage / 100), 2)`.
+  * G9: Multi-currency conversion integrity: `exchange_rate > 0`, `functional_currency_amount == round(gross_commission * exchange_rate, 2)`.
+  * G10: Clawback integrity: if `earning_type == "clawback_deduction"`: `gross_commission <= 0` and `clawback_parent` must be specified. `clawback_parent` must belong to same tenant, same payee, and cannot be a clawback deduction itself (`clawback_parent.earning_type != "clawback_deduction"`).
+  * G11: Immutability check: if `status in ("locked", "paid")`, financial amounts (`deal_amount`, `split_percentage`, `gross_commission`, `currency`, `exchange_rate`) cannot be edited unless transitioning status.
+
+### 8.10-3 — Model (3) `CommissionStatement` — `CST` — `CommissionStatements.py`
+
+Serves **Bullet 2** (Real-Time Earnings Tracking), **Bullet 4** (Multi-Currency & Global Plans), and **Bullet 5** (Payout Processing & Integration).
+- [ ] `class CommissionStatement(TenantNumbered)`, `NUMBER_PREFIX = "CST"`.
+- [ ] `STATUS_CHOICES = [("draft", "Draft"), ("submitted", "Submitted for Approval"), ("under_review", "Under Review"), ("approved", "Manager Approved"), ("locked", "Locked in Statement Batch"), ("exported", "Exported to Payroll Feed"), ("paid", "Disbursed / Paid")]`.
+- [ ] Fields:
+  * `payee`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="commission_statements")`
+  * `plan`: `ForeignKey("CommissionPlan", on_delete=models.PROTECT, related_name="statements")`
+  * `period_name`: `CharField(max_length=60)` (e.g. "October 2026", "2026-Q3", "2026-M10")
+  * `period_start`: `DateField()`
+  * `period_end`: `DateField()`
+  * `currency`: `ForeignKey("accounting.Currency", on_delete=models.PROTECT, related_name="commission_statements")` (statement functional payout currency)
+  * `total_deal_revenue`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` (sum of credited deal volume in period)
+  * `quota_target`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` (period quota target)
+  * `attainment_percentage`: `DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"))` (cumulative attainment % for period)
+  * `base_commission_total`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  * `accelerator_bonus_total`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  * `spif_total`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  * `draw_advanced`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` (draw advance issued for this period)
+  * `draw_recovered`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` (prior recoverable draw deducted from this payout)
+  * `clawbacks_total`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` (sum of cancellation chargebacks deducted in period)
+  * `adjustments_total`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` (net manual adjustments and dispute credits)
+  * `gross_payout`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"), help_text="base + accelerator + spif + adjustments")`
+  * `tax_withholding_estimated`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  * `net_payout`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"), help_text="gross_payout - draw_recovered - clawbacks - tax_withholding")`
+  * `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft")`
+  * `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_commission_statements")`
+  * `approved_at`: `DateTimeField(null=True, blank=True)`
+  * `payroll_run`: `ForeignKey("accounting.PayrollRun", on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_commission_statements", help_text="Accrual link into Accounting 2.8 PayrollRun")`
+  * `payment_reference`: `CharField(max_length=80, blank=True, help_text="External payroll batch ID or disbursement ref")`
+  * `paid_at`: `DateField(null=True, blank=True)`
+  * `notes`: `TextField(blank=True)`
+- [ ] Excluded from form: `tenant`, `number`, `approved_by`, `approved_at`.
+- [ ] Meta: `ordering = ["-period_end", "payee__email"]`, `UniqueConstraint(["tenant", "number"], name="sales_cst_tenant_number_uniq")`, `UniqueConstraint(["tenant", "payee", "plan", "period_start", "period_end"], name="sales_cst_period_payee_uniq")`, indexes: `(tenant, payee)`, `(tenant, status)`, `(tenant, period_start, period_end)`, `(tenant, payroll_run)` (all ≤ 30 chars).
+- [ ] `clean()` enforces:
+  * G12: Period date validation: `period_end >= period_start`.
+  * G13: Gross-to-Net waterfall arithmetic integrity:
+    `gross_payout == round(base_commission_total + accelerator_bonus_total + spif_total + adjustments_total, 2)`
+    `net_payout == round(gross_payout - draw_recovered - clawbacks_total - tax_withholding_estimated, 2)`.
+  * G14: Workflow rules: `status == "approved"` requires `approved_by` and `approved_at`. If `status in ("locked", "exported", "paid")`, financial amounts cannot be altered. `payroll_run`, if set, must belong to same tenant.
+
+### 8.10-4 — Model (4) `CommissionAdjustment` — `CADJ` — `CommissionAdjustments.py`
+
+Serves **Bullet 3** (Clawbacks & Adjustments) and **Bullet 5** (Manual Override Approvals).
+- [ ] `class CommissionAdjustment(TenantNumbered)`, `NUMBER_PREFIX = "CADJ"`.
+- [ ] `ADJUSTMENT_TYPE_CHOICES = [("dispute", "Rep-Raised Commission Dispute"), ("cancellation_clawback", "Customer Cancellation / Refund Clawback"), ("churn_chargeback", "Premature Churn Chargeback"), ("quota_true_up", "End-of-Period Quota / Tier True-Up"), ("draw_reconciliation", "Recoverable Draw Settlement True-Up"), ("manual_override", "Manager Goodwill / Discretionary Override"), ("split_correction", "Retroactive Split Percentage Correction")]`.
+- [ ] `REASON_CHOICES = [("deal_discrepancy", "Deal Value Discrepancy"), ("split_error", "Split Allocation Error"), ("cancelled_contract", "Cancelled Contract / Refund"), ("late_billing", "Late Billing Milestone"), ("rate_mismatch", "Commission Rate Tier Mismatch"), ("goodwill_exception", "Manager Discretionary Goodwill"), ("other", "Other Justification")]`.
+- [ ] `STATUS_CHOICES = [("draft", "Draft"), ("submitted", "Submitted / Pending Review"), ("under_review", "Under Review"), ("approved", "Approved"), ("rejected", "Rejected"), ("applied", "Applied to Statement")]`.
+- [ ] Fields:
+  * `statement`: `ForeignKey("CommissionStatement", on_delete=models.CASCADE, related_name="adjustments")` (statement this adjustment affects)
+  * `earning`: `ForeignKey("CommissionEarning", on_delete=models.SET_NULL, null=True, blank=True, related_name="adjustments")` (contested or reversed line item)
+  * `payee`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="commission_adjustments")`
+  * `adjustment_type`: `CharField(max_length=30, choices=ADJUSTMENT_TYPE_CHOICES, default="dispute")`
+  * `amount`: `DecimalField(max_digits=14, decimal_places=2, help_text="Signed decimal: positive for credit addition, negative for clawback deduction")`
+  * `currency`: `ForeignKey("accounting.Currency", on_delete=models.PROTECT, related_name="commission_adjustments")`
+  * `reason_category`: `CharField(max_length=40, choices=REASON_CHOICES, default="deal_discrepancy")`
+  * `description`: `TextField(help_text="Detailed justification or rep dispute inquiry notes")`
+  * `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft")`
+  * `reviewed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="reviewed_commission_adjustments")`
+  * `reviewed_at`: `DateTimeField(null=True, blank=True)`
+  * `resolution_notes`: `TextField(blank=True, help_text="Manager or RevOps rationale for approving/rejecting")`
+  * `sales_order`: `ForeignKey("scm.SalesOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="commission_adjustments", help_text="Referenced order for cancellations")`
+  * `opportunity`: `ForeignKey("crm.Opportunity", on_delete=models.SET_NULL, null=True, blank=True, related_name="commission_adjustments", help_text="Referenced deal")`
+- [ ] Excluded from form: `tenant`, `number`, `status`, `reviewed_by`, `reviewed_at`, `resolution_notes`.
+- [ ] Meta: `ordering = ["-created_at"]`, `UniqueConstraint(["tenant", "number"], name="sales_cadj_tenant_number_uniq")`, indexes: `(tenant, statement)`, `(tenant, payee)`, `(tenant, status)`, `(tenant, adjustment_type)` (all ≤ 30 chars).
+- [ ] `clean()` enforces:
+  * G15: Same-tenant validation: `statement.tenant_id == tenant_id`, and if set: `earning.tenant_id == tenant_id`, `sales_order.tenant_id == tenant_id`, `opportunity.tenant_id == tenant_id`.
+  * G16: Amount direction and resolution checks: `cancellation_clawback` and `churn_chargeback` require `amount < 0`. If `status in ("approved", "applied")`, `reviewed_by` and `reviewed_at` must be recorded. Adjustments cannot be added or changed if parent `statement.status in ("locked", "exported", "paid")`.
+
+### 8.10-5 — Derived Read-Only Boards (`CommissionBoards.py`)
+
+No tables, no migrations, no seeder rows. Pure query projections over existing models.
+- [ ] **Board 1: `sales_commission_plan_hub`** (Commission Plan Design)  
+  Serves **Bullet 1**. Plan designer catalog displaying active, draft, and archived commission plans. Surfaces side-by-side tier accelerator bracket structures, SPIF bonus campaigns, participant headcount, draw terms, and clawback policy terms.
+- [ ] **Board 2: `sales_commission_earnings_dashboard`** (Real-Time Earnings Tracking)  
+  Serves **Bullet 2**. Interactive rep and manager earnings portal featuring:
+  * Live quota attainment speedometer (attainment %, tier jump threshold, pacing).
+  * Deal-by-deal crediting ledger with team split share and mathematical calculation trace.
+  * SPIF bonus tallies and draw balance reconciliation tracker.
+  * **Interactive "What-If" Deal Calculator**: rep-facing simulation tool enabling reps to model hypothetical deal values or pull open pipeline opportunities (`crm.Opportunity`), adjust split percentage, and visualize projected commission earnings, accelerator tier jumps, and gross payout prior to closing.
+- [ ] **Board 3: `sales_commission_adjustment_workbench`** (Clawbacks & Adjustments)  
+  Serves **Bullet 3**. Operational triage workbench managing:
+  * Cancellation chargebacks from cancelled sales orders (`scm.SalesOrder`) and deal amendments (`sales.OrderAmendment`).
+  * Rep dispute resolution ticketing workflow (`draft` -> `submitted` -> `under_review` -> `approved` / `rejected` -> `applied`).
+  * End-of-period quota true-ups and draw reconciliation settlement queues with audit logs.
+- [ ] **Board 4: `sales_global_compensation_matrix`** (Multi-Currency & Global Plans)  
+  Serves **Bullet 4**. Multi-national compensation matrix displaying regional plan variations (North America, EMEA, APAC, Global), daily spot FX conversion audit trails (comparing transaction currency vs base functional currency via `accounting.ExchangeRate`), and regional statutory tax withholding estimates.
+- [ ] **Board 5: `sales_commission_payout_processing`** (Payout Processing & Integration)  
+  Serves **Bullet 5**. Pay-period statement generation workbench supporting:
+  * Automated batch generation of monthly/quarterly rep statements.
+  * Managerial approval and two-step cryptographic statement locking.
+  * 1-click posting integration linking locked commission statement batches to `accounting.PayrollRun` (`PRUN-`).
+  * External payroll CSV export feeds pre-formatted for standard payroll providers (ADP Workforce Now, Workday, Gusto, Paychex).
+
+### 8.10-6 — Mathematical & Calculation Engine Specifications
+
+- [ ] **Incremental (Marginal) Accelerator Math**:
+  $$\text{Commission} = \sum_{i} \max\left(0, \min(R_{curr}, U_i) - \max(R_{prev}, L_i)\right) \times r_i$$
+  Partition deal volume across tier brackets $[L_i, U_i]$ defined by quota attainment bounds; only the volume inside each tier earns that specific rate.
+- [ ] **Retroactive (All-In) Accelerator Math**:
+  Attainment $A = \frac{R_{curr}}{Q} \times 100\%$. Find matching tier bracket rate $r_k$:
+  $$\text{Current Deal Payout} = (R_{curr} \times r_k) - \text{Cumulative Previously Paid Base Commission}$$
+- [ ] **Opportunity Split Crediting**:
+  Consumes `crm.OpportunitySplit`:
+  $$\text{Credited Deal Revenue} = \text{Deal Amount} \times \frac{\text{Split Percentage}}{100}$$
+- [ ] **Draw Against Commission Reconciliation**:
+  * Recoverable: $\text{Net Payout} = \max(0, \text{Gross Commissions} - \text{Prior Unrecovered Draws})$, with remaining balance rolling forward.
+  * Non-Recoverable: $\text{Payout} = \max(\text{Gross Commissions}, \text{Draw Guarantee})$. Shortfalls absorbed by company without debt rollover.
+- [ ] **Clawback Duration Math**:
+  * Full Cliff: Deal cancelled within lookback window $\implies \text{Clawback} = -1 \times \text{Original Commission}$.
+  * Pro-Rated: $\text{Clawback} = -1 \times \text{Original Commission} \times \left(1 - \frac{\text{Elapsed Days}}{\text{Contract Duration}}\right)$.
+- [ ] **Multi-Currency Spot Translation**:
+  Using `accounting.ExchangeRate` on deal close date:
+  $$\text{Functional Amount} = \text{Transaction Gross Commission} \times \text{Spot Exchange Rate}$$
+
+### 8.10-7 — Forms (`apps/sales/forms/IncentiveCompensation/`)
+
+All forms inherit `(TenantUniqueMixin, TenantModelForm)` from `apps.sales.forms._common`.
+- [ ] **`CommissionPlanForm`** (`CommissionPlans.py`):
+  * `Meta.fields = ["name", "code", "description", "plan_type", "calculation_frequency", "tier_mode", "currency", "target_role", "effective_start_date", "effective_end_date", "status", "is_global", "regional_scope", "local_tax_withholding_pct", "tiers_config", "spif_config", "draw_type", "draw_amount", "clawback_window_days", "clawback_policy", "notes"]`.
+  * Excluded: `tenant`, `number`.
+  * `__init__` scopes: `currency` to `accounting.Currency`.
+- [ ] **`CommissionEarningForm`** (`CommissionEarnings.py`):
+  * `Meta.fields = ["plan", "payee", "opportunity", "opportunity_split", "sales_order", "sales_quota", "statement", "earning_type", "deal_amount", "split_percentage", "credited_amount", "attainment_pct_at_close", "commission_rate_pct", "accelerator_rate_pct", "spif_amount", "gross_commission", "currency", "exchange_rate", "functional_currency_amount", "status", "event_date", "clawback_parent", "calculation_notes"]`.
+  * Excluded: `tenant`, `number`.
+  * `__init__` scopes: `plan` to same-tenant active `CommissionPlan`, `payee` to same-tenant active users, `opportunity` to same-tenant `crm.Opportunity`, `opportunity_split` to same-tenant `crm.OpportunitySplit`, `sales_order` to same-tenant `scm.SalesOrder`, `sales_quota` to same-tenant `crm.SalesQuota`, `statement` to same-tenant `CommissionStatement`, `currency` to `accounting.Currency`, `clawback_parent` to same-tenant `CommissionEarning`.
+- [ ] **`CommissionEarningApproveForm`** (`CommissionEarnings.py`):
+  * Action confirmation form for manager approval.
+- [ ] **`CommissionStatementForm`** (`CommissionStatements.py`):
+  * `Meta.fields = ["payee", "plan", "period_name", "period_start", "period_end", "currency", "total_deal_revenue", "quota_target", "attainment_percentage", "base_commission_total", "accelerator_bonus_total", "spif_total", "draw_advanced", "draw_recovered", "clawbacks_total", "adjustments_total", "gross_payout", "tax_withholding_estimated", "net_payout", "status", "payroll_run", "payment_reference", "paid_at", "notes"]`.
+  * Excluded: `tenant`, `number`, `approved_by`, `approved_at`.
+  * `__init__` scopes: `payee` to same-tenant active users, `plan` to same-tenant `CommissionPlan`, `currency` to `accounting.Currency`, `payroll_run` to same-tenant `accounting.PayrollRun`.
+- [ ] **`CommissionStatementGenerateForm`** (`CommissionStatements.py`):
+  * Form for batch statement generation: `plan`, `period_name`, `period_start`, `period_end`, optional `payee`.
+- [ ] **`CommissionStatementActionForm`** (`CommissionStatements.py`):
+  * Action form for submit, approve, lock, and post-payroll transitions.
+- [ ] **`CommissionAdjustmentForm`** (`CommissionAdjustments.py`):
+  * `Meta.fields = ["statement", "earning", "payee", "adjustment_type", "amount", "currency", "reason_category", "description", "sales_order", "opportunity"]`.
+  * Excluded: `tenant`, `number`, `status`, `reviewed_by`, `reviewed_at`, `resolution_notes`.
+  * `__init__` scopes: `statement` to same-tenant unlocked `CommissionStatement`, `earning` to same-tenant `CommissionEarning`, `payee` to same-tenant active users, `currency` to `accounting.Currency`, `sales_order` to same-tenant `scm.SalesOrder`, `opportunity` to same-tenant `crm.Opportunity`.
+- [ ] **`CommissionAdjustmentReviewForm`** (`CommissionAdjustments.py`):
+  * Review triage form: `resolution_notes` and target decision (`approved` / `rejected`).
+
+### 8.10-8 — URL Names and Routes (`apps/sales/urls/IncentiveCompensation/`)
+
+Literal board routes before parameterized `<int:pk>` routes. Board routes concatenated first.
+- [ ] **Boards** (`CommissionBoards.py`):
+  * `commissions/plans/hub/` → `sales_commission_plan_hub`
+  * `commissions/earnings/dashboard/` → `sales_commission_earnings_dashboard`
+  * `commissions/earnings/whatif-calculator/` → `sales_commission_whatif_calculate` (HTMX calculation endpoint)
+  * `commissions/adjustments/workbench/` → `sales_commission_adjustment_workbench`
+  * `commissions/global-matrix/` → `sales_global_compensation_matrix`
+  * `commissions/payout-processing/` → `sales_commission_payout_processing`
+  * `commissions/payout-processing/export/` → `sales_commission_payout_export` (CSV export handler)
+- [ ] **Plans** (`CommissionPlans.py`):
+  * `commissions/plans/` → `commission_plan_list`
+  * `commissions/plans/add/` → `commission_plan_create`
+  * `commissions/plans/<int:pk>/edit/` → `commission_plan_edit`
+  * `commissions/plans/<int:pk>/delete/` → `commission_plan_delete` (POST-only, `@tenant_admin_required`)
+  * `commissions/plans/<int:pk>/` → `commission_plan_detail`
+- [ ] **Earnings** (`CommissionEarnings.py`):
+  * `commissions/earnings/` → `commission_earning_list`
+  * `commissions/earnings/add/` → `commission_earning_create`
+  * `commissions/earnings/<int:pk>/edit/` → `commission_earning_edit`
+  * `commissions/earnings/<int:pk>/delete/` → `commission_earning_delete` (POST-only, `@tenant_admin_required`)
+  * `commissions/earnings/<int:pk>/approve/` → `commission_earning_approve` (POST-only)
+  * `commissions/earnings/<int:pk>/` → `commission_earning_detail`
+- [ ] **Statements** (`CommissionStatements.py`):
+  * `commissions/statements/` → `commission_statement_list`
+  * `commissions/statements/add/` → `commission_statement_create`
+  * `commissions/statements/generate/` → `commission_statement_generate`
+  * `commissions/statements/<int:pk>/edit/` → `commission_statement_edit`
+  * `commissions/statements/<int:pk>/delete/` → `commission_statement_delete` (POST-only, `@tenant_admin_required`)
+  * `commissions/statements/<int:pk>/submit/` → `commission_statement_submit` (POST-only)
+  * `commissions/statements/<int:pk>/approve/` → `commission_statement_approve` (POST-only)
+  * `commissions/statements/<int:pk>/lock/` → `commission_statement_lock` (POST-only)
+  * `commissions/statements/<int:pk>/post-payroll/` → `commission_statement_post_payroll` (POST-only)
+  * `commissions/statements/<int:pk>/` → `commission_statement_detail`
+- [ ] **Adjustments** (`CommissionAdjustments.py`):
+  * `commissions/adjustments/` → `commission_adjustment_list`
+  * `commissions/adjustments/add/` → `commission_adjustment_create`
+  * `commissions/adjustments/<int:pk>/edit/` → `commission_adjustment_edit`
+  * `commissions/adjustments/<int:pk>/delete/` → `commission_adjustment_delete` (POST-only, `@tenant_admin_required`)
+  * `commissions/adjustments/<int:pk>/approve/` → `commission_adjustment_approve` (POST-only)
+  * `commissions/adjustments/<int:pk>/reject/` → `commission_adjustment_reject` (POST-only)
+  * `commissions/adjustments/<int:pk>/apply/` → `commission_adjustment_apply` (POST-only)
+  * `commissions/adjustments/<int:pk>/` → `commission_adjustment_detail`
+
+### 8.10-9 — Views, URL Names, and Context Keys (`apps/sales/views/IncentiveCompensation/`)
+
+Every view is `@login_required`, tenant-scoped (`filter(tenant=request.tenant)`), uses audit logs (`write_audit_log` / `crud_*`), and handles tenantless superusers gracefully.
+- [ ] **`commission_plan_list`** → `object_list`, `page_obj`, `q`, `plan_type_choices`, `status_choices`, `tier_mode_choices`, `stats` (dict: `total`, `active`, `tiered`, `hybrid`).
+- [ ] **`commission_plan_detail`** → `obj`, `plan_type_display`, `tier_mode_display`, `tiers`, `spif`, `earnings_count`, `active_participants_count`.
+- [ ] **`commission_plan_create` / `_edit`** → `form`, `obj`, `is_edit`, `plan_type_choices`, `tier_mode_choices`.
+- [ ] **`commission_earning_list`** → `object_list`, `page_obj`, `q`, `payee_choices`, `plan_choices`, `status_choices`, `earning_type_choices`, `stats` (dict: `total_accrued`, `total_approved`, `total_paid`, `total_clawed_back`).
+- [ ] **`commission_earning_detail`** → `obj`, `earning_type_display`, `status_display`, `clawback_children`, `adjustments`.
+- [ ] **`commission_earning_create` / `_edit`** → `form`, `obj`, `is_edit`.
+- [ ] **`commission_statement_list`** → `object_list`, `page_obj`, `q`, `payee_choices`, `status_choices`, `stats` (dict: `total_gross`, `total_net`, `pending_approval`, `locked`).
+- [ ] **`commission_statement_detail`** → `obj`, `status_display`, `line_items` (attached earnings), `adjustments` (attached adjustments), `waterfall` (dict: `base`, `accelerators`, `spif`, `adjustments`, `gross`, `draw_recovered`, `clawbacks`, `tax`, `net`).
+- [ ] **`commission_statement_create` / `_edit`** → `form`, `obj`, `is_edit`.
+- [ ] **`commission_statement_generate`** → `form`, `preview_results`, `periods`.
+- [ ] **`commission_adjustment_list`** → `object_list`, `page_obj`, `q`, `adjustment_type_choices`, `status_choices`, `reason_choices`, `stats` (dict: `total_disputes`, `pending_review`, `total_clawbacks`, `net_adjustment_amount`).
+- [ ] **`commission_adjustment_detail`** → `obj`, `adjustment_type_display`, `reason_display`, `status_display`, `review_form`.
+- [ ] **`commission_adjustment_create` / `_edit`** → `form`, `obj`, `is_edit`.
+- [ ] **`sales_commission_plan_hub`** (Board 1) → `plans`, `active_count`, `spif_campaigns`, `tier_structures`, `stats` (dict: `total_plans`, `active_reps`, `total_spifs_active`).
+- [ ] **`sales_commission_earnings_dashboard`** (Board 2) → `recent_earnings`, `quota_speedometer` (dict: `target`, `attainment_amount`, `attainment_pct`, `current_tier_rate`, `next_tier_pct`, `distance_to_tier`), `spif_tallies`, `draw_status`, `open_opportunities` (for What-If simulation dropdown).
+- [ ] **`sales_commission_whatif_calculate`** (What-If API) → `deal_amount`, `split_pct`, `simulated_attainment_pct`, `simulated_commission`, `accelerator_tier_reached`, `rate_pct`, `calculation_trace`.
+- [ ] **`sales_commission_adjustment_workbench`** (Board 3) → `pending_disputes`, `unprocessed_cancellations` (cancelled `scm.SalesOrder` or `sales.OrderAmendment` rows without clawbacks), `draw_true_ups`, `stats` (dict: `open_disputes`, `pending_clawbacks`, `settled_month`).
+- [ ] **`sales_global_compensation_matrix`** (Board 4) → `regional_plans` (grouped by Americas, EMEA, APAC), `currencies` (with latest `ExchangeRate` spot rates), `consolidated_totals` (base currency vs local currency commitments), `tax_withholding_summary`.
+- [ ] **`sales_commission_payout_processing`** (Board 5) → `statements_by_status` (`draft`, `under_review`, `approved`, `locked`, `exported`, `paid`), `batch_rollups` (total payees, gross sum, net sum), `recent_payroll_runs` (`accounting.PayrollRun` available for hand-off), `export_formats`.
+
+### 8.10-10 — Backend Layout & Re-Exports
+
+- [ ] Create `apps/sales/models/IncentiveCompensation/__init__.py` (re-exports `CommissionPlan`, `CommissionEarning`, `CommissionStatement`, `CommissionAdjustment`, plus choices and helpers) + `CommissionPlans.py`, `CommissionEarnings.py`, `CommissionStatements.py`, `CommissionAdjustments.py`.
+- [ ] Create `apps/sales/forms/IncentiveCompensation/__init__.py` + 4 form files.
+- [ ] Create `apps/sales/views/IncentiveCompensation/__init__.py` + 4 entity view files + `CommissionBoards.py`.
+- [ ] Create `apps/sales/urls/IncentiveCompensation/__init__.py` + 4 entity URL files + `CommissionBoards.py`.
+- [ ] Update `apps/sales/models/__init__.py`: import and re-export the 4 models, choices, and add to `__all__`.
+- [ ] Update `apps/sales/forms/__init__.py`: import and re-export the forms.
+- [ ] Update `apps/sales/views/__init__.py`: import and re-export the views, update `__all__` prefix tuple with `"commission_plan_"`, `"commission_earning_"`, `"commission_statement_"`, `"commission_adjustment_"`, `"sales_commission_"`, `"sales_global_"`.
+- [ ] Update `apps/sales/urls/__init__.py`: import `urlpatterns as _incentive_compensation` from `.IncentiveCompensation` and concatenate `*_incentive_compensation` into `urlpatterns`.
+- [ ] Update `apps/sales/admin.py`: register `CommissionPlan`, `CommissionEarning`, `CommissionStatement`, `CommissionAdjustment` with proper `list_display`, `list_filter`, `search_fields`, `readonly_fields`.
+- [ ] Incremental migration `0019`: `python manage.py makemigrations sales` → claims `0019`.
+- [ ] Seeder: extend `apps/sales/management/commands/seed_sales.py`:
+  * Add `_seed_incentive_compensation(tenant, owner)` called from `_seed_tenant()`.
+  * Create idempotent sample records:
+    - 3 `CommissionPlan` records:
+      * "Enterprise AE Quota & Tiered Accelerators Plan (FY2026)" (`quota_tiered`, `incremental`, USD, 4 tiers: 0-80% @ 8%, 80-100% @ 12%, 100-150% @ 18%, >150% @ 25%; recoverable draw $3,000; clawback 90-day cliff; SPIF: "Q4 Cloud Expansion Push" +$750).
+      * "Commercial SDR Inbound & SPIF Plan" (`hybrid`, `revenue_percentage` 4%, non-recoverable draw $1,500, SPIF $250 flat per opportunity).
+      * "EMEA Strategic Account Plan" (`quota_tiered`, `retroactive`, EUR currency, regional_scope="EMEA", local tax withholding 30.00%).
+    - 4 `CommissionEarning` records:
+      * Earning 1: Closed-won deal commission from existing `crm.Opportunity` ($85,000 deal, 100% split, 12% rate, gross commission $10,200).
+      * Earning 2: Multi-rep split deal commission ($120,000 deal with 60% AE split = $72,000 credited, 18% accelerator rate + $750 SPIF bonus).
+      * Earning 3: Order billed execution commission linked to `scm.SalesOrder` ($45,000 order, EUR currency, spot exchange rate 1.085).
+      * Earning 4: Clawback deduction record (negative gross commission -$3,400 linked via `clawback_parent` to earlier earning due to contract cancellation).
+    - 2 `CommissionStatement` records:
+      * Statement 1: "October 2026 Payee Statement" for primary AE (quota $100,000, credited revenue $157,000, 157% attainment, gross payout $19,410, net payout $12,128, status "locked", linked to `accounting.PayrollRun` or approved by owner).
+      * Statement 2: "October 2026 Payee Statement" for secondary rep (status "under_review", with pending adjustments).
+    - 3 `CommissionAdjustment` records:
+      * Adjustment 1: Cancellation clawback debit (-$3,400) linked to cancelled order/deal, status "applied".
+      * Adjustment 2: Rep-raised dispute inquiry (+$850) contesting split percentage on co-sold deal, status "submitted" / "under_review".
+      * Adjustment 3: Manager discretionary override bonus (+$1,200) for strategic displacement, status "approved", reviewed by owner.
+  * Update summary banner to: `"Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, and 8.10 seed complete."`
+
+### 8.10-11 — Templates Layout (`templates/sales/incentivecompensation/`)
+
+Lowercase folder names, clean semantic components:
+- [ ] `templates/sales/incentivecompensation/commissionplan/{list,detail,form}.html`
+- [ ] `templates/sales/incentivecompensation/commissionearning/{list,detail,form}.html`
+- [ ] `templates/sales/incentivecompensation/commissionstatement/{list,detail,form,generate}.html`
+- [ ] `templates/sales/incentivecompensation/commissionadjustment/{list,detail,form}.html`
+- [ ] `templates/sales/incentivecompensation/boards/plan_hub.html`
+- [ ] `templates/sales/incentivecompensation/boards/earnings_dashboard.html` (with interactive What-If deal calculator card & calculation HTMX target)
+- [ ] `templates/sales/incentivecompensation/boards/adjustment_workbench.html`
+- [ ] `templates/sales/incentivecompensation/boards/global_matrix.html`
+- [ ] `templates/sales/incentivecompensation/boards/payout_processing.html`
+All lists feature filter bar reflecting `request.GET`, Actions column with view/edit/delete (POST+confirm+csrf), pagination with `has_previous`/`has_next` guards (L9), empty states, and standard badge classes (`.badge-green`, `.badge-amber`, `.badge-red`, `.badge-info`, `.badge-muted`, `.badge-slate` — no `-success/-danger`).
+
+### 8.10-12 — Wire-Up (`apps/core/navigation.py`)
+
+- [ ] Add `LIVE_LINKS["8.10"]` with the 5 exact NavERP.md feature bullet names:
+```python
+    "8.10": {
+        # OWNERSHIP RULINGS (L29/L36/L37):
+        # - Opportunities & Splits are owned by CRM 1.2 (`crm.Opportunity` `OPP-` / `crm.OpportunitySplit`).
+        # - Quotas are owned by CRM 1.2 (`crm.SalesQuota` `QTA-`) and Sales 8.7 (`sales.QuotaPlan` `QPA-`).
+        # - Sales Orders are owned by SCM 4.5 (`scm.SalesOrder` `SO-`) and amended in Sales 8.6.
+        # - Currency & Exchange Rates are owned by Accounting 2.2 (`accounting.Currency` / `accounting.ExchangeRate`).
+        # - Payroll posting is owned by Accounting 2.8 (`accounting.PayrollRun` `PRUN-`).
+        # Zero duplicate quota, deal, order, split, currency, or payroll tables declared.
+        # The five NavERP.md 8.10 bullet strings, VERBATIM:
+        "Commission Plan Design": "sales:sales_commission_plan_hub",
+        "Real-Time Earnings Tracking": "sales:sales_commission_earnings_dashboard",
+        "Clawbacks & Adjustments": "sales:sales_commission_adjustment_workbench",
+        "Multi-Currency & Global Plans": "sales:sales_global_compensation_matrix",
+        "Payout Processing & Integration": "sales:sales_commission_payout_processing",
+        # Extra live leaves:
+        "Commission Plans": "sales:commission_plan_list",
+        "Commission Earnings": "sales:commission_earning_list",
+        "Commission Statements": "sales:commission_statement_list",
+        "Commission Adjustments": "sales:commission_adjustment_list",
+    },
+```
+
+### 8.10-13 — Verify
+
+- [ ] `venv\Scripts\python.exe manage.py makemigrations sales` → generates `0019_...`
+- [ ] `venv\Scripts\python.exe manage.py migrate` → applies cleanly.
+- [ ] `venv\Scripts\python.exe manage.py seed_sales` × 2 → idempotent execution, zero crashes or duplicates.
+- [ ] `venv\Scripts\python.exe manage.py check` → zero system check errors.
+- [ ] Smoke test script (`temp/smoke_sales_8_10.py`) executed as `admin_acme` / `password`:
+  * Every new `sales:*` URL returns HTTP 200 (or expected 302 on POST/actions).
+  * Assert content presence (no unrendered `{#` or `{% comment` template tags).
+  * Page titles render and seeded records are present.
+  * What-If calculator endpoint returns valid simulated commission payload.
+  * Cross-tenant IDOR checks: attempting to read or mutate another tenant's record yields HTTP 404.
+- [ ] Sidebar verification: navigate to Sales > 8.10 Incentive Compensation Management, confirm all 5 feature bullets show "Live" and open their respective boards/views.
+
+### 8.10-14 — Close-Out
+
+- [ ] Run the 7 review passes in sequence:
+  1. `code-reviewer`
+  2. `explorer`
+  3. `frontend-reviewer`
+  4. `performance-reviewer`
+  5. `qa-smoke-tester`
+  6. `security-reviewer`
+  7. `test-writer` (4 test lanes in `apps/sales/tests/`: `test_incentivecompensation_models.py`, `test_incentivecompensation_forms.py`, `test_incentivecompensation_views.py`, `test_incentivecompensation_security.py`)
+- [ ] Update `.claude/skills/sales/SKILL.md` with 8.10 entities, rulings, and patterns.
+- [ ] Update `README.md` if applicable.
+
+### 8.10-15 — Later passes / Deferred
+
+- Direct Banking Clearing & Automated ACH/Wire Disbursement — external treasury integration (Module 2).
+- Bi-directional Webhook Sync to External Payroll Engines (live streaming to ADP/Workday) — integration gateway (Module 20).
+- AI-Powered Commission Gaming & Anomaly Detection — deferred to Sales Analytics & Intelligence (8.12).
+- ASC 606 Multi-Year Commission Capitalization & Amortization Schedules — deferred to Revenue Recognition (8.6 / Accounting 2.10).
+
+### 8.10-16 — Review notes
+(to be filled in during Phase 7 close-out)
+
+---
+
 ### 8.9 — Sales Enablement (app `sales`, extends `core.Document` + `sales.CompetitorProfile` + `crm.CommunicationLog` + `sales.ActivityLog`) — plan from `research-sales-8.9.md` (2026-10-18)
 
 > **This plan EXTENDS an existing app.** `apps/sales/` is live with 8.1–8.8. **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.** Migration is **incremental**: the leaf today is `0016_activitytype_activitylog_salesplancycle_activitygoal_and_more.py`, so **8.9 claims `0017`**.
