@@ -104,3 +104,7 @@ class SalesPlaybook(TenantNumbered):
         if self.pipeline_id and self.tenant_id:
             if getattr(self.pipeline, "tenant_id", None) != self.tenant_id:
                 raise ValidationError({"pipeline": "Associated pipeline must belong to the same workspace."})
+        if self.owner_id and self.tenant_id:
+            if getattr(self.owner, "tenant_id", None) != self.tenant_id:
+                raise ValidationError({"owner": "Playbook owner must belong to the same workspace."})
+
