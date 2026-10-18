@@ -173,9 +173,9 @@
                         <label class="form-label text-xs">Compensation Plan</label>
                         <select name="plan_id" required class="form-select text-sm w-full">
                             <option value="">Select plan...</option>
-                            {% for s in ready_statements|slice:":1" %}
+                            {% for p in plans %}
+                            <option value="{{ p.pk }}">{{ p.name }}</option>
                             {% endfor %}
-                            <option value="1">Active Plan Envelope</option>
                         </select>
                     </div>
                     <button type="submit" class="btn btn-primary w-full justify-center">
