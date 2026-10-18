@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Scorecard #{{ scorecard.number }}{% else %}New Call Coaching Evaluation{% endif %} — Sales Enablement — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_coaching_workbench' %}">Coaching Workbench</a>
+            <span>/</span>
+            <a href="{% url 'sales:coaching_scorecard_list' %}">Scorecards</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Scorecard{% else %}New Scorecard{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Coaching Scorecard #{{ scorecard.number }}{% else %}Record Call Coaching Evaluation{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.coachee.id_for_label }}">Sales Rep (Coachee) *</label>
+                    {{ form.coachee }}
+                    {% if form.coachee.errors %}<div class="form-error">{{ form.coachee.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.coach.id_for_label }}">Evaluating Coach / Manager</label>
+                    {{ form.coach }}
+                    {% if form.coach.errors %}<div class="form-error">{{ form.coach.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.communication_log.id_for_label }}">Anchored CRM Interaction (Call/Meeting) *</label>
+                    {{ form.communication_log }}
+                    {% if form.communication_log.errors %}<div class="form-error">{{ form.communication_log.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Select the customer interaction record from CRM 1.5.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.activity_log.id_for_label }}">Associated Sales Activity Log</label>
+                    {{ form.activity_log }}
+                    {% if form.activity_log.errors %}<div class="form-error">{{ form.activity_log.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Optional link to 8.8 sales activity attribution.</span>
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.recording_url.id_for_label }}">Call Video / Audio Recording URL</label>
+                    {{ form.recording_url }}
+                    {% if form.recording_url.errors %}<div class="form-error">{{ form.recording_url.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Link to recording (Zoom, Teams, Loom, Google Meet).</span>
+                </div>
+
+                <!-- 4 Rubric Scores -->
+                <div class="md:col-span-2 p-4 bg-slate-50 rounded border border-slate-200 space-y-4">
+                    <h3 class="font-semibold text-slate-800 text-sm">Competency Rubric Scores (1=Poor, 5=Exceptional)</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                        <div class="form-group">
+                            <label class="form-label text-xs font-medium" for="{{ form.discovery_score.id_for_label }}">1. Discovery & Pain *</label>
+                            {{ form.discovery_score }}
+                            {% if form.discovery_score.errors %}<div class="form-error">{{ form.discovery_score.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label text-xs font-medium" for="{{ form.value_prop_score.id_for_label }}">2. Value Proposition *</label>
+                            {{ form.value_prop_score }}
+                            {% if form.value_prop_score.errors %}<div class="form-error">{{ form.value_prop_score.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label text-xs font-medium" for="{{ form.objection_handling_score.id_for_label }}">3. Objection Handling *</label>
+                            {{ form.objection_handling_score }}
+                            {% if form.objection_handling_score.errors %}<div class="form-error">{{ form.objection_handling_score.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label text-xs font-medium" for="{{ form.next_steps_score.id_for_label }}">4. Next Steps & Plan *</label>
+                            {{ form.next_steps_score }}
+                            {% if form.next_steps_score.errors %}<div class="form-error">{{ form.next_steps_score.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.talk_listen_ratio_percent.id_for_label }}">Rep Talk Time Ratio (%)</label>
+                    {{ form.talk_listen_ratio_percent }}
+                    {% if form.talk_listen_ratio_percent.errors %}<div class="form-error">{{ form.talk_listen_ratio_percent.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Target benchmark is 40-55%.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.call_sentiment.id_for_label }}">Client Call Sentiment</label>
+                    {{ form.call_sentiment }}
+                    {% if form.call_sentiment.errors %}<div class="form-error">{{ form.call_sentiment.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.transcript_summary.id_for_label }}">Conversation Highlights & Quotes</label>
+                    {{ form.transcript_summary }}
+                    {% if form.transcript_summary.errors %}<div class="form-error">{{ form.transcript_summary.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.key_strengths.id_for_label }}">Key Strengths Demonstrated</label>
+                    {{ form.key_strengths }}
+                    {% if form.key_strengths.errors %}<div class="form-error">{{ form.key_strengths.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.areas_for_improvement.id_for_label }}">Areas for Improvement</label>
+                    {{ form.areas_for_improvement }}
+                    {% if form.areas_for_improvement.errors %}<div class="form-error">{{ form.areas_for_improvement.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.action_items.id_for_label }}">Agreed Action Items & Skill Drills</label>
+                    {{ form.action_items }}
+                    {% if form.action_items.errors %}<div class="form-error">{{ form.action_items.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.review_status.id_for_label }}">Evaluation Workflow Status</label>
+                    {{ form.review_status }}
+                    {% if form.review_status.errors %}<div class="form-error">{{ form.review_status.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.evaluated_on.id_for_label }}">Evaluation Date</label>
+                    {{ form.evaluated_on }}
+                    {% if form.evaluated_on.errors %}<div class="form-error">{{ form.evaluated_on.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'sales:coaching_scorecard_detail' scorecard.pk %}{% else %}{% url 'sales:coaching_scorecard_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Evaluation{% else %}Record Evaluation{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
