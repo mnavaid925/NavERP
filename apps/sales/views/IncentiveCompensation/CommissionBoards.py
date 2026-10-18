@@ -211,6 +211,7 @@ def sales_commission_payout_processing(request):
     ready_statements = statements.filter(status__in=["approved", "locked"])
     pending_approvals = statements.filter(status="under_review")
     payroll_runs = PayrollRun.objects.filter(tenant=request.tenant).order_by("-pay_date")[:5]
+    plans = CommissionPlan.objects.filter(tenant=request.tenant, status="active").order_by("name")
 
     total_payout_due = ready_statements.aggregate(s=Sum("net_payout"))["s"] or Decimal("0.00")
     statements_ready = ready_statements.count()
@@ -226,6 +227,7 @@ def sales_commission_payout_processing(request):
         "ready_statements": ready_statements,
         "pending_approvals": pending_approvals,
         "payroll_runs": payroll_runs,
+        "plans": plans,
         "stats": stats,
     }
     return render(request, "sales/incentivecompensation/boards/payout_processing.html", context)
