@@ -129,6 +129,12 @@ class EnablementContent(TenantNumbered):
     def __str__(self):
         return f"{self.number} - {self.title} ({self.get_content_type_display()})"
 
+    @property
+    def tag_list(self):
+        if not self.tags:
+            return []
+        return [t.strip() for t in self.tags.split(",") if t.strip()]
+
     def clean(self):
         super().clean()
         if not self.document_id and not self.external_url and not self.description:
