@@ -143,6 +143,15 @@ def commission_earning_create(request):
 @login_required
 def commission_earning_edit(request, pk):
     obj = get_object_or_404(CommissionEarning.objects.filter(tenant=request.tenant), pk=pk)
+    if obj.status in ("approved", "paid", "clawed_back") or (
+        obj.statement and obj.statement.status in ("locked", "exported", "paid")
+    ):
+        messages.error(
+            request,
+            f"Commission earning {obj.number} cannot be edited in '{obj.get_status_display()}' status or when attached to a locked statement.",
+        )
+        return redirect("sales:commission_earning_detail", pk=obj.pk)
+
     if request.method == "POST":
         form = CommissionEarningForm(request.POST, instance=obj, tenant=request.tenant)
         if form.is_valid():
@@ -174,6 +183,15 @@ def commission_earning_edit(request, pk):
 @tenant_admin_required
 def commission_earning_delete(request, pk):
     obj = get_object_or_404(CommissionEarning.objects.filter(tenant=request.tenant), pk=pk)
+    if obj.status in ("approved", "paid", "clawed_back") or (
+        obj.statement and obj.statement.status in ("locked", "exported", "paid")
+    ):
+        messages.error(
+            request,
+            f"Commission earning {obj.number} cannot be deleted in '{obj.get_status_display()}' status or when attached to a locked statement.",
+        )
+        return redirect("sales:commission_earning_detail", pk=obj.pk)
+
     num = obj.number
     write_audit_log(
         request.user,
