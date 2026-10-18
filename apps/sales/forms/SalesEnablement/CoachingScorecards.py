@@ -1,5 +1,6 @@
 """Sales 8.9 — `CoachingScorecardForm`."""
 from django import forms
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.core.forms import TenantModelForm
@@ -51,6 +52,11 @@ class CoachingScorecardForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            if "call_sentiment" in self.fields and not self.initial.get("call_sentiment"):
+                self.fields["call_sentiment"].initial = "neutral"
+            if "evaluated_on" in self.fields and not self.initial.get("evaluated_on"):
+                self.fields["evaluated_on"].initial = timezone.now().date()
         if self.tenant is not None:
             self.fields["communication_log"].queryset = CommunicationLog.objects.filter(
                 tenant=self.tenant
