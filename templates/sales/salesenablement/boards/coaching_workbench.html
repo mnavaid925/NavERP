@@ -142,7 +142,7 @@
                         {% else %}
                         <span class="badge badge-slate text-xs">{{ sc.get_review_status_display }}</span>
                         {% endif %}
-                        <a href="{% url 'sales:coaching_scorecard_detail' sc.pk %}" class="btn btn-icon">
+                        <a href="{% url 'sales:coaching_scorecard_detail' sc.pk %}" class="btn btn-icon" title="View Evaluation Details" aria-label="View Evaluation Details">
                             <i data-lucide="chevron-right"></i>
                         </a>
                     </div>
