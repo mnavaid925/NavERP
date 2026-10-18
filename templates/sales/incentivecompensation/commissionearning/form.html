@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Commission Earning — {{ obj.number }}{% else %}Record Commission Earning{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_commission_plan_hub' %}">Incentive Compensation</a>
+            <span>/</span>
+            <a href="{% url 'sales:commission_earning_list' %}">Earnings</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}Record Earning{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Commission Earning: {{ obj.number }}{% else %}Record Commission Earning{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:commission_earning_detail' obj.pk %}{% else %}{% url 'sales:commission_earning_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card border-red-300 bg-red-50 p-4">
+        <div class="text-sm text-red-700">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Crediting & Deal Attribution Details</h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.plan.id_for_label }}">Compensation Plan *</label>
+                    {{ form.plan }}
+                    {% if form.plan.errors %}<div class="form-error">{{ form.plan.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.payee.id_for_label }}">Credited Payee / Rep *</label>
+                    {{ form.payee }}
+                    {% if form.payee.errors %}<div class="form-error">{{ form.payee.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.credit_type.id_for_label }}">Credit Channel</label>
+                    {{ form.credit_type }}
+                    {% if form.credit_type.errors %}<div class="form-error">{{ form.credit_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.opportunity.id_for_label }}">CRM Opportunity</label>
+                    {{ form.opportunity }}
+                    {% if form.opportunity.errors %}<div class="form-error">{{ form.opportunity.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sales_order.id_for_label }}">SCM Sales Order</label>
+                    {{ form.sales_order }}
+                    {% if form.sales_order.errors %}<div class="form-error">{{ form.sales_order.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.earned_date.id_for_label }}">Earned Date *</label>
+                    {{ form.earned_date }}
+                    {% if form.earned_date.errors %}<div class="form-error">{{ form.earned_date.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Calculation & Multi-Currency Inputs</h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.deal_amount.id_for_label }}">Deal Amount *</label>
+                    {{ form.deal_amount }}
+                    {% if form.deal_amount.errors %}<div class="form-error">{{ form.deal_amount.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.deal_currency.id_for_label }}">Deal Currency *</label>
+                    {{ form.deal_currency }}
+                    {% if form.deal_currency.errors %}<div class="form-error">{{ form.deal_currency.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.split_percentage.id_for_label }}">Split Share % *</label>
+                    {{ form.split_percentage }}
+                    {% if form.split_percentage.errors %}<div class="form-error">{{ form.split_percentage.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.exchange_rate.id_for_label }}">Spot FX Rate</label>
+                    {{ form.exchange_rate }}
+                    {% if form.exchange_rate.errors %}<div class="form-error">{{ form.exchange_rate.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.attainment_pct_at_close.id_for_label }}">Attainment at Close %</label>
+                    {{ form.attainment_pct_at_close }}
+                    {% if form.attainment_pct_at_close.errors %}<div class="form-error">{{ form.attainment_pct_at_close.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.applied_rate_pct.id_for_label }}">Applied Commission Rate % *</label>
+                    {{ form.applied_rate_pct }}
+                    {% if form.applied_rate_pct.errors %}<div class="form-error">{{ form.applied_rate_pct.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.spif_amount.id_for_label }}">Tactical SPIF Bonus</label>
+                    {{ form.spif_amount }}
+                    {% if form.spif_amount.errors %}<div class="form-error">{{ form.spif_amount.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+            </div>
+            <div class="form-group mt-4">
+                <label class="form-label" for="{{ form.clawback_parent.id_for_label }}">Clawback Parent Origin (if reversing an earlier earning)</label>
+                {{ form.clawback_parent }}
+                {% if form.clawback_parent.errors %}<div class="form-error">{{ form.clawback_parent.errors }}</div>{% endif %}
+            </div>
+        </div>
+        <div class="card-footer flex justify-end gap-3 p-4 bg-slate-50 border-t border-slate-200">
+            <a href="{% if is_edit %}{% url 'sales:commission_earning_detail' obj.pk %}{% else %}{% url 'sales:commission_earning_list' %}{% endif %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check"></i>
+                <span>{% if is_edit %}Save Changes{% else %}Record Earning{% endif %}</span>
+            </button>
+        </div>
+    </div>
+</form>
+{% endblock %}
