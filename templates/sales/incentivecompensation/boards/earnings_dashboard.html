@@ -34,7 +34,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Gross Commission Earned</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ attainment_gauge.total_gross_earned|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ currency_code|default:"USD" }} {{ attainment_gauge.total_gross_earned|floatformat:2 }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -52,7 +52,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Tactical SPIF Bonuses</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ attainment_gauge.total_spif_earned|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ currency_code|default:"USD" }} {{ attainment_gauge.total_spif_earned|floatformat:2 }}</div>
         </div>
     </div>
 </div>
@@ -83,7 +83,7 @@
                                 <div class="font-medium text-slate-900">{{ row.payee.get_full_name|default:row.payee.email }}</div>
                                 <div class="text-xs text-slate-400 font-mono">{{ row.payee.email }}</div>
                             </td>
-                            <td class="text-sm text-slate-800">${{ row.volume|floatformat:2 }}</td>
+                            <td class="text-sm text-slate-800">{{ currency_code|default:"USD" }} {{ row.volume|floatformat:2 }}</td>
                             <td>
                                 <div class="flex items-center gap-2">
                                     <div class="w-16 bg-slate-200 rounded-full h-2 overflow-hidden">
@@ -92,8 +92,8 @@
                                     <span class="text-xs font-bold text-slate-700">{{ row.attainment }}%</span>
                                 </div>
                             </td>
-                            <td class="text-xs font-semibold text-orange-600">${{ row.spif|floatformat:2 }}</td>
-                            <td class="text-sm font-bold text-slate-900">${{ row.gross|floatformat:2 }}</td>
+                            <td class="text-xs font-semibold text-orange-600">{{ currency_code|default:"USD" }} {{ row.spif|floatformat:2 }}</td>
+                            <td class="text-sm font-bold text-slate-900">{{ currency_code|default:"USD" }} {{ row.gross|floatformat:2 }}</td>
                         </tr>
                         {% empty %}
                         <tr>
@@ -138,9 +138,9 @@
                             <td class="text-xs text-slate-700">
                                 {% if earn.opportunity %}{{ earn.opportunity.name }}{% else %}—{% endif %}
                             </td>
-                            <td class="text-sm text-slate-800">${{ earn.credited_volume|floatformat:2 }}</td>
+                            <td class="text-sm text-slate-800">{{ earn.deal_currency.code|default:"USD" }} {{ earn.credited_volume|floatformat:2 }}</td>
                             <td class="text-xs font-bold text-primary">{{ earn.applied_rate_pct }}%</td>
-                            <td class="text-sm font-bold text-slate-900">${{ earn.gross_commission|floatformat:2 }}</td>
+                            <td class="text-sm font-bold text-slate-900">{{ earn.deal_currency.code|default:"USD" }} {{ earn.gross_commission|floatformat:2 }}</td>
                             <td class="text-xs text-slate-500">{{ earn.earned_date|date:"M d, Y" }}</td>
                         </tr>
                         {% empty %}
@@ -178,7 +178,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label text-xs">Expected Deal Size ($)</label>
+                    <label class="form-label text-xs">Expected Deal Size ({{ currency_code|default:"USD" }})</label>
                     <input type="number" id="sim_deal_amount" value="50000" step="1000" class="form-input text-sm w-full">
                 </div>
 
