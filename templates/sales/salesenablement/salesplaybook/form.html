@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ playbook.name }}{% else %}Create Sales Playbook{% endif %} — Sales Enablement — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_playbook_board' %}">Playbook Board</a>
+            <span>/</span>
+            <a href="{% url 'sales:sales_playbook_list' %}">Playbooks</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Playbook{% else %}New Playbook{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Playbook: {{ playbook.name }}{% else %}Create Sales Playbook{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label font-medium" for="{{ form.name.id_for_label }}">Playbook Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.motion_type.id_for_label }}">Selling Motion *</label>
+                    {{ form.motion_type }}
+                    {% if form.motion_type.errors %}<div class="form-error">{{ form.motion_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Lifecycle Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.pipeline.id_for_label }}">Opportunity Pipeline</label>
+                    {{ form.pipeline }}
+                    {% if form.pipeline.errors %}<div class="form-error">{{ form.pipeline.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Associate with an 8.2 opportunity pipeline (optional).</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_audience.id_for_label }}">Target Audience / ICP</label>
+                    {{ form.target_audience }}
+                    {% if form.target_audience.errors %}<div class="form-error">{{ form.target_audience.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.summary.id_for_label }}">Executive Summary / Motion Goals</label>
+                    {{ form.summary }}
+                    {% if form.summary.errors %}<div class="form-error">{{ form.summary.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label font-medium text-blue-800" for="{{ form.discovery_questions.id_for_label }}">Diagnostic Discovery Questions</label>
+                    {{ form.discovery_questions }}
+                    {% if form.discovery_questions.errors %}<div class="form-error">{{ form.discovery_questions.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Structured probing questions for reps to qualify customer pain.</span>
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label font-medium text-emerald-800" for="{{ form.talk_tracks.id_for_label }}">Verbatim Talk Tracks & Value Positioning</label>
+                    {{ form.talk_tracks }}
+                    {% if form.talk_tracks.errors %}<div class="form-error">{{ form.talk_tracks.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Elevator pitches, ROI proof points, and customer stories.</span>
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label font-medium text-amber-800" for="{{ form.objection_scripts.id_for_label }}">Objection Handling Scripts</label>
+                    {{ form.objection_scripts }}
+                    {% if form.objection_scripts.errors %}<div class="form-error">{{ form.objection_scripts.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Common buyer hesitations and structured counter-arguments.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.dos_and_donts.id_for_label }}">Do's & Don'ts</label>
+                    {{ form.dos_and_donts }}
+                    {% if form.dos_and_donts.errors %}<div class="form-error">{{ form.dos_and_donts.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.exit_criteria.id_for_label }}">Stage Exit Criteria</label>
+                    {{ form.exit_criteria }}
+                    {% if form.exit_criteria.errors %}<div class="form-error">{{ form.exit_criteria.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Playbook Owner / Lead</label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.version.id_for_label }}">Version</label>
+                    {{ form.version }}
+                    {% if form.version.errors %}<div class="form-error">{{ form.version.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2 flex items-center gap-2 pt-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_active }}
+                        <span class="text-sm font-medium text-slate-700">Active</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'sales:sales_playbook_detail' playbook.pk %}{% else %}{% url 'sales:sales_playbook_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Playbook{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
