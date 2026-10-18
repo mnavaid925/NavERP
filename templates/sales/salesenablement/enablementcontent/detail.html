@@ -100,11 +100,11 @@
                 </div>
                 {% endif %}
 
-                {% if content.tags %}
+                {% if content.tag_list %}
                 <div>
                     <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Keywords & Tags</h3>
                     <div class="flex flex-wrap gap-1.5">
-                        {% for tag in content.tags.split %}
+                        {% for tag in content.tag_list %}
                         <span class="badge badge-slate text-xs">{{ tag }}</span>
                         {% endfor %}
                     </div>
