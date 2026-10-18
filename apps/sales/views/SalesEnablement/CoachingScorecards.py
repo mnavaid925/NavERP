@@ -42,11 +42,11 @@ def coaching_scorecard_list(request):
         qs = qs.filter(review_status=review_status)
 
     coach_id = request.GET.get("coach", "").strip()
-    if coach_id.isdigit():
+    if coach_id.isdecimal():
         qs = qs.filter(coach_id=int(coach_id))
 
     coachee_id = request.GET.get("coachee", "").strip()
-    if coachee_id.isdigit():
+    if coachee_id.isdecimal():
         qs = qs.filter(coachee_id=int(coachee_id))
 
     paginator = Paginator(qs, 15)
@@ -102,10 +102,10 @@ def coaching_scorecard_create(request):
     else:
         initial = {}
         comm_id = request.GET.get("communication_log")
-        if comm_id and comm_id.isdigit():
+        if comm_id and comm_id.isdecimal():
             initial["communication_log"] = int(comm_id)
         act_id = request.GET.get("activity_log")
-        if act_id and act_id.isdigit():
+        if act_id and act_id.isdecimal():
             initial["activity_log"] = int(act_id)
         form = CoachingScorecardForm(initial=initial, tenant=request.tenant)
 
