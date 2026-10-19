@@ -27,6 +27,14 @@ from apps.sales.views.SalesAnalytics.RepPerformanceScorecards import (
     rep_performance_scorecard_edit,
     rep_performance_scorecard_list,
 )
+from apps.sales.views.SalesAnalytics.AnalyticsConsoles import (
+    analytics_console,
+    benchmark_console,
+    funnel_console,
+    rep_scorecard_console,
+    velocity_console,
+    win_loss_console,
+)
 
 __all__ = [
     "win_loss_debrief_list",
@@ -49,4 +57,10 @@ __all__ = [
     "rep_performance_scorecard_detail",
     "rep_performance_scorecard_edit",
     "rep_performance_scorecard_delete",
+    "analytics_console",
+    "win_loss_console",
+    "velocity_console",
+    "funnel_console",
+    "rep_scorecard_console",
+    "benchmark_console",
 ]
