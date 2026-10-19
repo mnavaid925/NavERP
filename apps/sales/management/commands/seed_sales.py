@@ -71,6 +71,14 @@ from apps.sales.models import (
     CustomerRenewal,
     CustomerOnboarding,
     CustomerBusinessReview,
+    # 8.13 Marketing Alignment & Attribution. These EXTEND crm.Campaign / crm.Lead /
+    # crm.Opportunity and sales.EnablementContent by FK -- none is a second master.
+    AttributionTouchpoint,
+    CampaignAttribution,
+    MqlHandoff,
+    ContentEngagement,
+    MarketingEvent,
+    EventRegistration,
 )
 
 from apps.sales.cpq_services import cpq_recalc_quote_totals, cpq_render_proposal_html, cpq_convert_to_sales_order
@@ -114,12 +122,14 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, backfill=backfill)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, and 8.11 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, and 8.13 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
         self.stdout.write(self.style.WARNING("Sales 8.3 enrichment is local review evidence only; provider, LinkedIn, verification, and sending workers are not seeded."))
         self.stdout.write(self.style.WARNING("Sales 8.6 posts NO JournalEntry: RevenueSchedule.journal_entry is a reference-only FK (L29), so recognition figures stay a Sales-side schedule until Accounting consumes them."))
+        self.stdout.write(self.style.WARNING("Sales 8.13 posts NO JournalEntry either (L29): campaign ROI, pipeline and attributed revenue are marketing-side attribution of revenue recognised elsewhere."))
+        self.stdout.write(self.style.WARNING("Sales 8.13 follow-up and event reminders are RECORDED STATES, not dispatched automation: there is no marketing send worker in NavERP (GAP-sales-8.13-05)."))
 
     def _seed_tenant(self, tenant, backfill=False):
         # `.order_by("pk")` is load-bearing, NOT cosmetic. `requested_by_id` is part of the
@@ -148,6 +158,7 @@ class Command(BaseCommand):
         self._seed_sales_enablement(tenant, owner)
         self._seed_incentive_compensation(tenant, owner)
         self._seed_customer_success(tenant, owner)
+        self._seed_marketing_alignment(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -2826,6 +2837,335 @@ class Command(BaseCommand):
             f"{CustomerRenewal.objects.filter(tenant=tenant).count()} renewals, "
             f"{CustomerOnboarding.objects.filter(tenant=tenant).count()} onboardings, "
             f"{CustomerBusinessReview.objects.filter(tenant=tenant).count()} business reviews)."
+        )
+
+    def _seed_marketing_alignment(self, tenant, owner):
+        """Seed Sales 8.13 Marketing Alignment & Attribution rows.
+
+        **No second master (L36/L37).** This helper REUSES the existing ``crm.Campaign``
+        (campaign master, with its budget / actual spend / UTM tags), ``crm.Lead`` (journey
+        identity), ``crm.Opportunity`` (conversion endpoint), the customer ``core.Party``
+        accounts and the ``sales.EnablementContent`` collateral rows. It creates none of them.
+        If those masters are missing for a tenant the block warns and skips rather than
+        inventing a duplicate.
+
+        Idempotency:
+        - AttributionTouchpoint: (tenant, lead, campaign, touch_date, touch_type)
+        - CampaignAttribution: (tenant, touchpoint, attribution_model)
+        - MqlHandoff: (tenant, lead)
+        - ContentEngagement: (tenant, content, account, engagement_type)
+        - MarketingEvent: (tenant, name)
+        - EventRegistration: (tenant, event, registrant_email)
+        """
+        campaigns = list(Campaign.objects.filter(tenant=tenant).order_by("pk"))
+        leads = list(Lead.objects.filter(tenant=tenant).order_by("pk"))
+        opportunities = list(Opportunity.objects.filter(tenant=tenant).order_by("pk"))
+        accounts = list(
+            Party.objects.filter(tenant=tenant, roles__role="customer")
+            .distinct()
+            .order_by("pk")
+        )
+        contents = list(EnablementContent.objects.filter(tenant=tenant).order_by("pk"))
+
+        if not campaigns or not leads:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"{tenant.name}: no crm.Campaign / crm.Lead rows found; "
+                    f"skipped Sales 8.13 marketing alignment seeding."
+                )
+            )
+            return
+
+        today = timezone.localdate()
+        now = timezone.now()
+        currency, _ = Currency.objects.get_or_create(
+            code="USD", defaults={"name": "US Dollar", "symbol": "$"}
+        )
+
+        # ---- 1. AttributionTouchpoint (the touch ledger) --------------------------------------
+        # (lead_index, campaign_index, channel, touch_type, days_ago, position, cost, value)
+        touch_specs = [
+            (0, 0, "email", "email_open", 28, "first", "45.00", "12000.00"),
+            (0, 0, "webinar", "event_attendance", 14, "middle", "120.00", "6000.00"),
+            (0, 0, "email", "email_click", 6, "last", "60.00", "9000.00"),
+            (1, 1, "paid_search", "click", 21, "first", "310.00", "15000.00"),
+            (1, 0, "social", "content_download", 9, "last", "85.00", "4200.00"),
+            (2, 0, "referral", "demo_request", 4, "first", "25.00", "7800.00"),
+        ]
+        touchpoints = []
+        for lead_idx, camp_idx, channel, touch_type, days_ago, position, cost, value in touch_specs:
+            if lead_idx >= len(leads) or camp_idx >= len(campaigns):
+                continue
+            lead = leads[lead_idx]
+            campaign = campaigns[camp_idx]
+            touch_date = today - timedelta(days=days_ago)
+            if AttributionTouchpoint.objects.filter(
+                tenant=tenant,
+                lead=lead,
+                campaign=campaign,
+                touch_date=touch_date,
+                touch_type=touch_type,
+            ).exists():
+                continue
+            touchpoints.append(
+                AttributionTouchpoint.objects.create(
+                    tenant=tenant,
+                    campaign=campaign,
+                    lead=lead,
+                    opportunity=(
+                        opportunities[lead_idx]
+                        if lead_idx < len(opportunities)
+                        else None
+                    ),
+                    channel=channel,
+                    touch_type=touch_type,
+                    touch_date=touch_date,
+                    touch_position=position,
+                    cost=Decimal(cost),
+                    engagement_value=Decimal(value),
+                    currency=currency,
+                    source_reference=(
+                        f"utm_source={channel}&utm_medium=seed&utm_campaign="
+                        f"{campaign.number.lower()}"
+                    ),
+                    notes="Seeded marketing touch for the 8.13 attribution ledger.",
+                )
+            )
+
+        # ---- 2. CampaignAttribution (credit per touch per model) ------------------------------
+        # Each touch carries a first-touch, a last-touch and a linear credit, so the console's
+        # model selector produces genuinely different rollups over the same journey.
+        all_touches = list(
+            AttributionTouchpoint.objects.filter(tenant=tenant).order_by("pk")
+        )
+        credit_specs = [
+            ("first_touch", "approved"),
+            ("last_touch", "approved"),
+            ("linear", "computed"),
+        ]
+        for touch in all_touches:
+            for model, status in credit_specs:
+                if CampaignAttribution.objects.filter(
+                    tenant=tenant, touchpoint=touch, attribution_model=model
+                ).exists():
+                    continue
+                if model == "first_touch":
+                    credit = Decimal("100.00") if touch.touch_position == "first" else Decimal("0.00")
+                    revenue = touch.engagement_value if touch.touch_position == "first" else Decimal("0.00")
+                    cost = touch.cost if touch.touch_position == "first" else Decimal("0.00")
+                elif model == "last_touch":
+                    credit = Decimal("100.00") if touch.touch_position == "last" else Decimal("0.00")
+                    revenue = touch.engagement_value if touch.touch_position == "last" else Decimal("0.00")
+                    cost = touch.cost if touch.touch_position == "last" else Decimal("0.00")
+                else:  # linear -- equal credit across the journey
+                    credit = Decimal("33.34")
+                    revenue = (touch.engagement_value / Decimal("3")).quantize(Decimal("0.01"))
+                    cost = (touch.cost / Decimal("3")).quantize(Decimal("0.01"))
+                CampaignAttribution.objects.create(
+                    tenant=tenant,
+                    touchpoint=touch,
+                    attribution_model=model,
+                    credit_pct=credit,
+                    attributed_revenue=revenue,
+                    attributed_cost=cost,
+                    status=status,
+                    computed_on=today,
+                    computed_by=owner,
+                    notes=f"Seeded {model.replace('_', ' ')} credit for {touch.number}.",
+                )
+
+        # ---- 3. MqlHandoff (the marketing-to-sales handoff) -----------------------------------
+        handoff_specs = [
+            {
+                "status": "accepted",
+                "source_kind": "campaign",
+                "responded_in_hours": 5,
+                "sla_in_hours": 24,
+                "acceptance_reason": "Strong ICP fit and a funded budget for this tier.",
+                "rejection_reason": "",
+                "notes": "Accepted inside the SLA; a demo was booked the same week.",
+            },
+            {
+                "status": "rejected",
+                "source_kind": "content",
+                "responded_in_hours": 18,
+                "sla_in_hours": 24,
+                "acceptance_reason": "",
+                "rejection_reason": "Budget already allocated to an incumbent renewal this quarter.",
+                "notes": "Rejected inside the SLA; routed back to the nurture sequence.",
+            },
+            {
+                "status": "pending",
+                "source_kind": "event",
+                "responded_in_hours": None,
+                "sla_in_hours": -2,  # already overdue -> shows as an SLA breach
+                "acceptance_reason": "",
+                "rejection_reason": "",
+                "notes": "Left unanswered past the deadline to exercise the SLA breach path.",
+            },
+        ]
+        for idx, spec in enumerate(handoff_specs):
+            if idx >= len(leads):
+                break
+            lead = leads[idx]
+            if MqlHandoff.objects.filter(tenant=tenant, lead=lead).exists():
+                continue
+            handoff_at = now - timedelta(days=3 + idx)
+            responded_at = None
+            if spec["responded_in_hours"] is not None:
+                responded_at = handoff_at + timedelta(hours=spec["responded_in_hours"])
+            MqlHandoff.objects.create(
+                tenant=tenant,
+                lead=lead,
+                campaign=campaigns[idx % len(campaigns)],
+                account=accounts[idx % len(accounts)] if accounts else None,
+                owner=owner,
+                assigned_to=owner,
+                opportunity=(
+                    opportunities[idx] if idx < len(opportunities) else None
+                ),
+                status=spec["status"],
+                source_kind=spec["source_kind"],
+                handoff_at=handoff_at,
+                sla_due_at=handoff_at + timedelta(hours=spec["sla_in_hours"]),
+                responded_at=responded_at,
+                acceptance_reason=spec["acceptance_reason"],
+                rejection_reason=spec["rejection_reason"],
+                lead_score=lead.score,
+                estimated_value=lead.est_value,
+                currency=currency,
+                notes=spec["notes"],
+            )
+
+        # ---- 4. ContentEngagement (content performance + content-to-revenue) ------------------
+        engagement_specs = [
+            (0, "download", "email", 82, "12000.00"),
+            (0, "complete", "web", 64, "0.00"),
+            (1, "download", "sales", 91, "18500.00"),
+            (1, "view", "social", 38, "0.00"),
+            (2, "attend", "event", 77, "9400.00"),
+        ]
+        for idx, (content_idx, engagement_type, channel, score, revenue) in enumerate(engagement_specs):
+            if content_idx >= len(contents):
+                continue
+            content = contents[content_idx]
+            account = accounts[idx % len(accounts)] if accounts else None
+            if ContentEngagement.objects.filter(
+                tenant=tenant,
+                content=content,
+                account=account,
+                engagement_type=engagement_type,
+            ).exists():
+                continue
+            ContentEngagement.objects.create(
+                tenant=tenant,
+                content=content,
+                account=account,
+                lead=leads[idx % len(leads)] if leads else None,
+                campaign=campaigns[idx % len(campaigns)],
+                engagement_type=engagement_type,
+                engagement_channel=channel,
+                engagement_score=score,
+                revenue_attributed=Decimal(revenue),
+                currency=currency,
+                engaged_at=now - timedelta(days=2 + idx),
+                notes="Seeded content engagement for the 8.13 content performance report.",
+            )
+
+        # ---- 5. MarketingEvent (+ EventRegistration children) ---------------------------------
+        event_specs = [
+            {
+                "name": "Q3 Revenue Ops Masterclass",
+                "event_type": "webinar",
+                "status": "published",
+                "starts_in_days": 12,
+                "duration_hours": 2,
+                "venue": "Virtual -- broadcast studio",
+                "virtual_url": "https://events.nav-erp.internal/webinar/q3-revops",
+                "capacity": 300,
+                "budget": "4500.00",
+                "campaign_index": 0,
+            },
+            {
+                "name": "Revenue Analytics Deep Dive",
+                "event_type": "workshop",
+                "status": "planned",
+                "starts_in_days": 34,
+                "duration_hours": 3,
+                "venue": "Head Office -- Room 4B",
+                "virtual_url": "",
+                "capacity": 60,
+                "budget": "12000.00",
+                "campaign_index": 1,
+            },
+        ]
+        registration_specs = [
+            ("Jordan Blake", "jordan.blake@example.com", "attended", "campaign", 88, "15000.00", "opportunity_created"),
+            ("Priya Raman", "priya.raman@example.com", "attended", "email", 74, "8500.00", "meeting_booked"),
+            ("Sam Ortiz", "sam.ortiz@example.com", "registered", "organic", 45, "0.00", "pending"),
+            ("Robin Chen", "robin.chen@example.com", "no_show", "partner", 12, "0.00", "no_action"),
+        ]
+        for spec in event_specs:
+            existing = MarketingEvent.objects.filter(tenant=tenant, name=spec["name"]).first()
+            if existing is not None:
+                event = existing
+            else:
+                event = MarketingEvent.objects.create(
+                    tenant=tenant,
+                    name=spec["name"],
+                    event_type=spec["event_type"],
+                    status=spec["status"],
+                    start_at=now + timedelta(days=spec["starts_in_days"]),
+                    end_at=now
+                    + timedelta(days=spec["starts_in_days"], hours=spec["duration_hours"]),
+                    timezone_name="UTC",
+                    venue=spec["venue"],
+                    virtual_url=spec["virtual_url"],
+                    capacity=spec["capacity"],
+                    budget=Decimal(spec["budget"]),
+                    currency=currency,
+                    owner=owner,
+                    campaign=campaigns[spec["campaign_index"] % len(campaigns)],
+                    description="Seeded marketing event for the 8.13 event and webinar module.",
+                )
+            for idx, (name, email, reg_status, channel, score, revenue, followup) in enumerate(
+                registration_specs
+            ):
+                if EventRegistration.objects.filter(
+                    tenant=tenant, event=event, registrant_email=email
+                ).exists():
+                    continue
+                registered_at = now - timedelta(days=spec["starts_in_days"] - 1, hours=idx)
+                EventRegistration.objects.create(
+                    tenant=tenant,
+                    event=event,
+                    lead=leads[idx % len(leads)] if leads else None,
+                    account=accounts[idx % len(accounts)] if accounts else None,
+                    campaign=campaigns[spec["campaign_index"] % len(campaigns)],
+                    registrant_name=name,
+                    registrant_email=email,
+                    registration_status=reg_status,
+                    source_channel=channel,
+                    registered_at=registered_at,
+                    followup_status=followup,
+                    followup_notes="Seeded post-event follow-up state.",
+                    engagement_score=score,
+                    revenue_attributed=Decimal(revenue),
+                    opportunity=(
+                        opportunities[idx % len(opportunities)]
+                        if followup == "opportunity_created" and opportunities
+                        else None
+                    ),
+                )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.13 marketing alignment demo rows ensured "
+            f"({AttributionTouchpoint.objects.filter(tenant=tenant).count()} touchpoints, "
+            f"{CampaignAttribution.objects.filter(tenant=tenant).count()} attributions, "
+            f"{MqlHandoff.objects.filter(tenant=tenant).count()} MQL handoffs, "
+            f"{ContentEngagement.objects.filter(tenant=tenant).count()} content engagements, "
+            f"{MarketingEvent.objects.filter(tenant=tenant).count()} events, "
+            f"{EventRegistration.objects.filter(tenant=tenant).count()} registrations)."
         )
 
 
