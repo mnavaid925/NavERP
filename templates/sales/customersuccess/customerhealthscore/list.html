@@ -196,12 +196,14 @@
                         <a href="{% url 'sales:customer_health_score_edit' score.pk %}" class="btn btn-icon btn-outline" title="Edit evaluation">
                             <i data-lucide="pencil"></i>
                         </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
                         <form method="post" action="{% url 'sales:customer_health_score_delete' score.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete health score {{ score.number }}?');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-icon btn-danger" title="Delete evaluation">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
