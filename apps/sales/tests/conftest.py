@@ -3964,4 +3964,298 @@ def commission_adjustment_b(tenant_b, admin_b, commission_statement_b, commissio
     )
 
 
+# ==============================================================================
+# Sales 8.11 — Customer Success & Account Management Fixtures & Test Contract
+# ==============================================================================
+
+CUSTOMERSUCCESS_MODEL_FIELDS = {
+    "CustomerHealthScore": (
+        "id", "tenant", "created_at", "updated_at", "number", "account",
+        "evaluation_date", "overall_score", "health_band", "previous_score",
+        "score_trend", "product_usage_score", "support_ticket_score",
+        "nps_sentiment_score", "relationship_score", "renewal_risk_score",
+        "risk_level", "risk_reasons", "active_alert_message", "is_churn_risk",
+        "license_utilization_pct", "open_support_tickets", "latest_nps",
+        "last_activity_date", "notes",
+    ),
+    "CustomerRenewal": (
+        "id", "tenant", "created_at", "updated_at", "number", "account",
+        "owner", "original_order", "renewal_name", "contract_reference",
+        "current_arr", "projected_renewal_arr", "expansion_amount", "currency",
+        "renewal_date", "target_close_date", "stage", "churn_risk_flag",
+        "renewal_probability_pct", "auto_renewal", "notice_period_days",
+        "expansion_opportunity", "notes",
+    ),
+    "CustomerOnboarding": (
+        "id", "tenant", "created_at", "updated_at", "number", "account",
+        "lead_csm", "sales_order", "title", "playbook_template", "stage",
+        "status", "kickoff_date", "target_go_live_date", "actual_go_live_date",
+        "time_to_value_days", "progress_pct", "executive_sponsor_name",
+        "executive_sponsor_email", "milestones_config", "blockers",
+        "success_criteria",
+    ),
+    "CustomerBusinessReview": (
+        "id", "tenant", "created_at", "updated_at", "number", "account",
+        "lead_csm", "account_plan", "title", "review_period", "review_year",
+        "scheduled_date", "completed_date", "status", "template_type",
+        "executive_sponsor_attended", "client_attendees", "internal_attendees",
+        "health_score_at_review", "key_achievements", "challenges_and_risks",
+        "action_items", "is_referenceable", "reference_types_permitted",
+        "case_study_status", "testimonial_quote", "notes",
+    ),
+}
+
+CUSTOMERSUCCESS_CHOICES = {
+    "CustomerHealthScore": {
+        "health_band": (("green", "Healthy (75-100)"), ("yellow", "Needs Attention (50-74)"), ("red", "At Risk (0-49)")),
+        "score_trend": (("improving", "Improving"), ("stable", "Stable"), ("declining", "Declining")),
+        "risk_level": (("low", "Low Risk"), ("medium", "Medium Risk"), ("high", "High Risk"), ("critical", "Critical Risk")),
+    },
+    "CustomerRenewal": {
+        "stage": (
+            ("upcoming", "Upcoming (90+ Days)"), ("engagement", "Active Engagement"),
+            ("proposal_sent", "Renewal Proposal Sent"), ("negotiation", "Contract Negotiation"),
+            ("renewed", "Renewed (Closed-Won)"), ("expanded", "Renewed & Expanded"),
+            ("churned", "Churned (Closed-Lost)"), ("contracted_down", "Contracted Down"),
+        ),
+        "churn_risk_flag": (("low", "Low"), ("medium", "Medium"), ("high", "High"), ("critical", "Critical")),
+    },
+    "CustomerOnboarding": {
+        "playbook_template": (
+            ("enterprise_high_touch", "Enterprise High-Touch (90 Days)"),
+            ("midmarket_standard", "Mid-Market Standard (45 Days)"),
+            ("smb_accelerated", "SMB Accelerated (21 Days)"),
+            ("tech_touch_automated", "Tech-Touch Automated"),
+        ),
+        "stage": (
+            ("kickoff", "Kickoff & Alignment"), ("architecture_design", "Architecture & Solution Design"),
+            ("configuration", "System Configuration"), ("data_migration", "Data Migration"),
+            ("training", "User & Admin Training"), ("uat_testing", "User Acceptance Testing"),
+            ("go_live", "Production Go-Live"), ("completed", "Completed & Handed to CS"),
+            ("stalled", "Stalled / On Hold"),
+        ),
+        "status": (
+            ("not_started", "Not Started"), ("in_progress", "In Progress"),
+            ("on_track", "On Track"), ("at_risk", "At Risk"),
+            ("blocked", "Blocked"), ("completed", "Completed"),
+        ),
+    },
+    "CustomerBusinessReview": {
+        "review_period": (
+            ("q1", "Q1 Review"), ("q2", "Q2 Review"), ("q3", "Q3 Review"),
+            ("q4", "Q4 Review"), ("mid_year", "Mid-Year Review"),
+            ("annual", "Annual Executive Review"),
+        ),
+        "status": (
+            ("scheduled", "Scheduled"), ("materials_prepared", "Materials Prepared"),
+            ("conducted", "Conducted / Completed"), ("follow_up_sent", "Follow-Up Action Items Sent"),
+            ("cancelled", "Cancelled"),
+        ),
+        "template_type": (
+            ("executive_value", "Executive Value & ROI Review"),
+            ("technical_roadmap", "Technical Architecture & Roadmap"),
+            ("renewal_alignment", "Renewal & Partnership Alignment"),
+            ("operational_cadence", "Standard Operational Cadence"),
+        ),
+        "case_study_status": (
+            ("none", "Not Candidate"), ("identified", "Candidate Identified"),
+            ("interview_scheduled", "Interview Scheduled"), ("drafting", "Drafting Case Study"),
+            ("approved", "Client Approved"), ("published", "Published"),
+        ),
+    },
+}
+
+CUSTOMERSUCCESS_URLS = {
+    "customer_health_console": "customer-success/health-console/",
+    "customer_renewal_pipeline": "customer-success/renewal-pipeline/",
+    "customer_onboarding_hub": "customer-success/onboarding-hub/",
+    "customer_advocacy_hub": "customer-success/advocacy-hub/",
+    "customer_qbr_studio": "customer-success/qbr-studio/",
+    "customer_health_score_list": "customer-success/health-scores/",
+    "customer_health_score_create": "customer-success/health-scores/create/",
+    "customer_health_score_detail": "customer-success/health-scores/<int:pk>/",
+    "customer_health_score_edit": "customer-success/health-scores/<int:pk>/edit/",
+    "customer_health_score_delete": "customer-success/health-scores/<int:pk>/delete/",
+    "customer_renewal_list": "customer-success/renewals/",
+    "customer_renewal_create": "customer-success/renewals/create/",
+    "customer_renewal_detail": "customer-success/renewals/<int:pk>/",
+    "customer_renewal_edit": "customer-success/renewals/<int:pk>/edit/",
+    "customer_renewal_delete": "customer-success/renewals/<int:pk>/delete/",
+    "customer_onboarding_list": "customer-success/onboardings/",
+    "customer_onboarding_create": "customer-success/onboardings/create/",
+    "customer_onboarding_detail": "customer-success/onboardings/<int:pk>/",
+    "customer_onboarding_edit": "customer-success/onboardings/<int:pk>/edit/",
+    "customer_onboarding_delete": "customer-success/onboardings/<int:pk>/delete/",
+    "customer_business_review_list": "customer-success/business-reviews/",
+    "customer_business_review_create": "customer-success/business-reviews/create/",
+    "customer_business_review_detail": "customer-success/business-reviews/<int:pk>/",
+    "customer_business_review_edit": "customer-success/business-reviews/<int:pk>/edit/",
+    "customer_business_review_delete": "customer-success/business-reviews/<int:pk>/delete/",
+}
+
+
+def _customersuccess_party(tenant, name="Customer Alpha"):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant, name=name, party_type="organization")
+
+
+def _customersuccess_health_score(tenant, account, **overrides):
+    from apps.sales.models import CustomerHealthScore
+    from django.utils import timezone
+    defaults = {
+        "tenant": tenant,
+        "account": account,
+        "evaluation_date": timezone.localdate(),
+        "overall_score": 85,
+        "health_band": "green",
+        "score_trend": "improving",
+        "risk_level": "low",
+        "product_usage_score": 85,
+        "support_ticket_score": 85,
+        "nps_sentiment_score": 85,
+        "relationship_score": 85,
+        "renewal_risk_score": 85,
+        "risk_reasons": [],
+        "active_alert_message": "",
+        "is_churn_risk": False,
+        "license_utilization_pct": Decimal("85.00"),
+        "open_support_tickets": 1,
+        "latest_nps": 50,
+        "notes": "Healthy account.",
+    }
+    defaults.update(overrides)
+    return CustomerHealthScore.objects.create(**defaults)
+
+
+def _customersuccess_renewal(tenant, account, owner, currency, **overrides):
+    from apps.sales.models import CustomerRenewal
+    from datetime import date
+    defaults = {
+        "tenant": tenant,
+        "account": account,
+        "owner": owner,
+        "currency": currency,
+        "renewal_name": f"{account.name} 2026 Renewal",
+        "contract_reference": "CNT-TEST-01",
+        "current_arr": Decimal("100000.00"),
+        "projected_renewal_arr": Decimal("110000.00"),
+        "expansion_amount": Decimal("10000.00"),
+        "renewal_date": date(2026, 6, 1),
+        "target_close_date": date(2026, 5, 15),
+        "stage": "upcoming",
+        "churn_risk_flag": "low",
+        "renewal_probability_pct": 80,
+        "auto_renewal": False,
+        "notice_period_days": 60,
+        "notes": "Targeting expansion.",
+    }
+    defaults.update(overrides)
+    return CustomerRenewal.objects.create(**defaults)
+
+
+def _customersuccess_onboarding(tenant, account, lead_csm, **overrides):
+    from apps.sales.models import CustomerOnboarding
+    from datetime import date
+    defaults = {
+        "tenant": tenant,
+        "account": account,
+        "lead_csm": lead_csm,
+        "title": f"{account.name} Implementation",
+        "playbook_template": "enterprise_high_touch",
+        "stage": "kickoff",
+        "status": "in_progress",
+        "kickoff_date": date(2026, 2, 1),
+        "target_go_live_date": date(2026, 4, 30),
+        "progress_pct": 20,
+        "executive_sponsor_name": "Alice Smith",
+        "executive_sponsor_email": "alice@example.com",
+        "milestones_config": [{"name": "Kickoff", "due": "2026-02-05", "done": True}],
+        "success_criteria": "Successful deployment.",
+        "blockers": "",
+    }
+    defaults.update(overrides)
+    return CustomerOnboarding.objects.create(**defaults)
+
+
+def _customersuccess_business_review(tenant, account, lead_csm, **overrides):
+    from apps.sales.models import CustomerBusinessReview
+    from datetime import date
+    defaults = {
+        "tenant": tenant,
+        "account": account,
+        "lead_csm": lead_csm,
+        "title": f"{account.name} Q1 Executive Review",
+        "review_period": "q1",
+        "review_year": 2026,
+        "scheduled_date": date(2026, 3, 15),
+        "status": "scheduled",
+        "template_type": "executive_value",
+        "executive_sponsor_attended": True,
+        "client_attendees": "Alice Smith (VP)",
+        "internal_attendees": "CSM Lead",
+        "health_score_at_review": 85,
+        "key_achievements": "Time to value decreased.",
+        "challenges_and_risks": "",
+        "action_items": [],
+        "is_referenceable": True,
+        "reference_types_permitted": ["case_study", "reference_calls"],
+        "case_study_status": "identified",
+        "testimonial_quote": "Great partnership.",
+        "notes": "",
+    }
+    defaults.update(overrides)
+    return CustomerBusinessReview.objects.create(**defaults)
+
+
+@pytest.fixture
+def cs_account_a(tenant_a):
+    return _customersuccess_party(tenant_a, name="Acme Customer A")
+
+
+@pytest.fixture
+def cs_account_b(tenant_b):
+    return _customersuccess_party(tenant_b, name="Globex Customer B")
+
+
+@pytest.fixture
+def cs_health_score_a(tenant_a, cs_account_a):
+    return _customersuccess_health_score(tenant_a, cs_account_a)
+
+
+@pytest.fixture
+def cs_health_score_b(tenant_b, cs_account_b):
+    return _customersuccess_health_score(tenant_b, cs_account_b)
+
+
+@pytest.fixture
+def cs_renewal_a(tenant_a, cs_account_a, admin_user, icm_currency):
+    return _customersuccess_renewal(tenant_a, cs_account_a, admin_user, icm_currency)
+
+
+@pytest.fixture
+def cs_renewal_b(tenant_b, cs_account_b, admin_b, icm_currency):
+    return _customersuccess_renewal(tenant_b, cs_account_b, admin_b, icm_currency)
+
+
+@pytest.fixture
+def cs_onboarding_a(tenant_a, cs_account_a, admin_user):
+    return _customersuccess_onboarding(tenant_a, cs_account_a, admin_user)
+
+
+@pytest.fixture
+def cs_onboarding_b(tenant_b, cs_account_b, admin_b):
+    return _customersuccess_onboarding(tenant_b, cs_account_b, admin_b)
+
+
+@pytest.fixture
+def cs_qbr_a(tenant_a, cs_account_a, admin_user):
+    return _customersuccess_business_review(tenant_a, cs_account_a, admin_user)
+
+
+@pytest.fixture
+def cs_qbr_b(tenant_b, cs_account_b, admin_b):
+    return _customersuccess_business_review(tenant_b, cs_account_b, admin_b)
+
+
+
 
