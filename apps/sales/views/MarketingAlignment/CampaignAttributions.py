@@ -17,6 +17,7 @@ from apps.sales.models.MarketingAlignment.CampaignAttributions import (
     ATTRIBUTION_STATUS_CHOICES,
     CampaignAttribution,
 )
+from apps.sales.views.MarketingAlignment._common import pk_from_param
 
 
 @login_required
@@ -51,8 +52,9 @@ def campaign_attribution_list(request):
         qs = qs.filter(status=status)
 
     campaign_id = request.GET.get("campaign", "").strip()
-    if campaign_id and campaign_id.isdigit():
-        qs = qs.filter(touchpoint__campaign_id=int(campaign_id))
+    campaign_pk = pk_from_param(campaign_id)
+    if campaign_pk is not None:
+        qs = qs.filter(touchpoint__campaign_id=campaign_pk)
 
     stats = qs.aggregate(
         total_count=Count("id"),
