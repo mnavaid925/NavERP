@@ -2998,7 +2998,12 @@ class Command(BaseCommand):
                 "status": "pending",
                 "source_kind": "event",
                 "responded_in_hours": None,
-                "sla_in_hours": -2,  # already overdue -> shows as an SLA breach
+                # A normal 24h SLA window. The handoff itself is raised 3+ days in the past
+                # (`handoff_at = now - timedelta(days=3 + idx)`), so the deadline is already in
+                # the past -- that is what makes this row a deliberate, overdue SLA breach.
+                # It must stay positive: a negative window would put the deadline BEFORE the
+                # handoff and violate the model's own `sla_due_at >= handoff_at` invariant.
+                "sla_in_hours": 24,
                 "acceptance_reason": "",
                 "rejection_reason": "",
                 "notes": "Left unanswered past the deadline to exercise the SLA breach path.",
