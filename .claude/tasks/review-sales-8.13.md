@@ -106,7 +106,62 @@ test-writing phase was skipped rather than contended (see `GAP-sales-8.13-09`).
 
 ---
 
-## Findings
+## Phase 4 review passes
 
-(findings appended here as each reviewer reports)
+### `code-reviewer` — **C1: oversized pk in a filter parameter → 500 (Critical)**
+
+Found while running the 8.12 session's own probe output against 8.13's identical pattern.
+
+**Where:** all **10** pk-valued filter parameters across the five 8.13 list views —
+`AttributionTouchpoints.py` (`campaign`, `lead`), `CampaignAttributions.py` (`campaign`),
+`MqlHandoffs.py` (`campaign`, `owner`), `ContentEngagements.py` (`content`, `account`,
+`campaign`), `MarketingEvents.py` (`owner`, `campaign`).
+
+**What was wrong.** Each guard read:
+
+```python
+campaign_id = request.GET.get("campaign", "").strip()
+if campaign_id and campaign_id.isdigit():
+    qs = qs.filter(campaign_id=int(campaign_id))
+```
+
+`.isdigit()` is **not** a safety check. `?campaign=999999999999999999999` (21 digits) passes the
+digit test, `int()` converts it, and the DB driver then raises
+`OverflowError: Python int too large to convert to SQLite INTEGER` → an uncaught **500**.
+
+**Why it matters.** The value is **harmless on MariaDB** — the production database returns
+"no rows" and the page renders. It is **not** harmless on SQLite, and the entire NavERP test
+suite runs on SQLite in-memory. So the bug is invisible in the running app and becomes a hard
+500 under the test database, and in any future deployment on SQLite. The Phase 3 smoke gate
+missed it because its hostile-input check used *non-numeric* junk (`?campaign=abc`), which the
+old guard already handled — the oversized-numeric case was only reachable by running the same
+views against SQLite.
+
+**Fix applied** (new shared helper `apps/sales/views/MarketingAlignment/_common.py`):
+
+```python
+MAX_PK = 2**63 - 1
+MIN_PK = -(2**63)
+
+def pk_from_param(value):
+    """Return an int pk for a GET parameter, or None when it cannot possibly be one."""
+```
+
+`None` means "do not filter by this parameter" — an empty value, a non-numeric value, or a value
+outside the int64 range — so the filter falls back to the unfiltered list, which is the same
+outcome as an unknown id and is never an error. All 10 call sites now use it; the contract pins
+it as **§4.0 The pk-filter guard — `pk_from_param` (MANDATORY)**.
+
+**Verification.** Reproduced on SQLite before the fix — **10/10 filters raised `OverflowError`**.
+After the fix — **10/10 return 200**. `manage.py check` clean, `makemigrations --check` clean,
+the full 8.13 page sweep still passes on MariaDB, and the oversized-pk sweep passes on both
+databases.
+
+### `explorer` — pending
+### `frontend-reviewer` — pending
+### `performance-reviewer` — pending
+### `qa-smoke-tester` (Phase 4 pass) — pending
+### `security-reviewer` — pending
+
+---
 
