@@ -71,6 +71,7 @@ class CustomerBusinessReviewForm(TenantUniqueMixin, TenantModelForm):
             )
             self.fields["account_plan"].queryset = (
                 AccountPlan.objects.filter(tenant=self.tenant)
+                .select_related("account")
                 .order_by("-period_start")
             )
 
