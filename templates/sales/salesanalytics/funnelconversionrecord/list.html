@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Funnel Conversion Records — Sales Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <span>Funnel Conversion Records</span>
+        </div>
+        <h1 class="page-title">Funnel Conversion Records</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:funnel_conversion_record_list' %}" class="btn btn-outline">
+            <i data-lucide="refresh-cw"></i>
+            <span>Refresh</span>
+        </a>
+        <a href="{% url 'sales:funnel_conversion_record_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Conversion Record</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="clipboard-list"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_count|default:"0" }}</div>
+        <div class="stat-label">Total Records</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div class="stat-value">{{ stats.avg_conversion_rate_pct|default:"0.00" }}%</div>
+        <div class="stat-label">Avg Conversion Rate</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="user-minus"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_dropoff|default:"0" }}</div>
+        <div class="stat-label">Total Dropoff</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="triangle-alert"></i>
+        </div>
+        <div class="stat-value">{{ stats.below_benchmark_count|default:"0" }}</div>
+        <div class="stat-label">Below Benchmark</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card">
+    <div class="card-body">
+        <form method="get" class="filter-bar">
+            <div class="form-group">
+                <label class="form-label" for="filter-q">Search</label>
+                <input type="search" id="filter-q" name="q" value="{{ q }}" placeholder="Label, number, channel, notes..." class="form-input">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-funnel-scope">Funnel Scope</label>
+                <select id="filter-funnel-scope" name="funnel_scope" class="form-select">
+                    <option value="">All Scopes</option>
+                    {% for val, label in scope_choices %}
+                    <option value="{{ val }}" {% if request.GET.funnel_scope == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-from-stage">From Stage</label>
+                <select id="filter-from-stage" name="from_stage" class="form-select">
+                    <option value="">All Stages</option>
+                    {% for stage in from_stages %}
+                    <option value="{{ stage.pk|stringformat:"d" }}" {% if request.GET.from_stage == stage.pk|stringformat:"d" %}selected{% endif %}>{{ stage.pipeline.name }} · {{ stage.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-to-stage">To Stage</label>
+                <select id="filter-to-stage" name="to_stage" class="form-select">
+                    <option value="">All Stages</option>
+                    {% for stage in to_stages %}
+                    <option value="{{ stage.pk|stringformat:"d" }}" {% if request.GET.to_stage == stage.pk|stringformat:"d" %}selected{% endif %}>{{ stage.pipeline.name }} · {{ stage.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-territory">Territory</label>
+                <select id="filter-territory" name="territory" class="form-select">
+                    <option value="">All Territories</option>
+                    {% for territory in territories %}
+                    <option value="{{ territory.pk|stringformat:"d" }}" {% if request.GET.territory == territory.pk|stringformat:"d" %}selected{% endif %}>{{ territory.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-owner">Owner</label>
+                <select id="filter-owner" name="owner" class="form-select">
+                    <option value="">All Owners</option>
+                    {% for owner in owners %}
+                    <option value="{{ owner.pk|stringformat:"d" }}" {% if request.GET.owner == owner.pk|stringformat:"d" %}selected{% endif %}>{{ owner.get_full_name|default:owner.username|default:owner.email }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter"></i>
+                    <span>Apply</span>
+                </button>
+                {% if active_filters.q or active_filters.funnel_scope or active_filters.from_stage or active_filters.to_stage or active_filters.territory or active_filters.owner %}
+                <a href="{% url 'sales:funnel_conversion_record_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                    <span>Reset</span>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- List Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Label</th>
+                    <th>Scope</th>
+                    <th>From Stage</th>
+                    <th>To Stage</th>
+                    <th>Territory</th>
+                    <th>Owner</th>
+                    <th>Entered</th>
+                    <th>Converted</th>
+                    <th>Rate</th>
+                    <th>Dropoff</th>
+                    <th>Period</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in records %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:funnel_conversion_record_detail' record.pk %}" class="font-mono text-sm font-semibold hover:underline">
+                            {{ record.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ record.label }}</div>
+                        {% if record.segment %}
+                        <div class="text-xs text-slate-500">{{ record.segment }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ record.scope_badge_class }}">{{ record.get_funnel_scope_display }}</span>
+                    </td>
+                    <td>
+                        {% if record.from_stage %}
+                        <span class="text-sm">{{ record.from_stage.name }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if record.to_stage %}
+                        <span class="text-sm">{{ record.to_stage.name }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if record.territory %}
+                        <span class="text-sm">{{ record.territory.name }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if record.owner %}
+                        <span class="text-sm">{{ record.owner.get_full_name|default:record.owner.username }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-slate-600 text-sm">{{ record.entered_count }}</td>
+                    <td class="text-slate-600 text-sm">{{ record.converted_count }}</td>
+                    <td>
+                        <span class="text-sm font-semibold">{{ record.conversion_rate_pct }}%</span>
+                        {% if record.benchmark_pct is not None %}
+                        {% if record.is_below_benchmark %}
+                        <span class="badge badge-red">Below</span>
+                        {% else %}
+                        <span class="badge badge-green">On Target</span>
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                    <td class="text-slate-600 text-sm">{{ record.dropoff_count }}</td>
+                    <td class="text-slate-600 text-sm">{{ record.period_start|date:"M d" }} – {{ record.period_end|date:"M d, Y" }}</td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'sales:funnel_conversion_record_detail' record.pk %}" class="btn btn-icon btn-outline" title="View conversion record">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:funnel_conversion_record_edit' record.pk %}" class="btn btn-icon btn-outline" title="Edit conversion record">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'sales:funnel_conversion_record_delete' record.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete conversion record {{ record.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete conversion record">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="13">
+                        <div class="empty-state">
+                            <i data-lucide="funnel"></i>
+                            <h3>No funnel conversion records found</h3>
+                            <p>Record how many leads, opportunities or stage placements entered a funnel step and how many converted out of it.</p>
+                            <a href="{% url 'sales:funnel_conversion_record_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Record First Conversion</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+</div>
+{% endblock %}
