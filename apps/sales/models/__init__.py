@@ -70,6 +70,12 @@ from .IncentiveCompensation.CommissionEarnings import CommissionEarning
 from .IncentiveCompensation.CommissionStatements import CommissionStatement
 from .IncentiveCompensation.CommissionAdjustments import CommissionAdjustment
 
+# 8.11 Customer Success & Account Management.
+from .CustomerSuccess.CustomerHealthScores import CustomerHealthScore
+from .CustomerSuccess.CustomerRenewals import CustomerRenewal
+from .CustomerSuccess.CustomerOnboardings import CustomerOnboarding
+from .CustomerSuccess.CustomerBusinessReviews import CustomerBusinessReview
+
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
     "LeadQualification", "LeadRoutingRule", "LeadNurtureEnrollment", "validate_routing_conditions",
@@ -96,7 +102,10 @@ __all__ = [
     "EnablementContent", "SalesPlaybook", "SalesCertification", "CoachingScorecard",
     # 8.10 Incentive Compensation Management
     "CommissionPlan", "CommissionEarning", "CommissionStatement", "CommissionAdjustment",
+    # 8.11 Customer Success & Account Management
+    "CustomerHealthScore", "CustomerRenewal", "CustomerOnboarding", "CustomerBusinessReview",
 ]
+
 
 
 
