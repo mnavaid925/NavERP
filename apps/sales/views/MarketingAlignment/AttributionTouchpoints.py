@@ -21,7 +21,7 @@ from apps.sales.models.MarketingAlignment.AttributionTouchpoints import (
     TOUCH_TYPE_CHOICES,
     AttributionTouchpoint,
 )
-from apps.sales.views.MarketingAlignment._common import pk_from_param
+from apps.sales.views.MarketingAlignment._common import enum_filter, pk_from_param
 
 
 @login_required
@@ -42,17 +42,15 @@ def attribution_touchpoint_list(request):
             | Q(number__icontains=q)
         )
 
-    channel = request.GET.get("channel", "").strip()
-    if channel:
-        qs = qs.filter(channel=channel)
+    channel, qs = enum_filter(qs, request, "channel", "channel", TOUCH_CHANNEL_CHOICES)
 
-    touch_type = request.GET.get("touch_type", "").strip()
-    if touch_type:
-        qs = qs.filter(touch_type=touch_type)
+    touch_type, qs = enum_filter(
+        qs, request, "touch_type", "touch_type", TOUCH_TYPE_CHOICES
+    )
 
-    position = request.GET.get("position", "").strip()
-    if position:
-        qs = qs.filter(touch_position=position)
+    position, qs = enum_filter(
+        qs, request, "position", "touch_position", TOUCH_POSITION_CHOICES
+    )
 
     campaign_id = request.GET.get("campaign", "").strip()
     campaign_pk = pk_from_param(campaign_id)
