@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Campaign Attributions — Marketing Alignment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <span>Attributions</span>
+        </div>
+        <h1 class="page-title">Campaign Attributions</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:campaign_attribution_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Attribution</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="split"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Credit Assignments</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="badge-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Approved</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.approved_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Attributed Revenue</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                ${{ stats.total_attributed_revenue|default:"0.00"|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="circle-dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Attributed Cost</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                ${{ stats.total_attributed_cost|default:"0.00"|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search campaign, lead, deal..." class="form-input w-full" aria-label="Search attributions">
+            </div>
+            <div>
+                <select name="attribution_model" class="form-select w-full" aria-label="Filter by attribution model">
+                    <option value="">All Attribution Models</option>
+                    {% for val, label in model_choices %}
+                    <option value="{{ val }}" {% if active_filters.attribution_model == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="status" class="form-select w-full" aria-label="Filter by attribution status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if active_filters.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="campaign" class="form-select w-full" aria-label="Filter by campaign">
+                    <option value="">All Campaigns</option>
+                    {% for campaign in campaigns %}
+                    <option value="{{ campaign.pk }}" {% if active_filters.campaign == campaign.pk|stringformat:"d" %}selected{% endif %}>{{ campaign.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if active_filters.q or active_filters.attribution_model or active_filters.status or active_filters.campaign %}
+                <a href="{% url 'sales:campaign_attribution_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Attribution ID</th>
+                    <th>Model</th>
+                    <th>Campaign</th>
+                    <th>Touchpoint</th>
+                    <th>Credit %</th>
+                    <th>Attributed Revenue</th>
+                    <th>Attributed Cost</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for attribution in attributions %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:campaign_attribution_detail' attribution.pk %}" class="font-mono text-sm font-semibold text-blue-600 hover:underline">
+                            {{ attribution.number }}
+                        </a>
+                        <div class="text-xs text-slate-500">{{ attribution.computed_on|date:"M d, Y" }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ attribution.get_attribution_model_display }}</span>
+                    </td>
+                    <td>
+                        {% if attribution.campaign %}
+                        <div class="font-medium text-slate-900">{{ attribution.campaign.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ attribution.campaign.number }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">No campaign</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if attribution.touchpoint %}
+                        <a href="{% url 'sales:attribution_touchpoint_detail' attribution.touchpoint.pk %}" class="text-sm text-blue-600 hover:underline font-mono">
+                            {{ attribution.touchpoint.number }}
+                        </a>
+                        <div class="text-xs text-slate-500">{{ attribution.touchpoint.get_channel_display }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-semibold text-slate-900">{{ attribution.credit_pct|floatformat:2 }}%</div>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">${{ attribution.attributed_revenue|floatformat:2 }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700">${{ attribution.attributed_cost|floatformat:2 }}</span>
+                    </td>
+                    <td>
+                        {% if attribution.status == "approved" %}
+                        <span class="badge badge-green">Approved</span>
+                        {% elif attribution.status == "rejected" %}
+                        <span class="badge badge-red">Rejected</span>
+                        {% elif attribution.status == "computed" %}
+                        <span class="badge badge-info">Computed</span>
+                        {% else %}
+                        <span class="badge badge-muted">Draft</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'sales:campaign_attribution_detail' attribution.pk %}" class="btn btn-icon btn-outline" title="View details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:campaign_attribution_edit' attribution.pk %}" class="btn btn-icon btn-outline" title="Edit attribution">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'sales:campaign_attribution_delete' attribution.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete attribution {{ attribution.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete attribution">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="split" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No campaign attributions found</div>
+                            <div class="empty-state-text">Assign conversion credit to a touchpoint under first-touch, last-touch, multi-touch or a custom model.</div>
+                            <a href="{% url 'sales:campaign_attribution_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Create First Attribution</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination (L9 Guarded) -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} attributions
+        </div>
+        <div class="pagination-actions">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.attribution_model %}&attribution_model={{ active_filters.attribution_model }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.attribution_model %}&attribution_model={{ active_filters.attribution_model }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
