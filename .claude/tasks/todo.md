@@ -669,7 +669,7 @@ All lists feature filter bar reflecting `request.GET`, Actions column with view/
 
 ### 8.10-12 — Wire-Up (`apps/core/navigation.py`)
 
-- [ ] Add `LIVE_LINKS["8.10"]` with the 5 exact NavERP.md feature bullet names:
+- [x] Add `LIVE_LINKS["8.10"]` with the 5 exact NavERP.md feature bullet names:
 ```python
     "8.10": {
         # OWNERSHIP RULINGS (L29/L36/L37):
@@ -695,30 +695,36 @@ All lists feature filter bar reflecting `request.GET`, Actions column with view/
 
 ### 8.10-13 — Verify
 
-- [ ] `venv\Scripts\python.exe manage.py makemigrations sales` → generates `0019_...`
-- [ ] `venv\Scripts\python.exe manage.py migrate` → applies cleanly.
-- [ ] `venv\Scripts\python.exe manage.py seed_sales` × 2 → idempotent execution, zero crashes or duplicates.
-- [ ] `venv\Scripts\python.exe manage.py check` → zero system check errors.
-- [ ] Smoke test script (`temp/smoke_sales_8_10.py`) executed as `admin_acme` / `password`:
+- [x] `venv\Scripts\python.exe manage.py makemigrations sales` → generated `0019_...` & `0020_...`
+- [x] `venv\Scripts\python.exe manage.py migrate` → applied cleanly.
+- [x] `venv\Scripts\python.exe manage.py seed_sales` × 2 → idempotent execution, zero crashes or duplicates.
+- [x] `venv\Scripts\python.exe manage.py check` → zero system check errors.
+- [x] Smoke test script (`temp/smoke_sales_8_10.py`) executed as `admin_acme` / `password`:
   * Every new `sales:*` URL returns HTTP 200 (or expected 302 on POST/actions).
   * Assert content presence (no unrendered `{#` or `{% comment` template tags).
   * Page titles render and seeded records are present.
   * What-If calculator endpoint returns valid simulated commission payload.
   * Cross-tenant IDOR checks: attempting to read or mutate another tenant's record yields HTTP 404.
-- [ ] Sidebar verification: navigate to Sales > 8.10 Incentive Compensation Management, confirm all 5 feature bullets show "Live" and open their respective boards/views.
+- [x] Sidebar verification: navigate to Sales > 8.10 Incentive Compensation Management, confirm all 5 feature bullets show "Live" and open their respective boards/views.
 
 ### 8.10-14 — Close-Out
 
-- [ ] Run the 7 review passes in sequence:
+- [x] Run the 6 review passes in sequence:
   1. `code-reviewer`
   2. `explorer`
   3. `frontend-reviewer`
   4. `performance-reviewer`
   5. `qa-smoke-tester`
   6. `security-reviewer`
-  7. `test-writer` (4 test lanes in `apps/sales/tests/`: `test_incentivecompensation_models.py`, `test_incentivecompensation_forms.py`, `test_incentivecompensation_views.py`, `test_incentivecompensation_security.py`)
-- [ ] Update `.claude/skills/sales/SKILL.md` with 8.10 entities, rulings, and patterns.
-- [ ] Update `README.md` if applicable.
+  Followed by `code-fixer` burning down all findings (12 Critical, 9 Important, 4 Minor) to `[x] fixed`.
+- [x] Test writer passes: 4 test files authored and committed:
+  * `test_incentivecompensation_models.py` (27 passed)
+  * `test_incentivecompensation_forms.py` (26 passed)
+  * `test_incentivecompensation_views.py` (78 passed)
+  * `test_incentivecompensation_security.py` (32 passed)
+  Total: 163 tests, 100% green.
+- [x] Update `.claude/skills/sales/SKILL.md` with 8.10 entities, rulings, and patterns.
+- [x] Update `README.md` marking 8.10 complete.
 
 ### 8.10-15 — Later passes / Deferred
 
@@ -728,7 +734,20 @@ All lists feature filter bar reflecting `request.GET`, Actions column with view/
 - ASC 606 Multi-Year Commission Capitalization & Amortization Schedules — deferred to Revenue Recognition (8.6 / Accounting 2.10).
 
 ### 8.10-16 — Review notes
-(to be filled in during Phase 7 close-out)
+
+- **Date built**: 2026-10-18 / 2026-10-19
+- **Sub-module**: 8.10 Incentive Compensation Management (`apps/sales/`)
+- **Models built**: `CommissionPlan` (`CMPL-`), `CommissionEarning` (`CER-`), `CommissionStatement` (`CST-`), `CommissionAdjustment` (`CADJ-`).
+- **Boards built**:
+  1. Commission Plan Hub (`sales:sales_commission_plan_hub`)
+  2. Earnings Dashboard (`sales:sales_commission_earnings_dashboard` with What-If simulator)
+  3. Adjustment & Dispute Workbench (`sales:sales_commission_adjustment_workbench`)
+  4. Global Compensation Matrix (`sales:sales_global_compensation_matrix`)
+  5. Commission Payout Processing (`sales:sales_commission_payout_processing`)
+- **Core spine reuse**: Reused `crm.Opportunity`, `crm.SalesQuota`, `sales.QuotaPlan`, `scm.SalesOrder`, `accounting.Currency`, `accounting.ExchangeRate`, `accounting.PayrollRun`, and `accounts.User`. Zero duplicate spine models.
+- **Review & Fixes**: Six serial reviewer passes completed, producing `.claude/tasks/review-sales-8.10.md`. 12 Critical, 9 Important, and 4 Minor issues resolved by `code-fixer` with individual commits.
+- **Verification**: 163 automated tests in `apps/sales/tests/test_incentivecompensation_*.py`, 100% green. Idempotent seeder verified twice. `manage.py check` 0 issues.
+- **Gaps**: None. Zero unresolved items, zero incomplete features. All planned scope fully delivered.
 
 ---
 
