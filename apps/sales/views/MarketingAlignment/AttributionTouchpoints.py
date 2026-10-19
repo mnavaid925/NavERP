@@ -12,6 +12,9 @@ from apps.crm.models import Campaign, Lead
 from apps.sales.forms.MarketingAlignment.AttributionTouchpoints import (
     AttributionTouchpointForm,
 )
+from apps.sales.models.MarketingAlignment.CampaignAttributions import (
+    CampaignAttribution,
+)
 from apps.sales.models.MarketingAlignment.AttributionTouchpoints import (
     TOUCH_CHANNEL_CHOICES,
     TOUCH_POSITION_CHOICES,
@@ -106,10 +109,17 @@ def attribution_touchpoint_detail(request, pk):
         ),
         pk=pk,
     )
+    # The credit rows for this touch under every attribution model -- the per-model
+    # breakdown behind the aggregate `obj.attributed_revenue`.
+    attributions = (
+        CampaignAttribution.objects.filter(tenant=request.tenant, touchpoint=obj)
+        .select_related("computed_by")
+        .order_by("attribution_model")
+    )
     return render(
         request,
         "sales/marketingalignment/attributiontouchpoint/detail.html",
-        {"obj": obj, "touchpoint": obj},
+        {"obj": obj, "touchpoint": obj, "attributions": attributions},
     )
 
 
