@@ -73,9 +73,9 @@
         <div class="text-xs text-slate-500 mt-3">
             Previous Evaluation: <strong class="text-slate-800">{{ obj.previous_score }}/100</strong>
             {% if obj.overall_score > obj.previous_score %}
-            <span class="text-green-600 font-medium">(+{{ obj.overall_score|add:"-"|add:obj.previous_score }})</span>
+            <span class="text-green-600 font-medium">(+{{ obj.score_delta }})</span>
             {% elif obj.overall_score < obj.previous_score %}
-            <span class="text-red-600 font-medium">({{ obj.overall_score|add:"-"|add:obj.previous_score }})</span>
+            <span class="text-red-600 font-medium">({{ obj.score_delta }})</span>
             {% endif %}
         </div>
         {% endif %}
