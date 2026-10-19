@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Conversion {{ obj.number }} — Funnel Conversion Records — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <a href="{% url 'sales:funnel_conversion_record_list' %}">Funnel Conversion Records</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ obj.number }} · {{ obj.label }}</h1>
+            <span class="badge {{ obj.scope_badge_class }}">{{ obj.get_funnel_scope_display }}</span>
+            {% if obj.is_below_benchmark %}
+            <span class="badge badge-red">Below Benchmark</span>
+            {% else %}
+            <span class="badge badge-green">On Target</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:funnel_conversion_record_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Conversion Records</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Main content -->
+    <div class="lg:col-span-2 space-y-4">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Conversion Record</h2>
+            </div>
+            <div class="card-body">
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Record Number</dt>
+                        <dd class="text-slate-900 font-mono">{{ obj.number }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Label</dt>
+                        <dd class="text-slate-900 font-medium">{{ obj.label }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Funnel Scope</dt>
+                        <dd class="text-slate-900">
+                            <span class="badge {{ obj.scope_badge_class }}">{{ obj.get_funnel_scope_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">From Stage</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.from_stage %}
+                            <span class="font-mono text-xs">{{ obj.from_stage.pipeline.name }}</span>
+                            {{ obj.from_stage.name }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">To Stage</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.to_stage %}
+                            <span class="font-mono text-xs">{{ obj.to_stage.pipeline.name }}</span>
+                            {{ obj.to_stage.name }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Territory</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.territory %}{{ obj.territory.name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Owner</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Source Channel</dt>
+                        <dd class="text-slate-900">{% if obj.source_channel %}{{ obj.source_channel }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Period</dt>
+                        <dd class="text-slate-900">{{ obj.period_start|date:"F d, Y" }} – {{ obj.period_end|date:"F d, Y" }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Segment</dt>
+                        <dd class="text-slate-900">{% if obj.segment %}{{ obj.segment }}{% else %}—{% endif %}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Funnel Counts</h2>
+            </div>
+            <div class="card-body">
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Entered Count</dt>
+                        <dd class="text-slate-900 font-semibold">{{ obj.entered_count }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Converted Count</dt>
+                        <dd class="text-slate-900 font-semibold">{{ obj.converted_count }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Skipped Count</dt>
+                        <dd class="text-slate-900 font-semibold">{{ obj.skipped_count }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Avg Cycle Days</dt>
+                        <dd class="text-slate-900">{% if obj.avg_cycle_days is not None %}{{ obj.avg_cycle_days }}{% else %}—{% endif %}</dd>
+                    </div>
+                </dl>
+                <div class="text-xs text-slate-500 mt-3">
+                    The conversion rate and the dropoff below are <strong>derived</strong> from the entered and
+                    converted counts on every save — they are read-only and can never be typed in.
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Derived Read-Outs</h2>
+            </div>
+            <div class="card-body">
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Conversion Rate</dt>
+                        <dd class="text-slate-900 font-semibold">{{ obj.conversion_rate_pct }}%</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Dropoff Count</dt>
+                        <dd class="text-slate-900 font-semibold">{{ obj.dropoff_count }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Benchmark</h2>
+            </div>
+            <div class="card-body">
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Benchmark</dt>
+                        <dd class="text-slate-900">{% if obj.benchmark_pct is not None %}{{ obj.benchmark_pct }}%{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Benchmark Source</dt>
+                        <dd class="text-slate-900">{% if obj.benchmark_source %}{{ obj.benchmark_source }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Benchmark As Of</dt>
+                        <dd class="text-slate-900">{% if obj.benchmark_as_of %}{{ obj.benchmark_as_of|date:"F d, Y" }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Gap vs Benchmark</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.benchmark_gap_pct is not None %}
+                            {% if obj.is_below_benchmark %}
+                            <span class="badge badge-red">{{ obj.benchmark_gap_pct }}%</span>
+                            {% else %}
+                            <span class="badge badge-green">{{ obj.benchmark_gap_pct }}%</span>
+                            {% endif %}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Notes</h2>
+            </div>
+            <div class="card-body">
+                {% if obj.notes %}
+                <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">{{ obj.notes }}</div>
+                {% else %}
+                <div class="text-xs text-slate-400 italic">No notes recorded.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions sidebar -->
+    <div class="space-y-4">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Actions</h2>
+            </div>
+            <div class="card-body space-y-3">
+                {% comment %}
+                  This model carries no lifecycle status field, so there is no state that
+                  would make Edit or Delete invalid — both actions stay available.
+                {% endcomment %}
+                <a href="{% url 'sales:funnel_conversion_record_edit' obj.pk %}" class="btn btn-primary w-full">
+                    <i data-lucide="pencil"></i>
+                    <span>Edit Record</span>
+                </a>
+
+                {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                <form method="post" action="{% url 'sales:funnel_conversion_record_delete' obj.pk %}" onsubmit="return confirm('Are you sure you want to delete conversion record {{ obj.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger w-full">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Record</span>
+                    </button>
+                </form>
+                {% endif %}
+
+                <a href="{% url 'sales:funnel_conversion_record_list' %}" class="btn btn-outline w-full">
+                    <i data-lucide="arrow-left"></i>
+                    <span>Back to List</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Performance</h2>
+            </div>
+            <div class="card-body">
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Conversion Rate</div>
+                <div class="text-sm text-slate-900 font-semibold">{{ obj.conversion_rate_pct }}%</div>
+
+                <div class="text-xs font-semibold uppercase text-slate-500 mt-3 mb-1">Dropoff</div>
+                <div class="text-sm text-slate-900 font-semibold">{{ obj.dropoff_count }}</div>
+
+                <div class="text-xs font-semibold uppercase text-slate-500 mt-3 mb-1">Benchmark</div>
+                <div class="text-sm text-slate-900">
+                    {% if obj.benchmark_pct is not None %}
+                    {{ obj.benchmark_pct }}%
+                    {% if obj.is_below_benchmark %}
+                    <span class="badge badge-red">Below</span>
+                    {% else %}
+                    <span class="badge badge-green">On Target</span>
+                    {% endif %}
+                    {% else %}
+                    <span class="text-slate-400">—</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
