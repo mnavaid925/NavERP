@@ -5,10 +5,16 @@ from .WinLossDebriefs import (
     INTERVIEW_CHANNEL_CHOICES,
     WinLossDebrief,
 )
+from .StageVelocityAnalyses import (
+    VELOCITY_STATUS_CHOICES,
+    StageVelocityAnalysis,
+)
 
 __all__ = [
     "WinLossDebrief",
     "INTERVIEW_CHANNEL_CHOICES",
     "FEEDBACK_TEAM_CHOICES",
     "DEBRIEF_STATUS_CHOICES",
+    "StageVelocityAnalysis",
+    "VELOCITY_STATUS_CHOICES",
 ]
