@@ -98,11 +98,13 @@
                 {% if form.progress_pct.errors %}<div class="form-error">{{ form.progress_pct.errors }}</div>{% endif %}
             </div>
 
+            {% if is_edit and obj.time_to_value_days is not None %}
             <div class="form-group">
-                <label class="form-label" for="{{ form.time_to_value_days.id_for_label }}">Time-to-Value (Days)</label>
-                {{ form.time_to_value_days }}
-                {% if form.time_to_value_days.errors %}<div class="form-error">{{ form.time_to_value_days.errors }}</div>{% endif %}
+                <label class="form-label">Computed Time-to-Value</label>
+                <div class="form-input bg-slate-50 text-slate-700 cursor-not-allowed">{{ obj.time_to_value_days }} days</div>
+                <div class="text-xs text-slate-400 mt-1">Computed automatically upon recording actual go-live date.</div>
             </div>
+            {% endif %}
 
             <div class="form-group">
                 <label class="form-label" for="{{ form.kickoff_date.id_for_label }}">Kickoff Date <span class="text-red-500">*</span></label>
