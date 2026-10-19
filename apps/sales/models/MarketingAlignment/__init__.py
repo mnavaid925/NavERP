@@ -10,6 +10,11 @@ from apps.sales.models.MarketingAlignment.CampaignAttributions import (
     ATTRIBUTION_STATUS_CHOICES,
     CampaignAttribution,
 )
+from apps.sales.models.MarketingAlignment.ContentEngagements import (
+    ENGAGEMENT_CHANNEL_CHOICES,
+    ENGAGEMENT_TYPE_CHOICES,
+    ContentEngagement,
+)
 from apps.sales.models.MarketingAlignment.MqlHandoffs import (
     HANDOFF_SOURCE_CHOICES,
     HANDOFF_STATUS_CHOICES,
@@ -27,4 +32,7 @@ __all__ = [
     "MqlHandoff",
     "HANDOFF_STATUS_CHOICES",
     "HANDOFF_SOURCE_CHOICES",
+    "ContentEngagement",
+    "ENGAGEMENT_TYPE_CHOICES",
+    "ENGAGEMENT_CHANNEL_CHOICES",
 ]
