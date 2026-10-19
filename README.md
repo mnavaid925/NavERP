@@ -1547,6 +1547,38 @@ database to prove it. See `.claude/tasks/contract-sales-8.8.md` for the frozen b
 
 ---
 
+### Module 8 8.10 — Incentive Compensation Management (built)
+
+8.10 delivers enterprise Sales Performance & Incentive Compensation Management (ICM) — multi-tiered commission plan design, deal-level commission crediting, interactive What-If deal calculators, dispute adjudication & clawbacks, multi-currency spot FX conversion, and statement payout batch processing into payroll.
+
+- **Ownership boundaries (L29/L36/L37)**:
+  - Reuses `crm.Opportunity` for deal transaction volumes, split allocations, and close dates.
+  - Reuses `crm.SalesQuota` and `sales.QuotaPlan` for quota attainment snapshots.
+  - Reuses `scm.SalesOrder` for order-based commission crediting.
+  - Reuses `accounting.Currency` and `accounting.ExchangeRate` for multi-currency plan definitions and daily spot FX translations.
+  - Reuses `accounting.PayrollRun` as the settlement destination for locked and exported commission statements.
+  - Reuses `accounts.User` for payees, plan owners, reviewers, and dispute adjudicators. Zero duplicate spine entities.
+
+**What shipped**
+
+| Model | Prefix | Carries |
+|---|---|---|
+| `CommissionPlan` | `CMPL-` | Compensation plan design master supporting flat revenue %, gross margin %, tiered quota attainment accelerators (incremental marginal brackets vs retroactive all-in), SPIF tactical bonuses, recoverable/non-recoverable draws, and clawback window terms |
+| `CommissionEarning` | `CER-` | Deal- and order-level commission crediting fact with split allocations, attainment snapshots, accelerator rate application, SPIF additions, and spot FX functional currency translation |
+| `CommissionStatement` | `CST-` | Settlement cycle envelope for one payee, reconciling credited volume, base earnings, accelerators, SPIFs, draw advances/recoveries, manual adjustments, clawbacks, tax withholdings, and net payout |
+| `CommissionAdjustment` | `CADJ-` | Manual bonuses, dispute resolutions, deal cancellations, draw recoveries, and true-up line items with payee/manager dispute exchanges |
+
+**Five derived boards**:
+1. **Commission Plan Hub** (`sales:sales_commission_plan_hub`): Plan performance, baseline rates, tier accelerators, active SPIFs, and plan lifecycle control.
+2. **Earnings Dashboard** (`sales:sales_commission_earnings_dashboard`): Attainment progress gauges, rep earnings summaries, and an interactive **What-If Deal Simulator** for dynamic deal scenario projection.
+3. **Adjustment & Dispute Workbench** (`sales:sales_commission_adjustment_workbench`): Cancellation clawback queue, active dispute tickets, resolution workflows, and true-up summaries.
+4. **Global Compensation Matrix** (`sales:sales_global_compensation_matrix`): Regional plan variations, multi-currency spot FX translations, and tax withholding compliance benchmarks.
+5. **Commission Payout Processing** (`sales:sales_commission_payout_processing`): Ready-for-payroll statement approvals, lock finals, batch statement generation, and payroll run settlement integration.
+
+`apps/sales/migrations/0019_commissionplan_commissionstatement_commissionearning_and_more.py` and `0020_commissionadjustment_sales_cadj_ten_stat_idx_and_more.py` provide the 8.10 schema and performance compound indexes. `seed_sales` is fully idempotent, seeding complete plans, deal earnings, statements, adjustments, and disputes for ACME and GLOBEX tenants. 163 automated tests pass green across `apps/sales/tests/test_incentivecompensation_*.py`. See `.claude/tasks/contract-sales-8.10.md` for the build contract, `.claude/tasks/review-sales-8.10.md` for the six-pass review record, and `.claude/skills/sales/SKILL.md` for the living module guide.
+
+---
+
 ### Module 8 8.13 — Marketing Alignment & Attribution (built)
 
 8.13 connects marketing to sales: it records every marketing interaction on the path to a
