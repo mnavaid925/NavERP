@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Analysis {{ obj.number }}{% else %}New Stage Velocity Analysis{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <a href="{% url 'sales:stage_velocity_analysis_list' %}">Stage Velocity Analyses</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Analysis{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Stage Velocity Analysis {{ obj.number }}{% else %}New Stage Velocity Analysis{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:stage_velocity_analysis_detail' obj.pk %}{% else %}{% url 'sales:stage_velocity_analysis_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-4">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Pipeline & Stage -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Pipeline &amp; Stage</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.pipeline.id_for_label }}">Pipeline <span class="req">*</span></label>
+                {{ form.pipeline }}
+                {% if form.pipeline.errors %}<div class="form-error">{{ form.pipeline.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.pipeline_stage.id_for_label }}">Pipeline Stage <span class="req">*</span></label>
+                {{ form.pipeline_stage }}
+                <div class="text-xs text-slate-500">The stage must belong to the selected pipeline.</div>
+                {% if form.pipeline_stage.errors %}<div class="form-error">{{ form.pipeline_stage.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.period_start.id_for_label }}">Period Start <span class="req">*</span></label>
+                {{ form.period_start }}
+                {% if form.period_start.errors %}<div class="form-error">{{ form.period_start.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.period_end.id_for_label }}">Period End <span class="req">*</span></label>
+                {{ form.period_end }}
+                {% if form.period_end.errors %}<div class="form-error">{{ form.period_end.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.opportunity_count.id_for_label }}">Opportunities Measured</label>
+                {{ form.opportunity_count }}
+                {% if form.opportunity_count.errors %}<div class="form-error">{{ form.opportunity_count.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.segment.id_for_label }}">Segment</label>
+                {{ form.segment }}
+                {% if form.segment.errors %}<div class="form-error">{{ form.segment.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Duration Metrics -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Duration Metrics</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.median_days_in_stage.id_for_label }}">Median Days In Stage</label>
+                {{ form.median_days_in_stage }}
+                <div class="text-xs text-slate-500">Stage durations are right-skewed, so the median and the p90 are recorded instead of an average.</div>
+                {% if form.median_days_in_stage.errors %}<div class="form-error">{{ form.median_days_in_stage.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.p90_days_in_stage.id_for_label }}">P90 Days In Stage</label>
+                {{ form.p90_days_in_stage }}
+                {% if form.p90_days_in_stage.errors %}<div class="form-error">{{ form.p90_days_in_stage.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.max_days_in_stage.id_for_label }}">Max Days In Stage</label>
+                {{ form.max_days_in_stage }}
+                {% if form.max_days_in_stage.errors %}<div class="form-error">{{ form.max_days_in_stage.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.sales_cycle_days.id_for_label }}">Sales Cycle (days)</label>
+                {{ form.sales_cycle_days }}
+                {% if form.sales_cycle_days.errors %}<div class="form-error">{{ form.sales_cycle_days.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.velocity_value.id_for_label }}">Velocity Value</label>
+                {{ form.velocity_value }}
+                {% if form.velocity_value.errors %}<div class="form-error">{{ form.velocity_value.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottleneck & Benchmark -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Bottleneck &amp; Benchmark</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.is_bottleneck.id_for_label }}">Is Bottleneck</label>
+                <div class="flex items-center gap-2">
+                    {{ form.is_bottleneck }}
+                    <span class="text-sm text-slate-600">This stage is a manager-judged bottleneck</span>
+                </div>
+                {% if form.is_bottleneck.errors %}<div class="form-error">{{ form.is_bottleneck.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.bottleneck_rank.id_for_label }}">Bottleneck Rank</label>
+                {{ form.bottleneck_rank }}
+                <div class="text-xs text-slate-500">The rank as judged at entry time; the console re-derives a live rank.</div>
+                {% if form.bottleneck_rank.errors %}<div class="form-error">{{ form.bottleneck_rank.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.benchmark_days.id_for_label }}">Benchmark (days)</label>
+                {{ form.benchmark_days }}
+                {% if form.benchmark_days.errors %}<div class="form-error">{{ form.benchmark_days.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.benchmark_source.id_for_label }}">Benchmark Source</label>
+                {{ form.benchmark_source }}
+                {% if form.benchmark_source.errors %}<div class="form-error">{{ form.benchmark_source.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.benchmark_as_of.id_for_label }}">Benchmark As Of</label>
+                {{ form.benchmark_as_of }}
+                {% if form.benchmark_as_of.errors %}<div class="form-error">{{ form.benchmark_as_of.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommendation & Status -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Recommendation &amp; Status</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.recommendation.id_for_label }}">Recommendation</label>
+                {{ form.recommendation }}
+                {% if form.recommendation.errors %}<div class="form-error">{{ form.recommendation.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Status <span class="req">*</span></label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:stage_velocity_analysis_detail' obj.pk %}{% else %}{% url 'sales:stage_velocity_analysis_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Save Analysis{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
