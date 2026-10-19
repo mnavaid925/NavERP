@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Scorecard {{ obj.number }}{% else %}New Rep Performance Scorecard{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <a href="{% url 'sales:rep_performance_scorecard_list' %}">Rep Performance Scorecards</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Scorecard{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Rep Performance Scorecard {{ obj.number }}{% else %}New Rep Performance Scorecard{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:rep_performance_scorecard_detail' obj.pk %}{% else %}{% url 'sales:rep_performance_scorecard_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+{% comment %}
+  The four derived read-outs — win rate, average deal size, quota attainment and
+  goal gap — are NOT inputs on this form. They are computed in save() from the
+  counters and amounts entered below, so a reader can never type a rate that
+  contradicts the numbers behind it.
+{% endcomment %}
+
+<form method="post" class="space-y-4">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Rep & Period -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Rep &amp; Period</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.rep.id_for_label }}">Rep <span class="req">*</span></label>
+                {{ form.rep }}
+                {% if form.rep.errors %}<div class="form-error">{{ form.rep.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.manager.id_for_label }}">Manager</label>
+                {{ form.manager }}
+                {% if form.manager.errors %}<div class="form-error">{{ form.manager.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.territory.id_for_label }}">Territory</label>
+                {{ form.territory }}
+                {% if form.territory.errors %}<div class="form-error">{{ form.territory.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.forecast_period.id_for_label }}">Forecast Period</label>
+                {{ form.forecast_period }}
+                {% if form.forecast_period.errors %}<div class="form-error">{{ form.forecast_period.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.quota_plan.id_for_label }}">Quota Plan</label>
+                {{ form.quota_plan }}
+                {% if form.quota_plan.errors %}<div class="form-error">{{ form.quota_plan.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.coaching_scorecard.id_for_label }}">Coaching Scorecard</label>
+                {{ form.coaching_scorecard }}
+                {% if form.coaching_scorecard.errors %}<div class="form-error">{{ form.coaching_scorecard.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.period_start.id_for_label }}">Period Start <span class="req">*</span></label>
+                {{ form.period_start }}
+                {% if form.period_start.errors %}<div class="form-error">{{ form.period_start.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.period_end.id_for_label }}">Period End <span class="req">*</span></label>
+                {{ form.period_end }}
+                {% if form.period_end.errors %}<div class="form-error">{{ form.period_end.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Leading Indicators -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Leading Indicators — Recorded Activity</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.activities_logged.id_for_label }}">Activities Logged</label>
+                {{ form.activities_logged }}
+                {% if form.activities_logged.errors %}<div class="form-error">{{ form.activities_logged.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.calls_logged.id_for_label }}">Calls Logged</label>
+                {{ form.calls_logged }}
+                {% if form.calls_logged.errors %}<div class="form-error">{{ form.calls_logged.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.emails_logged.id_for_label }}">Emails Logged</label>
+                {{ form.emails_logged }}
+                {% if form.emails_logged.errors %}<div class="form-error">{{ form.emails_logged.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.meetings_logged.id_for_label }}">Meetings Logged</label>
+                {{ form.meetings_logged }}
+                {% if form.meetings_logged.errors %}<div class="form-error">{{ form.meetings_logged.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.meetings_booked.id_for_label }}">Meetings Booked</label>
+                {{ form.meetings_booked }}
+                {% if form.meetings_booked.errors %}<div class="form-error">{{ form.meetings_booked.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.follow_ups_completed.id_for_label }}">Follow-ups Completed</label>
+                {{ form.follow_ups_completed }}
+                {% if form.follow_ups_completed.errors %}<div class="form-error">{{ form.follow_ups_completed.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.activity_minutes.id_for_label }}">Activity Minutes</label>
+                {{ form.activity_minutes }}
+                {% if form.activity_minutes.errors %}<div class="form-error">{{ form.activity_minutes.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.response_time_hours.id_for_label }}">Response Time (hours)</label>
+                {{ form.response_time_hours }}
+                {% if form.response_time_hours.errors %}<div class="form-error">{{ form.response_time_hours.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Lagging Indicators -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Lagging Indicators — Outcomes</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.opportunities_created.id_for_label }}">Opportunities Created</label>
+                {{ form.opportunities_created }}
+                {% if form.opportunities_created.errors %}<div class="form-error">{{ form.opportunities_created.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.opportunities_won.id_for_label }}">Opportunities Won</label>
+                {{ form.opportunities_won }}
+                {% if form.opportunities_won.errors %}<div class="form-error">{{ form.opportunities_won.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.opportunities_lost.id_for_label }}">Opportunities Lost</label>
+                {{ form.opportunities_lost }}
+                {% if form.opportunities_lost.errors %}<div class="form-error">{{ form.opportunities_lost.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.pipeline_value.id_for_label }}">Pipeline Value</label>
+                {{ form.pipeline_value }}
+                {% if form.pipeline_value.errors %}<div class="form-error">{{ form.pipeline_value.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.weighted_pipeline_value.id_for_label }}">Weighted Pipeline Value</label>
+                {{ form.weighted_pipeline_value }}
+                {% if form.weighted_pipeline_value.errors %}<div class="form-error">{{ form.weighted_pipeline_value.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.revenue_closed.id_for_label }}">Revenue Closed</label>
+                {{ form.revenue_closed }}
+                {% if form.revenue_closed.errors %}<div class="form-error">{{ form.revenue_closed.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                {{ form.currency }}
+                {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.sales_cycle_days.id_for_label }}">Sales Cycle (days)</label>
+                {{ form.sales_cycle_days }}
+                {% if form.sales_cycle_days.errors %}<div class="form-error">{{ form.sales_cycle_days.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.quota_target.id_for_label }}">Quota Target</label>
+                {{ form.quota_target }}
+                {% if form.quota_target.errors %}<div class="form-error">{{ form.quota_target.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Assessment -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Assessment &amp; Coaching</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.overall_score.id_for_label }}">Overall Score</label>
+                {{ form.overall_score }}
+                {% if form.overall_score.errors %}<div class="form-error">{{ form.overall_score.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.rating.id_for_label }}">Rating <span class="req">*</span></label>
+                {{ form.rating }}
+                {% if form.rating.errors %}<div class="form-error">{{ form.rating.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.strengths.id_for_label }}">Strengths</label>
+                {{ form.strengths }}
+                {% if form.strengths.errors %}<div class="form-error">{{ form.strengths.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.areas_for_improvement.id_for_label }}">Areas for Improvement</label>
+                {{ form.areas_for_improvement }}
+                {% if form.areas_for_improvement.errors %}<div class="form-error">{{ form.areas_for_improvement.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.coaching_actions.id_for_label }}">Coaching Actions</label>
+                {{ form.coaching_actions }}
+                {% if form.coaching_actions.errors %}<div class="form-error">{{ form.coaching_actions.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Benchmarks & Status -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Benchmarks &amp; Status</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.benchmark_win_rate_pct.id_for_label }}">Benchmark Win Rate</label>
+                {{ form.benchmark_win_rate_pct }}
+                {% if form.benchmark_win_rate_pct.errors %}<div class="form-error">{{ form.benchmark_win_rate_pct.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.benchmark_cycle_days.id_for_label }}">Benchmark Cycle (days)</label>
+                {{ form.benchmark_cycle_days }}
+                {% if form.benchmark_cycle_days.errors %}<div class="form-error">{{ form.benchmark_cycle_days.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.benchmark_quota_attainment_pct.id_for_label }}">Benchmark Quota Attainment</label>
+                {{ form.benchmark_quota_attainment_pct }}
+                {% if form.benchmark_quota_attainment_pct.errors %}<div class="form-error">{{ form.benchmark_quota_attainment_pct.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.benchmark_source.id_for_label }}">Benchmark Source</label>
+                {{ form.benchmark_source }}
+                {% if form.benchmark_source.errors %}<div class="form-error">{{ form.benchmark_source.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.benchmark_as_of.id_for_label }}">Benchmark As Of</label>
+                {{ form.benchmark_as_of }}
+                {% if form.benchmark_as_of.errors %}<div class="form-error">{{ form.benchmark_as_of.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.segment.id_for_label }}">Segment</label>
+                {{ form.segment }}
+                {% if form.segment.errors %}<div class="form-error">{{ form.segment.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Status <span class="req">*</span></label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:rep_performance_scorecard_detail' obj.pk %}{% else %}{% url 'sales:rep_performance_scorecard_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Save Scorecard{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
