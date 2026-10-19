@@ -223,6 +223,30 @@ def customer_renewal_pipeline(request):
         projected_arr=Sum("projected_renewal_arr"),
         expansion_arr=Sum("expansion_amount"),
         high_risk_arr=Sum("current_arr", filter=Q(churn_risk_flag__in=["high", "critical"])),
+        upcoming_30_count=Count(
+            "id",
+            filter=Q(
+                renewal_date__gte=today,
+                renewal_date__lte=in_30_days,
+                stage__in=["upcoming", "engagement", "proposal_sent", "negotiation"],
+            ),
+        ),
+        upcoming_60_count=Count(
+            "id",
+            filter=Q(
+                renewal_date__gt=in_30_days,
+                renewal_date__lte=in_60_days,
+                stage__in=["upcoming", "engagement", "proposal_sent", "negotiation"],
+            ),
+        ),
+        upcoming_90_count=Count(
+            "id",
+            filter=Q(
+                renewal_date__gt=in_60_days,
+                renewal_date__lte=in_90_days,
+                stage__in=["upcoming", "engagement", "proposal_sent", "negotiation"],
+            ),
+        ),
     )
 
     context = {
