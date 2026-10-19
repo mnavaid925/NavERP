@@ -24,6 +24,7 @@ from apps.sales.models.MarketingAlignment.MarketingEvents import (
     EventRegistration,
     MarketingEvent,
 )
+from apps.sales.views.MarketingAlignment._common import pk_from_param
 
 
 def _event_annotations(queryset):
@@ -76,12 +77,14 @@ def marketing_event_list(request):
         qs = qs.filter(status=status)
 
     owner_id = request.GET.get("owner", "").strip()
-    if owner_id and owner_id.isdigit():
-        qs = qs.filter(owner_id=int(owner_id))
+    owner_pk = pk_from_param(owner_id)
+    if owner_pk is not None:
+        qs = qs.filter(owner_id=owner_pk)
 
     campaign_id = request.GET.get("campaign", "").strip()
-    if campaign_id and campaign_id.isdigit():
-        qs = qs.filter(campaign_id=int(campaign_id))
+    campaign_pk = pk_from_param(campaign_id)
+    if campaign_pk is not None:
+        qs = qs.filter(campaign_id=campaign_pk)
 
     now = timezone.now()
     stats = qs.aggregate(
