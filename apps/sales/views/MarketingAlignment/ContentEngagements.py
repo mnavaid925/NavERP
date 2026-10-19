@@ -19,7 +19,7 @@ from apps.sales.models.MarketingAlignment.ContentEngagements import (
     ContentEngagement,
 )
 from apps.sales.models.SalesEnablement.EnablementContents import EnablementContent
-from apps.sales.views.MarketingAlignment._common import pk_from_param
+from apps.sales.views.MarketingAlignment._common import enum_filter, pk_from_param
 
 
 @login_required
@@ -39,13 +39,13 @@ def content_engagement_list(request):
             | Q(number__icontains=q)
         )
 
-    engagement_type = request.GET.get("engagement_type", "").strip()
-    if engagement_type:
-        qs = qs.filter(engagement_type=engagement_type)
+    engagement_type, qs = enum_filter(
+        qs, request, "engagement_type", "engagement_type", ENGAGEMENT_TYPE_CHOICES
+    )
 
-    engagement_channel = request.GET.get("engagement_channel", "").strip()
-    if engagement_channel:
-        qs = qs.filter(engagement_channel=engagement_channel)
+    engagement_channel, qs = enum_filter(
+        qs, request, "engagement_channel", "engagement_channel", ENGAGEMENT_CHANNEL_CHOICES
+    )
 
     content_id = request.GET.get("content", "").strip()
     content_pk = pk_from_param(content_id)
