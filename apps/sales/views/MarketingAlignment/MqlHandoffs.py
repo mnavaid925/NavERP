@@ -2,7 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, F, Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -54,8 +54,10 @@ def mql_handoff_list(request):
         qs = qs.filter(owner_id=owner_pk)
 
     now = timezone.now()
-    # A breach is either "answered late" or "still unanswered past the deadline". Both halves
-    # are expressible in SQL, so the count never loads the rows.
+    # A breach is either "answered late" or "still unanswered past the deadline" -- and it is
+    # the SAME rule the row badge uses, straight from the model, so the card on this page and
+    # the badge on each row can never disagree. Both halves are expressible in SQL, so the
+    # count never loads the rows.
     stats = qs.aggregate(
         total_count=Count("id"),
         pending_count=Count("id", filter=Q(status="pending")),
@@ -63,11 +65,7 @@ def mql_handoff_list(request):
         rejected_count=Count("id", filter=Q(status="rejected")),
         expired_count=Count("id", filter=Q(status="expired")),
         converted_count=Count("id", filter=Q(status="converted")),
-        sla_breach_count=Count(
-            "id",
-            filter=Q(responded_at__isnull=False, responded_at__gt=F("sla_due_at"))
-            | Q(status="pending", sla_due_at__lt=now),
-        ),
+        sla_breach_count=Count("id", filter=MqlHandoff.sla_breach_q(now)),
     )
     decided_count = stats["accepted_count"] + stats["rejected_count"]
     stats["acceptance_rate_pct"] = (
