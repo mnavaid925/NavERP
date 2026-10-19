@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Renewals — Customer Success — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_renewal_pipeline' %}">Customer Success</a>
+            <span>/</span>
+            <span>Renewals</span>
+        </div>
+        <h1 class="page-title">Customer Renewals</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_renewal_pipeline' %}" class="btn btn-outline">
+            <i data-lucide="kanban"></i>
+            <span>Pipeline Kanban</span>
+        </a>
+        <a href="{% url 'sales:customer_renewal_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Renewal</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="refresh-cw"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Renewals</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total ARR at Risk</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                ${{ stats.total_arr|default:"0.00"|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Projected Renewal ARR</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                ${{ stats.projected_arr|default:"0.00"|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">High Churn Risk</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.churn_risk_count|default:"0" }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search renewal, contract, account..." class="form-input w-full">
+            </div>
+            <div>
+                <select name="stage" class="form-select w-full">
+                    <option value="">All Renewal Stages</option>
+                    {% for val, label in stage_choices %}
+                    <option value="{{ val }}" {% if active_filters.stage == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="churn_risk_flag" class="form-select w-full">
+                    <option value="">All Risk Ratings</option>
+                    {% for val, label in churn_risk_choices %}
+                    <option value="{{ val }}" {% if active_filters.churn_risk_flag == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="account" class="form-select w-full">
+                    <option value="">All Customer Accounts</option>
+                    {% for acct in accounts %}
+                    <option value="{{ acct.pk }}" {% if active_filters.account == acct.pk|stringformat:"d" %}selected{% endif %}>{{ acct.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if active_filters.q or active_filters.stage or active_filters.churn_risk_flag or active_filters.account or active_filters.owner %}
+                <a href="{% url 'sales:customer_renewal_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Renewal ID</th>
+                    <th>Account / Deal Name</th>
+                    <th>Current ARR</th>
+                    <th>Projected ARR</th>
+                    <th>Stage</th>
+                    <th>Risk</th>
+                    <th>Renewal Date</th>
+                    <th>Owner</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for renewal in renewals %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:customer_renewal_detail' renewal.pk %}" class="font-mono text-sm font-semibold text-blue-600 hover:underline">
+                            {{ renewal.number }}
+                        </a>
+                        {% if renewal.auto_renewal %}
+                        <span class="badge badge-info ml-1 text-xs">Auto-Renew</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ renewal.renewal_name }}</div>
+                        <div class="text-xs text-slate-500 mt-0.5">
+                            {{ renewal.account.name }}
+                            {% if renewal.contract_reference %}
+                            <span class="font-mono">({{ renewal.contract_reference }})</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">${{ renewal.current_arr|floatformat:2 }}</span>
+                        <span class="text-xs text-slate-400 font-mono">{{ renewal.currency.code }}</span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">${{ renewal.projected_renewal_arr|floatformat:2 }}</span>
+                        {% if renewal.expansion_amount > 0 %}
+                        <span class="text-xs text-emerald-600 font-medium">(+${{ renewal.expansion_amount|floatformat:2 }})</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ renewal.stage_badge_class }}">
+                            {{ renewal.get_stage_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ renewal.risk_badge_class }}">
+                            {{ renewal.get_churn_risk_flag_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-900">{{ renewal.renewal_date|date:"M d, Y" }}</div>
+                        <div class="text-xs text-slate-500">Close: {{ renewal.target_close_date|date:"M d" }}</div>
+                    </td>
+                    <td>
+                        <span class="text-sm text-slate-700">
+                            {% if renewal.owner %}{{ renewal.owner.get_full_name|default:renewal.owner.username }}{% else %}—{% endif %}
+                        </span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'sales:customer_renewal_detail' renewal.pk %}" class="btn btn-icon btn-outline" title="View details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:customer_renewal_edit' renewal.pk %}" class="btn btn-icon btn-outline" title="Edit renewal">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'sales:customer_renewal_delete' renewal.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete renewal {{ renewal.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete renewal">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="refresh-cw" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No customer renewals found</div>
+                            <div class="empty-state-text">Track upcoming contract expirations, protect recurring revenue, and identify expansion opportunities.</div>
+                            <a href="{% url 'sales:customer_renewal_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Create First Renewal</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination (L9 Guarded) -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} renewals
+        </div>
+        <div class="pagination-actions">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.stage %}&stage={{ active_filters.stage }}{% endif %}{% if active_filters.churn_risk_flag %}&churn_risk_flag={{ active_filters.churn_risk_flag }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.stage %}&stage={{ active_filters.stage }}{% endif %}{% if active_filters.churn_risk_flag %}&churn_risk_flag={{ active_filters.churn_risk_flag }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
