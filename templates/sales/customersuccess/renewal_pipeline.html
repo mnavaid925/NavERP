@@ -68,19 +68,19 @@
 
 <!-- Expiration Countdown Horizon -->
 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-    <div class="card p-4 border-l-4 border-red-500">
+    <div class="card p-4 border-s-4 border-red-500">
         <div class="text-xs font-semibold uppercase text-red-700 tracking-wider">Expiring in 0–30 Days (Immediate Action)</div>
-        <div class="text-2xl font-bold text-slate-900 mt-1">{{ upcoming_30_days|length }} Renewals</div>
+        <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.upcoming_30_count|default:"0" }} Renewals</div>
         <div class="text-xs text-slate-500 mt-1">Contracts requiring urgent executive alignment & signature.</div>
     </div>
-    <div class="card p-4 border-l-4 border-amber-500">
+    <div class="card p-4 border-s-4 border-amber-500">
         <div class="text-xs font-semibold uppercase text-amber-700 tracking-wider">Expiring in 31–60 Days (Negotiation Window)</div>
-        <div class="text-2xl font-bold text-slate-900 mt-1">{{ upcoming_60_days|length }} Renewals</div>
+        <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.upcoming_60_count|default:"0" }} Renewals</div>
         <div class="text-xs text-slate-500 mt-1">Proposals submitted; active commercial discussions.</div>
     </div>
-    <div class="card p-4 border-l-4 border-blue-500">
+    <div class="card p-4 border-s-4 border-blue-500">
         <div class="text-xs font-semibold uppercase text-blue-700 tracking-wider">Expiring in 61–90 Days (Upcoming Outreach)</div>
-        <div class="text-2xl font-bold text-slate-900 mt-1">{{ upcoming_90_days|length }} Renewals</div>
+        <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.upcoming_90_count|default:"0" }} Renewals</div>
         <div class="text-xs text-slate-500 mt-1">Early QBR alignment and expansion headroom exploration.</div>
     </div>
 </div>
