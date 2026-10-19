@@ -191,4 +191,74 @@
         </div>
     </div>
 </div>
+
+<!-- Credit assigned to this touch, per attribution model -->
+<div class="card mt-6">
+    <div class="card-header">
+        <h2 class="card-title">Credit by Attribution Model</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Credit %</th>
+                    <th>Attributed Revenue</th>
+                    <th>Attributed Cost</th>
+                    <th>Status</th>
+                    <th>Computed On</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for attribution in attributions %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:campaign_attribution_detail' attribution.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ attribution.get_attribution_model_display }}
+                        </a>
+                        <div class="text-xs text-slate-500 font-mono">{{ attribution.number }}</div>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{{ attribution.credit_pct|floatformat:2 }}%</span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">${{ attribution.attributed_revenue|floatformat:2 }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700">${{ attribution.attributed_cost|floatformat:2 }}</span>
+                    </td>
+                    <td>
+                        {% if attribution.status == "approved" %}
+                        <span class="badge badge-green">Approved</span>
+                        {% elif attribution.status == "rejected" %}
+                        <span class="badge badge-red">Rejected</span>
+                        {% elif attribution.status == "computed" %}
+                        <span class="badge badge-info">Computed</span>
+                        {% else %}
+                        <span class="badge badge-muted">Draft</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-sm text-slate-700">{{ attribution.computed_on|date:"M d, Y" }}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state">
+                            <i data-lucide="split" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No conversion credit assigned yet</div>
+                            <div class="empty-state-text">Assign a credit percentage to this touch under a first-touch, last-touch, multi-touch or custom model.</div>
+                            <a href="{% url 'sales:campaign_attribution_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Assign Credit</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 {% endblock %}
