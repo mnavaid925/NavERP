@@ -98,7 +98,7 @@
                     </td>
                     <td>
                         <span class="badge badge-info text-xs">Peer Sales Calls</span>
-                        <span class="badge badge-slate text-xs ml-1">RFP Quotes</span>
+                        <span class="badge badge-slate text-xs ms-1">RFP Quotes</span>
                     </td>
                     <td class="text-sm text-slate-700">{{ rev.scheduled_date|date:"M d, Y" }}</td>
                     <td class="text-sm text-slate-700">{% if rev.lead_csm %}{{ rev.lead_csm.get_full_name|default:rev.lead_csm.username }}{% else %}—{% endif %}</td>
