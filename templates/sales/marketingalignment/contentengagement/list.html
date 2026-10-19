@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Content Engagements — Marketing Alignment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <span>Content Engagements</span>
+        </div>
+        <h1 class="page-title">Content Performance &amp; Engagement</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:content_engagement_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Engagement</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="mouse-pointer-click"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Engagements</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="download"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Downloads</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.download_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="gauge"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Avg Engagement Score</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if stats.avg_engagement_score %}{{ stats.avg_engagement_score|floatformat:1 }}{% else %}0.0{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Revenue Attributed</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                ${{ stats.total_revenue_attributed|default:"0.00"|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search content, account, lead..." class="form-input w-full" aria-label="Search content engagements">
+            </div>
+            <div>
+                <select name="engagement_type" class="form-select w-full" aria-label="Filter by engagement type">
+                    <option value="">All Engagement Types</option>
+                    {% for val, label in engagement_type_choices %}
+                    <option value="{{ val }}" {% if active_filters.engagement_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="engagement_channel" class="form-select w-full" aria-label="Filter by channel">
+                    <option value="">All Channels</option>
+                    {% for val, label in channel_choices %}
+                    <option value="{{ val }}" {% if active_filters.engagement_channel == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="content" class="form-select w-full" aria-label="Filter by content item">
+                    <option value="">All Content</option>
+                    {% for content in contents %}
+                    <option value="{{ content.pk }}" {% if active_filters.content == content.pk|stringformat:"d" %}selected{% endif %}>{{ content.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="account" class="form-select w-full" aria-label="Filter by account">
+                    <option value="">All Accounts</option>
+                    {% for account in accounts %}
+                    <option value="{{ account.pk }}" {% if active_filters.account == account.pk|stringformat:"d" %}selected{% endif %}>{{ account.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if active_filters.q or active_filters.engagement_type or active_filters.engagement_channel or active_filters.content or active_filters.account or active_filters.campaign %}
+                <a href="{% url 'sales:content_engagement_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Engagement ID</th>
+                    <th>Content</th>
+                    <th>Type / Channel</th>
+                    <th>Account / Lead</th>
+                    <th>Campaign</th>
+                    <th>Score</th>
+                    <th>Revenue Attributed</th>
+                    <th>Engaged At</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for engagement in engagements %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:content_engagement_detail' engagement.pk %}" class="font-mono text-sm font-semibold text-blue-600 hover:underline">
+                            {{ engagement.number }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if engagement.content %}
+                        <div class="font-medium text-slate-900">{{ engagement.content.title }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ engagement.content.number }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-900">{{ engagement.get_engagement_type_display }}</div>
+                        <div class="text-xs text-slate-500">{{ engagement.get_engagement_channel_display }}</div>
+                    </td>
+                    <td>
+                        {% if engagement.account %}
+                        <div class="text-sm text-slate-900">{{ engagement.account.name }}</div>
+                        {% endif %}
+                        {% if engagement.lead %}
+                        <div class="text-xs text-slate-500 font-mono">{{ engagement.lead.number }}</div>
+                        {% else %}
+                        <div class="text-xs text-slate-400">—</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if engagement.campaign %}
+                        <div class="text-sm text-slate-700">{{ engagement.campaign.name }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if engagement.is_high_intent %}badge-green{% else %}badge-muted{% endif %}">
+                            {{ engagement.engagement_score }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">${{ engagement.revenue_attributed|floatformat:2 }}</span>
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-900">{{ engagement.engaged_at|date:"M d, Y" }}</div>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'sales:content_engagement_detail' engagement.pk %}" class="btn btn-icon btn-outline" title="View details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:content_engagement_edit' engagement.pk %}" class="btn btn-icon btn-outline" title="Edit engagement">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'sales:content_engagement_delete' engagement.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete engagement {{ engagement.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete engagement">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="file-text" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No content engagements found</div>
+                            <div class="empty-state-text">Track downloads, shares and engagement scores, and map each content interaction to the revenue it produced.</div>
+                            <a href="{% url 'sales:content_engagement_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Record First Engagement</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination (L9 Guarded) -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} engagements
+        </div>
+        <div class="pagination-actions">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.engagement_type %}&engagement_type={{ active_filters.engagement_type }}{% endif %}{% if active_filters.engagement_channel %}&engagement_channel={{ active_filters.engagement_channel }}{% endif %}{% if active_filters.content %}&content={{ active_filters.content }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.engagement_type %}&engagement_type={{ active_filters.engagement_type }}{% endif %}{% if active_filters.engagement_channel %}&engagement_channel={{ active_filters.engagement_channel }}{% endif %}{% if active_filters.content %}&content={{ active_filters.content }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
