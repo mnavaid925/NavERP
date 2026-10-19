@@ -2899,13 +2899,17 @@ class Command(BaseCommand):
             lead = leads[lead_idx]
             campaign = campaigns[camp_idx]
             touch_date = today - timedelta(days=days_ago)
-            if AttributionTouchpoint.objects.filter(
+            existing = AttributionTouchpoint.objects.filter(
                 tenant=tenant,
                 lead=lead,
                 campaign=campaign,
                 touch_date=touch_date,
                 touch_type=touch_type,
-            ).exists():
+            ).first()
+            if existing is not None:
+                # Seeded by an earlier run of this block. Keep it in the list -- the credit loop
+                # below stays idempotent -- but never create it a second time.
+                touchpoints.append(existing)
                 continue
             touchpoints.append(
                 AttributionTouchpoint.objects.create(
@@ -2935,15 +2939,16 @@ class Command(BaseCommand):
         # ---- 2. CampaignAttribution (credit per touch per model) ------------------------------
         # Each touch carries a first-touch, a last-touch and a linear credit, so the console's
         # model selector produces genuinely different rollups over the same journey.
-        all_touches = list(
-            AttributionTouchpoint.objects.filter(tenant=tenant).order_by("pk")
-        )
+        #
+        # The credit loop runs over `touchpoints` -- the touches THIS block owns -- and NOT over
+        # every touchpoint in the tenant. Crediting the whole tenant would fabricate three
+        # credit rows against every operator-entered touchpoint on the next `seed_sales` run.
         credit_specs = [
             ("first_touch", "approved"),
             ("last_touch", "approved"),
             ("linear", "computed"),
         ]
-        for touch in all_touches:
+        for touch in touchpoints:
             for model, status in credit_specs:
                 if CampaignAttribution.objects.filter(
                     tenant=tenant, touchpoint=touch, attribution_model=model
