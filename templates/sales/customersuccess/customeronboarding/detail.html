@@ -132,7 +132,7 @@
                     <dt class="text-slate-500 font-medium">Linked Sales Order (SCM)</dt>
                     <dd class="text-slate-900">
                         {% if obj.sales_order %}
-                        <span class="font-mono text-blue-600">{{ obj.sales_order.order_number }}</span>
+                        <span class="font-mono text-blue-600">{{ obj.sales_order.number }}</span>
                         {% else %}
                         <span class="text-slate-400">None linked</span>
                         {% endif %}
