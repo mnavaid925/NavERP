@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Onboarding {{ obj.number }} — {{ obj.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_onboarding_hub' %}">Customer Success</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_onboarding_list' %}">Onboardings</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ obj.title }}</h1>
+            <span class="badge {{ obj.status_badge_class }}">{{ obj.get_status_display }}</span>
+            <span class="badge {{ obj.stage_badge_class }}">{{ obj.get_stage_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_onboarding_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Projects</span>
+        </a>
+        <a href="{% url 'sales:customer_onboarding_edit' obj.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Project</span>
+        </a>
+        <form method="post" action="{% url 'sales:customer_onboarding_delete' obj.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete onboarding {{ obj.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+{% if obj.blockers %}
+<div class="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 flex items-start gap-3">
+    <div class="text-red-600 mt-0.5">
+        <i data-lucide="alert-octagon" class="w-5 h-5"></i>
+    </div>
+    <div>
+        <div class="text-sm font-semibold text-red-900">Implementation Blocker Identified</div>
+        <div class="text-sm text-red-700 mt-0.5 whitespace-pre-line">{{ obj.blockers }}</div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Key Milestone Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="percent"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Completion Progress</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.progress_pct }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="zap"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Time-to-Value (TTV)</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if obj.time_to_value_days is not None %}{{ obj.time_to_value_days }} <span class="text-xs text-slate-400 font-normal">days</span>{% else %}In Flight{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Kickoff Date</div>
+            <div class="text-xl font-bold text-slate-900 mt-1">{{ obj.kickoff_date|date:"M d, Y" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="flag"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Target Production Go-Live</div>
+            <div class="text-xl font-bold text-slate-900 mt-1">{{ obj.target_go_live_date|date:"M d, Y" }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Details & Alignment -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Implementation Blueprint & Stakeholders</h2>
+        </div>
+        <div class="card-body">
+            <dl class="divide-y divide-slate-100 text-sm">
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Project Number</dt>
+                    <dd class="text-slate-900 font-mono">{{ obj.number }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Customer Account</dt>
+                    <dd class="text-slate-900 font-semibold">{{ obj.account.name }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Playbook Blueprint</dt>
+                    <dd class="text-slate-900 font-medium">{{ obj.get_playbook_template_display }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Lead CSM / PM</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.lead_csm %}{{ obj.lead_csm.get_full_name|default:obj.lead_csm.username }}{% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Client Executive Sponsor</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.executive_sponsor_name %}{{ obj.executive_sponsor_name }}{% else %}<span class="text-slate-400">—</span>{% endif %}
+                        {% if obj.executive_sponsor_email %}
+                        <span class="text-xs text-slate-400">({{ obj.executive_sponsor_email }})</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Linked Sales Order (SCM)</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.sales_order %}
+                        <span class="font-mono text-blue-600">{{ obj.sales_order.order_number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">None linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Actual Go-Live Date</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.actual_go_live_date %}
+                        <span class="font-bold text-emerald-600">{{ obj.actual_go_live_date|date:"F d, Y" }}</span>
+                        {% else %}
+                        <span class="text-slate-400">Pending launch</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Success Criteria & Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Success Criteria & Acceptance Scope</h2>
+        </div>
+        <div class="card-body">
+            {% if obj.success_criteria %}
+            <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">
+                {{ obj.success_criteria }}
+            </div>
+            {% else %}
+            <div class="text-xs text-slate-400 italic">No explicit success criteria documented.</div>
+            {% endif %}
+
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-2">Customer Success Account Hub</div>
+                <div class="flex flex-wrap gap-2">
+                    <a href="{% url 'sales:customer_health_score_list' %}?account={{ obj.account.pk }}" class="btn btn-outline btn-sm">
+                        <i data-lucide="activity"></i>
+                        <span>Health Scores</span>
+                    </a>
+                    <a href="{% url 'sales:customer_renewal_list' %}?account={{ obj.account.pk }}" class="btn btn-outline btn-sm">
+                        <i data-lucide="refresh-cw"></i>
+                        <span>Renewals</span>
+                    </a>
+                    <a href="{% url 'sales:customer_business_review_list' %}?account={{ obj.account.pk }}" class="btn btn-outline btn-sm">
+                        <i data-lucide="calendar"></i>
+                        <span>QBRs</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
