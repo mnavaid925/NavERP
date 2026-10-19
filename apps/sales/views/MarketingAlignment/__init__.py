@@ -27,6 +27,15 @@ from apps.sales.views.MarketingAlignment.MqlHandoffs import (
     mql_handoff_edit,
     mql_handoff_list,
 )
+from apps.sales.views.MarketingAlignment.MarketingEvents import (
+    marketing_event_create,
+    marketing_event_delete,
+    marketing_event_detail,
+    marketing_event_edit,
+    marketing_event_list,
+    marketing_event_registration_create,
+    marketing_event_registrations,
+)
 
 __all__ = [
     "attribution_touchpoint_list",
@@ -49,4 +58,11 @@ __all__ = [
     "content_engagement_detail",
     "content_engagement_edit",
     "content_engagement_delete",
+    "marketing_event_list",
+    "marketing_event_create",
+    "marketing_event_detail",
+    "marketing_event_edit",
+    "marketing_event_delete",
+    "marketing_event_registrations",
+    "marketing_event_registration_create",
 ]
