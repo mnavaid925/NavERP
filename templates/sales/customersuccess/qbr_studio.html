@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Executive & Quarterly Business Review Studio — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Customer Success</span>
+            <span>/</span>
+            <span>QBR Studio</span>
+        </div>
+        <h1 class="page-title">Executive & Quarterly Business Review (QBR) Studio</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_business_review_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>All Reviews</span>
+        </a>
+        <a href="{% url 'sales:customer_business_review_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Schedule QBR</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="presentation"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Scheduled Reviews</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="calendar-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Upcoming Cadence</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.scheduled_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Completed Sessions</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.completed_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="user-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Exec Sponsor Presence</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.exec_sponsor_attended|default:"0" }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Presentation Template Blueprints -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="card p-4 hover:border-blue-400 transition-colors">
+        <div class="flex items-center gap-2 text-blue-600 mb-2">
+            <i data-lucide="trending-up" class="w-5 h-5"></i>
+            <h3 class="font-bold text-slate-900 text-sm">Executive Value & ROI</h3>
+        </div>
+        <p class="text-xs text-slate-500">Focus on C-level business outcomes, license efficiency, and quantified cost savings.</p>
+    </div>
+    <div class="card p-4 hover:border-purple-400 transition-colors">
+        <div class="flex items-center gap-2 text-purple-600 mb-2">
+            <i data-lucide="layers" class="w-5 h-5"></i>
+            <h3 class="font-bold text-slate-900 text-sm">Technical Roadmap</h3>
+        </div>
+        <p class="text-xs text-slate-500">Deep-dive on architecture, feature adoption, upcoming API capabilities, and scalability.</p>
+    </div>
+    <div class="card p-4 hover:border-green-400 transition-colors">
+        <div class="flex items-center gap-2 text-emerald-600 mb-2">
+            <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+            <h3 class="font-bold text-slate-900 text-sm">Renewal & Alignment</h3>
+        </div>
+        <p class="text-xs text-slate-500">Commercial partnership check-in 90 days before contract expiration to agree terms.</p>
+    </div>
+    <div class="card p-4 hover:border-amber-400 transition-colors">
+        <div class="flex items-center gap-2 text-amber-600 mb-2">
+            <i data-lucide="sliders" class="w-5 h-5"></i>
+            <h3 class="font-bold text-slate-900 text-sm">Operational Cadence</h3>
+        </div>
+        <p class="text-xs text-slate-500">Quarterly health check-in, SLA metrics, open ticket resolution, and training needs.</p>
+    </div>
+</div>
+
+<!-- Scheduled & Upcoming QBRs -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="card-title">Upcoming Review Sessions</h2>
+        <a href="{% url 'sales:customer_business_review_create' %}" class="btn btn-outline btn-sm">Schedule Review</a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Review Title</th>
+                    <th>Account</th>
+                    <th>Cadence</th>
+                    <th>Scheduled Date</th>
+                    <th>Template Type</th>
+                    <th>Status</th>
+                    <th>Lead CSM</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rev in upcoming_qbrs %}
+                <tr>
+                    <td class="font-medium text-slate-900">
+                        <a href="{% url 'sales:customer_business_review_detail' rev.pk %}" class="text-blue-600 hover:underline">
+                            {{ rev.title }}
+                        </a>
+                    </td>
+                    <td class="text-slate-800">{{ rev.account.name }}</td>
+                    <td><span class="font-medium text-slate-700">{{ rev.get_review_period_display }} ({{ rev.review_year }})</span></td>
+                    <td class="font-bold text-slate-900">{{ rev.scheduled_date|date:"M d, Y" }}</td>
+                    <td><span class="text-xs text-slate-600">{{ rev.get_template_type_display }}</span></td>
+                    <td><span class="badge {{ rev.status_badge_class }}">{{ rev.get_status_display }}</span></td>
+                    <td class="text-sm text-slate-700">{{ rev.lead_csm.get_full_name|default:rev.lead_csm.username }}</td>
+                    <td class="text-right">
+                        <a href="{% url 'sales:customer_business_review_detail' rev.pk %}" class="btn btn-outline btn-sm">
+                            Open Studio
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-6 text-xs text-slate-400 italic">No upcoming review sessions scheduled.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Recently Conducted Reviews -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="card-title">Recently Conducted Executive Reviews</h2>
+        <a href="{% url 'sales:customer_business_review_list' %}" class="btn btn-outline btn-sm">View Full History</a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Account</th>
+                    <th>Review Title</th>
+                    <th>Conducted On</th>
+                    <th>Health Score</th>
+                    <th>Exec Attended</th>
+                    <th>Advocacy Outcome</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rev in recent_completed %}
+                <tr>
+                    <td class="font-semibold text-slate-900">{{ rev.account.name }}</td>
+                    <td>
+                        <a href="{% url 'sales:customer_business_review_detail' rev.pk %}" class="text-blue-600 hover:underline">
+                            {{ rev.title }}
+                        </a>
+                    </td>
+                    <td class="text-sm text-slate-700">{{ rev.completed_date|date:"M d, Y" }}</td>
+                    <td>
+                        {% if rev.health_score_at_review is not None %}
+                        <span class="font-bold text-slate-900">{{ rev.health_score_at_review }}/100</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if rev.executive_sponsor_attended %}
+                        <span class="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium">
+                            <i data-lucide="check" class="w-3.5 h-3.5"></i> Yes
+                        </span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">No</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if rev.is_referenceable %}
+                        <span class="badge badge-green text-xs">Reference Agreed</span>
+                        {% elif rev.case_study_status != "none" %}
+                        <span class="badge badge-amber text-xs">Case Study</span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-6 text-xs text-slate-400 italic">No completed executive reviews recorded.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
