@@ -32,6 +32,7 @@
             <i data-lucide="pencil"></i>
             <span>Edit Score</span>
         </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'sales:customer_health_score_delete' obj.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete health score {{ obj.number }}?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">
@@ -39,6 +40,7 @@
                 <span>Delete</span>
             </button>
         </form>
+        {% endif %}
     </div>
 </div>
 
