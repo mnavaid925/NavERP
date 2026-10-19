@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Business Reviews (QBRs) — Customer Success — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_qbr_studio' %}">Customer Success</a>
+            <span>/</span>
+            <span>Business Reviews</span>
+        </div>
+        <h1 class="page-title">Quarterly & Executive Business Reviews (QBRs)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_qbr_studio' %}" class="btn btn-outline">
+            <i data-lucide="presentation"></i>
+            <span>QBR Studio</span>
+        </a>
+        <a href="{% url 'sales:customer_advocacy_hub' %}" class="btn btn-outline">
+            <i data-lucide="star"></i>
+            <span>Advocacy Hub</span>
+        </a>
+        <a href="{% url 'sales:customer_business_review_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Schedule Review</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Reviews</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Scheduled / Upcoming</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.scheduled_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Conducted Reviews</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.conducted_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Referenceable Clients</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.referenceable_count|default:"0" }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search title, account, achievements..." class="form-input w-full">
+            </div>
+            <div>
+                <select name="status" class="form-select w-full">
+                    <option value="">All Review Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if active_filters.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="review_period" class="form-select w-full">
+                    <option value="">All Periods</option>
+                    {% for val, label in period_choices %}
+                    <option value="{{ val }}" {% if active_filters.review_period == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="account" class="form-select w-full">
+                    <option value="">All Accounts</option>
+                    {% for acct in accounts %}
+                    <option value="{{ acct.pk }}" {% if active_filters.account == acct.pk|stringformat:"d" %}selected{% endif %}>{{ acct.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if active_filters.q or active_filters.status or active_filters.review_period or active_filters.template_type or active_filters.account or active_filters.is_referenceable %}
+                <a href="{% url 'sales:customer_business_review_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Review ID</th>
+                    <th>Account / Review Title</th>
+                    <th>Period / Year</th>
+                    <th>Template</th>
+                    <th>Scheduled Date</th>
+                    <th>Status</th>
+                    <th>Exec Sponsor</th>
+                    <th>Advocacy</th>
+                    <th>Lead CSM</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rev in reviews %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:customer_business_review_detail' rev.pk %}" class="font-mono text-sm font-semibold text-blue-600 hover:underline">
+                            {{ rev.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ rev.title }}</div>
+                        <div class="text-xs text-slate-500 mt-0.5">{{ rev.account.name }}</div>
+                    </td>
+                    <td>
+                        <span class="font-medium text-slate-800">{{ rev.get_review_period_display }}</span>
+                        <span class="text-xs text-slate-400">({{ rev.review_year }})</span>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600">
+                            {{ rev.get_template_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-900">{{ rev.scheduled_date|date:"M d, Y" }}</div>
+                        {% if rev.completed_date %}
+                        <div class="text-xs text-emerald-600">Done: {{ rev.completed_date|date:"M d" }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ rev.status_badge_class }}">
+                            {{ rev.get_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if rev.executive_sponsor_attended %}
+                        <span class="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium">
+                            <i data-lucide="check" class="w-3.5 h-3.5"></i> Attended
+                        </span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">No</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if rev.is_referenceable %}
+                        <span class="badge badge-green text-xs">Referenceable</span>
+                        {% elif rev.case_study_status != "none" %}
+                        <span class="badge badge-amber text-xs">Case Study</span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-sm text-slate-700">
+                            {% if rev.lead_csm %}{{ rev.lead_csm.get_full_name|default:rev.lead_csm.username }}{% else %}—{% endif %}
+                        </span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'sales:customer_business_review_detail' rev.pk %}" class="btn btn-icon btn-outline" title="View details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:customer_business_review_edit' rev.pk %}" class="btn btn-icon btn-outline" title="Edit review">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'sales:customer_business_review_delete' rev.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete review {{ rev.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete review">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <i data-lucide="calendar" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No quarterly business reviews found</div>
+                            <div class="empty-state-text">Conduct structured executive business reviews, align on mutual strategic goals, and track customer advocacy proof points.</div>
+                            <a href="{% url 'sales:customer_business_review_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Schedule First QBR</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination (L9 Guarded) -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} reviews
+        </div>
+        <div class="pagination-actions">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.review_period %}&review_period={{ active_filters.review_period }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.review_period %}&review_period={{ active_filters.review_period }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
