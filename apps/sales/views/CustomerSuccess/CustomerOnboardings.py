@@ -215,5 +215,6 @@ def customer_onboarding_hub(request):
         "blocked_onboardings": blocked_onboardings,
         "completed_recent": completed_recent,
         "stats": stats,
+        "avg_ttv": stats.get("avg_ttv"),
     }
     return render(request, "sales/customersuccess/onboarding_hub.html", context)
