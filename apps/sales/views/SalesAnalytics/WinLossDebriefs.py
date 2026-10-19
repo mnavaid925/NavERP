@@ -2,8 +2,8 @@
 
 Function-based views over the 8.12 Win/Loss Debrief record. Every queryset is
 tenant-scoped, every write is audit-logged, and every integer FK filter is
-guarded with ``.isdigit()`` so a hand-edited URL is ignored rather than a 500
-(L11).
+guarded by ``_pk_filter`` (``.isdigit()`` plus a 64-bit range bound) so a
+hand-edited URL is ignored rather than a 500 (L11).
 """
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -28,6 +28,7 @@ from apps.sales.models.SalesAnalytics.WinLossDebriefs import (
     INTERVIEW_CHANNEL_CHOICES,
     WinLossDebrief,
 )
+from apps.sales.views.SalesAnalytics._helpers import _pk_filter
 
 
 @login_required
@@ -63,12 +64,14 @@ def win_loss_debrief_list(request):
         qs = qs.filter(feedback_team=feedback_team)
 
     opportunity_id = request.GET.get("opportunity", "").strip()
-    if opportunity_id and opportunity_id.isdigit():
-        qs = qs.filter(opportunity_id=int(opportunity_id))
+    opportunity_pk = _pk_filter(opportunity_id)
+    if opportunity_pk is not None:
+        qs = qs.filter(opportunity_id=opportunity_pk)
 
     reason_id = request.GET.get("reason", "").strip()
-    if reason_id and reason_id.isdigit():
-        qs = qs.filter(primary_reason_id=int(reason_id))
+    reason_pk = _pk_filter(reason_id)
+    if reason_pk is not None:
+        qs = qs.filter(primary_reason_id=reason_pk)
 
     stats = qs.aggregate(
         total_count=Count("id"),
