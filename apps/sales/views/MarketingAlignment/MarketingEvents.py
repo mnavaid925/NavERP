@@ -155,10 +155,7 @@ def marketing_event_detail(request, pk):
     )
     context = {
         "obj": obj,
-        "event": obj,
         "registrations": registrations,
-        "registration_status_choices": REGISTRATION_STATUS_CHOICES,
-        "followup_status_choices": FOLLOWUP_STATUS_CHOICES,
     }
     return render(
         request,
@@ -269,7 +266,6 @@ def marketing_event_registrations(request, pk):
 
     context = {
         "event": obj,
-        "obj": obj,
         "registrations": page_obj.object_list,
         "page_obj": page_obj,
         "registration_status_choices": REGISTRATION_STATUS_CHOICES,
@@ -329,3 +325,78 @@ def marketing_event_registration_create(request, pk):
         "sales/marketingalignment/marketingevent/registration_form.html",
         {"form": form, "event": obj, "obj": None, "is_edit": False},
     )
+
+
+@login_required
+def marketing_event_registration_edit(request, pk, registration_pk):
+    """Edit one registration of an event.
+
+    This is the only path that moves a registration from "registered" to "attended", so the
+    model's `attended_at` stamp -- "applied the first time the registration is marked
+    attended" -- could never be applied without it.
+    """
+    obj = get_object_or_404(
+        MarketingEvent.objects.filter(tenant=request.tenant),
+        pk=pk,
+    )
+    registration = get_object_or_404(
+        EventRegistration.objects.filter(tenant=request.tenant, event=obj),
+        pk=registration_pk,
+    )
+    if request.method == "POST":
+        form = EventRegistrationForm(
+            request.POST, tenant=request.tenant, instance=registration
+        )
+        # The event comes from the URL, never from the form post.
+        form.fields["event"].disabled = True
+        if form.is_valid():
+            registration = form.save(commit=False)
+            registration.tenant = request.tenant
+            registration.event = obj
+            registration.save()
+            write_audit_log(
+                request.user,
+                registration,
+                "update",
+                f"Updated registration for {registration.registrant_name} "
+                f"on event {obj.number}",
+                tenant=request.tenant,
+            )
+            messages.success(
+                request, f"Registration for {registration.registrant_name} updated."
+            )
+            return redirect("sales:marketing_event_registrations", pk=obj.pk)
+    else:
+        form = EventRegistrationForm(tenant=request.tenant, instance=registration)
+        form.fields["event"].disabled = True
+
+    return render(
+        request,
+        "sales/marketingalignment/marketingevent/registration_form.html",
+        {"form": form, "event": obj, "obj": registration, "is_edit": True},
+    )
+
+
+@require_POST
+@tenant_admin_required
+def marketing_event_registration_delete(request, pk, registration_pk):
+    """Remove one registration from an event."""
+    obj = get_object_or_404(
+        MarketingEvent.objects.filter(tenant=request.tenant),
+        pk=pk,
+    )
+    registration = get_object_or_404(
+        EventRegistration.objects.filter(tenant=request.tenant, event=obj),
+        pk=registration_pk,
+    )
+    name = registration.registrant_name
+    write_audit_log(
+        request.user,
+        registration,
+        "delete",
+        f"Removed registration for {name} from event {obj.number}",
+        tenant=request.tenant,
+    )
+    registration.delete()
+    messages.success(request, f"Registration for {name} removed.")
+    return redirect("sales:marketing_event_registrations", pk=obj.pk)
