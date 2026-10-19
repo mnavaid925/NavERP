@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Attribution {{ obj.number }} — Marketing Alignment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <a href="{% url 'sales:campaign_attribution_list' %}">Attributions</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">Attribution {{ obj.number }}</h1>
+            <span class="badge badge-info">{{ obj.get_attribution_model_display }}</span>
+            {% if obj.status == "approved" %}
+            <span class="badge badge-green">Approved</span>
+            {% elif obj.status == "rejected" %}
+            <span class="badge badge-red">Rejected</span>
+            {% elif obj.status == "computed" %}
+            <span class="badge badge-info">Computed</span>
+            {% else %}
+            <span class="badge badge-muted">Draft</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:campaign_attribution_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Attributions</span>
+        </a>
+        <a href="{% url 'sales:campaign_attribution_edit' obj.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Attribution</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'sales:campaign_attribution_delete' obj.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete attribution {{ obj.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Credit Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="percent"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Credit Assigned</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.credit_pct|floatformat:2 }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Attributed Revenue</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.attributed_revenue|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="circle-dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Attributed Cost</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.attributed_cost|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="gauge"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">ROI on Credit</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if obj.roi_pct is not None %}{{ obj.roi_pct|floatformat:1 }}%{% else %}—{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Details -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Credit Assignment</h2>
+        </div>
+        <div class="card-body">
+            <dl class="divide-y divide-slate-100 text-sm">
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Attribution ID</dt>
+                    <dd class="text-slate-900 font-mono">{{ obj.number }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Attribution Model</dt>
+                    <dd class="text-slate-900 font-semibold">{{ obj.get_attribution_model_display }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Credit Percentage</dt>
+                    <dd class="text-slate-900 font-bold">{{ obj.credit_pct|floatformat:2 }}%</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Status</dt>
+                    <dd class="text-slate-900">{{ obj.get_status_display }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Computed On</dt>
+                    <dd class="text-slate-900">{{ obj.computed_on|date:"F d, Y" }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Computed By</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.computed_by %}{{ obj.computed_by.get_full_name|default:obj.computed_by.username }}{% else %}—{% endif %}
+                    </dd>
+                </div>
+            </dl>
+
+            {% if obj.notes %}
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-2">Rationale</div>
+                <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">
+                    {{ obj.notes }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Credited Touchpoint</h2>
+        </div>
+        <div class="card-body">
+            {% if obj.touchpoint %}
+            <dl class="divide-y divide-slate-100 text-sm">
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Touchpoint</dt>
+                    <dd class="text-slate-900 font-mono">
+                        <a href="{% url 'sales:attribution_touchpoint_detail' obj.touchpoint.pk %}" class="text-blue-600 hover:underline">
+                            {{ obj.touchpoint.number }}
+                        </a>
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Channel / Interaction</dt>
+                    <dd class="text-slate-900">{{ obj.touchpoint.get_channel_display }} · {{ obj.touchpoint.get_touch_type_display }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Journey Position</dt>
+                    <dd class="text-slate-900">{{ obj.touchpoint.get_touch_position_display }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Touch Date</dt>
+                    <dd class="text-slate-900">{{ obj.touchpoint.touch_date|date:"F d, Y" }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Source Campaign</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.campaign %}
+                        {{ obj.campaign.name }}
+                        <span class="font-mono text-xs text-slate-500">{{ obj.campaign.number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">No campaign</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Lead</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.lead %}
+                        {{ obj.lead.name }}
+                        <span class="font-mono text-xs text-slate-500">{{ obj.lead.number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">Not linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Opportunity</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.opportunity %}
+                        {{ obj.opportunity.name }}
+                        <span class="font-mono text-xs text-slate-500">{{ obj.opportunity.number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">Not linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+            {% else %}
+            <div class="text-xs text-slate-400 italic">The credited touchpoint is no longer available.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
