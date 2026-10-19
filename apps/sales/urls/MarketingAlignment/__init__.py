@@ -1,4 +1,7 @@
 """Sales 8.13 — MarketingAlignment URLs package re-exports."""
+from apps.sales.urls.MarketingAlignment.AttributionConsole import (
+    urlpatterns as console_urls,
+)
 from apps.sales.urls.MarketingAlignment.AttributionTouchpoints import (
     urlpatterns as touchpoint_urls,
 )
@@ -16,6 +19,7 @@ from apps.sales.urls.MarketingAlignment.MarketingEvents import (
 )
 
 urlpatterns = [
+    *console_urls,
     *touchpoint_urls,
     *attribution_urls,
     *handoff_urls,
