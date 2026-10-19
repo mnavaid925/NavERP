@@ -329,7 +329,193 @@ behaviour; and the `Sum("registered_total")` aggregate over an ordered queryset 
 `get_aggregation()` can add ordering fields to the GROUP BY, so that one deserves a numeric check
 before sign-off.
 
-### `explorer` — pending
+### `explorer` — **7 findings: 2 Important, 5 Minor** (+ a structure map)
+
+A static code/structure pass (grep + file reads only — no renders, no DB, no file modified). It
+read the code-reviewer's section first, so nothing below duplicates it. Findings are prefixed `E`
+to keep the IDs unique across the six passes.
+
+#### E1 — IMPORTANT — 11 enum filters accept junk values, so a hostile filter empties the register
+
+`AttributionTouchpoints.py:47,51,55` (`channel`, `touch_type`, `touch_position`) ·
+`CampaignAttributions.py:48,52` (`attribution_model`, `status`) ·
+`ContentEngagements.py:44,48` (`engagement_type`, `engagement_channel`) ·
+`MarketingEvents.py:73,77` (`event_type`, `status`) · `MqlHandoffs.py:42,46` (`status`,
+`source_kind`).
+
+Each site applies the raw GET string without checking it against the model's `CHOICES`:
+
+```python
+status = request.GET.get("status", "").strip()
+if status:
+    qs = qs.filter(status=status)
+```
+
+**Consequence.** `?status=bogus` narrows to a value no row can hold → the register renders
+**empty with all-zero stat cards** (the stats are computed on the *filtered* queryset), instead
+of falling back to the unfiltered list. This is a **contract breach**: contract §9 requires
+"junk params fall back to the unfiltered list", and the Phase 3 smoke gate only asserted
+"no 500", which is why it slipped through. The console in the same sub-module already does the
+right thing (`AttributionConsole.py:57-59` whitelist + `first_touch` fallback) — so 8.13 ships
+11 copies of the un-guarded shape and 1 copy of the guarded shape.
+
+**Fix:** a shared `enum_filter(qs, request, param, field, choices)` in
+`apps/sales/views/MarketingAlignment/_common.py`, applied at all 11 sites.
+
+#### E2 — IMPORTANT — the average-response-hours computation is copy-pasted across two files
+
+`MqlHandoffs.py:82-92` and `AttributionConsole.py:187-199` — the same eleven lines twice. Two
+independent copies of one metric that must agree, or the MQL list card and the console's funnel
+disagree — exactly the drift risk `apps/sales/views/_helpers.py`'s own docstring warns about
+("*four copies of a role check, each free to drift*"). The two copies already differ in their
+queryset (filtered vs whole-tenant), which is legitimate; the *algorithm* is duplicated.
+**Fix:** one `avg_response_hours(queryset)` helper in `views/MarketingAlignment/_common.py`, called
+from both. This also gives the code-reviewer's I2 (the triplicated SLA-breach `Q`) a natural home.
+
+#### E3 — MINOR — 14 dead context/stats keys across six views, and 2 of them are contract drift
+
+Every key below is passed by a view and read by no template. **Five detail templates use `obj.`
+exclusively** (40 `obj.` hits, 0 `event.` hits in `marketingevent/detail.html`).
+
+| View | Dead key(s) |
+|---|---|
+| `attribution_touchpoint_detail` | `"touchpoint": obj` |
+| `campaign_attribution_detail` | `"attribution": obj` |
+| `mql_handoff_detail` | `"handoff": obj` |
+| `content_engagement_detail` | `"engagement": obj` |
+| `marketing_event_detail` | `"event": obj`; `"registration_status_choices"`, `"followup_status_choices"` (these belong to `registrations.html`, which gets them from the registrations view) |
+| `marketing_event_registrations` | `"obj": obj` (the template uses `event.`) |
+| `campaign_attribution_list` | `stats["total_credit_pct"]` |
+| `mql_handoff_list` | `stats["pending_count"]`, `["expired_count"]`, `["converted_count"]` |
+| `marketing_event_list` | `stats["upcoming_count"]` |
+| `content_engagement_list` | `stats["engaged_account_count"]` |
+| console | `channel_rows[i]["channel"]` (the template reads `row.label`) |
+
+**Contract drift.** The contract **pins** six of these (§4.2 `touchpoint`, §4.4 `total_credit_pct`,
+§4.5 `attribution`, §4.7 the five MQL counters, §4.8 `handoff`, §4.13 `upcoming_count`, §4.14 `event`)
+and does **not** pin the two extra choice keys `marketing_event_detail` actually passes; conversely
+§4.16 under-specifies `marketing_event_registrations`, whose as-built context also needs
+`registration_status_choices`, `followup_status_choices` and `active_filters`. **No runtime
+impact** — the pages render correctly — but the contract is the authoritative spec, and a later
+pass (or the Phase 6 test-writer) pins context names from it.
+
+#### E4 — MINOR — the seeder's `touchpoints` accumulator is dead code, and it is exactly where the code-reviewer's I4 fix belongs
+
+`seed_sales.py:2895` (`touchpoints = []`) and `:2910` (`touchpoints.append(...)`) — built and
+appended to but never read; the credit loop iterates the tenant's whole touchpoint set instead.
+The accumulator is the fossil of the intended design, and fixing I4 (credit only the rows this
+block created) makes it live and removes the dead code in one step. **Do not simply delete it
+while I4 is outstanding** — that would cement the defect.
+
+#### E5 — MINOR — four model properties nothing references
+
+`AttributionTouchpoint.is_first_touch` / `.is_last_touch` (duplicate the `touch_position` field,
+and the list stats re-express the same fact as `Q(touch_position="first")`),
+`MqlHandoff.is_responded` (duplicates the `responded_at__isnull=False` test used in two views),
+`ContentEngagement.is_download` (duplicates `Q(engagement_type="download")`). Two expressions of
+one fact, free to drift. **Fix:** use them where the same condition is currently re-expressed in
+SQL, or delete them.
+
+#### E6 — MINOR — `EventRegistration` has no edit or delete path, so the attendance transition is unreachable from the UI
+
+`urls/MarketingAlignment/MarketingEvents.py:12-13` registers only the registrations list and the
+registration create. The model's `attended_at` help-text says *"Stamped automatically the first
+time the registration is marked attended"*, and `EventRegistration.save()` implements that — but
+a registration created as `registered` can never later be marked `attended` through the app.
+This is a **contract scope decision** (§4.16/§4.17 list only list + create), not a wiring bug, and
+the code-reviewer verified CRUD completeness across 5 entity sets. **Consequence:** the attendance
+model — the point of the registration child — is write-once. **Fix:** add an edit (+ delete)
+route under the event's registrations page, or amend the help-text and record the missing
+transition as a gap.
+
+#### E7 — MINOR — two top-level 8.13 sidebar bullets resolve to the same URL
+
+`apps/core/navigation.py:2522` "Campaign Influence & Attribution" → `sales:marketing_attribution_console`
+and `:2524` "Campaign Performance Integration" → the same URL. **Important context:** a duplicate
+target is an **established convention** in that file — 13 duplicated URLs, 12 of them the same
+shape (a NavERP bullet + a short alias leaf). What differs in 8.13 is that the duplicate is
+between **two top-level NavERP feature bullets**, so the sidebar shows one page twice under two
+bullet names, and "Campaign Influence & Attribution" has no landing page of its own — its two
+entity lists are demoted to "extra live leaves". **Fix:** point "Campaign Influence &
+Attribution" at `sales:attribution_touchpoint_list`, or drop one bullet label.
+
+#### Structure map (the explorer's distinctive deliverable)
+
+- **Models** (`apps/sales/models/MarketingAlignment/`, 5 entity files + `__init__.py`, all on
+  `apps/sales/models/_base.py`'s `TenantNumbered`/`TenantOwned`):
+  `AttributionTouchpoints.py` → `AttributionTouchpoint` (`ATB-`) → `crm.Campaign`, `crm.Lead`,
+  `crm.Opportunity`, `accounting.Currency`; `CampaignAttributions.py` → `CampaignAttribution`
+  (`ATR-`), the child of `AttributionTouchpoint` (`related_name="attributions"`) → `accounts.User`;
+  `MqlHandoffs.py` → `MqlHandoff` (`MQL-`) → `crm.Lead`, `crm.Campaign`, `core.Party`,
+  `accounts.User` (owner + assigned_to), `crm.Opportunity`, `accounting.Currency`;
+  `ContentEngagements.py` → `ContentEngagement` (`CNG-`) → `sales.EnablementContent`, `core.Party`,
+  `crm.Lead`, `crm.Campaign`, `accounting.Currency`; `MarketingEvents.py` → `MarketingEvent` (`EVT-`)
+  → `accounts.User`, `crm.Campaign`, `accounting.Currency`, **plus** its unnumbered child
+  `EventRegistration` (`TenantOwned`) → `MarketingEvent` (`related_name="registrations"`),
+  `crm.Lead`, `core.Party`, `crm.Campaign`, `crm.Opportunity`. A sixth, *derived* surface —
+  `views/MarketingAlignment/AttributionConsole.py` → `marketing_attribution_console` — stores nothing
+  and rolls up `CampaignAttribution` + `AttributionTouchpoint` + `crm.Campaign` on the fly.
+- **Forms** (`apps/sales/forms/MarketingAlignment/`): one `ModelForm` per entity —
+  `AttributionTouchpointForm`, `CampaignAttributionForm`, `MqlHandoffForm`, `ContentEngagementForm`,
+  `MarketingEventForm`, `EventRegistrationForm`; all six derive from `TenantModelForm`, the five
+  numbered ones also from `TenantUniqueMixin`, each narrowing its FK querysets to `request.tenant`.
+- **Views** (`apps/sales/views/MarketingAlignment/`): 5 entity modules × {list, create, detail, edit,
+  delete} = 25, plus `marketing_event_registrations`, `marketing_event_registration_create` and
+  `marketing_attribution_console` = **28 functions**; deletes are `@require_POST` +
+  `@tenant_admin_required`; `_common.py` holds the one shared helper, the int64-safe `pk_from_param`.
+- **URLs** (`apps/sales/urls/MarketingAlignment/`): 6 modules, all under `marketing-alignment/`,
+  **28 patterns** (5+5+5+5+7+1) — `touchpoints/`, `attributions/`, `mql-handoffs/`,
+  `content-engagements/`, `events/` (+ `events/<pk>/registrations/`), `console/` — mounted in
+  `apps/sales/urls/__init__.py` as `_marketing_alignment` under `app_name = "sales"`.
+- **Templates** (`templates/sales/marketingalignment/`): 5 entity folders × {list, detail, form} +
+  `marketingevent/{registrations,registration_form}` + the standalone `attribution_console.html` at
+  the sub-module root = **18**.
+- **Cross-cutting**: the 8.13 blocks in `apps/sales/{models,forms,views,urls}/__init__.py`; all 6
+  models registered in `apps/sales/admin.py:831-928`; the seeder block `_seed_marketing_alignment`
+  (`seed_sales.py:2842-3169`, called from `handle()` at `:161`); `LIVE_LINKS["8.13"]`
+  (`apps/core/navigation.py:2515-2530`); migration `0023_attributiontouchpoint_campaignattribution_and_more.py`.
+
+#### Verified as correct by the explorer
+
+- **Migration ↔ models is a faithful field-by-field match** — every field name, type, `choices`
+  list (all 15 choice-bearing fields carry their full vocabulary), `db_index`, `default`,
+  `max_length`, `validators`, `help_text`, `null`/`blank`, `on_delete`, `related_name` (all 32 FK
+  `related_name`s match, including the two child relations `attributions` and `registrations`), plus
+  every `Meta` element — `ordering`, 20 indexes, 5 unique constraints.
+- **The re-export blocks are complete and typo-free** — `models/…/__init__.py` (20 names),
+  `forms/…` (6), `views/…` (28), `urls/…` (6 modules); every name in every `__all__` exists and
+  every definition is exported; the `views/__init__.py` prefix filter picks up all 28 functions.
+- **No wiring gaps in the URL/template graph** — 28 view functions ↔ 28 URL patterns ↔ 18
+  templates: no view without a URL, no URL without a view, no orphan template, no path typo.
+- **Template ↔ view filter wiring is exact** — every `<select name="…">` matches a
+  `request.GET.get("…")` one-for-one (touchpoint 6, attribution 4, engagement 6, event 5,
+  handoff 5); every `*_choices` key a template needs is rendered; and the pagination links on all
+  five list templates **and** the registrations page preserve every active filter.
+- **Convention compliance** — no relative imports anywhere under the 8.13 packages (grep `^from \.`
+  → 0 hits); one file per entity, PascalCase; package `__init__.py` re-exports complete, the same
+  shape as the 8.11 `CustomerSuccess` sibling; template folders match the sibling convention and
+  the standalone console sits at the sub-module root per the folder rule's clause 6.
+- **Seeder shape** — all six declared idempotency keys match the keys the code actually checks;
+  every choice value it writes is a member of the model's `CHOICES`; every field it writes exists
+  on the model; no variable used before definition; the block tolerates absent masters.
+- **`pk_from_param` is genuinely new** — `apps/sales/views/_common.py` has no pk-parsing helper,
+  and all 10 pk filter sites use it.
+- **Scope consistency** — the 8.13 views scope by `tenant=request.tenant` without `sales_scope`;
+  that matches every sales sub-module except 8.2, and `apps/core/scoping.py` documents the
+  mechanism as opt-in per module.
+- **`LIVE_LINKS["8.13"]` targets all resolve** (7 links, 6 distinct URLs).
+
+#### Not verified by the explorer
+
+No runtime verification (by instruction): no page rendered, no query string issued, no
+`manage.py check`, no test run, no DB connection. `makemigrations --check` was not re-run (the
+concurrent 8.12 session has in-flight models in the same app, so its output would be ambiguous) —
+the explorer substituted the static field-by-field comparison above. The console aggregates'
+numeric correctness (including whether `qs.aggregate(Sum("registered_total"))` over an ordered
+queryset emits a `GROUP BY` that changes the result) remains a runtime question. The filter
+dropdown querysets' completeness, and the sidebar rendering of E7, were reasoned from source
+rather than observed.
+
 ### `frontend-reviewer` — pending
 ### `performance-reviewer` — pending
 ### `qa-smoke-tester` (Phase 4 pass) — pending
