@@ -66,11 +66,15 @@ class MarketingEventForm(TenantUniqueMixin, TenantModelForm):
             self.fields["campaign"].queryset = Campaign.objects.filter(
                 tenant=self.tenant
             ).order_by("name")
-            self.fields["currency"].queryset = Currency.objects.order_by("code")
+            self.fields["currency"].queryset = Currency.objects.filter(
+                is_active=True
+            ).order_by("code")
 
     def clean(self):
         cleaned_data = super().clean()
-        _reject_foreign(self, cleaned_data, ["owner", "campaign", "currency"])
+        # `currency` is deliberately absent: `accounting.Currency` is a GLOBAL master with no
+        # tenant FK, so the generic tenant check would reject every currency (L29).
+        _reject_foreign(self, cleaned_data, ["owner", "campaign"])
         end_at = cleaned_data.get("end_at")
         start_at = cleaned_data.get("start_at")
         if end_at and start_at and end_at < start_at:
