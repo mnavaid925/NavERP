@@ -54,6 +54,11 @@ from .models import (
     CommissionEarning,
     CommissionStatement,
     CommissionAdjustment,
+    # 8.11 Customer Success & Account Management
+    CustomerHealthScore,
+    CustomerRenewal,
+    CustomerOnboarding,
+    CustomerBusinessReview,
 )
 
 
@@ -760,5 +765,47 @@ class CommissionAdjustmentAdmin(admin.ModelAdmin):
     readonly_fields = ("tenant", "number", "created_at", "updated_at")
     list_select_related = ("statement", "earning", "payee", "requested_by", "approved_by", "tenant")
     raw_id_fields = ("statement", "earning", "payee", "requested_by", "approved_by")
+
+
+# 8.11 Customer Success & Account Management
+@admin.register(CustomerHealthScore)
+class CustomerHealthScoreAdmin(admin.ModelAdmin):
+    list_display = ("number", "account", "composite_score", "health_band", "trend", "risk_level", "evaluated_at", "tenant")
+    list_filter = ("health_band", "trend", "risk_level", "tenant")
+    search_fields = ("number", "account__name", "account__number", "risk_summary")
+    readonly_fields = ("tenant", "number", "composite_score", "health_band", "trend", "risk_level", "created_at", "updated_at")
+    list_select_related = ("account", "csm", "tenant")
+    raw_id_fields = ("account", "csm")
+
+
+@admin.register(CustomerRenewal)
+class CustomerRenewalAdmin(admin.ModelAdmin):
+    list_display = ("number", "account", "contract_end_date", "target_renewal_date", "stage", "risk_level", "current_mrr", "expansion_target", "tenant")
+    list_filter = ("stage", "risk_level", "tenant")
+    search_fields = ("number", "contract_number", "account__name", "account__number")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("account", "owner", "currency", "expansion_opportunity", "tenant")
+    raw_id_fields = ("account", "owner", "currency", "expansion_opportunity")
+
+
+@admin.register(CustomerOnboarding)
+class CustomerOnboardingAdmin(admin.ModelAdmin):
+    list_display = ("number", "account", "plan_tier", "status", "kickoff_date", "target_go_live_date", "actual_go_live_date", "completion_percent", "tenant")
+    list_filter = ("plan_tier", "status", "tenant")
+    search_fields = ("number", "account__name", "account__number", "success_criteria")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("account", "onboarding_lead", "sales_order", "tenant")
+    raw_id_fields = ("account", "onboarding_lead", "sales_order")
+
+
+@admin.register(CustomerBusinessReview)
+class CustomerBusinessReviewAdmin(admin.ModelAdmin):
+    list_display = ("number", "account", "cadence", "status", "scheduled_date", "conducted_date", "csat_score", "nps_score", "referenceable_status", "tenant")
+    list_filter = ("cadence", "status", "referenceable_status", "tenant")
+    search_fields = ("number", "title", "account__name", "account__number", "executive_sponsor")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("account", "csm", "account_plan", "tenant")
+    raw_id_fields = ("account", "csm", "account_plan")
+
 
 
