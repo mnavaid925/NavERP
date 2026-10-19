@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Rep Performance Scorecards — Sales Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <span>Rep Performance Scorecards</span>
+        </div>
+        <h1 class="page-title">Rep Performance Scorecards</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:rep_performance_scorecard_list' %}" class="btn btn-outline">
+            <i data-lucide="refresh-cw"></i>
+            <span>Refresh</span>
+        </a>
+        <a href="{% url 'sales:rep_performance_scorecard_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Scorecard</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="clipboard-list"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_count|default:"0" }}</div>
+        <div class="stat-label">Total Scorecards</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="target"></i>
+        </div>
+        <div class="stat-value">{{ stats.avg_win_rate_pct|default:"0.00"|floatformat:2 }}%</div>
+        <div class="stat-label">Avg Win Rate</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="banknote"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_revenue_closed|default:"0" }}</div>
+        <div class="stat-label">Total Revenue Closed</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="gauge"></i>
+        </div>
+        <div class="stat-value">{{ stats.avg_quota_attainment_pct|default:"0.00"|floatformat:2 }}%</div>
+        <div class="stat-label">Avg Quota Attainment</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div class="stat-value">{{ stats.on_track_count|default:"0" }}</div>
+        <div class="stat-label">On Track (Outstanding / Strong / On Track)</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card">
+    <div class="card-body">
+        <form method="get" class="filter-bar">
+            <div class="form-group">
+                <label class="form-label" for="filter-q">Search</label>
+                <input type="search" id="filter-q" name="q" value="{{ q }}" placeholder="Number, rep, strengths, notes..." class="form-input">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-status">Status</label>
+                <select id="filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-rating">Rating</label>
+                <select id="filter-rating" name="rating" class="form-select">
+                    <option value="">All Ratings</option>
+                    {% for val, label in rating_choices %}
+                    <option value="{{ val }}" {% if request.GET.rating == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-rep">Rep</label>
+                <select id="filter-rep" name="rep" class="form-select">
+                    <option value="">All Reps</option>
+                    {% for rep in reps %}
+                    <option value="{{ rep.pk|stringformat:"d" }}" {% if request.GET.rep == rep.pk|stringformat:"d" %}selected{% endif %}>{{ rep.get_full_name|default:rep.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-territory">Territory</label>
+                <select id="filter-territory" name="territory" class="form-select">
+                    <option value="">All Territories</option>
+                    {% for territory in territories %}
+                    <option value="{{ territory.pk|stringformat:"d" }}" {% if request.GET.territory == territory.pk|stringformat:"d" %}selected{% endif %}>{{ territory.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-forecast-period">Forecast Period</label>
+                <select id="filter-forecast-period" name="forecast_period" class="form-select">
+                    <option value="">All Forecast Periods</option>
+                    {% for period in forecast_periods %}
+                    <option value="{{ period.pk|stringformat:"d" }}" {% if request.GET.forecast_period == period.pk|stringformat:"d" %}selected{% endif %}>{{ period.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter"></i>
+                    <span>Apply</span>
+                </button>
+                {% if active_filters.q or active_filters.status or active_filters.rating or active_filters.rep or active_filters.territory or active_filters.forecast_period %}
+                <a href="{% url 'sales:rep_performance_scorecard_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                    <span>Reset</span>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- List Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Rep</th>
+                    <th>Territory</th>
+                    <th>Period</th>
+                    <th>Activities</th>
+                    <th>Won / Lost</th>
+                    <th>Win Rate</th>
+                    <th>Revenue Closed</th>
+                    <th>Quota Attainment</th>
+                    <th>Goal Gap</th>
+                    <th>Rating</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for scorecard in scorecards %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:rep_performance_scorecard_detail' scorecard.pk %}" class="font-mono text-sm font-semibold hover:underline">
+                            {{ scorecard.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            {% if scorecard.rep %}{{ scorecard.rep.get_full_name|default:scorecard.rep.username }}{% else %}—{% endif %}
+                        </div>
+                        {% if scorecard.segment %}
+                        <div class="text-xs text-slate-500">{{ scorecard.segment }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if scorecard.territory %}
+                        <span class="text-sm">{{ scorecard.territory.name }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-slate-600 text-sm">{{ scorecard.period_start|date:"M d" }} – {{ scorecard.period_end|date:"M d, Y" }}</td>
+                    <td class="text-slate-600 text-sm">{{ scorecard.total_activities }}</td>
+                    <td class="text-slate-600 text-sm">{{ scorecard.opportunities_won }} / {{ scorecard.opportunities_lost }}</td>
+                    <td>
+                        <span class="text-sm font-semibold">{{ scorecard.win_rate_pct }}%</span>
+                    </td>
+                    <td class="text-slate-600 text-sm">{{ scorecard.revenue_closed }}</td>
+                    <td>
+                        <span class="text-sm font-semibold">{{ scorecard.quota_attainment_pct }}%</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ scorecard.goal_gap_badge_class }}">{{ scorecard.goal_gap_value }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ scorecard.rating_badge_class }}">{{ scorecard.get_rating_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ scorecard.status_badge_class }}">{{ scorecard.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'sales:rep_performance_scorecard_detail' scorecard.pk %}" class="btn btn-icon btn-outline" title="View scorecard">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% comment %}
+                          An APPROVED scorecard is the frozen record of a completed review
+                          cycle, so it offers neither Edit nor Delete. Every other status
+                          (draft, shared, acknowledged) keeps both actions available.
+                        {% endcomment %}
+                        {% if scorecard.status != "approved" %}
+                        <a href="{% url 'sales:rep_performance_scorecard_edit' scorecard.pk %}" class="btn btn-icon btn-outline" title="Edit scorecard">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'sales:rep_performance_scorecard_delete' scorecard.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete scorecard {{ scorecard.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete scorecard">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="13">
+                        <div class="empty-state">
+                            <i data-lucide="user-square-2"></i>
+                            <h3>No rep performance scorecards found</h3>
+                            <p>Record one rep's period scorecard — the leading activity evidence, the lagging outcomes, and the rating that came out of them.</p>
+                            <a href="{% url 'sales:rep_performance_scorecard_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Record First Scorecard</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+</div>
+{% endblock %}
