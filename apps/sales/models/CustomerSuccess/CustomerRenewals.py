@@ -130,6 +130,7 @@ class CustomerRenewal(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "account", "stage"], name="sales_crn_acct_stage_idx"),
+            models.Index(fields=["tenant", "stage"], name="sales_crn_ten_stage_idx"),
             models.Index(fields=["tenant", "renewal_date"], name="sales_crn_date_idx"),
             models.Index(fields=["tenant", "churn_risk_flag"], name="sales_crn_risk_idx"),
         ]
