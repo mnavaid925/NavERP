@@ -81,6 +81,16 @@ from .CustomerSuccess import (
     CustomerRenewalForm,
 )
 
+# 8.13 Marketing Alignment & Attribution
+from .MarketingAlignment import (
+    AttributionTouchpointForm,
+    CampaignAttributionForm,
+    ContentEngagementForm,
+    EventRegistrationForm,
+    MarketingEventForm,
+    MqlHandoffForm,
+)
+
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
     "LeadQualificationForm", "LeadRoutingPreviewForm", "LeadRoutingRuleForm", "LeadRoutingRunForm",
@@ -117,6 +127,9 @@ __all__ = [
     # 8.11 Customer Success & Account Management
     "CustomerHealthScoreForm", "CustomerRenewalForm",
     "CustomerOnboardingForm", "CustomerBusinessReviewForm",
+    # 8.13 Marketing Alignment & Attribution
+    "AttributionTouchpointForm", "CampaignAttributionForm", "MqlHandoffForm",
+    "ContentEngagementForm", "MarketingEventForm", "EventRegistrationForm",
 ]
 
 
