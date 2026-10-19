@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Stage Velocity Analyses — Sales Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <span>Stage Velocity Analyses</span>
+        </div>
+        <h1 class="page-title">Stage Velocity Analyses</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:stage_velocity_analysis_list' %}" class="btn btn-outline">
+            <i data-lucide="refresh-cw"></i>
+            <span>Refresh</span>
+        </a>
+        <a href="{% url 'sales:stage_velocity_analysis_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Analysis</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="gauge"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_count|default:"0" }}</div>
+        <div class="stat-label">Total Analyses</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="triangle-alert"></i>
+        </div>
+        <div class="stat-value">{{ stats.bottleneck_count|default:"0" }}</div>
+        <div class="stat-label">Bottlenecks</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="pencil-line"></i>
+        </div>
+        <div class="stat-value">{{ stats.draft_count|default:"0" }}</div>
+        <div class="stat-label">Draft</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="eye"></i>
+        </div>
+        <div class="stat-value">{{ stats.reviewed_count|default:"0" }}</div>
+        <div class="stat-label">Reviewed</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div class="stat-value">{{ stats.approved_count|default:"0" }}</div>
+        <div class="stat-label">Approved</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card">
+    <div class="card-body">
+        <form method="get" class="filter-bar">
+            <div class="form-group">
+                <label class="form-label" for="filter-q">Search</label>
+                <input type="search" id="filter-q" name="q" value="{{ q }}" placeholder="Number, pipeline, stage, recommendation..." class="form-input">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-status">Status</label>
+                <select id="filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-pipeline">Pipeline</label>
+                <select id="filter-pipeline" name="pipeline" class="form-select">
+                    <option value="">All Pipelines</option>
+                    {% for pipeline in pipelines %}
+                    <option value="{{ pipeline.pk }}" {% if request.GET.pipeline == pipeline.pk|stringformat:"d" %}selected{% endif %}>{{ pipeline.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-pipeline-stage">Stage</label>
+                <select id="filter-pipeline-stage" name="pipeline_stage" class="form-select">
+                    <option value="">All Stages</option>
+                    {% for stage in pipeline_stages %}
+                    <option value="{{ stage.pk }}" {% if request.GET.pipeline_stage == stage.pk|stringformat:"d" %}selected{% endif %}>{{ stage.pipeline.name }} — {{ stage.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-bottleneck">Bottleneck</label>
+                <select id="filter-bottleneck" name="bottleneck" class="form-select">
+                    <option value="">All Analyses</option>
+                    <option value="1" {% if request.GET.bottleneck == "1" %}selected{% endif %}>Bottlenecks Only</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter"></i>
+                    <span>Apply</span>
+                </button>
+                {% if active_filters.q or active_filters.status or active_filters.pipeline or active_filters.pipeline_stage or active_filters.bottleneck %}
+                <a href="{% url 'sales:stage_velocity_analysis_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                    <span>Reset</span>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- List Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Analysis</th>
+                    <th>Pipeline</th>
+                    <th>Stage</th>
+                    <th>Period</th>
+                    <th>Median Days</th>
+                    <th>P90 Days</th>
+                    <th>Max Days</th>
+                    <th>Cycle Days</th>
+                    <th>Status</th>
+                    <th>Bottleneck</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for analysis in analyses %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:stage_velocity_analysis_detail' analysis.pk %}" class="font-mono text-sm font-semibold hover:underline">
+                            {{ analysis.number }}
+                        </a>
+                        <div class="text-xs text-slate-500">{{ analysis.opportunity_count }} opp.</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ analysis.pipeline.name }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-800">{{ analysis.pipeline_stage.name }}</div>
+                        <div class="text-xs text-slate-500">Seq {{ analysis.pipeline_stage.sequence }}</div>
+                    </td>
+                    <td class="text-slate-600 text-sm">
+                        {{ analysis.period_start|date:"M d, Y" }}<br>
+                        <span class="text-xs text-slate-500">to {{ analysis.period_end|date:"M d, Y" }}</span>
+                    </td>
+                    <td class="text-slate-900 font-semibold">{{ analysis.median_days_in_stage }}</td>
+                    <td class="text-slate-600">{{ analysis.p90_days_in_stage }}</td>
+                    <td class="text-slate-600">{{ analysis.max_days_in_stage }}</td>
+                    <td class="text-slate-600">
+                        {% if analysis.sales_cycle_days is not None %}{{ analysis.sales_cycle_days }}{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ analysis.status_badge_class }}">{{ analysis.get_status_display }}</span>
+                    </td>
+                    <td>
+                        {% if analysis.is_bottleneck %}
+                        <span class="badge {{ analysis.bottleneck_badge_class }}">Bottleneck</span>
+                        {% if analysis.bottleneck_rank %}<span class="text-xs text-slate-500">#{{ analysis.bottleneck_rank }}</span>{% endif %}
+                        {% else %}
+                        <span class="badge {{ analysis.bottleneck_badge_class }}">{{ analysis.get_is_bottleneck_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'sales:stage_velocity_analysis_detail' analysis.pk %}" class="btn btn-icon btn-outline" title="View analysis">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% comment %}
+                          An APPROVED analysis is the frozen, signed-off measurement for its
+                          period, so it offers neither Edit nor Delete. Draft and Reviewed
+                          analyses keep both actions available.
+                        {% endcomment %}
+                        {% if analysis.status != "approved" %}
+                        <a href="{% url 'sales:stage_velocity_analysis_edit' analysis.pk %}" class="btn btn-icon btn-outline" title="Edit analysis">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'sales:stage_velocity_analysis_delete' analysis.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete analysis {{ analysis.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete analysis">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="11">
+                        <div class="empty-state">
+                            <i data-lucide="gauge"></i>
+                            <h3>No stage velocity analyses found</h3>
+                            <p>Record how long opportunities actually sit in each pipeline stage — the median and p90 durations, the cycle time, and where the bottleneck is.</p>
+                            <a href="{% url 'sales:stage_velocity_analysis_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Record First Analysis</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+</div>
+{% endblock %}
