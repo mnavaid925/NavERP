@@ -2512,6 +2512,22 @@ LIVE_LINKS = {
         "Customer Onboardings": "sales:customer_onboarding_list",
         "Business Reviews": "sales:customer_business_review_list",
     },
+    "8.13": {
+        # OWNERSHIP RULING (L36/L37)
+        # Reuses crm.Campaign (CAM-) for the campaign master -- budget, actual spend and the
+        # UTM triple; reuses crm.Lead (LEAD-) and crm.Opportunity (OPP-) for the journey and
+        # the conversion endpoint; reuses core.Party for customer accounts; reuses
+        # sales.EnablementContent (ECN-) for the content master.
+        # Zero duplicate campaign, lead, opportunity, account or content models declared.
+        "Campaign Influence & Attribution": "sales:marketing_attribution_console",
+        "MQL-to-SQL Tracking": "sales:mql_handoff_list",
+        "Campaign Performance Integration": "sales:marketing_attribution_console",
+        "Content Performance & Engagement": "sales:content_engagement_list",
+        "Event & Webinar Management": "sales:marketing_event_list",
+        # Extra live leaves
+        "Attribution Touchpoints": "sales:attribution_touchpoint_list",
+        "Campaign Attributions": "sales:campaign_attribution_list",
+    },
 
 
 
