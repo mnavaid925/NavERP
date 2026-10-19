@@ -69,6 +69,7 @@ class CustomerRenewalForm(TenantUniqueMixin, TenantModelForm):
             )
             self.fields["original_order"].queryset = (
                 SalesOrder.objects.filter(tenant=self.tenant)
+                .select_related("customer")
                 .order_by("-order_date")
             )
             self.fields["expansion_opportunity"].queryset = (
