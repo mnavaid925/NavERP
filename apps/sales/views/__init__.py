@@ -280,6 +280,33 @@ from .IncentiveCompensation import (
     sales_commission_what_if_calc,
     sales_global_compensation_matrix,
 )
+from .CustomerSuccess import (
+    customer_advocacy_hub,
+    customer_business_review_create,
+    customer_business_review_delete,
+    customer_business_review_detail,
+    customer_business_review_edit,
+    customer_business_review_list,
+    customer_health_console,
+    customer_health_score_create,
+    customer_health_score_delete,
+    customer_health_score_detail,
+    customer_health_score_edit,
+    customer_health_score_list,
+    customer_onboarding_create,
+    customer_onboarding_delete,
+    customer_onboarding_detail,
+    customer_onboarding_edit,
+    customer_onboarding_hub,
+    customer_onboarding_list,
+    customer_qbr_studio,
+    customer_renewal_create,
+    customer_renewal_delete,
+    customer_renewal_detail,
+    customer_renewal_edit,
+    customer_renewal_list,
+    customer_renewal_pipeline,
+)
 
 # View functions exported for URLconf routing and external imports
 __all__ = [
@@ -307,6 +334,8 @@ __all__ = [
         # 8.10 Incentive Compensation Management
         "commission_plan_", "commission_earning_", "commission_statement_", "commission_adjustment_",
         "sales_commission_", "sales_global_compensation_",
+        # 8.11 Customer Success & Account Management
+        "customer_",
     ))
 ]
 
