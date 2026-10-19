@@ -166,3 +166,9 @@ class CustomerHealthScore(TenantNumbered):
             "declining": "trending-down",
         }
         return mapping.get(self.score_trend, "minus")
+
+    @property
+    def score_delta(self):
+        if self.previous_score is not None:
+            return self.overall_score - self.previous_score
+        return None
