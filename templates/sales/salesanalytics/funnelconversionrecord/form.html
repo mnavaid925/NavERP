@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Conversion Record {{ obj.number }}{% else %}New Funnel Conversion Record{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <a href="{% url 'sales:funnel_conversion_record_list' %}">Funnel Conversion Records</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Record{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Funnel Conversion Record {{ obj.number }}{% else %}New Funnel Conversion Record{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:funnel_conversion_record_detail' obj.pk %}{% else %}{% url 'sales:funnel_conversion_record_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-4">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Record & Scope -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Record &amp; Scope</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.label.id_for_label }}">Label <span class="req">*</span></label>
+                {{ form.label }}
+                {% if form.label.errors %}<div class="form-error">{{ form.label.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.funnel_scope.id_for_label }}">Funnel Scope <span class="req">*</span></label>
+                {{ form.funnel_scope }}
+                {% if form.funnel_scope.errors %}<div class="form-error">{{ form.funnel_scope.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.source_channel.id_for_label }}">Source Channel</label>
+                {{ form.source_channel }}
+                {% if form.source_channel.errors %}<div class="form-error">{{ form.source_channel.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.from_stage.id_for_label }}">From Stage</label>
+                {{ form.from_stage }}
+                {% if form.from_stage.errors %}<div class="form-error">{{ form.from_stage.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.to_stage.id_for_label }}">To Stage</label>
+                {{ form.to_stage }}
+                {% if form.to_stage.errors %}<div class="form-error">{{ form.to_stage.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.territory.id_for_label }}">Territory</label>
+                {{ form.territory }}
+                {% if form.territory.errors %}<div class="form-error">{{ form.territory.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.owner.id_for_label }}">Owner</label>
+                {{ form.owner }}
+                {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.segment.id_for_label }}">Segment</label>
+                {{ form.segment }}
+                {% if form.segment.errors %}<div class="form-error">{{ form.segment.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Period & Counts -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Period &amp; Counts</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.period_start.id_for_label }}">Period Start <span class="req">*</span></label>
+                {{ form.period_start }}
+                {% if form.period_start.errors %}<div class="form-error">{{ form.period_start.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.period_end.id_for_label }}">Period End <span class="req">*</span></label>
+                {{ form.period_end }}
+                {% if form.period_end.errors %}<div class="form-error">{{ form.period_end.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.avg_cycle_days.id_for_label }}">Avg Cycle Days</label>
+                {{ form.avg_cycle_days }}
+                {% if form.avg_cycle_days.errors %}<div class="form-error">{{ form.avg_cycle_days.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.entered_count.id_for_label }}">Entered Count</label>
+                {{ form.entered_count }}
+                {% if form.entered_count.errors %}<div class="form-error">{{ form.entered_count.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.converted_count.id_for_label }}">Converted Count</label>
+                {{ form.converted_count }}
+                {% if form.converted_count.errors %}<div class="form-error">{{ form.converted_count.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.skipped_count.id_for_label }}">Skipped Count</label>
+                {{ form.skipped_count }}
+                {% if form.skipped_count.errors %}<div class="form-error">{{ form.skipped_count.errors }}</div>{% endif %}
+            </div>
+        </div>
+        <div class="card-body pt-0">
+            <div class="text-xs text-slate-500">
+                The <strong>conversion rate</strong> and the <strong>dropoff count</strong> are derived from the
+                entered and converted counts and are never typed — they are recomputed on every save.
+            </div>
+        </div>
+    </div>
+
+    <!-- Benchmark & Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Benchmark &amp; Notes</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.benchmark_pct.id_for_label }}">Benchmark %</label>
+                {{ form.benchmark_pct }}
+                {% if form.benchmark_pct.errors %}<div class="form-error">{{ form.benchmark_pct.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.benchmark_as_of.id_for_label }}">Benchmark As Of</label>
+                {{ form.benchmark_as_of }}
+                {% if form.benchmark_as_of.errors %}<div class="form-error">{{ form.benchmark_as_of.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.benchmark_source.id_for_label }}">Benchmark Source</label>
+                {{ form.benchmark_source }}
+                {% if form.benchmark_source.errors %}<div class="form-error">{{ form.benchmark_source.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:funnel_conversion_record_detail' obj.pk %}{% else %}{% url 'sales:funnel_conversion_record_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Save Record{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
