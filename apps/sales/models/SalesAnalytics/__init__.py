@@ -13,6 +13,11 @@ from .FunnelConversionRecords import (
     FUNNEL_SCOPE_CHOICES,
     FunnelConversionRecord,
 )
+from .RepPerformanceScorecards import (
+    SCORECARD_RATING_CHOICES,
+    SCORECARD_STATUS_CHOICES,
+    RepPerformanceScorecard,
+)
 
 __all__ = [
     "WinLossDebrief",
@@ -23,4 +28,7 @@ __all__ = [
     "VELOCITY_STATUS_CHOICES",
     "FunnelConversionRecord",
     "FUNNEL_SCOPE_CHOICES",
+    "RepPerformanceScorecard",
+    "SCORECARD_RATING_CHOICES",
+    "SCORECARD_STATUS_CHOICES",
 ]
