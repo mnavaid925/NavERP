@@ -1,4 +1,7 @@
 """Sales 8.13 — MarketingAlignment views package re-exports."""
+from apps.sales.views.MarketingAlignment.AttributionConsole import (
+    marketing_attribution_console,
+)
 from apps.sales.views.MarketingAlignment.AttributionTouchpoints import (
     attribution_touchpoint_create,
     attribution_touchpoint_delete,
@@ -38,6 +41,7 @@ from apps.sales.views.MarketingAlignment.MarketingEvents import (
 )
 
 __all__ = [
+    "marketing_attribution_console",
     "attribution_touchpoint_list",
     "attribution_touchpoint_create",
     "attribution_touchpoint_detail",
