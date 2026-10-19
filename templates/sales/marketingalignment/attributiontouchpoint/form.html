@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Touch {{ obj.number }}{% else %}New Attribution Touchpoint{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <a href="{% url 'sales:attribution_touchpoint_list' %}">Touchpoints</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Touchpoint{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Attribution Touch {{ obj.number }}{% else %}New Attribution Touchpoint{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:attribution_touchpoint_detail' obj.pk %}{% else %}{% url 'sales:attribution_touchpoint_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Journey Linkage -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Journey Linkage</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.campaign.id_for_label }}">Source Campaign</label>
+                {{ form.campaign }}
+                {% if form.campaign.errors %}<div class="form-error">{{ form.campaign.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.lead.id_for_label }}">Lead</label>
+                {{ form.lead }}
+                {% if form.lead.errors %}<div class="form-error">{{ form.lead.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.opportunity.id_for_label }}">Opportunity</label>
+                {{ form.opportunity }}
+                {% if form.opportunity.errors %}<div class="form-error">{{ form.opportunity.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Interaction -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Interaction &amp; Journey Position</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.channel.id_for_label }}">Channel <span class="text-red-500">*</span></label>
+                {{ form.channel }}
+                {% if form.channel.errors %}<div class="form-error">{{ form.channel.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.touch_type.id_for_label }}">Interaction Type <span class="text-red-500">*</span></label>
+                {{ form.touch_type }}
+                {% if form.touch_type.errors %}<div class="form-error">{{ form.touch_type.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.touch_date.id_for_label }}">Touch Date <span class="text-red-500">*</span></label>
+                {{ form.touch_date }}
+                {% if form.touch_date.errors %}<div class="form-error">{{ form.touch_date.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.touch_position.id_for_label }}">Journey Position <span class="text-red-500">*</span></label>
+                {{ form.touch_position }}
+                {% if form.touch_position.errors %}<div class="form-error">{{ form.touch_position.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Cost & Value -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Cost, Value &amp; Source Reference</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.cost.id_for_label }}">Touch Cost ($)</label>
+                {{ form.cost }}
+                {% if form.cost.errors %}<div class="form-error">{{ form.cost.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.engagement_value.id_for_label }}">Engagement Value ($)</label>
+                {{ form.engagement_value }}
+                {% if form.engagement_value.errors %}<div class="form-error">{{ form.engagement_value.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                {{ form.currency }}
+                {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.source_reference.id_for_label }}">UTM / Source Reference</label>
+                {{ form.source_reference }}
+                {% if form.source_reference.errors %}<div class="form-error">{{ form.source_reference.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Notes</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:attribution_touchpoint_detail' obj.pk %}{% else %}{% url 'sales:attribution_touchpoint_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Record Touchpoint{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
