@@ -27,22 +27,25 @@ from apps.sales.models.MarketingAlignment.MarketingEvents import (
 from apps.sales.views.MarketingAlignment._common import enum_filter, pk_from_param
 
 
-def _event_annotations(queryset):
+def _event_annotations(queryset, tenant):
     """Annotate registration and attendance totals without a JOIN.
 
     Two correlated subqueries are used instead of a ``Count("registrations")`` annotation: a
     multi-valued annotation adds a JOIN, and the outer ``Count("id")`` on such a queryset
     counts the joined rows, which would inflate every event-level total on the page.
+
+    The subqueries are tenant-scoped, like every other queryset on these pages: a registration
+    row that somehow pointed at another workspace's event must not be counted here.
     """
     registered = (
-        EventRegistration.objects.filter(event=OuterRef("pk"))
+        EventRegistration.objects.filter(tenant=tenant, event=OuterRef("pk"))
         .values("event")
         .annotate(c=Count("id"))
         .values("c")
     )
     attended = (
         EventRegistration.objects.filter(
-            event=OuterRef("pk"), registration_status="attended"
+            tenant=tenant, event=OuterRef("pk"), registration_status="attended"
         )
         .values("event")
         .annotate(c=Count("id"))
@@ -90,7 +93,7 @@ def marketing_event_list(request):
         published_count=Count("id", filter=Q(status="published")),
         upcoming_count=Count("id", filter=Q(start_at__gte=now)),
     )
-    qs = _event_annotations(qs)
+    qs = _event_annotations(qs, request.tenant)
     registration_stats = qs.aggregate(
         total_registrations=Sum("registered_total"),
         total_attendance=Sum("attended_total"),
@@ -140,7 +143,8 @@ def marketing_event_detail(request, pk):
         _event_annotations(
             MarketingEvent.objects.filter(tenant=request.tenant).select_related(
                 "owner", "campaign", "currency"
-            )
+            ),
+            request.tenant,
         ),
         pk=pk,
     )
