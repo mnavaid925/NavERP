@@ -20,6 +20,13 @@ from apps.sales.views.SalesAnalytics.FunnelConversionRecords import (
     funnel_conversion_record_edit,
     funnel_conversion_record_list,
 )
+from apps.sales.views.SalesAnalytics.RepPerformanceScorecards import (
+    rep_performance_scorecard_create,
+    rep_performance_scorecard_delete,
+    rep_performance_scorecard_detail,
+    rep_performance_scorecard_edit,
+    rep_performance_scorecard_list,
+)
 
 __all__ = [
     "win_loss_debrief_list",
@@ -37,4 +44,9 @@ __all__ = [
     "funnel_conversion_record_detail",
     "funnel_conversion_record_edit",
     "funnel_conversion_record_delete",
+    "rep_performance_scorecard_list",
+    "rep_performance_scorecard_create",
+    "rep_performance_scorecard_detail",
+    "rep_performance_scorecard_edit",
+    "rep_performance_scorecard_delete",
 ]
