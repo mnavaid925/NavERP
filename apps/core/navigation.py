@@ -2495,6 +2495,23 @@ LIVE_LINKS = {
         "Commission Statements": "sales:commission_statement_list",
         "Commission Adjustments": "sales:commission_adjustment_list",
     },
+    "8.11": {
+        # OWNERSHIP RULING (L36/L37)
+        # Reuses core.Party (customer roles) for account master; reuses crm.Opportunity (OPP-) for expansion deals;
+        # reuses scm.SalesOrder (SO-) for onboarding contract commitments; reuses sales.AccountPlan (ACPL-);
+        # reuses accounting.Currency for multi-currency contracts.
+        # Zero duplicate customer, deal, order, account plan, or currency models declared.
+        "Health Scoring & Risk Alerts": "sales:customer_health_console",
+        "Renewal & Expansion Pipeline": "sales:customer_renewal_pipeline",
+        "Onboarding & Implementation": "sales:customer_onboarding_hub",
+        "Advocacy & Reference Management": "sales:customer_advocacy_hub",
+        "Quarterly Business Reviews (QBRs)": "sales:customer_qbr_studio",
+        # Extra live leaves
+        "Health Scores": "sales:customer_health_score_list",
+        "Customer Renewals": "sales:customer_renewal_list",
+        "Customer Onboardings": "sales:customer_onboarding_list",
+        "Business Reviews": "sales:customer_business_review_list",
+    },
 
 
 
