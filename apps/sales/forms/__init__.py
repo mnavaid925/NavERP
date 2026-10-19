@@ -73,6 +73,14 @@ from .IncentiveCompensation import (
     CommissionStatementForm,
 )
 
+# 8.11 Customer Success & Account Management
+from .CustomerSuccess import (
+    CustomerBusinessReviewForm,
+    CustomerHealthScoreForm,
+    CustomerOnboardingForm,
+    CustomerRenewalForm,
+)
+
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
     "LeadQualificationForm", "LeadRoutingPreviewForm", "LeadRoutingRuleForm", "LeadRoutingRunForm",
@@ -106,7 +114,11 @@ __all__ = [
     # 8.10 Incentive Compensation Management
     "CommissionPlanForm", "CommissionEarningForm",
     "CommissionStatementForm", "CommissionAdjustmentForm",
+    # 8.11 Customer Success & Account Management
+    "CustomerHealthScoreForm", "CustomerRenewalForm",
+    "CustomerOnboardingForm", "CustomerBusinessReviewForm",
 ]
+
 
 
 
