@@ -2,7 +2,11 @@
 
 > Phase 3 Step 1. `BASE = 386a2b27a38fb2589f69ddb287976cc2302ea332`.
 > Research: `.claude/tasks/research-sales-8.13.md`. Plan: `.claude/tasks/todo.md`.
-> Next migration: **`0022_marketingalignment`** (the last `apps/sales` migration is `0021_customersuccess`).
+> Next migration: **`0023_attributiontouchpoint_campaignattribution_and_more.py`**.
+> *(The contract was originally written as `0022_marketingalignment` on the assumption that
+> `0021_customersuccess` was the last sales migration. The real last migration at build time was
+> `0022_customersuccess_indexes`, so the applied migration is `0023_…`. Corrected after the smoke
+> gate — see `.claude/tasks/review-sales-8.13.md`, finding M2.)*
 > App **already exists** → this run EXTENDS it. No scaffold, no `apps.py`, no `config/settings.py`
 > or `config/urls.py` change. The only navigation change is one new `LIVE_LINKS["8.13"]` entry.
 
@@ -770,7 +774,7 @@ leaves for each entity list. The `parse_catalog()` / `MODULE_ICONS` machinery is
 
 ## 9. Verification gates
 
-1. `venv\Scripts\python.exe manage.py makemigrations sales` → `0022_marketingalignment`
+1. `venv\Scripts\python.exe manage.py makemigrations sales` → `0023_attributiontouchpoint_campaignattribution_and_more.py`
 2. `venv\Scripts\python.exe manage.py migrate`
 3. `venv\Scripts\python.exe manage.py seed_sales` → **twice**; the second run must create nothing new
 4. `venv\Scripts\python.exe manage.py check` → clean
