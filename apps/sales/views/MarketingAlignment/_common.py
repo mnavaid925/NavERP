@@ -34,3 +34,43 @@ def pk_from_param(value):
     if pk < MIN_PK or pk > MAX_PK:
         return None
     return pk
+
+
+def enum_filter(qs, request, param, field, choices):
+    """Filter a queryset by a closed-vocabulary GET parameter.
+
+    A GET parameter is arbitrary text, so `?status=bogus` must not narrow the register to a
+    value no row can hold: the list would render EMPTY with all-zero stat cards, because the
+    stats are computed over the filtered queryset. An unknown value therefore narrows NOTHING
+    and the page falls back to the unfiltered list -- the same outcome as an empty parameter.
+
+    Returns `(raw_value, queryset)`. The RAW value is returned (not the sanitised one) so the
+    template's `active_filters` still reflects exactly what the user asked for.
+    """
+    value = request.GET.get(param, "").strip()
+    if value and value in {code for code, _label in choices}:
+        qs = qs.filter(**{field: value})
+    return value, qs
+
+
+def avg_response_hours(queryset):
+    """Mean hours between the handoff and the sales response, over the ANSWERED handoffs.
+
+    Returns None when nothing has been answered yet.
+
+    The mean is computed in Python rather than as a SQL duration expression on purpose: a
+    portable duration expression differs between MySQL/MariaDB and SQLite, and this runs on
+    both. The responded subset is bounded by real sales activity, not by the row count of the
+    table.
+    """
+    response_pairs = list(
+        queryset.filter(responded_at__isnull=False).values_list("responded_at", "handoff_at")
+    )
+    response_hours = [
+        (responded - handed).total_seconds() / 3600
+        for responded, handed in response_pairs
+        if responded is not None and handed is not None
+    ]
+    if not response_hours:
+        return None
+    return round(sum(response_hours) / len(response_hours), 2)
