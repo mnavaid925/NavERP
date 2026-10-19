@@ -47,12 +47,62 @@ each one reports. When all six have reported, the file is deduped, sorted
 
 | # | Reviewer | Scope | Status | Findings |
 |---|---|---|---|---|
+| 0 | `qa-smoke-tester` (Phase 3 gate) | rendered pages, filters, pagination, IDOR, content | **done** | 4 (I1, I2, M1, M2) — all fixed in the main session |
 | 1 | `code-reviewer` | correctness, contract drift, Django idioms | pending | — |
 | 2 | `explorer` | code/structure mapping, duplication, dead paths | pending | — |
 | 3 | `frontend-reviewer` | templates, design system, filters, accessibility | pending | — |
 | 4 | `performance-reviewer` | queries, N+1, indexes, aggregation | pending | — |
 | 5 | `qa-smoke-tester` | rendered pages, filters, pagination, IDOR | pending | — |
 | 6 | `security-reviewer` | tenant isolation, IDOR, injection, data exposure | pending | — |
+
+---
+
+## Phase 3 smoke gate — `qa-smoke-tester` pass (2026-10-19)
+
+The Phase 3 gate ran an independent read-only verification against the contract (23 URLs, content
+assertions, leak markers, junk params, page 2, cross-tenant IDOR, FK-select scoping,
+cross-tenant POST rejection, the console model selector, and `check` / migration drift).
+
+**Result: all 9 functional checks PASSED** — every page renders 200 with the right content, no
+`{#` / `{% comment` leak markers, no 500 on hostile query strings, page 2 renders and preserves
+active filters, 12/12 cross-tenant URLs return **404**, 19 FK selects across the 6 create forms
+offer **0** foreign-tenant pks, a cross-tenant FK POST creates **0** rows, and the console rollup
+genuinely changes with the model (`first_touch` $19,800 / `last_touch` $13,200 / `linear` $13,000
+on the leading campaign).
+
+**The gate FAILED on contract conformance** with 4 findings. All 4 are fixed below.
+
+### Findings
+
+| ID | Severity | Finding | Status |
+|---|---|---|---|
+| `I1` | Important | **Touchpoint list had no `lead` filter control.** The view delivered the contract-pinned `leads` context key and honoured `?lead=<pk>` server-side, but the template never rendered a `<select name="lead">` — so the journey-identity dimension was unreachable from the UI. The template's own clear-filters guard and pagination links already referenced `active_filters.lead`, proving it was a dropped control, not a scope decision. | **[x] fixed** |
+| `I2` | Important | **Content-engagement list had no `campaign` filter control.** Same shape as I1: the view delivered the contract-pinned `campaigns` context key and honoured `?campaign=<pk>`, but no `<select name="campaign">` was rendered — "which campaign drove this engagement" had no UI path, and the clear-filters guard and pagination links already referenced `active_filters.campaign`. | **[x] fixed** |
+| `M1` | Minor | **Touchpoint detail view omitted the contract-pinned `attributions` context key.** Contract §4.2 pins `{"obj", "touchpoint", "attributions"}`; the view passed only `{"obj", "touchpoint"}`. The template did not consume the key either — it showed only the aggregate model property `obj.attributed_revenue`, so the per-model credit breakdown was invisible. No blank region, contract drift only. | **[x] fixed** |
+| `M2` | Minor | **Contract named the migration `0022_marketingalignment`; the applied file is `0023_attributiontouchpoint_campaignattribution_and_more.py`** (0022 was taken by `0022_customersuccess_indexes`). Documentation drift only — `makemigrations --check` was clean and `showmigrations` reported every sales migration `[X]`. | **[x] fixed** |
+
+### Fixes applied (main session — Phase 3 drift, not Phase 4 review findings)
+
+- **I1** — `templates/sales/marketingalignment/attributiontouchpoint/list.html`: added the
+  `lead` select (options from the `leads` context key, `|stringformat:"d"` pk comparison, and
+  `active_filters.lead` reflected as `selected`); filter grid re-laid out to `lg:grid-cols-4`
+  for the now-seven controls.
+- **I2** — `templates/sales/marketingalignment/contentengagement/list.html`: added the
+  `campaign` select on the same pattern; filter grid re-laid out to `lg:grid-cols-4`.
+- **M1** — `apps/sales/views/MarketingAlignment/AttributionTouchpoints.py`: the detail view now
+  passes `attributions` (the touch's credit rows under every model, `select_related("computed_by")`).
+  `templates/sales/marketingalignment/attributiontouchpoint/detail.html` gained a **"Credit by
+  Attribution Model"** table that consumes it, so the key is live rather than decorative.
+- **M2** — `.claude/tasks/contract-sales-8.13.md`: the migration reference corrected to
+  `0023_attributiontouchpoint_campaignattribution_and_more.py`, with the reason recorded.
+
+### Environment note (not a 8.13 defect)
+
+A **concurrent session** is building sub-module **8.12** in this same checkout on the same
+`main` branch. It owns `apps/sales/tests/conftest.py` and
+`apps/sales/tests/test_customersuccess_models.py`, and it landed three commits inside the
+`386a2b2...HEAD` range. 8.13 never touched `apps/sales/tests/` — which is also why Phase 6's
+test-writing phase was skipped rather than contended (see `GAP-sales-8.13-09`).
 
 ---
 
