@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Onboarding {{ obj.number }}{% else %}New Customer Implementation{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_onboarding_hub' %}">Customer Success</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_onboarding_list' %}">Onboardings</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Project{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Customer Onboarding {{ obj.number }}{% else %}New Customer Implementation{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:customer_onboarding_detail' obj.pk %}{% else %}{% url 'sales:customer_onboarding_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Identity & Stakeholders -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Project Identity & Account Alignment</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.title.id_for_label }}">Implementation Project Title <span class="text-red-500">*</span></label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.account.id_for_label }}">Customer Account <span class="text-red-500">*</span></label>
+                {{ form.account }}
+                {% if form.account.errors %}<div class="form-error">{{ form.account.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.lead_csm.id_for_label }}">Lead CSM / Implementation Lead <span class="text-red-500">*</span></label>
+                {{ form.lead_csm }}
+                {% if form.lead_csm.errors %}<div class="form-error">{{ form.lead_csm.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.sales_order.id_for_label }}">Triggering Sales Order (SCM)</label>
+                {{ form.sales_order }}
+                {% if form.sales_order.errors %}<div class="form-error">{{ form.sales_order.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.playbook_template.id_for_label }}">Playbook Template <span class="text-red-500">*</span></label>
+                {{ form.playbook_template }}
+                {% if form.playbook_template.errors %}<div class="form-error">{{ form.playbook_template.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Milestones, Progress & Dates -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Execution Stage, Health & Schedule</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.stage.id_for_label }}">Implementation Stage <span class="text-red-500">*</span></label>
+                {{ form.stage }}
+                {% if form.stage.errors %}<div class="form-error">{{ form.stage.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Project Health Status <span class="text-red-500">*</span></label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.progress_pct.id_for_label }}">Progress Completion (%)</label>
+                {{ form.progress_pct }}
+                {% if form.progress_pct.errors %}<div class="form-error">{{ form.progress_pct.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.time_to_value_days.id_for_label }}">Time-to-Value (Days)</label>
+                {{ form.time_to_value_days }}
+                {% if form.time_to_value_days.errors %}<div class="form-error">{{ form.time_to_value_days.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.kickoff_date.id_for_label }}">Kickoff Date <span class="text-red-500">*</span></label>
+                {{ form.kickoff_date }}
+                {% if form.kickoff_date.errors %}<div class="form-error">{{ form.kickoff_date.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.target_go_live_date.id_for_label }}">Target Go-Live Date <span class="text-red-500">*</span></label>
+                {{ form.target_go_live_date }}
+                {% if form.target_go_live_date.errors %}<div class="form-error">{{ form.target_go_live_date.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.actual_go_live_date.id_for_label }}">Actual Go-Live Date</label>
+                {{ form.actual_go_live_date }}
+                {% if form.actual_go_live_date.errors %}<div class="form-error">{{ form.actual_go_live_date.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Executive Sponsor & Roadblocks -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Executive Sponsor & Roadblocks</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.executive_sponsor_name.id_for_label }}">Client Executive Sponsor</label>
+                {{ form.executive_sponsor_name }}
+                {% if form.executive_sponsor_name.errors %}<div class="form-error">{{ form.executive_sponsor_name.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.executive_sponsor_email.id_for_label }}">Sponsor Email</label>
+                {{ form.executive_sponsor_email }}
+                {% if form.executive_sponsor_email.errors %}<div class="form-error">{{ form.executive_sponsor_email.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.blockers.id_for_label }}">Active Blockers / Roadblocks</label>
+                {{ form.blockers }}
+                {% if form.blockers.errors %}<div class="form-error">{{ form.blockers.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.success_criteria.id_for_label }}">Agreed Success Criteria</label>
+                {{ form.success_criteria }}
+                {% if form.success_criteria.errors %}<div class="form-error">{{ form.success_criteria.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:customer_onboarding_detail' obj.pk %}{% else %}{% url 'sales:customer_onboarding_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Launch Implementation{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
