@@ -61,13 +61,17 @@ class ContentEngagementForm(TenantUniqueMixin, TenantModelForm):
             self.fields["campaign"].queryset = Campaign.objects.filter(
                 tenant=self.tenant
             ).order_by("name")
-            self.fields["currency"].queryset = Currency.objects.order_by("code")
+            self.fields["currency"].queryset = Currency.objects.filter(
+                is_active=True
+            ).order_by("code")
 
     def clean(self):
         cleaned_data = super().clean()
+        # `currency` is deliberately absent: `accounting.Currency` is a GLOBAL master with no
+        # tenant FK, so the generic tenant check would reject every currency (L29).
         _reject_foreign(
             self,
             cleaned_data,
-            ["content", "account", "lead", "campaign", "currency"],
+            ["content", "account", "lead", "campaign"],
         )
         return cleaned_data
