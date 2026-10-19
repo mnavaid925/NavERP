@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}{{ obj.name }} — Marketing Alignment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <a href="{% url 'sales:marketing_event_list' %}">Events</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ obj.name }}</h1>
+            <span class="badge badge-info">{{ obj.get_event_type_display }}</span>
+            {% if obj.status == "published" %}
+            <span class="badge badge-green">Published</span>
+            {% elif obj.status == "completed" %}
+            <span class="badge badge-muted">Completed</span>
+            {% elif obj.status == "cancelled" %}
+            <span class="badge badge-red">Cancelled</span>
+            {% else %}
+            <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:marketing_event_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Events</span>
+        </a>
+        <a href="{% url 'sales:marketing_event_registrations' obj.pk %}" class="btn btn-outline">
+            <i data-lucide="users"></i>
+            <span>Registrations</span>
+        </a>
+        <a href="{% url 'sales:marketing_event_edit' obj.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Event</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'sales:marketing_event_delete' obj.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete event {{ obj.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Event Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="users"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Registrations</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.registered_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="user-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Attended</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.attended_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="percent"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Show-Up Rate</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if obj.show_up_rate_pct is not None %}{{ obj.show_up_rate_pct }}%{% else %}—{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Revenue / Registrant</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if obj.revenue_per_registrant is not None %}${{ obj.revenue_per_registrant|floatformat:2 }}{% else %}—{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Details -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Event Logistics</h2>
+        </div>
+        <div class="card-body">
+            <dl class="divide-y divide-slate-100 text-sm">
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Event ID</dt>
+                    <dd class="text-slate-900 font-mono">{{ obj.number }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Event Type</dt>
+                    <dd class="text-slate-900">{{ obj.get_event_type_display }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Starts</dt>
+                    <dd class="text-slate-900 font-bold">{{ obj.start_at|date:"F d, Y H:i" }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Ends</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.end_at %}{{ obj.end_at|date:"F d, Y H:i" }}{% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Timezone</dt>
+                    <dd class="text-slate-900 font-mono">{{ obj.timezone_name }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Venue</dt>
+                    <dd class="text-slate-900">{{ obj.venue|default:"—" }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Capacity</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.capacity %}{{ obj.capacity }}{% else %}Unlimited{% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Budget</dt>
+                    <dd class="text-slate-900 font-semibold">${{ obj.budget|floatformat:2 }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Ownership &amp; Promotion</h2>
+        </div>
+        <div class="card-body">
+            <dl class="divide-y divide-slate-100 text-sm">
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Event Owner</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Promoting Campaign</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.campaign %}
+                        {{ obj.campaign.name }}
+                        <span class="font-mono text-xs text-slate-500">{{ obj.campaign.number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">No campaign</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Virtual URL</dt>
+                    <dd class="text-slate-900 text-xs font-mono">{{ obj.virtual_url|default:"—" }}</dd>
+                </div>
+            </dl>
+
+            {% if obj.description %}
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-2">Agenda / Description</div>
+                <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">
+                    {{ obj.description }}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-2">Registration Hub</div>
+                <div class="flex flex-wrap gap-2">
+                    <a href="{% url 'sales:marketing_event_registrations' obj.pk %}" class="btn btn-outline btn-sm">
+                        <i data-lucide="users"></i>
+                        <span>Attendance &amp; Follow-Up</span>
+                    </a>
+                    <a href="{% url 'sales:marketing_event_registration_create' obj.pk %}" class="btn btn-outline btn-sm">
+                        <i data-lucide="user-plus"></i>
+                        <span>Add Registration</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Registrations preview -->
+<div class="card mt-6">
+    <div class="card-header">
+        <h2 class="card-title">Recent Registrations</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Registrant</th>
+                    <th>Status</th>
+                    <th>Follow-Up</th>
+                    <th>Score</th>
+                    <th>Registered At</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for registration in registrations|slice:":10" %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ registration.registrant_name }}</div>
+                        <div class="text-xs text-slate-500">{{ registration.registrant_email|default:"—" }}</div>
+                    </td>
+                    <td>
+                        {% if registration.registration_status == "attended" %}
+                        <span class="badge badge-green">Attended</span>
+                        {% elif registration.registration_status == "no_show" %}
+                        <span class="badge badge-red">No-Show</span>
+                        {% elif registration.registration_status == "cancelled" %}
+                        <span class="badge badge-muted">Cancelled</span>
+                        {% elif registration.registration_status == "waitlisted" %}
+                        <span class="badge badge-amber">Waitlisted</span>
+                        {% else %}
+                        <span class="badge badge-info">{{ registration.get_registration_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ registration.get_followup_status_display }}</span>
+                    </td>
+                    <td>
+                        <span class="text-sm text-slate-700">{{ registration.engagement_score }}</span>
+                    </td>
+                    <td>
+                        <span class="text-sm text-slate-700">{{ registration.registered_at|date:"M d, Y" }}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5">
+                        <div class="empty-state">
+                            <i data-lucide="users" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No registrations yet</div>
+                            <div class="empty-state-text">Add the first registration to start tracking attendance and follow-up.</div>
+                            <a href="{% url 'sales:marketing_event_registration_create' obj.pk %}" class="btn btn-primary mt-4">
+                                <i data-lucide="user-plus"></i>
+                                <span>Add Registration</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
