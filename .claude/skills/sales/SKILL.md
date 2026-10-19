@@ -1,6 +1,6 @@
 ---
 name: sales
-description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, and 8.8 Sales Activity & Task Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
+description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, 8.8 Sales Activity & Task Management, and 8.9 Sales Enablement. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
 ---
 
 # Sales Management System (Module 8)
@@ -721,3 +721,85 @@ Four-lane suite in `apps/sales/tests/`, named `test_salesactivitytaskmanagement_
 - **Add a new board**: add a view to `views/SalesActivityTaskManagement/Boards.py` with a named `MAX_BOARD_*` cap published through `_caps()`, add a template under `boards/`, add the route, and add a bullet or extra leaf in `LIVE_LINKS["8.8"]`. No model needed.
 - **Change the suggestion rules**: edit the five blocks in `sales_next_best_actions`, bump its weight, and add the label to `RULE_LABELS` — the template reads `rule_label`/`rule_badge` from there and must not derive them itself.
 - **Extend the frozen evidence**: a new counter needs `editable=False` on the model, an `advance_email_engagement()` branch, a POST verb, an admin `readonly_fields` entry, and an engagement property update — in all five places, or it becomes hand-editable through one of them (L20/L22).
+
+## 8.9 Sales Enablement
+
+App path: `apps/sales/`; templates: `templates/sales/salesenablement/`; URL namespace: `sales`.
+
+### Ownership boundaries (L29 / L36 / L37)
+
+Sub-module 8.9 operationalizes sales collateral, stage talk tracks, onboarding accreditations, conversation coaching, and competitor battlecards without duplicating upstream modules:
+
+- **Competitor Profiles**: Reuses 8.2 `CompetitorProfile` (`CMP-`) in `EnablementContent.competitor`. Queries 8.2 `OpportunityOutcome` for win/loss analytics. Zero duplicate competitor masters.
+- **Conversation Logs & Activities**: Reuses CRM 1.5 `CommunicationLog` (`COM-`) and Sales 8.8 `ActivityLog` (`SAL-`) as evaluation anchors in `CoachingScorecard`.
+- **Collateral Files**: Reuses `core.Document` for physical file binaries; `EnablementContent` stores metadata, taxonomy, and versioning.
+- **Selling Stages**: Reuses 8.2 `PipelineStage` and `Pipeline` in `SalesPlaybook` and `EnablementContent`.
+- **LMS Training**: Reuses HRM 3.22 `TrainingCourse` (`hrm.TrainingCourse`) as an optional syllabus bridge for accreditations.
+- **Users**: Reuses `accounts.User` for coaches, coachees, certifiers, students, and content authors.
+
+### 8.9 models (`apps/sales/models/SalesEnablement/`)
+
+1. **`EnablementContent` (`ECN-#####`)**:
+   - `EnablementContents.py`: Collateral repository asset.
+   - Fields: `title`, `content_type` (`battlecard`, `pitch_deck`, `case_study`, `product_sheet`, `demo_script`, `pricing_guide`, `security_whitepaper`, `email_template`), `version`, `target_stage`, `target_persona`, `competitor`, `document`, `external_url`, `description`, `tags`, `is_client_facing`, `is_active`, `expires_on`, `view_count`, `share_count`, `author`.
+   - Business methods: `tag_list` property, `record_view()`, `record_share()`.
+   - Clean guard G1: requires at least one of `document`, `external_url`, or `description`.
+
+2. **`SalesPlaybook` (`SPB-#####`)**:
+   - `SalesPlaybooks.py`: Step-by-step selling methodology guide.
+   - Fields: `name`, `motion_type` (`new_logo`, `expansion`, `renewal`, `competitive_displacement`, `channel_partner`), `version`, `pipeline`, `summary`, `target_audience`, `qualification_criteria`, `stage_guidance`, `objection_scripts`, `competitive_positioning`, `exit_criteria`, `status` (`draft`, `review`, `published`, `archived`), `is_active`, `owner`.
+
+3. **`SalesCertification` (`SCTF-#####`)**:
+   - `SalesCertifications.py`: Training curriculum and product accreditation.
+   - Fields: `curriculum_name`, `category` (`onboarding`, `product`, `methodology`, `compliance`, `pitch`), `rep`, `status` (`enrolled`, `completed`, `failed`, `expired`), `passing_score_percent`, `score_percent`, `certified_at`, `expires_at`, `hrm_course`, `accreditation_body`, `credential_id`, `certificate_url`, `certified_by`, `notes`.
+   - Clean guards G6-G8: `status="completed"` requires `score_percent >= passing_score_percent`, auto-populates `certified_at`, and validates `expires_at >= certified_at`.
+
+4. **`CoachingScorecard` (`CSC-#####`)**:
+   - `CoachingScorecards.py`: Conversation intelligence and rubric evaluation.
+   - Fields: `evaluation_name`, `evaluated_on`, `coach`, `coachee`, `communication_log`, `activity_log`, rubric scores 1-5 (`discovery_score`, `value_prop_score`, `objection_handling_score`, `next_steps_score`), `overall_score` (computed composite percentage 0-100%, `editable=False`), `talk_ratio_rep_percent`, `call_sentiment` (`positive`, `neutral`, `hesitant`, `challenging`), `strengths`, `areas_for_improvement`, `action_items`, `review_status` (`draft`, `shared`, `acknowledged`).
+
+### 8.9 routes and views (`apps/sales/views/SalesEnablement/`)
+
+- **Boards**:
+  - `enablement_content_hub` (`/sales/enablement/hub/`): Content repository with search, taxonomy, and quick persona filters.
+  - `sales_playbook_board` (`/sales/enablement/playbooks/board/`): Motion-grouped playbook dashboard.
+  - `sales_readiness_board` (`/sales/enablement/readiness/`): Representative competency matrix with aggregate stats.
+  - `sales_coaching_workbench` (`/sales/enablement/coaching/workbench/`): Review queue and conversation scorecard summary.
+  - `sales_competitive_intelligence_library` (`/sales/enablement/ci-library/`): Battlecards, SWOT positioning, and win/loss records.
+- **CRUD Entities**:
+  - `enablement_content_{list,create,detail,edit,delete}` + action `enablement_content_share` (POST)
+  - `sales_playbook_{list,create,detail,edit,delete}`
+  - `sales_certification_{list,create,detail,edit,delete}`
+  - `coaching_scorecard_{list,create,detail,edit,delete}` + action `coaching_scorecard_acknowledge` (POST)
+
+### 8.9 templates (`templates/sales/salesenablement/`)
+
+- `boards/{content_hub,playbook_board,readiness_board,coaching_workbench,competitive_intelligence_library}.html`
+- `enablementcontent/{list,detail,form}.html`
+- `salesplaybook/{list,detail,form}.html`
+- `salescertification/{list,detail,form}.html`
+- `coachingscorecard/{list,detail,form}.html`
+
+### 8.9 sidebar wiring (`apps/core/navigation.py`)
+
+`LIVE_LINKS["8.9"]` maps the five NavERP.md feature bullets and four list leaves:
+- Content Repository & Search -> `sales:enablement_content_hub`
+- Sales Playbooks & Guidance -> `sales:sales_playbook_board`
+- Training & Certification Tracking -> `sales:sales_readiness_board`
+- Coaching & Call Recording -> `sales:sales_coaching_workbench`
+- Competitive Intelligence Library -> `sales:sales_competitive_intelligence_library`
+- Leaves: Enablement Content, Sales Playbooks, Certifications, Coaching Scorecards.
+
+### 8.9 migrations & seeder
+
+- Migrations: `0017_salesenablement.py` and `0018_coachingscorecard_sales_csc_tenant_eval_idx_and_more.py` (composite B-tree indexes).
+- Seeder: `python manage.py seed_sales` -> `_seed_sales_enablement()` seeds realistic collateral, playbooks, certifications, and scorecards for ACME and GLOBEX tenants.
+
+### 8.9 tests
+
+142 automated tests under `apps/sales/tests/`:
+- `test_salesenablement_models.py` (21 passed)
+- `test_salesenablement_forms.py` (28 passed)
+- `test_salesenablement_views.py` (65 passed)
+- `test_salesenablement_security.py` (28 passed)
+
