@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Health & Risk Console — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Customer Success</span>
+            <span>/</span>
+            <span>Health Console</span>
+        </div>
+        <h1 class="page-title">Customer Health & Early Risk Radar</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_health_score_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>All Scorecards</span>
+        </a>
+        <a href="{% url 'sales:customer_health_score_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Evaluate Account</span>
+        </a>
+    </div>
+</div>
+
+<!-- Portfolio Health Scorecards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Avg Portfolio Health</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if stats.avg_overall %}{{ stats.avg_overall|floatformat:1 }}{% else %}0.0{% endif %}<span class="text-xs text-slate-400 font-normal">/100</span>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Healthy Accounts</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.healthy_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Needs Attention</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.attention_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Critical At-Risk</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.at_risk_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="bell-ring"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Churn Alerts</div>
+            <div class="text-2xl font-bold text-red-600 mt-1">{{ stats.churn_alerts_count|default:"0" }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Churn Early Warning Alerts -->
+{% if churn_alerts %}
+<div class="card mb-6 border-l-4 border-red-500">
+    <div class="card-header flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <i data-lucide="alert-octagon" class="w-5 h-5 text-red-600"></i>
+            <h2 class="card-title text-red-900">Active Churn Early Warning Alerts</h2>
+        </div>
+        <span class="badge badge-red">{{ churn_alerts|length }} Accounts Flagged</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Account</th>
+                    <th>Overall Score</th>
+                    <th>Risk Rating</th>
+                    <th>Warning Alert Message</th>
+                    <th>Support Tickets</th>
+                    <th>License Utilization</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for score in churn_alerts %}
+                <tr class="bg-red-50/20">
+                    <td class="font-medium text-slate-900">
+                        <a href="{% url 'sales:customer_health_score_detail' score.pk %}" class="hover:underline text-blue-600 font-semibold">
+                            {{ score.account.name }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="font-bold text-red-700 text-lg">{{ score.overall_score }}</span>
+                        <span class="text-xs text-slate-400">/100</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ score.risk_badge_class }}">{{ score.get_risk_level_display }}</span>
+                    </td>
+                    <td class="text-sm text-red-700 font-medium">
+                        {{ score.active_alert_message|default:"Unmitigated retention risk identified" }}
+                    </td>
+                    <td class="text-slate-800 font-semibold">{{ score.open_support_tickets }}</td>
+                    <td class="text-slate-800">{{ score.license_utilization_pct }}%</td>
+                    <td class="text-right">
+                        <a href="{% url 'sales:customer_health_score_detail' score.pk %}" class="btn btn-outline btn-sm">
+                            Investigate
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Health Matrix Split -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- At Risk Column -->
+    <div class="card border-t-4 border-red-500">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="font-bold text-red-800">At Risk (Red: 0–49)</h3>
+            <span class="badge badge-red">{{ at_risk_scores|length }}</span>
+        </div>
+        <div class="card-body space-y-3">
+            {% for s in at_risk_scores %}
+            <div class="p-3 bg-red-50/50 rounded-lg border border-red-100 flex items-center justify-between">
+                <div>
+                    <a href="{% url 'sales:customer_health_score_detail' s.pk %}" class="font-semibold text-slate-900 hover:underline text-sm block">
+                        {{ s.account.name }}
+                    </a>
+                    <div class="text-xs text-slate-500 mt-0.5">Evaluated: {{ s.evaluation_date|date:"M d, Y" }}</div>
+                </div>
+                <div class="text-right">
+                    <span class="text-lg font-bold text-red-700">{{ s.overall_score }}</span>
+                    <span class="text-xs text-slate-400 block">/100</span>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-xs text-slate-400 italic py-4 text-center">No at-risk accounts.</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Needs Attention Column -->
+    <div class="card border-t-4 border-amber-500">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="font-bold text-amber-800">Needs Attention (Yellow: 50–74)</h3>
+            <span class="badge badge-amber">{{ attention_scores|length }}</span>
+        </div>
+        <div class="card-body space-y-3">
+            {% for s in attention_scores %}
+            <div class="p-3 bg-amber-50/50 rounded-lg border border-amber-100 flex items-center justify-between">
+                <div>
+                    <a href="{% url 'sales:customer_health_score_detail' s.pk %}" class="font-semibold text-slate-900 hover:underline text-sm block">
+                        {{ s.account.name }}
+                    </a>
+                    <div class="text-xs text-slate-500 mt-0.5">Evaluated: {{ s.evaluation_date|date:"M d, Y" }}</div>
+                </div>
+                <div class="text-right">
+                    <span class="text-lg font-bold text-amber-700">{{ s.overall_score }}</span>
+                    <span class="text-xs text-slate-400 block">/100</span>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-xs text-slate-400 italic py-4 text-center">No accounts needing attention.</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Healthy Column -->
+    <div class="card border-t-4 border-emerald-500">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="font-bold text-emerald-800">Healthy (Green: 75–100)</h3>
+            <span class="badge badge-green">{{ healthy_scores|length }}</span>
+        </div>
+        <div class="card-body space-y-3">
+            {% for s in healthy_scores %}
+            <div class="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100 flex items-center justify-between">
+                <div>
+                    <a href="{% url 'sales:customer_health_score_detail' s.pk %}" class="font-semibold text-slate-900 hover:underline text-sm block">
+                        {{ s.account.name }}
+                    </a>
+                    <div class="text-xs text-slate-500 mt-0.5">Evaluated: {{ s.evaluation_date|date:"M d, Y" }}</div>
+                </div>
+                <div class="text-right">
+                    <span class="text-lg font-bold text-emerald-700">{{ s.overall_score }}</span>
+                    <span class="text-xs text-slate-400 block">/100</span>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-xs text-slate-400 italic py-4 text-center">No healthy accounts recorded.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
