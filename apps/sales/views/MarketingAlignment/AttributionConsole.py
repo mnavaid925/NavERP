@@ -92,7 +92,6 @@ def marketing_attribution_console(request):
     campaign_rows = []
     total_spend = ZERO
     total_attributed_revenue = ZERO
-    total_leads = 0
     for campaign_pk, campaign in campaigns.items():
         tp = tp_by_campaign.get(campaign_pk, {})
         attr = attr_by_campaign.get(campaign_pk, {})
@@ -114,7 +113,6 @@ def marketing_attribution_console(request):
         )
         total_spend += spend
         total_attributed_revenue += revenue
-        total_leads += lead_count
 
     campaign_rows.sort(key=lambda row: (row["attributed_revenue"], row["spend"]), reverse=True)
 
@@ -252,6 +250,13 @@ def marketing_attribution_console(request):
         )
 
     # ---- Headline stats -------------------------------------------------------------------
+    # The BLENDED cost per lead counts each lead ONCE across the whole tenant: a lead that
+    # touched two campaigns is one lead, not two. Summing the per-campaign `lead_count`
+    # (each a `Count("lead_id", distinct=True)`) would double-count such a lead, so the
+    # denominator is one distinct count over the tenant's touchpoints instead.
+    total_leads = (
+        touchpoints.aggregate(total_leads=Count("lead_id", distinct=True))["total_leads"] or 0
+    )
     avg_cost_per_lead = (total_spend / total_leads) if (total_leads and total_spend) else None
     stats = {
         "total_touchpoints": touchpoints.count(),
