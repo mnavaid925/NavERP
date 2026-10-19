@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Attribution Touchpoints — Marketing Alignment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <span>Touchpoints</span>
+        </div>
+        <h1 class="page-title">Attribution Touchpoints</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:attribution_touchpoint_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Touchpoint</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="route"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Touches</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="circle-dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Touch Cost</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                ${{ stats.total_cost|default:"0.00"|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Engagement Value</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                ${{ stats.total_engagement_value|default:"0.00"|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="split"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">First / Last Touches</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ stats.first_touch_count|default:"0" }} / {{ stats.last_touch_count|default:"0" }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search campaign, lead, UTM..." class="form-input w-full" aria-label="Search touchpoints">
+            </div>
+            <div>
+                <select name="channel" class="form-select w-full" aria-label="Filter by channel">
+                    <option value="">All Channels</option>
+                    {% for val, label in channel_choices %}
+                    <option value="{{ val }}" {% if active_filters.channel == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="touch_type" class="form-select w-full" aria-label="Filter by touch type">
+                    <option value="">All Touch Types</option>
+                    {% for val, label in touch_type_choices %}
+                    <option value="{{ val }}" {% if active_filters.touch_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="position" class="form-select w-full" aria-label="Filter by journey position">
+                    <option value="">All Journey Positions</option>
+                    {% for val, label in position_choices %}
+                    <option value="{{ val }}" {% if active_filters.position == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="campaign" class="form-select w-full" aria-label="Filter by campaign">
+                    <option value="">All Campaigns</option>
+                    {% for campaign in campaigns %}
+                    <option value="{{ campaign.pk }}" {% if active_filters.campaign == campaign.pk|stringformat:"d" %}selected{% endif %}>{{ campaign.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if active_filters.q or active_filters.channel or active_filters.touch_type or active_filters.position or active_filters.campaign or active_filters.lead %}
+                <a href="{% url 'sales:attribution_touchpoint_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Touch ID</th>
+                    <th>Campaign</th>
+                    <th>Journey Position</th>
+                    <th>Channel / Type</th>
+                    <th>Lead / Deal</th>
+                    <th>Cost</th>
+                    <th>Engagement Value</th>
+                    <th>Date</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for touchpoint in touchpoints %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:attribution_touchpoint_detail' touchpoint.pk %}" class="font-mono text-sm font-semibold text-blue-600 hover:underline">
+                            {{ touchpoint.number }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if touchpoint.campaign %}
+                        <div class="font-medium text-slate-900">{{ touchpoint.campaign.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ touchpoint.campaign.number }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">No campaign</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if touchpoint.touch_position == "first" %}
+                        <span class="badge badge-green">First Touch</span>
+                        {% elif touchpoint.touch_position == "last" %}
+                        <span class="badge badge-info">Last Touch</span>
+                        {% else %}
+                        <span class="badge badge-muted">Middle Touch</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-900">{{ touchpoint.get_channel_display }}</div>
+                        <div class="text-xs text-slate-500">{{ touchpoint.get_touch_type_display }}</div>
+                    </td>
+                    <td>
+                        {% if touchpoint.lead %}
+                        <div class="text-sm text-slate-900">{{ touchpoint.lead.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ touchpoint.lead.number }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">${{ touchpoint.cost|floatformat:2 }}</span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">${{ touchpoint.engagement_value|floatformat:2 }}</span>
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-900">{{ touchpoint.touch_date|date:"M d, Y" }}</div>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'sales:attribution_touchpoint_detail' touchpoint.pk %}" class="btn btn-icon btn-outline" title="View details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:attribution_touchpoint_edit' touchpoint.pk %}" class="btn btn-icon btn-outline" title="Edit touchpoint">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'sales:attribution_touchpoint_delete' touchpoint.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete touchpoint {{ touchpoint.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete touchpoint">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="route" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No attribution touchpoints found</div>
+                            <div class="empty-state-text">Record every marketing interaction so credit can be assigned across first-touch, last-touch and multi-touch models.</div>
+                            <a href="{% url 'sales:attribution_touchpoint_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Record First Touchpoint</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination (L9 Guarded) -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} touchpoints
+        </div>
+        <div class="pagination-actions">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.channel %}&channel={{ active_filters.channel }}{% endif %}{% if active_filters.touch_type %}&touch_type={{ active_filters.touch_type }}{% endif %}{% if active_filters.position %}&position={{ active_filters.position }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}{% if active_filters.lead %}&lead={{ active_filters.lead }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.channel %}&channel={{ active_filters.channel }}{% endif %}{% if active_filters.touch_type %}&touch_type={{ active_filters.touch_type }}{% endif %}{% if active_filters.position %}&position={{ active_filters.position }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}{% if active_filters.lead %}&lead={{ active_filters.lead }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
