@@ -19,7 +19,11 @@ from apps.sales.models.MarketingAlignment.ContentEngagements import (
     ContentEngagement,
 )
 from apps.sales.models.SalesEnablement.EnablementContents import EnablementContent
-from apps.sales.views.MarketingAlignment._common import enum_filter, pk_from_param
+from apps.sales.views.MarketingAlignment._common import (
+    enum_filter,
+    pk_from_param,
+    single_currency,
+)
 
 
 @login_required
@@ -102,6 +106,9 @@ def content_engagement_list(request):
             "campaign": campaign_id,
         },
         "stats": stats,
+        # The money total is only labelled with a symbol when every listed engagement shares
+        # ONE currency -- see `single_currency`.
+        "currency": single_currency(qs),
     }
     return render(
         request,
@@ -121,7 +128,7 @@ def content_engagement_detail(request, pk):
     return render(
         request,
         "sales/marketingalignment/contentengagement/detail.html",
-        {"obj": obj, "engagement": obj},
+        {"obj": obj},
     )
 
 
