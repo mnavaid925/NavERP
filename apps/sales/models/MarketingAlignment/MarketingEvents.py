@@ -340,10 +340,22 @@ class EventRegistration(TenantOwned):
     def save(self, *args, **kwargs):
         # Stamp attended_at on the first transition into "attended"; clear it if the row moves
         # off that status.
+        stamped = False
         if self.registration_status == "attended" and self.attended_at is None:
             self.attended_at = timezone.now()
+            stamped = True
         elif self.registration_status != "attended":
             self.attended_at = None
+            stamped = True
+        # A caller that passes `update_fields` must not be able to persist the row while
+        # silently dropping the stamp: the in-memory instance would report an attendance time
+        # that never reached the database.
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            fields = set(update_fields)
+            if stamped:
+                fields.add("attended_at")
+            kwargs["update_fields"] = fields
         super().save(*args, **kwargs)
 
     def clean(self):
