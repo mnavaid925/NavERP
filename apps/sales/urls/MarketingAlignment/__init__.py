@@ -11,10 +11,14 @@ from apps.sales.urls.MarketingAlignment.ContentEngagements import (
 from apps.sales.urls.MarketingAlignment.MqlHandoffs import (
     urlpatterns as handoff_urls,
 )
+from apps.sales.urls.MarketingAlignment.MarketingEvents import (
+    urlpatterns as event_urls,
+)
 
 urlpatterns = [
     *touchpoint_urls,
     *attribution_urls,
     *handoff_urls,
     *engagement_urls,
+    *event_urls,
 ]
