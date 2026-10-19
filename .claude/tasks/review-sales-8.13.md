@@ -157,6 +157,178 @@ After the fix — **10/10 return 200**. `manage.py check` clean, `makemigrations
 the full 8.13 page sweep still passes on MariaDB, and the oversized-pk sweep passes on both
 databases.
 
+### `code-reviewer` — **12 findings: 1 Critical, 5 Important, 7 Minor** (VERDICT: FAIL)
+
+The reviewer read the contract, every backend and template file, and executed runtime probes
+(seeder idempotency on a real tenant, `save()` re-stamp behaviour, the currency rejection,
+form validity). Its full report is summarised below; every finding is to be fixed by the
+`code-fixer` agent in ID order.
+
+#### C1 — CRITICAL — the `currency` FK is unusable on every 8.13 form and admin
+
+`accounting.Currency` is a **GLOBAL** master with **no tenant FK**
+(`apps/accounting/models/GeneralLedger/Currencies.py:6-9` — *"ISO 4217 currency master.
+**Global** — shared across all tenants (no tenant FK)"*; verified by introspection: fields are
+`['id','code','name','symbol','is_active']`). So `getattr(currency, "tenant_id", None)` is `None`,
+and `None != request.tenant.id` is always true — **every currency selection is rejected**.
+
+The project's own idiom says the opposite: `ForecastPeriods.py:13` — *"`reporting_currency` is
+deliberately never tenant-checked (L29)"*; `QuotaPlans.py:21-22` — *"`accounting.Currency` is a
+GLOBAL master with no `tenant` FK, so it is never tenant-checked (L29)"*; `LeadQualifications.py:69`
+— `budget_currency` carries no tenant guard.
+
+- **Evidence (executed by the reviewer):**
+  `AttributionTouchpointForm(tenant=<Acme>, data={..., "currency": <USD pk>})` →
+  `FORM VALID: False`, `{'currency': [ValidationError(['That record belongs to another workspace.'])]}`.
+  Model path: `AttributionTouchpoint(..., currency=usd).full_clean()` → `ValidationError` on `currency`.
+- **Sites:** `apps/sales/forms/_common.py:34` (the shared `_reject_foreign` test),
+  `AttributionTouchpoints.py:66`, `ContentEngagements.py:71`, `MqlHandoffs.py:93`,
+  `MarketingEvents.py:73`; and the model `clean()` guards at `AttributionTouchpoints.py:192`,
+  `ContentEngagements.py:160`, `MqlHandoffs.py:221`, `MarketingEvents.py:226`.
+- **Consequence:** the `currency` field cannot be set on any 8.13 record through the UI or the
+  admin — the dropdown offers currencies and then rejects every one. Worse, the seeder writes a
+  currency anyway (`seed_sales.py:2926, 3036, 3070, 3126`), so **16 of the 19 seeded 8.13 rows per
+  tenant** hold a value their own model forbids; re-opening any of them in the edit form
+  re-submits the currency and hits the same error — **the seeded rows are un-editable**.
+- **Fix:** remove `"currency"` from the four `_reject_foreign(...)` lists and from the four
+  `clean()` guard loops; keep it in `Meta.fields` and in the admin (it is a valid global
+  reference). Optionally narrow the widget to `Currency.objects.filter(is_active=True)`.
+
+#### I1 — IMPORTANT — the seeder writes an `MqlHandoff` that violates the model's own SLA invariant
+
+`seed_sales.py:3001` (`"sla_in_hours": -2`) and `:3030` (`sla_due_at = handoff_at + timedelta(hours=...)`)
+put the SLA deadline **two hours before the handoff was raised**. `objects.create()` never calls
+`full_clean()`, so the row is written anyway. The intent (an overdue pending handoff) is
+expressible correctly: `handoff_at` in the past with `sla_due_at = handoff_at + 24h` is already
+in the past, because `handoff_at = now - timedelta(days=3 + idx)`. **Fix:** make `sla_in_hours`
+positive and let `handoff_at` place the deadline in the past.
+
+#### I2 — IMPORTANT — SLA-breach counting contradicts the model's own `is_sla_breached`
+
+The model property treats *any* unanswered, overdue handoff as breached. Both aggregates
+(`MqlHandoffs.py:70-71`, `AttributionConsole.py:166-167`) use
+`Q(responded_at__isnull=False, responded_at__gt=F("sla_due_at")) | Q(status="pending", sla_due_at__lt=now)`,
+so a handoff in status `expired` that was never answered is excluded — exactly the case the
+`expired` status exists to record. **Consequence:** the list stat and the console's SLA
+compliance over-report compliance, and the same row reads as breached through
+`obj.is_sla_breached` and compliant in the totals. **Fix:** align both aggregates with the
+property — ideally by exposing one shared `Q` on the model so they cannot drift.
+
+#### I3 — IMPORTANT — admin FK querysets are not narrowed to the requesting tenant
+
+`admin.py:902-911` (`MarketingEventAdmin` — no `formfield_for_foreignkey` at all, so `owner`
+and `campaign` are unnarrowed); `:894-899` (`ContentEngagementAdmin` narrows `content`/`lead`/
+`campaign` but **not** `account`); `:875-882` (`MqlHandoffAdmin` narrows `lead`/`campaign`/
+`opportunity`/`owner`/`assigned_to` but **not** `account`); `:857-861` (`CampaignAttributionAdmin`
+narrows `touchpoint` but **not** `computed_by`). **Consequence:** the admin dropdowns list other
+tenants' campaign names, party names and user emails, and the model guard then rejects the
+cross-tenant pick — a confusing dead end rather than a filtered list. `accounts.User.tenant` is
+nullable for the platform superuser, so `computed_by` is additionally un-selectable for `admin`.
+**Fix:** add the missing names to each override, or introduce a shared base admin that narrows
+every FK to `request.tenant`.
+
+#### I4 — IMPORTANT — the seeder fabricates attribution credits against touchpoints it did not create
+
+`seed_sales.py:2938-2939` — `all_touches = list(AttributionTouchpoint.objects.filter(tenant=tenant).order_by("pk"))`
+is the **whole tenant**, not the six rows just inserted; `:2946-2975` then writes
+`first_touch`/`last_touch`/`linear` credits for each. The block's own idempotency key is
+`(tenant, touchpoint, attribution_model)`, so any operator-entered touchpoint with no credits
+gets three fabricated credit rows on the next `seed_sales` run. **Consequence:** running a demo
+command silently mutates operator-entered data. **Fix:** restrict `all_touches` to the rows this
+block created, or to an explicit allow-list.
+
+#### I5 — IMPORTANT — console content/event title lookups are not tenant-filtered
+
+`AttributionConsole.py:215` (`EnablementContent.objects.filter(pk__in=content_ids)`) and `:240`
+(`MarketingEvent.objects.filter(pk__in=event_ids)`); same pattern in
+`MarketingEvents.py`'s `_event_annotations` (`EventRegistration.objects.filter(event=OuterRef("pk"))`).
+Every other queryset in the console is tenant-scoped. **Consequence:** one cross-tenant link
+(which `Model.clean()` does not prevent on `save()`) makes the console render another tenant's
+content title or event name. **Fix:** add `tenant=tenant` to both filters and to the registration
+subquery.
+
+#### M1 — MINOR — blended `avg_cost_per_lead` double-counts leads spanning multiple campaigns
+
+`AttributionConsole.py:93,115` (`total_leads += lead_count`, a per-campaign
+`Count("lead_id", distinct=True)`) and `:264` (`total_spend / total_leads`). A lead touching two
+campaigns contributes 2, so the headline cost-per-lead is understated. The contract pins the
+per-campaign formula but not the blended headline. **Fix:** compute it from one
+`Count("lead_id", distinct=True)` over the tenant's touchpoints and pin the formula in the contract.
+
+#### M2 — MINOR — 7 of the 11 contract-pinned `stats` keys are passed but never rendered
+
+`AttributionConsole.py:270-276` passes `avg_cost_per_lead`, `mql_total`, `mql_accepted`,
+`mql_acceptance_rate_pct`, `sla_compliance_pct`, `content_engagements`, `events`; the template
+renders only `total_touchpoints`, `total_spend`, `total_attributed_revenue`, `blended_roi_pct`
+(the MQL numbers come from `mql_funnel` instead). `:275-276` issue two extra `COUNT(*)` queries
+per load for values nothing displays, and `avg_cost_per_lead` — the one pinned headline stat with
+no other home — is never shown although the page sub-heading advertises "cost per lead".
+**Fix:** render the pinned stats, or drop the unused keys and the two counts.
+
+#### M3 — MINOR — `attributed_cost` is aggregated and never read
+
+`AttributionConsole.py:79` — `attributed_cost=Sum("attributed_cost")` in the per-campaign
+aggregate; the key is read nowhere and is not in the contract's `campaign_rows` shape.
+**Fix:** drop the annotation, or pin and render it.
+
+#### M4 — MINOR — `MqlHandoff.save()` clears `responded_at` for every non-responded status
+
+`MqlHandoffs.py:197` clears the stamp whenever the status is not in the responded set, which
+includes `expired`. The contract clears only on the move back to `pending`. An already-answered
+handoff later re-labelled `expired` loses its response time, and with it `is_responded`,
+`response_hours` and its late-response breach classification — it silently drops out of
+`avg_response_hours` and flips from "answered late" to "unanswered" in the SLA metric. The status
+is editable from the form, so the transition is reachable by an ordinary edit.
+**Fix:** clear only on the move back to `pending`.
+
+#### M5 — MINOR — `save(update_fields=...)` silently discards the timestamp stamp
+
+`MqlHandoffs.py:197` and `MarketingEvents.py:338` mutate `responded_at`/`attended_at` and then
+delegate to `super().save(*args, **kwargs)`. If a caller passes `update_fields` that excludes
+the stamped field, the stamp is not persisted while the in-memory instance still reports it. No
+current 8.13 caller uses `update_fields`, so this is latent. **Fix:** add the stamped field to
+`update_fields` when supplied, or refuse the call.
+
+#### M6 — MINOR — templates hardcode `$` although the module carries a `currency` FK
+
+e.g. `attributiontouchpoint/list.html:43,54,188,191`; `attribution_console.html:82,91,134,137,150,156,201,207,316,372`.
+A touchpoint denominated in EUR renders as `$120.00`, and the console's Spend / Attributed Revenue
+totals add figures whose currencies may differ. **Fix:** render `{{ obj.currency.symbol }}` /
+`{{ obj.currency.code }}`.
+
+#### M7 — MINOR — `MqlHandoffForm.clean()` does not implement the `sla_due_at >= handoff_at` rule the contract pins to the form
+
+`MqlHandoffs.py:83-93` enforces only the rejection-reason rule; the SLA ordering rule lives
+solely in the model's `clean()`. Observable behaviour is nearly identical (Django's
+`ModelForm._post_clean` → `full_clean()` → `Model.clean()`), except that when either field
+already carries a form-level error Django excludes it from model validation and the ordering rule
+is silently skipped. **Fix:** add the comparison to the form's `clean()`.
+
+#### Verified as correct by the code-reviewer
+
+Seeder idempotency (ran twice on one tenant — identical counts, no duplicate masters created);
+`Currency` confirmed global (the basis for C1); `MqlHandoff.save()` does not re-stamp on a same-
+status re-save and re-stamps on a re-accept; `EventRegistration.save()` stamps on entering
+`attended` and clears on `no_show`; all 18 templates present at the contract paths, no
+`badge-success/-warning/-danger`, stat icons limited to the six legal colours, csrf on every POST
+form, all pk comparisons via `|stringformat:"d"` with zero `|slugify`; **every contract-pinned
+filter has a working GET control** (touchpoint 6/6, attribution 4/4, engagement 6/6, event 5/5,
+handoff 5/5); the console consumes every one of its context keys; `?model=` is whitelist-validated
+with a `first_touch` fallback; **no `JournalEntry` anywhere in 8.13** (L29); no duplicate master
+declared (L36/L37); every list/detail queryset tenant-scoped and every form FK queryset
+tenant-scoped; CRUD completeness across 5 entity sets with POST-only tenant-admin deletes; the
+package re-export blocks and `LIVE_LINKS["8.13"]` match the contract.
+
+#### Not verified by the code-reviewer
+
+The seeded-row edit round-trip (its own probe harness had two fixture bugs — `core.PartyRole`
+needs an explicit `tenant=`, and `crm.Campaign`'s field is `budget_planned`, not `budget`); the
+console aggregates against hand-computed values; any page render, junk-param list, page-2
+pagination or cross-tenant IDOR request; `manage.py check` and the migration's forward/backward
+behaviour; and the `Sum("registered_total")` aggregate over an ordered queryset — Django's
+`get_aggregation()` can add ordering fields to the GROUP BY, so that one deserves a numeric check
+before sign-off.
+
 ### `explorer` — pending
 ### `frontend-reviewer` — pending
 ### `performance-reviewer` — pending
