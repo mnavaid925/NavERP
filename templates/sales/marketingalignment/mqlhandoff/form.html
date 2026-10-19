@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Handoff {{ obj.number }}{% else %}New MQL Handoff{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <a href="{% url 'sales:mql_handoff_list' %}">MQL Handoffs</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Handoff{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit MQL Handoff {{ obj.number }}{% else %}New MQL-to-SQL Handoff{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:mql_handoff_detail' obj.pk %}{% else %}{% url 'sales:mql_handoff_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Lead & Assignment -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Lead &amp; Assignment</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.lead.id_for_label }}">Lead <span class="text-red-500">*</span></label>
+                {{ form.lead }}
+                {% if form.lead.errors %}<div class="form-error">{{ form.lead.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.account.id_for_label }}">Target Account</label>
+                {{ form.account }}
+                {% if form.account.errors %}<div class="form-error">{{ form.account.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.campaign.id_for_label }}">Originating Campaign</label>
+                {{ form.campaign }}
+                {% if form.campaign.errors %}<div class="form-error">{{ form.campaign.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.owner.id_for_label }}">Marketing Owner</label>
+                {{ form.owner }}
+                {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.assigned_to.id_for_label }}">Assigned Sales Rep</label>
+                {{ form.assigned_to }}
+                {% if form.assigned_to.errors %}<div class="form-error">{{ form.assigned_to.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.opportunity.id_for_label }}">Resulting Opportunity</label>
+                {{ form.opportunity }}
+                {% if form.opportunity.errors %}<div class="form-error">{{ form.opportunity.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow & SLA -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Workflow &amp; Response SLA</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Status <span class="text-red-500">*</span></label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.source_kind.id_for_label }}">Source <span class="text-red-500">*</span></label>
+                {{ form.source_kind }}
+                {% if form.source_kind.errors %}<div class="form-error">{{ form.source_kind.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.handoff_at.id_for_label }}">Handed Off At <span class="text-red-500">*</span></label>
+                {{ form.handoff_at }}
+                {% if form.handoff_at.errors %}<div class="form-error">{{ form.handoff_at.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.sla_due_at.id_for_label }}">SLA Deadline <span class="text-red-500">*</span></label>
+                {{ form.sla_due_at }}
+                {% if form.sla_due_at.errors %}<div class="form-error">{{ form.sla_due_at.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Decision & Value -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Sales Decision &amp; Lead Value</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.acceptance_reason.id_for_label }}">Acceptance Reason</label>
+                {{ form.acceptance_reason }}
+                {% if form.acceptance_reason.errors %}<div class="form-error">{{ form.acceptance_reason.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.rejection_reason.id_for_label }}">Rejection Reason</label>
+                {{ form.rejection_reason }}
+                {% if form.rejection_reason.errors %}<div class="form-error">{{ form.rejection_reason.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.lead_score.id_for_label }}">Lead Score at Handoff</label>
+                {{ form.lead_score }}
+                {% if form.lead_score.errors %}<div class="form-error">{{ form.lead_score.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.estimated_value.id_for_label }}">Estimated Value ($)</label>
+                {{ form.estimated_value }}
+                {% if form.estimated_value.errors %}<div class="form-error">{{ form.estimated_value.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                {{ form.currency }}
+                {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Notes</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:mql_handoff_detail' obj.pk %}{% else %}{% url 'sales:mql_handoff_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Handoff{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
