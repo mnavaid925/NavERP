@@ -73,12 +73,12 @@
 <!-- Filters -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
             <div>
-                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search title, account, achievements..." class="form-input w-full">
+                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search title, account, achievements..." class="form-input w-full" aria-label="Search reviews">
             </div>
             <div>
-                <select name="status" class="form-select w-full">
+                <select name="status" class="form-select w-full" aria-label="Filter by review status">
                     <option value="">All Review Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if active_filters.status == val %}selected{% endif %}>{{ label }}</option>
@@ -86,7 +86,7 @@
                 </select>
             </div>
             <div>
-                <select name="review_period" class="form-select w-full">
+                <select name="review_period" class="form-select w-full" aria-label="Filter by review period">
                     <option value="">All Periods</option>
                     {% for val, label in period_choices %}
                     <option value="{{ val }}" {% if active_filters.review_period == val %}selected{% endif %}>{{ label }}</option>
@@ -94,10 +94,26 @@
                 </select>
             </div>
             <div>
-                <select name="account" class="form-select w-full">
+                <select name="template_type" class="form-select w-full" aria-label="Filter by review template">
+                    <option value="">All Templates</option>
+                    {% for val, label in template_choices %}
+                    <option value="{{ val }}" {% if active_filters.template_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="account" class="form-select w-full" aria-label="Filter by customer account">
                     <option value="">All Accounts</option>
                     {% for acct in accounts %}
                     <option value="{{ acct.pk }}" {% if active_filters.account == acct.pk|stringformat:"d" %}selected{% endif %}>{{ acct.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="lead_csm" class="form-select w-full" aria-label="Filter by lead CSM">
+                    <option value="">All Lead CSMs</option>
+                    {% for u in csm_users %}
+                    <option value="{{ u.pk }}" {% if active_filters.lead_csm == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -106,7 +122,7 @@
                     <i data-lucide="filter"></i>
                     <span>Filter</span>
                 </button>
-                {% if active_filters.q or active_filters.status or active_filters.review_period or active_filters.template_type or active_filters.account or active_filters.is_referenceable %}
+                {% if active_filters.q or active_filters.status or active_filters.review_period or active_filters.template_type or active_filters.account or active_filters.lead_csm or active_filters.is_referenceable %}
                 <a href="{% url 'sales:customer_business_review_list' %}" class="btn btn-outline" title="Clear filters">
                     <i data-lucide="x"></i>
                 </a>
@@ -233,7 +249,7 @@
         </div>
         <div class="pagination-actions">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.review_period %}&review_period={{ active_filters.review_period }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.template_type %}&template_type={{ active_filters.template_type }}{% endif %}{% if active_filters.is_referenceable %}&is_referenceable={{ active_filters.is_referenceable }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.review_period %}&review_period={{ active_filters.review_period }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.template_type %}&template_type={{ active_filters.template_type }}{% endif %}{% if active_filters.lead_csm %}&lead_csm={{ active_filters.lead_csm }}{% endif %}{% if active_filters.is_referenceable %}&is_referenceable={{ active_filters.is_referenceable }}{% endif %}" class="btn btn-outline btn-sm">
                 Previous
             </a>
             {% else %}
@@ -243,7 +259,7 @@
             <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.review_period %}&review_period={{ active_filters.review_period }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.template_type %}&template_type={{ active_filters.template_type }}{% endif %}{% if active_filters.is_referenceable %}&is_referenceable={{ active_filters.is_referenceable }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.review_period %}&review_period={{ active_filters.review_period }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.template_type %}&template_type={{ active_filters.template_type }}{% endif %}{% if active_filters.lead_csm %}&lead_csm={{ active_filters.lead_csm }}{% endif %}{% if active_filters.is_referenceable %}&is_referenceable={{ active_filters.is_referenceable }}{% endif %}" class="btn btn-outline btn-sm">
                 Next
             </a>
             {% else %}
