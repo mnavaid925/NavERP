@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Touch {{ obj.number }} — Marketing Alignment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <a href="{% url 'sales:attribution_touchpoint_list' %}">Touchpoints</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">Touch {{ obj.number }}</h1>
+            <span class="badge badge-info">{{ obj.get_channel_display }}</span>
+            {% if obj.touch_position == "first" %}
+            <span class="badge badge-green">First Touch</span>
+            {% elif obj.touch_position == "last" %}
+            <span class="badge badge-info">Last Touch</span>
+            {% else %}
+            <span class="badge badge-muted">Middle Touch</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:attribution_touchpoint_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Touchpoints</span>
+        </a>
+        <a href="{% url 'sales:attribution_touchpoint_edit' obj.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Touch</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'sales:attribution_touchpoint_delete' obj.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete touchpoint {{ obj.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Journey Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="mouse-pointer-click"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Interaction</div>
+            <div class="text-lg font-bold text-slate-900 mt-1">{{ obj.get_touch_type_display }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="circle-dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Touch Cost</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.cost|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Engagement Value</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.engagement_value|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="split"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Credit Assigned</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.attributed_revenue|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Details -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Interaction &amp; Journey Position</h2>
+        </div>
+        <div class="card-body">
+            <dl class="divide-y divide-slate-100 text-sm">
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Touch ID</dt>
+                    <dd class="text-slate-900 font-mono">{{ obj.number }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Channel</dt>
+                    <dd class="text-slate-900 font-semibold">{{ obj.get_channel_display }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Interaction Type</dt>
+                    <dd class="text-slate-900">{{ obj.get_touch_type_display }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Journey Position</dt>
+                    <dd class="text-slate-900">{{ obj.get_touch_position_display }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Touch Date</dt>
+                    <dd class="text-slate-900 font-bold">{{ obj.touch_date|date:"F d, Y" }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">UTM / Source Reference</dt>
+                    <dd class="text-slate-900 font-mono text-xs">{{ obj.source_reference|default:"—" }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Currency</dt>
+                    <dd class="text-slate-900 font-mono">{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Campaign, Lead &amp; Deal</h2>
+        </div>
+        <div class="card-body">
+            <dl class="divide-y divide-slate-100 text-sm">
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Source Campaign</dt>
+                    <dd class="text-slate-900 font-semibold">
+                        {% if obj.campaign %}
+                        {{ obj.campaign.name }}
+                        <span class="font-mono text-xs text-slate-500">{{ obj.campaign.number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">No campaign — unattributed touch</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Lead</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.lead %}
+                        {{ obj.lead.name }}
+                        <span class="font-mono text-xs text-slate-500">{{ obj.lead.number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">Not linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Opportunity</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.opportunity %}
+                        {{ obj.opportunity.name }}
+                        <span class="font-mono text-xs text-slate-500">{{ obj.opportunity.number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">Not linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Cost</dt>
+                    <dd class="text-slate-900 font-semibold">${{ obj.cost|floatformat:2 }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Engagement Value</dt>
+                    <dd class="text-slate-900 font-semibold">${{ obj.engagement_value|floatformat:2 }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Credit Assigned (all models)</dt>
+                    <dd class="text-slate-900 font-semibold">${{ obj.attributed_revenue|floatformat:2 }}</dd>
+                </div>
+            </dl>
+
+            {% if obj.notes %}
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-2">Notes</div>
+                <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">
+                    {{ obj.notes }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
