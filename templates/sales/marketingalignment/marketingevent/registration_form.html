@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Add Registration — {{ event.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <a href="{% url 'sales:marketing_event_list' %}">Events</a>
+            <span>/</span>
+            <a href="{% url 'sales:marketing_event_detail' event.pk %}">{{ event.name }}</a>
+            <span>/</span>
+            <span>Add Registration</span>
+        </div>
+        <h1 class="page-title">Add Registration</h1>
+        <p class="text-sm text-slate-500 mt-1">{{ event.name }} — {{ event.start_at|date:"F d, Y H:i" }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:marketing_event_registrations' event.pk %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Registrant -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Registrant</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.event.id_for_label }}">Event</label>
+                {{ form.event }}
+                <div class="form-help">Fixed by the event this registration belongs to.</div>
+                {% if form.event.errors %}<div class="form-error">{{ form.event.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.registrant_name.id_for_label }}">Registrant Name <span class="text-red-500">*</span></label>
+                {{ form.registrant_name }}
+                {% if form.registrant_name.errors %}<div class="form-error">{{ form.registrant_name.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.registrant_email.id_for_label }}">Registrant Email</label>
+                {{ form.registrant_email }}
+                {% if form.registrant_email.errors %}<div class="form-error">{{ form.registrant_email.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.lead.id_for_label }}">Lead</label>
+                {{ form.lead }}
+                {% if form.lead.errors %}<div class="form-error">{{ form.lead.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.account.id_for_label }}">Account</label>
+                {{ form.account }}
+                {% if form.account.errors %}<div class="form-error">{{ form.account.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Registration & Attendance -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Registration &amp; Attendance</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.registration_status.id_for_label }}">Registration Status <span class="text-red-500">*</span></label>
+                {{ form.registration_status }}
+                {% if form.registration_status.errors %}<div class="form-error">{{ form.registration_status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.source_channel.id_for_label }}">Source Channel <span class="text-red-500">*</span></label>
+                {{ form.source_channel }}
+                {% if form.source_channel.errors %}<div class="form-error">{{ form.source_channel.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.registered_at.id_for_label }}">Registered At</label>
+                {{ form.registered_at }}
+                {% if form.registered_at.errors %}<div class="form-error">{{ form.registered_at.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.campaign.id_for_label }}">Campaign</label>
+                {{ form.campaign }}
+                {% if form.campaign.errors %}<div class="form-error">{{ form.campaign.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Follow-Up -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Post-Event Follow-Up</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.followup_status.id_for_label }}">Follow-Up Status <span class="text-red-500">*</span></label>
+                {{ form.followup_status }}
+                {% if form.followup_status.errors %}<div class="form-error">{{ form.followup_status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.engagement_score.id_for_label }}">Engagement Score (0-100)</label>
+                {{ form.engagement_score }}
+                {% if form.engagement_score.errors %}<div class="form-error">{{ form.engagement_score.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.revenue_attributed.id_for_label }}">Revenue Attributed ($)</label>
+                {{ form.revenue_attributed }}
+                {% if form.revenue_attributed.errors %}<div class="form-error">{{ form.revenue_attributed.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.opportunity.id_for_label }}">Resulting Opportunity</label>
+                {{ form.opportunity }}
+                {% if form.opportunity.errors %}<div class="form-error">{{ form.opportunity.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2 lg:col-span-4">
+                <label class="form-label" for="{{ form.followup_notes.id_for_label }}">Follow-Up Notes</label>
+                {{ form.followup_notes }}
+                {% if form.followup_notes.errors %}<div class="form-error">{{ form.followup_notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% url 'sales:marketing_event_registrations' event.pk %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>Add Registration</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
