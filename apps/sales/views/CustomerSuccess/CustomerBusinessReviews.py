@@ -124,9 +124,10 @@ def customer_business_review_create(request):
             obj = form.save()
             write_audit_log(
                 request.user,
-                "CREATE",
                 obj,
+                "create",
                 f"Scheduled QBR {obj.number} for {obj.account.name} on {obj.scheduled_date}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Customer business review {obj.number} created successfully.")
             return redirect("sales:customer_business_review_detail", pk=obj.pk)
@@ -152,9 +153,10 @@ def customer_business_review_edit(request, pk):
             obj = form.save()
             write_audit_log(
                 request.user,
-                "UPDATE",
                 obj,
+                "update",
                 f"Updated business review {obj.number} for {obj.account.name}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Customer business review {obj.number} updated successfully.")
             return redirect("sales:customer_business_review_detail", pk=obj.pk)
@@ -177,13 +179,14 @@ def customer_business_review_delete(request, pk):
     )
     title = obj.title
     number = obj.number
-    obj.delete()
     write_audit_log(
         request.user,
-        "DELETE",
         obj,
+        "delete",
         f"Deleted business review {number} ({title})",
+        tenant=request.tenant,
     )
+    obj.delete()
     messages.success(request, f"Business review {number} deleted.")
     return redirect("sales:customer_business_review_list")
 
