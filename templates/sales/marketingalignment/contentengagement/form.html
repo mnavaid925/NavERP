@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Engagement {{ obj.number }}{% else %}New Content Engagement{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <a href="{% url 'sales:content_engagement_list' %}">Content Engagements</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Engagement{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Content Engagement {{ obj.number }}{% else %}New Content Engagement{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:content_engagement_detail' obj.pk %}{% else %}{% url 'sales:content_engagement_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Content & Audience -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Content &amp; Audience</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.content.id_for_label }}">Content Item <span class="text-red-500">*</span></label>
+                {{ form.content }}
+                {% if form.content.errors %}<div class="form-error">{{ form.content.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.account.id_for_label }}">Account</label>
+                {{ form.account }}
+                {% if form.account.errors %}<div class="form-error">{{ form.account.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.lead.id_for_label }}">Lead</label>
+                {{ form.lead }}
+                {% if form.lead.errors %}<div class="form-error">{{ form.lead.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.campaign.id_for_label }}">Source Campaign</label>
+                {{ form.campaign }}
+                {% if form.campaign.errors %}<div class="form-error">{{ form.campaign.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Interaction & Score -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Interaction &amp; Engagement Score</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.engagement_type.id_for_label }}">Engagement Type <span class="text-red-500">*</span></label>
+                {{ form.engagement_type }}
+                {% if form.engagement_type.errors %}<div class="form-error">{{ form.engagement_type.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.engagement_channel.id_for_label }}">Engagement Channel <span class="text-red-500">*</span></label>
+                {{ form.engagement_channel }}
+                {% if form.engagement_channel.errors %}<div class="form-error">{{ form.engagement_channel.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.engagement_score.id_for_label }}">Engagement Score (0-100)</label>
+                {{ form.engagement_score }}
+                {% if form.engagement_score.errors %}<div class="form-error">{{ form.engagement_score.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.engaged_at.id_for_label }}">Engaged At <span class="text-red-500">*</span></label>
+                {{ form.engaged_at }}
+                {% if form.engaged_at.errors %}<div class="form-error">{{ form.engaged_at.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Revenue Mapping -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Content-to-Revenue Mapping</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.revenue_attributed.id_for_label }}">Revenue Attributed ($)</label>
+                {{ form.revenue_attributed }}
+                {% if form.revenue_attributed.errors %}<div class="form-error">{{ form.revenue_attributed.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                {{ form.currency }}
+                {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Notes</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:content_engagement_detail' obj.pk %}{% else %}{% url 'sales:content_engagement_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Record Engagement{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
