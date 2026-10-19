@@ -76,10 +76,14 @@ class MqlHandoffForm(TenantUniqueMixin, TenantModelForm):
             self.fields["opportunity"].queryset = Opportunity.objects.filter(
                 tenant=self.tenant
             ).order_by("-created_at")
-            self.fields["currency"].queryset = Currency.objects.order_by("code")
+            self.fields["currency"].queryset = Currency.objects.filter(
+                is_active=True
+            ).order_by("code")
 
     def clean(self):
         cleaned_data = super().clean()
+        # `currency` is deliberately absent: `accounting.Currency` is a GLOBAL master with no
+        # tenant FK, so the generic tenant check would reject every currency (L29).
         _reject_foreign(
             self,
             cleaned_data,
@@ -90,7 +94,6 @@ class MqlHandoffForm(TenantUniqueMixin, TenantModelForm):
                 "owner",
                 "assigned_to",
                 "opportunity",
-                "currency",
             ],
         )
         status = cleaned_data.get("status")
@@ -98,5 +101,15 @@ class MqlHandoffForm(TenantUniqueMixin, TenantModelForm):
             self.add_error(
                 "rejection_reason",
                 "A rejected handoff must record why sales rejected it.",
+            )
+        # The SLA ordering rule lives here as well as on the model: when either field already
+        # carries a form-level error, Django excludes it from model validation and the model's
+        # own check is silently skipped.
+        sla_due_at = cleaned_data.get("sla_due_at")
+        handoff_at = cleaned_data.get("handoff_at")
+        if sla_due_at and handoff_at and sla_due_at < handoff_at:
+            self.add_error(
+                "sla_due_at",
+                "The SLA deadline cannot be earlier than the handoff time.",
             )
         return cleaned_data
