@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Advocacy & Reference Management Center — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Customer Success</span>
+            <span>/</span>
+            <span>Advocacy Hub</span>
+        </div>
+        <h1 class="page-title">Customer Advocacy & Reference Management Center</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_business_review_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>All Business Reviews</span>
+        </a>
+        <a href="{% url 'sales:customer_business_review_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Schedule QBR</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Verified Reference Clients</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.referenceable_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="book-open"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Case Study Pipeline</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.case_study_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="message-square-quote"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Testimonial Quote Vault</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.testimonial_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Published Collateral</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.published_case_studies|default:"0" }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Verified Reference Accounts Directory -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <i data-lucide="user-check" class="w-5 h-5 text-emerald-600"></i>
+            <h2 class="card-title">Verified Customer Reference Accounts</h2>
+        </div>
+        <span class="badge badge-green">{{ referenceable_accounts|length }} Ready for Sales Calls</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Customer Account</th>
+                    <th>QBR Record</th>
+                    <th>Permitted Reference Motions</th>
+                    <th>Last Review Date</th>
+                    <th>Lead CSM</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rev in referenceable_accounts %}
+                <tr>
+                    <td class="font-semibold text-slate-900">{{ rev.account.name }}</td>
+                    <td class="font-mono text-sm">
+                        <a href="{% url 'sales:customer_business_review_detail' rev.pk %}" class="text-blue-600 hover:underline">
+                            {{ rev.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge badge-info text-xs">Peer Sales Calls</span>
+                        <span class="badge badge-slate text-xs ml-1">RFP Quotes</span>
+                    </td>
+                    <td class="text-sm text-slate-700">{{ rev.scheduled_date|date:"M d, Y" }}</td>
+                    <td class="text-sm text-slate-700">{{ rev.lead_csm.get_full_name|default:rev.lead_csm.username }}</td>
+                    <td class="text-right">
+                        <a href="{% url 'sales:customer_business_review_detail' rev.pk %}" class="btn btn-outline btn-sm">
+                            View Profile
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-6 text-xs text-slate-400 italic">No referenceable client accounts identified yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Case Study Pipeline & Testimonial Vault Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Case Study Pipeline -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Marketing Case Study Pipeline</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Account</th>
+                        <th>Pipeline Stage</th>
+                        <th>Lead CSM</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rev in case_study_pipeline %}
+                    <tr>
+                        <td class="font-medium text-slate-900">
+                            <a href="{% url 'sales:customer_business_review_detail' rev.pk %}" class="hover:underline text-blue-600">
+                                {{ rev.account.name }}
+                            </a>
+                        </td>
+                        <td>
+                            <span class="badge {{ rev.case_study_badge_class }}">
+                                {{ rev.get_case_study_status_display }}
+                            </span>
+                        </td>
+                        <td class="text-sm text-slate-700">{{ rev.lead_csm.get_full_name|default:rev.lead_csm.username }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="text-center py-4 text-xs text-slate-400 italic">No case studies in development.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Testimonial Vault -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Approved Customer Testimonial Vault</h2>
+        </div>
+        <div class="card-body space-y-4">
+            {% for rev in testimonials %}
+            <div class="p-4 bg-slate-50 rounded-lg border border-slate-100">
+                <blockquote class="text-sm text-slate-800 italic">
+                    "{{ rev.testimonial_quote }}"
+                </blockquote>
+                <div class="mt-2 text-xs font-semibold text-slate-900 flex items-center justify-between">
+                    <span>— {{ rev.account.name }}</span>
+                    <a href="{% url 'sales:customer_business_review_detail' rev.pk %}" class="text-blue-600 hover:underline">
+                        Review {{ rev.number }}
+                    </a>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-xs text-slate-400 italic py-6 text-center">No approved testimonials recorded.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
