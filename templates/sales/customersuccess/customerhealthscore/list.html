@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Health Scores — Customer Success — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_health_console' %}">Customer Success</a>
+            <span>/</span>
+            <span>Health Scores</span>
+        </div>
+        <h1 class="page-title">Customer Health Scores</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_health_console' %}" class="btn btn-outline">
+            <i data-lucide="activity"></i>
+            <span>Health Console</span>
+        </a>
+        <a href="{% url 'sales:customer_health_score_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Evaluation</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="users"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Evaluated Accounts</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Healthy Accounts</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.healthy_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Needs Attention</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.attention_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">At Risk Accounts</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.at_risk_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="gauge"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Portfolio Average</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if stats.avg_score %}{{ stats.avg_score|floatformat:1 }}{% else %}0.0{% endif %}<span class="text-xs text-slate-400 font-normal">/100</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search account, number, notes..." class="form-input w-full">
+            </div>
+            <div>
+                <select name="health_band" class="form-select w-full">
+                    <option value="">All Health Bands</option>
+                    {% for val, label in health_band_choices %}
+                    <option value="{{ val }}" {% if active_filters.health_band == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="risk_level" class="form-select w-full">
+                    <option value="">All Risk Levels</option>
+                    {% for val, label in risk_level_choices %}
+                    <option value="{{ val }}" {% if active_filters.risk_level == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="account" class="form-select w-full">
+                    <option value="">All Customer Accounts</option>
+                    {% for acct in accounts %}
+                    <option value="{{ acct.pk }}" {% if active_filters.account == acct.pk|stringformat:"d" %}selected{% endif %}>{{ acct.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if active_filters.q or active_filters.health_band or active_filters.risk_level or active_filters.account or active_filters.is_churn_risk %}
+                <a href="{% url 'sales:customer_health_score_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- List Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Score ID</th>
+                    <th>Account</th>
+                    <th>Overall Score</th>
+                    <th>Health Band</th>
+                    <th>Trend</th>
+                    <th>Risk Level</th>
+                    <th>Product / Support</th>
+                    <th>Evaluation Date</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for score in health_scores %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:customer_health_score_detail' score.pk %}" class="font-mono text-sm font-semibold text-blue-600 hover:underline">
+                            {{ score.number }}
+                        </a>
+                        {% if score.is_churn_risk %}
+                        <span class="badge badge-red ml-1 text-xs">Churn Risk</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ score.account.name }}</div>
+                        {% if score.active_alert_message %}
+                        <div class="text-xs text-red-600 mt-0.5 truncate max-w-xs">{{ score.active_alert_message }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg font-bold text-slate-900">{{ score.overall_score }}</span>
+                            <span class="text-xs text-slate-400">/100</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ score.health_badge_class }}">
+                            {{ score.get_health_band_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="inline-flex items-center gap-1 text-sm text-slate-600">
+                            <i data-lucide="{{ score.trend_icon }}" class="w-4 h-4"></i>
+                            <span>{{ score.get_score_trend_display }}</span>
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ score.risk_badge_class }}">
+                            {{ score.get_risk_level_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-xs text-slate-600">
+                            <span>Usage: <strong class="text-slate-800">{{ score.product_usage_score }}</strong></span>
+                            <span class="mx-1">·</span>
+                            <span>Tickets: <strong class="text-slate-800">{{ score.open_support_tickets }}</strong></span>
+                        </div>
+                    </td>
+                    <td class="text-slate-600 text-sm">
+                        {{ score.evaluation_date|date:"M d, Y" }}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'sales:customer_health_score_detail' score.pk %}" class="btn btn-icon btn-outline" title="View details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:customer_health_score_edit' score.pk %}" class="btn btn-icon btn-outline" title="Edit evaluation">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'sales:customer_health_score_delete' score.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete health score {{ score.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete evaluation">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="activity" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No customer health scores found</div>
+                            <div class="empty-state-text">Track multi-dimensional account health, product usage, support tickets, and NPS sentiment.</div>
+                            <a href="{% url 'sales:customer_health_score_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Record First Health Score</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination (L9 Guarded) -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} health scores
+        </div>
+        <div class="pagination-actions">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.health_band %}&health_band={{ active_filters.health_band }}{% endif %}{% if active_filters.risk_level %}&risk_level={{ active_filters.risk_level }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.health_band %}&health_band={{ active_filters.health_band }}{% endif %}{% if active_filters.risk_level %}&risk_level={{ active_filters.risk_level }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
