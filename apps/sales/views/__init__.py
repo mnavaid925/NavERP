@@ -307,6 +307,36 @@ from .CustomerSuccess import (
     customer_renewal_list,
     customer_renewal_pipeline,
 )
+from .MarketingAlignment import (
+    attribution_touchpoint_create,
+    attribution_touchpoint_delete,
+    attribution_touchpoint_detail,
+    attribution_touchpoint_edit,
+    attribution_touchpoint_list,
+    campaign_attribution_create,
+    campaign_attribution_delete,
+    campaign_attribution_detail,
+    campaign_attribution_edit,
+    campaign_attribution_list,
+    content_engagement_create,
+    content_engagement_delete,
+    content_engagement_detail,
+    content_engagement_edit,
+    content_engagement_list,
+    marketing_attribution_console,
+    marketing_event_create,
+    marketing_event_delete,
+    marketing_event_detail,
+    marketing_event_edit,
+    marketing_event_list,
+    marketing_event_registration_create,
+    marketing_event_registrations,
+    mql_handoff_create,
+    mql_handoff_delete,
+    mql_handoff_detail,
+    mql_handoff_edit,
+    mql_handoff_list,
+)
 
 # View functions exported for URLconf routing and external imports
 __all__ = [
@@ -336,6 +366,9 @@ __all__ = [
         "sales_commission_", "sales_global_compensation_",
         # 8.11 Customer Success & Account Management
         "customer_",
+        # 8.13 Marketing Alignment & Attribution
+        "attribution_touchpoint_", "campaign_attribution_", "mql_handoff_",
+        "content_engagement_", "marketing_event_", "marketing_attribution_",
     ))
 ]
 
