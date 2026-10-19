@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Win/Loss Debriefs — Sales Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <span>Win/Loss Debriefs</span>
+        </div>
+        <h1 class="page-title">Win/Loss Debriefs</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:win_loss_debrief_list' %}" class="btn btn-outline">
+            <i data-lucide="refresh-cw"></i>
+            <span>Refresh</span>
+        </a>
+        <a href="{% url 'sales:win_loss_debrief_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Debrief</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="clipboard-list"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_count|default:"0" }}</div>
+        <div class="stat-label">Total Debriefs</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="circle-dot"></i>
+        </div>
+        <div class="stat-value">{{ stats.open_count|default:"0" }}</div>
+        <div class="stat-label">Open (Draft / Submitted / Shared)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="wrench"></i>
+        </div>
+        <div class="stat-value">{{ stats.actioned_count|default:"0" }}</div>
+        <div class="stat-label">Actioned</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div class="stat-value">{{ stats.closed_count|default:"0" }}</div>
+        <div class="stat-label">Closed</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card">
+    <div class="card-body">
+        <form method="get" class="filter-bar">
+            <div class="form-group">
+                <label class="form-label" for="filter-q">Search</label>
+                <input type="search" id="filter-q" name="q" value="{{ q }}" placeholder="Opportunity, number, quote, notes..." class="form-input">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-status">Status</label>
+                <select id="filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-interview-channel">Interview Channel</label>
+                <select id="filter-interview-channel" name="interview_channel" class="form-select">
+                    <option value="">All Channels</option>
+                    {% for val, label in interview_channel_choices %}
+                    <option value="{{ val }}" {% if request.GET.interview_channel == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-feedback-team">Feedback Team</label>
+                <select id="filter-feedback-team" name="feedback_team" class="form-select">
+                    <option value="">All Teams</option>
+                    {% for val, label in feedback_team_choices %}
+                    <option value="{{ val }}" {% if request.GET.feedback_team == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-opportunity">Opportunity</label>
+                <select id="filter-opportunity" name="opportunity" class="form-select">
+                    <option value="">All Opportunities</option>
+                    {% for opp in opportunities %}
+                    <option value="{{ opp.pk }}" {% if request.GET.opportunity == opp.pk|stringformat:"d" %}selected{% endif %}>{{ opp.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="filter-reason">Primary Reason</label>
+                <select id="filter-reason" name="reason" class="form-select">
+                    <option value="">All Reasons</option>
+                    {% for reason in reasons %}
+                    <option value="{{ reason.pk }}" {% if request.GET.reason == reason.pk|stringformat:"d" %}selected{% endif %}>{{ reason.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter"></i>
+                    <span>Apply</span>
+                </button>
+                {% if active_filters.q or active_filters.status or active_filters.interview_channel or active_filters.feedback_team or active_filters.opportunity or active_filters.reason %}
+                <a href="{% url 'sales:win_loss_debrief_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                    <span>Reset</span>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- List Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Debrief</th>
+                    <th>Opportunity</th>
+                    <th>Status</th>
+                    <th>Channel</th>
+                    <th>Feedback Team</th>
+                    <th>Primary Reason</th>
+                    <th>Interviewer</th>
+                    <th>Drivers</th>
+                    <th>Debriefed On</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for debrief in debriefs %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:win_loss_debrief_detail' debrief.pk %}" class="font-mono text-sm font-semibold hover:underline">
+                            {{ debrief.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ debrief.opportunity.name }}</div>
+                        {% if debrief.account %}
+                        <div class="text-xs text-slate-500">{{ debrief.account.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ debrief.status_badge_class }}">{{ debrief.get_status_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ debrief.channel_badge_class }}">{{ debrief.get_interview_channel_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ debrief.feedback_badge_class }}">{{ debrief.get_feedback_team_display }}</span>
+                    </td>
+                    <td>
+                        {% if debrief.primary_reason %}
+                        <span class="text-sm">{{ debrief.primary_reason.name }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if debrief.interviewer %}
+                        <span class="text-sm">{{ debrief.interviewer.get_full_name }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-sm font-semibold">{{ debrief.driver_count }}</span>
+                    </td>
+                    <td class="text-slate-600 text-sm">{{ debrief.debriefed_on|date:"M d, Y" }}</td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'sales:win_loss_debrief_detail' debrief.pk %}" class="btn btn-icon btn-outline" title="View debrief">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% comment %}
+                          A CLOSED debrief is the frozen record of a finished debrief cycle, so it
+                          is neither editable nor deletable. Every other status (draft, submitted,
+                          shared, actioned) keeps both actions available.
+                        {% endcomment %}
+                        {% if debrief.status != "closed" %}
+                        <a href="{% url 'sales:win_loss_debrief_edit' debrief.pk %}" class="btn btn-icon btn-outline" title="Edit debrief">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'sales:win_loss_debrief_delete' debrief.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete debrief {{ debrief.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete debrief">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <i data-lucide="clipboard-list"></i>
+                            <h3>No win/loss debriefs found</h3>
+                            <p>Record the qualitative debrief for a closed deal — the decision drivers, the buyer's own words, and the actions that follow.</p>
+                            <a href="{% url 'sales:win_loss_debrief_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Record First Debrief</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+</div>
+{% endblock %}
