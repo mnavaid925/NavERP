@@ -101,7 +101,7 @@
                         <span class="badge badge-slate text-xs ml-1">RFP Quotes</span>
                     </td>
                     <td class="text-sm text-slate-700">{{ rev.scheduled_date|date:"M d, Y" }}</td>
-                    <td class="text-sm text-slate-700">{{ rev.lead_csm.get_full_name|default:rev.lead_csm.username }}</td>
+                    <td class="text-sm text-slate-700">{% if rev.lead_csm %}{{ rev.lead_csm.get_full_name|default:rev.lead_csm.username }}{% else %}—{% endif %}</td>
                     <td class="text-right">
                         <a href="{% url 'sales:customer_business_review_detail' rev.pk %}" class="btn btn-outline btn-sm">
                             View Profile
@@ -147,7 +147,7 @@
                                 {{ rev.get_case_study_status_display }}
                             </span>
                         </td>
-                        <td class="text-sm text-slate-700">{{ rev.lead_csm.get_full_name|default:rev.lead_csm.username }}</td>
+                        <td class="text-sm text-slate-700">{% if rev.lead_csm %}{{ rev.lead_csm.get_full_name|default:rev.lead_csm.username }}{% else %}—{% endif %}</td>
                     </tr>
                     {% empty %}
                     <tr>
