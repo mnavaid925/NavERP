@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Registrations — {{ event.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <a href="{% url 'sales:marketing_event_list' %}">Events</a>
+            <span>/</span>
+            <a href="{% url 'sales:marketing_event_detail' event.pk %}">{{ event.name }}</a>
+            <span>/</span>
+            <span>Registrations</span>
+        </div>
+        <h1 class="page-title">Registrations &amp; Attendance</h1>
+        <p class="text-sm text-slate-500 mt-1">{{ event.name }} — {{ event.start_at|date:"F d, Y H:i" }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:marketing_event_detail' event.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Event Detail</span>
+        </a>
+        <a href="{% url 'sales:marketing_event_registration_create' event.pk %}" class="btn btn-primary">
+            <i data-lucide="user-plus"></i>
+            <span>Add Registration</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+                <select name="registration_status" class="form-select w-full" aria-label="Filter by registration status">
+                    <option value="">All Registration Statuses</option>
+                    {% for val, label in registration_status_choices %}
+                    <option value="{{ val }}" {% if active_filters.registration_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="followup_status" class="form-select w-full" aria-label="Filter by follow-up status">
+                    <option value="">All Follow-Up Statuses</option>
+                    {% for val, label in followup_status_choices %}
+                    <option value="{{ val }}" {% if active_filters.followup_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if active_filters.registration_status or active_filters.followup_status %}
+                <a href="{% url 'sales:marketing_event_registrations' event.pk %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Registrant</th>
+                    <th>Registration</th>
+                    <th>Attendance</th>
+                    <th>Follow-Up</th>
+                    <th>Score</th>
+                    <th>Revenue</th>
+                    <th>Opportunity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for registration in registrations %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ registration.registrant_name }}</div>
+                        <div class="text-xs text-slate-500">{{ registration.registrant_email|default:"—" }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-900">{{ registration.get_registration_status_display }}</div>
+                        <div class="text-xs text-slate-500">{{ registration.get_source_channel_display }}</div>
+                    </td>
+                    <td>
+                        {% if registration.attended_at %}
+                        <span class="badge badge-green">Attended</span>
+                        <div class="text-xs text-slate-500 mt-0.5">{{ registration.attended_at|date:"M d, Y H:i" }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if registration.followup_status == "opportunity_created" %}
+                        <span class="badge badge-green">Opportunity Created</span>
+                        {% elif registration.followup_status == "meeting_booked" %}
+                        <span class="badge badge-info">Meeting Booked</span>
+                        {% elif registration.followup_status == "sent" %}
+                        <span class="badge badge-slate">Follow-Up Sent</span>
+                        {% elif registration.followup_status == "no_action" %}
+                        <span class="badge badge-muted">No Action</span>
+                        {% else %}
+                        <span class="badge badge-amber">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if registration.engagement_score >= 70 %}badge-green{% else %}badge-muted{% endif %}">
+                            {{ registration.engagement_score }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">${{ registration.revenue_attributed|floatformat:2 }}</span>
+                    </td>
+                    <td>
+                        {% if registration.opportunity %}
+                        <span class="text-sm text-slate-700">{{ registration.opportunity.name }}</span>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="users" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No registrations found</div>
+                            <div class="empty-state-text">Add registrants to track who signed up, who attended, and what the post-event follow-up produced.</div>
+                            <a href="{% url 'sales:marketing_event_registration_create' event.pk %}" class="btn btn-primary mt-4">
+                                <i data-lucide="user-plus"></i>
+                                <span>Add Registration</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination (L9 Guarded) -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} registrations
+        </div>
+        <div class="pagination-actions">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.registration_status %}&registration_status={{ active_filters.registration_status }}{% endif %}{% if active_filters.followup_status %}&followup_status={{ active_filters.followup_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.registration_status %}&registration_status={{ active_filters.registration_status }}{% endif %}{% if active_filters.followup_status %}&followup_status={{ active_filters.followup_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
