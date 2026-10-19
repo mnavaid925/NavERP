@@ -56,6 +56,10 @@ def customer_business_review_list(request):
     if account_id and account_id.isdigit():
         qs = qs.filter(account_id=int(account_id))
 
+    csm_id = request.GET.get("lead_csm", "").strip()
+    if csm_id and csm_id.isdigit():
+        qs = qs.filter(lead_csm_id=int(csm_id))
+
     is_ref = request.GET.get("is_referenceable", "").strip()
     if is_ref in ("1", "true", "True"):
         qs = qs.filter(is_referenceable=True)
@@ -94,6 +98,7 @@ def customer_business_review_list(request):
             "review_period": review_period,
             "template_type": template_type,
             "account": account_id,
+            "lead_csm": csm_id,
             "is_referenceable": is_ref,
         },
         "stats": stats,
