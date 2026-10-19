@@ -16,10 +16,11 @@ revenue recognised elsewhere -- it is not a financial posting.
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Avg, Count, F, Q, Sum
+from django.db.models import Avg, Count, Q, Sum
 from django.shortcuts import render
 from django.utils import timezone
 
+from apps.accounting.models import Currency
 from apps.crm.models import Campaign
 from apps.sales.models.MarketingAlignment.AttributionTouchpoints import (
     TOUCH_CHANNEL_CHOICES,
@@ -36,6 +37,7 @@ from apps.sales.models.MarketingAlignment.MarketingEvents import (
 )
 from apps.sales.models.MarketingAlignment.MqlHandoffs import MqlHandoff
 from apps.sales.models.SalesEnablement.EnablementContents import EnablementContent
+from apps.sales.views.MarketingAlignment._common import avg_response_hours
 
 ZERO = Decimal("0.00")
 
@@ -161,11 +163,7 @@ def marketing_attribution_console(request):
         expired=Count("id", filter=Q(status="expired")),
         converted=Count("id", filter=Q(status="converted")),
         total=Count("id"),
-        breaches=Count(
-            "id",
-            filter=Q(responded_at__isnull=False, responded_at__gt=F("sla_due_at"))
-            | Q(status="pending", sla_due_at__lt=now),
-        ),
+        breaches=Count("id", filter=MqlHandoff.sla_breach_q(now)),
     )
     decided = funnel["accepted"] + funnel["rejected"]
     mql_funnel = {
@@ -184,19 +182,7 @@ def marketing_attribution_console(request):
             else None
         ),
     }
-    response_pairs = list(
-        handoffs.filter(responded_at__isnull=False).values_list(
-            "responded_at", "handoff_at"
-        )
-    )
-    response_hours = [
-        (responded - handed).total_seconds() / 3600
-        for responded, handed in response_pairs
-        if responded is not None and handed is not None
-    ]
-    mql_funnel["avg_response_hours"] = (
-        round(sum(response_hours) / len(response_hours), 2) if response_hours else None
-    )
+    mql_funnel["avg_response_hours"] = avg_response_hours(handoffs)
 
     # ---- Content engagement ranking -------------------------------------------------------
     content_agg = (
