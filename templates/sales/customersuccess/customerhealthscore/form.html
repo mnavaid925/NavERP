@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Health Score {{ obj.number }}{% else %}New Customer Health Evaluation{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_health_console' %}">Customer Success</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_health_score_list' %}">Health Scores</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Evaluation{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Customer Health Score {{ obj.number }}{% else %}New Customer Health Evaluation{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:customer_health_score_detail' obj.pk %}{% else %}{% url 'sales:customer_health_score_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Account & Primary Assessment -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Account & Overall Health Status</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.account.id_for_label }}">Customer Account <span class="text-red-500">*</span></label>
+                {{ form.account }}
+                {% if form.account.errors %}<div class="form-error">{{ form.account.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.evaluation_date.id_for_label }}">Evaluation Date <span class="text-red-500">*</span></label>
+                {{ form.evaluation_date }}
+                {% if form.evaluation_date.errors %}<div class="form-error">{{ form.evaluation_date.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.overall_score.id_for_label }}">Overall Score (0-100) <span class="text-red-500">*</span></label>
+                {{ form.overall_score }}
+                {% if form.overall_score.errors %}<div class="form-error">{{ form.overall_score.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.health_band.id_for_label }}">Health Band <span class="text-red-500">*</span></label>
+                {{ form.health_band }}
+                {% if form.health_band.errors %}<div class="form-error">{{ form.health_band.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.previous_score.id_for_label }}">Previous Score (0-100)</label>
+                {{ form.previous_score }}
+                {% if form.previous_score.errors %}<div class="form-error">{{ form.previous_score.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.score_trend.id_for_label }}">Directional Trend</label>
+                {{ form.score_trend }}
+                {% if form.score_trend.errors %}<div class="form-error">{{ form.score_trend.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.risk_level.id_for_label }}">Churn Risk Level <span class="text-red-500">*</span></label>
+                {{ form.risk_level }}
+                {% if form.risk_level.errors %}<div class="form-error">{{ form.risk_level.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Component Scores (0-100) -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Scorecard Component Factors (0–100)</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.product_usage_score.id_for_label }}">Product Usage</label>
+                {{ form.product_usage_score }}
+                {% if form.product_usage_score.errors %}<div class="form-error">{{ form.product_usage_score.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.support_ticket_score.id_for_label }}">Support Tickets</label>
+                {{ form.support_ticket_score }}
+                {% if form.support_ticket_score.errors %}<div class="form-error">{{ form.support_ticket_score.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.nps_sentiment_score.id_for_label }}">NPS / Sentiment</label>
+                {{ form.nps_sentiment_score }}
+                {% if form.nps_sentiment_score.errors %}<div class="form-error">{{ form.nps_sentiment_score.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.relationship_score.id_for_label }}">Relationship Depth</label>
+                {{ form.relationship_score }}
+                {% if form.relationship_score.errors %}<div class="form-error">{{ form.relationship_score.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.renewal_risk_score.id_for_label }}">Renewal Health</label>
+                {{ form.renewal_risk_score }}
+                {% if form.renewal_risk_score.errors %}<div class="form-error">{{ form.renewal_risk_score.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Risk Signals & Operational Telemetry -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Operational Telemetry & Risk Alerts</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.active_alert_message.id_for_label }}">Active Alert Message</label>
+                {{ form.active_alert_message }}
+                {% if form.active_alert_message.errors %}<div class="form-error">{{ form.active_alert_message.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group flex items-center pt-6">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_churn_risk }}
+                    <span class="text-sm font-semibold text-red-700">Flag as Active Churn Risk</span>
+                </label>
+                {% if form.is_churn_risk.errors %}<div class="form-error">{{ form.is_churn_risk.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.license_utilization_pct.id_for_label }}">License Utilization (%)</label>
+                {{ form.license_utilization_pct }}
+                {% if form.license_utilization_pct.errors %}<div class="form-error">{{ form.license_utilization_pct.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.open_support_tickets.id_for_label }}">Open Support Tickets</label>
+                {{ form.open_support_tickets }}
+                {% if form.open_support_tickets.errors %}<div class="form-error">{{ form.open_support_tickets.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.latest_nps.id_for_label }}">Latest NPS (-100 to +100)</label>
+                {{ form.latest_nps }}
+                {% if form.latest_nps.errors %}<div class="form-error">{{ form.latest_nps.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.last_activity_date.id_for_label }}">Last Activity Date</label>
+                {{ form.last_activity_date }}
+                {% if form.last_activity_date.errors %}<div class="form-error">{{ form.last_activity_date.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">CSM Evaluation Notes</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:customer_health_score_detail' obj.pk %}{% else %}{% url 'sales:customer_health_score_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Save Evaluation{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
