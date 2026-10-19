@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}MQL Handoffs — Marketing Alignment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <span>MQL Handoffs</span>
+        </div>
+        <h1 class="page-title">MQL-to-SQL Handoffs</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:mql_handoff_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Handoff</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="send"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Handoffs</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="badge-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Acceptance Rate</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if stats.acceptance_rate_pct is not None %}{{ stats.acceptance_rate_pct }}%{% else %}—{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Avg Response Time</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if stats.avg_response_hours is not None %}{{ stats.avg_response_hours }}h{% else %}—{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alarm-clock"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">SLA Breaches</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.sla_breach_count|default:"0" }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search lead, account, handoff..." class="form-input w-full" aria-label="Search handoffs">
+            </div>
+            <div>
+                <select name="status" class="form-select w-full" aria-label="Filter by handoff status">
+                    <option value="">All Handoff Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if active_filters.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="source_kind" class="form-select w-full" aria-label="Filter by source">
+                    <option value="">All Sources</option>
+                    {% for val, label in source_choices %}
+                    <option value="{{ val }}" {% if active_filters.source_kind == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="campaign" class="form-select w-full" aria-label="Filter by campaign">
+                    <option value="">All Campaigns</option>
+                    {% for campaign in campaigns %}
+                    <option value="{{ campaign.pk }}" {% if active_filters.campaign == campaign.pk|stringformat:"d" %}selected{% endif %}>{{ campaign.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="owner" class="form-select w-full" aria-label="Filter by marketing owner">
+                    <option value="">All Marketing Owners</option>
+                    {% for u in owners %}
+                    <option value="{{ u.pk }}" {% if active_filters.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if active_filters.q or active_filters.status or active_filters.source_kind or active_filters.campaign or active_filters.owner %}
+                <a href="{% url 'sales:mql_handoff_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Handoff ID</th>
+                    <th>Lead / Account</th>
+                    <th>Source</th>
+                    <th>Assigned Rep</th>
+                    <th>Est. Value</th>
+                    <th>SLA Due</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for handoff in handoffs %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:mql_handoff_detail' handoff.pk %}" class="font-mono text-sm font-semibold text-blue-600 hover:underline">
+                            {{ handoff.number }}
+                        </a>
+                        <div class="text-xs text-slate-500">{{ handoff.handoff_at|date:"M d, Y H:i" }}</div>
+                    </td>
+                    <td>
+                        {% if handoff.lead %}
+                        <div class="font-medium text-slate-900">{{ handoff.lead.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ handoff.lead.number }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">—</span>
+                        {% endif %}
+                        {% if handoff.account %}
+                        <div class="text-xs text-slate-500">{{ handoff.account.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-900">{{ handoff.get_source_kind_display }}</div>
+                        {% if handoff.campaign %}
+                        <div class="text-xs text-slate-500">{{ handoff.campaign.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-sm text-slate-700">
+                            {% if handoff.assigned_to %}{{ handoff.assigned_to.get_full_name|default:handoff.assigned_to.username }}{% else %}—{% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">${{ handoff.estimated_value|floatformat:2 }}</span>
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-900">{{ handoff.sla_due_at|date:"M d, Y H:i" }}</div>
+                        {% if handoff.is_sla_breached %}
+                        <span class="badge badge-red">SLA Breached</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if handoff.status == "accepted" %}
+                        <span class="badge badge-green">Accepted</span>
+                        {% elif handoff.status == "rejected" %}
+                        <span class="badge badge-red">Rejected</span>
+                        {% elif handoff.status == "converted" %}
+                        <span class="badge badge-info">Converted</span>
+                        {% elif handoff.status == "expired" %}
+                        <span class="badge badge-amber">Expired</span>
+                        {% else %}
+                        <span class="badge badge-muted">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'sales:mql_handoff_detail' handoff.pk %}" class="btn btn-icon btn-outline" title="View details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:mql_handoff_edit' handoff.pk %}" class="btn btn-icon btn-outline" title="Edit handoff">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'sales:mql_handoff_delete' handoff.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete handoff {{ handoff.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete handoff">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="send" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No MQL handoffs found</div>
+                            <div class="empty-state-text">Hand marketing qualified leads to sales with an SLA so acceptance rate and response time stay visible.</div>
+                            <a href="{% url 'sales:mql_handoff_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Create First Handoff</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination (L9 Guarded) -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} handoffs
+        </div>
+        <div class="pagination-actions">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.source_kind %}&source_kind={{ active_filters.source_kind }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.source_kind %}&source_kind={{ active_filters.source_kind }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
