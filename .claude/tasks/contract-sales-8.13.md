@@ -514,7 +514,16 @@ Deletes are `@require_POST` + `@tenant_admin_required` and redirect to the list.
 | `campaigns` | `Campaign.objects.filter(tenant=request.tenant).order_by("name")` |
 | `leads` | `Lead.objects.filter(tenant=request.tenant).order_by("name")` |
 | `active_filters` | `{"q", "channel", "touch_type", "position", "campaign", "lead"}` — every value is the raw `request.GET` string |
-| `stats` | `{"total_count", "total_cost", "total_engagement_value", "attributed_revenue", "first_touch_count", "last_touch_count"}` |
+| `stats` | `{"total_count", "total_cost", "total_engagement_value", "first_touch_count", "last_touch_count"}` |
+
+> **Why `attributed_revenue` is NOT in the touchpoint list stats.** The credited revenue lives on
+> `CampaignAttribution` (entity 2), and entity 1 is built **before** entity 2. Importing
+> `CampaignAttribution` into the touchpoint view would forward-reference a module that does not
+> exist yet and break the tree at that commit. The credited revenue for a single touch is still
+> available on the detail page through the **model property** `obj.attributed_revenue`, which
+> resolves the reverse accessor `self.attributions` lazily and therefore needs no import; and the
+> campaign-level credited-revenue rollup lives on the console, which is built last. The list stat
+> `total_engagement_value` is the touchpoint's own native field and is never a proxy for it.
 
 **Filters:** `q` → `Q(campaign__name__icontains) | Q(lead__name__icontains) | Q(opportunity__name__icontains) | Q(source_reference__icontains) | Q(number__icontains)`;
 `channel` → exact; `touch_type` → exact; `position` → exact; `campaign` → `campaign_id=int(v)` when `v.isdigit()`;
