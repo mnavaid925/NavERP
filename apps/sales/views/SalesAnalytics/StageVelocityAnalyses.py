@@ -2,8 +2,8 @@
 
 Function-based views over the 8.12 Stage Velocity Analysis record. Every
 queryset is tenant-scoped, every write is audit-logged, and every integer FK
-filter is guarded with ``.isdigit()`` so a hand-edited URL is ignored rather
-than a 500 (L11).
+filter is guarded by ``_pk_filter`` (``.isdigit()`` plus a 64-bit range bound) so
+a hand-edited URL is ignored rather than a 500 (L11).
 """
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -20,6 +20,7 @@ from apps.sales.models.SalesAnalytics.StageVelocityAnalyses import (
     VELOCITY_STATUS_CHOICES,
     StageVelocityAnalysis,
 )
+from apps.sales.views.SalesAnalytics._helpers import _pk_filter
 
 
 @login_required
@@ -44,12 +45,14 @@ def stage_velocity_analysis_list(request):
         qs = qs.filter(status=status)
 
     pipeline_id = request.GET.get("pipeline", "").strip()
-    if pipeline_id and pipeline_id.isdigit():
-        qs = qs.filter(pipeline_id=int(pipeline_id))
+    pipeline_pk = _pk_filter(pipeline_id)
+    if pipeline_pk is not None:
+        qs = qs.filter(pipeline_id=pipeline_pk)
 
     stage_id = request.GET.get("pipeline_stage", "").strip()
-    if stage_id and stage_id.isdigit():
-        qs = qs.filter(pipeline_stage_id=int(stage_id))
+    stage_pk = _pk_filter(stage_id)
+    if stage_pk is not None:
+        qs = qs.filter(pipeline_stage_id=stage_pk)
 
     bottleneck = request.GET.get("bottleneck", "").strip()
     if bottleneck in {"1", "true"}:
