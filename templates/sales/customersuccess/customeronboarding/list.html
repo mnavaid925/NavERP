@@ -71,12 +71,12 @@
 <!-- Filters -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
             <div>
-                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search project, account, blockers..." class="form-input w-full">
+                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search project, account, blockers..." class="form-input w-full" aria-label="Search onboardings">
             </div>
             <div>
-                <select name="status" class="form-select w-full">
+                <select name="status" class="form-select w-full" aria-label="Filter by onboarding status">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if active_filters.status == val %}selected{% endif %}>{{ label }}</option>
@@ -84,7 +84,7 @@
                 </select>
             </div>
             <div>
-                <select name="stage" class="form-select w-full">
+                <select name="stage" class="form-select w-full" aria-label="Filter by onboarding stage">
                     <option value="">All Stages</option>
                     {% for val, label in stage_choices %}
                     <option value="{{ val }}" {% if active_filters.stage == val %}selected{% endif %}>{{ label }}</option>
@@ -92,10 +92,26 @@
                 </select>
             </div>
             <div>
-                <select name="account" class="form-select w-full">
+                <select name="playbook_template" class="form-select w-full" aria-label="Filter by playbook template">
+                    <option value="">All Playbooks</option>
+                    {% for val, label in playbook_choices %}
+                    <option value="{{ val }}" {% if active_filters.playbook_template == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="account" class="form-select w-full" aria-label="Filter by customer account">
                     <option value="">All Accounts</option>
                     {% for acct in accounts %}
                     <option value="{{ acct.pk }}" {% if active_filters.account == acct.pk|stringformat:"d" %}selected{% endif %}>{{ acct.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="lead_csm" class="form-select w-full" aria-label="Filter by lead CSM">
+                    <option value="">All Lead CSMs</option>
+                    {% for u in csm_users %}
+                    <option value="{{ u.pk }}" {% if active_filters.lead_csm == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -104,7 +120,7 @@
                     <i data-lucide="filter"></i>
                     <span>Filter</span>
                 </button>
-                {% if active_filters.q or active_filters.status or active_filters.stage or active_filters.account or active_filters.lead_csm %}
+                {% if active_filters.q or active_filters.status or active_filters.stage or active_filters.playbook_template or active_filters.account or active_filters.lead_csm %}
                 <a href="{% url 'sales:customer_onboarding_list' %}" class="btn btn-outline" title="Clear filters">
                     <i data-lucide="x"></i>
                 </a>
