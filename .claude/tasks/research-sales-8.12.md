@@ -2,11 +2,11 @@
 
 ## Repo state checked first
 
-**LIVE_LINKS built so far in Module 8** (read from `apps/core/navigation.py`): `8.1` Lead Management · `8.2` Opportunity & Pipeline Management · `8.3` Contact & Account Management · `8.4` Sales Forecasting · `8.5` Quote & Proposal Management (CPQ) · `8.6` Order Management · `8.7` Territory & Quota Management · `8.8` Sales Activity & Task Management · `8.9` Sales Enablement · `8.10` Incentive Compensation Management · `8.11` Customer Success & Account Management. **`8.12` is the next unbuilt sub-module.** (`8.13` Marketing Alignment & Attribution is also unbuilt and is out of scope here.)
+**LIVE_LINKS built so far in Module 8** (read from `apps/core/navigation.py`): `8.1` Lead Management · `8.2` Opportunity & Pipeline Management · `8.3` Contact & Account Management · `8.4` Sales Forecasting · `8.5` Quote & Proposal Management (CPQ) · `8.6` Order Management · `8.7` Territory & Quota Management · `8.8` Sales Activity & Task Management · `8.9` Sales Enablement · `8.10` Incentive Compensation Management · `8.11` Customer Success & Account Management · `8.13` Marketing Alignment & Attribution. **`8.12` is the next unbuilt sub-module.** (`8.13` was built concurrently, out of NavERP.md order — it is out of scope here, and its `AttributionTouchpoint` / `CampaignAttribution` / `MqlHandoff` / `ContentEngagement` / `MarketingEvent` models are NOT reused by 8.12.)
 
 **`apps/sales` already exists** — this is an EXTEND run. No app scaffolding, no `config/settings.py` INSTALLED_APPS change, no `config/urls.py` change. The only navigation change is ONE `LIVE_LINKS["8.12"]` entry in `apps/core/navigation.py`.
 
-**Next migration number: `0023`** (`apps/sales/migrations/` currently ends at `0021_customersuccess.py`, `0022_customersuccess_indexes.py`).
+**Next migration number: `0024`** (`apps/sales/migrations/` currently ends at `0021_customersuccess.py`, `0022_customersuccess_indexes.py`, `0023_attributiontouchpoint_campaignattribution_and_more.py` — the 8.13 Marketing Alignment build landed concurrently, so the number must be re-verified at generation time per L43).
 
 ### Spine entities VERIFIED to EXIST (grep evidence)
 
@@ -287,7 +287,7 @@ The five NavERP bullet names map 1:1 onto five **distinct** console destinations
 - `apps/sales/models/SalesAnalytics/{WinLossDebriefs,StageVelocityAnalyses,FunnelConversionRecords,RepPerformanceScorecards}.py` + `__init__.py`
 - `apps/sales/forms/SalesAnalytics/…`, `apps/sales/views/SalesAnalytics/…`, `apps/sales/urls/SalesAnalytics/…`
 - Add the four names to the `apps/sales/models/__init__.py` import block **and** `__all__`.
-- Migration: `0023_salesanalytics.py` (next free number).
+- Migration: `0024_salesanalytics.py` (next free number — re-verify at generation time, L43).
 
 ### House rules that bind this build
 
