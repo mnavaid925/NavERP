@@ -1,6 +1,6 @@
 ---
 name: sales
-description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, 8.8 Sales Activity & Task Management, and 8.9 Sales Enablement. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
+description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, 8.8 Sales Activity & Task Management, 8.9 Sales Enablement, and 8.10 Incentive Compensation Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
 ---
 
 # Sales Management System (Module 8)
@@ -969,4 +969,68 @@ per touch per model, so the two can never overwrite each other.
   spend connectors, automatic handoff generation, event email automation, live webinar
   micro-engagement capture, AI content recommendations, funnel-based attribution) are registered
   in `.agents/tasks/gaps-sales-8.13.md`.
+
+---
+
+## 8.10 Incentive Compensation Management (ICM)
+
+App sub-package: `apps/sales/*/IncentiveCompensation/`; templates: `templates/sales/incentivecompensation/`.
+
+### 8.10 Overview
+Sub-module 8.10 provides comprehensive Sales Performance & Incentive Compensation Management (ICM) — commission plan design (flat revenue %, gross margin %, tiered accelerators, SPIF tactical bonuses), real-time deal crediting, interactive What-If deal calculators, clawbacks & dispute adjudication, multi-currency spot FX conversion, and statement payout batch processing into payroll.
+
+### 8.10 Models (`apps/sales/models/IncentiveCompensation/`)
+- `CommissionPlan` (`CMPL-`): Plan design master. Fields: `name`, `code`, `plan_type` (`flat_revenue`, `gross_margin`, `tiered_quota`, `spif_only`, `hybrid`), `tier_mode` (`incremental`, `retroactive`, `not_applicable`), `status` (`draft`, `active`, `archived`), `payout_frequency`, `effective_start`, `effective_end`, `currency` (FK `accounting.Currency`), `target_region`, `base_rate_pct`, `tiers_config` (JSON list of bracket dicts `min_pct`, `max_pct`, `rate_pct`), `spif_config` (JSON list of SPIF rules), `draw_amount`, `is_draw_recoverable`, `clawback_window_days`, `tax_withholding_pct`, `sales_quota` (FK `crm.SalesQuota`), `owner`.
+- `CommissionEarning` (`CER-`): Deal- and order-level commission credit fact. Fields: `plan`, `payee` (User), `opportunity` (FK `crm.Opportunity`), `sales_order` (FK `scm.SalesOrder`), `credit_type` (`direct`, `split`, `overlay`, `manager_override`, `spif_bonus`), `status` (`pending`, `calculated`, `approved`, `paid`, `clawed_back`), `deal_amount`, `deal_currency`, `split_percentage`, `credited_volume`, `attainment_pct_at_close`, `applied_rate_pct`, `base_commission_amount`, `spif_amount`, `gross_commission`, `exchange_rate`, `functional_amount`, `clawback_parent` (self-FK), `statement` (FK `CommissionStatement`), `earned_date`.
+- `CommissionStatement` (`CST-`): Settlement cycle envelope for one payee. Fields: `statement_number`, `payee`, `plan`, `period_start`, `period_end`, `status` (`draft`, `under_review`, `approved`, `locked`, `exported`, `paid`), `total_credited_volume`, `total_base_commission`, `total_accelerator_amount`, `total_spif_amount`, `gross_earnings`, `draw_advance_paid`, `draw_recovered`, `adjustments_amount`, `clawbacks_deducted`, `tax_withholding_amount`, `net_payout`, `approved_by`, `approved_at`, `locked_at`, `payroll_run` (FK `accounting.PayrollRun`), `notes`.
+- `CommissionAdjustment` (`CADJ-`): Manual override, dispute resolution, clawback, or true-up line item. Fields: `statement`, `earning`, `payee`, `adjustment_type` (`clawback_cancellation`, `dispute_resolution`, `manual_bonus`, `draw_recovery`, `split_correction`, `true_up_reconciliation`), `amount` (signed: + for bonus, - for clawback), `status` (`draft`, `submitted`, `under_review`, `disputed`, `approved`, `applied`, `rejected`), `reason`, `dispute_comments`, `requested_by`, `approved_by`, `effective_date`.
+
+### 8.10 Core Spine Reuse
+Strictly adheres to L29/L36/L37:
+- Deals & conversion: `crm.Opportunity`
+- Quotas: `crm.SalesQuota`, `sales.QuotaPlan`
+- Orders: `scm.SalesOrder`
+- Financials: `accounting.Currency`, `accounting.PayrollRun`
+- Identity: `accounts.User`
+
+### 8.10 Routes & URLs (`apps/sales/urls/IncentiveCompensation/`)
+Mounted under `sales:` namespace:
+- **Boards**:
+  - `sales:sales_commission_plan_hub` (`/sales/compensation/plan-hub/`)
+  - `sales:sales_commission_earnings_dashboard` (`/sales/compensation/earnings-dashboard/`)
+  - `sales:sales_commission_adjustment_workbench` (`/sales/compensation/adjustment-workbench/`)
+  - `sales:sales_global_compensation_matrix` (`/sales/compensation/global-matrix/`)
+  - `sales:sales_commission_payout_processing` (`/sales/compensation/payout-processing/`)
+  - `sales:sales_commission_what_if_calc` (`/sales/compensation/what-if/`) [AJAX simulator]
+- **CRUD & Actions**:
+  - `sales:commission_plan_{list,create,detail,edit,delete}`
+  - `sales:commission_earning_{list,create,detail,edit,delete}`
+  - `sales:commission_statement_{list,create,detail,edit,delete,approve,lock,generate_batch}`
+  - `sales:commission_adjustment_{list,create,detail,edit,delete,resolve_dispute}`
+
+### 8.10 Templates (`templates/sales/incentivecompensation/`)
+- `boards/{plan_hub,earnings_dashboard,adjustment_workbench,global_matrix,payout_processing}.html`
+- `commissionplan/{list,detail,form}.html`
+- `commissionearning/{list,detail,form}.html`
+- `commissionstatement/{list,detail,form}.html`
+- `commissionadjustment/{list,detail,form}.html`
+
+### 8.10 Navigation Wiring (`apps/core/navigation.py`)
+`LIVE_LINKS["8.10"]` maps all 5 NavERP.md feature bullets verbatim:
+- Commission Plan Design -> `sales:sales_commission_plan_hub`
+- Real-Time Earnings Tracking -> `sales:sales_commission_earnings_dashboard`
+- Clawbacks & Adjustments -> `sales:sales_commission_adjustment_workbench`
+- Multi-Currency & Global Plans -> `sales:sales_global_compensation_matrix`
+- Payout Processing & Integration -> `sales:sales_commission_payout_processing`
+- Plus 4 direct CRUD leaf links: Commission Plans, Deal Earnings Ledger, Commission Statements, Adjustments & Disputes.
+
+### 8.10 Conventions & Gotchas
+- **Privileged Actions**: `commission_statement_approve`, `commission_statement_lock`, `commission_adjustment_resolve_dispute`, and `commission_statement_generate_batch` require `@tenant_admin_required`.
+- **Self-Approval Blocks**: Rep payees and claimants cannot approve their own statements or resolve their own dispute tickets (`obj.payee == request.user`).
+- **Mass Assignment Defense**: `status` is strictly excluded from `Meta.fields` in `CommissionStatementForm`, `CommissionAdjustmentForm`, and `CommissionEarningForm`.
+- **Mutation Guards**: Paid earnings or earnings attached to locked/exported/paid statements cannot be edited or deleted.
+- **Horizontal Scoping**: Non-admin users only view/edit their own payee records in list and detail views.
+- **Deterministic Waterfall**: Server-side model `clean()` recalculates credited volume, base rate, gross commission, draw deductions, and zero-floor net payouts.
+- **What-If Calculator**: Fully hardened with bounded numeric parsing, `NaN`/`inf` rejections, returning HTTP 400 on malformed input (L35).
+
 
