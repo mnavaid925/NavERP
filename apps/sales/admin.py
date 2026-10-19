@@ -59,6 +59,13 @@ from .models import (
     CustomerRenewal,
     CustomerOnboarding,
     CustomerBusinessReview,
+    # 8.13 Marketing Alignment & Attribution
+    AttributionTouchpoint,
+    CampaignAttribution,
+    MqlHandoff,
+    ContentEngagement,
+    MarketingEvent,
+    EventRegistration,
 )
 
 
@@ -806,6 +813,119 @@ class CustomerBusinessReviewAdmin(admin.ModelAdmin):
     readonly_fields = ("tenant", "number", "created_at", "updated_at")
     list_select_related = ("account", "lead_csm", "account_plan", "tenant")
     raw_id_fields = ("account", "lead_csm", "account_plan")
+
+
+# ---------------------------------------------------------------- 8.13 Marketing Alignment & Attribution
+#
+# OWNERSHIP (L36/L37): there is no Campaign / Lead / Opportunity / Content admin here, because
+# 8.13 declares no such master. `crm.Campaign` (budget, actual spend, UTM tags) is the campaign
+# master, `crm.Lead` and `crm.Opportunity` are the journey and the conversion endpoint, and
+# `sales.EnablementContent` (8.9) is the content master. Every FK below points at one of them.
+#
+# `responded_at` and `attended_at` are SYSTEM-SET on the workflow transition, so they are
+# readonly here as well as `editable=False` on the model: an admin must not be able to type a
+# response time that the workflow never recorded. The auto-`number` is minted by
+# TenantNumbered.save() and is likewise never typed in.
+
+
+@admin.register(AttributionTouchpoint)
+class AttributionTouchpointAdmin(admin.ModelAdmin):
+    list_display = ("number", "campaign", "lead", "opportunity", "channel", "touch_type", "touch_date", "touch_position", "cost", "tenant")
+    list_filter = ("channel", "touch_type", "touch_position", "tenant")
+    search_fields = ("number", "campaign__name", "lead__name", "opportunity__name", "source_reference")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("campaign", "lead", "opportunity", "currency", "tenant")
+    raw_id_fields = ("campaign", "lead", "opportunity", "currency")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None)
+        if tenant is not None and db_field.name in {"campaign", "lead", "opportunity"}:
+            model = db_field.remote_field.model
+            kwargs["queryset"] = model._default_manager.filter(tenant=tenant)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(CampaignAttribution)
+class CampaignAttributionAdmin(admin.ModelAdmin):
+    list_display = ("number", "touchpoint", "attribution_model", "credit_pct", "attributed_revenue", "attributed_cost", "status", "computed_on", "tenant")
+    list_filter = ("attribution_model", "status", "tenant")
+    search_fields = ("number", "touchpoint__number", "notes")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("touchpoint", "computed_by", "tenant")
+    raw_id_fields = ("touchpoint", "computed_by")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None)
+        if tenant is not None and db_field.name == "touchpoint":
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(MqlHandoff)
+class MqlHandoffAdmin(admin.ModelAdmin):
+    list_display = ("number", "lead", "campaign", "account", "assigned_to", "status", "source_kind", "handoff_at", "sla_due_at", "responded_at", "tenant")
+    list_filter = ("status", "source_kind", "tenant")
+    search_fields = ("number", "lead__name", "lead__number", "account__name", "acceptance_reason", "rejection_reason")
+    # responded_at is stamped by save() on the first sales response -- readonly so it cannot be
+    # typed, which would make the SLA compliance figure on the console meaningless.
+    readonly_fields = ("tenant", "number", "responded_at", "created_at", "updated_at")
+    list_select_related = ("lead", "campaign", "account", "owner", "assigned_to", "opportunity", "currency", "tenant")
+    raw_id_fields = ("lead", "campaign", "account", "owner", "assigned_to", "opportunity", "currency")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None)
+        if tenant is not None and db_field.name in {"lead", "campaign", "opportunity"}:
+            model = db_field.remote_field.model
+            kwargs["queryset"] = model._default_manager.filter(tenant=tenant)
+        if tenant is not None and db_field.name in {"owner", "assigned_to"}:
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant, is_active=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(ContentEngagement)
+class ContentEngagementAdmin(admin.ModelAdmin):
+    list_display = ("number", "content", "account", "lead", "campaign", "engagement_type", "engagement_channel", "engagement_score", "revenue_attributed", "tenant")
+    list_filter = ("engagement_type", "engagement_channel", "tenant")
+    search_fields = ("number", "content__title", "account__name", "lead__name")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("content", "account", "lead", "campaign", "currency", "tenant")
+    raw_id_fields = ("content", "account", "lead", "campaign", "currency")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None)
+        if tenant is not None and db_field.name in {"content", "lead", "campaign"}:
+            model = db_field.remote_field.model
+            kwargs["queryset"] = model._default_manager.filter(tenant=tenant)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(MarketingEvent)
+class MarketingEventAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "event_type", "status", "start_at", "end_at", "venue", "capacity", "budget", "tenant")
+    list_filter = ("event_type", "status", "tenant")
+    search_fields = ("number", "name", "venue", "description")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("owner", "campaign", "currency", "tenant")
+    raw_id_fields = ("owner", "campaign", "currency")
+
+
+@admin.register(EventRegistration)
+class EventRegistrationAdmin(admin.ModelAdmin):
+    list_display = ("event", "registrant_name", "registrant_email", "registration_status", "source_channel", "followup_status", "engagement_score", "registered_at", "attended_at", "tenant")
+    list_filter = ("registration_status", "source_channel", "followup_status", "tenant")
+    search_fields = ("registrant_name", "registrant_email", "event__name", "followup_notes")
+    # attended_at is stamped by save() on the transition to "attended" -- readonly for the same
+    # reason as MqlHandoff.responded_at above.
+    readonly_fields = ("tenant", "attended_at", "created_at", "updated_at")
+    list_select_related = ("event", "lead", "account", "campaign", "opportunity", "tenant")
+    raw_id_fields = ("event", "lead", "account", "campaign", "opportunity")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None)
+        if tenant is not None and db_field.name in {"event", "lead", "campaign", "opportunity"}:
+            model = db_field.remote_field.model
+            kwargs["queryset"] = model._default_manager.filter(tenant=tenant)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 
