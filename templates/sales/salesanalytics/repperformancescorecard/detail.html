@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+
+{% block title %}Scorecard {{ obj.number }} — Rep Performance Scorecards — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <a href="{% url 'sales:rep_performance_scorecard_list' %}">Rep Performance Scorecards</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ obj.number }} · {% if obj.rep %}{{ obj.rep.get_full_name|default:obj.rep.username }}{% else %}—{% endif %}</h1>
+            <span class="badge {{ obj.rating_badge_class }}">{{ obj.get_rating_display }}</span>
+            <span class="badge {{ obj.status_badge_class }}">{{ obj.get_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:rep_performance_scorecard_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Scorecards</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Main content -->
+    <div class="lg:col-span-2 space-y-4">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Scorecard Record</h2>
+            </div>
+            <div class="card-body">
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Scorecard Number</dt>
+                        <dd class="text-slate-900 font-mono">{{ obj.number }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Rep</dt>
+                        <dd class="text-slate-900 font-medium">
+                            {% if obj.rep %}{{ obj.rep.get_full_name|default:obj.rep.username }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Manager</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.manager %}{{ obj.manager.get_full_name|default:obj.manager.username }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Territory</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.territory %}{{ obj.territory.name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Forecast Period</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.forecast_period %}{{ obj.forecast_period.name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Quota Plan</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.quota_plan %}
+                            <span class="font-mono text-xs">{{ obj.quota_plan.number }}</span>
+                            {{ obj.quota_plan.get_method_display }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Coaching Scorecard</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.coaching_scorecard %}
+                            <span class="font-mono text-xs">{{ obj.coaching_scorecard.number }}</span>
+                            {{ obj.coaching_scorecard.get_review_status_display }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Period</dt>
+                        <dd class="text-slate-900">{{ obj.period_start|date:"F d, Y" }} – {{ obj.period_end|date:"F d, Y" }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Currency</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.currency %}{{ obj.currency.code }} — {{ obj.currency.name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Segment</dt>
+                        <dd class="text-slate-900">{% if obj.segment %}{{ obj.segment }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Overall Score</dt>
+                        <dd class="text-slate-900 font-semibold">
+                            {% if obj.overall_score is not None %}{{ obj.overall_score }}%{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Rating</dt>
+                        <dd class="text-slate-900">
+                            <span class="badge {{ obj.rating_badge_class }}">{{ obj.get_rating_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Status</dt>
+                        <dd class="text-slate-900">
+                            <span class="badge {{ obj.status_badge_class }}">{{ obj.get_status_display }}</span>
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Leading Indicators — Recorded Activity</h2>
+            </div>
+            <div class="card-body">
+                {% comment %}
+                  These counters are the period's RECORDED EVIDENCE — what the rep and
+                  the manager agreed had happened. The console shows the live
+                  sales.ActivityLog-derived counts BESIDE this stored snapshot so any
+                  divergence is visible; it never overwrites the snapshot.
+                {% endcomment %}
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Activities Logged</dt>
+                        <dd class="text-slate-900">{{ obj.activities_logged }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Calls Logged</dt>
+                        <dd class="text-slate-900">{{ obj.calls_logged }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Emails Logged</dt>
+                        <dd class="text-slate-900">{{ obj.emails_logged }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Meetings Logged</dt>
+                        <dd class="text-slate-900">{{ obj.meetings_logged }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Meetings Booked</dt>
+                        <dd class="text-slate-900">{{ obj.meetings_booked }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Follow-ups Completed</dt>
+                        <dd class="text-slate-900">{{ obj.follow_ups_completed }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Total Recorded Activities</dt>
+                        <dd class="text-slate-900 font-semibold">{{ obj.total_activities }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Activity Minutes</dt>
+                        <dd class="text-slate-900">{{ obj.activity_minutes }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Response Time (hours)</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.response_time_hours is not None %}{{ obj.response_time_hours }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Lagging Indicators — Outcomes</h2>
+            </div>
+            <div class="card-body">
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Opportunities Created</dt>
+                        <dd class="text-slate-900">{{ obj.opportunities_created }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Opportunities Won</dt>
+                        <dd class="text-slate-900">{{ obj.opportunities_won }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Opportunities Lost</dt>
+                        <dd class="text-slate-900">{{ obj.opportunities_lost }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Pipeline Value</dt>
+                        <dd class="text-slate-900">{{ obj.pipeline_value }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Weighted Pipeline Value</dt>
+                        <dd class="text-slate-900">{{ obj.weighted_pipeline_value }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Revenue Closed</dt>
+                        <dd class="text-slate-900">{{ obj.revenue_closed }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Sales Cycle (days)</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.sales_cycle_days is not None %}{{ obj.sales_cycle_days }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Quota Target</dt>
+                        <dd class="text-slate-900">{{ obj.quota_target }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Derived Read-outs</h2>
+            </div>
+            <div class="card-body">
+                {% comment %}
+                  These four are computed in save() from the counters above and are
+                  never typed. The goal gap is target minus actual, so it is NEGATIVE
+                  once the target is exceeded — a negative gap is a met target.
+                {% endcomment %}
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Win Rate</dt>
+                        <dd class="text-slate-900 font-semibold">{{ obj.win_rate_pct }}%</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Average Deal Size</dt>
+                        <dd class="text-slate-900 font-semibold">{{ obj.average_deal_size }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Quota Attainment</dt>
+                        <dd class="text-slate-900 font-semibold">{{ obj.quota_attainment_pct }}%</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Goal Gap (target − actual)</dt>
+                        <dd class="text-slate-900 font-semibold">
+                            <span class="badge {{ obj.goal_gap_badge_class }}">{{ obj.goal_gap_value }}</span>
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Assessment &amp; Coaching</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Strengths</div>
+                    {% if obj.strengths %}
+                    <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">{{ obj.strengths }}</div>
+                    {% else %}
+                    <div class="text-xs text-slate-400 italic">No strengths recorded.</div>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Areas for Improvement</div>
+                    {% if obj.areas_for_improvement %}
+                    <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">{{ obj.areas_for_improvement }}</div>
+                    {% else %}
+                    <div class="text-xs text-slate-400 italic">No areas for improvement recorded.</div>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Coaching Actions</div>
+                    {% if obj.coaching_actions %}
+                    <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">{{ obj.coaching_actions }}</div>
+                    {% else %}
+                    <div class="text-xs text-slate-400 italic">No coaching actions recorded.</div>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Notes</div>
+                    {% if obj.notes %}
+                    <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">{{ obj.notes }}</div>
+                    {% else %}
+                    <div class="text-xs text-slate-400 italic">No notes recorded.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Benchmarks</h2>
+            </div>
+            <div class="card-body">
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Benchmark Win Rate</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.benchmark_win_rate_pct is not None %}{{ obj.benchmark_win_rate_pct }}%{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Benchmark Cycle (days)</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.benchmark_cycle_days is not None %}{{ obj.benchmark_cycle_days }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Benchmark Quota Attainment</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.benchmark_quota_attainment_pct is not None %}{{ obj.benchmark_quota_attainment_pct }}%{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Benchmark Source</dt>
+                        <dd class="text-slate-900">{% if obj.benchmark_source %}{{ obj.benchmark_source }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Benchmark As Of</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.benchmark_as_of %}{{ obj.benchmark_as_of|date:"F d, Y" }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions sidebar -->
+    <div class="space-y-4">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Actions</h2>
+            </div>
+            <div class="card-body space-y-3">
+                {% comment %}
+                  An APPROVED scorecard is the frozen record of a completed review
+                  cycle, so it offers neither Edit nor Delete. Every other status
+                  (draft, shared, acknowledged) keeps both actions available.
+                {% endcomment %}
+                {% if obj.status != "approved" %}
+                <a href="{% url 'sales:rep_performance_scorecard_edit' obj.pk %}" class="btn btn-primary w-full">
+                    <i data-lucide="pencil"></i>
+                    <span>Edit Scorecard</span>
+                </a>
+                {% else %}
+                <div class="text-xs text-slate-500 italic">This scorecard is approved and can no longer be edited.</div>
+                {% endif %}
+
+                {% if obj.status != "approved" %}
+                {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                <form method="post" action="{% url 'sales:rep_performance_scorecard_delete' obj.pk %}" onsubmit="return confirm('Are you sure you want to delete scorecard {{ obj.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger w-full">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Scorecard</span>
+                    </button>
+                </form>
+                {% endif %}
+                {% endif %}
+
+                <a href="{% url 'sales:rep_performance_scorecard_list' %}" class="btn btn-outline w-full">
+                    <i data-lucide="arrow-left"></i>
+                    <span>Back to List</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Performance Summary</h2>
+            </div>
+            <div class="card-body">
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Rating</div>
+                <div class="mb-3">
+                    <span class="badge {{ obj.rating_badge_class }}">{{ obj.get_rating_display }}</span>
+                </div>
+
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-1">On Track</div>
+                <div class="text-sm text-slate-900 mb-3">
+                    {% if obj.is_on_track %}Yes — this rep is rated on track.{% else %}No — this rep is rated {{ obj.get_rating_display|lower }}.{% endif %}
+                </div>
+
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Goal Gap</div>
+                <div class="mb-3">
+                    <span class="badge {{ obj.goal_gap_badge_class }}">{{ obj.goal_gap_value }}</span>
+                </div>
+
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Recorded Activities</div>
+                <div class="text-sm text-slate-900">{{ obj.total_activities }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
