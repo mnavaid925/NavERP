@@ -78,7 +78,6 @@ def marketing_attribution_console(request):
         row["touchpoint__campaign_id"]: row
         for row in attributions.values("touchpoint__campaign_id").annotate(
             attributed_revenue=Sum("attributed_revenue"),
-            attributed_cost=Sum("attributed_cost"),
         )
     }
 
@@ -264,16 +263,23 @@ def marketing_attribution_console(request):
         "total_attributed_revenue": total_attributed_revenue,
         "blended_roi_pct": _roi_pct(total_attributed_revenue, total_spend),
         "avg_cost_per_lead": avg_cost_per_lead,
-        "mql_total": mql_funnel["total"],
-        "mql_accepted": mql_funnel["accepted"],
-        "mql_acceptance_rate_pct": mql_funnel["acceptance_rate_pct"],
-        "sla_compliance_pct": mql_funnel["sla_compliance_pct"],
-        "content_engagements": ContentEngagement.objects.filter(tenant=tenant).count(),
-        "events": MarketingEvent.objects.filter(tenant=tenant).count(),
     }
+
+    # The console's money figures are denominated in the currency of the touchpoints they are
+    # derived from. A symbol is only shown when EVERY touchpoint in the tenant uses the SAME
+    # currency; otherwise the totals are rendered without a symbol rather than mislabelled.
+    currency_ids = set(
+        touchpoints.exclude(currency__isnull=True).values_list("currency_id", flat=True)
+    )
+    console_currency = (
+        Currency.objects.filter(pk=currency_ids.pop()).first()
+        if len(currency_ids) == 1
+        else None
+    )
 
     context = {
         "stats": stats,
+        "currency": console_currency,
         "campaign_rows": campaign_rows,
         "channel_rows": channel_rows,
         "mql_funnel": mql_funnel,
