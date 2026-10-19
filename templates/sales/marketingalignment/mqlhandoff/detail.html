@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Handoff {{ obj.number }} — Marketing Alignment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <a href="{% url 'sales:mql_handoff_list' %}">MQL Handoffs</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">Handoff {{ obj.number }}</h1>
+            {% if obj.status == "accepted" %}
+            <span class="badge badge-green">Accepted</span>
+            {% elif obj.status == "rejected" %}
+            <span class="badge badge-red">Rejected</span>
+            {% elif obj.status == "converted" %}
+            <span class="badge badge-info">Converted</span>
+            {% elif obj.status == "expired" %}
+            <span class="badge badge-amber">Expired</span>
+            {% else %}
+            <span class="badge badge-muted">Pending</span>
+            {% endif %}
+            {% if obj.is_sla_breached %}
+            <span class="badge badge-red">SLA Breached</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:mql_handoff_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Handoffs</span>
+        </a>
+        <a href="{% url 'sales:mql_handoff_edit' obj.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Handoff</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'sales:mql_handoff_delete' obj.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete handoff {{ obj.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- SLA Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="gauge"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Lead Score at Handoff</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.lead_score|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Estimated Value</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.estimated_value|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="timer"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Response Time</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if obj.response_hours is not None %}{{ obj.response_hours }}h{% else %}—{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if obj.is_sla_breached %}red{% else %}green{% endif %}">
+            <i data-lucide="alarm-clock"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">SLA Compliance</div>
+            <div class="text-2xl font-bold {% if obj.is_sla_breached %}text-red-600{% else %}text-slate-900{% endif %} mt-1">
+                {% if obj.is_sla_breached %}Breached{% else %}On Time{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Details -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Lead, Account &amp; Source</h2>
+        </div>
+        <div class="card-body">
+            <dl class="divide-y divide-slate-100 text-sm">
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Handoff ID</dt>
+                    <dd class="text-slate-900 font-mono">{{ obj.number }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Lead</dt>
+                    <dd class="text-slate-900 font-semibold">
+                        {% if obj.lead %}
+                        {{ obj.lead.name }}
+                        <span class="font-mono text-xs text-slate-500">{{ obj.lead.number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">Not linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Target Account</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.account %}
+                        {{ obj.account.name }}
+                        {% else %}
+                        <span class="text-slate-400">Not linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Source</dt>
+                    <dd class="text-slate-900">{{ obj.get_source_kind_display }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Originating Campaign</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.campaign %}
+                        {{ obj.campaign.name }}
+                        <span class="font-mono text-xs text-slate-500">{{ obj.campaign.number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">No campaign</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Marketing Owner</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Assigned Sales Rep</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.assigned_to %}{{ obj.assigned_to.get_full_name|default:obj.assigned_to.username }}{% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Resulting Opportunity</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.opportunity %}
+                        {{ obj.opportunity.name }}
+                        <span class="font-mono text-xs text-slate-500">{{ obj.opportunity.number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">Not linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">SLA &amp; Sales Decision</h2>
+        </div>
+        <div class="card-body">
+            <dl class="divide-y divide-slate-100 text-sm">
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Handed Off At</dt>
+                    <dd class="text-slate-900">{{ obj.handoff_at|date:"M d, Y H:i" }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">SLA Deadline</dt>
+                    <dd class="text-slate-900 font-bold">{{ obj.sla_due_at|date:"M d, Y H:i" }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Responded At</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.responded_at %}{{ obj.responded_at|date:"M d, Y H:i" }}{% else %}— not yet answered{% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Acceptance Reason</dt>
+                    <dd class="text-slate-900">{{ obj.acceptance_reason|default:"—" }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Rejection Reason</dt>
+                    <dd class="text-slate-900">{{ obj.rejection_reason|default:"—" }}</dd>
+                </div>
+            </dl>
+
+            {% if obj.notes %}
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-2">Notes</div>
+                <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">
+                    {{ obj.notes }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
