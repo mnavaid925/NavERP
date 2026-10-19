@@ -330,6 +330,8 @@ from .MarketingAlignment import (
     marketing_event_edit,
     marketing_event_list,
     marketing_event_registration_create,
+    marketing_event_registration_delete,
+    marketing_event_registration_edit,
     marketing_event_registrations,
     mql_handoff_create,
     mql_handoff_delete,
