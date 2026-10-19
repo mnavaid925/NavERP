@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Renewal {{ obj.number }}{% else %}New Customer Renewal{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_renewal_pipeline' %}">Customer Success</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_renewal_list' %}">Renewals</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Renewal{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Customer Renewal {{ obj.number }}{% else %}New Customer Renewal{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:customer_renewal_detail' obj.pk %}{% else %}{% url 'sales:customer_renewal_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Account & Primary Assessment -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Renewal Identity & Account Alignment</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.renewal_name.id_for_label }}">Renewal Name <span class="text-red-500">*</span></label>
+                {{ form.renewal_name }}
+                {% if form.renewal_name.errors %}<div class="form-error">{{ form.renewal_name.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.contract_reference.id_for_label }}">Contract Reference / MSA</label>
+                {{ form.contract_reference }}
+                {% if form.contract_reference.errors %}<div class="form-error">{{ form.contract_reference.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.account.id_for_label }}">Customer Account <span class="text-red-500">*</span></label>
+                {{ form.account }}
+                {% if form.account.errors %}<div class="form-error">{{ form.account.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.owner.id_for_label }}">Renewal Owner / CSM <span class="text-red-500">*</span></label>
+                {{ form.owner }}
+                {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.original_order.id_for_label }}">Original Order (SCM)</label>
+                {{ form.original_order }}
+                {% if form.original_order.errors %}<div class="form-error">{{ form.original_order.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Commercial Values & Currency -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Commercial ARR & Financial Terms</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.current_arr.id_for_label }}">Current ARR ($) <span class="text-red-500">*</span></label>
+                {{ form.current_arr }}
+                {% if form.current_arr.errors %}<div class="form-error">{{ form.current_arr.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.projected_renewal_arr.id_for_label }}">Projected Renewal ARR ($) <span class="text-red-500">*</span></label>
+                {{ form.projected_renewal_arr }}
+                {% if form.projected_renewal_arr.errors %}<div class="form-error">{{ form.projected_renewal_arr.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.expansion_amount.id_for_label }}">Expansion Upsell ($)</label>
+                {{ form.expansion_amount }}
+                {% if form.expansion_amount.errors %}<div class="form-error">{{ form.expansion_amount.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.currency.id_for_label }}">Currency <span class="text-red-500">*</span></label>
+                {{ form.currency }}
+                {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Dates, Pipeline Stage & Churn Risk -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Pipeline Stage, Risk & Key Dates</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.renewal_date.id_for_label }}">Contract Expiration Date <span class="text-red-500">*</span></label>
+                {{ form.renewal_date }}
+                {% if form.renewal_date.errors %}<div class="form-error">{{ form.renewal_date.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.target_close_date.id_for_label }}">Target Signature Date <span class="text-red-500">*</span></label>
+                {{ form.target_close_date }}
+                {% if form.target_close_date.errors %}<div class="form-error">{{ form.target_close_date.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.stage.id_for_label }}">Pipeline Stage <span class="text-red-500">*</span></label>
+                {{ form.stage }}
+                {% if form.stage.errors %}<div class="form-error">{{ form.stage.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.churn_risk_flag.id_for_label }}">Churn Risk Rating <span class="text-red-500">*</span></label>
+                {{ form.churn_risk_flag }}
+                {% if form.churn_risk_flag.errors %}<div class="form-error">{{ form.churn_risk_flag.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.renewal_probability_pct.id_for_label }}">Renewal Probability (%)</label>
+                {{ form.renewal_probability_pct }}
+                {% if form.renewal_probability_pct.errors %}<div class="form-error">{{ form.renewal_probability_pct.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.notice_period_days.id_for_label }}">Cancellation Notice (Days)</label>
+                {{ form.notice_period_days }}
+                {% if form.notice_period_days.errors %}<div class="form-error">{{ form.notice_period_days.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group flex items-center pt-6">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.auto_renewal }}
+                    <span class="text-sm font-semibold text-slate-800">Evergreen Auto-Renewal Clause</span>
+                </label>
+                {% if form.auto_renewal.errors %}<div class="form-error">{{ form.auto_renewal.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.expansion_opportunity.id_for_label }}">Expansion Deal (CRM)</label>
+                {{ form.expansion_opportunity }}
+                {% if form.expansion_opportunity.errors %}<div class="form-error">{{ form.expansion_opportunity.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Commercial Discussion Notes</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:customer_renewal_detail' obj.pk %}{% else %}{% url 'sales:customer_renewal_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Renewal{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
