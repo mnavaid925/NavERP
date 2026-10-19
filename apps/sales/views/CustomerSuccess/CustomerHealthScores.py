@@ -204,6 +204,7 @@ def customer_health_console(request):
     )
 
     context = {
+        "health_scores": all_scores[:25],
         "all_scores": all_scores[:25],
         "healthy_scores": healthy_scores,
         "attention_scores": attention_scores,
