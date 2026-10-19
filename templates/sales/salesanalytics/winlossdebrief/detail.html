@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block title %}Debrief {{ obj.number }} — Win/Loss Debriefs — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <a href="{% url 'sales:win_loss_debrief_list' %}">Win/Loss Debriefs</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ obj.number }} · {{ obj.opportunity.name }}</h1>
+            <span class="badge {{ obj.status_badge_class }}">{{ obj.get_status_display }}</span>
+            <span class="badge {{ obj.channel_badge_class }}">{{ obj.get_interview_channel_display }}</span>
+            <span class="badge {{ obj.feedback_badge_class }}">{{ obj.get_feedback_team_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:win_loss_debrief_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Debriefs</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Main content -->
+    <div class="lg:col-span-2 space-y-4">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Debrief Record</h2>
+            </div>
+            <div class="card-body">
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Debrief Number</dt>
+                        <dd class="text-slate-900 font-mono">{{ obj.number }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Opportunity</dt>
+                        <dd class="text-slate-900 font-medium">{{ obj.opportunity.name }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Account</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.account %}{{ obj.account.name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Outcome</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.outcome %}
+                            <span class="font-mono text-xs">{{ obj.outcome.number }}</span>
+                            {{ obj.outcome.get_result_display }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Primary Reason</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.primary_reason %}{{ obj.primary_reason.name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Interviewer</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.interviewer %}{{ obj.interviewer.get_full_name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Action Owner</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.action_owner %}{{ obj.action_owner.get_full_name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Communication Log</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.communication_log %}
+                            <span class="font-mono text-xs">{{ obj.communication_log.number }}</span>
+                            {{ obj.communication_log.get_channel_display }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Debriefed On</dt>
+                        <dd class="text-slate-900">{{ obj.debriefed_on|date:"F d, Y" }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Interview Channel</dt>
+                        <dd class="text-slate-900">
+                            <span class="badge {{ obj.channel_badge_class }}">{{ obj.get_interview_channel_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Feedback Team</dt>
+                        <dd class="text-slate-900">
+                            <span class="badge {{ obj.feedback_badge_class }}">{{ obj.get_feedback_team_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Status</dt>
+                        <dd class="text-slate-900">
+                            <span class="badge {{ obj.status_badge_class }}">{{ obj.get_status_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Actioned On</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.actioned_on %}{{ obj.actioned_on|date:"F d, Y" }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Decision Drivers</dt>
+                        <dd class="text-slate-900 font-semibold">{{ obj.driver_count }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Decision Drivers</h2>
+            </div>
+            <div class="card-body">
+                {% if obj.decision_drivers %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Driver</th>
+                                <th>Sentiment</th>
+                                <th>Weight</th>
+                                <th>Buyer Quote</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for driver in obj.decision_drivers %}
+                            <tr>
+                                <td class="font-medium text-slate-900">{{ driver.driver }}</td>
+                                <td>
+                                    {% if driver.sentiment == "positive" %}
+                                    <span class="badge badge-green">Positive</span>
+                                    {% else %}
+                                    <span class="badge badge-red">Negative</span>
+                                    {% endif %}
+                                </td>
+                                <td class="font-semibold">{{ driver.weight }}</td>
+                                <td class="text-slate-600">
+                                    {% if driver.quote %}{{ driver.quote }}{% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-xs text-slate-400 italic">No decision drivers were recorded for this debrief.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Qualitative Feedback</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Buyer Quote</div>
+                    {% if obj.buyer_quote %}
+                    <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">{{ obj.buyer_quote }}</div>
+                    {% else %}
+                    <div class="text-xs text-slate-400 italic">No buyer quote recorded.</div>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Counterfactual</div>
+                    {% if obj.counterfactual %}
+                    <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">{{ obj.counterfactual }}</div>
+                    {% else %}
+                    <div class="text-xs text-slate-400 italic">No counterfactual recorded.</div>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Action Items</div>
+                    {% if obj.action_items %}
+                    <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">{{ obj.action_items }}</div>
+                    {% else %}
+                    <div class="text-xs text-slate-400 italic">No action items recorded.</div>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Notes</div>
+                    {% if obj.notes %}
+                    <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">{{ obj.notes }}</div>
+                    {% else %}
+                    <div class="text-xs text-slate-400 italic">No notes recorded.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions sidebar -->
+    <div class="space-y-4">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Actions</h2>
+            </div>
+            <div class="card-body space-y-3">
+                {% comment %}
+                  A CLOSED debrief is the frozen record of a finished debrief cycle, so it
+                  offers neither Edit nor Delete. Every other status (draft, submitted,
+                  shared, actioned) keeps both actions available.
+                {% endcomment %}
+                {% if obj.status != "closed" %}
+                <a href="{% url 'sales:win_loss_debrief_edit' obj.pk %}" class="btn btn-primary w-full">
+                    <i data-lucide="pencil"></i>
+                    <span>Edit Debrief</span>
+                </a>
+                {% else %}
+                <div class="text-xs text-slate-500 italic">This debrief is closed and can no longer be edited.</div>
+                {% endif %}
+
+                {% if obj.status != "closed" %}
+                {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                <form method="post" action="{% url 'sales:win_loss_debrief_delete' obj.pk %}" onsubmit="return confirm('Are you sure you want to delete debrief {{ obj.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger w-full">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Debrief</span>
+                    </button>
+                </form>
+                {% endif %}
+                {% endif %}
+
+                <a href="{% url 'sales:win_loss_debrief_list' %}" class="btn btn-outline w-full">
+                    <i data-lucide="arrow-left"></i>
+                    <span>Back to List</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Feedback Routing</h2>
+            </div>
+            <div class="card-body">
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Responsible Team</div>
+                <div class="mb-3">
+                    <span class="badge {{ obj.feedback_badge_class }}">{{ obj.get_feedback_team_display }}</span>
+                </div>
+
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Action Owner</div>
+                <div class="text-sm text-slate-900">
+                    {% if obj.action_owner %}{{ obj.action_owner.get_full_name }}{% else %}—{% endif %}
+                </div>
+
+                <div class="text-xs font-semibold uppercase text-slate-500 mt-3 mb-1">Open Feedback</div>
+                <div class="text-sm text-slate-900">
+                    {% if obj.is_open %}Yes — this debrief is still open.{% else %}No — this debrief is {{ obj.get_status_display|lower }}.{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
