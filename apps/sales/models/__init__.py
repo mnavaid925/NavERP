@@ -75,6 +75,28 @@ from .CustomerSuccess.CustomerHealthScores import CustomerHealthScore
 from .CustomerSuccess.CustomerRenewals import CustomerRenewal
 from .CustomerSuccess.CustomerOnboardings import CustomerOnboarding
 from .CustomerSuccess.CustomerBusinessReviews import CustomerBusinessReview
+from .MarketingAlignment import (
+    ATTRIBUTION_MODEL_CHOICES,
+    ATTRIBUTION_STATUS_CHOICES,
+    ENGAGEMENT_CHANNEL_CHOICES,
+    ENGAGEMENT_TYPE_CHOICES,
+    EVENT_STATUS_CHOICES,
+    EVENT_TYPE_CHOICES,
+    FOLLOWUP_STATUS_CHOICES,
+    HANDOFF_SOURCE_CHOICES,
+    HANDOFF_STATUS_CHOICES,
+    REGISTRATION_SOURCE_CHOICES,
+    REGISTRATION_STATUS_CHOICES,
+    TOUCH_CHANNEL_CHOICES,
+    TOUCH_POSITION_CHOICES,
+    TOUCH_TYPE_CHOICES,
+    AttributionTouchpoint,
+    CampaignAttribution,
+    ContentEngagement,
+    EventRegistration,
+    MarketingEvent,
+    MqlHandoff,
+)
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
@@ -104,6 +126,18 @@ __all__ = [
     "CommissionPlan", "CommissionEarning", "CommissionStatement", "CommissionAdjustment",
     # 8.11 Customer Success & Account Management
     "CustomerHealthScore", "CustomerRenewal", "CustomerOnboarding", "CustomerBusinessReview",
+    # 8.13 Marketing Alignment & Attribution. These EXTEND the CRM campaign / lead / opportunity
+    # masters and the Sales 8.9 content master by FK -- none of them is a second campaign,
+    # lead, opportunity, account or content master. See the package docstring for L36/L37.
+    "AttributionTouchpoint", "CampaignAttribution", "MqlHandoff",
+    "ContentEngagement", "MarketingEvent", "EventRegistration",
+    "TOUCH_CHANNEL_CHOICES", "TOUCH_TYPE_CHOICES", "TOUCH_POSITION_CHOICES",
+    "ATTRIBUTION_MODEL_CHOICES", "ATTRIBUTION_STATUS_CHOICES",
+    "HANDOFF_STATUS_CHOICES", "HANDOFF_SOURCE_CHOICES",
+    "ENGAGEMENT_TYPE_CHOICES", "ENGAGEMENT_CHANNEL_CHOICES",
+    "EVENT_TYPE_CHOICES", "EVENT_STATUS_CHOICES",
+    "REGISTRATION_STATUS_CHOICES", "REGISTRATION_SOURCE_CHOICES",
+    "FOLLOWUP_STATUS_CHOICES",
 ]
 
 
