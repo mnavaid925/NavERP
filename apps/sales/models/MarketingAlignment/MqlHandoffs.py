@@ -207,13 +207,15 @@ class MqlHandoff(TenantNumbered):
         super().clean()
         tenant_id = self.tenant_id
         if tenant_id:
+            # `currency` is deliberately absent: `accounting.Currency` is a GLOBAL master with no
+            # tenant FK, so `getattr(currency, "tenant_id", None)` is None and every currency would
+            # be rejected as cross-tenant (L29 -- Currency is never tenant-checked).
             for field_name, label in (
                 ("campaign", "Campaign"),
                 ("account", "Account"),
                 ("owner", "Owner"),
                 ("assigned_to", "Assigned rep"),
                 ("opportunity", "Opportunity"),
-                ("currency", "Currency"),
             ):
                 related = getattr(self, field_name, None)
                 if related is None:
