@@ -1514,3 +1514,36 @@ database to prove it. See `.claude/tasks/contract-sales-8.8.md` for the frozen b
 `.claude/skills/sales/SKILL.md` for the as-built guide.
 
 ---
+
+### Module 8 8.9 — Sales Enablement (built)
+
+8.9 adds sales collateral lifecycle management, methodology-driven playbooks, rep readiness and product certification tracking, conversation coaching scorecards, and competitive intelligence over the sales and CRM spine:
+
+- **Ownership boundaries (L29/L36/L37)**:
+  - Reuses 8.2 `CompetitorProfile` (`CMP-`) by foreign key and links to `OpportunityOutcome` for win/loss records. Zero duplicate competitor masters.
+  - Reuses CRM 1.5 `CommunicationLog` (`COM-`) and Sales 8.8 `ActivityLog` (`SAL-`) as evaluation anchors in `CoachingScorecard`.
+  - Reuses `core.Document` for file binaries; `EnablementContent` stores versioning, metadata, taxonomy, and stage mapping.
+  - Reuses 8.2 `Pipeline` and `PipelineStage` in `SalesPlaybook` and `EnablementContent`.
+  - Reuses HRM 3.22 `TrainingCourse` (`hrm.TrainingCourse`) as an optional syllabus bridge for accreditations.
+  - Reuses `accounts.User` for coaches, coachees, certifiers, students, and authors.
+
+**What shipped**
+
+| Model | Prefix | Carries |
+|---|---|---|
+| `EnablementContent` | `ECN-` | Collateral repository asset (battlecards, pitch decks, case studies, product sheets, demo scripts) with versioning, persona tags, view/share counters, and client-facing flags |
+| `SalesPlaybook` | `SPB-` | Step-by-step selling guidance by motion (new logo, expansion, renewal, displacement, partner) with stage guidance, qualification criteria, and objection handling scripts |
+| `SalesCertification` | `SCTF-` | Curriculum enrollment, test scores, passing validation, auto-stamped certified dates, expiration tracking, and optional LMS course linkage |
+| `CoachingScorecard` | `CSC-` | Conversation intelligence evaluation with 1-5 rubric scoring across 4 dimensions, automated composite score calculation (0-100%), talk/listen ratio, sentiment, and coachee acknowledgment workflow |
+
+**Five derived boards**:
+1. **Enablement Content Hub** (`sales:enablement_content_hub`): Centralized collateral library with search, taxonomy badges, persona filters, and utilization metrics.
+2. **Sales Playbook Board** (`sales:sales_playbook_board`): Motion-grouped playbook catalog with stage navigation.
+3. **Sales Readiness Board** (`sales:sales_readiness_board`): Representative accreditation matrix, curriculum completion rate, and upcoming expiration tracking.
+4. **Coaching Workbench** (`sales:sales_coaching_workbench`): Call review queue, average rubric performance, talk ratio benchmarks, and evaluation scorecards.
+5. **Competitive Intelligence Library** (`sales:sales_competitive_intelligence_library`): Competitor profiles, SWOT positioning, battlecards, and win/loss records.
+
+`apps/sales/migrations/0017_salesenablement.py` and `0018_coachingscorecard_sales_csc_tenant_eval_idx_and_more.py` provide the 8.9 schema and performance indexes. `seed_sales` is fully idempotent, seeding complete collateral, playbooks, certifications, and scorecards for ACME and GLOBEX tenants. 142 automated tests pass green across `apps/sales/tests/test_salesenablement_*.py`. See `.claude/tasks/contract-sales-8.9.md` for the build contract, `.claude/tasks/review-sales-8.9.md` for the six-pass review record, and `.claude/skills/sales/SKILL.md` for the living module guide.
+
+---
+
