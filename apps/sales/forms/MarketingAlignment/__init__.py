@@ -2,7 +2,11 @@
 from apps.sales.forms.MarketingAlignment.AttributionTouchpoints import (
     AttributionTouchpointForm,
 )
+from apps.sales.forms.MarketingAlignment.CampaignAttributions import (
+    CampaignAttributionForm,
+)
 
 __all__ = [
     "AttributionTouchpointForm",
+    "CampaignAttributionForm",
 ]
