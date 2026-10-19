@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Onboarding & Implementation Playbook Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Customer Success</span>
+            <span>/</span>
+            <span>Onboarding Hub</span>
+        </div>
+        <h1 class="page-title">Onboarding & Implementation Playbook Hub</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_onboarding_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>All Projects</span>
+        </a>
+        <a href="{% url 'sales:customer_onboarding_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Launch Implementation</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="play-circle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Projects</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.active_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Blocked / Stalled</div>
+            <div class="text-2xl font-bold text-red-600 mt-1">{{ stats.blocked_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="zap"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Average TTV (Go-Live)</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if stats.avg_ttv %}{{ stats.avg_ttv|floatformat:0 }} <span class="text-xs text-slate-400 font-normal">days</span>{% else %}N/A{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="percent"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Average Progress</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if stats.avg_progress %}{{ stats.avg_progress|floatformat:0 }}%{% else %}0%{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Completed Launches</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.completed_count|default:"0" }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Blocked Implementation Queue -->
+{% if blocked_onboardings %}
+<div class="card mb-6 border-l-4 border-red-500">
+    <div class="card-header flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <i data-lucide="alert-octagon" class="w-5 h-5 text-red-600"></i>
+            <h2 class="card-title text-red-900">Escalation Queue: Blocked & At-Risk Launches</h2>
+        </div>
+        <span class="badge badge-red">{{ blocked_onboardings|length }} Projects Blocked</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Account</th>
+                    <th>Stage</th>
+                    <th>Status</th>
+                    <th>Identified Roadblocks & Impediments</th>
+                    <th>Lead CSM</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ob in blocked_onboardings %}
+                <tr class="bg-red-50/20">
+                    <td class="font-semibold text-slate-900 font-mono">
+                        <a href="{% url 'sales:customer_onboarding_detail' ob.pk %}" class="text-blue-600 hover:underline">
+                            {{ ob.number }}
+                        </a>
+                    </td>
+                    <td class="font-medium text-slate-900">{{ ob.account.name }}</td>
+                    <td><span class="badge {{ ob.stage_badge_class }}">{{ ob.get_stage_display }}</span></td>
+                    <td><span class="badge {{ ob.status_badge_class }}">{{ ob.get_status_display }}</span></td>
+                    <td class="text-xs text-red-700 font-medium max-w-sm truncate">
+                        {{ ob.blockers|default:"Unresolved roadblock pending resolution" }}
+                    </td>
+                    <td>{{ ob.lead_csm.get_full_name|default:ob.lead_csm.username }}</td>
+                    <td class="text-right">
+                        <a href="{% url 'sales:customer_onboarding_detail' ob.pk %}" class="btn btn-outline btn-sm">
+                            Resolve
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Active Implementations in Flight -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="card-title">Active Implementation Blueprints in Flight</h2>
+        <a href="{% url 'sales:customer_onboarding_list' %}" class="btn btn-outline btn-sm">View All Projects</a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Project Title</th>
+                    <th>Account</th>
+                    <th>Playbook Blueprint</th>
+                    <th>Stage</th>
+                    <th>Progress</th>
+                    <th>Target Go-Live</th>
+                    <th>Lead CSM</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ob in active_onboardings %}
+                <tr>
+                    <td class="font-medium text-slate-900">
+                        <a href="{% url 'sales:customer_onboarding_detail' ob.pk %}" class="text-blue-600 hover:underline">
+                            {{ ob.title }}
+                        </a>
+                    </td>
+                    <td class="text-slate-800">{{ ob.account.name }}</td>
+                    <td><span class="text-xs font-medium text-slate-700">{{ ob.get_playbook_template_display }}</span></td>
+                    <td><span class="badge {{ ob.stage_badge_class }}">{{ ob.get_stage_display }}</span></td>
+                    <td class="w-36">
+                        <div class="flex items-center gap-2">
+                            <div class="progress flex-1">
+                                <div class="progress-bar {% if ob.progress_pct >= 80 %}bg-emerald-500{% elif ob.progress_pct >= 40 %}bg-amber-500{% else %}bg-slate-500{% endif %}" style="width: {{ ob.progress_pct }}%;"></div>
+                            </div>
+                            <span class="text-xs font-semibold text-slate-700">{{ ob.progress_pct }}%</span>
+                        </div>
+                    </td>
+                    <td class="text-sm font-medium text-slate-900">{{ ob.target_go_live_date|date:"M d, Y" }}</td>
+                    <td class="text-sm text-slate-700">{{ ob.lead_csm.get_full_name|default:ob.lead_csm.username }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-6 text-xs text-slate-400 italic">No active implementation projects in flight.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
