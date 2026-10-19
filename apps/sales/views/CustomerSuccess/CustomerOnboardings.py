@@ -121,9 +121,10 @@ def customer_onboarding_create(request):
             obj = form.save()
             write_audit_log(
                 request.user,
-                "CREATE",
                 obj,
+                "create",
                 f"Launched customer onboarding {obj.number} for {obj.account.name} (Playbook: {obj.get_playbook_template_display()})",
+                tenant=request.tenant,
             )
             messages.success(request, f"Customer onboarding project {obj.number} created successfully.")
             return redirect("sales:customer_onboarding_detail", pk=obj.pk)
@@ -149,9 +150,10 @@ def customer_onboarding_edit(request, pk):
             obj = form.save()
             write_audit_log(
                 request.user,
-                "UPDATE",
                 obj,
+                "update",
                 f"Updated onboarding {obj.number} for {obj.account.name}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Customer onboarding {obj.number} updated successfully.")
             return redirect("sales:customer_onboarding_detail", pk=obj.pk)
@@ -174,13 +176,14 @@ def customer_onboarding_delete(request, pk):
     )
     title = obj.title
     number = obj.number
-    obj.delete()
     write_audit_log(
         request.user,
-        "DELETE",
         obj,
+        "delete",
         f"Deleted customer onboarding {number} ({title})",
+        tenant=request.tenant,
     )
+    obj.delete()
     messages.success(request, f"Customer onboarding {number} deleted.")
     return redirect("sales:customer_onboarding_list")
 
