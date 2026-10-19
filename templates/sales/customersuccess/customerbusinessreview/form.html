@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Review {{ obj.number }}{% else %}Schedule Business Review (QBR){% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_qbr_studio' %}">Customer Success</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_business_review_list' %}">Business Reviews</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Review{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Customer Business Review {{ obj.number }}{% else %}Schedule Business Review (QBR){% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:customer_business_review_detail' obj.pk %}{% else %}{% url 'sales:customer_business_review_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Identity & Scheduling -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Review Identity & Scheduling</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.title.id_for_label }}">Review Title <span class="text-red-500">*</span></label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.account.id_for_label }}">Customer Account <span class="text-red-500">*</span></label>
+                {{ form.account }}
+                {% if form.account.errors %}<div class="form-error">{{ form.account.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.lead_csm.id_for_label }}">Lead CSM <span class="text-red-500">*</span></label>
+                {{ form.lead_csm }}
+                {% if form.lead_csm.errors %}<div class="form-error">{{ form.lead_csm.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.account_plan.id_for_label }}">Strategic Account Plan</label>
+                {{ form.account_plan }}
+                {% if form.account_plan.errors %}<div class="form-error">{{ form.account_plan.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.review_period.id_for_label }}">Review Period <span class="text-red-500">*</span></label>
+                {{ form.review_period }}
+                {% if form.review_period.errors %}<div class="form-error">{{ form.review_period.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.review_year.id_for_label }}">Review Year <span class="text-red-500">*</span></label>
+                {{ form.review_year }}
+                {% if form.review_year.errors %}<div class="form-error">{{ form.review_year.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.scheduled_date.id_for_label }}">Scheduled Date <span class="text-red-500">*</span></label>
+                {{ form.scheduled_date }}
+                {% if form.scheduled_date.errors %}<div class="form-error">{{ form.scheduled_date.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.completed_date.id_for_label }}">Completed Date</label>
+                {{ form.completed_date }}
+                {% if form.completed_date.errors %}<div class="form-error">{{ form.completed_date.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Execution Status <span class="text-red-500">*</span></label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.template_type.id_for_label }}">Presentation Template <span class="text-red-500">*</span></label>
+                {{ form.template_type }}
+                {% if form.template_type.errors %}<div class="form-error">{{ form.template_type.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.health_score_at_review.id_for_label }}">Health Score at Review (0-100)</label>
+                {{ form.health_score_at_review }}
+                {% if form.health_score_at_review.errors %}<div class="form-error">{{ form.health_score_at_review.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group flex items-center pt-6">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.executive_sponsor_attended }}
+                    <span class="text-sm font-semibold text-slate-800">Client Executive Sponsor Attended</span>
+                </label>
+                {% if form.executive_sponsor_attended.errors %}<div class="form-error">{{ form.executive_sponsor_attended.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendees & Discussion -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Attendees, Achievements & Challenges</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.client_attendees.id_for_label }}">Client Attendees</label>
+                {{ form.client_attendees }}
+                {% if form.client_attendees.errors %}<div class="form-error">{{ form.client_attendees.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.internal_attendees.id_for_label }}">Internal Attendees</label>
+                {{ form.internal_attendees }}
+                {% if form.internal_attendees.errors %}<div class="form-error">{{ form.internal_attendees.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.key_achievements.id_for_label }}">Key Value Achievements & ROI Metrics</label>
+                {{ form.key_achievements }}
+                {% if form.key_achievements.errors %}<div class="form-error">{{ form.key_achievements.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.challenges_and_risks.id_for_label }}">Challenges, Roadblocks & Service Gaps</label>
+                {{ form.challenges_and_risks }}
+                {% if form.challenges_and_risks.errors %}<div class="form-error">{{ form.challenges_and_risks.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Advocacy & Case Study -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Customer Advocacy & Reference Programs</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group flex items-center pt-6">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_referenceable }}
+                    <span class="text-sm font-semibold text-emerald-800">Verified Referenceable Account</span>
+                </label>
+                {% if form.is_referenceable.errors %}<div class="form-error">{{ form.is_referenceable.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.case_study_status.id_for_label }}">Case Study Pipeline</label>
+                {{ form.case_study_status }}
+                {% if form.case_study_status.errors %}<div class="form-error">{{ form.case_study_status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-3">
+                <label class="form-label" for="{{ form.testimonial_quote.id_for_label }}">Approved Client Testimonial Quote</label>
+                {{ form.testimonial_quote }}
+                {% if form.testimonial_quote.errors %}<div class="form-error">{{ form.testimonial_quote.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Meeting Notes</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:customer_business_review_detail' obj.pk %}{% else %}{% url 'sales:customer_business_review_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Schedule Review{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
