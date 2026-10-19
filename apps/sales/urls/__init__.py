@@ -37,6 +37,8 @@ from .SalesActivityTaskManagement import urlpatterns as _sales_activity
 from .SalesEnablement import urlpatterns as _sales_enablement
 # 8.10 Incentive Compensation Management
 from .IncentiveCompensation import urlpatterns as _incentive_compensation
+# 8.11 Customer Success & Account Management
+from .CustomerSuccess import urlpatterns as _customer_success
 
 app_name = "sales"
 
@@ -69,6 +71,8 @@ urlpatterns = [
     *_sales_enablement,
     # 8.10 Incentive Compensation Management.
     *_incentive_compensation,
+    # 8.11 Customer Success & Account Management.
+    *_customer_success,
     *_pipelines,
     *_teams,
     *_competitors,
