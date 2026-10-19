@@ -24,7 +24,7 @@ from apps.sales.models.MarketingAlignment.MarketingEvents import (
     EventRegistration,
     MarketingEvent,
 )
-from apps.sales.views.MarketingAlignment._common import pk_from_param
+from apps.sales.views.MarketingAlignment._common import enum_filter, pk_from_param
 
 
 def _event_annotations(queryset):
@@ -68,13 +68,11 @@ def marketing_event_list(request):
             Q(name__icontains=q) | Q(venue__icontains=q) | Q(number__icontains=q)
         )
 
-    event_type = request.GET.get("event_type", "").strip()
-    if event_type:
-        qs = qs.filter(event_type=event_type)
+    event_type, qs = enum_filter(
+        qs, request, "event_type", "event_type", EVENT_TYPE_CHOICES
+    )
 
-    status = request.GET.get("status", "").strip()
-    if status:
-        qs = qs.filter(status=status)
+    status, qs = enum_filter(qs, request, "status", "status", EVENT_STATUS_CHOICES)
 
     owner_id = request.GET.get("owner", "").strip()
     owner_pk = pk_from_param(owner_id)
@@ -253,13 +251,13 @@ def marketing_event_registrations(request, pk):
         .order_by("-registered_at")
     )
 
-    registration_status = request.GET.get("registration_status", "").strip()
-    if registration_status:
-        qs = qs.filter(registration_status=registration_status)
+    registration_status, qs = enum_filter(
+        qs, request, "registration_status", "registration_status", REGISTRATION_STATUS_CHOICES
+    )
 
-    followup_status = request.GET.get("followup_status", "").strip()
-    if followup_status:
-        qs = qs.filter(followup_status=followup_status)
+    followup_status, qs = enum_filter(
+        qs, request, "followup_status", "followup_status", FOLLOWUP_STATUS_CHOICES
+    )
 
     paginator = Paginator(qs, 20)
     page_number = request.GET.get("page")
