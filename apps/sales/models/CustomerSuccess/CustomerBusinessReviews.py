@@ -148,6 +148,7 @@ class CustomerBusinessReview(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "account", "status"], name="sales_qbr_acct_stat_idx"),
+            models.Index(fields=["tenant", "status"], name="sales_qbr_ten_stat_idx"),
             models.Index(fields=["tenant", "scheduled_date"], name="sales_qbr_date_idx"),
             models.Index(fields=["tenant", "is_referenceable"], name="sales_qbr_ref_idx"),
         ]
