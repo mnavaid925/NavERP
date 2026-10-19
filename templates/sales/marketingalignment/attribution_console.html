@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+
+{% block title %}Marketing Alignment Console — Sales — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <span>Console</span>
+        </div>
+        <h1 class="page-title">Marketing Alignment &amp; Attribution</h1>
+        <p class="text-sm text-slate-500 mt-1">Campaign ROI, cost per lead, pipeline generated, MQL funnel and content/event performance — all derived, none stored.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:attribution_touchpoint_list' %}" class="btn btn-outline">
+            <i data-lucide="route"></i>
+            <span>Touchpoints</span>
+        </a>
+        <a href="{% url 'sales:campaign_attribution_list' %}" class="btn btn-outline">
+            <i data-lucide="split"></i>
+            <span>Attributions</span>
+        </a>
+        <a href="{% url 'sales:mql_handoff_list' %}" class="btn btn-outline">
+            <i data-lucide="send"></i>
+            <span>MQL Handoffs</span>
+        </a>
+        <a href="{% url 'sales:content_engagement_list' %}" class="btn btn-outline">
+            <i data-lucide="file-text"></i>
+            <span>Content</span>
+        </a>
+        <a href="{% url 'sales:marketing_event_list' %}" class="btn btn-primary">
+            <i data-lucide="calendar-days"></i>
+            <span>Events</span>
+        </a>
+    </div>
+</div>
+
+<!-- Attribution model selector -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="flex flex-wrap items-end gap-3">
+            <div>
+                <label class="form-label" for="model">Attribution Model</label>
+                <select name="model" id="model" class="form-select" aria-label="Attribution model">
+                    {% for val, label in model_choices %}
+                    <option value="{{ val }}" {% if active_model == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="refresh-cw"></i>
+                <span>Recalculate</span>
+            </button>
+            <div class="text-xs text-slate-500 pb-2">
+                Every figure below is recomputed under <span class="font-semibold text-slate-700">{{ active_model_label }}</span>.
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Headline stats -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="route"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Touches Tracked</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_touchpoints|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="circle-dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Campaign Spend</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_spend|default:"0.00"|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Attributed Revenue</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_attributed_revenue|default:"0.00"|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="gauge"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Blended ROI</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if stats.blended_roi_pct is not None %}{{ stats.blended_roi_pct|floatformat:1 }}%{% else %}—{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Campaign performance + channel rollup -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="card-title">Campaign Performance — ROI, Cost per Lead &amp; Pipeline</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Campaign</th>
+                        <th>Spend</th>
+                        <th>Attributed Revenue</th>
+                        <th>ROI</th>
+                        <th>Cost / Lead</th>
+                        <th>Pipeline</th>
+                        <th>Leads</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in campaign_rows %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ row.campaign.name }}</div>
+                            <div class="text-xs text-slate-500 font-mono">{{ row.campaign.number }} · {{ row.touchpoint_count }} touches</div>
+                        </td>
+                        <td>
+                            <span class="text-slate-700">${{ row.spend|floatformat:2 }}</span>
+                        </td>
+                        <td>
+                            <span class="font-semibold text-slate-900">${{ row.attributed_revenue|floatformat:2 }}</span>
+                        </td>
+                        <td>
+                            {% if row.roi_pct is not None %}
+                            <span class="badge {% if row.roi_pct >= 0 %}badge-green{% else %}badge-red{% endif %}">
+                                {{ row.roi_pct|floatformat:1 }}%
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400 text-sm">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.cost_per_lead is not None %}
+                            <span class="text-slate-700">${{ row.cost_per_lead|floatformat:2 }}</span>
+                            {% else %}
+                            <span class="text-slate-400 text-sm">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="text-slate-700">${{ row.pipeline_value|floatformat:2 }}</span>
+                        </td>
+                        <td>
+                            <span class="text-slate-700">{{ row.lead_count }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7">
+                            <div class="empty-state">
+                                <i data-lucide="megaphone" class="empty-state-icon"></i>
+                                <div class="empty-state-title">No campaign performance yet</div>
+                                <div class="empty-state-text">Record touchpoints against a campaign and assign conversion credit to see ROI, cost per lead and pipeline.</div>
+                                <a href="{% url 'sales:attribution_touchpoint_create' %}" class="btn btn-primary mt-4">
+                                    <i data-lucide="plus"></i>
+                                    <span>Record First Touchpoint</span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Channel Contribution</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Channel</th>
+                        <th>Touches</th>
+                        <th>Revenue</th>
+                        <th>ROI</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in channel_rows %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ row.label }}</div>
+                            <div class="text-xs text-slate-500">${{ row.cost|floatformat:2 }} cost</div>
+                        </td>
+                        <td>
+                            <span class="text-slate-700">{{ row.touchpoints }}</span>
+                        </td>
+                        <td>
+                            <span class="font-semibold text-slate-900">${{ row.attributed_revenue|floatformat:2 }}</span>
+                        </td>
+                        <td>
+                            {% if row.roi_pct is not None %}
+                            <span class="badge {% if row.roi_pct >= 0 %}badge-green{% else %}badge-red{% endif %}">
+                                {{ row.roi_pct|floatformat:1 }}%
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400 text-sm">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4">
+                            <div class="empty-state">
+                                <i data-lucide="radio" class="empty-state-icon"></i>
+                                <div class="empty-state-title">No channel data</div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- MQL funnel + content + events -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">MQL-to-SQL Funnel</h2>
+        </div>
+        <div class="card-body">
+            <dl class="divide-y divide-slate-100 text-sm">
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Total Handoffs</dt>
+                    <dd class="text-slate-900 font-bold">{{ mql_funnel.total }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Pending</dt>
+                    <dd class="text-slate-900">{{ mql_funnel.pending }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Accepted</dt>
+                    <dd class="text-slate-900 text-emerald-600 font-semibold">{{ mql_funnel.accepted }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Rejected</dt>
+                    <dd class="text-slate-900 text-red-600 font-semibold">{{ mql_funnel.rejected }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Expired (SLA)</dt>
+                    <dd class="text-slate-900">{{ mql_funnel.expired }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Converted</dt>
+                    <dd class="text-slate-900">{{ mql_funnel.converted }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Acceptance Rate</dt>
+                    <dd class="text-slate-900 font-bold">
+                        {% if mql_funnel.acceptance_rate_pct is not None %}{{ mql_funnel.acceptance_rate_pct }}%{% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">SLA Compliance</dt>
+                    <dd class="text-slate-900 font-bold">
+                        {% if mql_funnel.sla_compliance_pct is not None %}{{ mql_funnel.sla_compliance_pct }}%{% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Avg Response Time</dt>
+                    <dd class="text-slate-900">
+                        {% if mql_funnel.avg_response_hours is not None %}{{ mql_funnel.avg_response_hours }}h{% else %}—{% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Top Content by Revenue</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Content</th>
+                        <th>Engagements</th>
+                        <th>Score</th>
+                        <th>Revenue</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in content_rows %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ row.content }}</div>
+                        </td>
+                        <td>
+                            <span class="text-slate-700">{{ row.engagements }}</span>
+                        </td>
+                        <td>
+                            <span class="text-slate-700">{{ row.avg_score }}</span>
+                        </td>
+                        <td>
+                            <span class="font-semibold text-slate-900">${{ row.revenue_attributed|floatformat:2 }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4">
+                            <div class="empty-state">
+                                <i data-lucide="file-text" class="empty-state-icon"></i>
+                                <div class="empty-state-title">No content engagement yet</div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Event Attendance &amp; Yield</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Event</th>
+                        <th>Regs</th>
+                        <th>Attended</th>
+                        <th>Show-Up</th>
+                        <th>Rev / Registrant</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in event_rows %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ row.event }}</div>
+                        </td>
+                        <td>
+                            <span class="text-slate-700">{{ row.registrations }}</span>
+                        </td>
+                        <td>
+                            <span class="text-slate-700">{{ row.attended }}</span>
+                        </td>
+                        <td>
+                            {% if row.show_up_pct is not None %}
+                            <span class="badge {% if row.show_up_pct >= 50 %}badge-green{% else %}badge-amber{% endif %}">
+                                {{ row.show_up_pct }}%
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400 text-sm">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.revenue_per_registrant is not None %}
+                            <span class="text-slate-700">${{ row.revenue_per_registrant|floatformat:2 }}</span>
+                            {% else %}
+                            <span class="text-slate-400 text-sm">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5">
+                            <div class="empty-state">
+                                <i data-lucide="calendar-days" class="empty-state-icon"></i>
+                                <div class="empty-state-title">No event registrations yet</div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
