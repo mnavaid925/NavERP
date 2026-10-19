@@ -728,17 +728,17 @@ Every view is `@login_required`, tenant-scoped (`filter(tenant=request.tenant)`)
 
 ### 8.9-9 — Backend Layout & Re-Exports
 
-- [ ] Create `apps/sales/models/SalesEnablement/__init__.py` (re-exports `EnablementContent`, `SalesPlaybook`, `SalesCertification`, `CoachingScorecard`, plus choices & helpers) + `EnablementContents.py`, `SalesPlaybooks.py`, `SalesCertifications.py`, `CoachingScorecards.py`.
-- [ ] Create `apps/sales/forms/SalesEnablement/__init__.py` + 4 form files.
-- [ ] Create `apps/sales/views/SalesEnablement/__init__.py` + 4 entity view files + `EnablementBoards.py`.
-- [ ] Create `apps/sales/urls/SalesEnablement/__init__.py` + 4 entity URL files + `EnablementBoards.py`.
-- [ ] Update `apps/sales/models/__init__.py`: import and re-export the 4 models, choices, and add to `__all__`.
-- [ ] Update `apps/sales/forms/__init__.py`: import and re-export the 4 forms.
-- [ ] Update `apps/sales/views/__init__.py`: import and re-export the views, update `__all__` prefix tuple with `"enablement_"`, `"sales_playbook_"`, `"sales_certification_"`, `"coaching_scorecard_"`.
-- [ ] Update `apps/sales/urls/__init__.py`: import `urlpatterns as _sales_enablement` from `.SalesEnablement` and concatenate `*_sales_enablement` into `urlpatterns`.
-- [ ] Update `apps/sales/admin.py`: register `EnablementContent`, `SalesPlaybook`, `SalesCertification`, `CoachingScorecard` with proper `list_display`, `list_filter`, `search_fields`, `readonly_fields`.
-- [ ] Incremental migration `0017`: `python manage.py makemigrations sales` → claims `0017`.
-- [ ] Seeder: extend `apps/sales/management/commands/seed_sales.py`:
+- [x] Create `apps/sales/models/SalesEnablement/__init__.py` (re-exports `EnablementContent`, `SalesPlaybook`, `SalesCertification`, `CoachingScorecard`, plus choices & helpers) + `EnablementContents.py`, `SalesPlaybooks.py`, `SalesCertifications.py`, `CoachingScorecards.py`.
+- [x] Create `apps/sales/forms/SalesEnablement/__init__.py` + 4 form files.
+- [x] Create `apps/sales/views/SalesEnablement/__init__.py` + 4 entity view files + `EnablementBoards.py`.
+- [x] Create `apps/sales/urls/SalesEnablement/__init__.py` + 4 entity URL files + `EnablementBoards.py`.
+- [x] Update `apps/sales/models/__init__.py`: import and re-export the 4 models, choices, and add to `__all__`.
+- [x] Update `apps/sales/forms/__init__.py`: import and re-export the 4 forms.
+- [x] Update `apps/sales/views/__init__.py`: import and re-export the views, update `__all__` prefix tuple with `"enablement_"`, `"sales_playbook_"`, `"sales_certification_"`, `"coaching_scorecard_"`.
+- [x] Update `apps/sales/urls/__init__.py`: import `urlpatterns as _sales_enablement` from `.SalesEnablement` and concatenate `*_sales_enablement` into `urlpatterns`.
+- [x] Update `apps/sales/admin.py`: register `EnablementContent`, `SalesPlaybook`, `SalesCertification`, `CoachingScorecard` with proper `list_display`, `list_filter`, `search_fields`, `readonly_fields`.
+- [x] Incremental migration `0017`: `python manage.py makemigrations sales` → claims `0017` + `0018` for performance B-tree indexes.
+- [x] Seeder: extend `apps/sales/management/commands/seed_sales.py`:
   * Add `_seed_sales_enablement(tenant, owner)` called from `handle()`.
   * Create idempotent sample records:
     - 4 `EnablementContent` (battle card for top competitor from 8.2 `CompetitorProfile`, client-facing pitch deck, case study, internal objection script).
@@ -750,20 +750,20 @@ Every view is `@login_required`, tenant-scoped (`filter(tenant=request.tenant)`)
 ### 8.9-10 — Templates Layout (`templates/sales/salesenablement/`)
 
 Lowercase folder names, bare file names:
-- [ ] `templates/sales/salesenablement/enablementcontent/{list,detail,form}.html`
-- [ ] `templates/sales/salesenablement/salesplaybook/{list,detail,form}.html`
-- [ ] `templates/sales/salesenablement/salescertification/{list,detail,form}.html`
-- [ ] `templates/sales/salesenablement/coachingscorecard/{list,detail,form}.html`
-- [ ] `templates/sales/salesenablement/boards/content_hub.html`
-- [ ] `templates/sales/salesenablement/boards/playbook_board.html`
-- [ ] `templates/sales/salesenablement/boards/readiness_board.html`
-- [ ] `templates/sales/salesenablement/boards/coaching_workbench.html`
-- [ ] `templates/sales/salesenablement/boards/competitive_intelligence_library.html`
+- [x] `templates/sales/salesenablement/enablementcontent/{list,detail,form}.html`
+- [x] `templates/sales/salesenablement/salesplaybook/{list,detail,form}.html`
+- [x] `templates/sales/salesenablement/salescertification/{list,detail,form}.html`
+- [x] `templates/sales/salesenablement/coachingscorecard/{list,detail,form}.html`
+- [x] `templates/sales/salesenablement/boards/content_hub.html`
+- [x] `templates/sales/salesenablement/boards/playbook_board.html`
+- [x] `templates/sales/salesenablement/boards/readiness_board.html`
+- [x] `templates/sales/salesenablement/boards/coaching_workbench.html`
+- [x] `templates/sales/salesenablement/boards/competitive_intelligence_library.html`
 All lists feature filter bar reflecting `request.GET`, Actions column with view/edit/delete (POST+confirm+csrf), pagination with `has_previous`/`has_next` guards (L9), empty states, and standard badge classes (`.badge-green`, `.badge-amber`, `.badge-red`, `.badge-info`, `.badge-muted`, `.badge-slate` — no `-success/-danger`).
 
 ### 8.9-11 — Wire-Up (`apps/core/navigation.py`)
 
-- [ ] Add `LIVE_LINKS["8.9"]` with the 5 exact NavERP.md feature bullet names:
+- [x] Add `LIVE_LINKS["8.9"]` with the 5 exact NavERP.md feature bullet names:
 ```python
     "8.9": {
         # OWNERSHIP RULINGS (L29/L36/L37):
@@ -786,39 +786,53 @@ All lists feature filter bar reflecting `request.GET`, Actions column with view/
 
 ### 8.9-12 — Verify
 
-- [ ] `python manage.py makemigrations sales` → generates `0017_...`
-- [ ] `python manage.py migrate` → applies cleanly.
-- [ ] `python manage.py seed_sales` × 2 → idempotent execution, zero crashes or duplicates.
-- [ ] `python manage.py check` → zero system check errors.
-- [ ] Smoke test script (`temp/smoke_sales_8_9.py`) executed as `admin_acme` / `password`:
+- [x] `python manage.py makemigrations sales` → generates `0017_salesenablement.py` and `0018_...`
+- [x] `python manage.py migrate` → applies cleanly.
+- [x] `python manage.py seed_sales` × 2 → idempotent execution, zero crashes or duplicates.
+- [x] `python manage.py check` → zero system check errors.
+- [x] Smoke test script executed as `admin_acme` / `password`:
   * Every new `sales:*` URL returns HTTP 200 (or expected 302 on POST/actions).
   * Assert content presence (no unrendered `{#` or `{% comment` template tags).
   * Page titles render and seeded records are present.
-  * Cross-tenant IDOR checks: attempting to read or mutate another tenant's record yields HTTP 404.
-- [ ] Sidebar verification: navigate to Sales > 8.9 Sales Enablement, confirm all 5 feature bullets show "Live" and open their respective boards/views.
+  * Cross-tenant IDOR checks: 18/18 attack vectors return strict HTTP 404.
+- [x] Sidebar verification: navigate to Sales > 8.9 Sales Enablement, confirm all 5 feature bullets show "Live" and open their respective boards/views.
 
 ### 8.9-13 — Close-Out
 
-- [ ] Run the 7 review passes in sequence:
-  1. `code-reviewer`
-  2. `explorer`
-  3. `frontend-reviewer`
-  4. `performance-reviewer`
-  5. `qa-smoke-tester`
-  6. `security-reviewer`
-  7. `test-writer` (4 test lanes in `apps/sales/tests/`: models, forms, views, security)
-- [ ] Update `.claude/skills/sales/SKILL.md` with 8.9 entities, rulings, and patterns.
-- [ ] Update `README.md` if applicable.
+- [x] Run the 6 review passes in sequence:
+  1. `code-reviewer` [x]
+  2. `explorer` [x]
+  3. `frontend-reviewer` [x]
+  4. `performance-reviewer` [x]
+  5. `qa-smoke-tester` [x]
+  6. `security-reviewer` [x]
+- [x] `code-fixer` agent resolved all 29 findings (`C1`–`C4`, `I1`–`I16`, `M1`–`M9`) with single-file commits.
+- [x] `test-writer` suite: 4 test lanes in `apps/sales/tests/` (142 tests passing green):
+  - `test_salesenablement_models.py` (21 passed)
+  - `test_salesenablement_forms.py` (28 passed)
+  - `test_salesenablement_views.py` (65 passed)
+  - `test_salesenablement_security.py` (28 passed)
+- [x] Update `.claude/skills/sales/SKILL.md` with 8.9 entities, rulings, and patterns.
+- [x] Update `README.md` with 8.9 built section.
+- [x] Register gaps in `.agents/tasks/gaps-sales-8.9.md` (Core surface: Zero Gaps).
 
 ### 8.9-14 — Later passes / Deferred
 
-- Real-Time Telephony Recording & Web Meeting Bots (Zoom/Teams bots, live VoIP media streaming) — external telephony integration.
-- Automated AI Speech-to-Text Transcription Engine (Whisper/Deepgram background transcription pipeline) — external worker integration.
-- Automated Web & Market Signal Scraper (competitor website changes, price scraping) — external crawler worker.
+- Real-Time Telephony Recording & Web Meeting Bots (Zoom/Teams bots, live VoIP media streaming) — external telephony integration (`GAP-sales-8.9-01`).
+- Automated AI Speech-to-Text Transcription Engine (Whisper/Deepgram background transcription pipeline) — external worker integration (`GAP-sales-8.9-02`).
+- Automated Web & Market Signal Scraper (competitor website changes, price scraping) — external crawler worker (`GAP-sales-8.9-03`).
 - AI Virtual Pitch Practice & Roleplay Simulator — future interactive AI sales readiness pass.
 
-### 8.9-15 — Review notes
-(to be filled in during Phase 7 close-out)
+### 8.9-15 — Review notes & Close-Out Summary
+
+- **Completed**: 2026-10-19.
+- **As-Built Core Models**: `EnablementContent` (`ECN-`), `SalesPlaybook` (`SPB-`), `SalesCertification` (`SCTF-`), `CoachingScorecard` (`CSC-`).
+- **Boards Shipped**: Content Hub, Playbook Board, Readiness Matrix, Coaching Workbench, CI Library.
+- **Migrations**: `0017_salesenablement.py` and `0018_coachingscorecard_sales_csc_tenant_eval_idx_and_more.py`.
+- **Seeder**: Idempotent `_seed_sales_enablement()` seeds ACME and GLOBEX tenant workflows.
+- **Test Results**: 142 passed, 0 failed, 0 warnings (100% green suite).
+- **Review Findings**: 29/29 findings resolved and verified (`C1`–`C4`, `I1`–`I16`, `M1`–`M9`) documented in `.claude/tasks/review-sales-8.9.md`.
+- **Gaps**: None on core contract surface. Deferred items documented in [.agents/tasks/gaps-sales-8.9.md](file:///c:/xampp/htdocs/NavERP/.agents/tasks/gaps-sales-8.9.md).
 
 ---
 
