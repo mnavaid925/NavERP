@@ -116,7 +116,7 @@
                     <td class="text-xs text-red-700 font-medium max-w-sm truncate">
                         {{ ob.blockers|default:"Unresolved roadblock pending resolution" }}
                     </td>
-                    <td>{{ ob.lead_csm.get_full_name|default:ob.lead_csm.username }}</td>
+                    <td>{% if ob.lead_csm %}{{ ob.lead_csm.get_full_name|default:ob.lead_csm.username }}{% else %}—{% endif %}</td>
                     <td class="text-right">
                         <a href="{% url 'sales:customer_onboarding_detail' ob.pk %}" class="btn btn-outline btn-sm">
                             Resolve
@@ -169,7 +169,7 @@
                         </div>
                     </td>
                     <td class="text-sm font-medium text-slate-900">{{ ob.target_go_live_date|date:"M d, Y" }}</td>
-                    <td class="text-sm text-slate-700">{{ ob.lead_csm.get_full_name|default:ob.lead_csm.username }}</td>
+                    <td class="text-sm text-slate-700">{% if ob.lead_csm %}{{ ob.lead_csm.get_full_name|default:ob.lead_csm.username }}{% else %}—{% endif %}</td>
                 </tr>
                 {% empty %}
                 <tr>
