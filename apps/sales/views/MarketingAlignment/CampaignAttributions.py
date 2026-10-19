@@ -17,7 +17,11 @@ from apps.sales.models.MarketingAlignment.CampaignAttributions import (
     ATTRIBUTION_STATUS_CHOICES,
     CampaignAttribution,
 )
-from apps.sales.views.MarketingAlignment._common import enum_filter, pk_from_param
+from apps.sales.views.MarketingAlignment._common import (
+    enum_filter,
+    pk_from_param,
+    single_currency,
+)
 
 
 @login_required
@@ -83,6 +87,9 @@ def campaign_attribution_list(request):
             "campaign": campaign_id,
         },
         "stats": stats,
+        # A credit row carries no currency of its own -- it inherits the touchpoint's. The money
+        # totals are only labelled with a symbol when every listed credit shares ONE currency.
+        "currency": single_currency(qs, "touchpoint__currency"),
     }
     return render(
         request,
@@ -106,7 +113,7 @@ def campaign_attribution_detail(request, pk):
     return render(
         request,
         "sales/marketingalignment/campaignattribution/detail.html",
-        {"obj": obj, "attribution": obj},
+        {"obj": obj},
     )
 
 
