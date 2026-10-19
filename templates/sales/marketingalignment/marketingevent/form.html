@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Event {{ obj.number }}{% else %}New Marketing Event{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <a href="{% url 'sales:marketing_event_list' %}">Events</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Event{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Marketing Event {{ obj.number }}{% else %}New Marketing Event{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:marketing_event_detail' obj.pk %}{% else %}{% url 'sales:marketing_event_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Identity -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Event Identity</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Event Name <span class="text-red-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.event_type.id_for_label }}">Event Type <span class="text-red-500">*</span></label>
+                {{ form.event_type }}
+                {% if form.event_type.errors %}<div class="form-error">{{ form.event_type.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Status <span class="text-red-500">*</span></label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.timezone_name.id_for_label }}">Timezone</label>
+                {{ form.timezone_name }}
+                {% if form.timezone_name.errors %}<div class="form-error">{{ form.timezone_name.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Schedule &amp; Location</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.start_at.id_for_label }}">Starts At <span class="text-red-500">*</span></label>
+                {{ form.start_at }}
+                {% if form.start_at.errors %}<div class="form-error">{{ form.start_at.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.end_at.id_for_label }}">Ends At</label>
+                {{ form.end_at }}
+                {% if form.end_at.errors %}<div class="form-error">{{ form.end_at.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.capacity.id_for_label }}">Capacity</label>
+                {{ form.capacity }}
+                {% if form.capacity.errors %}<div class="form-error">{{ form.capacity.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.venue.id_for_label }}">Venue</label>
+                {{ form.venue }}
+                {% if form.venue.errors %}<div class="form-error">{{ form.venue.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.virtual_url.id_for_label }}">Virtual URL</label>
+                {{ form.virtual_url }}
+                {% if form.virtual_url.errors %}<div class="form-error">{{ form.virtual_url.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Ownership & Budget -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Ownership, Budget &amp; Promotion</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.owner.id_for_label }}">Event Owner</label>
+                {{ form.owner }}
+                {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.campaign.id_for_label }}">Promoting Campaign</label>
+                {{ form.campaign }}
+                {% if form.campaign.errors %}<div class="form-error">{{ form.campaign.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.budget.id_for_label }}">Budget ($)</label>
+                {{ form.budget }}
+                {% if form.budget.errors %}<div class="form-error">{{ form.budget.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                {{ form.currency }}
+                {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Description -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Agenda &amp; Description</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:marketing_event_detail' obj.pk %}{% else %}{% url 'sales:marketing_event_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Event{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
