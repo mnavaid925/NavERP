@@ -11,4 +11,6 @@ urlpatterns = [
     path("marketing-alignment/events/<int:pk>/delete/", views.marketing_event_delete, name="marketing_event_delete"),
     path("marketing-alignment/events/<int:pk>/registrations/", views.marketing_event_registrations, name="marketing_event_registrations"),
     path("marketing-alignment/events/<int:pk>/registrations/create/", views.marketing_event_registration_create, name="marketing_event_registration_create"),
+    path("marketing-alignment/events/<int:pk>/registrations/<int:registration_pk>/edit/", views.marketing_event_registration_edit, name="marketing_event_registration_edit"),
+    path("marketing-alignment/events/<int:pk>/registrations/<int:registration_pk>/delete/", views.marketing_event_registration_delete, name="marketing_event_registration_delete"),
 ]
