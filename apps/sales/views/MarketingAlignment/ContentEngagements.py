@@ -19,6 +19,7 @@ from apps.sales.models.MarketingAlignment.ContentEngagements import (
     ContentEngagement,
 )
 from apps.sales.models.SalesEnablement.EnablementContents import EnablementContent
+from apps.sales.views.MarketingAlignment._common import pk_from_param
 
 
 @login_required
@@ -47,16 +48,19 @@ def content_engagement_list(request):
         qs = qs.filter(engagement_channel=engagement_channel)
 
     content_id = request.GET.get("content", "").strip()
-    if content_id and content_id.isdigit():
-        qs = qs.filter(content_id=int(content_id))
+    content_pk = pk_from_param(content_id)
+    if content_pk is not None:
+        qs = qs.filter(content_id=content_pk)
 
     account_id = request.GET.get("account", "").strip()
-    if account_id and account_id.isdigit():
-        qs = qs.filter(account_id=int(account_id))
+    account_pk = pk_from_param(account_id)
+    if account_pk is not None:
+        qs = qs.filter(account_id=account_pk)
 
     campaign_id = request.GET.get("campaign", "").strip()
-    if campaign_id and campaign_id.isdigit():
-        qs = qs.filter(campaign_id=int(campaign_id))
+    campaign_pk = pk_from_param(campaign_id)
+    if campaign_pk is not None:
+        qs = qs.filter(campaign_id=campaign_pk)
 
     stats = qs.aggregate(
         total_count=Count("id"),
