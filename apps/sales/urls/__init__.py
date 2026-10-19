@@ -39,6 +39,9 @@ from .SalesEnablement import urlpatterns as _sales_enablement
 from .IncentiveCompensation import urlpatterns as _incentive_compensation
 # 8.11 Customer Success & Account Management
 from .CustomerSuccess import urlpatterns as _customer_success
+# 8.13 Marketing Alignment & Attribution. Extends crm.Campaign / crm.Lead / crm.Opportunity and
+# sales.EnablementContent by FK; declares no second campaign, lead, opportunity or content master.
+from .MarketingAlignment import urlpatterns as _marketing_alignment
 
 app_name = "sales"
 
@@ -73,6 +76,8 @@ urlpatterns = [
     *_incentive_compensation,
     # 8.11 Customer Success & Account Management.
     *_customer_success,
+    # 8.13 Marketing Alignment & Attribution.
+    *_marketing_alignment,
     *_pipelines,
     *_teams,
     *_competitors,
