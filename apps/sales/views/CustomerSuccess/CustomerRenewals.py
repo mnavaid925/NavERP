@@ -119,9 +119,10 @@ def customer_renewal_create(request):
             obj = form.save()
             write_audit_log(
                 request.user,
-                "CREATE",
                 obj,
+                "create",
                 f"Created renewal {obj.number} for {obj.account.name} (ARR: {obj.current_arr} {obj.currency.code})",
+                tenant=request.tenant,
             )
             messages.success(request, f"Customer renewal {obj.number} created successfully.")
             return redirect("sales:customer_renewal_detail", pk=obj.pk)
@@ -147,9 +148,10 @@ def customer_renewal_edit(request, pk):
             obj = form.save()
             write_audit_log(
                 request.user,
-                "UPDATE",
                 obj,
+                "update",
                 f"Updated renewal {obj.number} for {obj.account.name}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Customer renewal {obj.number} updated successfully.")
             return redirect("sales:customer_renewal_detail", pk=obj.pk)
@@ -172,13 +174,14 @@ def customer_renewal_delete(request, pk):
     )
     name = obj.renewal_name
     number = obj.number
-    obj.delete()
     write_audit_log(
         request.user,
-        "DELETE",
         obj,
+        "delete",
         f"Deleted customer renewal {number} ({name})",
+        tenant=request.tenant,
     )
+    obj.delete()
     messages.success(request, f"Customer renewal {number} deleted.")
     return redirect("sales:customer_renewal_list")
 
