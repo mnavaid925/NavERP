@@ -56,13 +56,17 @@ class AttributionTouchpointForm(TenantUniqueMixin, TenantModelForm):
             self.fields["opportunity"].queryset = Opportunity.objects.filter(
                 tenant=self.tenant
             ).order_by("-created_at")
-            self.fields["currency"].queryset = Currency.objects.order_by("code")
+            self.fields["currency"].queryset = Currency.objects.filter(
+                is_active=True
+            ).order_by("code")
 
     def clean(self):
         cleaned_data = super().clean()
+        # `currency` is deliberately absent: `accounting.Currency` is a GLOBAL master with no
+        # tenant FK, so the generic tenant check would reject every currency (L29).
         _reject_foreign(
             self,
             cleaned_data,
-            ["campaign", "lead", "opportunity", "currency"],
+            ["campaign", "lead", "opportunity"],
         )
         return cleaned_data
