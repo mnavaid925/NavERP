@@ -37,6 +37,8 @@ from apps.sales.views.MarketingAlignment.MarketingEvents import (
     marketing_event_edit,
     marketing_event_list,
     marketing_event_registration_create,
+    marketing_event_registration_delete,
+    marketing_event_registration_edit,
     marketing_event_registrations,
 )
 
@@ -69,4 +71,6 @@ __all__ = [
     "marketing_event_delete",
     "marketing_event_registrations",
     "marketing_event_registration_create",
+    "marketing_event_registration_edit",
+    "marketing_event_registration_delete",
 ]
