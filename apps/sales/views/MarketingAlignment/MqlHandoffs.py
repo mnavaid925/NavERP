@@ -17,7 +17,7 @@ from apps.sales.models.MarketingAlignment.MqlHandoffs import (
     HANDOFF_STATUS_CHOICES,
     MqlHandoff,
 )
-from apps.sales.views.MarketingAlignment._common import pk_from_param
+from apps.sales.views.MarketingAlignment._common import enum_filter, pk_from_param
 
 
 @login_required
@@ -37,13 +37,11 @@ def mql_handoff_list(request):
             | Q(number__icontains=q)
         )
 
-    status = request.GET.get("status", "").strip()
-    if status:
-        qs = qs.filter(status=status)
+    status, qs = enum_filter(qs, request, "status", "status", HANDOFF_STATUS_CHOICES)
 
-    source_kind = request.GET.get("source_kind", "").strip()
-    if source_kind:
-        qs = qs.filter(source_kind=source_kind)
+    source_kind, qs = enum_filter(
+        qs, request, "source_kind", "source_kind", HANDOFF_SOURCE_CHOICES
+    )
 
     campaign_id = request.GET.get("campaign", "").strip()
     campaign_pk = pk_from_param(campaign_id)
