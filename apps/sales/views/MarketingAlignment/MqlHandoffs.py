@@ -64,11 +64,8 @@ def mql_handoff_list(request):
     # count never loads the rows.
     stats = qs.aggregate(
         total_count=Count("id"),
-        pending_count=Count("id", filter=Q(status="pending")),
         accepted_count=Count("id", filter=Q(status="accepted")),
         rejected_count=Count("id", filter=Q(status="rejected")),
-        expired_count=Count("id", filter=Q(status="expired")),
-        converted_count=Count("id", filter=Q(status="converted")),
         sla_breach_count=Count("id", filter=MqlHandoff.sla_breach_q(now)),
     )
     decided_count = stats["accepted_count"] + stats["rejected_count"]
@@ -122,7 +119,7 @@ def mql_handoff_detail(request, pk):
     return render(
         request,
         "sales/marketingalignment/mqlhandoff/detail.html",
-        {"obj": obj, "handoff": obj},
+        {"obj": obj},
     )
 
 
