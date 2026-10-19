@@ -82,10 +82,10 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <div>
-                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search account, number, notes..." class="form-input w-full">
+                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search account, number, notes..." class="form-input w-full" aria-label="Search health scores">
             </div>
             <div>
-                <select name="health_band" class="form-select w-full">
+                <select name="health_band" class="form-select w-full" aria-label="Filter by health band">
                     <option value="">All Health Bands</option>
                     {% for val, label in health_band_choices %}
                     <option value="{{ val }}" {% if active_filters.health_band == val %}selected{% endif %}>{{ label }}</option>
@@ -93,7 +93,7 @@
                 </select>
             </div>
             <div>
-                <select name="risk_level" class="form-select w-full">
+                <select name="risk_level" class="form-select w-full" aria-label="Filter by risk level">
                     <option value="">All Risk Levels</option>
                     {% for val, label in risk_level_choices %}
                     <option value="{{ val }}" {% if active_filters.risk_level == val %}selected{% endif %}>{{ label }}</option>
@@ -101,7 +101,7 @@
                 </select>
             </div>
             <div>
-                <select name="account" class="form-select w-full">
+                <select name="account" class="form-select w-full" aria-label="Filter by customer account">
                     <option value="">All Customer Accounts</option>
                     {% for acct in accounts %}
                     <option value="{{ acct.pk }}" {% if active_filters.account == acct.pk|stringformat:"d" %}selected{% endif %}>{{ acct.name }}</option>
@@ -148,7 +148,7 @@
                             {{ score.number }}
                         </a>
                         {% if score.is_churn_risk %}
-                        <span class="badge badge-red ml-1 text-xs">Churn Risk</span>
+                        <span class="badge badge-red ms-1 text-xs">Churn Risk</span>
                         {% endif %}
                     </td>
                     <td>
