@@ -17,7 +17,7 @@ from apps.sales.models.MarketingAlignment.CampaignAttributions import (
     ATTRIBUTION_STATUS_CHOICES,
     CampaignAttribution,
 )
-from apps.sales.views.MarketingAlignment._common import pk_from_param
+from apps.sales.views.MarketingAlignment._common import enum_filter, pk_from_param
 
 
 @login_required
@@ -43,13 +43,13 @@ def campaign_attribution_list(request):
             | Q(number__icontains=q)
         )
 
-    attribution_model = request.GET.get("attribution_model", "").strip()
-    if attribution_model:
-        qs = qs.filter(attribution_model=attribution_model)
+    attribution_model, qs = enum_filter(
+        qs, request, "attribution_model", "attribution_model", ATTRIBUTION_MODEL_CHOICES
+    )
 
-    status = request.GET.get("status", "").strip()
-    if status:
-        qs = qs.filter(status=status)
+    status, qs = enum_filter(
+        qs, request, "status", "status", ATTRIBUTION_STATUS_CHOICES
+    )
 
     campaign_id = request.GET.get("campaign", "").strip()
     campaign_pk = pk_from_param(campaign_id)
