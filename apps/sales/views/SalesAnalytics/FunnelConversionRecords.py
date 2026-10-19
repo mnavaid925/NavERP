@@ -2,8 +2,8 @@
 
 Function-based views over the 8.12 Funnel Conversion Record. Every queryset is
 tenant-scoped, every write is audit-logged, and every integer FK filter is
-guarded with ``.isdigit()`` so a hand-edited URL is ignored rather than a 500
-(L11).
+guarded by ``_pk_filter`` (``.isdigit()`` plus a 64-bit range bound) so a
+hand-edited URL is ignored rather than a 500 (L11).
 """
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -22,6 +22,7 @@ from apps.sales.models.SalesAnalytics.FunnelConversionRecords import (
     FUNNEL_SCOPE_CHOICES,
     FunnelConversionRecord,
 )
+from apps.sales.views.SalesAnalytics._helpers import _pk_filter
 
 
 @login_required
@@ -47,20 +48,24 @@ def funnel_conversion_record_list(request):
         qs = qs.filter(funnel_scope=scope)
 
     from_id = request.GET.get("from_stage", "").strip()
-    if from_id and from_id.isdigit():
-        qs = qs.filter(from_stage_id=int(from_id))
+    from_pk = _pk_filter(from_id)
+    if from_pk is not None:
+        qs = qs.filter(from_stage_id=from_pk)
 
     to_id = request.GET.get("to_stage", "").strip()
-    if to_id and to_id.isdigit():
-        qs = qs.filter(to_stage_id=int(to_id))
+    to_pk = _pk_filter(to_id)
+    if to_pk is not None:
+        qs = qs.filter(to_stage_id=to_pk)
 
     territory_id = request.GET.get("territory", "").strip()
-    if territory_id and territory_id.isdigit():
-        qs = qs.filter(territory_id=int(territory_id))
+    territory_pk = _pk_filter(territory_id)
+    if territory_pk is not None:
+        qs = qs.filter(territory_id=territory_pk)
 
     owner_id = request.GET.get("owner", "").strip()
-    if owner_id and owner_id.isdigit():
-        qs = qs.filter(owner_id=int(owner_id))
+    owner_pk = _pk_filter(owner_id)
+    if owner_pk is not None:
+        qs = qs.filter(owner_id=owner_pk)
 
     aggregate = qs.aggregate(
         total_count=Count("id"),
