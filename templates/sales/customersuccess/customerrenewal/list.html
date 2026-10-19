@@ -73,12 +73,12 @@
 <!-- Filters -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
             <div>
-                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search renewal, contract, account..." class="form-input w-full">
+                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search renewal, contract, account..." class="form-input w-full" aria-label="Search renewals">
             </div>
             <div>
-                <select name="stage" class="form-select w-full">
+                <select name="stage" class="form-select w-full" aria-label="Filter by renewal stage">
                     <option value="">All Renewal Stages</option>
                     {% for val, label in stage_choices %}
                     <option value="{{ val }}" {% if active_filters.stage == val %}selected{% endif %}>{{ label }}</option>
@@ -86,7 +86,7 @@
                 </select>
             </div>
             <div>
-                <select name="churn_risk_flag" class="form-select w-full">
+                <select name="churn_risk_flag" class="form-select w-full" aria-label="Filter by risk rating">
                     <option value="">All Risk Ratings</option>
                     {% for val, label in churn_risk_choices %}
                     <option value="{{ val }}" {% if active_filters.churn_risk_flag == val %}selected{% endif %}>{{ label }}</option>
@@ -94,10 +94,18 @@
                 </select>
             </div>
             <div>
-                <select name="account" class="form-select w-full">
+                <select name="account" class="form-select w-full" aria-label="Filter by customer account">
                     <option value="">All Customer Accounts</option>
                     {% for acct in accounts %}
                     <option value="{{ acct.pk }}" {% if active_filters.account == acct.pk|stringformat:"d" %}selected{% endif %}>{{ acct.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="owner" class="form-select w-full" aria-label="Filter by renewal owner">
+                    <option value="">All Renewal Owners</option>
+                    {% for u in owners %}
+                    <option value="{{ u.pk }}" {% if active_filters.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
                     {% endfor %}
                 </select>
             </div>
