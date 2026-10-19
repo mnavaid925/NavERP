@@ -210,9 +210,12 @@ def marketing_attribution_console(request):
         .order_by("-revenue_attributed")[:8]
     )
     content_ids = [row["content_id"] for row in content_agg if row["content_id"]]
-    # Resolve the content titles in one extra query rather than one per row.
+    # Resolve the content titles in one extra query rather than one per row. Tenant-scoped,
+    # like every other queryset on this page.
     titles = dict(
-        EnablementContent.objects.filter(pk__in=content_ids).values_list("pk", "title")
+        EnablementContent.objects.filter(tenant=tenant, pk__in=content_ids).values_list(
+            "pk", "title"
+        )
     )
     content_rows = [
         {
@@ -237,7 +240,9 @@ def marketing_attribution_console(request):
     )
     event_ids = [row["event_id"] for row in event_agg if row["event_id"]]
     event_names = dict(
-        MarketingEvent.objects.filter(pk__in=event_ids).values_list("pk", "name")
+        MarketingEvent.objects.filter(tenant=tenant, pk__in=event_ids).values_list(
+            "pk", "name"
+        )
     )
     event_rows = []
     for row in event_agg:
