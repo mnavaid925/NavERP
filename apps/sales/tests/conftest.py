@@ -3812,13 +3812,14 @@ def _incentivecompensation_currency(code="USD", name="US Dollar", symbol="$"):
 
 
 def _incentivecompensation_plan(tenant, currency=None, owner=None, **overrides):
+    import uuid
     from apps.sales.models import CommissionPlan
     if currency is None:
         currency = _incentivecompensation_currency()
     defaults = {
         "tenant": tenant,
         "name": "Standard Enterprise Quota Plan",
-        "code": f"std-plan-{tenant.id}-{timezone.now().timestamp()}",
+        "code": f"std-plan-{tenant.id}-{uuid.uuid4().hex[:10]}",
         "description": "Standard AE baseline compensation plan.",
         "plan_type": "flat_revenue",
         "tier_mode": "not_applicable",
