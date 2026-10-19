@@ -21,7 +21,11 @@ from apps.sales.models.MarketingAlignment.AttributionTouchpoints import (
     TOUCH_TYPE_CHOICES,
     AttributionTouchpoint,
 )
-from apps.sales.views.MarketingAlignment._common import enum_filter, pk_from_param
+from apps.sales.views.MarketingAlignment._common import (
+    enum_filter,
+    pk_from_param,
+    single_currency,
+)
 
 
 @login_required
@@ -94,6 +98,9 @@ def attribution_touchpoint_list(request):
             "lead": lead_id,
         },
         "stats": stats,
+        # The money totals are only labelled with a symbol when every listed touch is
+        # denominated in the SAME currency -- see `single_currency`.
+        "currency": single_currency(qs),
     }
     return render(
         request,
@@ -120,7 +127,7 @@ def attribution_touchpoint_detail(request, pk):
     return render(
         request,
         "sales/marketingalignment/attributiontouchpoint/detail.html",
-        {"obj": obj, "touchpoint": obj, "attributions": attributions},
+        {"obj": obj, "attributions": attributions},
     )
 
 
