@@ -15762,3 +15762,54 @@ attendance / revenue-per-registrant.
 
 ## Review notes
 (filled in at the end)
+
+---
+
+## Phase 3 close-out — build + integration + smoke (2026-10-19)
+
+### Build delivered
+
+- **5 entity folders / 6 model classes** in `apps/sales/models/MarketingAlignment/`:
+  `AttributionTouchpoint` (`ATB-`), `CampaignAttribution` (`ATR-`), `MqlHandoff` (`MQL-`),
+  `ContentEngagement` (`CNG-`), `MarketingEvent` (`EVT-`) + `EventRegistration` (child, unnumbered).
+- **5 CRUD sets** — 5 list pages (search + filters + pagination + Actions), 5 detail pages,
+  5 create pages, 5 edit pages, 5 POST-only tenant-admin deletes, plus the event registration
+  hub and the add-registration form.
+- **1 derived console** — `marketing_attribution_console`, the campaign ROI / cost-per-lead /
+  pipeline board. **Every figure is derived; nothing on it is stored.**
+- **18 templates** in `templates/sales/marketingalignment/`.
+
+### Integration gates — all green
+
+| Gate | Result |
+|---|---|
+| `manage.py makemigrations sales` | `0023_attributiontouchpoint_campaignattribution_and_more.py` created (the last sales migration was `0022_customersuccess_indexes`, so the number was re-verified at run time per L43) |
+| `manage.py migrate` | `Applying sales.0023_... OK` |
+| `manage.py seed_sales` (run 1) | 6 touchpoints, 18 attributions, 3 MQL handoffs, 5 content engagements, 2 events, 8 registrations |
+| `manage.py seed_sales` (run 2) | **identical counts — idempotent** |
+| `manage.py check` | `System check identified no issues (0 silenced)` |
+| `manage.py makemigrations --check --dry-run` | `No changes detected` — no model drift |
+| `LIVE_LINKS["8.13"]` | added in `apps/core/navigation.py` — 5 NavERP bullets + 2 extra live leaves |
+| All 8.13 url names reverse | confirmed — no `NoReverseMatch` |
+
+### Smoke gate — PASSED (independent main-session check + verifier agent)
+
+An independent check (`temp/selfcheck_813.py`, gitignored) exercised every new page as
+`admin_acme` and asserted **content, not just a status code**:
+
+- **5 list pages** — all 200; each contains its seeded record (`ATB-00006`, `ATR-00018`,
+  `MQL-00001`, `CNG-00001`, `Revenue Analytics Deep Dive`) and the expected labels
+  (`First Touch`, `SLA Breached`); **no `{#` and no `{% comment` leak markers** in any page.
+- **6 detail pages** (5 entities + the registration hub) and **6 create pages** — all 200, each
+  containing its seeded record.
+- **Console** — 200, with the model selector, a campaign row and the MQL funnel present.
+- **Junk params** — 7 hostile query strings (including `?page=999` and `?model=not_a_model`) on
+  every list page and the console: **no 500**, all fall back to the unfiltered view.
+- **Page 2** — 200 on all five list pages.
+- **Cross-tenant IDOR** — as `admin_acme`, a `admin_globex` touchpoint and handoff pk returned
+  **404** on both the detail and the edit route.
+- **Console model selector** — the rollup genuinely changes with the model:
+  `first_touch` **$34,800.00** / `last_touch` **$13,200.00** / `linear` **$18,000.00**.
+
+**Gaps**: see `.agents/tasks/gaps-sales-8.13.md` (9 entries — 8 external/declined, 1 the
+user-directed skip of the test-writing phase).
