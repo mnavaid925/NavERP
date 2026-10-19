@@ -13,6 +13,13 @@ from apps.sales.views.MarketingAlignment.CampaignAttributions import (
     campaign_attribution_edit,
     campaign_attribution_list,
 )
+from apps.sales.views.MarketingAlignment.MqlHandoffs import (
+    mql_handoff_create,
+    mql_handoff_delete,
+    mql_handoff_detail,
+    mql_handoff_edit,
+    mql_handoff_list,
+)
 
 __all__ = [
     "attribution_touchpoint_list",
@@ -25,4 +32,9 @@ __all__ = [
     "campaign_attribution_detail",
     "campaign_attribution_edit",
     "campaign_attribution_delete",
+    "mql_handoff_list",
+    "mql_handoff_create",
+    "mql_handoff_detail",
+    "mql_handoff_edit",
+    "mql_handoff_delete",
 ]
