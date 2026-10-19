@@ -5,10 +5,18 @@ from apps.sales.models.MarketingAlignment.AttributionTouchpoints import (
     TOUCH_TYPE_CHOICES,
     AttributionTouchpoint,
 )
+from apps.sales.models.MarketingAlignment.CampaignAttributions import (
+    ATTRIBUTION_MODEL_CHOICES,
+    ATTRIBUTION_STATUS_CHOICES,
+    CampaignAttribution,
+)
 
 __all__ = [
     "AttributionTouchpoint",
     "TOUCH_CHANNEL_CHOICES",
     "TOUCH_TYPE_CHOICES",
     "TOUCH_POSITION_CHOICES",
+    "CampaignAttribution",
+    "ATTRIBUTION_MODEL_CHOICES",
+    "ATTRIBUTION_STATUS_CHOICES",
 ]
