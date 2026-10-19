@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}Review {{ obj.number }} — {{ obj.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_qbr_studio' %}">Customer Success</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_business_review_list' %}">Business Reviews</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ obj.title }}</h1>
+            <span class="badge {{ obj.status_badge_class }}">{{ obj.get_status_display }}</span>
+            <span class="badge badge-info">{{ obj.get_review_period_display }} ({{ obj.review_year }})</span>
+            {% if obj.is_referenceable %}
+            <span class="badge badge-green">Verified Reference</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_business_review_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Reviews</span>
+        </a>
+        <a href="{% url 'sales:customer_business_review_edit' obj.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Review</span>
+        </a>
+        <form method="post" action="{% url 'sales:customer_business_review_delete' obj.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete review {{ obj.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Scheduled Date</div>
+            <div class="text-xl font-bold text-slate-900 mt-1">{{ obj.scheduled_date|date:"F d, Y" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Actual Conducted Date</div>
+            <div class="text-xl font-bold text-slate-900 mt-1">
+                {% if obj.completed_date %}{{ obj.completed_date|date:"F d, Y" }}{% else %}<span class="text-slate-400 font-normal">Pending</span>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Health at Review</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if obj.health_score_at_review is not None %}{{ obj.health_score_at_review }}<span class="text-xs text-slate-400 font-normal">/100</span>{% else %}—{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="user-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Exec Sponsor Presence</div>
+            <div class="text-xl font-bold mt-1 {% if obj.executive_sponsor_attended %}text-emerald-600{% else %}text-slate-400{% endif %}">
+                {% if obj.executive_sponsor_attended %}Confirmed Attended{% else %}Not Attended{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Review Agendas & Attendees -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Review Agenda & Strategic Alignment</h2>
+        </div>
+        <div class="card-body">
+            <dl class="divide-y divide-slate-100 text-sm">
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Review ID</dt>
+                    <dd class="text-slate-900 font-mono">{{ obj.number }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Customer Account</dt>
+                    <dd class="text-slate-900 font-semibold">{{ obj.account.name }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Review Cadence / Period</dt>
+                    <dd class="text-slate-900">{{ obj.get_review_period_display }} ({{ obj.review_year }})</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Presentation Template</dt>
+                    <dd class="text-slate-900 font-medium">{{ obj.get_template_type_display }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Lead CSM</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.lead_csm %}{{ obj.lead_csm.get_full_name|default:obj.lead_csm.username }}{% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Linked Account Plan</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.account_plan %}
+                        <a href="{% url 'sales:account_plan_detail' obj.account_plan.pk %}" class="text-blue-600 hover:underline">
+                            {{ obj.account_plan.title }}
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400">None linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Stakeholder & Executive Attendees</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div>
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Client Attendees & Stakeholders</div>
+                {% if obj.client_attendees %}
+                <div class="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100 whitespace-pre-line">
+                    {{ obj.client_attendees }}
+                </div>
+                {% else %}
+                <div class="text-xs text-slate-400 italic">None recorded</div>
+                {% endif %}
+            </div>
+
+            <div>
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Internal NavERP Account Team</div>
+                {% if obj.internal_attendees %}
+                <div class="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100 whitespace-pre-line">
+                    {{ obj.internal_attendees }}
+                </div>
+                {% else %}
+                <div class="text-xs text-slate-400 italic">None recorded</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Value Realization & Challenges -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Quantified Value Delivered & Key Achievements</h2>
+        </div>
+        <div class="card-body">
+            {% if obj.key_achievements %}
+            <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-emerald-50/50 p-4 rounded-lg border border-emerald-100">
+                {{ obj.key_achievements }}
+            </div>
+            {% else %}
+            <div class="text-xs text-slate-400 italic">No achievements recorded for this review.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Identified Challenges, Risks & Service Gaps</h2>
+        </div>
+        <div class="card-body">
+            {% if obj.challenges_and_risks %}
+            <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-amber-50/50 p-4 rounded-lg border border-amber-100">
+                {{ obj.challenges_and_risks }}
+            </div>
+            {% else %}
+            <div class="text-xs text-slate-400 italic">No risks or service roadblocks flagged.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Customer Advocacy & Reference Management -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="card-title">Customer Advocacy & Reference Program Outcomes</h2>
+        <a href="{% url 'sales:customer_advocacy_hub' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="star"></i>
+            <span>Advocacy Hub</span>
+        </a>
+    </div>
+    <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div>
+            <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Reference Readiness</div>
+            {% if obj.is_referenceable %}
+            <span class="badge badge-green text-sm py-1 px-3">Verified Reference Client</span>
+            <div class="text-xs text-slate-500 mt-2">Agreed to participate in peer reference calls and RFP quotes.</div>
+            {% else %}
+            <span class="badge badge-slate text-sm py-1 px-3">Not Yet Referenceable</span>
+            <div class="text-xs text-slate-400 mt-2">Client has not formally agreed to reference activities.</div>
+            {% endif %}
+        </div>
+
+        <div>
+            <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Case Study Pipeline Stage</div>
+            <span class="badge {{ obj.case_study_badge_class }} text-sm py-1 px-3">
+                {{ obj.get_case_study_status_display }}
+            </span>
+            <div class="text-xs text-slate-500 mt-2">Coordinated with marketing for collateral publication.</div>
+        </div>
+
+        <div>
+            <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Approved Testimonial Quote</div>
+            {% if obj.testimonial_quote %}
+            <blockquote class="text-xs text-slate-700 italic border-l-2 border-blue-500 pl-3 py-1">
+                "{{ obj.testimonial_quote }}"
+            </blockquote>
+            {% else %}
+            <div class="text-xs text-slate-400 italic">No testimonial quote recorded.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Meeting Notes & Account Hub -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Meeting Notes & Post-Review Actions</h2>
+    </div>
+    <div class="card-body">
+        {% if obj.notes %}
+        <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">
+            {{ obj.notes }}
+        </div>
+        {% else %}
+        <div class="text-xs text-slate-400 italic">No general meeting notes recorded.</div>
+        {% endif %}
+
+        <div class="mt-6 pt-4 border-t border-slate-100">
+            <div class="text-xs font-semibold uppercase text-slate-500 mb-2">Customer Success Account Hub</div>
+            <div class="flex flex-wrap gap-2">
+                <a href="{% url 'sales:customer_health_score_list' %}?account={{ obj.account.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="activity"></i>
+                    <span>Health Scores</span>
+                </a>
+                <a href="{% url 'sales:customer_renewal_list' %}?account={{ obj.account.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="refresh-cw"></i>
+                    <span>Renewals</span>
+                </a>
+                <a href="{% url 'sales:customer_onboarding_list' %}?account={{ obj.account.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="play-circle"></i>
+                    <span>Onboardings</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
