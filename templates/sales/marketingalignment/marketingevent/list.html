@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}Marketing Events — Marketing Alignment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <span>Events</span>
+        </div>
+        <h1 class="page-title">Events &amp; Webinars</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:marketing_event_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Event</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="calendar-days"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Events</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="megaphone"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Open for Registration</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.published_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="users"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Registrations / Attendance</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ stats.total_registrations|default:"0" }} / {{ stats.total_attendance|default:"0" }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="percent"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Avg Show-Up Rate</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if stats.avg_show_up_pct is not None %}{{ stats.avg_show_up_pct }}%{% else %}—{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search event, venue..." class="form-input w-full" aria-label="Search events">
+            </div>
+            <div>
+                <select name="event_type" class="form-select w-full" aria-label="Filter by event type">
+                    <option value="">All Event Types</option>
+                    {% for val, label in event_type_choices %}
+                    <option value="{{ val }}" {% if active_filters.event_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="status" class="form-select w-full" aria-label="Filter by event status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if active_filters.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="owner" class="form-select w-full" aria-label="Filter by event owner">
+                    <option value="">All Owners</option>
+                    {% for u in owners %}
+                    <option value="{{ u.pk }}" {% if active_filters.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="campaign" class="form-select w-full" aria-label="Filter by campaign">
+                    <option value="">All Campaigns</option>
+                    {% for campaign in campaigns %}
+                    <option value="{{ campaign.pk }}" {% if active_filters.campaign == campaign.pk|stringformat:"d" %}selected{% endif %}>{{ campaign.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if active_filters.q or active_filters.event_type or active_filters.status or active_filters.owner or active_filters.campaign %}
+                <a href="{% url 'sales:marketing_event_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Event ID</th>
+                    <th>Event</th>
+                    <th>Type</th>
+                    <th>Starts</th>
+                    <th>Registrations</th>
+                    <th>Show-Up</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in events %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sales:marketing_event_detail' event.pk %}" class="font-mono text-sm font-semibold text-blue-600 hover:underline">
+                            {{ event.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ event.name }}</div>
+                        <div class="text-xs text-slate-500">
+                            {% if event.venue %}{{ event.venue }}{% else %}Virtual event{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ event.get_event_type_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-900">{{ event.start_at|date:"M d, Y" }}</div>
+                        <div class="text-xs text-slate-500">{{ event.start_at|time:"H:i" }} {{ event.timezone_name }}</div>
+                    </td>
+                    <td>
+                        <div class="font-semibold text-slate-900">{{ event.registered_count }}</div>
+                        <div class="text-xs text-slate-500">{{ event.attended_count }} attended</div>
+                    </td>
+                    <td>
+                        {% if event.show_up_rate_pct is not None %}
+                        <span class="badge {% if event.show_up_rate_pct >= 50 %}badge-green{% else %}badge-amber{% endif %}">
+                            {{ event.show_up_rate_pct }}%
+                        </span>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if event.status == "published" %}
+                        <span class="badge badge-green">Published</span>
+                        {% elif event.status == "ongoing" %}
+                        <span class="badge badge-info">Ongoing</span>
+                        {% elif event.status == "completed" %}
+                        <span class="badge badge-muted">Completed</span>
+                        {% elif event.status == "cancelled" %}
+                        <span class="badge badge-red">Cancelled</span>
+                        {% else %}
+                        <span class="badge badge-slate">Planned</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'sales:marketing_event_detail' event.pk %}" class="btn btn-icon btn-outline" title="View details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:marketing_event_registrations' event.pk %}" class="btn btn-icon btn-outline" title="Registrations">
+                            <i data-lucide="users"></i>
+                        </a>
+                        <a href="{% url 'sales:marketing_event_edit' event.pk %}" class="btn btn-icon btn-outline" title="Edit event">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'sales:marketing_event_delete' event.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete event {{ event.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete event">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="calendar-days" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No marketing events found</div>
+                            <div class="empty-state-text">Run webinars and events, track registration and attendance, and drive the post-event follow-up.</div>
+                            <a href="{% url 'sales:marketing_event_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Create First Event</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination (L9 Guarded) -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} events
+        </div>
+        <div class="pagination-actions">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.event_type %}&event_type={{ active_filters.event_type }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.event_type %}&event_type={{ active_filters.event_type }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
