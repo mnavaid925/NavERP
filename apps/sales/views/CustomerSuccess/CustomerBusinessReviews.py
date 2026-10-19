@@ -233,12 +233,15 @@ def customer_advocacy_hub(request):
     case_study_pipeline = all_reviews.exclude(case_study_status="none")
     testimonials = all_reviews.exclude(testimonial_quote="").exclude(testimonial_quote__isnull=True)
 
-    stats = {
-        "referenceable_count": referenceable_accounts.count(),
-        "case_study_count": case_study_pipeline.count(),
-        "testimonial_count": testimonials.count(),
-        "published_case_studies": case_study_pipeline.filter(case_study_status="published").count(),
-    }
+    stats = all_reviews.aggregate(
+        referenceable_count=Count("id", filter=Q(is_referenceable=True)),
+        case_study_count=Count("id", filter=~Q(case_study_status="none")),
+        testimonial_count=Count(
+            "id",
+            filter=~Q(testimonial_quote="") & Q(testimonial_quote__isnull=False),
+        ),
+        published_case_studies=Count("id", filter=Q(case_study_status="published")),
+    )
 
     context = {
         "referenceable_accounts": referenceable_accounts[:15],
