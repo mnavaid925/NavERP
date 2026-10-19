@@ -845,24 +845,46 @@ class AttributionTouchpointAdmin(admin.ModelAdmin):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
+class TenantScopedFKAdmin(admin.ModelAdmin):
+    """Base admin for the 8.13 entities: narrows EVERY tenant-scoped FK to the tenant.
+
+    ``accounts.User.tenant`` is nullable -- the platform superuser has no tenant -- so a user FK
+    is filtered on ``tenant=request.tenant, is_active=True``, which also excludes that
+    superuser. ``accounting.Currency`` is a GLOBAL master with no tenant and is never narrowed
+    (L29).
+    """
+
+    tenant_fk_fields = ()
+    tenant_user_fk_fields = ()
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None)
+        if tenant is not None:
+            if db_field.name in self.tenant_user_fk_fields:
+                kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(
+                    tenant=tenant, is_active=True
+                )
+            elif db_field.name in self.tenant_fk_fields:
+                kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(
+                    tenant=tenant
+                )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
 @admin.register(CampaignAttribution)
-class CampaignAttributionAdmin(admin.ModelAdmin):
+class CampaignAttributionAdmin(TenantScopedFKAdmin):
     list_display = ("number", "touchpoint", "attribution_model", "credit_pct", "attributed_revenue", "attributed_cost", "status", "computed_on", "tenant")
     list_filter = ("attribution_model", "status", "tenant")
     search_fields = ("number", "touchpoint__number", "notes")
     readonly_fields = ("tenant", "number", "created_at", "updated_at")
     list_select_related = ("touchpoint", "computed_by", "tenant")
     raw_id_fields = ("touchpoint", "computed_by")
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        tenant = getattr(request, "tenant", None)
-        if tenant is not None and db_field.name == "touchpoint":
-            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    tenant_fk_fields = ("touchpoint",)
+    tenant_user_fk_fields = ("computed_by",)
 
 
 @admin.register(MqlHandoff)
-class MqlHandoffAdmin(admin.ModelAdmin):
+class MqlHandoffAdmin(TenantScopedFKAdmin):
     list_display = ("number", "lead", "campaign", "account", "assigned_to", "status", "source_kind", "handoff_at", "sla_due_at", "responded_at", "tenant")
     list_filter = ("status", "source_kind", "tenant")
     search_fields = ("number", "lead__name", "lead__number", "account__name", "acceptance_reason", "rejection_reason")
@@ -871,46 +893,35 @@ class MqlHandoffAdmin(admin.ModelAdmin):
     readonly_fields = ("tenant", "number", "responded_at", "created_at", "updated_at")
     list_select_related = ("lead", "campaign", "account", "owner", "assigned_to", "opportunity", "currency", "tenant")
     raw_id_fields = ("lead", "campaign", "account", "owner", "assigned_to", "opportunity", "currency")
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        tenant = getattr(request, "tenant", None)
-        if tenant is not None and db_field.name in {"lead", "campaign", "opportunity"}:
-            model = db_field.remote_field.model
-            kwargs["queryset"] = model._default_manager.filter(tenant=tenant)
-        if tenant is not None and db_field.name in {"owner", "assigned_to"}:
-            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant, is_active=True)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    tenant_fk_fields = ("lead", "campaign", "account", "opportunity")
+    tenant_user_fk_fields = ("owner", "assigned_to")
 
 
 @admin.register(ContentEngagement)
-class ContentEngagementAdmin(admin.ModelAdmin):
+class ContentEngagementAdmin(TenantScopedFKAdmin):
     list_display = ("number", "content", "account", "lead", "campaign", "engagement_type", "engagement_channel", "engagement_score", "revenue_attributed", "tenant")
     list_filter = ("engagement_type", "engagement_channel", "tenant")
     search_fields = ("number", "content__title", "account__name", "lead__name")
     readonly_fields = ("tenant", "number", "created_at", "updated_at")
     list_select_related = ("content", "account", "lead", "campaign", "currency", "tenant")
     raw_id_fields = ("content", "account", "lead", "campaign", "currency")
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        tenant = getattr(request, "tenant", None)
-        if tenant is not None and db_field.name in {"content", "lead", "campaign"}:
-            model = db_field.remote_field.model
-            kwargs["queryset"] = model._default_manager.filter(tenant=tenant)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    tenant_fk_fields = ("content", "account", "lead", "campaign")
 
 
 @admin.register(MarketingEvent)
-class MarketingEventAdmin(admin.ModelAdmin):
+class MarketingEventAdmin(TenantScopedFKAdmin):
     list_display = ("number", "name", "event_type", "status", "start_at", "end_at", "venue", "capacity", "budget", "tenant")
     list_filter = ("event_type", "status", "tenant")
     search_fields = ("number", "name", "venue", "description")
     readonly_fields = ("tenant", "number", "created_at", "updated_at")
     list_select_related = ("owner", "campaign", "currency", "tenant")
     raw_id_fields = ("owner", "campaign", "currency")
+    tenant_fk_fields = ("campaign",)
+    tenant_user_fk_fields = ("owner",)
 
 
 @admin.register(EventRegistration)
-class EventRegistrationAdmin(admin.ModelAdmin):
+class EventRegistrationAdmin(TenantScopedFKAdmin):
     list_display = ("event", "registrant_name", "registrant_email", "registration_status", "source_channel", "followup_status", "engagement_score", "registered_at", "attended_at", "tenant")
     list_filter = ("registration_status", "source_channel", "followup_status", "tenant")
     search_fields = ("registrant_name", "registrant_email", "event__name", "followup_notes")
@@ -919,13 +930,7 @@ class EventRegistrationAdmin(admin.ModelAdmin):
     readonly_fields = ("tenant", "attended_at", "created_at", "updated_at")
     list_select_related = ("event", "lead", "account", "campaign", "opportunity", "tenant")
     raw_id_fields = ("event", "lead", "account", "campaign", "opportunity")
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        tenant = getattr(request, "tenant", None)
-        if tenant is not None and db_field.name in {"event", "lead", "campaign", "opportunity"}:
-            model = db_field.remote_field.model
-            kwargs["queryset"] = model._default_manager.filter(tenant=tenant)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    tenant_fk_fields = ("event", "lead", "account", "campaign", "opportunity")
 
 
 
