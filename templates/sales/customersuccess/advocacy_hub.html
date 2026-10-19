@@ -73,7 +73,7 @@
             <i data-lucide="user-check" class="w-5 h-5 text-emerald-600"></i>
             <h2 class="card-title">Verified Customer Reference Accounts</h2>
         </div>
-        <span class="badge badge-green">{{ referenceable_accounts|length }} Ready for Sales Calls</span>
+        <span class="badge badge-green">{{ stats.referenceable_count|default:"0" }} Ready for Sales Calls</span>
     </div>
     <div class="table-wrap">
         <table class="table">
