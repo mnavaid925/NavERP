@@ -4096,8 +4096,10 @@ CUSTOMERSUCCESS_URLS = {
 
 
 def _customersuccess_party(tenant, name="Customer Alpha"):
-    from apps.core.models import Party
-    return Party.objects.create(tenant=tenant, name=name, kind="organization")
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant, name=name, kind="organization")
+    PartyRole.objects.create(tenant=tenant, party=party, role="customer")
+    return party
 
 
 def _customersuccess_health_score(tenant, account, **overrides):
