@@ -17,6 +17,7 @@ from apps.sales.models.MarketingAlignment.MqlHandoffs import (
     HANDOFF_STATUS_CHOICES,
     MqlHandoff,
 )
+from apps.sales.views.MarketingAlignment._common import pk_from_param
 
 
 @login_required
@@ -45,12 +46,14 @@ def mql_handoff_list(request):
         qs = qs.filter(source_kind=source_kind)
 
     campaign_id = request.GET.get("campaign", "").strip()
-    if campaign_id and campaign_id.isdigit():
-        qs = qs.filter(campaign_id=int(campaign_id))
+    campaign_pk = pk_from_param(campaign_id)
+    if campaign_pk is not None:
+        qs = qs.filter(campaign_id=campaign_pk)
 
     owner_id = request.GET.get("owner", "").strip()
-    if owner_id and owner_id.isdigit():
-        qs = qs.filter(owner_id=int(owner_id))
+    owner_pk = pk_from_param(owner_id)
+    if owner_pk is not None:
+        qs = qs.filter(owner_id=owner_pk)
 
     now = timezone.now()
     # A breach is either "answered late" or "still unanswered past the deadline". Both halves
