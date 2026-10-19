@@ -15813,3 +15813,434 @@ An independent check (`temp/selfcheck_813.py`, gitignored) exercised every new p
 
 **Gaps**: see `.agents/tasks/gaps-sales-8.13.md` (9 entries — 8 external/declined, 1 the
 user-directed skip of the test-writing phase).
+
+---
+
+# Sub-module 8.12 — Sales Analytics & Intelligence (Module 8: Sales Management System, sales) — plan from research-sales-8.12.md  (2026-10-19)
+
+**Input:** `.claude/tasks/research-sales-8.12.md` (336 lines; 10 leaders surveyed — Salesforce, HubSpot, Gong, Clari, Zoho, Dynamics 365, Pipedrive, Klue, Clozd, DealHub). **App `apps/sales` already exists → this is an EXTEND run.** No scaffold, no `apps.py`, **no `config/settings.py` INSTALLED_APPS change, no `config/urls.py` change.** The ONLY navigation change is one new `LIVE_LINKS["8.12"]` entry in `apps/core/navigation.py`.
+
+**CONCURRENT WRITER WARNING.** Another session is committing to this same checkout right now (it built 8.13 and is doing 8.11 test work). Every shared file below — `apps/sales/{models,forms,views,urls}/__init__.py`, `apps/sales/admin.py`, `apps/sales/management/commands/seed_sales.py`, `apps/core/navigation.py`, `templates/sales/sales_overview.html` — must be edited **surgically (insert one new block; never rewrite or reformat the file)**. Re-read each shared file immediately before editing it.
+
+**Next migration: `0024`** — verified now: `apps/sales/migrations/` ends at `0023_attributiontouchpoint_campaignattribution_and_more.py`. **Re-verify the number at generation time (L43)** — the concurrent session may land another one.
+
+**Also note:** 8.13's models (`AttributionTouchpoint`, `CampaignAttribution`, `MqlHandoff`, `ContentEngagement`, `MarketingEvent` in `apps/sales/models/MarketingAlignment/`) are a **separate sub-module**. 8.12 does not import, FK, or reuse them.
+
+## The five non-negotiable rulings this plan is built on
+
+**(a) Zero duplicate masters (L36/L37).** 8.12 declares NO win/loss-reason table, NO opportunity-outcome table, NO competitor table, NO report/dashboard/widget/snapshot engine, NO quota/period table, NO activity master, NO call-rubric scorecard, NO ledger, NO currency table, NO rep table, NO benchmark master, NO funnel-stage table. It **EXTENDS by FK**: `sales.WinLossReason` (`WLR-`) + `sales.OpportunityOutcome` (`OUT-`, 8.2) · `sales.CoachingScorecard` (`CSC-`, 8.9) · `crm.Opportunity` (`OPP-`) · `crm.Lead` (`LEAD-`) · `crm.Territory` · `crm.CommunicationLog` (`COM-`) · `crm.AnalyticsReport` / `AnalyticsDashboard` / `DashboardWidget` / `ReportSnapshot` (CRM 1.6) · `sales.Pipeline` (`PIPE-`) / `PipelineStage` (`target_days`) / `OpportunityPipelinePlacement` (`stage_entered_at`) · `sales.ActivityLog` (`SAL-`) / `ActivityType` · `sales.QuotaPlan` (`QPA-`, 8.7) · `sales.ForecastPeriod` (8.4) · `core.Party` · `accounting.Currency` · `accounts.User` (= `settings.AUTH_USER_MODEL`).
+
+**(b) An analytics engine already ships — render over it, never build a second one.** `apps/sales/opportunity_analytics.py` provides `sales_win_loss_rows(tenant, *, pipeline_id, owner_id, territory_id, currency, date_from, date_to)`, `sales_competitor_rows(tenant, …same kwargs…)`, `sales_stage_age_rows(tenant, *, pipeline_id, owner_id, territory_id, currency, date_from, date_to, health, as_of, placements)`, `sales_pipeline_rollups(tenant, *, pipeline_id, owner_id, territory_id, currency, as_of)`, `sales_pipeline_currency_totals(tenant, …)`, `opportunity_pipeline_health(opportunity, …)`, `opportunity_pipeline_health_projection(tenant, …)`, `sales_health_counts(tenant, opportunities=None, placements=None, *, as_of=None)`. `apps/crm/analytics.py` provides the saved-report engine: **`compute_report(report)` (PUBLIC)**, `compute_widget(widget)`, `WIDGET_METRICS`, `REPORT_COMPUTERS` (keys `sales_activity`, `sales_performance`, `funnel`, `service`). **8.12's six consoles are thin renderers over these.** No new aggregation module, no new report builder, no new query layer.
+
+> ⚠ `apps/crm/analytics.py::_compute_funnel` and `::_compute_sales_performance` are **underscore-private**. Do **NOT** import them across the app boundary. Reach the funnel and top-performers reports through the **public** `crm.analytics.compute_report(report)` with a `crm.AnalyticsReport` whose `report_type` is `"funnel"` / `"sales_performance"` — both are valid `REPORT_TYPE_CHOICES` (`apps/crm/models/AnalyticsReporting/_choices.py`).
+
+**(c) There is NO stage-transition history table — so velocity is a PERSISTED SNAPSHOT, not a computed history.** Grep across `apps/` finds no `StageHistory` / `stage_history` / `OpportunityStageChange` model. The only stage-timing facts that exist are `crm.Opportunity.stage_changed_at` (the **last** transition) and `sales.OpportunityPipelinePlacement.stage_entered_at` (the **current** stage). Historical per-stage durations are therefore **NOT derivable from the current data**. `StageVelocityAnalysis` (VCA-) is a **user-entered, persisted measurement snapshot** for a period; the console then *compares* the recorded medians against `PipelineStage.target_days` to rank bottlenecks. This spine gap is recorded as `GAP-sales-8.12-01` — it is **not** a deferral, it is a known hole in `crm.Opportunity` that only CRM 1.2 can close.
+
+**(d) 4 models, 6 derived console pages, 0 console tables.** The five NavERP.md bullets map to **five distinct console destinations** (L30 — the human sidebar pass is a required close-out step). The four model list pages are extra live leaves. The consoles are derived/read-only: **every figure on them is computed at render time, never stored.**
+
+**(e) The `tenant` FK is inherited, not redeclared.** `apps/sales/models/_base.py::TenantNumbered` already declares `tenant = FK("core.Tenant", on_delete=CASCADE, related_name="+", db_index=True)` plus `number` (`editable=False`), `created_at`, `updated_at`. **Do NOT redeclare `tenant` on any 8.12 model** — a second declaration is a duplicate field, not a unique `related_name`. Every model inherits the base's `tenant` (and therefore satisfies the "every model is tenant-scoped" rule). All four 8.12 models extend `TenantNumbered` and get a `number` from the prefix system.
+
+## Number-prefix registry — `WLA`, `VCA`, `FNL`, `RPS`
+
+Verified free repo-wide (no `NUMBER_PREFIX = "WLA|VCA|FNL|RPS"` anywhere in `apps/`). **Already taken and NOT reusable:** `WLR` + `OUT` (8.2 OpportunityOutcomes) · `CSC` (8.9 CoachingScorecard) · `SCR` (taken **four times** — procurement/`Screenings`, scm/`SupplierScorecards`, projects/`ScopeChangeRequests`, hrm/`Statutoryreturn`). `BMK` is also free but **unused** — there is no benchmark master (see Declined).
+
+## Models (from research — 1–4)
+
+All four live in a **new** package `apps/sales/models/SalesAnalytics/`, extend `TenantNumbered`, and are re-exported from `apps/sales/models/__init__.py` (a model without a re-export is an `ImportError` at runtime).
+
+### 1. `WinLossDebrief` [`WLA-`] — `apps/sales/models/SalesAnalytics/WinLossDebriefs.py` — **bullet 1 (Win/Loss Analysis)**
+
+Drivers: per-deal structured debrief (table-stakes) · decision-driver tagging with buyer quote (table-stakes) · counterfactual "what would have changed the outcome" (common) · quote + named channel (common) · **actionable feedback loop to product and marketing** (table-stakes).
+
+| Field | Type | Notes |
+|---|---|---|
+| `opportunity` | FK `crm.Opportunity`, PROTECT, `related_name="sales_win_loss_debriefs"` | the deal under debrief |
+| `outcome` | FK `sales.OpportunityOutcome`, PROTECT, null, `related_name="sales_win_loss_debriefs"` | **extends** 8.2's append-only outcome; never a second outcome table |
+| `primary_reason` | FK `sales.WinLossReason`, PROTECT, null, `related_name="sales_win_loss_debriefs"` | **extends** 8.2's reason catalogue; never a second reason table |
+| `account` | FK `core.Party`, SET_NULL, null | the customer (`core.Party` with a `PartyRole` of `customer`) |
+| `interviewer` | FK `AUTH_USER_MODEL`, SET_NULL, null | who ran the debrief |
+| `action_owner` | FK `AUTH_USER_MODEL`, SET_NULL, null | who owns the feedback action |
+| `communication_log` | FK `crm.CommunicationLog`, SET_NULL, null | the recorded conversation the quote came from |
+| `debriefed_on` | DateField | when |
+| `interview_channel` | Char(20), `INTERVIEW_CHANNEL_CHOICES`, default `interview` | interview / survey / email_review / internal_debrief / analysis |
+| `decision_drivers` | JSONField(default=list, blank) | `[{"driver": str, "sentiment": "positive"\|"negative", "weight": int 1–5, "quote": str}]` |
+| `buyer_quote` | Text, blank | the verbatim quote |
+| `counterfactual` | Text, blank | "what would have changed the outcome" |
+| `feedback_team` | Char(20), `FEEDBACK_TEAM_CHOICES`, default `sales` | product / marketing / sales / finance / operations / other |
+| `action_items` | Text, blank | the loop's payload |
+| `actioned_on` | Date, null | when the loop closed |
+| `status` | Char(12), `DEBRIEF_STATUS_CHOICES`, default `draft` | draft / submitted / shared / actioned / closed |
+| `notes` | Text, blank | |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto). **No derived field exists on this model, so nothing is excluded on derived grounds.**
+- **`decision_drivers` is a JSONField, not a second reason master.** `sales.WinLossReason.category` already carries the 8.2 taxonomy (price / product_fit / timing / competition / relationship / authority / budget / no_decision / other). The driver list is the **per-deal evidence**; the catalogue is the **taxonomy**. Form field = a `forms.Textarea` (JSON text) whose `clean()` parses the JSON and raises a field error on malformed JSON, a non-list payload, a missing `driver`/`sentiment` key, a sentiment outside `positive|negative`, or a weight outside 1–5.
+- **Competitor attribution is NOT redeclared.** The losing competitor is already reachable through `outcome.competitor_link` → `sales.OpportunityCompetitor` (8.2/8.9). 8.12 only *reads* it.
+- `clean()` follows the `OpportunityOutcome.clean()` pattern: every FK must belong to the same tenant.
+
+### 2. `StageVelocityAnalysis` [`VCA-`] — `apps/sales/models/SalesAnalytics/StageVelocityAnalyses.py` — **bullet 2 (Sales Velocity & Cycle Time)**
+
+Drivers: time-in-stage (table-stakes) · **median + p90, never a plain average** (common) · bottleneck identification vs `PipelineStage.target_days` (table-stakes) · acceleration recommendation (table-stakes) · pipeline velocity formula (common) · benchmark value + vintage for bullet 5 (table-stakes).
+
+| Field | Type | Notes |
+|---|---|---|
+| `pipeline` | FK `sales.Pipeline`, PROTECT, `related_name="sales_velocity_analyses"` | |
+| `pipeline_stage` | FK `sales.PipelineStage`, PROTECT, `related_name="sales_velocity_analyses"` | the unit of time-in-stage |
+| `period_start`, `period_end` | DateField | the measured window |
+| `opportunity_count` | PositiveInteger, default 0 | deals measured |
+| `median_days_in_stage` | Decimal(8,2), default 0 | **p50** |
+| `p90_days_in_stage` | Decimal(8,2), default 0 | **p90** |
+| `max_days_in_stage` | PositiveInteger, default 0 | aging |
+| `sales_cycle_days` | Decimal(8,2), null | median full cycle for the deals that passed through |
+| `velocity_value` | Decimal(16,2), default 0 | (deals × avg deal value × win rate) ÷ cycle days |
+| `is_bottleneck` | Boolean, default False | |
+| `bottleneck_rank` | PositiveSmallInteger, null | |
+| `recommendation` | Text, blank | the acceleration recommendation |
+| `benchmark_days` | Decimal(8,2), null | bullet-5 linkage |
+| `benchmark_source` | Char(120), blank | |
+| `benchmark_as_of` | Date, null | vintage stamp |
+| `segment` | Char(40), blank | peer-segment label |
+| `status` | Char(12), `VELOCITY_STATUS_CHOICES`, default `draft` | draft / reviewed / approved |
+| `notes` | Text, blank | |
+
+- **Form excludes:** `tenant`, `number`, `created_at`, `updated_at`.
+- **Explicit derived-field ruling (L28's note: decide per field and say why).** The measured days **ARE the record's data** — there is no stage-transition history to compute them from (ruling (c)) — so `opportunity_count`, `median_days_in_stage`, `p90_days_in_stage`, `max_days_in_stage`, `sales_cycle_days` and `velocity_value` are **editable form inputs**, i.e. the recorded measurement, not a formula over sibling fields on the same row.
+- **There is deliberately NO `avg_days_in_stage` field.** The reference modelling guidance is explicit that a right-skewed duration distribution is reported as **median and p90**; a plain average invites a reader to treat a mean as typical. Do not add one.
+- `is_bottleneck` and `bottleneck_rank` are **editable**: `PipelineStage.target_days` is **nullable**, so the flag is a manager's judgement in the general case, and a rank is relative to a set of sibling rows in a period — a single row cannot compute its own rank. The console re-derives a **live** rank at render time and shows it beside the stored one; the stored rank is a snapshot of the judgement at entry time. Document this in the model docstring.
+- `velocity_value`'s inputs (deal count, average deal value, win rate, cycle days) live on **other** models, so it is entered, not computed here.
+
+### 3. `FunnelConversionRecord` [`FNL-`] — `apps/sales/models/SalesAnalytics/FunnelConversionRecords.py` — **bullet 3 (Conversion Funnel Analytics)**
+
+Drivers: lead-to-opportunity / opportunity-to-close / stage-to-stage rates (table-stakes) · skip count (table-stakes) · drop-off count (table-stakes) · elapsed time per segment (common) · **fixed denominator / fixed cohort** (common) · rolling 90/180-day window (common) · breakdown dimensions (common) · industry conversion band (common).
+
+| Field | Type | Notes |
+|---|---|---|
+| `label` | Char(160) | the human name of the measured segment |
+| `funnel_scope` | Char(24), `FUNNEL_SCOPE_CHOICES`, default `lead_to_opportunity` | lead_to_opportunity / opportunity_to_close / stage_to_stage / overall |
+| `from_stage` | FK `sales.PipelineStage`, SET_NULL, null, `related_name="sales_funnel_from_records"` | chronology order is `PipelineStage.sequence` |
+| `to_stage` | FK `sales.PipelineStage`, SET_NULL, null, `related_name="sales_funnel_to_records"` | |
+| `territory` | FK `crm.Territory`, SET_NULL, null | breakdown dimension |
+| `owner` | FK `AUTH_USER_MODEL`, SET_NULL, null | breakdown dimension |
+| `source_channel` | Char(60), blank | breakdown dimension |
+| `period_start`, `period_end` | DateField | the rolling measurement window |
+| `entered_count` | PositiveInteger, default 0 | the **stated** denominator |
+| `converted_count` | PositiveInteger, default 0 | |
+| `conversion_rate_pct` | **Decimal(5,2), `editable=False`** | **COMPUTED** in `save()` |
+| `dropoff_count` | **PositiveInteger, `editable=False`** | **COMPUTED** in `save()` |
+| `skipped_count` | PositiveInteger, default 0 | deals that did not follow the stage chronology |
+| `avg_cycle_days` | Decimal(8,2), null | elapsed time for this segment |
+| `benchmark_pct` | Decimal(5,2), null | industry band |
+| `benchmark_source` | Char(120), blank | |
+| `benchmark_as_of` | Date, null | vintage stamp |
+| `segment` | Char(40), blank | peer-segment label |
+| `notes` | Text, blank | |
+
+- **Form excludes:** `tenant`, `number`, `created_at`, `updated_at`, **`conversion_rate_pct`**, **`dropoff_count`**.
+- **Ruling:** `conversion_rate_pct = converted_count / entered_count × 100` and `dropoff_count = entered_count − converted_count` are ratios/differences of two fields **on the same row** — making them editable lets the row contradict itself. Computed in `save()`, `editable=False`, excluded from the form.
+- `entered_count` / `converted_count` ARE editable: the fixed-denominator / fixed-cohort rule means the denominator is an **explicit, stated measurement**, and it is not re-derivable (no stage-transition history). Same for `skipped_count`.
+- `benchmark_pct` / `benchmark_source` / `benchmark_as_of` are editable — hand-entered external industry bands carrying a vintage stamp (external benchmark feeds are deferred, see Later passes).
+
+### 4. `RepPerformanceScorecard` [`RPS-`] — `apps/sales/models/SalesAnalytics/RepPerformanceScorecards.py` — **bullet 4 (Rep Performance Scorecards)** + the **measurement half of bullet 5**
+
+Drivers: activity metrics (table-stakes) · pipeline contribution (table-stakes) · win rate (table-stakes) · revenue per rep + average deal size (table-stakes) · quota attainment & goal gap (table-stakes) · leading-vs-lagging split (common) · benchmark values (table-stakes).
+
+| Field | Type | Notes |
+|---|---|---|
+| `rep` | FK `AUTH_USER_MODEL`, PROTECT, `related_name="sales_rep_scorecards"` | reps are `accounts.User` — no rep table |
+| `territory` | FK `crm.Territory`, SET_NULL, null | |
+| `manager` | FK `AUTH_USER_MODEL`, SET_NULL, null | |
+| `forecast_period` | FK `sales.ForecastPeriod`, SET_NULL, null | 8.4 |
+| `quota_plan` | FK `sales.QuotaPlan`, SET_NULL, null | 8.7 (which itself FKs `crm.SalesQuota`) |
+| `coaching_scorecard` | FK `sales.CoachingScorecard`, SET_NULL, null, `related_name="sales_rep_scorecards"` | **optional link to 8.9's call-level rubric — never a duplicate** |
+| `period_start`, `period_end` | DateField | |
+| *Leading / activity block* | | |
+| `activities_logged`, `calls_logged`, `emails_logged`, `meetings_logged`, `meetings_booked`, `follow_ups_completed` | PositiveInteger, default 0 | counted from `sales.ActivityLog` (8.8) |
+| `activity_minutes` | PositiveInteger, default 0 | |
+| `response_time_hours` | Decimal(6,2), null | |
+| *Pipeline contribution block* | | |
+| `opportunities_created`, `opportunities_won`, `opportunities_lost` | PositiveInteger, default 0 | from `crm.Opportunity.owner` / `.amount` / `.probability` |
+| `pipeline_value` | Decimal(16,2), default 0 | |
+| `weighted_pipeline_value` | Decimal(16,2), default 0 | `crm.Opportunity.weighted_amount` already exists as a property — this records the period total |
+| *Lagging / outcome block* | | |
+| `win_rate_pct` | **Decimal(5,2), `editable=False`** | **COMPUTED** in `save()` |
+| `revenue_closed` | Decimal(16,2), default 0 | closed-won amount / `scm.SalesOrder.total` — **no second revenue ledger** (L29) |
+| `currency` | FK `accounting.Currency`, SET_NULL, null | the scorecard is **single-currency** |
+| `average_deal_size` | **Decimal(14,2), `editable=False`** | **COMPUTED** in `save()` |
+| `sales_cycle_days` | Decimal(8,2), null | |
+| *Goal-gap block* | | |
+| `quota_target` | Decimal(16,2), default 0 | the target in force for the period |
+| `quota_attainment_pct` | **Decimal(6,2), `editable=False`** | **COMPUTED** in `save()` |
+| `goal_gap_value` | **Decimal(16,2), `editable=False`** | **COMPUTED** in `save()` |
+| *Assessment* | | |
+| `overall_score` | Decimal(5,2), null | the manager's composite judgement |
+| `rating` | Char(20), `SCORECARD_RATING_CHOICES`, default `on_track` | outstanding / strong / on_track / needs_improvement / underperforming |
+| `strengths`, `areas_for_improvement`, `coaching_actions` | Text, blank | |
+| *Benchmark block* | | |
+| `benchmark_win_rate_pct`, `benchmark_cycle_days`, `benchmark_quota_attainment_pct` | Decimal, null | |
+| `benchmark_source` | Char(120), blank | |
+| `benchmark_as_of` | Date, null | vintage stamp |
+| `segment` | Char(40), blank | peer-segment label |
+| `status` | Char(12), `SCORECARD_STATUS_CHOICES`, default `draft` | draft / shared / acknowledged / approved |
+| `notes` | Text, blank | |
+
+- **Form excludes:** `tenant`, `number`, `created_at`, `updated_at`, **`win_rate_pct`**, **`average_deal_size`**, **`quota_attainment_pct`**, **`goal_gap_value`**.
+- **Ruling:** those four are computed in `save()` from the row's own `opportunities_won` / `opportunities_lost`, `revenue_closed` / `opportunities_won`, `revenue_closed` / `quota_target`, and `quota_target` / `revenue_closed` — ratios/differences of two fields on the same row, so editing them lets the row contradict itself.
+- **The activity counters are editable** — they are the period's *recorded evidence*. The console shows the **live** `sales.ActivityLog`-derived counts **beside** the stored snapshot so any divergence is visible; the console **never overwrites** the stored snapshot.
+- `overall_score` and `rating` are **editable** — the manager's composite judgement, not a formula (the components have different weights, and the call-level rubric lives in 8.9).
+- **Single-currency by design:** `crm.Opportunity.currency` is per-opportunity, so a cross-currency leaderboard needs FX rates NavERP does not hold → `GAP-sales-8.12-11`.
+- The **leading / lagging split is a field-grouping**, documented in the model docstring (activity block = leading; outcome block = lagging), exactly as the research specifies.
+
+### Derived console pages — **NO new models**
+
+Six read-only pages, following the 8.11 `health_console` / 8.13 `attribution_console` / `boards/` precedent (5 existing `templates/sales/*/boards/` folders). Every figure is computed at render time.
+
+| Page | Bullet | Content | **Existing helper reused** |
+|---|---|---|---|
+| `sales:analytics_console` | landing | KPI tiles + links to the five bullet views | `sales_health_counts(tenant, …)` + `sales_pipeline_rollups(tenant, …)` |
+| `sales:win_loss_console` | 1 | win rate by reason / competitor / segment; recurring decision drivers; open feedback actions | `sales_win_loss_rows(tenant, …)` + `sales_competitor_rows(tenant, …)` |
+| `sales:velocity_console` | 2 | bottleneck ranking (median & p90 vs `PipelineStage.target_days`), aging table, velocity trend | `sales_stage_age_rows(tenant, …)` + `sales_pipeline_rollups(tenant, …)` |
+| `sales:funnel_console` | 3 | stage-by-stage waterfall, drop-off & skip counts, our rate vs benchmark | **`crm.analytics.compute_report(report)`** on a saved `crm.AnalyticsReport` with `report_type="funnel"` (public entry point — **not** the private `_compute_funnel`) + the FNL- records |
+| `sales:rep_scorecard_console` | 4 | rep leaderboard (activity, pipeline, win rate, revenue), team rollup | RPS- rows + a `sales.ActivityLog` aggregate + `crm.analytics.compute_report(report)` on `report_type="sales_performance"` |
+| `sales:benchmark_console` | 5 | internal team comparison, percentile bands, our metric vs industry benchmark, goal-gap | RPS-/FNL-/VCA- benchmark fields + `sales.QuotaPlan` |
+
+**Console → helper mapping is a hard rule.** Every console must name, in its module docstring, the existing helper it renders over. If a console needs a figure none of the helpers provide, it is computed from the four 8.12 models plus the spine — **never** by adding a new aggregation module.
+
+## Backend (apps/sales/{models,forms,views,urls}/SalesAnalytics/)
+
+New package folder `SalesAnalytics/` (PascalCase, matching the NavERP.md title "Sales Analytics") in **all four** layers, plus `__init__.py` in each.
+
+### File list (one entity per file; layers line up one-to-one)
+
+- [ ] `apps/sales/models/SalesAnalytics/WinLossDebriefs.py` — `WinLossDebrief` (`WLA`) + `INTERVIEW_CHANNEL_CHOICES`, `FEEDBACK_TEAM_CHOICES`, `DEBRIEF_STATUS_CHOICES`
+- [ ] `apps/sales/models/SalesAnalytics/StageVelocityAnalyses.py` — `StageVelocityAnalysis` (`VCA`) + `VELOCITY_STATUS_CHOICES`
+- [ ] `apps/sales/models/SalesAnalytics/FunnelConversionRecords.py` — `FunnelConversionRecord` (`FNL`) + `FUNNEL_SCOPE_CHOICES`
+- [ ] `apps/sales/models/SalesAnalytics/RepPerformanceScorecards.py` — `RepPerformanceScorecard` (`RPS`) + `SCORECARD_RATING_CHOICES`, `SCORECARD_STATUS_CHOICES`
+- [ ] `apps/sales/models/SalesAnalytics/__init__.py` — package re-exports
+- [ ] `apps/sales/forms/SalesAnalytics/WinLossDebriefs.py` — `WinLossDebriefForm`
+- [ ] `apps/sales/forms/SalesAnalytics/StageVelocityAnalyses.py` — `StageVelocityAnalysisForm`
+- [ ] `apps/sales/forms/SalesAnalytics/FunnelConversionRecords.py` — `FunnelConversionRecordForm`
+- [ ] `apps/sales/forms/SalesAnalytics/RepPerformanceScorecards.py` — `RepPerformanceScorecardForm`
+- [ ] `apps/sales/forms/SalesAnalytics/__init__.py`
+- [ ] `apps/sales/views/SalesAnalytics/WinLossDebriefs.py` — 5 CRUD views
+- [ ] `apps/sales/views/SalesAnalytics/StageVelocityAnalyses.py` — 5 CRUD views
+- [ ] `apps/sales/views/SalesAnalytics/FunnelConversionRecords.py` — 5 CRUD views
+- [ ] `apps/sales/views/SalesAnalytics/RepPerformanceScorecards.py` — 5 CRUD views
+- [ ] `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py` — 6 console views
+- [ ] `apps/sales/views/SalesAnalytics/__init__.py`
+- [ ] `apps/sales/urls/SalesAnalytics/WinLossDebriefs.py` — 5 named routes
+- [ ] `apps/sales/urls/SalesAnalytics/StageVelocityAnalyses.py` — 5 named routes
+- [ ] `apps/sales/urls/SalesAnalytics/FunnelConversionRecords.py` — 5 named routes
+- [ ] `apps/sales/urls/SalesAnalytics/RepPerformanceScorecards.py` — 5 named routes
+- [ ] `apps/sales/urls/SalesAnalytics/AnalyticsConsoles.py` — 6 literal console routes
+- [ ] `apps/sales/urls/SalesAnalytics/__init__.py` — **console urls FIRST**, then the entity modules (mirrors 8.13's `console_urls` first)
+
+**Absolute imports only** (`from apps.sales.models import X` / `from apps.sales.models.SalesAnalytics.WinLossDebriefs import WinLossDebrief`). Entity modules pull the shared toolkit from `models/_base.py` (models) and `forms/_common.py` / `views/_common.py` (forms/views) — `TenantUniqueMixin`, `_reject_foreign`, `tenant_users`, `tenant_territories` — via `import *` / explicit import.
+
+### Shared-file edits — **surgical, additive, single-writer**
+
+- [ ] `apps/sales/models/__init__.py` — insert `from .SalesAnalytics.… import (…)` block + add the 4 model names and the CHOICES constants to `__all__` (8.13's block ends the file's import list; 8.12's goes **after** it).
+- [ ] `apps/sales/forms/__init__.py` — insert the 8.12 form imports + add the 4 form names to `__all__`.
+- [ ] `apps/sales/views/__init__.py` — insert `from .SalesAnalytics import (…)` + **extend the `__all__` prefix tuple** with `win_loss_debrief_`, `stage_velocity_analysis_`, `funnel_conversion_record_`, `rep_performance_scorecard_` **and the six console names** (`analytics_console`, `win_loss_console`, `velocity_console`, `funnel_console`, `rep_scorecard_console`, `benchmark_console`). ⚠ `__all__` here is a **computed prefix filter** — a view whose name prefix is not in that tuple is silently NOT exported.
+- [ ] `apps/sales/urls/__init__.py` — insert `from .SalesAnalytics import urlpatterns as _sales_analytics` **and** splice `*_sales_analytics` into the `urlpatterns` list (8.13's note: the import alone is a no-op that still leaves `manage.py check` clean while every `reverse()` raises `NoReverseMatch`).
+- [ ] `apps/sales/admin.py` — register the 4 classes (follow the 8.13 block).
+- [ ] `apps/sales/management/commands/seed_sales.py` — **append** a new `_seed_sales_analytics(self, tenant, owner)` method + **one** call in `_seed_tenant` after `_seed_marketing_alignment(...)`. **Do not restructure the existing command.** The helper reuses the existing `crm.Opportunity` / `crm.Lead` / `core.Party` (customer) / `sales.Pipeline` / `sales.PipelineStage` / `sales.QuotaPlan` / `sales.ForecastPeriod` / `accounts.User` rows and creates **none** of them; if a master is missing for a tenant it warns and skips. Idempotency keys: WLA `(tenant, opportunity)`, VCA `(tenant, pipeline_stage, period_start)`, FNL `(tenant, label, period_start)`, RPS `(tenant, rep, period_start)` — each guarded with `get_or_create` / an existence check so a second run produces identical counts.
+- [ ] `apps/sales/migrations/0024_salesanalytics.py` — generated by `makemigrations sales` (**re-verify the number first**, L43).
+- [ ] `apps/core/navigation.py` — the single `LIVE_LINKS["8.12"]` entry (see Wire-up).
+- [ ] `templates/sales/sales_overview.html` — add one link to the 8.12 landing page (surgical insert).
+
+### URL names and paths (Django is first-match-wins; literal routes before `<int:pk>`)
+
+| Name | Path | View |
+|---|---|---|
+| `analytics_console` | `sales-analytics/` | `analytics_console` |
+| `win_loss_console` | `sales-analytics/win-loss/` | `win_loss_console` |
+| `velocity_console` | `sales-analytics/velocity/` | `velocity_console` |
+| `funnel_console` | `sales-analytics/funnel/` | `funnel_console` |
+| `rep_scorecard_console` | `sales-analytics/rep-scorecards/` | `rep_scorecard_console` |
+| `benchmark_console` | `sales-analytics/benchmarks/` | `benchmark_console` |
+| `win_loss_debrief_list` / `_create` / `_detail` / `_edit` / `_delete` | `sales-analytics/win-loss-debriefs/`, `/create/`, `/<int:pk>/`, `/<int:pk>/edit/`, `/<int:pk>/delete/` | |
+| `stage_velocity_analysis_list` / `_create` / `_detail` / `_edit` / `_delete` | `sales-analytics/stage-velocity/`, … | |
+| `funnel_conversion_record_list` / `_create` / `_detail` / `_edit` / `_delete` | `sales-analytics/funnel-records/`, … | |
+| `rep_performance_scorecard_list` / `_create` / `_detail` / `_edit` / `_delete` | `sales-analytics/scorecards/`, … | |
+
+**26 url names in total.** The console paths and the list paths are distinct literals under the `sales-analytics/` prefix, so no console route can be swallowed by an `<int:pk>` route — but the console module's `urlpatterns` is still spliced **first** in `urls/SalesAnalytics/__init__.py`, and inside each entity module the `<int:pk>` routes come **last**.
+
+### Views — house rules that bind every one of them
+
+- Function-based, `@login_required` on all; **writes** (create / edit / delete) additionally `@tenant_admin_required`; delete is `@require_POST` + `@tenant_admin_required` with `confirm()` + `{% csrf_token %}` in the template.
+- Every queryset is filtered `tenant=request.tenant`; the detail/edit/delete lookup is `get_object_or_404(Model.objects.filter(tenant=request.tenant), pk=pk)` → a **cross-tenant pk is a 404, not a 403**.
+- Search `q` → `Q()` lookups; filters applied **before** pagination; `Paginator(qs, 15)`.
+- **Integer FK filter params are validated with `.isdigit()`** (L11) before `.filter(fk_id=…)` — a junk value must be **ignored**, not raise and not silently empty the register.
+- **FK pk comparison in templates uses `|stringformat:"d"`** — never `|slugify`.
+- Pagination links guard with `has_previous` / `has_next` (L9).
+- Every write path calls `write_audit_log(request.user, obj, "create"|"update"|"delete", …, tenant=request.tenant)` from `apps/core/utils.py`.
+- Badges use **colour-named** classes only: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`. `badge-success` / `badge-danger` / `badge-warning` **do not exist** in `static/css/theme.css` (L33 — shipped 4×). `.stat-icon` accepts **only** `blue`, `green`, `orange`, `purple`, `slate` (`theme.css:260-264`; `red` exists at `:265` but is **not** in the approved set — do not use it). Every badge branch tests the model's **exact** CHOICES value and ends with an `{% else %}` fallback of `{{ obj.get_<field>_display }}` / `badge-slate`.
+- Multi-line template comments use `{% comment %}…{% endcomment %}` — a multi-line `{# #}` leaks as visible text (L2).
+- Every nullable FK dereference in a template is `{% if %}`-guarded (L10) — `{{ obj.owner.get_full_name|default:obj.owner.username }}` 500s when `owner` is NULL.
+
+### Context-var contract (L7/L8) — every key pinned
+
+A name left unpinned is a silently blank page. These are **mandatory**; the template and the view must agree exactly.
+
+**`win_loss_debrief_list`**
+- list var `debriefs` (= `page_obj.object_list`) · pagination `page_obj` · `q`
+- choices: `status_choices` (`DEBRIEF_STATUS_CHOICES`), `interview_channel_choices` (`INTERVIEW_CHANNEL_CHOICES`), `feedback_team_choices` (`FEEDBACK_TEAM_CHOICES`)
+- FK querysets: `opportunities` (crm.Opportunity, tenant), `outcomes` (sales.OpportunityOutcome, tenant), `reasons` (sales.WinLossReason, tenant, `is_active=True`), `accounts` (core.Party, tenant, `roles__role="customer"`, distinct), `interviewers` (User, tenant), `action_owners` (User, tenant)
+- `stats` dict: `total_count`, `open_count` (status in draft/submitted/shared), `actioned_count`, `closed_count`
+- `active_filters` dict: `q`, `status`, `interview_channel`, `opportunity`, `reason`
+
+**`stage_velocity_analysis_list`**
+- list var `analyses` · `page_obj` · `q`
+- choices: `status_choices` (`VELOCITY_STATUS_CHOICES`)
+- FK querysets: `pipelines` (sales.Pipeline, tenant), `pipeline_stages` (sales.PipelineStage, tenant, `is_active=True`)
+- `stats` dict: `total_count`, `bottleneck_count`, `draft_count`, `reviewed_count`, `approved_count`
+- `active_filters`: `q`, `status`, `pipeline`, `pipeline_stage`
+
+**`funnel_conversion_record_list`**
+- list var `records` · `page_obj` · `q`
+- choices: `scope_choices` (`FUNNEL_SCOPE_CHOICES`)
+- FK querysets: `from_stages` (PipelineStage, tenant), `to_stages` (PipelineStage, tenant), `territories` (crm.Territory, tenant), `owners` (User, tenant)
+- `stats` dict: `total_count`, `avg_conversion_rate_pct`, `total_dropoff`, `below_benchmark_count` (rows where `benchmark_pct` is set and `conversion_rate_pct < benchmark_pct`)
+- `active_filters`: `q`, `funnel_scope`, `from_stage`, `to_stage`, `territory`, `owner`
+
+**`rep_performance_scorecard_list`**
+- list var `scorecards` · `page_obj` · `q`
+- choices: `status_choices` (`SCORECARD_STATUS_CHOICES`), `rating_choices` (`SCORECARD_RATING_CHOICES`)
+- FK querysets: `reps` (User, tenant), `territories` (crm.Territory, tenant), `managers` (User, tenant), `currencies` (accounting.Currency, `order_by("code")`), `quota_plans` (sales.QuotaPlan, tenant), `forecast_periods` (sales.ForecastPeriod, tenant)
+- `stats` dict: `total_count`, `avg_win_rate_pct`, `total_revenue_closed`, `avg_quota_attainment_pct`, `on_track_count` (rating in outstanding/strong/on_track)
+- `active_filters`: `q`, `status`, `rating`, `rep`, `territory`, `forecast_period`
+
+**Detail views** — `obj` **plus** a named alias (`debrief` / `analysis` / `record` / `scorecard`). **Form views** — `form`, `obj`, `is_edit`.
+
+**Consoles** — pinned context keys:
+- `analytics_console`: `stats` (`total_debriefs`, `total_velocity_analyses`, `total_funnel_records`, `total_scorecards`, `open_feedback_actions`, `pipeline_health` from `sales_health_counts`), `bullet_links` (list of `{label, url}` for the five bullets), `recent_debriefs`, `recent_analyses`
+- `win_loss_console`: `stats`, `win_loss_rows` (from `sales_win_loss_rows`), `competitor_rows` (from `sales_competitor_rows`), `driver_rows` (recurring drivers aggregated from `WinLossDebrief.decision_drivers`), `open_actions`, `result_choices`
+- `velocity_console`: `stats`, `stage_age_rows` (from `sales_stage_age_rows`), `rollup_rows` (from `sales_pipeline_rollups`), `bottleneck_rows` (VCA- rows, live rank re-derived), `aging_rows`
+- `funnel_console`: `stats`, `funnel_rows` (FNL- records grouped), `funnel_report` (the `compute_report` result dict for the saved `"funnel"` report), `benchmark_rows`
+- `rep_scorecard_console`: `stats`, `scorecard_rows`, `leaderboard` (sorted), `team_rollup`, `activity_totals` (live `sales.ActivityLog` aggregate, shown **beside** the stored snapshot), `percentile_bands`
+- `benchmark_console`: `stats`, `peer_rows` (RPS- rows side by side), `percentile_bands`, `benchmark_rows` (our metric vs benchmark across RPS/FNL/VCA), `goal_gap_rows` (from `sales.QuotaPlan`)
+
+> ⚠ `apps/core/crud.py::crud_list` puts the rows in **`object_list`**, not in an entity-named var. If it is used, the template must read `object_list` — **or** the view must alias the entity-named var itself. The pinned names above are the contract; a template reading `debriefs` while the view passes `object_list` is a blank page. The 8.13 hand-rolled list pattern (`apps/sales/views/MarketingAlignment/MqlHandoffs.py`) is the reference implementation.
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — **one** new `LIVE_LINKS["8.12"]` entry. The five bullet keys are the **verbatim** NavERP.md text (the sidebar looks the key up by bullet text — `live_map.get(name)` in `apps/core/navigation.py`), and each maps to a **distinct** console:
+
+```python
+"8.12": {
+    # OWNERSHIP RULING (L36/L37)
+    # EXTENDS (never redeclares) Sales 8.2 WinLossReason (WLR-) + OpportunityOutcome (OUT-);
+    # links Sales 8.9 CoachingScorecard (CSC-) by FK. Reuses crm.Opportunity (OPP-), crm.Lead
+    # (LEAD-), crm.Territory, crm.CommunicationLog (COM-), crm.AnalyticsReport /
+    # AnalyticsDashboard / DashboardWidget / ReportSnapshot (CRM 1.6 report engine),
+    # sales.Pipeline (PIPE-) / PipelineStage (target_days) / OpportunityPipelinePlacement
+    # (stage_entered_at), sales.ActivityLog (SAL-) / ActivityType, sales.QuotaPlan (QPA-),
+    # sales.ForecastPeriod, core.Party, accounting.Currency and accounts.User. The six
+    # consoles render over apps/sales/opportunity_analytics.py and apps/crm/analytics.py.
+    # Zero duplicate reason, outcome, report, widget, quota, currency, activity, competitor
+    # or coaching-scorecard models declared.
+    "Win/Loss Analysis": "sales:win_loss_console",
+    "Sales Velocity & Cycle Time": "sales:velocity_console",
+    "Conversion Funnel Analytics": "sales:funnel_console",
+    "Rep Performance Scorecards": "sales:rep_scorecard_console",
+    "Benchmarking & Peer Comparison": "sales:benchmark_console",
+    # Extra live leaves
+    "Sales Analytics Console": "sales:analytics_console",
+    "Win/Loss Debriefs": "sales:win_loss_debrief_list",
+    "Stage Velocity Analyses": "sales:stage_velocity_analysis_list",
+    "Funnel Conversion Records": "sales:funnel_conversion_record_list",
+    "Rep Scorecard Records": "sales:rep_performance_scorecard_list",
+},
+```
+
+> ⚠ **No duplicate dict key.** The bullet "Rep Performance Scorecards" (→ `rep_scorecard_console`) and the extra leaf must have **different labels** — the extra leaf is "Rep Scorecard Records" (→ `rep_performance_scorecard_list`). A repeated key silently drops one entry from the sidebar.
+
+- [ ] **No `config/settings.py` and no `config/urls.py` change** — `apps/sales` is already installed and already routed. This is the single most common way to break a concurrent build; do not touch either file.
+- [ ] `templates/sales/sales_overview.html` — one link to `sales:analytics_console`.
+
+## Templates (templates/sales/salesanalytics/)
+
+Folder per sub-module → folder per entity → bare page filenames.
+
+- [ ] `templates/sales/salesanalytics/winlossdebrief/{list,detail,form}.html`
+- [ ] `templates/sales/salesanalytics/stagevelocityanalysis/{list,detail,form}.html`
+- [ ] `templates/sales/salesanalytics/funnelconversionrecord/{list,detail,form}.html`
+- [ ] `templates/sales/salesanalytics/repperformancescorecard/{list,detail,form}.html`
+- [ ] `templates/sales/salesanalytics/boards/{analytics_console,win_loss_console,velocity_console,funnel_console,rep_scorecard_console,benchmark_console}.html`
+
+**18 templates** (4 × 3 entity pages + 6 boards). The `boards/` folder is an established precedent (5 existing `templates/sales/*/boards/` folders). `{% extends "base.html" %}` and `{% include "partials/…" %}` are unaffected by the folder rule.
+
+Each **list** page: `.page-header` → `.stat-grid` of `.stat-card` / `.stat-icon` → `.card > .card-body > <form method="get" class="filter-bar">` (one control per declared filter, reflecting `request.GET`, + Apply + Reset) → table with an **Actions column** (view / edit / delete-POST+confirm+csrf) → `{% empty %}` empty state → `{% include "partials/pagination.html" %}`.
+
+Each **detail** page: an Actions sidebar (Edit — conditional on status; Delete — POST form with confirm, conditional on status; Back to List) + the full field set + the derived read-outs.
+
+Each **form** page: `{% csrf_token %}`, the form fields, Save / Cancel. Derived fields (`conversion_rate_pct`, `dropoff_count`, `win_rate_pct`, `average_deal_size`, `quota_attainment_pct`, `goal_gap_value`) are **not** inputs — they are shown read-only on the detail page and recomputed on save.
+
+**Filter-bar controls must match the pinned context keys exactly** (e.g. `{% for r in reasons %}` with `{% if request.GET.reason == r.pk|stringformat:"d" %}selected{% endif %}`).
+
+## Verify
+
+- [ ] `venv\Scripts\python.exe manage.py makemigrations sales` → `0024_salesanalytics.py` — **re-verify the number first** (L43); the last migration today is `0023_attributiontouchpoint_campaignattribution_and_more.py`
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_sales` — run **twice**; the second run must produce **identical counts** (idempotent)
+- [ ] `venv\Scripts\python.exe manage.py check` → `System check identified no issues (0 silenced)`
+- [ ] `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` → `No changes detected` (no model drift)
+- [ ] **All 26 new url names reverse** — no `NoReverseMatch` (L54: the import in `urls/__init__.py` *and* the `urlpatterns` splice are both required)
+- [ ] **temp/ smoke sweep as `admin_acme` / `password`** — assert **content, not just a status code** (a mismatched context var returns 200 and renders blank, L8):
+  - 4 list pages → 200, each containing its seeded record (`WLA-…`, `VCA-…`, `FNL-…`, `RPS-…`) and the expected labels
+  - 4 detail + 4 create + 4 edit pages → 200
+  - 6 console pages → 200, each containing its KPI labels and **a non-empty table** (a console that renders an empty table because the helper was never called is a failure)
+  - **every pinned context key is populated** — e.g. the stage filter dropdown is non-empty, `stats` renders numbers (not blanks)
+  - junk params (≥7 hostile query strings, incl. `?page=999`, `?status=nope`, `?opportunity=abc`, `?opportunity=999999999999999999999`) on every list page and every console → **no 500**, all fall back to the unfiltered view (L11)
+  - page 2 → 200 on all 4 list pages
+  - **cross-tenant IDOR** → a `admin_globex` pk returns **404** on both the detail and the edit route of all 4 models
+  - grep every rendered page for `{#` and `{% comment` → **zero hits** (L2)
+  - grep every rendered page for `badge-success|badge-danger|badge-warning|badge-purple|stat-icon amber|stat-icon red` → **zero hits** (L33)
+  - every `filter-bar` select's FK option value equals the target's `pk` and the selected option is `selected` when `request.GET` carries that pk (L-filter rules)
+- [ ] **Sidebar**: `LIVE_LINKS["8.12"]` present; the sidebar shows 8.12 with **5 bullets + 5 extra leaves**, all **Live**; each of the five bullets resolves to a **distinct** href (L30 — the human sidebar pass)
+- [ ] `.agents/tasks/gaps-sales-8.12.md` created in the integrate step (see Later passes) and linked from the review/close-out block
+
+## Close-out
+
+- [ ] **Phase 4 — six reviewers, ONE AFTER ANOTHER**: `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`, each reading `BASE...HEAD`, each appending its findings to `.claude/tasks/review-sales-8.12.md` (dedupe, sort Critical → Important → Minor, assign `C1` / `I3` / `M7` IDs, commit the file). A reviewer that returns nothing usable is **re-run** — a missing pass is missing coverage.
+- [ ] **Phase 5 — `code-fixer`**: fixes every finding in ID order, one commit per file, marking each `[x] fixed` / `[~] skipped — reason`. The main session does **not** apply findings itself.
+- [ ] **Phase 6 — the `test-writer` agent is SKIPPED at the user's explicit instruction.** Recorded as `GAP-sales-8.12-02`, not as a plan item. `apps/sales/tests/conftest.py` is **owned by the concurrent session** and must **not** be edited.
+- [ ] **Phase 7** — update `.claude/skills/sales/SKILL.md` with the 8.12 models / routes / templates / seeder rows / sidebar wiring / conventions & gotchas, and mark 8.12 complete in `README.md`. One file per commit.
+- [ ] **Git discipline** — one file per commit, PowerShell-safe (`git add 'file'; git commit -m 'msg'`), **never `&&`**, **never `git push`**. The user pushes manually.
+
+## Later passes / deferred
+
+- **AI win/loss theme extraction, auto-summarisation, auto-tagging of interview transcripts** (Klue 360°, Clozd) — deferred; needs a model and a transcript corpus. `WinLossDebrief.decision_drivers` / `buyer_quote` are the landing zone.
+- **Conversation intelligence** — call recording, transcription, talk-listen ratio, sentiment, AI call scoring (Gong, Clari, Dynamics 365) — deferred; needs a call store and an ASR/NLP pipeline. 8.9's `CoachingScorecard.recording_url` / `transcript_summary` are the placeholders.
+- **Email / calendar / VoIP activity auto-capture** (Gong, Clari, Dynamics 365) — deferred; needs OAuth connectors. 8.8's `ActivityLog.capture_source` / `is_auto_captured` already record the *fact* of a capture.
+- **AI predictive lead / opportunity scoring, predicted close date, predicted cycle length, Zia-style natural-language querying, AI rep ranking** — deferred; model-dependent. `crm.Opportunity.probability` / `forecast_category` stay user-set.
+- **Automated win/loss interview outreach, scheduling, incentives, recording, distribution** (Clozd's managed program) — deferred; needs a mailer / scheduler / incentive stack. 8.12 records the **channel** and the **quote** only.
+- **External benchmark data ingestion** (Pavilion/Ebsta cohort snapshots, Bridge Group, OpenView, RAIN Group, RepVue) — deferred; no public API, 30–60 day lag, licensing. The benchmark values are entered manually into `benchmark_*` + `benchmark_source` + `benchmark_as_of`.
+- **Scheduled report / dashboard email delivery and mobile access** (Zoho, HubSpot) — deferred; needs a mailer task and a responsive layout.
+- **BI / warehouse export** (Tableau, Power BI, Snowflake, DOMO) and white-label embedded dashboards — deferred; `crm.AnalyticsReport`'s JSON result payload is the natural export surface; the dashboard builder is CRM 1.6's.
+- **What-if scenario modelling and forecast compression analysis** (Anaplan, OpenView) — deferred; a modelling layer over the ledger, well beyond one sub-module.
+- **Program-level win/loss governance** (executive sponsorship, review cadence, participation rate) — deferred; `status` + `debriefed_on` on the debrief give a participation/covers count.
+- **Ramp time as a stored per-period metric** — currently derived from the rep's first `sales.ActivityLog`; becomes a field on RPS- only if it must be snapshotted per period.
+- **`.agents/tasks/gaps-sales-8.12.md`** (created in the integrate step) must carry, at minimum: `GAP-sales-8.12-01` stage-transition history missing from `crm.Opportunity`; `-02` the user-directed skip of Phase 6 (test-writer) + the concurrent-session ownership of `apps/sales/tests/conftest.py`; `-03` AI win/loss theme extraction; `-04` conversation intelligence; `-05` activity auto-capture connectors; `-06` AI predictive scoring / natural-language querying; `-07` automated win/loss interview outreach; `-08` external benchmark feeds; `-09` scheduled report delivery; `-10` BI/warehouse export; `-11` multi-currency revenue aggregation (no FX store); `-12` win/loss program governance; `-13` ramp time as a stored metric; `-14` custom dashboard builder / public share links (parked to CRM 1.6); `-15` what-if scenario modelling. Each entry: ID, owner, "waiting for / blocked on", a status checkbox, "done when", and immutable history.
+
+## Declined, with reasons (so it is not re-litigated)
+
+- **A second win/loss-reason or opportunity-outcome table** — L36/L37. 8.2 owns `sales.WinLossReason` (`WLR-`) and `sales.OpportunityOutcome` (`OUT-`); 8.12 extends both by FK.
+- **A second report / dashboard / widget / snapshot engine** — CRM 1.6 owns `crm.AnalyticsReport` / `AnalyticsDashboard` / `DashboardWidget` / `ReportSnapshot` and `apps/crm/analytics.py`. 8.12 renders over it; it never builds a second one.
+- **A second sales analytics/aggregation layer** — `apps/sales/opportunity_analytics.py` already ships the rollup, stage-age, win/loss, competitor, health and currency helpers. 8.12's consoles call them; no new aggregation module.
+- **Importing the private `crm.analytics._compute_funnel` / `._compute_sales_performance`** — underscore-private across an app boundary. Use the public `crm.analytics.compute_report(report)` with a saved `crm.AnalyticsReport` of `report_type` `"funnel"` / `"sales_performance"`.
+- **An `avg_days_in_stage` field on VCA-** — the reference modelling guidance is explicit that a right-skewed duration distribution is reported as **median and p90**; a plain average invites a reader to treat a mean as typical. Deliberately omitted.
+- **An `OpportunityStageHistory` / stage-transition model in 8.12** — the transition history belongs to `crm.Opportunity` (CRM 1.2), not to a sales-analytics sub-module. 8.12's VCA- snapshot is the honest substitute → `GAP-sales-8.12-01`.
+- **A `competitor` field on the debrief** — the losing competitor is already on `OpportunityOutcome.competitor_link` → `sales.OpportunityCompetitor` (8.2/8.9). 8.12 only reads it.
+- **A quota / quota-plan / forecast-period table** — 8.7 owns `sales.QuotaPlan` / `TerritoryMember` / `TerritoryRule` (and `crm.SalesQuota` / `crm.Territory`); 8.4 owns `sales.ForecastPeriod` / `ForecastSubmission` / `ForecastScenario` / `ForecastAdjustment`. 8.12 reads the quota and the period for the goal-gap figure; it does not re-quota and it does not re-forecast.
+- **A call-level coaching rubric (Discovery / Value-Prop / Objection / Next-Steps, talk-listen, sentiment)** — already built as `sales.CoachingScorecard` (`CSC-`) in 8.9. 8.12 links to it by optional FK and never duplicates it.
+- **A benchmark master table (`BenchmarkSource`, `BenchmarkSeries`)** — the benchmark values are a hand-entered number with a source and an as-of date, carried inline on the three analysis records. A master table would be a second place for the same number and would drift from it.
+- **A `Funnel` / `FunnelStage` table** — the funnel is a **report** over `crm.Opportunity` + `sales.PipelineStage`. FNL- records the *stated* denominator and the measured counts; it does not define the stages.
+- **A `Rep` / `Employee` table** — reps are `accounts.User` (= `settings.AUTH_USER_MODEL`); the HRM module owns the employee record and 8.12 never copies it.
+- **A product / item / segment catalogue slice** — no 8.12 bullet mentions product mix. `scm.Item` / `scm.UOM` / `scm.StockMove` / `scm.LotSerial` live under `apps/scm` (Module 5), not `apps/core`; 8.12 does not need them.
+- **Reusing 8.13's `AttributionTouchpoint` / `CampaignAttribution` / `MqlHandoff`** — 8.13 is a separate sub-module. 8.12's "feedback loop to product and marketing" is the `feedback_team` / `action_owner` / `action_items` / `actioned_on` / `status` block on the debrief, not a touchpoint row.
+- **Storing a campaign ROI / pipeline / coverage ratio as a column** — a derived fact stored next to its sources is a field that drifts. Coverage ratio, pipeline velocity, percentile bands, revenue concentration and the goal-gap charts are **computed on the console**.
+- **A `Segment` / peer-group master** — the peer-segment definition is a data-entry convention carried as a free-text `segment` label on the three records (the benchmarking guidance's "like-for-like" rule), not a maintained master table.
+- **Posting anything to the financial ledger** — L29. Revenue per rep is a *read* of `crm.Opportunity.amount` / `scm.SalesOrder.total`; 8.12 posts no `JournalEntry`.
+
+## Review notes
+(filled in at the end)
