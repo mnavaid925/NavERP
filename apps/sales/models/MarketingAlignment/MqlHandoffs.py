@@ -19,6 +19,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import F, Q
 from django.utils import timezone
 
 from apps.sales.models._base import TenantNumbered
@@ -174,6 +175,56 @@ class MqlHandoff(TenantNumbered):
     def is_responded(self):
         return self.responded_at is not None
 
+    # --- THE SLA-BREACH RULE -- one source, two evaluations -------------------------------
+    # A handoff is in breach when sales answered AFTER the deadline, or when it has not been
+    # answered at all and the deadline has passed. Neither clause looks at `status`: the
+    # `expired` status exists precisely to RECORD the unanswered-and-overdue case, so a status
+    # filter would hide exactly the rows the status names.
+    #
+    # `sla_breach_q()` renders these clauses as a SQL filter (used by EVERY aggregate in the
+    # module); `_sla_breach_match()` evaluates the same clauses against one row in Python (used
+    # by the row badge). Both read this tuple, so the MQL list card, the attribution console
+    # and the per-row badge cannot drift apart.
+    SLA_BREACH_CLAUSES = ("answered_late", "unanswered_overdue")
+
+    @classmethod
+    def sla_breach_q(cls, now=None):
+        """The SLA-breach rule as a SQL filter -- the single definition used by every aggregate.
+
+        `now` is the instant the "unanswered and overdue" clause is measured against; it
+        defaults to the current time. Pass an explicit `now` when several aggregates in one
+        request must be measured against the same instant.
+        """
+        if now is None:
+            now = timezone.now()
+        q = Q()
+        if "answered_late" in cls.SLA_BREACH_CLAUSES:
+            q |= Q(responded_at__isnull=False, responded_at__gt=F("sla_due_at"))
+        if "unanswered_overdue" in cls.SLA_BREACH_CLAUSES:
+            q |= Q(responded_at__isnull=True, sla_due_at__lt=now)
+        return q
+
+    def _sla_breach_match(self, now=None):
+        """The same SLA-breach rule, evaluated against this row in Python.
+
+        `sla_breach_q()` cannot be reused verbatim here: its "answered late" clause compares
+        two columns of the SAME row (`F("sla_due_at")`), which has no Python equivalent. The
+        clauses are therefore evaluated here one by one, against the same
+        `SLA_BREACH_CLAUSES` tuple that builds the SQL.
+        """
+        if self.sla_due_at is None:
+            return False
+        if now is None:
+            now = timezone.now()
+        for clause in self.SLA_BREACH_CLAUSES:
+            if clause == "answered_late" and self.responded_at is not None:
+                if self.responded_at > self.sla_due_at:
+                    return True
+            elif clause == "unanswered_overdue" and self.responded_at is None:
+                if self.sla_due_at < now:
+                    return True
+        return False
+
     @property
     def is_sla_breached(self):
         """True when sales answered after the deadline, or has not answered at all.
@@ -181,11 +232,7 @@ class MqlHandoff(TenantNumbered):
         An unanswered, overdue handoff is a breach too -- that is the case the SLA exists to
         surface, and it is exactly the "leakage" a MQL-to-SQL rate is supposed to expose.
         """
-        if self.sla_due_at is None:
-            return False
-        if self.responded_at is not None:
-            return self.responded_at > self.sla_due_at
-        return timezone.now() > self.sla_due_at
+        return self._sla_breach_match()
 
     @property
     def response_hours(self):
