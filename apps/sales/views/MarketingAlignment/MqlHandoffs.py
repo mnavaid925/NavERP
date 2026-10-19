@@ -17,7 +17,11 @@ from apps.sales.models.MarketingAlignment.MqlHandoffs import (
     HANDOFF_STATUS_CHOICES,
     MqlHandoff,
 )
-from apps.sales.views.MarketingAlignment._common import enum_filter, pk_from_param
+from apps.sales.views.MarketingAlignment._common import (
+    avg_response_hours,
+    enum_filter,
+    pk_from_param,
+)
 
 
 @login_required
@@ -72,20 +76,10 @@ def mql_handoff_list(request):
         round(stats["accepted_count"] / decided_count * 100, 1) if decided_count else None
     )
 
-    # Average response time is computed in Python over the responded handoffs only. A portable
-    # SQL duration expression differs between MySQL and SQLite, and this runs on both; the
-    # responded subset is bounded by real sales activity, not by the row count of the table.
-    response_pairs = list(
-        qs.filter(responded_at__isnull=False).values_list("responded_at", "handoff_at")
-    )
-    response_hours = [
-        (responded - handed).total_seconds() / 3600
-        for responded, handed in response_pairs
-        if responded is not None and handed is not None
-    ]
-    stats["avg_response_hours"] = (
-        round(sum(response_hours) / len(response_hours), 2) if response_hours else None
-    )
+    # Average response time is computed in Python over the responded handoffs only -- see
+    # `avg_response_hours()` for why it is not a SQL duration expression. The helper is shared
+    # with the attribution console so the two funnel figures can never disagree.
+    stats["avg_response_hours"] = avg_response_hours(qs)
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
