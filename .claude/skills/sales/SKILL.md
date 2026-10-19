@@ -803,3 +803,170 @@ Sub-module 8.9 operationalizes sales collateral, stage talk tracks, onboarding a
 - `test_salesenablement_views.py` (65 passed)
 - `test_salesenablement_security.py` (28 passed)
 
+---
+
+## 8.13 Marketing Alignment & Attribution
+
+App path: `apps/sales/`; templates: `templates/sales/marketingalignment/`; URL namespace: `sales`;
+URL prefix `/sales/marketing-alignment/`. Added 2026-10-19.
+
+### Ownership boundaries (L29 / L36 / L37) — READ THIS BEFORE ADDING ANY MODEL HERE
+
+8.13 measures marketing performance. It **declares no master of its own** — every one of the
+things it needs already exists, and 8.13 points at them by FK:
+
+- **Campaigns**: reuses CRM 1.3 `crm.Campaign` (`CAM-`) — the campaign master, with
+  `budget_planned`, `budget_actual`, `expected_revenue`, `actual_revenue`, `target_size` and
+  the UTM triple. The console reads campaign **spend** from `crm.Campaign.budget_actual`; it
+  never re-derives it. **Zero duplicate campaign tables.**
+- **Leads**: reuses CRM 1.1 `crm.Lead` (`LEAD-`) — the identity every touchpoint and handoff is
+  stitched to. **Zero duplicate lead tables.**
+- **Opportunities**: reuses CRM 1.2 `crm.Opportunity` (`OPP-`) — the conversion endpoint.
+  **Zero duplicate deal tables.**
+- **Accounts**: reuses `core.Party` with the `customer` role.
+- **Content**: reuses 8.9 `sales.EnablementContent` (`ECN-`) as the collateral master.
+  `ContentEngagement` measures *interactions with* it, it does not re-declare collateral.
+- **Users / Currency**: reuses `accounts.User` and `accounting.Currency`.
+
+**No JournalEntry is posted by 8.13 (L29).** Campaign ROI, "pipeline generated" and attributed
+revenue are *marketing-side attribution of revenue recognised elsewhere*.
+
+**Why two attribution tables.** `AttributionTouchpoint` is the raw **data** (what happened).
+`CampaignAttribution` is a **computation** over that data (what a model says it was worth).
+Splitting them is what lets first-touch and last-touch be evaluated side by side over the same
+journey — a `UniqueConstraint` on `(tenant, touchpoint, attribution_model)` guarantees one credit
+per touch per model, so the two can never overwrite each other.
+
+### 8.13 models (`apps/sales/models/MarketingAlignment/`)
+
+1. **`AttributionTouchpoint` (`ATB-#####`)** — `AttributionTouchpoints.py`
+   - The touch ledger: one row per marketing interaction.
+   - Fields: `campaign`, `lead`, `opportunity`, `channel` (`email`, `paid_search`,
+     `organic_search`, `social`, `display`, `webinar`, `event`, `referral`, `direct_mail`,
+     `website`, `other`), `touch_type` (`impression`, `click`, `email_open`, `email_click`,
+     `content_download`, `event_registration`, `event_attendance`, `meeting`, `trial_start`,
+     `demo_request`), `touch_date`, `touch_position` (`first`, `middle`, `last`), `cost`,
+     `engagement_value`, `currency`, `source_reference`, `notes`.
+   - Properties: `is_first_touch`, `is_last_touch`, `attributed_revenue` (sum of its credits —
+     the reverse accessor resolves lazily, so it needs no import).
+
+2. **`CampaignAttribution` (`ATR-#####`)** — `CampaignAttributions.py`
+   - The credit assignment: one row per (touchpoint × model).
+   - Fields: `touchpoint`, `attribution_model` (`first_touch`, `last_touch`, `linear`,
+     `time_decay`, `position_based`, `custom`), `credit_pct` (0–100), `attributed_revenue`,
+     `attributed_cost`, `status` (`draft`, `computed`, `approved`, `rejected`), `computed_on`,
+     `computed_by`, `notes`.
+   - Properties: `campaign` / `lead` / `opportunity` (proxied through the touchpoint), `roi_pct`.
+
+3. **`MqlHandoff` (`MQL-#####`)** — `MqlHandoffs.py`
+   - The marketing-to-sales handoff with a response SLA.
+   - Fields: `lead`, `campaign`, `account`, `owner`, `assigned_to`, `opportunity`, `status`
+     (`pending`, `accepted`, `rejected`, `expired`, `converted`), `source_kind` (`campaign`,
+     `content`, `event`, `webinar`, `referral`, `inbound`, `partner`, `other`), `handoff_at`,
+     `sla_due_at` (**required** — SLA compliance is a NavERP bullet), `responded_at`
+     (system-stamped, `editable=False`), `acceptance_reason`, `rejection_reason`, `lead_score`,
+     `estimated_value`, `currency`, `notes`.
+   - `save()` stamps `responded_at` on the first transition into `accepted` / `rejected` /
+     `converted` and clears it when the handoff returns to an unanswered status.
+   - Properties: `is_responded`, `is_sla_breached` (answered late **or** still unanswered past
+     the deadline), `response_hours`.
+   - Clean guard: a `rejected` handoff must carry a `rejection_reason`.
+
+4. **`ContentEngagement` (`CNG-#####`)** — `ContentEngagements.py`
+   - One interaction with a piece of 8.9 collateral: content-to-revenue mapping and engagement
+     scoring.
+   - Fields: `content` (→ 8.9 `EnablementContent`), `account`, `lead`, `campaign`,
+     `engagement_type` (`view`, `download`, `share`, `comment`, `attend`, `complete`),
+     `engagement_channel` (`email`, `web`, `search`, `social`, `sales`, `event`, `partner`,
+     `other`), `engagement_score` (0–100), `revenue_attributed`, `currency`, `engaged_at`, `notes`.
+   - Properties: `is_high_intent` (score ≥ 70), `is_download`.
+
+5. **`MarketingEvent` (`EVT-#####`)** — `MarketingEvents.py`
+   - The event: `name`, `event_type` (`webinar`, `conference`, `workshop`, `trade_show`,
+     `roadshow`, `roundtable`, `user_group`, `other`), `status` (`planned`, `published`,
+     `ongoing`, `completed`, `cancelled`), `start_at`, `end_at`, `timezone_name`, `venue`,
+     `virtual_url`, `capacity` (0 = unlimited), `budget`, `currency`, `owner`, `campaign`,
+     `description`.
+   - Properties: `registered_count` (uses the `registered_total` annotation when present),
+     `attended_count`, `show_up_rate_pct`, `revenue_per_registrant`.
+
+6. **`EventRegistration`** — same file, **child of `MarketingEvent`, NOT numbered**.
+   - Base is `TenantOwned` (tenant FK + timestamps), because it is an attendance/membership row,
+     not a document — the same ruling as `crm.CampaignMember`.
+   - Fields: `event`, `lead`, `account`, `campaign` (**UTM capture on the registrant**),
+     `registrant_name`, `registrant_email`, `registration_status` (`registered`, `confirmed`,
+     `attended`, `no_show`, `cancelled`, `waitlisted`), `source_channel`, `registered_at`,
+     `attended_at` (system-stamped, `editable=False`), `followup_status` (`pending`, `sent`,
+     `meeting_booked`, `opportunity_created`, `no_action`), `followup_notes`,
+     `engagement_score`, `revenue_attributed`, `opportunity`.
+   - `save()` stamps `attended_at` on the first transition into `attended`.
+
+### 8.13 routes and views (`apps/sales/views/MarketingAlignment/`)
+
+- **Console**:
+  - `marketing_attribution_console` (`/sales/marketing-alignment/console/`): the derived
+    performance board. Accepts `?model=` with one of the six attribution models; an unknown value
+    falls back to `first_touch` rather than showing an empty rollup. **Every figure is computed
+    on the fly — nothing on this page is stored.**
+- **CRUD Entities**:
+  - `attribution_touchpoint_{list,create,detail,edit,delete}`
+  - `campaign_attribution_{list,create,detail,edit,delete}`
+  - `mql_handoff_{list,create,detail,edit,delete}`
+  - `content_engagement_{list,create,detail,edit,delete}`
+  - `marketing_event_{list,create,detail,edit,delete}`
+  - `marketing_event_registrations` (the registration + attendance hub for one event)
+  - `marketing_event_registration_create` (add a registration)
+
+### 8.13 templates (`templates/sales/marketingalignment/`)
+
+- `attribution_console.html` (sub-module root — it is a board, not an entity CRUD page)
+- `attributiontouchpoint/{list,detail,form}.html`
+- `campaignattribution/{list,detail,form}.html`
+- `mqlhandoff/{list,detail,form}.html`
+- `contentengagement/{list,detail,form}.html`
+- `marketingevent/{list,detail,form}.html` + `registrations.html` + `registration_form.html`
+
+### 8.13 sidebar wiring (`apps/core/navigation.py`)
+
+`LIVE_LINKS["8.13"]` maps the five NavERP.md feature bullets plus two extra live leaves:
+- Campaign Influence & Attribution -> `sales:marketing_attribution_console`
+- MQL-to-SQL Tracking -> `sales:mql_handoff_list`
+- Campaign Performance Integration -> `sales:marketing_attribution_console`
+- Content Performance & Engagement -> `sales:content_engagement_list`
+- Event & Webinar Management -> `sales:marketing_event_list`
+- Leaves: Attribution Touchpoints -> `sales:attribution_touchpoint_list`, Campaign Attributions ->
+  `sales:campaign_attribution_list`.
+
+### 8.13 migrations & seeder
+
+- Migration: `0023_attributiontouchpoint_campaignattribution_and_more.py` (6 models, the
+  per-model credit constraint, the composite B-tree indexes and the tenant/number constraints).
+- Seeder: `python manage.py seed_sales` -> `_seed_marketing_alignment(tenant, owner)` seeds the
+  touch ledger, the first-touch / last-touch / linear credits, three MQL handoffs (one accepted,
+  one rejected, one deliberately left overdue to exercise the SLA-breach path), the content
+  engagements and two events with their registrations. It **reuses** the existing `crm.Campaign`,
+  `crm.Lead`, `crm.Opportunity`, customer `core.Party` and `sales.EnablementContent` rows and
+  creates none of them; if those masters are missing for a tenant it warns and skips rather than
+  inventing a duplicate. Idempotency keys: touchpoint `(tenant, lead, campaign, touch_date,
+  touch_type)`, attribution `(tenant, touchpoint, attribution_model)`, handoff `(tenant, lead)`,
+  engagement `(tenant, content, account, engagement_type)`, event `(tenant, name)`,
+  registration `(tenant, event, registrant_email)`.
+
+### 8.13 gotchas
+
+- **`responded_at` and `attended_at` are system-stamped.** Never let a form or the admin write
+  them — the SLA-compliance figure and the show-up rate are derived from them, so a typed value
+  would make the console wrong.
+- **The console's ROI is `(attributed_revenue - spend) / spend`** where `spend` is
+  `crm.Campaign.budget_actual`. If a campaign has no recorded spend, ROI and cost-per-lead are
+  `None` (rendered as "—"), not zero — a zero would read as "broke even".
+- **`EventRegistration.event` is fixed by the URL** on the add-registration form; the view
+  overrides the posted value and the form field is disabled.
+- **The 8.13 test suite is not written** — the `test-writer` agent was skipped at the user's
+  instruction for this run. The test contract is pinned in `.claude/tasks/contract-sales-8.13.md`
+  §1–§4. See `GAP-sales-8.13-09`.
+- **Known scope gaps** for 8.13 (W-shaped attribution, data-driven attribution, ad-platform
+  spend connectors, automatic handoff generation, event email automation, live webinar
+  micro-engagement capture, AI content recommendations, funnel-based attribution) are registered
+  in `.agents/tasks/gaps-sales-8.13.md`.
+
