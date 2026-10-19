@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Attribution {{ obj.number }}{% else %}New Campaign Attribution{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Marketing Alignment</span>
+            <span>/</span>
+            <a href="{% url 'sales:campaign_attribution_list' %}">Attributions</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Attribution{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Campaign Attribution {{ obj.number }}{% else %}New Campaign Attribution{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:campaign_attribution_detail' obj.pk %}{% else %}{% url 'sales:campaign_attribution_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Touchpoint & Model -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Touchpoint &amp; Attribution Model</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.touchpoint.id_for_label }}">Touchpoint <span class="text-red-500">*</span></label>
+                {{ form.touchpoint }}
+                {% if form.touchpoint.errors %}<div class="form-error">{{ form.touchpoint.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.attribution_model.id_for_label }}">Attribution Model <span class="text-red-500">*</span></label>
+                {{ form.attribution_model }}
+                {% if form.attribution_model.errors %}<div class="form-error">{{ form.attribution_model.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.credit_pct.id_for_label }}">Credit Percentage (%) <span class="text-red-500">*</span></label>
+                {{ form.credit_pct }}
+                {% if form.credit_pct.errors %}<div class="form-error">{{ form.credit_pct.errors }}</div>{% endif %}
+                <div class="form-help">0–100. A <em>Custom Model</em> must carry an explicit percentage.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Values & Workflow -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Credited Values &amp; Workflow</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.attributed_revenue.id_for_label }}">Attributed Revenue ($)</label>
+                {{ form.attributed_revenue }}
+                {% if form.attributed_revenue.errors %}<div class="form-error">{{ form.attributed_revenue.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.attributed_cost.id_for_label }}">Attributed Cost ($)</label>
+                {{ form.attributed_cost }}
+                {% if form.attributed_cost.errors %}<div class="form-error">{{ form.attributed_cost.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Status <span class="text-red-500">*</span></label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.computed_on.id_for_label }}">Computed On</label>
+                {{ form.computed_on }}
+                {% if form.computed_on.errors %}<div class="form-error">{{ form.computed_on.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.computed_by.id_for_label }}">Computed By</label>
+                {{ form.computed_by }}
+                {% if form.computed_by.errors %}<div class="form-error">{{ form.computed_by.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Credit Rationale</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:campaign_attribution_detail' obj.pk %}{% else %}{% url 'sales:campaign_attribution_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Attribution{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
