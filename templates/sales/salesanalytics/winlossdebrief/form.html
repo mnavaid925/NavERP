@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Debrief {{ obj.number }}{% else %}New Win/Loss Debrief{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <a href="{% url 'sales:win_loss_debrief_list' %}">Win/Loss Debriefs</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New Debrief{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Win/Loss Debrief {{ obj.number }}{% else %}New Win/Loss Debrief{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:win_loss_debrief_detail' obj.pk %}{% else %}{% url 'sales:win_loss_debrief_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-4">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Deal & Outcome -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Deal &amp; Outcome</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.opportunity.id_for_label }}">Opportunity <span class="req">*</span></label>
+                {{ form.opportunity }}
+                {% if form.opportunity.errors %}<div class="form-error">{{ form.opportunity.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.outcome.id_for_label }}">Outcome</label>
+                {{ form.outcome }}
+                {% if form.outcome.errors %}<div class="form-error">{{ form.outcome.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.primary_reason.id_for_label }}">Primary Reason</label>
+                {{ form.primary_reason }}
+                {% if form.primary_reason.errors %}<div class="form-error">{{ form.primary_reason.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.account.id_for_label }}">Account</label>
+                {{ form.account }}
+                {% if form.account.errors %}<div class="form-error">{{ form.account.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Debrief Team & Process -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Debrief Team &amp; Process</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.interviewer.id_for_label }}">Interviewer</label>
+                {{ form.interviewer }}
+                {% if form.interviewer.errors %}<div class="form-error">{{ form.interviewer.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.action_owner.id_for_label }}">Action Owner</label>
+                {{ form.action_owner }}
+                {% if form.action_owner.errors %}<div class="form-error">{{ form.action_owner.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.communication_log.id_for_label }}">Communication Log</label>
+                {{ form.communication_log }}
+                {% if form.communication_log.errors %}<div class="form-error">{{ form.communication_log.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.debriefed_on.id_for_label }}">Debriefed On <span class="req">*</span></label>
+                {{ form.debriefed_on }}
+                {% if form.debriefed_on.errors %}<div class="form-error">{{ form.debriefed_on.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.interview_channel.id_for_label }}">Interview Channel <span class="req">*</span></label>
+                {{ form.interview_channel }}
+                {% if form.interview_channel.errors %}<div class="form-error">{{ form.interview_channel.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.feedback_team.id_for_label }}">Feedback Team <span class="req">*</span></label>
+                {{ form.feedback_team }}
+                {% if form.feedback_team.errors %}<div class="form-error">{{ form.feedback_team.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Qualitative Feedback -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Qualitative Feedback</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.decision_drivers.id_for_label }}">Decision Drivers (JSON)</label>
+                {{ form.decision_drivers }}
+                <div class="text-xs text-slate-500">
+                    A JSON list of objects: <code>{"driver": "…", "sentiment": "positive|negative", "weight": 1-5, "quote": "…"}</code>
+                </div>
+                {% if form.decision_drivers.errors %}<div class="form-error">{{ form.decision_drivers.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.buyer_quote.id_for_label }}">Buyer Quote</label>
+                {{ form.buyer_quote }}
+                {% if form.buyer_quote.errors %}<div class="form-error">{{ form.buyer_quote.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.counterfactual.id_for_label }}">Counterfactual</label>
+                {{ form.counterfactual }}
+                {% if form.counterfactual.errors %}<div class="form-error">{{ form.counterfactual.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions & Status -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Actions &amp; Status</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.action_items.id_for_label }}">Action Items</label>
+                {{ form.action_items }}
+                {% if form.action_items.errors %}<div class="form-error">{{ form.action_items.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.actioned_on.id_for_label }}">Actioned On</label>
+                {{ form.actioned_on }}
+                {% if form.actioned_on.errors %}<div class="form-error">{{ form.actioned_on.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Status <span class="req">*</span></label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'sales:win_loss_debrief_detail' obj.pk %}{% else %}{% url 'sales:win_loss_debrief_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Save Debrief{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
