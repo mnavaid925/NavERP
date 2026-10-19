@@ -9,6 +9,10 @@ from .StageVelocityAnalyses import (
     VELOCITY_STATUS_CHOICES,
     StageVelocityAnalysis,
 )
+from .FunnelConversionRecords import (
+    FUNNEL_SCOPE_CHOICES,
+    FunnelConversionRecord,
+)
 
 __all__ = [
     "WinLossDebrief",
@@ -17,4 +21,6 @@ __all__ = [
     "DEBRIEF_STATUS_CHOICES",
     "StageVelocityAnalysis",
     "VELOCITY_STATUS_CHOICES",
+    "FunnelConversionRecord",
+    "FUNNEL_SCOPE_CHOICES",
 ]
