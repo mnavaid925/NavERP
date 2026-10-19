@@ -21,6 +21,7 @@ from apps.sales.models.MarketingAlignment.AttributionTouchpoints import (
     TOUCH_TYPE_CHOICES,
     AttributionTouchpoint,
 )
+from apps.sales.views.MarketingAlignment._common import pk_from_param
 
 
 @login_required
@@ -54,12 +55,14 @@ def attribution_touchpoint_list(request):
         qs = qs.filter(touch_position=position)
 
     campaign_id = request.GET.get("campaign", "").strip()
-    if campaign_id and campaign_id.isdigit():
-        qs = qs.filter(campaign_id=int(campaign_id))
+    campaign_pk = pk_from_param(campaign_id)
+    if campaign_pk is not None:
+        qs = qs.filter(campaign_id=campaign_pk)
 
     lead_id = request.GET.get("lead", "").strip()
-    if lead_id and lead_id.isdigit():
-        qs = qs.filter(lead_id=int(lead_id))
+    lead_pk = pk_from_param(lead_id)
+    if lead_pk is not None:
+        qs = qs.filter(lead_id=lead_pk)
 
     stats = qs.aggregate(
         total_count=Count("id"),
