@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block title %}Analysis {{ obj.number }} — Stage Velocity Analyses — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <a href="{% url 'sales:stage_velocity_analysis_list' %}">Stage Velocity Analyses</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ obj.number }} · {{ obj.pipeline_stage.name }}</h1>
+            <span class="badge {{ obj.status_badge_class }}">{{ obj.get_status_display }}</span>
+            {% if obj.is_bottleneck %}
+            <span class="badge {{ obj.bottleneck_badge_class }}">Bottleneck</span>
+            {% else %}
+            <span class="badge {{ obj.bottleneck_badge_class }}">{{ obj.get_is_bottleneck_display }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:stage_velocity_analysis_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Analyses</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Main content -->
+    <div class="lg:col-span-2 space-y-4">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Stage &amp; Period</h2>
+            </div>
+            <div class="card-body">
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Analysis Number</dt>
+                        <dd class="text-slate-900 font-mono">{{ obj.number }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Pipeline</dt>
+                        <dd class="text-slate-900 font-medium">{{ obj.pipeline.name }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Pipeline Stage</dt>
+                        <dd class="text-slate-900">{{ obj.pipeline_stage.name }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Stage Sequence</dt>
+                        <dd class="text-slate-900">{{ obj.pipeline_stage.sequence }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Stage Target (days)</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.pipeline_stage.target_days %}{{ obj.pipeline_stage.target_days }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Period Start</dt>
+                        <dd class="text-slate-900">{{ obj.period_start|date:"F d, Y" }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Period End</dt>
+                        <dd class="text-slate-900">{{ obj.period_end|date:"F d, Y" }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Opportunities Measured</dt>
+                        <dd class="text-slate-900 font-semibold">{{ obj.opportunity_count }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Segment</dt>
+                        <dd class="text-slate-900">{% if obj.segment %}{{ obj.segment }}{% else %}—{% endif %}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Duration Metrics</h2>
+            </div>
+            <div class="card-body">
+                {% comment %}
+                  Stage durations are right-skewed, so the record reports the median
+                  and the p90 — there is deliberately no average. See GAP-sales-8.12-01:
+                  NavERP keeps no stage-transition history, so these figures are the
+                  recorded measurement for the period, not a derived figure.
+                {% endcomment %}
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Median Days In Stage</dt>
+                        <dd class="text-slate-900 font-semibold">{{ obj.median_days_in_stage }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">P90 Days In Stage</dt>
+                        <dd class="text-slate-900">{{ obj.p90_days_in_stage }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Max Days In Stage</dt>
+                        <dd class="text-slate-900">{{ obj.max_days_in_stage }}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Days Over Target</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.days_over_target is not None %}
+                                {% if obj.is_over_target %}
+                                <span class="badge badge-red">{{ obj.days_over_target }} days over target</span>
+                                {% else %}
+                                <span class="badge badge-green">{{ obj.days_over_target }} days vs target</span>
+                                {% endif %}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Sales Cycle (days)</dt>
+                        <dd class="text-slate-900">{% if obj.sales_cycle_days is not None %}{{ obj.sales_cycle_days }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Velocity Value</dt>
+                        <dd class="text-slate-900">{{ obj.velocity_value }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Bottleneck &amp; Benchmark</h2>
+            </div>
+            <div class="card-body">
+                <dl class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Bottleneck</dt>
+                        <dd class="text-slate-900">
+                            {% if obj.is_bottleneck %}
+                            <span class="badge {{ obj.bottleneck_badge_class }}">Bottleneck</span>
+                            {% else %}
+                            <span class="badge {{ obj.bottleneck_badge_class }}">{{ obj.get_is_bottleneck_display }}</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Bottleneck Rank (at entry)</dt>
+                        <dd class="text-slate-900">{% if obj.bottleneck_rank %}{{ obj.bottleneck_rank }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Benchmark (days)</dt>
+                        <dd class="text-slate-900">{% if obj.benchmark_days is not None %}{{ obj.benchmark_days }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Benchmark Source</dt>
+                        <dd class="text-slate-900">{% if obj.benchmark_source %}{{ obj.benchmark_source }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Benchmark As Of</dt>
+                        <dd class="text-slate-900">{% if obj.benchmark_as_of %}{{ obj.benchmark_as_of|date:"F d, Y" }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="py-2.5 flex justify-between gap-4">
+                        <dt class="text-slate-500 font-medium">Status</dt>
+                        <dd class="text-slate-900">
+                            <span class="badge {{ obj.status_badge_class }}">{{ obj.get_status_display }}</span>
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Recommendation &amp; Notes</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Recommendation</div>
+                    {% if obj.recommendation %}
+                    <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">{{ obj.recommendation }}</div>
+                    {% else %}
+                    <div class="text-xs text-slate-400 italic">No recommendation recorded.</div>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Notes</div>
+                    {% if obj.notes %}
+                    <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">{{ obj.notes }}</div>
+                    {% else %}
+                    <div class="text-xs text-slate-400 italic">No notes recorded.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions sidebar -->
+    <div class="space-y-4">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Actions</h2>
+            </div>
+            <div class="card-body space-y-3">
+                {% comment %}
+                  An APPROVED analysis is the frozen, signed-off measurement for its
+                  period, so it offers neither Edit nor Delete. Draft and Reviewed
+                  analyses keep both actions available.
+                {% endcomment %}
+                {% if obj.status != "approved" %}
+                <a href="{% url 'sales:stage_velocity_analysis_edit' obj.pk %}" class="btn btn-primary w-full">
+                    <i data-lucide="pencil"></i>
+                    <span>Edit Analysis</span>
+                </a>
+                {% else %}
+                <div class="text-xs text-slate-500 italic">This analysis is approved and can no longer be edited.</div>
+                {% endif %}
+
+                {% if obj.status != "approved" %}
+                {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                <form method="post" action="{% url 'sales:stage_velocity_analysis_delete' obj.pk %}" onsubmit="return confirm('Are you sure you want to delete analysis {{ obj.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger w-full">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Analysis</span>
+                    </button>
+                </form>
+                {% endif %}
+                {% endif %}
+
+                <a href="{% url 'sales:stage_velocity_analysis_list' %}" class="btn btn-outline w-full">
+                    <i data-lucide="arrow-left"></i>
+                    <span>Back to List</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Stage Health</h2>
+            </div>
+            <div class="card-body">
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Bottleneck Flag</div>
+                <div class="mb-3">
+                    {% if obj.is_bottleneck %}
+                    <span class="badge {{ obj.bottleneck_badge_class }}">Bottleneck</span>
+                    {% else %}
+                    <span class="badge {{ obj.bottleneck_badge_class }}">{{ obj.get_is_bottleneck_display }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Against Stage Target</div>
+                <div class="text-sm text-slate-900">
+                    {% if obj.days_over_target is not None %}
+                        {% if obj.is_over_target %}
+                        Over target by {{ obj.days_over_target }} days.
+                        {% else %}
+                        Within target by {{ obj.days_over_target }} days.
+                        {% endif %}
+                    {% else %}
+                    This stage has no target configured.
+                    {% endif %}
+                </div>
+
+                <div class="text-xs font-semibold uppercase text-slate-500 mt-3 mb-1">Measurement Note</div>
+                <div class="text-xs text-slate-500">
+                    The durations above are the recorded measurement for this period. NavERP keeps no stage-transition history, so they are not re-derived from the pipeline.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
