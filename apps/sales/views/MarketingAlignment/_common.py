@@ -5,6 +5,8 @@ by 8.13's own entity modules, and it is the sub-module's analogue of `forms/_com
 """
 from apps.sales.views._common import *  # noqa: F401,F403
 
+from apps.accounting.models import Currency
+
 # A Django primary key is a 64-bit signed integer. A GET parameter is arbitrary text, and
 # `.isdigit()` alone is NOT enough to make it safe:
 #
@@ -74,3 +76,23 @@ def avg_response_hours(queryset):
     if not response_hours:
         return None
     return round(sum(response_hours) / len(response_hours), 2)
+
+
+def single_currency(queryset, field="currency"):
+    """The ONE currency the rows are denominated in, or None when that is not unambiguous.
+
+    A page total is a sum over rows. Adding euros to dollars is meaningless, so a symbol is
+    only shown when EVERY row uses the SAME currency; when the rows are mixed (or have no
+    currency at all) the total is rendered without a symbol rather than mislabelled.
+
+    `field` is the path to the currency FK, e.g. "currency" or "touchpoint__currency" for a
+    model that carries it on its parent.
+    """
+    currency_ids = set(
+        queryset.exclude(**{f"{field}__isnull": True}).values_list(
+            f"{field}_id", flat=True
+        )
+    )
+    if len(currency_ids) != 1:
+        return None
+    return Currency.objects.filter(pk=currency_ids.pop()).first()
