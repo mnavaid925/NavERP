@@ -120,6 +120,7 @@ class CustomerOnboarding(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "account", "status"], name="sales_cob_acct_stat_idx"),
+            models.Index(fields=["tenant", "status"], name="sales_cob_ten_stat_idx"),
             models.Index(fields=["tenant", "stage"], name="sales_cob_stage_idx"),
             models.Index(fields=["tenant", "target_go_live_date"], name="sales_cob_date_idx"),
         ]
