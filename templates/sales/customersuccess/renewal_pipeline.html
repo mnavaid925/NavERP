@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Renewal & Retention Pipeline Kanban — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Customer Success</span>
+            <span>/</span>
+            <span>Renewal Pipeline</span>
+        </div>
+        <h1 class="page-title">Renewal & Retention Pipeline Kanban</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_renewal_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>Table View</span>
+        </a>
+        <a href="{% url 'sales:customer_renewal_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Renewal</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="refresh-cw"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Active ARR at Risk</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_arr|default:"0.00"|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Projected Renewal ARR</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.projected_arr|default:"0.00"|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="plus-circle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Net Expansion Upsell</div>
+            <div class="text-2xl font-bold text-emerald-600 mt-1">+${{ stats.expansion_arr|default:"0.00"|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">High Churn Risk ARR</div>
+            <div class="text-2xl font-bold text-red-600 mt-1">${{ stats.high_risk_arr|default:"0.00"|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Expiration Countdown Horizon -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="card p-4 border-l-4 border-red-500">
+        <div class="text-xs font-semibold uppercase text-red-700 tracking-wider">Expiring in 0–30 Days (Immediate Action)</div>
+        <div class="text-2xl font-bold text-slate-900 mt-1">{{ upcoming_30_days|length }} Renewals</div>
+        <div class="text-xs text-slate-500 mt-1">Contracts requiring urgent executive alignment & signature.</div>
+    </div>
+    <div class="card p-4 border-l-4 border-amber-500">
+        <div class="text-xs font-semibold uppercase text-amber-700 tracking-wider">Expiring in 31–60 Days (Negotiation Window)</div>
+        <div class="text-2xl font-bold text-slate-900 mt-1">{{ upcoming_60_days|length }} Renewals</div>
+        <div class="text-xs text-slate-500 mt-1">Proposals submitted; active commercial discussions.</div>
+    </div>
+    <div class="card p-4 border-l-4 border-blue-500">
+        <div class="text-xs font-semibold uppercase text-blue-700 tracking-wider">Expiring in 61–90 Days (Upcoming Outreach)</div>
+        <div class="text-2xl font-bold text-slate-900 mt-1">{{ upcoming_90_days|length }} Renewals</div>
+        <div class="text-xs text-slate-500 mt-1">Early QBR alignment and expansion headroom exploration.</div>
+    </div>
+</div>
+
+<!-- Kanban Columns Grid -->
+<div class="flex gap-4 overflow-x-auto pb-6">
+    {% for stage_code, stage_label in stage_choices %}
+    <div class="w-80 flex-shrink-0 bg-slate-50 rounded-xl p-3 border border-slate-200">
+        <!-- Stage Header -->
+        <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-200">
+            <div>
+                <h3 class="font-bold text-slate-800 text-sm">{{ stage_label }}</h3>
+                <div class="text-xs text-slate-500 font-mono mt-0.5">
+                    {% for code, total in stage_totals.items %}
+                    {% if code == stage_code %}
+                    ${{ total|floatformat:0 }} ARR
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            <span class="badge badge-slate text-xs">
+                {% for code, renewals in renewals_by_stage.items %}
+                {% if code == stage_code %}{{ renewals|length }}{% endif %}
+                {% endfor %}
+            </span>
+        </div>
+
+        <!-- Cards -->
+        <div class="space-y-3">
+            {% for code, renewals in renewals_by_stage.items %}
+            {% if code == stage_code %}
+                {% for r in renewals %}
+                <div class="card p-3 shadow-sm hover:shadow transition-shadow bg-white">
+                    <div class="flex items-start justify-between gap-2">
+                        <a href="{% url 'sales:customer_renewal_detail' r.pk %}" class="font-semibold text-slate-900 hover:text-blue-600 text-sm leading-tight block">
+                            {{ r.renewal_name }}
+                        </a>
+                        <span class="badge {{ r.risk_badge_class }} text-xs flex-shrink-0">
+                            {{ r.get_churn_risk_flag_display }}
+                        </span>
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1">{{ r.account.name }}</div>
+
+                    <div class="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <div>
+                            <span class="text-sm font-bold text-slate-900">${{ r.current_arr|floatformat:0 }}</span>
+                            <span class="text-xs text-slate-400 font-mono">{{ r.currency.code }}</span>
+                        </div>
+                        <div class="text-xs text-slate-500 font-medium">
+                            Due {{ r.renewal_date|date:"M d" }}
+                        </div>
+                    </div>
+
+                    {% if r.expansion_amount > 0 %}
+                    <div class="mt-2 text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                        <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                        <span>+${{ r.expansion_amount|floatformat:0 }} Expansion</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <div class="text-xs text-slate-400 italic text-center py-6">No renewals in this stage.</div>
+                {% endfor %}
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
