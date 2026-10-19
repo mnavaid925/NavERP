@@ -110,9 +110,10 @@ def customer_health_score_create(request):
             obj = form.save()
             write_audit_log(
                 request.user,
-                "CREATE",
                 obj,
+                "create",
                 f"Evaluated health score for {obj.account.name}: {obj.overall_score} ({obj.get_health_band_display()})",
+                tenant=request.tenant,
             )
             messages.success(request, f"Customer health score {obj.number} created successfully.")
             return redirect("sales:customer_health_score_detail", pk=obj.pk)
@@ -138,9 +139,10 @@ def customer_health_score_edit(request, pk):
             obj = form.save()
             write_audit_log(
                 request.user,
-                "UPDATE",
                 obj,
+                "update",
                 f"Updated health score {obj.number} for {obj.account.name}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Customer health score {obj.number} updated successfully.")
             return redirect("sales:customer_health_score_detail", pk=obj.pk)
@@ -163,13 +165,14 @@ def customer_health_score_delete(request, pk):
     )
     account_name = obj.account.name
     number = obj.number
-    obj.delete()
     write_audit_log(
         request.user,
-        "DELETE",
         obj,
+        "delete",
         f"Deleted customer health score {number} for {account_name}",
+        tenant=request.tenant,
     )
+    obj.delete()
     messages.success(request, f"Customer health score {number} deleted.")
     return redirect("sales:customer_health_score_list")
 
