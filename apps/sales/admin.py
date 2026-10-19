@@ -770,42 +770,42 @@ class CommissionAdjustmentAdmin(admin.ModelAdmin):
 # 8.11 Customer Success & Account Management
 @admin.register(CustomerHealthScore)
 class CustomerHealthScoreAdmin(admin.ModelAdmin):
-    list_display = ("number", "account", "composite_score", "health_band", "trend", "risk_level", "evaluated_at", "tenant")
-    list_filter = ("health_band", "trend", "risk_level", "tenant")
-    search_fields = ("number", "account__name", "account__number", "risk_summary")
-    readonly_fields = ("tenant", "number", "composite_score", "health_band", "trend", "risk_level", "created_at", "updated_at")
-    list_select_related = ("account", "csm", "tenant")
-    raw_id_fields = ("account", "csm")
+    list_display = ("number", "account", "evaluation_date", "overall_score", "health_band", "score_trend", "risk_level", "is_churn_risk", "tenant")
+    list_filter = ("health_band", "score_trend", "risk_level", "is_churn_risk", "tenant")
+    search_fields = ("number", "account__name", "account__number", "active_alert_message", "notes")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("account", "tenant")
+    raw_id_fields = ("account",)
 
 
 @admin.register(CustomerRenewal)
 class CustomerRenewalAdmin(admin.ModelAdmin):
-    list_display = ("number", "account", "contract_end_date", "target_renewal_date", "stage", "risk_level", "current_mrr", "expansion_target", "tenant")
-    list_filter = ("stage", "risk_level", "tenant")
-    search_fields = ("number", "contract_number", "account__name", "account__number")
+    list_display = ("number", "account", "renewal_name", "renewal_date", "target_close_date", "current_arr", "stage", "churn_risk_flag", "tenant")
+    list_filter = ("stage", "churn_risk_flag", "auto_renewal", "tenant")
+    search_fields = ("number", "renewal_name", "contract_reference", "account__name", "account__number")
     readonly_fields = ("tenant", "number", "created_at", "updated_at")
-    list_select_related = ("account", "owner", "currency", "expansion_opportunity", "tenant")
-    raw_id_fields = ("account", "owner", "currency", "expansion_opportunity")
+    list_select_related = ("account", "owner", "currency", "expansion_opportunity", "original_order", "tenant")
+    raw_id_fields = ("account", "owner", "currency", "expansion_opportunity", "original_order")
 
 
 @admin.register(CustomerOnboarding)
 class CustomerOnboardingAdmin(admin.ModelAdmin):
-    list_display = ("number", "account", "plan_tier", "status", "kickoff_date", "target_go_live_date", "actual_go_live_date", "completion_percent", "tenant")
-    list_filter = ("plan_tier", "status", "tenant")
-    search_fields = ("number", "account__name", "account__number", "success_criteria")
+    list_display = ("number", "account", "title", "playbook_template", "stage", "status", "kickoff_date", "target_go_live_date", "progress_pct", "tenant")
+    list_filter = ("playbook_template", "stage", "status", "tenant")
+    search_fields = ("number", "title", "account__name", "account__number", "executive_sponsor_name")
     readonly_fields = ("tenant", "number", "created_at", "updated_at")
-    list_select_related = ("account", "onboarding_lead", "sales_order", "tenant")
-    raw_id_fields = ("account", "onboarding_lead", "sales_order")
+    list_select_related = ("account", "lead_csm", "sales_order", "tenant")
+    raw_id_fields = ("account", "lead_csm", "sales_order")
 
 
 @admin.register(CustomerBusinessReview)
 class CustomerBusinessReviewAdmin(admin.ModelAdmin):
-    list_display = ("number", "account", "cadence", "status", "scheduled_date", "conducted_date", "csat_score", "nps_score", "referenceable_status", "tenant")
-    list_filter = ("cadence", "status", "referenceable_status", "tenant")
-    search_fields = ("number", "title", "account__name", "account__number", "executive_sponsor")
+    list_display = ("number", "account", "title", "review_period", "review_year", "scheduled_date", "completed_date", "status", "is_referenceable", "tenant")
+    list_filter = ("review_period", "status", "template_type", "is_referenceable", "case_study_status", "tenant")
+    search_fields = ("number", "title", "account__name", "account__number", "client_attendees")
     readonly_fields = ("tenant", "number", "created_at", "updated_at")
-    list_select_related = ("account", "csm", "account_plan", "tenant")
-    raw_id_fields = ("account", "csm", "account_plan")
+    list_select_related = ("account", "lead_csm", "account_plan", "tenant")
+    raw_id_fields = ("account", "lead_csm", "account_plan")
 
 
 
