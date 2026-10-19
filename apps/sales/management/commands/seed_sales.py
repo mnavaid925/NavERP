@@ -66,6 +66,11 @@ from apps.sales.models import (
     CommissionEarning,
     CommissionStatement,
     CommissionAdjustment,
+    # 8.11 Customer Success & Account Management
+    CustomerHealthScore,
+    CustomerRenewal,
+    CustomerOnboarding,
+    CustomerBusinessReview,
 )
 
 from apps.sales.cpq_services import cpq_recalc_quote_totals, cpq_render_proposal_html, cpq_convert_to_sales_order
@@ -109,7 +114,7 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, backfill=backfill)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, and 8.10 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, and 8.11 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
@@ -142,6 +147,7 @@ class Command(BaseCommand):
         self._seed_activity_tasks(tenant, owner)
         self._seed_sales_enablement(tenant, owner)
         self._seed_incentive_compensation(tenant, owner)
+        self._seed_customer_success(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -2506,4 +2512,290 @@ class Command(BaseCommand):
             f"{CommissionStatement.objects.filter(tenant=tenant).count()} statements, "
             f"{CommissionAdjustment.objects.filter(tenant=tenant).count()} adjustments)."
         )
+
+    def _seed_customer_success(self, tenant, owner):
+        """Seed Sales 8.11 Customer Success & Account Management rows.
+
+        Idempotency:
+        - CustomerHealthScore: checked by (tenant, account).
+        - CustomerRenewal: checked by (tenant, contract_number).
+        - CustomerOnboarding: checked by (tenant, account, plan_tier).
+        - CustomerBusinessReview: checked by (tenant, account, title).
+        """
+        from apps.scm.models import SalesOrder
+
+        already_seeded = CustomerHealthScore.objects.filter(tenant=tenant).exists()
+
+        # Gather real customers in this tenant
+        customers = list(Party.objects.filter(tenant=tenant).order_by("id")[:4])
+        if not customers:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"{tenant.name}: no core Party accounts found; skipped Sales 8.11 customer success seeding."
+                )
+            )
+            return
+
+        acc1 = customers[0]
+        acc2 = customers[1] if len(customers) > 1 else acc1
+        acc3 = customers[2] if len(customers) > 2 else acc1
+
+        currency = Currency.objects.filter(code="USD").first() or Currency.objects.first()
+        opp = Opportunity.objects.filter(tenant=tenant).order_by("id").first()
+        order = SalesOrder.objects.filter(tenant=tenant).order_by("id").first()
+        account_plan = AccountPlan.objects.filter(tenant=tenant).order_by("id").first()
+
+        # --- 1. CustomerHealthScore (Good, Average, Poor) -----------------
+        if not CustomerHealthScore.objects.filter(tenant=tenant, account=acc1).exists():
+            CustomerHealthScore.objects.create(
+                tenant=tenant,
+                account=acc1,
+                csm=owner,
+                composite_score=88,
+                health_band="good",
+                trend="improving",
+                risk_level="low",
+                product_adoption_score=90,
+                executive_sponsor_score=85,
+                license_utilization_pct=92,
+                active_users_pct=88,
+                support_ticket_volume=2,
+                avg_ticket_resolution_hrs=4,
+                nps_sentiment="promoter",
+                risk_summary="Strong executive engagement and high product adoption across business units.",
+                action_plan="Explore expansion into Enterprise Tier and initiate case study advocacy.",
+            )
+
+        if acc2 != acc1 and not CustomerHealthScore.objects.filter(tenant=tenant, account=acc2).exists():
+            CustomerHealthScore.objects.create(
+                tenant=tenant,
+                account=acc2,
+                csm=owner,
+                composite_score=64,
+                health_band="average",
+                trend="stable",
+                risk_level="medium",
+                product_adoption_score=60,
+                executive_sponsor_score=70,
+                license_utilization_pct=68,
+                active_users_pct=60,
+                support_ticket_volume=7,
+                avg_ticket_resolution_hrs=18,
+                nps_sentiment="passive",
+                risk_summary="Champion departed last month; new stakeholder onboarding scheduled.",
+                action_plan="Conduct alignment call with new director of IT to reaffirm business value.",
+            )
+
+        if acc3 not in (acc1, acc2) and not CustomerHealthScore.objects.filter(tenant=tenant, account=acc3).exists():
+            CustomerHealthScore.objects.create(
+                tenant=tenant,
+                account=acc3,
+                csm=owner,
+                composite_score=42,
+                health_band="poor",
+                trend="declining",
+                risk_level="high",
+                product_adoption_score=40,
+                executive_sponsor_score=35,
+                license_utilization_pct=45,
+                active_users_pct=38,
+                support_ticket_volume=14,
+                avg_ticket_resolution_hrs=36,
+                nps_sentiment="detractor",
+                risk_summary="Multiple unresolved escalation tickets and drop in daily active users.",
+                action_plan="CSM and VP Engineering weekly triage meeting; deploy dedicated technical specialist.",
+            )
+
+        # --- 2. CustomerRenewal -------------------------------------------
+        cnt1 = f"CNT-{tenant.slug or 'DEF'}-01"
+        if not CustomerRenewal.objects.filter(tenant=tenant, contract_number=cnt1).exists():
+            CustomerRenewal.objects.create(
+                tenant=tenant,
+                account=acc1,
+                owner=owner,
+                currency=currency,
+                contract_number=cnt1,
+                contract_start_date=date(2025, 4, 1),
+                contract_end_date=date(2026, 4, 1),
+                target_renewal_date=date(2026, 3, 15),
+                current_arr=Decimal("120000.00"),
+                current_mrr=Decimal("10000.00"),
+                target_arr=Decimal("144000.00"),
+                expansion_target=Decimal("24000.00"),
+                stage="proposal_sent",
+                risk_level="low",
+                renewal_probability_pct=90,
+                expansion_probability_pct=75,
+                expansion_opportunity=opp,
+                loss_reason="",
+                notes="Customer confirmed budget approval for annual renewal plus 20 seats expansion.",
+            )
+
+        cnt2 = f"CNT-{tenant.slug or 'DEF'}-02"
+        if not CustomerRenewal.objects.filter(tenant=tenant, contract_number=cnt2).exists():
+            CustomerRenewal.objects.create(
+                tenant=tenant,
+                account=acc2,
+                owner=owner,
+                currency=currency,
+                contract_number=cnt2,
+                contract_start_date=date(2025, 5, 1),
+                contract_end_date=date(2026, 5, 1),
+                target_renewal_date=date(2026, 4, 15),
+                current_arr=Decimal("60000.00"),
+                current_mrr=Decimal("5000.00"),
+                target_arr=Decimal("60000.00"),
+                expansion_target=Decimal("0.00"),
+                stage="in_negotiation",
+                risk_level="medium",
+                renewal_probability_pct=65,
+                expansion_probability_pct=10,
+                loss_reason="",
+                notes="Procurement requesting 10% multi-year discount; under review by sales director.",
+            )
+
+        cnt3 = f"CNT-{tenant.slug or 'DEF'}-03"
+        if not CustomerRenewal.objects.filter(tenant=tenant, contract_number=cnt3).exists():
+            CustomerRenewal.objects.create(
+                tenant=tenant,
+                account=acc3,
+                owner=owner,
+                currency=currency,
+                contract_number=cnt3,
+                contract_start_date=date(2025, 1, 1),
+                contract_end_date=date(2026, 1, 1),
+                target_renewal_date=date(2025, 12, 15),
+                current_arr=Decimal("48000.00"),
+                current_mrr=Decimal("4000.00"),
+                target_arr=Decimal("60000.00"),
+                expansion_target=Decimal("12000.00"),
+                stage="closed_won",
+                risk_level="low",
+                renewal_probability_pct=100,
+                expansion_probability_pct=100,
+                notes="Renewed and expanded for CY2026 successfully.",
+            )
+
+        # --- 3. CustomerOnboarding ----------------------------------------
+        if not CustomerOnboarding.objects.filter(tenant=tenant, account=acc1, plan_tier="enterprise").exists():
+            CustomerOnboarding.objects.create(
+                tenant=tenant,
+                account=acc1,
+                onboarding_lead=owner,
+                sales_order=order,
+                plan_tier="enterprise",
+                status="completed",
+                kickoff_date=date(2026, 1, 10),
+                target_go_live_date=date(2026, 2, 28),
+                actual_go_live_date=date(2026, 2, 25),
+                completion_percent=100,
+                implementation_milestones=[
+                    {"name": "Architecture Review", "status": "done", "due": "2026-01-20"},
+                    {"name": "Data Migration", "status": "done", "due": "2026-02-10"},
+                    {"name": "User Training", "status": "done", "due": "2026-02-20"},
+                    {"name": "Go-Live Signoff", "status": "done", "due": "2026-02-25"},
+                ],
+                success_criteria="Successful migration of 5,000 SKUs and cutover with zero downtime.",
+                notes="Smooth launch, executive sponsor praised implementation velocity.",
+            )
+
+        if not CustomerOnboarding.objects.filter(tenant=tenant, account=acc2, plan_tier="premium").exists():
+            CustomerOnboarding.objects.create(
+                tenant=tenant,
+                account=acc2,
+                onboarding_lead=owner,
+                sales_order=order,
+                plan_tier="premium",
+                status="in_progress",
+                kickoff_date=date(2026, 2, 1),
+                target_go_live_date=date(2026, 3, 31),
+                completion_percent=65,
+                implementation_milestones=[
+                    {"name": "Scope Definition", "status": "done", "due": "2026-02-05"},
+                    {"name": "SSO & Security Config", "status": "done", "due": "2026-02-18"},
+                    {"name": "ERP Data Sync", "status": "in_progress", "due": "2026-03-10"},
+                    {"name": "User Acceptance Testing", "status": "pending", "due": "2026-03-25"},
+                ],
+                success_criteria="Full integration with legacy billing system and team certified.",
+                notes="On track for target go-live date.",
+            )
+
+        if not CustomerOnboarding.objects.filter(tenant=tenant, account=acc3, plan_tier="standard").exists():
+            CustomerOnboarding.objects.create(
+                tenant=tenant,
+                account=acc3,
+                onboarding_lead=owner,
+                sales_order=None,
+                plan_tier="standard",
+                status="at_risk",
+                kickoff_date=date(2026, 1, 15),
+                target_go_live_date=date(2026, 2, 15),
+                completion_percent=40,
+                implementation_milestones=[
+                    {"name": "Kickoff Call", "status": "done", "due": "2026-01-16"},
+                    {"name": "Data Export", "status": "blocked", "due": "2026-01-30", "blocker": "Customer IT delayed export format"},
+                ],
+                success_criteria="Automate daily sync jobs.",
+                notes="Customer IT bandwidth bottleneck causing delay.",
+            )
+
+        # --- 4. CustomerBusinessReview (Advocacy / QBRs) ------------------
+        qbr_title1 = "Q1 2026 Executive Value & Roadmap Review"
+        if not CustomerBusinessReview.objects.filter(tenant=tenant, account=acc1, title=qbr_title1).exists():
+            CustomerBusinessReview.objects.create(
+                tenant=tenant,
+                account=acc1,
+                csm=owner,
+                account_plan=account_plan,
+                title=qbr_title1,
+                cadence="quarterly",
+                status="completed",
+                scheduled_date=date(2026, 2, 10),
+                conducted_date=date(2026, 2, 10),
+                executive_sponsor="Jane Doe, VP Sales Operations",
+                attendees=["Jane Doe (VP Sales)", "John Smith (CTO)", "CSM Lead", "Account Exec"],
+                business_outcomes_delivered="Reduced sales cycle duration by 22% and automated quote approval SLA.",
+                strategic_priorities="Expand CPQ automation to EMEA branch and deploy mobile field quoting.",
+                customer_sentiment="Champion enthusiastic about upcoming AI forecasting features.",
+                csat_score=Decimal("4.8"),
+                nps_score=9,
+                action_items=[
+                    {"task": "Deliver mobile field quoting prototype", "owner": "Product Lead", "due": "2026-03-15"},
+                    {"task": "Draft expansion proposal for EMEA", "owner": "Account Exec", "due": "2026-03-01"},
+                ],
+                referenceable_status="referenceable",
+                advocacy_activities=["case_study", "reference_calls", "speaking"],
+                testimonial_quote="NavERP transformed our multi-entity sales visibility in less than 90 days.",
+            )
+
+        qbr_title2 = "Q1 2026 Strategic Business Review"
+        if not CustomerBusinessReview.objects.filter(tenant=tenant, account=acc2, title=qbr_title2).exists():
+            CustomerBusinessReview.objects.create(
+                tenant=tenant,
+                account=acc2,
+                csm=owner,
+                account_plan=account_plan,
+                title=qbr_title2,
+                cadence="quarterly",
+                status="scheduled",
+                scheduled_date=date(2026, 3, 20),
+                executive_sponsor="Michael Scott, Regional Director",
+                attendees=["Michael Scott (Regional Director)", "Jim Halpert (Sales Lead)"],
+                business_outcomes_delivered="Standardized quote generation templates across regional branches.",
+                strategic_priorities="Consolidate discount governance rules.",
+                customer_sentiment="Satisfied with onboarding pace.",
+                referenceable_status="candidate",
+                advocacy_activities=["reference_calls"],
+                testimonial_quote="Reliable platform with transparent audit trails.",
+            )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.11 customer success demo rows "
+            f"{'already present; re-checked for gaps' if already_seeded else 'ensured'} "
+            f"({CustomerHealthScore.objects.filter(tenant=tenant).count()} health scores, "
+            f"{CustomerRenewal.objects.filter(tenant=tenant).count()} renewals, "
+            f"{CustomerOnboarding.objects.filter(tenant=tenant).count()} onboardings, "
+            f"{CustomerBusinessReview.objects.filter(tenant=tenant).count()} business reviews)."
+        )
+
 
