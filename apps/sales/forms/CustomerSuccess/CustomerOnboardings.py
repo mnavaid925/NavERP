@@ -63,6 +63,7 @@ class CustomerOnboardingForm(TenantUniqueMixin, TenantModelForm):
             )
             self.fields["sales_order"].queryset = (
                 SalesOrder.objects.filter(tenant=self.tenant)
+                .select_related("customer")
                 .order_by("-order_date")
             )
 
