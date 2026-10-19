@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Renewal {{ obj.number }} — {{ obj.renewal_name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_renewal_pipeline' %}">Customer Success</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_renewal_list' %}">Renewals</a>
+            <span>/</span>
+            <span>{{ obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ obj.renewal_name }}</h1>
+            <span class="badge {{ obj.stage_badge_class }}">{{ obj.get_stage_display }}</span>
+            <span class="badge {{ obj.risk_badge_class }}">{{ obj.get_churn_risk_flag_display }} Risk</span>
+            {% if obj.auto_renewal %}
+            <span class="badge badge-info">Auto-Renewal Active</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_renewal_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Renewals</span>
+        </a>
+        <a href="{% url 'sales:customer_renewal_edit' obj.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Renewal</span>
+        </a>
+        <form method="post" action="{% url 'sales:customer_renewal_delete' obj.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete renewal {{ obj.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Commercial Financial Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Current ARR (Baseline)</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                ${{ obj.current_arr|floatformat:2 }} <span class="text-xs font-mono text-slate-400">{{ obj.currency.code }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Projected Renewal ARR</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                ${{ obj.projected_renewal_arr|floatformat:2 }} <span class="text-xs font-mono text-slate-400">{{ obj.currency.code }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="plus-circle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Expansion Upsell</div>
+            <div class="text-2xl font-bold text-emerald-600 mt-1">
+                +${{ obj.expansion_amount|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="target"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Renewal Probability</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.renewal_probability_pct }}%</div>
+        </div>
+    </div>
+</div>
+
+<!-- Details & Contract Terms -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Commercial & Contract Milestones</h2>
+        </div>
+        <div class="card-body">
+            <dl class="divide-y divide-slate-100 text-sm">
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Renewal ID</dt>
+                    <dd class="text-slate-900 font-mono">{{ obj.number }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Customer Account</dt>
+                    <dd class="text-slate-900 font-semibold">{{ obj.account.name }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Contract Reference / MSA</dt>
+                    <dd class="text-slate-900 font-mono">{{ obj.contract_reference|default:"—" }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Contract Expiration / Renewal Date</dt>
+                    <dd class="text-slate-900 font-bold">{{ obj.renewal_date|date:"F d, Y" }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Target Signature Close Date</dt>
+                    <dd class="text-slate-900">{{ obj.target_close_date|date:"F d, Y" }}</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Notice Window Required</dt>
+                    <dd class="text-slate-900">{{ obj.notice_period_days }} days prior</dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Account Owner / CSM</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Original Order (SCM)</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.original_order %}
+                        <span class="font-mono">{{ obj.original_order.order_number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">None linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="py-2.5 flex justify-between">
+                    <dt class="text-slate-500 font-medium">Linked Expansion Opportunity</dt>
+                    <dd class="text-slate-900">
+                        {% if obj.expansion_opportunity %}
+                        <span class="font-medium text-blue-600">{{ obj.expansion_opportunity.name }}</span>
+                        {% else %}
+                        <span class="text-slate-400">None linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Notes & Strategic Alignment -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Commercial Strategy & Negotiation Notes</h2>
+        </div>
+        <div class="card-body">
+            {% if obj.notes %}
+            <div class="text-sm text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">
+                {{ obj.notes }}
+            </div>
+            {% else %}
+            <div class="text-xs text-slate-400 italic">No commercial negotiation notes recorded.</div>
+            {% endif %}
+
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase text-slate-500 mb-2">Customer Success Account Hub</div>
+                <div class="flex flex-wrap gap-2">
+                    <a href="{% url 'sales:customer_health_score_list' %}?account={{ obj.account.pk }}" class="btn btn-outline btn-sm">
+                        <i data-lucide="activity"></i>
+                        <span>Health Scores</span>
+                    </a>
+                    <a href="{% url 'sales:customer_onboarding_list' %}?account={{ obj.account.pk }}" class="btn btn-outline btn-sm">
+                        <i data-lucide="play-circle"></i>
+                        <span>Onboardings</span>
+                    </a>
+                    <a href="{% url 'sales:customer_business_review_list' %}?account={{ obj.account.pk }}" class="btn btn-outline btn-sm">
+                        <i data-lucide="calendar"></i>
+                        <span>QBRs</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
