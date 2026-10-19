@@ -20,6 +20,15 @@ from apps.sales.models.MarketingAlignment.MqlHandoffs import (
     HANDOFF_STATUS_CHOICES,
     MqlHandoff,
 )
+from apps.sales.models.MarketingAlignment.MarketingEvents import (
+    EVENT_STATUS_CHOICES,
+    EVENT_TYPE_CHOICES,
+    FOLLOWUP_STATUS_CHOICES,
+    REGISTRATION_SOURCE_CHOICES,
+    REGISTRATION_STATUS_CHOICES,
+    EventRegistration,
+    MarketingEvent,
+)
 
 __all__ = [
     "AttributionTouchpoint",
@@ -35,4 +44,11 @@ __all__ = [
     "ContentEngagement",
     "ENGAGEMENT_TYPE_CHOICES",
     "ENGAGEMENT_CHANNEL_CHOICES",
+    "MarketingEvent",
+    "EventRegistration",
+    "EVENT_TYPE_CHOICES",
+    "EVENT_STATUS_CHOICES",
+    "REGISTRATION_STATUS_CHOICES",
+    "REGISTRATION_SOURCE_CHOICES",
+    "FOLLOWUP_STATUS_CHOICES",
 ]
