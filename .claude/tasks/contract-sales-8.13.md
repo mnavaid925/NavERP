@@ -507,6 +507,39 @@ All views are function-based, `@login_required`, tenant-scoped
 `apps.core.utils.write_audit_log(request.user, obj, <action>, <message>, tenant=request.tenant)`.
 Deletes are `@require_POST` + `@tenant_admin_required` and redirect to the list.
 
+### 4.0 The pk-filter guard — `pk_from_param` (MANDATORY)
+
+**Every** pk-valued filter parameter goes through
+`apps.sales/views/MarketingAlignment/_common.py::pk_from_param`, never a bare
+`value.isdigit()` + `int()`.
+
+```python
+MAX_PK = 2**63 - 1
+MIN_PK = -(2**63)
+
+def pk_from_param(value):
+    """Return an int pk for a GET parameter, or None when it cannot possibly be one."""
+```
+
+**Why this is not optional.** A GET parameter is arbitrary text, and `.isdigit()` alone is not
+enough to make it safe:
+
+```
+"?campaign=999999999999999999999"  ->  isdigit() is True  ->  int() succeeds
+->  the DB driver raises OverflowError on SQLite
+    ("Python int too large to convert to SQLite INTEGER")  ->  a 500 on hostile input.
+```
+
+The same value is **harmless on MariaDB**, so the bug hides in production and surfaces only
+under the SQLite test database that the whole test suite runs on. Anything outside the int64
+range is therefore ignored and the filter falls back to the unfiltered list — the same outcome
+as an unknown id, and never an error.
+
+This was found **after** the Phase 3 smoke gate passed, because the smoke gate's hostile-input
+check used non-numeric junk (`?campaign=abc`), which the old guard already handled. The
+oversized-numeric case was only caught by running the same views against the SQLite test DB.
+
+
 ### 4.1 `attribution_touchpoint_list` → `templates/sales/marketingalignment/attributiontouchpoint/list.html`
 | Context key | Value |
 |---|---|
