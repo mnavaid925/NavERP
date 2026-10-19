@@ -233,7 +233,7 @@
         </div>
         <div class="pagination-actions">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.health_band %}&health_band={{ active_filters.health_band }}{% endif %}{% if active_filters.risk_level %}&risk_level={{ active_filters.risk_level }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.health_band %}&health_band={{ active_filters.health_band }}{% endif %}{% if active_filters.risk_level %}&risk_level={{ active_filters.risk_level }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.is_churn_risk %}&is_churn_risk={{ active_filters.is_churn_risk }}{% endif %}" class="btn btn-outline btn-sm">
                 Previous
             </a>
             {% else %}
@@ -243,7 +243,7 @@
             <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.health_band %}&health_band={{ active_filters.health_band }}{% endif %}{% if active_filters.risk_level %}&risk_level={{ active_filters.risk_level }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.health_band %}&health_band={{ active_filters.health_band }}{% endif %}{% if active_filters.risk_level %}&risk_level={{ active_filters.risk_level }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.is_churn_risk %}&is_churn_risk={{ active_filters.is_churn_risk }}{% endif %}" class="btn btn-outline btn-sm">
                 Next
             </a>
             {% else %}
