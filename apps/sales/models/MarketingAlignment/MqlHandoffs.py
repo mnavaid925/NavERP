@@ -242,12 +242,28 @@ class MqlHandoff(TenantNumbered):
         return round((self.responded_at - self.handoff_at).total_seconds() / 3600, 2)
 
     def save(self, *args, **kwargs):
-        # Stamp responded_at on the first transition into a responded status; clear it when
-        # the handoff is pushed back to unanswered (pending / expired).
+        # Stamp responded_at on the first transition into a responded status.
+        #
+        # It is cleared ONLY on the move back to `pending` (the contract's re-open path). An
+        # already-answered handoff that is later re-labelled `expired` KEEPS its response time:
+        # clearing it would flip the row from "answered late" to "unanswered" in the SLA
+        # metric, and would silently destroy the measured response time.
+        stamped = False
         if self.status in RESPONDED_STATUSES and self.responded_at is None:
             self.responded_at = timezone.now()
-        elif self.status not in RESPONDED_STATUSES:
+            stamped = True
+        elif self.status == "pending":
             self.responded_at = None
+            stamped = True
+        # A caller that passes `update_fields` must not be able to persist the row while
+        # silently dropping the stamp: the in-memory instance would report a response time
+        # that never reached the database.
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            fields = set(update_fields)
+            if stamped:
+                fields.add("responded_at")
+            kwargs["update_fields"] = fields
         super().save(*args, **kwargs)
 
     def clean(self):
