@@ -71,7 +71,7 @@
 <!-- Filters -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
                 <input type="text" name="q" value="{{ active_filters.q }}" placeholder="Search campaign, lead, UTM..." class="form-input w-full" aria-label="Search touchpoints">
             </div>
@@ -104,6 +104,14 @@
                     <option value="">All Campaigns</option>
                     {% for campaign in campaigns %}
                     <option value="{{ campaign.pk }}" {% if active_filters.campaign == campaign.pk|stringformat:"d" %}selected{% endif %}>{{ campaign.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="lead" class="form-select w-full" aria-label="Filter by lead">
+                    <option value="">All Leads</option>
+                    {% for lead in leads %}
+                    <option value="{{ lead.pk }}" {% if active_filters.lead == lead.pk|stringformat:"d" %}selected{% endif %}>{{ lead.name }}</option>
                     {% endfor %}
                 </select>
             </div>
