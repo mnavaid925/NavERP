@@ -189,7 +189,7 @@
                 <div class="py-2.5 flex justify-between">
                     <dt class="text-slate-500 font-medium">Responded At</dt>
                     <dd class="text-slate-900">
-                        {% if obj.responded_at %}{{ obj.responded_at|date:"M d, Y H:i" }}{% else %}— not yet answered{% endif %}
+                        {% if obj.is_responded %}{{ obj.responded_at|date:"M d, Y H:i" }}{% else %}— not yet answered{% endif %}
                     </dd>
                 </div>
                 <div class="py-2.5 flex justify-between">
