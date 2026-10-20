@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+
+{% block title %}Sales Velocity Console — Sales Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <span>Velocity</span>
+        </div>
+        <h1 class="page-title">Sales Velocity &amp; Cycle Time</h1>
+        <p class="text-sm text-slate-500 mt-1">How long every open deal has sat in its stage, which stage is the bottleneck, and where the pipeline is going stale.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:analytics_console' %}" class="btn btn-outline">
+            <i data-lucide="gauge"></i>
+            <span>Overview</span>
+        </a>
+        <a href="{% url 'sales:win_loss_console' %}" class="btn btn-outline">
+            <i data-lucide="split"></i>
+            <span>Win/Loss</span>
+        </a>
+        <a href="{% url 'sales:funnel_console' %}" class="btn btn-outline">
+            <i data-lucide="filter"></i>
+            <span>Funnel</span>
+        </a>
+        <a href="{% url 'sales:rep_scorecard_console' %}" class="btn btn-outline">
+            <i data-lucide="award"></i>
+            <span>Rep Scorecards</span>
+        </a>
+        <a href="{% url 'sales:benchmark_console' %}" class="btn btn-outline">
+            <i data-lucide="radar"></i>
+            <span>Benchmarks</span>
+        </a>
+        <a href="{% url 'sales:stage_velocity_analysis_list' %}" class="btn btn-primary">
+            <i data-lucide="gauge"></i>
+            <span>All Analyses</span>
+        </a>
+    </div>
+</div>
+
+{% comment %}
+    Console 3 — Sales Velocity and Cycle Time. Renders over
+    apps.sales.opportunity_analytics (sales_stage_age_rows + sales_pipeline_rollups) and
+    the recorded stage velocity measurements, with the bottleneck rank re-derived live
+    at render time and shown beside the stored snapshot. Read-only.
+{% endcomment %}
+
+<!-- Headline stats -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="layers"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_stage_ages|default:"0" }}</div>
+        <div class="stat-label">Open in Stage</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div class="stat-value">{{ stats.stale_count|default:"0" }}</div>
+        <div class="stat-label">Stale Opportunities</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="percent"></i>
+        </div>
+        <div class="stat-value">{% if stats.stale_pct is not None %}{{ stats.stale_pct|floatformat:1 }}%{% else %}—{% endif %}</div>
+        <div class="stat-label">Stale Share</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="clock"></i>
+        </div>
+        <div class="stat-value">{% if stats.avg_stage_age_days is not None %}{{ stats.avg_stage_age_days|floatformat:1 }}{% else %}—{% endif %}</div>
+        <div class="stat-label">Avg Stage Age (days)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="bar-chart-3"></i>
+        </div>
+        <div class="stat-value">{% if stats.median_stage_age_days is not None %}{{ stats.median_stage_age_days|floatformat:1 }}{% else %}—{% endif %}</div>
+        <div class="stat-label">Median Stage Age (days)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="activity"></i>
+        </div>
+        <div class="stat-value">{% if stats.max_stage_age_days is not None %}{{ stats.max_stage_age_days }}{% else %}—{% endif %}</div>
+        <div class="stat-label">Max Stage Age (days)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="git-branch"></i>
+        </div>
+        <div class="stat-value">{{ stats.bottleneck_count|default:"0" }}</div>
+        <div class="stat-label">Flagged Bottlenecks</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="scan-line"></i>
+        </div>
+        <div class="stat-value">{{ stats.stage_count|default:"0" }}</div>
+        <div class="stat-label">Stages In Pipeline</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="circle-dollar-sign"></i>
+        </div>
+        <div class="stat-value">{{ stats.open_pipeline_value|default:"0" }}</div>
+        <div class="stat-label">Open Pipeline Value</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="briefcase-business"></i>
+        </div>
+        <div class="stat-value">{{ stats.open_pipeline_count|default:"0" }}</div>
+        <div class="stat-label">Open Opportunities</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="zap"></i>
+        </div>
+        <div class="stat-value">{{ stats.weighted_pipeline_value|default:"0" }}</div>
+        <div class="stat-label">Weighted Pipeline Value</div>
+    </div>
+</div>
+
+<!-- Open pipeline by stage -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Open Pipeline by Stage</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Pipeline / Stage</th>
+                    <th>Open Deals</th>
+                    <th>Stale</th>
+                    <th>Amount</th>
+                    <th>Weighted</th>
+                    <th>Currency</th>
+                    <th>State</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rollup_rows %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ row.label|default:"—" }}</div>
+                        {% if row.stage_kind %}
+                        <div class="text-xs text-slate-500">{{ row.stage_kind }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{{ row.count|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.stale_count|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.amount|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700">{{ row.weighted_amount|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.currency_code|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{% if row.stale_count %}Aging{% else %}Current{% endif %}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="layers"></i>
+                            <h3>No open pipeline</h3>
+                            <p>Place opportunities on a pipeline stage and the stage-by-stage value rolls up here.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Stage bottlenecks -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Stage Bottlenecks</h2>
+        <a href="{% url 'sales:stage_velocity_analysis_list' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="list"></i>
+            <span>All Analyses</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Stage</th>
+                    <th>Pipeline</th>
+                    <th>Median Days</th>
+                    <th>p90 Days</th>
+                    <th>Max Days</th>
+                    <th>Live Rank</th>
+                    <th>Stored Rank</th>
+                    <th>Opportunities</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in bottleneck_rows %}
+                <tr>
+                    <td>
+                        {% if row.analysis %}
+                        <a href="{% url 'sales:stage_velocity_analysis_detail' row.analysis.pk %}" class="font-semibold text-slate-900 hover:underline">
+                            {{ row.stage_name|default:"—" }}
+                        </a>
+                        {% else %}
+                        <span class="font-semibold text-slate-900">{{ row.stage_name|default:"—" }}</span>
+                        {% endif %}
+                        <div class="text-xs text-slate-500 font-mono">{{ row.number|default:"—" }}</div>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.pipeline_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        {% if row.median_days_in_stage is not None %}{{ row.median_days_in_stage|floatformat:1 }}{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if row.p90_days_in_stage is not None %}{{ row.p90_days_in_stage|floatformat:1 }}{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.max_days_in_stage|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{{ row.live_rank|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700">{{ row.bottleneck_rank|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.opportunity_count|default:"0" }}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="git-branch"></i>
+                            <h3>No velocity measurements yet</h3>
+                            <p>Record the measured days per stage to rank the bottlenecks against the pipeline.</p>
+                            <a href="{% url 'sales:stage_velocity_analysis_list' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="list"></i>
+                                <span>All Analyses</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Open opportunities by stage age -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Opportunities Still in Stage</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Opportunity</th>
+                    <th>Stage</th>
+                    <th>Pipeline</th>
+                    <th>Owner</th>
+                    <th>Age (days)</th>
+                    <th>Target (days)</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in stage_age_rows %}
+                <tr>
+                    <td>
+                        <span class="font-medium text-slate-900">{{ row.label|default:"—" }}</span>
+                        {% if row.opportunity_name %}
+                        <div class="text-xs text-slate-500">{{ row.opportunity_name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.stage_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.pipeline_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.owner_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{{ row.stage_age_days|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700">{{ row.target_days|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.amount|default:"0" }}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="clock"></i>
+                            <h3>Nothing sitting in a stage</h3>
+                            <p>No opportunity is currently placed on a pipeline stage, so there is no stage age to report.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Aging watchlist -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Aging Watchlist — Days Over Target</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Opportunity</th>
+                    <th>Stage</th>
+                    <th>Account</th>
+                    <th>Age (days)</th>
+                    <th>Over Target</th>
+                    <th>Target (days)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in aging_rows %}
+                <tr>
+                    <td>
+                        <span class="font-medium text-slate-900">{{ row.label|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.stage_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.account_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{{ row.stage_age_days|default:"0" }}</span>
+                    </td>
+                    <td>
+                        {% if row.days_over_target is not None %}
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">+{{ row.days_over_target }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-slate-700">{{ row.target_days|default:"—" }}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state">
+                            <i data-lucide="check-circle-2"></i>
+                            <h3>Nothing is over target</h3>
+                            <p>Every open opportunity is still inside its stage target.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
