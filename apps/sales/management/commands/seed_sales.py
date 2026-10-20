@@ -49,6 +49,13 @@ from apps.sales.models import (
     AccountTerritoryAssignment,
     TerritoryMember,
     QuotaPlan,
+    # 8.12 Sales Analytics & Intelligence. These EXTEND the 8.2 win/loss spine and the CRM
+    # opportunity / territory masters by FK; they declare no second reason, outcome,
+    # competitor, quota, currency, activity or report master.
+    WinLossDebrief,
+    StageVelocityAnalysis,
+    FunnelConversionRecord,
+    RepPerformanceScorecard,
     # 8.8 Sales Activity & Task Management
     ActivityType,
     ActivityLog,
@@ -159,6 +166,7 @@ class Command(BaseCommand):
         self._seed_incentive_compensation(tenant, owner)
         self._seed_customer_success(tenant, owner)
         self._seed_marketing_alignment(tenant, owner)
+        self._seed_sales_analytics(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -3176,6 +3184,262 @@ class Command(BaseCommand):
             f"{ContentEngagement.objects.filter(tenant=tenant).count()} content engagements, "
             f"{MarketingEvent.objects.filter(tenant=tenant).count()} events, "
             f"{EventRegistration.objects.filter(tenant=tenant).count()} registrations)."
+        )
+
+    def _seed_sales_analytics(self, tenant, owner):
+        """Seed Sales 8.12 Sales Analytics & Intelligence rows.
+
+        **No second master (L36/L37).** This helper REUSES the existing ``crm.Opportunity``
+        (the deal), the customer ``core.Party`` accounts, the ``sales.Pipeline`` /
+        ``sales.PipelineStage`` (8.2, and its ``target_days``), the ``sales.WinLossReason`` /
+        ``sales.OpportunityOutcome`` spine (8.2), ``sales.QuotaPlan`` (8.7),
+        ``sales.ForecastPeriod`` (8.4) and the ``accounts.User`` reps. It creates none of
+        them. If those masters are missing for a tenant the block warns and skips rather
+        than inventing a duplicate.
+
+        Idempotency:
+        - WinLossDebrief: (tenant, opportunity)
+        - StageVelocityAnalysis: (tenant, pipeline_stage, period_start)
+        - FunnelConversionRecord: (tenant, label, period_start)
+        - RepPerformanceScorecard: (tenant, rep, period_start)
+        """
+        opportunities = list(Opportunity.objects.filter(tenant=tenant).order_by("pk"))
+        accounts = list(
+            Party.objects.filter(tenant=tenant, roles__role="customer")
+            .distinct()
+            .order_by("pk")
+        )
+        pipelines = list(Pipeline.objects.filter(tenant=tenant).order_by("pk"))
+        stages = list(
+            PipelineStage.objects.filter(tenant=tenant, pipeline__tenant=tenant)
+            .order_by("pipeline__pk", "sequence", "pk")
+        )
+        reasons = list(WinLossReason.objects.filter(tenant=tenant).order_by("pk"))
+        outcomes = list(OpportunityOutcome.objects.filter(tenant=tenant).order_by("pk"))
+        reps = list(
+            User.objects.filter(tenant=tenant, is_active=True).order_by("pk")
+        )
+
+        if not opportunities or not stages:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"{tenant.name}: no crm.Opportunity / sales.PipelineStage rows found; "
+                    f"skipped Sales 8.12 sales analytics seeding."
+                )
+            )
+            return
+
+        today = timezone.localdate()
+        period_start = today - timedelta(days=90)
+        period_end = today
+
+        # ---- 1. WinLossDebrief (the qualitative win/loss record) ---------------------------
+        # One debrief per opportunity. It EXTENDS the 8.2 outcome / reason spine by FK and
+        # adds the human account the numeric spine cannot carry.
+        driver_specs = [
+            (
+                [{"driver": "price", "sentiment": "negative", "weight": 5,
+                  "quote": "Your quote came in above the incumbent we shortlisted."},
+                 {"driver": "implementation_time", "sentiment": "negative", "weight": 3,
+                  "quote": "We could not get it live before our fiscal year end."},
+                 {"driver": "relationship", "sentiment": "positive", "weight": 2,
+                  "quote": "Your team was responsive throughout."}],
+                "product", "shared",
+            ),
+            (
+                [{"driver": "ease_of_use", "sentiment": "positive", "weight": 4,
+                  "quote": "The team was productive on day one."},
+                 {"driver": "reporting", "sentiment": "positive", "weight": 3,
+                  "quote": "The dashboards answered our questions without a spreadsheet."},
+                 {"driver": "scale", "sentiment": "positive", "weight": 2,
+                  "quote": "It scaled with our second region."}],
+                "product", "actioned",
+            ),
+        ]
+        for idx, opportunity in enumerate(opportunities[:2]):
+            if WinLossDebrief.objects.filter(
+                tenant=tenant, opportunity=opportunity
+            ).exists():
+                continue
+            drivers, feedback_team, status = driver_specs[idx % len(driver_specs)]
+            outcome = None
+            for candidate in outcomes:
+                if candidate.opportunity_id == opportunity.pk:
+                    outcome = candidate
+                    break
+            reason = reasons[idx % len(reasons)] if reasons else None
+            account = accounts[idx % len(accounts)] if accounts else None
+            WinLossDebrief.objects.create(
+                tenant=tenant,
+                opportunity=opportunity,
+                outcome=outcome,
+                primary_reason=reason,
+                account=account,
+                interviewer=owner,
+                action_owner=owner,
+                debriefed_on=today - timedelta(days=idx * 3),
+                interview_channel="interview" if idx % 2 == 0 else "email_review",
+                decision_drivers=drivers,
+                buyer_quote=(
+                    "The evaluation stalled on the total cost of ownership, not the product."
+                    if idx % 2 == 0
+                    else "The decision was driven by how quickly our team could get value."
+                ),
+                counterfactual=(
+                    "A lower price with a faster implementation plan would have closed this."
+                    if idx % 2 == 0
+                    else "An earlier proof of concept would have shortened the cycle."
+                ),
+                feedback_team=feedback_team,
+                action_items=(
+                    "Product to review the onboarding timeline; marketing to publish a TCO guide."
+                    if idx % 2 == 0
+                    else "Enablement to turn the reporting walkthrough into a reusable deck."
+                ),
+                actioned_on=today if status == "actioned" else None,
+                status=status,
+                notes="Seeded 8.12 win/loss debrief.",
+            )
+
+        # ---- 2. StageVelocityAnalysis (time-in-stage) --------------------------------------
+        # The persisted measurement for the period -- there is no stage-transition history
+        # table in NavERP, so the durations cannot be derived (GAP-sales-8.12-01).
+        open_stages = [s for s in stages if s.stage_kind == "open"] or stages
+        for idx, stage in enumerate(open_stages[:3]):
+            if StageVelocityAnalysis.objects.filter(
+                tenant=tenant, pipeline_stage=stage, period_start=period_start
+            ).exists():
+                continue
+            median_days = Decimal(4 + idx * 6)
+            StageVelocityAnalysis.objects.create(
+                tenant=tenant,
+                pipeline=stage.pipeline,
+                pipeline_stage=stage,
+                period_start=period_start,
+                period_end=period_end,
+                opportunity_count=12 - idx * 2,
+                median_days_in_stage=median_days,
+                p90_days_in_stage=median_days * Decimal("2.4"),
+                max_days_in_stage=int(median_days * 3),
+                sales_cycle_days=median_days * Decimal("2.1"),
+                velocity_value=Decimal("480000.00") - Decimal(idx * 90000),
+                is_bottleneck=idx == 0,
+                bottleneck_rank=idx + 1 if idx == 0 else None,
+                recommendation=(
+                    "This stage is the slowest in the pipeline -- tighten the entry criteria "
+                    "and add a qualified-need check before the next stage."
+                    if idx == 0
+                    else "Cycle time is within range; keep the current handoff discipline."
+                ),
+                benchmark_days=Decimal(12),
+                benchmark_source="Seeded internal benchmark",
+                benchmark_as_of=period_end,
+                segment="All segments",
+                status="reviewed" if idx == 0 else "draft",
+                notes="Seeded 8.12 stage velocity analysis.",
+            )
+
+        # ---- 3. FunnelConversionRecord (conversion rates) ---------------------------------
+        funnel_specs = [
+            ("Lead to opportunity", "lead_to_opportunity", 120, 38, 400000, "mailing"),
+            ("Opportunity to close", "opportunity_to_close", 64, 21, 500000, "outbound"),
+            ("Stage to stage", "stage_to_stage", 96, 52, 300000, "partner"),
+        ]
+        for idx, (label, scope, entered, converted, revenue, channel) in enumerate(funnel_specs):
+            if FunnelConversionRecord.objects.filter(
+                tenant=tenant, label=label, period_start=period_start
+            ).exists():
+                continue
+            FunnelConversionRecord.objects.create(
+                tenant=tenant,
+                label=label,
+                funnel_scope=scope,
+                from_stage=open_stages[0] if open_stages else None,
+                to_stage=open_stages[1] if len(open_stages) > 1 else None,
+                territory=None,
+                owner=owner,
+                source_channel=channel,
+                period_start=period_start,
+                period_end=period_end,
+                entered_count=entered,
+                converted_count=converted,
+                skipped_count=idx * 4,
+                avg_cycle_days=Decimal(18 + idx * 9),
+                benchmark_pct=Decimal("30.00"),
+                benchmark_source="Seeded internal benchmark",
+                benchmark_as_of=period_end,
+                segment="All segments",
+                notes="Seeded 8.12 funnel conversion record.",
+            )
+
+        # ---- 4. RepPerformanceScorecard (rep scorecards) -----------------------------------
+        quota_plans = list(QuotaPlan.objects.filter(tenant=tenant).order_by("pk"))
+        forecast_periods = list(ForecastPeriod.objects.filter(tenant=tenant).order_by("pk"))
+        for idx, rep in enumerate(reps[:2] or [owner]):
+            if RepPerformanceScorecard.objects.filter(
+                tenant=tenant, rep=rep, period_start=period_start
+            ).exists():
+                continue
+            quota_target = Decimal("250000.00") + Decimal(idx * 50000)
+            won = 4 - idx
+            lost = 1 + idx
+            revenue = Decimal("185000.00") + Decimal(idx * 30000)
+            RepPerformanceScorecard.objects.create(
+                tenant=tenant,
+                rep=rep,
+                territory=None,
+                manager=owner,
+                forecast_period=forecast_periods[0] if forecast_periods else None,
+                quota_plan=quota_plans[0] if quota_plans else None,
+                coaching_scorecard=None,
+                period_start=period_start,
+                period_end=period_end,
+                activities_logged=48 + idx * 12,
+                calls_logged=22 + idx * 6,
+                emails_logged=19 + idx * 5,
+                meetings_logged=7 + idx * 2,
+                meetings_booked=9 + idx * 3,
+                follow_ups_completed=15 + idx * 4,
+                activity_minutes=640 + idx * 120,
+                response_time_hours=Decimal("2.50"),
+                opportunities_created=6 + idx,
+                opportunities_won=won,
+                opportunities_lost=lost,
+                pipeline_value=Decimal("420000.00") + Decimal(idx * 75000),
+                weighted_pipeline_value=Decimal("210000.00") + Decimal(idx * 40000),
+                revenue_closed=revenue,
+                currency=None,
+                sales_cycle_days=Decimal(34 + idx * 8),
+                quota_target=quota_target,
+                overall_score=Decimal("82.50") - Decimal(idx * 12),
+                rating="strong" if idx == 0 else "needs_improvement",
+                strengths="Consistent pipeline hygiene and a high demo-to-proposal rate.",
+                areas_for_improvement=(
+                    "Multi-threading the top accounts."
+                    if idx == 0
+                    else "Follow-up cadence slips in the second half of the month."
+                ),
+                coaching_actions=(
+                    "Shadow the top-performing rep on two opportunities this cycle."
+                    if idx == 0
+                    else "Work a weekly pipeline review until the goal gap closes."
+                ),
+                benchmark_win_rate_pct=Decimal("60.00"),
+                benchmark_cycle_days=Decimal("30.00"),
+                benchmark_quota_attainment_pct=Decimal("100.00"),
+                benchmark_source="Seeded internal benchmark",
+                benchmark_as_of=period_end,
+                segment="All segments",
+                status="shared" if idx == 0 else "draft",
+                notes="Seeded 8.12 rep performance scorecard.",
+            )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.12 sales analytics demo rows ensured "
+            f"({WinLossDebrief.objects.filter(tenant=tenant).count()} win/loss debriefs, "
+            f"{StageVelocityAnalysis.objects.filter(tenant=tenant).count()} velocity analyses, "
+            f"{FunnelConversionRecord.objects.filter(tenant=tenant).count()} funnel records, "
+            f"{RepPerformanceScorecard.objects.filter(tenant=tenant).count()} rep scorecards)."
         )
 
 
