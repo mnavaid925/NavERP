@@ -91,6 +91,14 @@ from .MarketingAlignment import (
     MqlHandoffForm,
 )
 
+# 8.12 Sales Analytics & Intelligence
+from .SalesAnalytics import (
+    FunnelConversionRecordForm,
+    RepPerformanceScorecardForm,
+    StageVelocityAnalysisForm,
+    WinLossDebriefForm,
+)
+
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
     "LeadQualificationForm", "LeadRoutingPreviewForm", "LeadRoutingRuleForm", "LeadRoutingRunForm",
@@ -130,6 +138,9 @@ __all__ = [
     # 8.13 Marketing Alignment & Attribution
     "AttributionTouchpointForm", "CampaignAttributionForm", "MqlHandoffForm",
     "ContentEngagementForm", "MarketingEventForm", "EventRegistrationForm",
+    # 8.12 Sales Analytics & Intelligence
+    "WinLossDebriefForm", "StageVelocityAnalysisForm",
+    "FunnelConversionRecordForm", "RepPerformanceScorecardForm",
 ]
 
 
