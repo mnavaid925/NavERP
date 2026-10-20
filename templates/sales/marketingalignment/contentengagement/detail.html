@@ -114,7 +114,10 @@
                 </div>
                 <div class="py-2.5 flex justify-between">
                     <dt class="text-slate-500 font-medium">Engagement Type</dt>
-                    <dd class="text-slate-900">{{ obj.get_engagement_type_display }}</dd>
+                    <dd class="text-slate-900">
+                        {% if obj.is_download %}<span class="badge badge-green">Download</span>{% endif %}
+                        {{ obj.get_engagement_type_display }}
+                    </dd>
                 </div>
                 <div class="py-2.5 flex justify-between">
                     <dt class="text-slate-500 font-medium">Engagement Channel</dt>
