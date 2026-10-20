@@ -47,7 +47,7 @@ touch ledger is the *raw interaction*; the credit is *a function of the model AN
 journey*. A journey with four touches needs four ledger rows but a different credit for each
 model. Collapsing them would force the credit to be typed into the touch, which destroys the
 ability to evaluate two models side by side (the thing every surveyed product does). Hence: ledger
-rows are data, credit rows are per-(touchpoint × model).
+rows are data, credit rows are per-(touchpoint Ã— model).
 
 ---
 
@@ -113,8 +113,15 @@ TOUCH_POSITION_CHOICES = [
 **Properties:** `is_first_touch` → `self.touch_position == "first"`; `is_last_touch` →
 `self.touch_position == "last"`; `attributed_revenue` → `sum(a.attributed_revenue for a in self.attributions.all())`.
 
-**Clean guards:** `campaign`, `lead`, `opportunity`, `currency` must belong to the same tenant as
+**Clean guards:** `campaign`, `lead`, `opportunity` must belong to the same tenant as
 `self.tenant` (a cross-tenant FK is rejected with a `ValidationError`).
+
+> **`currency` is NOT tenant-checked.** `accounting.Currency` is a **GLOBAL** master with **no
+> `tenant` FK** (`apps/accounting/models/GeneralLedger/Currencies.py:6-9`). `getattr(currency,
+> "tenant_id", None)` is therefore `None`, and `None != request.tenant.id` is always true — so
+> tenant-checking it rejects **every** currency selection and makes the field unusable. This
+> matches the project's own idiom: `ForecastPeriods.py:13` and `QuotaPlans.py:21-22` both say
+> `accounting.Currency` is "never tenant-checked (L29)". See review finding **C1**.
 
 **Meta:** `ordering = ["-touch_date", "-created_at"]`; indexes
 `(tenant, touch_date)`, `(tenant, campaign, touch_date)`, `(tenant, lead)`, `(tenant, opportunity)`.
@@ -160,7 +167,7 @@ ATTRIBUTION_STATUS_CHOICES = [
 `opportunity` → `self.touchpoint.opportunity`; `roi_pct` → `None` when `attributed_cost` is 0,
 else `(attributed_revenue - attributed_cost) / attributed_cost * 100`.
 
-**Clean guards:** `computed_by` same tenant; `credit_pct` ≤ 100; `attributed_revenue`/`attributed_cost` ≥ 0.
+**Clean guards:** `computed_by` same tenant; `credit_pct` â‰¤ 100; `attributed_revenue`/`attributed_cost` â‰¥ 0.
 
 **Meta:** `ordering = ["-computed_on", "-created_at"]`;
 `UniqueConstraint(fields=["tenant", "touchpoint", "attribution_model"], name="sales_atr_tp_model_uniq")`
@@ -220,9 +227,9 @@ HANDOFF_SOURCE_CHOICES = [
 **`save()`:** stamps `responded_at = timezone.now()` on the first transition into
 `accepted` / `rejected` / `converted`; clears it if the row is moved back to `pending`.
 
-**Clean guards:** `campaign`, `account`, `owner`, `assigned_to`, `opportunity`, `currency` same
+**Clean guards:** `campaign`, `account`, `owner`, `assigned_to`, `opportunity` same
 tenant; `sla_due_at` must not be before `handoff_at`; a `rejected` row must carry a
-`rejection_reason`.
+`rejection_reason`. **`currency` is not tenant-checked** — it is a global master (see **C1**).
 
 **Meta:** `ordering = ["-handoff_at", "-created_at"]`; indexes `(tenant, status)`,
 `(tenant, sla_due_at)`, `(tenant, lead)`, `(tenant, campaign)`;
@@ -271,7 +278,8 @@ ENGAGEMENT_CHANNEL_CHOICES = [
 **Properties:** `is_high_intent` → `self.engagement_score >= 70`;
 `is_download` → `self.engagement_type == "download"`.
 
-**Clean guards:** `content`, `account`, `lead`, `campaign`, `currency` same tenant.
+**Clean guards:** `content`, `account`, `lead`, `campaign` same tenant. **`currency` is not
+tenant-checked** — it is a global master (see **C1**).
 
 **Meta:** `ordering = ["-engaged_at", "-created_at"]`; indexes `(tenant, content, "-engaged_at")`,
 `(tenant, account)`, `(tenant, engagement_type)`;
@@ -325,7 +333,8 @@ EVENT_STATUS_CHOICES = [
 `revenue_per_registrant` → sum of `revenue_attributed` on this event's registrations ÷
 `registered_count`, or `None`.
 
-**Clean guards:** `end_at` must not be before `start_at`; `owner`, `campaign`, `currency` same tenant.
+**Clean guards:** `end_at` must not be before `start_at`; `owner`, `campaign` same tenant.
+**`currency` is not tenant-checked** — it is a global master (see **C1**).
 
 **Meta:** `ordering = ["-start_at", "-created_at"]`; indexes `(tenant, status)`,
 `(tenant, event_type)`, `(tenant, start_at)`;
@@ -420,7 +429,7 @@ FK queryset to `self.tenant` in `__init__`. Every form calls
 **Excluded:** `tenant`, `number`, `created_at`, `updated_at`.
 **FK querysets:** `touchpoint` → `AttributionTouchpoint.objects.filter(tenant=…).select_related("campaign", "lead", "opportunity")`;
 `computed_by` → `User.objects.filter(tenant=…)`.
-**Clean:** `credit_pct` ≤ 100 (model validator), and for `attribution_model == "custom"` a
+**Clean:** `credit_pct` â‰¤ 100 (model validator), and for `attribution_model == "custom"` a
 `credit_pct` of `0` is rejected with *"A custom attribution model must carry an explicit credit percentage."* — the
 custom escape hatch is meaningless without a number.
 
@@ -431,7 +440,7 @@ custom escape hatch is meaningless without a number.
 **FK querysets:** `lead` → `Lead.objects.filter(tenant=…)`; `campaign` → `Campaign.objects.filter(tenant=…)`;
 `account` → `Party.objects.filter(tenant=…, roles__role="customer").distinct()`; `owner` / `assigned_to` →
 `User.objects.filter(tenant=…)`; `opportunity` → `Opportunity.objects.filter(tenant=…)`; `currency` → `Currency.objects.all()`.
-**Clean:** a `rejected` status requires `rejection_reason`; `sla_due_at` must be ≥ `handoff_at`.
+**Clean:** a `rejected` status requires `rejection_reason`; `sla_due_at` must be â‰¥ `handoff_at`.
 
 ### 2.4 `ContentEngagementForm`
 `Meta.fields`:
@@ -493,6 +502,14 @@ every literal route is listed before its `<int:pk>` siblings.
 | `marketing_event_delete` | `marketing-alignment/events/<int:pk>/delete/` | `marketing_event_delete` |
 | `marketing_event_registrations` | `marketing-alignment/events/<int:pk>/registrations/` | `marketing_event_registrations` |
 | `marketing_event_registration_create` | `marketing-alignment/events/<int:pk>/registrations/create/` | `marketing_event_registration_create` |
+| `marketing_event_registration_edit` | `marketing-alignment/events/<int:pk>/registrations/<int:registration_pk>/edit/` | `marketing_event_registration_edit` |
+| `marketing_event_registration_delete` | `marketing-alignment/events/<int:pk>/registrations/<int:registration_pk>/delete/` | `marketing_event_registration_delete` |
+
+> **The registration edit route exists because the attendance model needs it.** `EventRegistration.save()`
+> stamps `attended_at` "the first time the registration is marked attended" — but with only a
+> create path, a registration created as `registered` could never be marked `attended` from the
+> app, so the stamp was a creation-time artefact only. The registrations table carries an Actions
+> column (edit / delete) and the registration form honours `is_edit` (finding **E6**).
 
 **Prefix collision check:** `marketing-alignment/` is verified free against every path already
 mounted under `sales:` (the `sales:` root has no `marketing-alignment` segment).
@@ -507,7 +524,7 @@ All views are function-based, `@login_required`, tenant-scoped
 `apps.core.utils.write_audit_log(request.user, obj, <action>, <message>, tenant=request.tenant)`.
 Deletes are `@require_POST` + `@tenant_admin_required` and redirect to the list.
 
-### 4.0 The pk-filter guard — `pk_from_param` (MANDATORY)
+### 4.0 The filter guards — `pk_from_param` and `enum_filter` (MANDATORY)
 
 **Every** pk-valued filter parameter goes through
 `apps.sales/views/MarketingAlignment/_common.py::pk_from_param`, never a bare
@@ -539,6 +556,44 @@ This was found **after** the Phase 3 smoke gate passed, because the smoke gate's
 check used non-numeric junk (`?campaign=abc`), which the old guard already handled. The
 oversized-numeric case was only caught by running the same views against the SQLite test DB.
 
+### 4.0b The closed-vocabulary filter guard — `enum_filter` (MANDATORY)
+
+Every **choice-valued** filter parameter goes through
+`apps/sales/views/MarketingAlignment/_common.py::enum_filter`, never a bare
+`qs.filter(field=request.GET.get(param))`.
+
+```python
+def enum_filter(qs, request, param, field, choices):
+    """Filter by a closed-vocabulary GET param; an unknown value narrows nothing."""
+    value = request.GET.get(param, "").strip()
+    if value and value in {code for code, _label in choices}:
+        qs = qs.filter(**{field: value})
+    return value, qs
+```
+
+**Why.** A value that is not in the model's `CHOICES` can be held by no row, so filtering on it
+narrows to an empty set — and because the list stats are computed on the *filtered* queryset, the
+page renders **empty with all-zero stat cards** instead of falling back to the unfiltered list.
+That breaches §9 ("junk params fall back to the unfiltered list"). The raw value is still returned
+for `active_filters`, so the template reflects what the user asked for.
+
+The 11 sites: `AttributionTouchpoints` (`channel`, `touch_type`, `touch_position`) ·
+`CampaignAttributions` (`attribution_model`, `status`) · `ContentEngagements` (`engagement_type`,
+`engagement_channel`) · `MarketingEvents` (`event_type`, `status`, `registration_status`,
+`followup_status`) · `MqlHandoffs` (`status`, `source_kind`). See review finding **E1**.
+
+### 4.0c The shared helpers in `apps/sales/views/MarketingAlignment/_common.py`
+
+| Helper | Why it exists |
+|---|---|
+| `pk_from_param` | §4.0 — an int64-safe pk from a GET parameter. |
+| `enum_filter` | §4.0b — a closed-vocabulary filter that ignores junk. |
+| `avg_response_hours(queryset)` | The mean hours between `handoff_at` and `responded_at`. Computed in Python because a portable SQL duration expression differs between MariaDB and SQLite; the responded subset is bounded by real sales activity. Used by **both** the MQL list card and the console, so the two cannot drift (finding **E2**). |
+| `single_currency(...)` | The currency a page total may be labelled with — **only** when every row in the total shares one currency, so a mixed-currency total is never given a false symbol (finding **M6**). |
+
+This file is 8.13's own helper home. A helper used by **more than one sub-module** belongs in
+`apps/sales/views/_helpers.py`; a helper used by one entity only stays in that entity's module.
+
 
 ### 4.1 `attribution_touchpoint_list` → `templates/sales/marketingalignment/attributiontouchpoint/list.html`
 | Context key | Value |
@@ -567,7 +622,7 @@ oversized-numeric case was only caught by running the same views against the SQL
 `lead` → `lead_id=int(v)` when `v.isdigit()`. All applied **before** pagination.
 
 ### 4.2 `attribution_touchpoint_detail` → `.../attributiontouchpoint/detail.html`
-`{"obj": <AttributionTouchpoint>, "touchpoint": <same object>, "attributions": <list of CampaignAttribution for this touch>}`
+`{"obj": <AttributionTouchpoint>, "attributions": <list of CampaignAttribution for this touch>}` — the `touchpoint` alias was dropped as unrendered (finding **E3**).
 
 ### 4.3 `attribution_touchpoint_create` / `_edit` → `.../attributiontouchpoint/form.html`
 `{"form": <form>, "obj": <None on create / the object on edit>, "is_edit": <bool>}` — the template
@@ -582,13 +637,13 @@ branches on `is_edit`.
 | `status_choices` | `ATTRIBUTION_STATUS_CHOICES` |
 | `campaigns` | `Campaign.objects.filter(tenant=request.tenant).order_by("name")` |
 | `active_filters` | `{"q", "attribution_model", "status", "campaign"}` |
-| `stats` | `{"total_count", "approved_count", "total_attributed_revenue", "total_attributed_cost", "total_credit_pct"}` |
+| `stats` | `{"total_count", "approved_count", "total_attributed_revenue", "total_attributed_cost"}` — `total_credit_pct` was dropped: summing a credit percentage across rows (and across three models) has no meaning, and nothing displayed it (finding **E3**). |
 
 **Filters:** `q` → `Q(touchpoint__campaign__name__icontains) | Q(touchpoint__lead__name__icontains) | Q(number__icontains)`;
 `attribution_model` → exact; `status` → exact; `campaign` → `touchpoint__campaign_id=int(v)`.
 
 ### 4.5 `campaign_attribution_detail` → `.../campaignattribution/detail.html`
-`{"obj": <CampaignAttribution>, "attribution": <same object>}`
+`{"obj": <CampaignAttribution>}` — the `attribution` alias was dropped as unrendered (finding **E3**).
 
 ### 4.6 `campaign_attribution_create` / `_edit` → `.../campaignattribution/form.html`
 `{"form", "obj", "is_edit"}`
@@ -603,13 +658,13 @@ branches on `is_edit`.
 | `campaigns` | `Campaign.objects.filter(tenant=request.tenant).order_by("name")` |
 | `owners` | `User.objects.filter(tenant=request.tenant).order_by("username")` |
 | `active_filters` | `{"q", "status", "source_kind", "campaign", "owner"}` |
-| `stats` | `{"total_count", "pending_count", "accepted_count", "rejected_count", "expired_count", "converted_count", "sla_breach_count", "acceptance_rate_pct", "avg_response_hours"}` |
+| `stats` | `{"total_count", "accepted_count", "rejected_count", "sla_breach_count", "acceptance_rate_pct", "avg_response_hours"}` — `pending_count` / `expired_count` / `converted_count` were dropped as unrendered (finding **E3**); the MQL funnel is on the console. `sla_breach_count` uses the model's own `MqlHandoff.sla_breach_q(now)`, so the card and the row badges cannot disagree (finding **I2**). |
 
 **Filters:** `q` → `Q(lead__name__icontains) | Q(lead__number__icontains) | Q(account__name__icontains) | Q(number__icontains)`;
 `status` → exact; `source_kind` → exact; `campaign` → `campaign_id=int(v)`; `owner` → `owner_id=int(v)`.
 
 ### 4.8 `mql_handoff_detail` → `.../mqlhandoff/detail.html`
-`{"obj": <MqlHandoff>, "handoff": <same object>}`
+`{"obj": <MqlHandoff>}` — the `handoff` alias was dropped as unrendered (finding **E3**).
 
 ### 4.9 `mql_handoff_create` / `_edit` → `.../mqlhandoff/form.html`
 `{"form", "obj", "is_edit"}`
@@ -632,7 +687,7 @@ branches on `is_edit`.
 `account` → `account_id=int(v)`; `campaign` → `campaign_id=int(v)`.
 
 ### 4.11 `content_engagement_detail` → `.../contentengagement/detail.html`
-`{"obj": <ContentEngagement>, "engagement": <same object>}`
+`{"obj": <ContentEngagement>}` — the `engagement` alias was dropped as unrendered (finding **E3**).
 
 ### 4.12 `content_engagement_create` / `_edit` → `.../contentengagement/form.html`
 `{"form", "obj", "is_edit"}`
@@ -653,13 +708,13 @@ branches on `is_edit`.
 `event_type` → exact; `status` → exact; `owner` → `owner_id=int(v)`; `campaign` → `campaign_id=int(v)`.
 
 ### 4.14 `marketing_event_detail` → `.../marketingevent/detail.html`
-`{"obj": <MarketingEvent>, "event": <same object>, "registrations": <list of EventRegistration for the event>}`
+`{"obj": <MarketingEvent>, "registrations": <list of EventRegistration for the event>}` — the `event` alias was dropped as unrendered (finding **E3**).
 
 ### 4.15 `marketing_event_create` / `_edit` → `.../marketingevent/form.html`
 `{"form", "obj", "is_edit"}`
 
 ### 4.16 `marketing_event_registrations` → `.../marketingevent/registrations.html`
-`{"event": <MarketingEvent>, "registrations": <list>, "page_obj": <page>}` — paginated at 20.
+`{"event": <MarketingEvent>, "registrations": <list>, "page_obj": <page>, "registration_status_choices": REGISTRATION_STATUS_CHOICES, "followup_status_choices": FOLLOWUP_STATUS_CHOICES, "active_filters": {"registration_status", "followup_status"}}` — paginated at 20. The two `*_choices` keys belong to **this** view, not to the event detail view (finding **E3**).
 Filtered by `registration_status` and `followup_status` from `request.GET`.
 
 ### 4.17 `marketing_event_registration_create` → `.../marketingevent/form.html`? **No** — registrations
@@ -670,14 +725,16 @@ Context: `{"form": <EventRegistrationForm>, "event": <MarketingEvent>, "obj": <N
 ### 4.18 `marketing_attribution_console` → `templates/sales/marketingalignment/attribution_console.html`
 | Context key | Value |
 |---|---|
-| `stats` | `{"total_touchpoints", "total_spend", "total_attributed_revenue", "blended_roi_pct", "avg_cost_per_lead", "mql_total", "mql_accepted", "mql_acceptance_rate_pct", "sla_compliance_pct", "content_engagements", "events"}` |
+| `stats` | `{"total_touchpoints", "total_spend", "total_attributed_revenue", "blended_roi_pct", "avg_cost_per_lead"}` — the five headline figures. The MQL numbers live in `mql_funnel`, and `content_engagements` / `events` were **dropped** because they cost a `COUNT(*)` each and nothing displayed them (finding **M2**). |
 | `campaign_rows` | list of dicts: `{"campaign", "spend", "attributed_revenue", "roi_pct", "cost_per_lead", "pipeline_value", "lead_count", "touchpoint_count"}` |
 | `channel_rows` | list of dicts: `{"channel", "label", "touchpoints", "cost", "attributed_revenue", "roi_pct"}` |
-| `mql_funnel` | `{"pending", "accepted", "rejected", "expired", "converted", "acceptance_rate_pct", "sla_compliance_pct", "avg_response_hours"}` |
+| `mql_funnel` | `{"pending", "accepted", "rejected", "expired", "converted", "total", "acceptance_rate_pct", "sla_compliance_pct", "avg_response_hours"}` |
 | `content_rows` | list of dicts: `{"content", "engagements", "avg_score", "revenue_attributed"}` |
 | `event_rows` | list of dicts: `{"event", "registrations", "attended", "show_up_pct", "revenue_per_registrant"}` |
 | `model_choices` | `ATTRIBUTION_MODEL_CHOICES` — the model selector labels shown on the page |
 | `active_model` | the `request.GET["model"]` value, defaulting to `"first_touch"` — the console recomputes the rollup under the selected model |
+| `active_model_label` | the human label for `active_model` |
+| `currency` | the single `accounting.Currency` the money figures may be labelled with — **only** when every touchpoint in the tenant uses the same one, otherwise `None` and the totals are rendered without a symbol (finding **M6**) |
 
 **Computation rules for the console (derived — never stored):**
 - `spend` per campaign = `crm.Campaign.budget_actual` (the campaign's own recorded spend) — 8.13 does
@@ -688,9 +745,15 @@ Context: `{"form": <EventRegistrationForm>, "event": <MarketingEvent>, "obj": <N
 - `cost_per_lead` = `spend / COUNT(DISTINCT touchpoint.lead_id)`, or `None` when there are no leads or spend is 0.
 - `pipeline_value` = `SUM(AttributionTouchpoint.engagement_value)` for the campaign's touchpoints.
 - `blended_roi_pct` = `(total_attributed_revenue - total_spend) / total_spend * 100`, or `None`.
+- `avg_cost_per_lead` (the **blended headline**) = `total_spend / COUNT(DISTINCT touchpoint.lead_id)`
+  over the tenant's touchpoints — **one** distinct count, so a lead that touched two campaigns is
+  counted once. Summing the per-campaign counts would double-count it and understate the figure
+  (finding **M1**).
 - `mql_acceptance_rate_pct` = `accepted / (accepted + rejected) * 100`, or `None` when neither exists.
 - `sla_compliance_pct` = `100 - (breached / total * 100)`, or `None` when there are no handoffs.
-- `avg_response_hours` = mean of `MqlHandoff.response_hours` over responded handoffs.
+  The breach predicate is **the model's** `MqlHandoff.sla_breach_q(now)` — the property, the list
+  card and this figure all read one definition, so they cannot drift (finding **I2**).
+- `avg_response_hours` = the shared `avg_response_hours(handoffs)` helper (finding **E2**).
 
 ---
 
@@ -723,7 +786,7 @@ inside it with bare `list.html` / `detail.html` / `form.html`.
 **Design-system rules (theme.css — verified by grep before writing):**
 - Badges: `.badge` + **colour-named only** — `.badge-green`, `.badge-red`, `.badge-amber`,
   `.badge-info`, `.badge-muted`, `.badge-slate`. **`.badge-success` / `.badge-warning` /
-  `.badge-danger` DO NOT EXIST** (L33 shipped 3× on exactly this).
+  `.badge-danger` DO NOT EXIST** (L33 shipped 3Ã— on exactly this).
 - Stat icons: `.stat-icon` + `.blue` / `.green` / `.orange` / `.purple` / `.slate` / `.red`.
 - Text helpers: `.text-muted`, `.text-danger`, `.text-red`, `.text-warn`, `.text-ok`, `.text-brand`,
   `.text-right`.
