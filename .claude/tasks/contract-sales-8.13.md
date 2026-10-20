@@ -722,6 +722,12 @@ get their own page `templates/sales/marketingalignment/marketingevent/registrati
 (a second form page inside the entity folder, sibling of `list/detail/form.html`).
 Context: `{"form": <EventRegistrationForm>, "event": <MarketingEvent>, "obj": <None>, "is_edit": False}`
 
+### 4.17b `marketing_event_registration_edit` → `.../marketingevent/registration_form.html`
+Context: `{"form": <EventRegistrationForm>, "event": <MarketingEvent>, "obj": <EventRegistration>, "is_edit": True}` —
+the same template in edit mode. The `event` field is disabled: it comes from the URL, never from the
+form post. The registrations table carries an Actions column (edit / delete) so this route is
+reachable (finding **E6**).
+
 ### 4.18 `marketing_attribution_console` → `templates/sales/marketingalignment/attribution_console.html`
 | Context key | Value |
 |---|---|
