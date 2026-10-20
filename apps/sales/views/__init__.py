@@ -340,6 +340,36 @@ from .MarketingAlignment import (
     mql_handoff_list,
 )
 
+# 8.12 Sales Analytics & Intelligence
+from .SalesAnalytics import (
+    analytics_console,
+    benchmark_console,
+    funnel_console,
+    funnel_conversion_record_create,
+    funnel_conversion_record_delete,
+    funnel_conversion_record_detail,
+    funnel_conversion_record_edit,
+    funnel_conversion_record_list,
+    rep_performance_scorecard_create,
+    rep_performance_scorecard_delete,
+    rep_performance_scorecard_detail,
+    rep_performance_scorecard_edit,
+    rep_performance_scorecard_list,
+    rep_scorecard_console,
+    stage_velocity_analysis_create,
+    stage_velocity_analysis_delete,
+    stage_velocity_analysis_detail,
+    stage_velocity_analysis_edit,
+    stage_velocity_analysis_list,
+    velocity_console,
+    win_loss_console,
+    win_loss_debrief_create,
+    win_loss_debrief_delete,
+    win_loss_debrief_detail,
+    win_loss_debrief_edit,
+    win_loss_debrief_list,
+)
+
 # View functions exported for URLconf routing and external imports
 __all__ = [
     name for name in globals()
@@ -371,6 +401,11 @@ __all__ = [
         # 8.13 Marketing Alignment & Attribution
         "attribution_touchpoint_", "campaign_attribution_", "mql_handoff_",
         "content_engagement_", "marketing_event_", "marketing_attribution_",
+        # 8.12 Sales Analytics & Intelligence
+        "win_loss_debrief_", "stage_velocity_analysis_", "funnel_conversion_record_",
+        "rep_performance_scorecard_",
+        "analytics_console", "win_loss_console", "velocity_console",
+        "funnel_console", "rep_scorecard_console", "benchmark_console",
     ))
 ]
 
