@@ -66,6 +66,11 @@ from .models import (
     ContentEngagement,
     MarketingEvent,
     EventRegistration,
+    # 8.12 Sales Analytics & Intelligence
+    WinLossDebrief,
+    StageVelocityAnalysis,
+    FunnelConversionRecord,
+    RepPerformanceScorecard,
 )
 
 
@@ -931,6 +936,67 @@ class EventRegistrationAdmin(TenantScopedFKAdmin):
     list_select_related = ("event", "lead", "account", "campaign", "opportunity", "tenant")
     raw_id_fields = ("event", "lead", "account", "campaign", "opportunity")
     tenant_fk_fields = ("event", "lead", "account", "campaign", "opportunity")
+
+
+# ---------------------------------------------------------------- 8.12 Sales Analytics & Intelligence
+#
+# OWNERSHIP (L36/L37): there is no Reason / Outcome / Competitor / Quota / Currency / Activity /
+# Report / Coaching admin registered here, because 8.12 declares no such master. Every FK below
+# points at an existing spine row: crm.Opportunity, crm.CommunicationLog, core.Party, accounts.User,
+# sales.WinLossReason + sales.OpportunityOutcome (8.2), sales.Pipeline + sales.PipelineStage (8.2),
+# sales.QuotaPlan (8.7), sales.ForecastPeriod (8.4) and sales.CoachingScorecard (8.9).
+# `accounting.Currency` is a GLOBAL master with no tenant and is never narrowed (L29).
+
+
+@admin.register(WinLossDebrief)
+class WinLossDebriefAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "opportunity", "outcome", "primary_reason", "feedback_team", "status", "debriefed_on", "tenant")
+    list_filter = ("status", "interview_channel", "feedback_team", "tenant")
+    search_fields = ("number", "opportunity__name", "buyer_quote", "action_items", "notes")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("opportunity", "outcome", "primary_reason", "account", "interviewer", "action_owner", "tenant")
+    raw_id_fields = ("opportunity", "outcome", "primary_reason", "account", "interviewer", "action_owner", "communication_log")
+    tenant_fk_fields = ("opportunity", "outcome", "primary_reason", "account", "communication_log")
+    tenant_user_fk_fields = ("interviewer", "action_owner")
+
+
+@admin.register(StageVelocityAnalysis)
+class StageVelocityAnalysisAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "pipeline", "pipeline_stage", "median_days_in_stage", "p90_days_in_stage", "is_bottleneck", "bottleneck_rank", "status", "tenant")
+    list_filter = ("status", "is_bottleneck", "tenant")
+    search_fields = ("number", "pipeline__name", "pipeline_stage__name", "recommendation", "notes")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("pipeline", "pipeline_stage", "tenant")
+    raw_id_fields = ("pipeline", "pipeline_stage")
+    tenant_fk_fields = ("pipeline", "pipeline_stage")
+
+
+@admin.register(FunnelConversionRecord)
+class FunnelConversionRecordAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "label", "funnel_scope", "entered_count", "converted_count", "conversion_rate_pct", "dropoff_count", "period_start", "period_end", "tenant")
+    list_filter = ("funnel_scope", "tenant")
+    search_fields = ("number", "label", "source_channel", "segment", "notes")
+    # conversion_rate_pct and dropoff_count are DERIVED in save() -- readonly so they can never be
+    # typed and drift away from the entered/converted counts they are computed from (L28).
+    readonly_fields = ("tenant", "number", "conversion_rate_pct", "dropoff_count", "created_at", "updated_at")
+    list_select_related = ("from_stage", "to_stage", "territory", "owner", "tenant")
+    raw_id_fields = ("from_stage", "to_stage", "territory", "owner")
+    tenant_fk_fields = ("from_stage", "to_stage", "territory")
+    tenant_user_fk_fields = ("owner",)
+
+
+@admin.register(RepPerformanceScorecard)
+class RepPerformanceScorecardAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "rep", "territory", "period_start", "period_end", "win_rate_pct", "quota_attainment_pct", "goal_gap_value", "rating", "status", "tenant")
+    list_filter = ("rating", "status", "tenant")
+    search_fields = ("number", "rep__username", "strengths", "coaching_actions", "notes")
+    # The four outcome figures are DERIVED in save() -- readonly so they can never be typed and
+    # drift away from the counts they are computed from (L28).
+    readonly_fields = ("tenant", "number", "win_rate_pct", "average_deal_size", "quota_attainment_pct", "goal_gap_value", "created_at", "updated_at")
+    list_select_related = ("rep", "territory", "manager", "currency", "quota_plan", "forecast_period", "tenant")
+    raw_id_fields = ("rep", "territory", "manager", "forecast_period", "quota_plan", "coaching_scorecard", "currency")
+    tenant_fk_fields = ("territory", "forecast_period", "quota_plan", "coaching_scorecard")
+    tenant_user_fk_fields = ("rep", "manager")
 
 
 
