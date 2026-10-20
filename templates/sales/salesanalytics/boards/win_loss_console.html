@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block title %}Win/Loss Analysis Console — Sales Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <span>Win/Loss</span>
+        </div>
+        <h1 class="page-title">Win/Loss Analysis</h1>
+        <p class="text-sm text-slate-500 mt-1">Win rate by reason, the competitors we actually lose to, the decision drivers that keep recurring, and the feedback loop that is still open.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:analytics_console' %}" class="btn btn-outline">
+            <i data-lucide="gauge"></i>
+            <span>Overview</span>
+        </a>
+        <a href="{% url 'sales:velocity_console' %}" class="btn btn-outline">
+            <i data-lucide="gauge"></i>
+            <span>Velocity</span>
+        </a>
+        <a href="{% url 'sales:funnel_console' %}" class="btn btn-outline">
+            <i data-lucide="filter"></i>
+            <span>Funnel</span>
+        </a>
+        <a href="{% url 'sales:rep_scorecard_console' %}" class="btn btn-outline">
+            <i data-lucide="award"></i>
+            <span>Rep Scorecards</span>
+        </a>
+        <a href="{% url 'sales:benchmark_console' %}" class="btn btn-outline">
+            <i data-lucide="radar"></i>
+            <span>Benchmarks</span>
+        </a>
+        <a href="{% url 'sales:win_loss_debrief_list' %}" class="btn btn-primary">
+            <i data-lucide="clipboard-list"></i>
+            <span>All Debriefs</span>
+        </a>
+    </div>
+</div>
+
+{% comment %}
+    Console 2 — Win/Loss Analysis. Renders over apps.sales.opportunity_analytics
+    (sales_win_loss_rows + sales_competitor_rows) plus the decision drivers aggregated
+    from the debrief records. Read-only: nothing here writes.
+{% endcomment %}
+
+<!-- Headline stats -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="split"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_outcomes|default:"0" }}</div>
+        <div class="stat-label">Decided Outcomes</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="trophy"></i>
+        </div>
+        <div class="stat-value">{{ stats.won_count|default:"0" }}</div>
+        <div class="stat-label">Won</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="target"></i>
+        </div>
+        <div class="stat-value">{{ stats.lost_count|default:"0" }}</div>
+        <div class="stat-label">Lost</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="percent"></i>
+        </div>
+        <div class="stat-value">{% if stats.win_rate_pct is not None %}{{ stats.win_rate_pct|floatformat:1 }}%{% else %}—{% endif %}</div>
+        <div class="stat-label">Win Rate</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="circle-dollar-sign"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_amount|default:"0" }}</div>
+        <div class="stat-label">Total Decided Value</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div class="stat-value">{{ stats.won_amount|default:"0" }}</div>
+        <div class="stat-label">Value Won</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div class="stat-value">{{ stats.lost_amount|default:"0" }}</div>
+        <div class="stat-label">Value Lost</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="users"></i>
+        </div>
+        <div class="stat-value">{{ stats.competitor_count|default:"0" }}</div>
+        <div class="stat-label">Competitors Tracked</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="file-text"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_debriefs|default:"0" }}</div>
+        <div class="stat-label">Total Debriefs</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="message-square"></i>
+        </div>
+        <div class="stat-value">{{ stats.open_actions|default:"0" }}</div>
+        <div class="stat-label">Open Feedback Actions</div>
+    </div>
+</div>
+
+<!-- Win / loss by reason -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Win / Loss by Reason</h2>
+        <div class="flex items-center gap-2">
+            {% for value, label in result_choices %}
+            <span class="badge badge-muted">{{ label }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Reason</th>
+                    <th>Result</th>
+                    <th>Pipeline</th>
+                    <th>Currency</th>
+                    <th>Outcomes</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in win_loss_rows %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ row.label|default:"—" }}</div>
+                        {% if row.category_label %}
+                        <div class="text-xs text-slate-500">{{ row.category_label }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{{ row.result_label|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.pipeline_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.currency_code|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{{ row.count|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.amount|default:"0" }}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state">
+                            <i data-lucide="split"></i>
+                            <h3>No decided outcomes yet</h3>
+                            <p>Close an opportunity with a recorded outcome and the win/loss breakdown appears here.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Competitors -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Competitors</h2>
+        <span class="badge badge-slate">{{ stats.competitor_outcomes|default:"0" }} Outcomes</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Competitor</th>
+                    <th>Result</th>
+                    <th>Relationship</th>
+                    <th>Pipeline</th>
+                    <th>Currency</th>
+                    <th>Outcomes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in competitor_rows %}
+                <tr>
+                    <td>
+                        <span class="font-medium text-slate-900">{{ row.label|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{{ row.result_label|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.relationship_label|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.pipeline_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.currency_code|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{{ row.count|default:"0" }}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state">
+                            <i data-lucide="users"></i>
+                            <h3>No competitor outcomes recorded</h3>
+                            <p>Record the competitor on a closed opportunity to see who you keep meeting in deals.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Recurring decision drivers -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Recurring Decision Drivers</h2>
+        {% if stats.top_driver %}
+        <span class="badge badge-slate">Top: {{ stats.top_driver }}</span>
+        {% endif %}
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Driver</th>
+                    <th>Sentiment</th>
+                    <th>Mentions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in driver_rows %}
+                <tr>
+                    <td>
+                        <span class="font-medium text-slate-900">{{ row.driver|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{{ row.sentiment|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{{ row.count|default:"0" }}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="3">
+                        <div class="empty-state">
+                            <i data-lucide="file-text"></i>
+                            <h3>No decision drivers captured</h3>
+                            <p>Capture the decision drivers on a debrief and the recurring themes are ranked here.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Open feedback actions -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Open Feedback Actions</h2>
+        <a href="{% url 'sales:win_loss_debrief_list' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="list"></i>
+            <span>All Debriefs</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Debrief</th>
+                    <th>Opportunity</th>
+                    <th>Status</th>
+                    <th>Primary Reason</th>
+                    <th>Channel</th>
+                    <th>Action Owner</th>
+                    <th>Debriefed On</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in open_actions %}
+                <tr>
+                    <td>
+                        {% if row.debrief %}
+                        <a href="{% url 'sales:win_loss_debrief_detail' row.debrief.pk %}" class="font-mono text-sm font-semibold hover:underline">
+                            {{ row.number|default:"—" }}
+                        </a>
+                        {% else %}
+                        <span class="font-mono text-sm">{{ row.number|default:"—" }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.opportunity_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{{ row.status_display|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.primary_reason_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.interview_channel_display|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.action_owner_name|default:"—" }}</span>
+                    </td>
+                    <td class="text-slate-600 text-sm">{{ row.debriefed_on|date:"M d, Y"|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="check-circle-2"></i>
+                            <h3>No open feedback actions</h3>
+                            <p>Every debrief on record has been actioned or closed — the win/loss feedback loop is closed out.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
