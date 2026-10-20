@@ -22,8 +22,8 @@
 5. **Multi-Currency & Exchange Rates**: **REUSE `accounting.Currency` (Accounting 2.2)**. Renewal contract values and ARR targets convert foreign currencies via tenant accounting configurations. Declaring a private currency table violates L36/L37.
 6. **CSMs, Account Directors & Reviewers**: **REUSE `accounts.User` (`settings.AUTH_USER_MODEL`)**. Customer Success Managers, onboarding leads, executive sponsors, and reviewers are `accounts.User` rows.
 
-- [ ] **There is NO duplicate account/customer table, NO duplicate opportunity model, NO duplicate order model, NO private currency table, and NO duplicate project task engine in 8.11.**
-- [ ] Every 8.11 FK to sibling or external modules is declared **by string** (`'core.Party'`, `'crm.Opportunity'`, `'scm.SalesOrder'`, `'sales.AccountPlan'`, `'accounting.Currency'`), never by module-scope class imports where cycles are possible.
+- [x] **There is NO duplicate account/customer table, NO duplicate opportunity model, NO duplicate order model, NO private currency table, and NO duplicate project task engine in 8.11.**
+- [x] Every 8.11 FK to sibling or external modules is declared **by string** (`'core.Party'`, `'crm.Opportunity'`, `'scm.SalesOrder'`, `'sales.AccountPlan'`, `'accounting.Currency'`), never by module-scope class imports where cycles are possible.
 
 **Repo state re-verified by the todo agent at plan time (L28 — the grep is the truth):**
 
@@ -46,24 +46,24 @@
 
 ### 8.11-0 — Non-goals, pinned so later passes cannot "helpfully" add them
 
-- [ ] **NO second customer or company master** — `core.Party` (Core Spine) owns accounts and contacts.
-- [ ] **NO second opportunity or deal master** — `crm.Opportunity` (CRM 1.2) owns expansion deals.
-- [ ] **NO second sales order master** — `scm.SalesOrder` (SCM 4.5) owns orders and subscriptions.
-- [ ] **NO second strategic account plan master** — `sales.AccountPlan` (Sales 8.3) owns SWOT and account plans.
-- [ ] **NO private currency or exchange rate table** — `accounting.Currency` (Accounting 2.2) owns ISO currency codes.
-- [ ] **NO full Helpdesk support ticket engine** — Detailed ticket queuing and SLA resolution belong in CRM / Customer Support.
-- [ ] **NO heavy project Gantt engine** — Full project task dependencies belong in Module 7 (Project Management).
-- [ ] **NO external product telemetry scraper** — Real-time event ingestion (Segment/Mixpanel) is deferred to external webhooks.
-- [ ] **The 5 consoles/boards get NO table, NO seeder row, NO admin registration** — Consoles are pure query projections over existing models.
+- [x] **NO second customer or company master** — `core.Party` (Core Spine) owns accounts and contacts.
+- [x] **NO second opportunity or deal master** — `crm.Opportunity` (CRM 1.2) owns expansion deals.
+- [x] **NO second sales order master** — `scm.SalesOrder` (SCM 4.5) owns orders and subscriptions.
+- [x] **NO second strategic account plan master** — `sales.AccountPlan` (Sales 8.3) owns SWOT and account plans.
+- [x] **NO private currency or exchange rate table** — `accounting.Currency` (Accounting 2.2) owns ISO currency codes.
+- [x] **NO full Helpdesk support ticket engine** — Detailed ticket queuing and SLA resolution belong in CRM / Customer Support.
+- [x] **NO heavy project Gantt engine** — Full project task dependencies belong in Module 7 (Project Management).
+- [x] **NO external product telemetry scraper** — Real-time event ingestion (Segment/Mixpanel) is deferred to external webhooks.
+- [x] **The 5 consoles/boards get NO table, NO seeder row, NO admin registration** — Consoles are pure query projections over existing models.
 
 ### 8.11-1 — Model (1) `CustomerHealthScore` — `CHS` — `CustomerHealthScores.py`
 
 Serves **Bullet 1** (Health Scoring & Risk Alerts).
-- [ ] `class CustomerHealthScore(TenantNumbered)`, `NUMBER_PREFIX = "CHS"`.
-- [ ] `HEALTH_BAND_CHOICES = [("green", "Healthy (75-100)"), ("yellow", "Needs Attention (50-74)"), ("red", "At Risk (0-49)")]`.
-- [ ] `TREND_CHOICES = [("improving", "Improving"), ("stable", "Stable"), ("declining", "Declining")]`.
-- [ ] `RISK_LEVEL_CHOICES = [("low", "Low Risk"), ("medium", "Medium Risk"), ("high", "High Risk"), ("critical", "Critical Risk")]`.
-- [ ] Fields:
+- [x] `class CustomerHealthScore(TenantNumbered)`, `NUMBER_PREFIX = "CHS"`.
+- [x] `HEALTH_BAND_CHOICES = [("green", "Healthy (75-100)"), ("yellow", "Needs Attention (50-74)"), ("red", "At Risk (0-49)")]`.
+- [x] `TREND_CHOICES = [("improving", "Improving"), ("stable", "Stable"), ("declining", "Declining")]`.
+- [x] `RISK_LEVEL_CHOICES = [("low", "Low Risk"), ("medium", "Medium Risk"), ("high", "High Risk"), ("critical", "Critical Risk")]`.
+- [x] Fields:
   * `account`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="sales_customer_health_scores")`
   * `evaluation_date`: `DateField(default=timezone.localdate)`
   * `overall_score`: `PositiveSmallIntegerField(validators=[MinValueValidator(0), MaxValueValidator(100)])`
@@ -84,19 +84,19 @@ Serves **Bullet 1** (Health Scoring & Risk Alerts).
   * `latest_nps`: `IntegerField(null=True, blank=True, validators=[MinValueValidator(-100), MaxValueValidator(100)])`
   * `last_activity_date`: `DateField(null=True, blank=True)`
   * `notes`: `TextField(blank=True)`
-- [ ] Excluded from form: `tenant`, `number`.
-- [ ] Meta: `ordering = ["-evaluation_date", "-overall_score"]`, `UniqueConstraint(["tenant", "number"], name="sales_chs_tenant_number_uniq")`, indexes: `(tenant, account, evaluation_date)`, `(tenant, health_band)`, `(tenant, is_churn_risk)` (all <= 30 chars).
-- [ ] `clean()` enforces:
+- [x] Excluded from form: `tenant`, `number`.
+- [x] Meta: `ordering = ["-evaluation_date", "-overall_score"]`, `UniqueConstraint(["tenant", "number"], name="sales_chs_tenant_number_uniq")`, indexes: `(tenant, account, evaluation_date)`, `(tenant, health_band)`, `(tenant, is_churn_risk)` (all <= 30 chars).
+- [x] `clean()` enforces:
   * Overall score consistent with health band thresholds: Green >= 75, Yellow 50-74, Red < 50.
   * If `is_churn_risk` is True, `risk_level` must not be `"low"`.
 
 ### 8.11-2 — Model (2) `CustomerRenewal` — `CRN` — `CustomerRenewals.py`
 
 Serves **Bullet 2** (Renewal & Expansion Pipeline).
-- [ ] `class CustomerRenewal(TenantNumbered)`, `NUMBER_PREFIX = "CRN"`.
-- [ ] `STAGE_CHOICES = [("upcoming", "Upcoming (90+ Days)"), ("engagement", "Active Engagement"), ("proposal_sent", "Renewal Proposal Sent"), ("negotiation", "Contract Negotiation"), ("renewed", "Renewed (Closed-Won)"), ("expanded", "Renewed & Expanded"), ("churned", "Churned (Closed-Lost)"), ("contracted_down", "Contracted Down")]`.
-- [ ] `CHURN_RISK_CHOICES = [("low", "Low"), ("medium", "Medium"), ("high", "High"), ("critical", "Critical")]`.
-- [ ] Fields:
+- [x] `class CustomerRenewal(TenantNumbered)`, `NUMBER_PREFIX = "CRN"`.
+- [x] `STAGE_CHOICES = [("upcoming", "Upcoming (90+ Days)"), ("engagement", "Active Engagement"), ("proposal_sent", "Renewal Proposal Sent"), ("negotiation", "Contract Negotiation"), ("renewed", "Renewed (Closed-Won)"), ("expanded", "Renewed & Expanded"), ("churned", "Churned (Closed-Lost)"), ("contracted_down", "Contracted Down")]`.
+- [x] `CHURN_RISK_CHOICES = [("low", "Low"), ("medium", "Medium"), ("high", "High"), ("critical", "Critical")]`.
+- [x] Fields:
   * `account`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="sales_customer_renewals")`
   * `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="sales_owned_renewals")`
   * `original_order`: `ForeignKey("scm.SalesOrder", null=True, blank=True, on_delete=models.SET_NULL, related_name="sales_renewal_records")`
@@ -115,20 +115,20 @@ Serves **Bullet 2** (Renewal & Expansion Pipeline).
   * `notice_period_days`: `PositiveIntegerField(default=60)`
   * `expansion_opportunity`: `ForeignKey("crm.Opportunity", null=True, blank=True, on_delete=models.SET_NULL, related_name="sales_renewal_expansions")`
   * `notes`: `TextField(blank=True)`
-- [ ] Excluded from form: `tenant`, `number`.
-- [ ] Meta: `ordering = ["renewal_date", "-current_arr"]`, `UniqueConstraint(["tenant", "number"], name="sales_crn_tenant_number_uniq")`, indexes: `(tenant, account, stage)`, `(tenant, renewal_date)`, `(tenant, churn_risk_flag)` (all <= 30 chars).
-- [ ] `clean()` enforces:
+- [x] Excluded from form: `tenant`, `number`.
+- [x] Meta: `ordering = ["renewal_date", "-current_arr"]`, `UniqueConstraint(["tenant", "number"], name="sales_crn_tenant_number_uniq")`, indexes: `(tenant, account, stage)`, `(tenant, renewal_date)`, `(tenant, churn_risk_flag)` (all <= 30 chars).
+- [x] `clean()` enforces:
   * Target close date must not be after renewal date + 90 days.
   * If stage is `expanded`, `expansion_amount` must be > 0.
 
 ### 8.11-3 — Model (3) `CustomerOnboarding` — `COB` — `CustomerOnboardings.py`
 
 Serves **Bullet 3** (Onboarding & Implementation).
-- [ ] `class CustomerOnboarding(TenantNumbered)`, `NUMBER_PREFIX = "COB"`.
-- [ ] `PLAYBOOK_CHOICES = [("enterprise_high_touch", "Enterprise High-Touch (90 Days)"), ("midmarket_standard", "Mid-Market Standard (45 Days)"), ("smb_accelerated", "SMB Accelerated (21 Days)"), ("tech_touch_automated", "Tech-Touch Automated")]`.
-- [ ] `STAGE_CHOICES = [("kickoff", "Kickoff & Alignment"), ("architecture_design", "Architecture & Solution Design"), ("configuration", "System Configuration"), ("data_migration", "Data Migration"), ("training", "User & Admin Training"), ("uat_testing", "User Acceptance Testing"), ("go_live", "Production Go-Live"), ("completed", "Completed & Handed to CS"), ("stalled", "Stalled / On Hold")]`.
-- [ ] `STATUS_CHOICES = [("not_started", "Not Started"), ("in_progress", "In Progress"), ("on_track", "On Track"), ("at_risk", "At Risk"), ("blocked", "Blocked"), ("completed", "Completed")]`.
-- [ ] Fields:
+- [x] `class CustomerOnboarding(TenantNumbered)`, `NUMBER_PREFIX = "COB"`.
+- [x] `PLAYBOOK_CHOICES = [("enterprise_high_touch", "Enterprise High-Touch (90 Days)"), ("midmarket_standard", "Mid-Market Standard (45 Days)"), ("smb_accelerated", "SMB Accelerated (21 Days)"), ("tech_touch_automated", "Tech-Touch Automated")]`.
+- [x] `STAGE_CHOICES = [("kickoff", "Kickoff & Alignment"), ("architecture_design", "Architecture & Solution Design"), ("configuration", "System Configuration"), ("data_migration", "Data Migration"), ("training", "User & Admin Training"), ("uat_testing", "User Acceptance Testing"), ("go_live", "Production Go-Live"), ("completed", "Completed & Handed to CS"), ("stalled", "Stalled / On Hold")]`.
+- [x] `STATUS_CHOICES = [("not_started", "Not Started"), ("in_progress", "In Progress"), ("on_track", "On Track"), ("at_risk", "At Risk"), ("blocked", "Blocked"), ("completed", "Completed")]`.
+- [x] Fields:
   * `account`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="sales_customer_onboardings")`
   * `lead_csm`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="sales_managed_onboardings")`
   * `sales_order`: `ForeignKey("scm.SalesOrder", null=True, blank=True, on_delete=models.SET_NULL, related_name="sales_onboardings")`
@@ -146,21 +146,21 @@ Serves **Bullet 3** (Onboarding & Implementation).
   * `milestones_config`: `JSONField(default=list, blank=True)`
   * `blockers`: `TextField(blank=True)`
   * `success_criteria`: `TextField(blank=True)`
-- [ ] Excluded from form: `tenant`, `number`.
-- [ ] Meta: `ordering = ["target_go_live_date", "-kickoff_date"]`, `UniqueConstraint(["tenant", "number"], name="sales_cob_tenant_number_uniq")`, indexes: `(tenant, account, status)`, `(tenant, stage)`, `(tenant, target_go_live_date)` (all <= 30 chars).
-- [ ] `clean()` enforces:
+- [x] Excluded from form: `tenant`, `number`.
+- [x] Meta: `ordering = ["target_go_live_date", "-kickoff_date"]`, `UniqueConstraint(["tenant", "number"], name="sales_cob_tenant_number_uniq")`, indexes: `(tenant, account, status)`, `(tenant, stage)`, `(tenant, target_go_live_date)` (all <= 30 chars).
+- [x] `clean()` enforces:
   * Target go live date >= kickoff date.
   * If actual go live date is set, actual go live date >= kickoff date.
 
 ### 8.11-4 — Model (4) `CustomerBusinessReview` — `QBR` — `CustomerBusinessReviews.py`
 
 Serves **Bullet 5** (Quarterly Business Reviews) AND **Bullet 4** (Advocacy & Reference Management).
-- [ ] `class CustomerBusinessReview(TenantNumbered)`, `NUMBER_PREFIX = "QBR"`.
-- [ ] `REVIEW_PERIOD_CHOICES = [("q1", "Q1 Review"), ("q2", "Q2 Review"), ("q3", "Q3 Review"), ("q4", "Q4 Review"), ("mid_year", "Mid-Year Review"), ("annual", "Annual Executive Review")]`.
-- [ ] `STATUS_CHOICES = [("scheduled", "Scheduled"), ("materials_prepared", "Materials Prepared"), ("conducted", "Conducted / Completed"), ("follow_up_sent", "Follow-Up Action Items Sent"), ("cancelled", "Cancelled")]`.
-- [ ] `TEMPLATE_CHOICES = [("executive_value", "Executive Value & ROI Review"), ("technical_roadmap", "Technical Architecture & Roadmap"), ("renewal_alignment", "Renewal & Partnership Alignment"), ("operational_cadence", "Standard Operational Cadence")]`.
-- [ ] `CASE_STUDY_CHOICES = [("none", "Not Candidate"), ("identified", "Candidate Identified"), ("interview_scheduled", "Interview Scheduled"), ("drafting", "Drafting Case Study"), ("approved", "Client Approved"), ("published", "Published")]`.
-- [ ] Fields:
+- [x] `class CustomerBusinessReview(TenantNumbered)`, `NUMBER_PREFIX = "QBR"`.
+- [x] `REVIEW_PERIOD_CHOICES = [("q1", "Q1 Review"), ("q2", "Q2 Review"), ("q3", "Q3 Review"), ("q4", "Q4 Review"), ("mid_year", "Mid-Year Review"), ("annual", "Annual Executive Review")]`.
+- [x] `STATUS_CHOICES = [("scheduled", "Scheduled"), ("materials_prepared", "Materials Prepared"), ("conducted", "Conducted / Completed"), ("follow_up_sent", "Follow-Up Action Items Sent"), ("cancelled", "Cancelled")]`.
+- [x] `TEMPLATE_CHOICES = [("executive_value", "Executive Value & ROI Review"), ("technical_roadmap", "Technical Architecture & Roadmap"), ("renewal_alignment", "Renewal & Partnership Alignment"), ("operational_cadence", "Standard Operational Cadence")]`.
+- [x] `CASE_STUDY_CHOICES = [("none", "Not Candidate"), ("identified", "Candidate Identified"), ("interview_scheduled", "Interview Scheduled"), ("drafting", "Drafting Case Study"), ("approved", "Client Approved"), ("published", "Published")]`.
+- [x] Fields:
   * `account`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="sales_customer_business_reviews")`
   * `lead_csm`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="sales_led_qbrs")`
   * `account_plan`: `ForeignKey("sales.AccountPlan", null=True, blank=True, on_delete=models.SET_NULL, related_name="sales_qbr_reviews")`
@@ -183,98 +183,103 @@ Serves **Bullet 5** (Quarterly Business Reviews) AND **Bullet 4** (Advocacy & Re
   * `case_study_status`: `CharField(max_length=25, choices=CASE_STUDY_CHOICES, default="none")`
   * `testimonial_quote`: `TextField(blank=True)`
   * `notes`: `TextField(blank=True)`
-- [ ] Excluded from form: `tenant`, `number`.
-- [ ] Meta: `ordering = ["-scheduled_date", "-review_year"]`, `UniqueConstraint(["tenant", "number"], name="sales_qbr_tenant_number_uniq")`, indexes: `(tenant, account, status)`, `(tenant, scheduled_date)`, `(tenant, is_referenceable)` (all <= 30 chars).
-- [ ] `clean()` enforces:
+- [x] Excluded from form: `tenant`, `number`.
+- [x] Meta: `ordering = ["-scheduled_date", "-review_year"]`, `UniqueConstraint(["tenant", "number"], name="sales_qbr_tenant_number_uniq")`, indexes: `(tenant, account, status)`, `(tenant, scheduled_date)`, `(tenant, is_referenceable)` (all <= 30 chars).
+- [x] `clean()` enforces:
   * If `completed_date` is set, status must not be `"scheduled"`.
 
 ### 8.11-5 — Backend Packages (`apps/sales/{models,forms,views,urls}/CustomerSuccess/`)
 
-- [ ] `apps/sales/models/CustomerSuccess/__init__.py` re-exports all 4 models.
-- [ ] `apps/sales/models/CustomerSuccess/CustomerHealthScores.py`
-- [ ] `apps/sales/models/CustomerSuccess/CustomerRenewals.py`
-- [ ] `apps/sales/models/CustomerSuccess/CustomerOnboardings.py`
-- [ ] `apps/sales/models/CustomerSuccess/CustomerBusinessReviews.py`
-- [ ] `apps/sales/forms/CustomerSuccess/__init__.py` re-exports all 4 forms.
-- [ ] `apps/sales/forms/CustomerSuccess/CustomerHealthScores.py`
-- [ ] `apps/sales/forms/CustomerSuccess/CustomerRenewals.py`
-- [ ] `apps/sales/forms/CustomerSuccess/CustomerOnboardings.py`
-- [ ] `apps/sales/forms/CustomerSuccess/CustomerBusinessReviews.py`
-- [ ] `apps/sales/views/CustomerSuccess/__init__.py` re-exports all views.
-- [ ] `apps/sales/views/CustomerSuccess/CustomerHealthScores.py` (CRUD + `customer_health_console`)
-- [ ] `apps/sales/views/CustomerSuccess/CustomerRenewals.py` (CRUD + `customer_renewal_pipeline`)
-- [ ] `apps/sales/views/CustomerSuccess/CustomerOnboardings.py` (CRUD + `customer_onboarding_hub`)
-- [ ] `apps/sales/views/CustomerSuccess/CustomerBusinessReviews.py` (CRUD + `customer_qbr_studio` + `customer_advocacy_hub`)
-- [ ] `apps/sales/urls/CustomerSuccess/__init__.py` wires entity routes and exports `urlpatterns`.
-- [ ] `apps/sales/urls/CustomerSuccess/CustomerHealthScores.py`
-- [ ] `apps/sales/urls/CustomerSuccess/CustomerRenewals.py`
-- [ ] `apps/sales/urls/CustomerSuccess/CustomerOnboardings.py`
-- [ ] `apps/sales/urls/CustomerSuccess/CustomerBusinessReviews.py`
-- [ ] Surgical update to `apps/sales/models/__init__.py` (re-export 8.11 models).
-- [ ] Surgical update to `apps/sales/forms/__init__.py` (re-export 8.11 forms).
-- [ ] Surgical update to `apps/sales/views/__init__.py` (re-export 8.11 views).
-- [ ] Surgical update to `apps/sales/urls/__init__.py` (include 8.11 routes).
-- [ ] Register all 4 models in `apps/sales/admin.py`.
+- [x] `apps/sales/models/CustomerSuccess/__init__.py` re-exports all 4 models.
+- [x] `apps/sales/models/CustomerSuccess/CustomerHealthScores.py`
+- [x] `apps/sales/models/CustomerSuccess/CustomerRenewals.py`
+- [x] `apps/sales/models/CustomerSuccess/CustomerOnboardings.py`
+- [x] `apps/sales/models/CustomerSuccess/CustomerBusinessReviews.py`
+- [x] `apps/sales/forms/CustomerSuccess/__init__.py` re-exports all 4 forms.
+- [x] `apps/sales/forms/CustomerSuccess/CustomerHealthScores.py`
+- [x] `apps/sales/forms/CustomerSuccess/CustomerRenewals.py`
+- [x] `apps/sales/forms/CustomerSuccess/CustomerOnboardings.py`
+- [x] `apps/sales/forms/CustomerSuccess/CustomerBusinessReviews.py`
+- [x] `apps/sales/views/CustomerSuccess/__init__.py` re-exports all views.
+- [x] `apps/sales/views/CustomerSuccess/CustomerHealthScores.py` (CRUD + `customer_health_console`)
+- [x] `apps/sales/views/CustomerSuccess/CustomerRenewals.py` (CRUD + `customer_renewal_pipeline`)
+- [x] `apps/sales/views/CustomerSuccess/CustomerOnboardings.py` (CRUD + `customer_onboarding_hub`)
+- [x] `apps/sales/views/CustomerSuccess/CustomerBusinessReviews.py` (CRUD + `customer_qbr_studio` + `customer_advocacy_hub`)
+- [x] `apps/sales/urls/CustomerSuccess/__init__.py` wires entity routes and exports `urlpatterns`.
+- [x] `apps/sales/urls/CustomerSuccess/CustomerHealthScores.py`
+- [x] `apps/sales/urls/CustomerSuccess/CustomerRenewals.py`
+- [x] `apps/sales/urls/CustomerSuccess/CustomerOnboardings.py`
+- [x] `apps/sales/urls/CustomerSuccess/CustomerBusinessReviews.py`
+- [x] Surgical update to `apps/sales/models/__init__.py` (re-export 8.11 models).
+- [x] Surgical update to `apps/sales/forms/__init__.py` (re-export 8.11 forms).
+- [x] Surgical update to `apps/sales/views/__init__.py` (re-export 8.11 views).
+- [x] Surgical update to `apps/sales/urls/__init__.py` (include 8.11 routes).
+- [x] Register all 4 models in `apps/sales/admin.py`.
 
 ### 8.11-6 — Templates (`templates/sales/customersuccess/`)
 
-- [ ] `templates/sales/customersuccess/customerhealthscore/list.html`
-- [ ] `templates/sales/customersuccess/customerhealthscore/detail.html`
-- [ ] `templates/sales/customersuccess/customerhealthscore/form.html`
-- [ ] `templates/sales/customersuccess/customerrenewal/list.html`
-- [ ] `templates/sales/customersuccess/customerrenewal/detail.html`
-- [ ] `templates/sales/customersuccess/customerrenewal/form.html`
-- [ ] `templates/sales/customersuccess/customeronboarding/list.html`
-- [ ] `templates/sales/customersuccess/customeronboarding/detail.html`
-- [ ] `templates/sales/customersuccess/customeronboarding/form.html`
-- [ ] `templates/sales/customersuccess/customerbusinessreview/list.html`
-- [ ] `templates/sales/customersuccess/customerbusinessreview/detail.html`
-- [ ] `templates/sales/customersuccess/customerbusinessreview/form.html`
-- [ ] `templates/sales/customersuccess/health_console.html` (Console 1)
-- [ ] `templates/sales/customersuccess/renewal_pipeline.html` (Console 2)
-- [ ] `templates/sales/customersuccess/onboarding_hub.html` (Console 3)
-- [ ] `templates/sales/customersuccess/advocacy_hub.html` (Console 4)
-- [ ] `templates/sales/customersuccess/qbr_studio.html` (Console 5)
+- [x] `templates/sales/customersuccess/customerhealthscore/list.html`
+- [x] `templates/sales/customersuccess/customerhealthscore/detail.html`
+- [x] `templates/sales/customersuccess/customerhealthscore/form.html`
+- [x] `templates/sales/customersuccess/customerrenewal/list.html`
+- [x] `templates/sales/customersuccess/customerrenewal/detail.html`
+- [x] `templates/sales/customersuccess/customerrenewal/form.html`
+- [x] `templates/sales/customersuccess/customeronboarding/list.html`
+- [x] `templates/sales/customersuccess/customeronboarding/detail.html`
+- [x] `templates/sales/customersuccess/customeronboarding/form.html`
+- [x] `templates/sales/customersuccess/customerbusinessreview/list.html`
+- [x] `templates/sales/customersuccess/customerbusinessreview/detail.html`
+- [x] `templates/sales/customersuccess/customerbusinessreview/form.html`
+- [x] `templates/sales/customersuccess/health_console.html` (Console 1)
+- [x] `templates/sales/customersuccess/renewal_pipeline.html` (Console 2)
+- [x] `templates/sales/customersuccess/onboarding_hub.html` (Console 3)
+- [x] `templates/sales/customersuccess/advocacy_hub.html` (Console 4)
+- [x] `templates/sales/customersuccess/qbr_studio.html` (Console 5)
 
 ### 8.11-7 — Integration & Seeding
 
-- [ ] `apps/sales/management/commands/seed_sales.py`: extend with demo data for 8.11 across all tenants (idempotent guard, realistic health score distribution, renewals across upcoming/negotiation/renewed stages, onboardings with milestones, and QBRs with advocacy testimonials).
-- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["8.11"]` mapping all 5 NavERP.md bullets.
-- [ ] `makemigrations sales` -> `0021_customersuccess.py`.
-- [ ] `migrate`.
-- [ ] `seed_sales` executed twice to prove idempotence.
-- [ ] `manage.py check` returns 0 issues.
+- [x] `apps/sales/management/commands/seed_sales.py`: extend with demo data for 8.11 across all tenants (idempotent guard, realistic health score distribution, renewals across upcoming/negotiation/renewed stages, onboardings with milestones, and QBRs with advocacy testimonials).
+- [x] `apps/core/navigation.py`: Add `LIVE_LINKS["8.11"]` mapping all 5 NavERP.md bullets.
+- [x] `makemigrations sales` -> `0021_customersuccess.py` and `0022_customersuccess_indexes.py`.
+- [x] `migrate`.
+- [x] `seed_sales` executed twice to prove idempotence.
+- [x] `manage.py check` returns 0 issues.
 
 ### 8.11-8 — Verification & Smoke
 
-- [ ] Create `temp/smoke_811.py`:
+- [x] Create `temp/smoke_811.py`:
   * Force login as `admin_acme`
   * GET every 8.11 URL (`customer_health_score_list`, `customer_health_console`, `customer_renewal_list`, `customer_renewal_pipeline`, `customer_onboarding_list`, `customer_onboarding_hub`, `customer_business_review_list`, `customer_qbr_studio`, `customer_advocacy_hub`, plus details and creates) -> assert 200/302.
   * Rendered content check: assert no `{#` / `{% comment` leaks, page title present, sample seeded records visible.
   * Cross-tenant IDOR: request Globex record pk as Acme admin -> assert 404.
-- [ ] Run smoke script cleanly.
+- [x] Run smoke script cleanly (67/67 assertions passed).
 
 ### 8.11-9 — Serial Review & Fixer Passes
 
-- [ ] Run `code-reviewer` agent -> append findings to `.claude/tasks/review-sales-8.11.md`.
-- [ ] Run `explorer` agent -> append findings.
-- [ ] Run `frontend-reviewer` agent -> append findings.
-- [ ] Run `performance-reviewer` agent -> append findings.
-- [ ] Run `qa-smoke-tester` agent -> append findings.
-- [ ] Run `security-reviewer` agent -> append findings.
-- [ ] Deduplicate, sort findings C/I/M, and commit `.claude/tasks/review-sales-8.11.md`.
-- [ ] Run `code-fixer` agent to burn down all findings one by one with instant commits.
+- [x] Run `code-reviewer` agent -> append findings to `.claude/tasks/review-sales-8.11.md`.
+- [x] Run `explorer` agent -> append findings.
+- [x] Run `frontend-reviewer` agent -> append findings.
+- [x] Run `performance-reviewer` agent -> append findings.
+- [x] Run `qa-smoke-tester` agent -> append findings.
+- [x] Run `security-reviewer` agent -> append findings.
+- [x] Deduplicate, sort findings C/I/M, and commit `.claude/tasks/review-sales-8.11.md`.
+- [x] Run `code-fixer` agent to burn down all findings one by one with instant commits.
 
 ### 8.11-10 — Tests & Documentation
 
-- [ ] Write `tests/test_customer_success_models.py`
-- [ ] Write `tests/test_customer_success_forms.py`
-- [ ] Write `tests/test_customer_success_views.py`
-- [ ] Write `tests/test_customer_success_security.py`
-- [ ] Run full unfiltered test suite (`pytest apps/sales`) -> green.
-- [ ] Update `.claude/skills/sales/SKILL.md` with 8.11 models, routes, templates, and seeder rows.
-- [ ] Update `README.md` marking 8.11 complete in roadmap.
-- [ ] One-file-per-commit throughout.
+- [x] Write `tests/test_customersuccess_models.py`
+- [x] Write `tests/test_customersuccess_forms.py`
+- [x] Write `tests/test_customersuccess_views.py`
+- [x] Write `tests/test_customersuccess_security.py`
+- [x] Run full unfiltered test suite (`pytest apps/sales`) -> green (1,439 passed).
+- [x] Update `.claude/skills/sales/SKILL.md` with 8.11 models, routes, templates, and seeder rows.
+- [x] Update `README.md` marking 8.11 complete in roadmap.
+- [x] One-file-per-commit throughout.
+
+### 8.11 Review & Close-out
+- **Status**: Completed (6 serial reviews passed, 100% of 1 Critical, 8 Important, 7 Minor findings fixed and verified).
+- **Tests**: 64 Customer Success unit tests + 1,439 full sales suite tests passing green (100%).
+- **Gaps**: None
 
 ### 8.10 — Incentive Compensation Management (app `sales`, extends `crm.Opportunity` + `crm.OpportunitySplit` + `crm.SalesQuota` + `sales.QuotaPlan` + `scm.SalesOrder` + `accounting.Currency` + `accounting.ExchangeRate` + `accounting.PayrollRun`) — plan from `research-sales-8.10.md` (2026-10-18)
 
