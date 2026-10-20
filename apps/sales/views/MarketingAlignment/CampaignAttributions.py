@@ -65,7 +65,6 @@ def campaign_attribution_list(request):
         approved_count=Count("id", filter=Q(status="approved")),
         total_attributed_revenue=Sum("attributed_revenue"),
         total_attributed_cost=Sum("attributed_cost"),
-        total_credit_pct=Sum("credit_pct"),
     )
 
     paginator = Paginator(qs, 15)
