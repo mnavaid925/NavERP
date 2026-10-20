@@ -736,7 +736,7 @@ Structure (matching the 8.11 / 8.13 sibling pages):
 | `apps/sales/admin.py` | Register the 4 models. |
 | `apps/sales/management/commands/seed_sales.py` | Append a `_seed_sales_analytics(self, tenant, owner)` method + **one** call in `_seed_tenant` after `_seed_marketing_alignment(...)`. Do not restructure the existing command. |
 | `apps/core/navigation.py` | Add ONE `LIVE_LINKS["8.12"]` entry (see §8). |
-| `templates/sales/sales_overview.html` | Add one link to `sales:analytics_console`. |
+| `templates/sales/overview.html` | Add one link to `sales:analytics_console` in the page-actions bar. (⚠ the real file is `templates/sales/overview.html` — there is **no** `templates/sales/sales_overview.html`; it is the module landing page for 8.1 Lead Operations.) |
 
 ### Seeder rules
 - Reuse the **existing** `crm.Opportunity` / `crm.Lead` / `core.Party` (customer) / `sales.Pipeline` /
