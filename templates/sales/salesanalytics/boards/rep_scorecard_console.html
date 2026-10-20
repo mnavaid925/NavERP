@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+
+{% block title %}Rep Performance Scorecards Console — Sales Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <span>Rep Scorecards</span>
+        </div>
+        <h1 class="page-title">Rep Performance Scorecards</h1>
+        <p class="text-sm text-slate-500 mt-1">Leading indicators (activity) beside lagging indicators (outcomes), the live team roll-up, and the rep-by-rep leaderboard.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:analytics_console' %}" class="btn btn-outline">
+            <i data-lucide="gauge"></i>
+            <span>Overview</span>
+        </a>
+        <a href="{% url 'sales:win_loss_console' %}" class="btn btn-outline">
+            <i data-lucide="split"></i>
+            <span>Win/Loss</span>
+        </a>
+        <a href="{% url 'sales:velocity_console' %}" class="btn btn-outline">
+            <i data-lucide="gauge"></i>
+            <span>Velocity</span>
+        </a>
+        <a href="{% url 'sales:funnel_console' %}" class="btn btn-outline">
+            <i data-lucide="filter"></i>
+            <span>Funnel</span>
+        </a>
+        <a href="{% url 'sales:benchmark_console' %}" class="btn btn-outline">
+            <i data-lucide="radar"></i>
+            <span>Benchmarks</span>
+        </a>
+        <a href="{% url 'sales:rep_performance_scorecard_list' %}" class="btn btn-primary">
+            <i data-lucide="award"></i>
+            <span>All Scorecards</span>
+        </a>
+    </div>
+</div>
+
+{% comment %}
+    Console 5 — Rep Performance Scorecards. Renders over the recorded scorecard rows, a
+    live activity-log aggregate for the scorecard period, and the public report engine.
+    The live activity counts sit beside the stored snapshot; nothing is overwritten.
+    Read-only.
+{% endcomment %}
+
+<!-- Headline stats -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="award"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_scorecards|default:"0" }}</div>
+        <div class="stat-label">Scorecards</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="users"></i>
+        </div>
+        <div class="stat-value">{{ stats.rep_count|default:"0" }}</div>
+        <div class="stat-label">Reps Scored</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="percent"></i>
+        </div>
+        <div class="stat-value">{% if stats.avg_win_rate_pct is not None %}{{ stats.avg_win_rate_pct|floatformat:1 }}%{% else %}—{% endif %}</div>
+        <div class="stat-label">Avg Win Rate</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="target"></i>
+        </div>
+        <div class="stat-value">{% if stats.avg_quota_attainment_pct is not None %}{{ stats.avg_quota_attainment_pct|floatformat:1 }}%{% else %}—{% endif %}</div>
+        <div class="stat-label">Avg Quota Attainment</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="circle-dollar-sign"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_pipeline_value|default:"0" }}</div>
+        <div class="stat-label">Total Pipeline Value</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_revenue_closed|default:"0" }}</div>
+        <div class="stat-label">Revenue Closed</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div class="stat-value">{{ stats.on_track_count|default:"0" }}</div>
+        <div class="stat-label">On Track Or Above</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="activity"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_activities_logged|default:"0" }}</div>
+        <div class="stat-label">Activities Logged</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="zap"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_weighted_pipeline_value|default:"0" }}</div>
+        <div class="stat-label">Weighted Pipeline Value</div>
+    </div>
+</div>
+
+<!-- Team roll-up, live activity and percentile bands -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Team Roll-Up</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Reps</dt>
+                    <dd>{{ team_rollup.reps|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Scorecards</dt>
+                    <dd>{{ team_rollup.scorecards|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Win Rate</dt>
+                    <dd>{% if team_rollup.win_rate_pct is not None %}{{ team_rollup.win_rate_pct|floatformat:1 }}%{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Pipeline Value</dt>
+                    <dd>{{ team_rollup.pipeline_value|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Weighted Pipeline</dt>
+                    <dd>{{ team_rollup.weighted_pipeline_value|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Revenue Closed</dt>
+                    <dd>{{ team_rollup.revenue_closed|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Quota Target</dt>
+                    <dd>{{ team_rollup.quota_target|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Quota Attainment</dt>
+                    <dd>{% if team_rollup.quota_attainment_pct is not None %}{{ team_rollup.quota_attainment_pct|floatformat:1 }}%{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Opportunities Won / Lost</dt>
+                    <dd>{{ team_rollup.opportunities_won|default:"0" }} / {{ team_rollup.opportunities_lost|default:"0" }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Live Activity — Scorecard Period</h2>
+            <span class="badge badge-slate">{{ stats.activity_total|default:"0" }} Logged</span>
+        </div>
+        <div class="card-body">
+            <p class="text-xs text-slate-500 mb-3">
+                {{ activity_totals.period_start|date:"M d, Y"|default:"—" }} → {{ activity_totals.period_end|date:"M d, Y"|default:"—" }}
+            </p>
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Total Logged</dt>
+                    <dd>{{ activity_totals.total|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Calls</dt>
+                    <dd>{{ activity_totals.calls|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Emails</dt>
+                    <dd>{{ activity_totals.emails|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Meetings</dt>
+                    <dd>{{ activity_totals.meetings|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>SMS</dt>
+                    <dd>{{ activity_totals.sms|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Notes</dt>
+                    <dd>{{ activity_totals.notes|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Other</dt>
+                    <dd>{{ activity_totals.other|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Auto-Captured</dt>
+                    <dd>{{ activity_totals.auto_captured|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Planned Minutes</dt>
+                    <dd>{{ activity_totals.planned_minutes|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Undated Rows</dt>
+                    <dd>{{ activity_totals.undated_total|default:"0" }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Win Rate Percentile Bands</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Median</dt>
+                    <dd>{% if percentile_bands.median is not None %}{{ percentile_bands.median|floatformat:1 }}%{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>75th Percentile</dt>
+                    <dd>{% if percentile_bands.p75 is not None %}{{ percentile_bands.p75|floatformat:1 }}%{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>90th Percentile</dt>
+                    <dd>{% if percentile_bands.p90 is not None %}{{ percentile_bands.p90|floatformat:1 }}%{% else %}—{% endif %}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+
+<!-- Scorecards -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Rep Scorecards</h2>
+        <a href="{% url 'sales:rep_performance_scorecard_list' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="list"></i>
+            <span>All Scorecards</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Rep</th>
+                    <th>Territory</th>
+                    <th>Rating</th>
+                    <th>Win Rate</th>
+                    <th>Revenue Closed</th>
+                    <th>Quota Target</th>
+                    <th>Attainment</th>
+                    <th>Activities</th>
+                    <th>Cycle (days)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in scorecard_rows %}
+                <tr>
+                    <td>
+                        {% if row.scorecard %}
+                        <a href="{% url 'sales:rep_performance_scorecard_detail' row.scorecard.pk %}" class="font-semibold text-slate-900 hover:underline">
+                            {{ row.rep_name|default:"—" }}
+                        </a>
+                        {% else %}
+                        <span class="font-semibold text-slate-900">{{ row.rep_name|default:"—" }}</span>
+                        {% endif %}
+                        <div class="text-xs text-slate-500 font-mono">{{ row.number|default:"—" }}</div>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.territory_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{{ row.rating_display|default:"—" }}</span>
+                    </td>
+                    <td>
+                        {% if row.win_rate_pct is not None %}{{ row.win_rate_pct|floatformat:1 }}%{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{{ row.revenue_closed|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700">{{ row.quota_target|default:"0" }}</span>
+                    </td>
+                    <td>
+                        {% if row.quota_attainment_pct is not None %}{{ row.quota_attainment_pct|floatformat:1 }}%{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.activities_logged|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700">{% if row.sales_cycle_days is not None %}{{ row.sales_cycle_days|floatformat:1 }}{% else %}—{% endif %}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="award"></i>
+                            <h3>No scorecards yet</h3>
+                            <p>Score a rep for a period to start building the leaderboard and the team roll-up.</p>
+                            <a href="{% url 'sales:rep_performance_scorecard_list' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="list"></i>
+                                <span>All Scorecards</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Leaderboard -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Leaderboard</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Rep</th>
+                    <th>Win Rate</th>
+                    <th>Revenue Closed</th>
+                    <th>Rating</th>
+                    <th>Overall Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in leaderboard %}
+                <tr>
+                    <td>
+                        <span class="font-semibold text-slate-500">{{ forloop.counter }}</span>
+                    </td>
+                    <td>
+                        <span class="font-medium text-slate-900">{{ row.rep_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        {% if row.win_rate_pct is not None %}{{ row.win_rate_pct|floatformat:1 }}%{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{{ row.revenue_closed|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{{ row.rating_display|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700">{% if row.overall_score is not None %}{{ row.overall_score|floatformat:1 }}{% else %}—{% endif %}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state">
+                            <i data-lucide="trophy"></i>
+                            <h3>No leaderboard yet</h3>
+                            <p>The leaderboard ranks the scored reps by win rate and revenue closed.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
