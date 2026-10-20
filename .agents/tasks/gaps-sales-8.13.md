@@ -36,6 +36,7 @@
 | `GAP-sales-8.13-07` | Module 23 `ai` | `[~] Deferred` | Module 23 AI & Intelligent Automation is not built. ON24's "Prospect Engagement Profile" recommends the next piece of content per prospect from the engagement history. | Given an account's `ContentEngagement` history, the system recommends the next content to send and records the recommendation against the account. |
 | `GAP-sales-8.13-08` | Marketing Analytics | `[~] Deferred` | A path-exploration report. Salesforce Marketing Intelligence separates **touch-based** attribution (global interaction credit) from **funnel-based** attribution (credit for stage transitions) and offers a path view of touchpoint order and drop-off. 8.13 ships the touch-based side only. | A report shows the order of touchpoints per lead across channels, the common paths, and where journeys drop off, and the console offers a funnel-based model alongside the touch-based five. |
 | `GAP-sales-8.13-09` | QA / Test Automation | `[ ] Open` | **The `test-writer` agent was skipped at the user's explicit instruction** for this run. The 8.13 test contract was pinned in `.claude/tasks/contract-sales-8.13.md` §1–§4 (every model field, every CHOICES value, every form `Meta.fields`, every url name and every view context key), so the suite can be written against a frozen contract. `apps/sales/tests/conftest.py` was **not** touched: it is owned by a concurrent session (commit `386a2b2`, "test(sales): add customer success test fixtures and contract to conftest") and editing it from another writer would breach the single-writer rule. | `apps/sales/tests/test_marketingalignment_models.py`, `_forms.py`, `_views.py` and `_security.py` exist, every test is named `test_marketingalignment_*`, `apps/sales/tests/conftest.py` carries the 8.13 fixtures, and the **full unfiltered** `apps/sales` suite is green. |
+| `GAP-sales-8.13-10` | Documentation / Repo Hygiene | `[~] Deferred` | **A pre-existing, long-standing mojibake corruption in `README.md`** — its UTF-8 punctuation was re-encoded through a Windows codepage by an earlier session's tooling, and the damage reaches back through **many commits** (820 corrupted sequences as far back as the Module 0 / 8.4 era commits; 792 at this run's start). This run **recovered 734 of the ~890 sequences** — 318 lines rewritten 1:1, +161 `→` and +222 `—` restored, no line lost (1628 → 1628) — but **156 sequences are irrecoverable**: their third UTF-8 byte was replaced by U+FFFD, so the original characters no longer exist in the file and cannot be reconstructed by any transformation. The survivors are punctuation separators in prose (e.g. `Django 5.1 ‹sep› Tailwind CSS`) and box-drawing art. `git` has no clean source for them: every historical version of the file is already corrupted. | Every non-ASCII character in `README.md` renders as its intended glyph. Because the lost bytes are gone, the remaining 156 need to be **re-authored from intent** (each is a `·` / `│` / `└` style separator) rather than decoded — a hand pass over the affected lines, or regenerating the affected sections from the module tables they summarise. |
 
 ---
 
@@ -53,8 +54,21 @@
 
 ## 4. Close-out Note
 
-**As-built gaps**: the deferred register above (§2) — nine entries, of which eight are external
-dependencies or explicitly-declined capabilities and one (`GAP-sales-8.13-09`) is the
-user-directed skip of the test-writing phase. **No gap in this register is an unfinished piece of
+**As-built gaps**: the deferred register above (§2) — ten entries, of which eight are external
+dependencies or explicitly-declined capabilities, one (`GAP-sales-8.13-09`) is the user-directed
+skip of the test-writing phase, and one (`GAP-sales-8.13-10`) is a pre-existing README encoding
+defect that this run partially repaired. **No gap in this register is an unfinished piece of
 the 8.13 build surface** — every NavERP.md bullet for 8.13 ships a live, complete, tenant-scoped
-page, and the smoke gate plus the six-reviewer pass recorded the correctness evidence.
+page, and the smoke gate plus the two completed review passes recorded the correctness evidence.
+
+### Phase 4 / Phase 5 outcome
+
+Two of the six review passes completed their findings (a `code-reviewer` pass and an `explorer`
+pass) and produced **19 findings: 1 Critical, 7 Important, 11 Minor** — all now fixed and
+verified. The Critical was the `currency` FK being tenant-checked against the **global**
+`accounting.Currency` master, which made the currency field unusable on every 8.13 form and left
+16 of the 19 seeded rows per tenant un-editable. The full record, with the commit sha for every
+fix and the verification evidence, is in `.claude/tasks/review-sales-8.13.md`.
+
+The `frontend-reviewer`, `performance-reviewer` and `security-reviewer` passes are recorded as
+**not run** — see §2 note below.
