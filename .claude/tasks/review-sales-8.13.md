@@ -523,3 +523,68 @@ rather than observed.
 
 ---
 
+## Phase 5 — `code-fixer` pass (2026-10-20)
+
+**Status: all 19 findings FIXED and verified.** The fixer landed **34 commits** (one file per
+commit) across 22 files, plus one more commit set from the main session for the two findings the
+fixer was cancelled before finishing.
+
+### Status table — every finding, its fix and its commit
+
+| ID | Sev | Status | Fix | Commit(s) |
+|---|---|---|---|---|
+| `C1` | Critical | **[x] fixed** | The `currency` FK is no longer tenant-checked. `accounting.Currency` is a **global** master with no `tenant` FK, so `getattr(currency, "tenant_id", None)` is `None` and `None != request.tenant.id` rejected **every** currency selection. Removed `"currency"` from the four `_reject_foreign(...)` lists and from the four model `clean()` guard loops. The seeded rows are editable again. | `b6bc6024` `7f154f8f` `cc6843bc` `5e357c1a` (models) · `d3937303` `a93495b9` `40a971c2` `05b62f9c` (forms) |
+| `I1` | Important | **[x] fixed** | The seeder's `pending` handoff spec used `"sla_in_hours": -2`, putting the SLA deadline *before* the handoff. Now a positive `24`; `handoff_at` is already in the past, so the row is still deliberately overdue. | `6171e239` |
+| `I2` | Important | **[x] fixed** | The SLA-breach rule is now defined **once** on the model (`MqlHandoff`) and used by the property, the list card and the console, so they cannot drift. | `58edb390` `f0407540` `f9a8f663` |
+| `I3` | Important | **[x] fixed** | Every tenant-scoped FK on the 8.13 admin forms is now narrowed to `request.tenant` (including `account`, `computed_by`, `owner`, `assigned_to`, `campaign`). | `a560bad4` |
+| `I4` | Important | **[x] fixed** | The seeder credits only the touchpoints it created (its `touchpoints` accumulator is now the source of truth), so it can no longer fabricate credits on operator-entered rows. | `054b19b6` |
+| `I5` | Important | **[x] fixed** | The console's content/event title lookups and the event registration subquery are now tenant-scoped. | `d785efbb` `565e3d13` |
+| `E1` | Important | **[x] fixed** | A shared `enum_filter` helper ignores a closed-vocabulary GET value that is not a real choice, so a junk filter falls back to the unfiltered list instead of emptying the register. Applied at all 11 sites. | `dafb3e6a` (helper) · `2500cf84` `a8343c24` `a8e351ea` `90580118` `24fe791a` |
+| `E2` | Important | **[x] fixed** | The average-response-hours calculation is now one shared `avg_response_hours(queryset)` helper instead of two copies. | `dafb3e6a` (helper) · `4cf224d6` `f9a8f663` |
+| `M1` | Minor | **[x] fixed** | The blended cost-per-lead now counts each lead once (a distinct count over the tenant's touchpoints) instead of summing per-campaign counts. | `b12bb6f8` |
+| `M2` | Minor | **[x] fixed** | The unused console `stats` keys and the two pointless `COUNT(*)` queries were removed, and the rollup currency is exposed. | `74f17c86` |
+| `M3` | Minor | **[x] fixed** | The unread `attributed_cost` aggregate was dropped. | `74f17c86` |
+| `M4` | Minor | **[x] fixed** | `responded_at` is cleared only on the move back to `pending`, not on every non-responded status — a handoff re-labelled `expired` keeps its response time. | `6f2a4009` |
+| `M5` | Minor | **[x] fixed** | `save(update_fields=...)` now includes the stamped field, so the timestamp is not silently discarded. | `6f2a4009` `5da32c4a` |
+| `M6` | Minor | **[x] fixed** | A shared `single_currency` helper labels a page total only when the currency is unambiguous, and the per-row amounts render the record's own currency. | `5c2fdeb6` (helper) · `03719998` `9a1a64f1` `63d66f2f` `7a4331eb` |
+| `M7` | Minor | **[x] fixed** | The `sla_due_at >= handoff_at` rule is now enforced in the form's `clean()`, not only in the model's. | `05b62f9c` |
+| `E3` | Minor | **[x] fixed** | The dead alias context keys and the unrendered stats keys were dropped, the contract was corrected to match, and the two extra choice keys were moved to the view that uses them. | `03719998` `9a1a64f1` `63d66f2f` `7a4331eb` `65059e98` + contract |
+| `E4` | Minor | **[x] fixed** | Fixed together with `I4` — the seeder's `touchpoints` accumulator is now the source of truth, so it is live code rather than a fossil. | `054b19b6` |
+| `E5` | Minor | **[x] fixed** | The four unreferenced properties are now *used* rather than deleted — `is_first_touch` / `is_last_touch` drive the journey-position badges, `is_responded` drives the "Responded At" row, `is_download` drives the download badge. One expression of each fact. | `4a22caff` `80608080` `9bf3b963` `863cc182` |
+| `E6` | Minor | **[x] fixed** | `EventRegistration` now has an edit and a delete path, so a registration can actually be moved to `attended` (which is the point of the `attended_at` stamp). The registrations table gained an Actions column and the form honours edit mode. | `852496f0` `5d1a5733` `8fca843c` `65059e98` (routes/views) · `a5f689d8` `07265352` (templates) |
+| `E7` | Minor | **[x] fixed** | "Campaign Influence & Attribution" now points at `sales:attribution_touchpoint_list` instead of the console, so no two top-level NavERP bullets resolve to the same URL. The console remains the landing page for "Campaign Performance Integration". | `49ce7175` (carried in the concurrent session's commit — see the environment note) |
+
+### Verification after the fixer pass
+
+| Gate | Result |
+|---|---|
+| `manage.py check` | `System check identified no issues (0 silenced)` |
+| `makemigrations --check --dry-run` | blocked by **`sales.StageVelocityAnalysis`**, the *concurrent 8.12 session's* model (its index name `sales_vca_tenant_bottleneck_idx` is 32 chars, over Django's 30-char limit). **Not an 8.13 defect** — every 8.13 index and constraint name is ≤ 30 chars, and 8.13's own migration `0023_…` is applied and unchanged. Left alone per the concurrent-writer rule. |
+| Seeded rows are editable | **4/4** — the seeded touchpoint, MQL handoff, content engagement and marketing event each re-save through their edit form with a **302**, currency included. This is the direct regression test for `C1`. |
+| Junk enum filters fall back | **11/11** — `?channel=bogus`, `?status=bogus`, `?attribution_model=bogus` etc. on every list page return 200 and still list the seeded rows (12 / 15 / 3 / 5 / 2), with no empty state. |
+| SLA breach count agrees with the row badges | list card `1` == model `is_sla_breached` count `1`; console SLA compliance `66.7%` == the model rule `66.7%`. |
+| Every seeded handoff is valid | **6/6** across both tenants — `sla_due_at >= handoff_at`, and the deliberately-overdue pending handoff still reports as a breach. |
+| Console leaks no cross-tenant row | the console's content and event rows resolve only to this tenant's ids, and both lookups carry `tenant=tenant`. |
+| Registration edit path | the registrations table exposes the edit link and the delete form; the edit page renders prefilled in edit mode; marking a registration `attended` saves and **stamps `attended_at`**. |
+| Full 8.13 page sweep | **ALL CHECKS PASSED** (23 URLs, content assertions, no template leak markers, junk params, page 2, cross-tenant IDOR → 404, console model selector). |
+| Oversized-pk filter sweep | **no overflow failure** on MariaDB **and** on the SQLite test DB (10/10 filters return 200). |
+| Seeder idempotency | a second run leaves the counts unchanged (12 touchpoints, 36 attributions, 3 handoffs, 5 engagements, 2 events, 8 registrations), and every touchpoint carries exactly one credit per model. |
+
+### Demo-data repair
+
+The `I1` seeder fix is correct, but the seeder's idempotency key is `(tenant, lead)`, so the row it
+created under the **old** rule was never revisited and still carried a `sla_due_at` earlier than its
+`handoff_at` — invalid against the module's own `clean()` guard, and the reason a seeded row could
+not be re-saved. Those two rows (one per tenant) were **deleted and re-seeded**, which is the
+correct repair: the seeder only creates rows it owns, and it now writes a valid SLA.
+
+### Environment note — a concurrent commit carried one of these fixes
+
+The `E7` navigation change was uncommitted in the working tree when the concurrent 8.12 session
+committed `apps/core/navigation.py` for its own `LIVE_LINKS["8.12"]` entry. It swept my change in
+with it, and its commit message says so: *"feat(core): add LIVE_LINKS 8.12 entry for sales analytics
+and intelligence (**carries a concurrent 8.13 sidebar fix**)"*. The 8.13 block was verified intact
+after that commit. Nothing was lost; the commit boundary simply does not match the finding ID.
+
+---
+
