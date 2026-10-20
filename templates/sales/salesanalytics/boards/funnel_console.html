@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}Conversion Funnel Console — Sales Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <span>Funnel</span>
+        </div>
+        <h1 class="page-title">Conversion Funnel Analytics</h1>
+        <p class="text-sm text-slate-500 mt-1">Recorded stage-to-stage conversion, the CRM funnel report, and how every measured rate compares with its benchmark.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:analytics_console' %}" class="btn btn-outline">
+            <i data-lucide="gauge"></i>
+            <span>Overview</span>
+        </a>
+        <a href="{% url 'sales:win_loss_console' %}" class="btn btn-outline">
+            <i data-lucide="split"></i>
+            <span>Win/Loss</span>
+        </a>
+        <a href="{% url 'sales:velocity_console' %}" class="btn btn-outline">
+            <i data-lucide="gauge"></i>
+            <span>Velocity</span>
+        </a>
+        <a href="{% url 'sales:rep_scorecard_console' %}" class="btn btn-outline">
+            <i data-lucide="award"></i>
+            <span>Rep Scorecards</span>
+        </a>
+        <a href="{% url 'sales:benchmark_console' %}" class="btn btn-outline">
+            <i data-lucide="radar"></i>
+            <span>Benchmarks</span>
+        </a>
+        <a href="{% url 'sales:funnel_conversion_record_list' %}" class="btn btn-primary">
+            <i data-lucide="filter"></i>
+            <span>All Funnel Records</span>
+        </a>
+    </div>
+</div>
+
+{% comment %}
+    Console 4 — Conversion Funnel Analytics. Renders over the PUBLIC
+    apps.crm.analytics.compute_report entry point on an in-memory funnel report, plus the
+    recorded funnel conversion rows. Read-only: the console creates no report row.
+{% endcomment %}
+
+<!-- Headline stats -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="filter"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_records|default:"0" }}</div>
+        <div class="stat-label">Funnel Records</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="percent"></i>
+        </div>
+        <div class="stat-value">{% if stats.avg_conversion_rate_pct is not None %}{{ stats.avg_conversion_rate_pct|floatformat:1 }}%{% else %}—{% endif %}</div>
+        <div class="stat-label">Avg Conversion Rate</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="scan-line"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_entered|default:"0" }}</div>
+        <div class="stat-label">Deals Entered</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_converted|default:"0" }}</div>
+        <div class="stat-label">Deals Converted</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_dropoff|default:"0" }}</div>
+        <div class="stat-label">Dropped Off</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="activity"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_skipped|default:"0" }}</div>
+        <div class="stat-label">Skipped</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div class="stat-value">{{ stats.below_benchmark_count|default:"0" }}</div>
+        <div class="stat-label">Below Benchmark</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="target"></i>
+        </div>
+        <div class="stat-value">{{ stats.benchmark_count|default:"0" }}</div>
+        <div class="stat-label">Benchmarked Records</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="bar-chart-3"></i>
+        </div>
+        <div class="stat-value">{{ stats.report_rows|default:"0" }}</div>
+        <div class="stat-label">Funnel Report Rows</div>
+    </div>
+</div>
+
+{% if funnel_report_error %}
+{% comment %}
+    A broken report must degrade to an explanatory notice, never a silent blank panel
+    and never a 500.
+{% endcomment %}
+<div class="card mb-6 border-s-4 border-amber-500">
+    <div class="card-header">
+        <h2 class="card-title">Funnel Report Unavailable</h2>
+        <span class="badge badge-amber">Non-fatal</span>
+    </div>
+    <div class="card-body">
+        <p class="text-sm text-slate-700 mb-2">The CRM funnel report could not be computed, so the report panel below is empty. The recorded funnel conversion rows below are unaffected.</p>
+        <p class="text-xs text-slate-500 mb-0 font-mono">{{ funnel_report_error }}</p>
+    </div>
+</div>
+{% endif %}
+
+<!-- CRM funnel report -->
+{% if funnel_report %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">{{ funnel_report.chart_label|default:"Funnel Report" }}</h2>
+        <span class="badge badge-slate">{{ funnel_report.chart_type|default:"—" }}</span>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            {% for item in funnel_report.summary %}
+            <div class="detail-item">
+                <dt>{{ item.label|default:"—" }}</dt>
+                <dd>{% if item.value is not None %}{{ item.value }}{% else %}—{% endif %}</dd>
+            </div>
+            {% empty %}
+            <div class="detail-item">
+                <dt>Summary</dt>
+                <dd>—</dd>
+            </div>
+            {% endfor %}
+        </dl>
+    </div>
+    {% if funnel_report.columns %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    {% for column in funnel_report.columns %}
+                    <th>{{ column|default:"—" }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in funnel_report.rows %}
+                <tr>
+                    {% for cell in row %}
+                    <td>{{ cell|default:"—" }}</td>
+                    {% endfor %}
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="{{ funnel_report.columns|length }}">
+                        <div class="empty-state">
+                            <i data-lucide="bar-chart-3"></i>
+                            <h3>No funnel report rows</h3>
+                            <p>The report engine returned no rows for this period and range.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body">
+        <div class="empty-state">
+            <i data-lucide="bar-chart-3"></i>
+            <h3>No funnel report available</h3>
+            <p>The report engine returned no payload for this tenant. The recorded funnel conversion rows below still apply.</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Recorded funnel conversion rows -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Funnel Conversion Records</h2>
+        <a href="{% url 'sales:funnel_conversion_record_list' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="list"></i>
+            <span>All Records</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Record</th>
+                    <th>Label</th>
+                    <th>Scope</th>
+                    <th>Period</th>
+                    <th>Entered</th>
+                    <th>Converted</th>
+                    <th>Rate</th>
+                    <th>Benchmark</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in funnel_rows %}
+                <tr>
+                    <td>
+                        {% if row.record %}
+                        <a href="{% url 'sales:funnel_conversion_record_detail' row.record.pk %}" class="font-mono text-sm font-semibold hover:underline">
+                            {{ row.number|default:"—" }}
+                        </a>
+                        {% else %}
+                        <span class="font-mono text-sm">{{ row.number|default:"—" }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-medium text-slate-900">{{ row.label_text|default:"—" }}</span>
+                        {% if row.territory_name %}
+                        <div class="text-xs text-slate-500">{{ row.territory_name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.funnel_scope_display|default:"—" }}</span>
+                    </td>
+                    <td class="text-slate-600 text-sm">
+                        {{ row.period_start|date:"M d, Y"|default:"—" }} → {{ row.period_end|date:"M d, Y"|default:"—" }}
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{{ row.entered_count|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.converted_count|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{% if row.conversion_rate_pct is not None %}{{ row.conversion_rate_pct|floatformat:1 }}%{% else %}—{% endif %}</span>
+                    </td>
+                    <td>
+                        {% if row.benchmark_pct is not None %}
+                        <span class="text-slate-800">{{ row.benchmark_pct|floatformat:1 }}%</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="filter"></i>
+                            <h3>No funnel records yet</h3>
+                            <p>Record the stage-to-stage conversion for a period to populate the funnel board.</p>
+                            <a href="{% url 'sales:funnel_conversion_record_list' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="list"></i>
+                                <span>All Records</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Benchmark comparison -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Conversion vs Benchmark</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Source Model</th>
+                    <th>Our Value</th>
+                    <th>Benchmark</th>
+                    <th>Delta</th>
+                    <th>Source</th>
+                    <th>As Of</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in benchmark_rows %}
+                <tr>
+                    <td>
+                        <span class="font-medium text-slate-900">{{ row.label|default:"—" }}</span>
+                        {% if row.number %}
+                        <div class="text-xs text-slate-500 font-mono">{{ row.number }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.model|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{% if row.value is not None %}{{ row.value|floatformat:2 }}{% else %}—{% endif %}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{% if row.benchmark is not None %}{{ row.benchmark|floatformat:2 }}{% else %}—{% endif %}</span>
+                    </td>
+                    <td>
+                        {% if row.delta is not None %}
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{{ row.delta|floatformat:2 }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.source|default:"—" }}</span>
+                    </td>
+                    <td class="text-slate-600 text-sm">{{ row.as_of|date:"M d, Y"|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="target"></i>
+                            <h3>No benchmarked funnel metrics</h3>
+                            <p>Set a benchmark on a funnel record and the gap against it is reported here.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
