@@ -39,7 +39,10 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Open for Registration</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.published_count|default:"0" }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ stats.published_count|default:"0" }}
+                <span class="text-sm font-medium text-slate-500">/ {{ stats.upcoming_count|default:"0" }} upcoming</span>
+            </div>
         </div>
     </div>
     <div class="stat-card">
