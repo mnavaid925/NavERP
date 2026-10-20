@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}Sales Analytics Console — Sales Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <span>Console</span>
+        </div>
+        <h1 class="page-title">Sales Analytics &amp; Intelligence</h1>
+        <p class="text-sm text-slate-500 mt-1">Win/loss, cycle time, funnel conversion, rep scorecards and peer benchmarks — every figure is recomputed at render time, none of it stored.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:win_loss_console' %}" class="btn btn-outline">
+            <i data-lucide="split"></i>
+            <span>Win/Loss</span>
+        </a>
+        <a href="{% url 'sales:velocity_console' %}" class="btn btn-outline">
+            <i data-lucide="gauge"></i>
+            <span>Velocity</span>
+        </a>
+        <a href="{% url 'sales:funnel_console' %}" class="btn btn-outline">
+            <i data-lucide="filter"></i>
+            <span>Funnel</span>
+        </a>
+        <a href="{% url 'sales:rep_scorecard_console' %}" class="btn btn-outline">
+            <i data-lucide="award"></i>
+            <span>Rep Scorecards</span>
+        </a>
+        <a href="{% url 'sales:benchmark_console' %}" class="btn btn-outline">
+            <i data-lucide="radar"></i>
+            <span>Benchmarks</span>
+        </a>
+        <a href="{% url 'sales:win_loss_debrief_list' %}" class="btn btn-primary">
+            <i data-lucide="clipboard-list"></i>
+            <span>All Debriefs</span>
+        </a>
+    </div>
+</div>
+
+{% comment %}
+    Console 1 — the landing board. Renders over apps.sales.opportunity_analytics
+    (sales_health_counts + sales_pipeline_rollups). Read-only: every figure below is
+    derived at render time, so this page never writes.
+{% endcomment %}
+
+<!-- Headline stats -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="clipboard-list"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_debriefs|default:"0" }}</div>
+        <div class="stat-label">Win/Loss Debriefs</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="gauge"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_velocity_analyses|default:"0" }}</div>
+        <div class="stat-label">Velocity Analyses</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="filter"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_funnel_records|default:"0" }}</div>
+        <div class="stat-label">Funnel Records</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="award"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_scorecards|default:"0" }}</div>
+        <div class="stat-label">Rep Scorecards</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="message-square"></i>
+        </div>
+        <div class="stat-value">{{ stats.open_feedback_actions|default:"0" }}</div>
+        <div class="stat-label">Open Feedback Actions</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="layers"></i>
+        </div>
+        <div class="stat-value">{{ stats.pipeline_health_total|default:"0" }}</div>
+        <div class="stat-label">Pipeline Opportunities</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div class="stat-value">{{ stats.pipeline_on_track|default:"0" }}</div>
+        <div class="stat-label">On Track</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="eye"></i>
+        </div>
+        <div class="stat-value">{{ stats.pipeline_watch|default:"0" }}</div>
+        <div class="stat-label">On Watch</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div class="stat-value">{{ stats.pipeline_at_risk|default:"0" }}</div>
+        <div class="stat-label">At Risk</div>
+    </div>
+</div>
+
+<!-- Open pipeline value -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Open Pipeline</h2>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Open Pipeline Value</dt>
+                <dd>{{ stats.open_pipeline_value|default:"0" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Open Opportunities</dt>
+                <dd>{{ stats.open_pipeline_count|default:"0" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Stale Opportunities</dt>
+                <dd>{{ stats.stale_pipeline_count|default:"0" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Pipeline Health</dt>
+                <dd>
+                    {% for key, value in stats.pipeline_health.items %}
+                    <span class="badge badge-muted">{{ key|title }}: {{ value|default:"0" }}</span>
+                    {% empty %}
+                    <span class="text-slate-400">—</span>
+                    {% endfor %}
+                </dd>
+            </div>
+        </dl>
+    </div>
+</div>
+
+<!-- Analytics boards -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Analytics Boards</h2>
+    </div>
+    <div class="card-body">
+        <div class="flex flex-wrap gap-2">
+            {% for link in bullet_links %}
+                {% if link.url %}
+                <a href="{{ link.url }}" class="btn btn-outline">
+                    <i data-lucide="route"></i>
+                    <span>{{ link.label }}</span>
+                </a>
+                {% else %}
+                <span class="btn btn-outline opacity-50">
+                    <i data-lucide="route"></i>
+                    <span>{{ link.label }}</span>
+                </span>
+                {% endif %}
+            {% empty %}
+            <div class="empty-state">
+                <i data-lucide="route"></i>
+                <h3>No analytics boards available</h3>
+                <p>The 8.12 board links are not wired yet.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Recent win/loss debriefs -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Recent Win/Loss Debriefs</h2>
+        <a href="{% url 'sales:win_loss_debrief_list' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="list"></i>
+            <span>All Debriefs</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Debrief</th>
+                    <th>Opportunity</th>
+                    <th>Status</th>
+                    <th>Channel</th>
+                    <th>Primary Reason</th>
+                    <th>Action Owner</th>
+                    <th>Debriefed On</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in recent_debriefs %}
+                <tr>
+                    <td>
+                        {% if row.debrief %}
+                        <a href="{% url 'sales:win_loss_debrief_detail' row.debrief.pk %}" class="font-mono text-sm font-semibold hover:underline">
+                            {{ row.number|default:"—" }}
+                        </a>
+                        {% else %}
+                        <span class="font-mono text-sm">{{ row.number|default:"—" }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.opportunity_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{{ row.status_display|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.interview_channel_display|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.primary_reason_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.action_owner_name|default:"—" }}</span>
+                    </td>
+                    <td class="text-slate-600 text-sm">{{ row.debriefed_on|date:"M d, Y"|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="clipboard-list"></i>
+                            <h3>No win/loss debriefs yet</h3>
+                            <p>Record the qualitative debrief for a closed deal to start building the decision-driver history.</p>
+                            <a href="{% url 'sales:win_loss_debrief_list' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="list"></i>
+                                <span>All Debriefs</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Recent stage velocity analyses -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Recent Stage Velocity Analyses</h2>
+        <a href="{% url 'sales:stage_velocity_analysis_list' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="list"></i>
+            <span>All Analyses</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Stage</th>
+                    <th>Pipeline</th>
+                    <th>Median Days</th>
+                    <th>p90 Days</th>
+                    <th>Max Days</th>
+                    <th>Opportunities</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in recent_analyses %}
+                <tr>
+                    <td>
+                        {% if row.analysis %}
+                        <a href="{% url 'sales:stage_velocity_analysis_detail' row.analysis.pk %}" class="font-semibold text-slate-900 hover:underline">
+                            {{ row.stage_name|default:"—" }}
+                        </a>
+                        {% else %}
+                        <span class="font-semibold text-slate-900">{{ row.stage_name|default:"—" }}</span>
+                        {% endif %}
+                        <div class="text-xs text-slate-500 font-mono">{{ row.number|default:"—" }}</div>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.pipeline_name|default:"—" }}</span>
+                    </td>
+                    <td>
+                        {% if row.median_days_in_stage is not None %}{{ row.median_days_in_stage|floatformat:1 }}{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if row.p90_days_in_stage is not None %}{{ row.p90_days_in_stage|floatformat:1 }}{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.max_days_in_stage|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.opportunity_count|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.status_display|default:"—" }}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="gauge"></i>
+                            <h3>No stage velocity analyses yet</h3>
+                            <p>Record the measured time each stage takes so the velocity board can rank the bottlenecks.</p>
+                            <a href="{% url 'sales:stage_velocity_analysis_list' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="list"></i>
+                                <span>All Analyses</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
