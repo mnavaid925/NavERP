@@ -1,6 +1,6 @@
 ---
 name: sales
-description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, 8.8 Sales Activity & Task Management, 8.9 Sales Enablement, and 8.10 Incentive Compensation Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
+description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, 8.8 Sales Activity & Task Management, 8.9 Sales Enablement, 8.10 Incentive Compensation Management, and 8.11 Customer Success & Account Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
 ---
 
 # Sales Management System (Module 8)
@@ -1032,5 +1032,78 @@ Mounted under `sales:` namespace:
 - **Horizontal Scoping**: Non-admin users only view/edit their own payee records in list and detail views.
 - **Deterministic Waterfall**: Server-side model `clean()` recalculates credited volume, base rate, gross commission, draw deductions, and zero-floor net payouts.
 - **What-If Calculator**: Fully hardened with bounded numeric parsing, `NaN`/`inf` rejections, returning HTTP 400 on malformed input (L35).
+
+---
+
+## 8.11 Customer Success & Account Management (CSAM)
+
+App sub-package: `apps/sales/*/CustomerSuccess/`; templates: `templates/sales/customersuccess/`.
+
+### 8.11 Overview
+Sub-module 8.11 provides enterprise Customer Success & Account Management (CSAM) — predictive health scoring & risk alerts, multi-year renewal & expansion pipeline tracking, milestone-based onboarding playbooks with Time-to-Value (TTV) metrics, verified customer advocacy & reference governance, and Executive/Quarterly Business Review (QBR/EBR) cadence studios.
+
+### 8.11 Models (`apps/sales/models/CustomerSuccess/`)
+All models inherit from `TenantNumbered` and enforce strict workspace isolation and collision-free sequence prefixes:
+- `CustomerHealthScore` (`CHS-`): Multidimensional health evaluation fact. Fields: `account` (FK `core.Party`, `roles__role="customer"`), `evaluation_date`, `overall_score` (0-100), `health_band` (`green`, `yellow`, `red`), `previous_score`, `score_trend` (`improving`, `stable`, `declining`), `risk_level` (`low`, `medium`, `high`, `critical`), `product_usage_score`, `support_ticket_score`, `nps_sentiment_score`, `relationship_score`, `renewal_risk_score`, `risk_reasons` (JSON list of root causes), `active_alert_message`, `is_churn_risk`, `license_utilization_pct`, `open_support_tickets`, `latest_nps` (-100..100), `last_activity_date`, `notes`. Property `score_delta` computes `overall_score - previous_score`.
+- `CustomerRenewal` (`CRN-`): Contract renewal and retention lifecycle tracker. Fields: `account`, `owner` (CSM/Account Director), `original_order` (FK `scm.SalesOrder`), `renewal_name`, `contract_reference`, `current_arr`, `projected_renewal_arr`, `expansion_amount`, `currency` (FK `accounting.Currency`), `renewal_date`, `target_close_date`, `stage` (`upcoming`, `engagement`, `proposal_sent`, `negotiation`, `renewed`, `expanded`, `churned`, `contracted_down`), `churn_risk_flag` (`low`, `medium`, `high`, `critical`), `renewal_probability_pct` (0-100), `auto_renewal`, `notice_period_days`, `expansion_opportunity` (FK `crm.Opportunity`), `notes`. Property `total_potential_arr` returns `projected_renewal_arr + expansion_amount`.
+- `CustomerOnboarding` (`COB-`): Implementation and onboarding motion manager. Fields: `account`, `lead_csm`, `sales_order` (FK `scm.SalesOrder`), `title`, `playbook_template` (`enterprise_high_touch`, `midmarket_standard`, `smb_accelerated`, `tech_touch_automated`), `stage` (`kickoff`, `architecture_design`, `configuration`, `data_migration`, `training`, `uat_testing`, `go_live`, `completed`), `status` (`not_started`, `in_progress`, `on_track`, `at_risk`, `blocked`, `completed`), `kickoff_date`, `target_go_live_date`, `actual_go_live_date`, `time_to_value_days` (system-derived on save), `progress_pct` (0-100), `executive_sponsor_name`, `executive_sponsor_email`, `milestones_config` (JSON list of milestone tasks), `blockers`, `success_criteria`.
+- `CustomerBusinessReview` (`QBR-`): Strategic executive review and advocacy vehicle. Fields: `account`, `lead_csm`, `account_plan` (FK `sales.AccountPlan`), `title`, `review_period` (`q1`, `q2`, `q3`, `q4`, `mid_year`, `annual`), `review_year`, `scheduled_date`, `completed_date`, `status` (`scheduled`, `materials_prepared`, `conducted`, `follow_up_sent`, `cancelled`), `template_type` (`executive_value`, `technical_roadmap`, `renewal_alignment`, `operational_cadence`), `executive_sponsor_attended`, `client_attendees`, `internal_attendees`, `health_score_at_review`, `key_achievements`, `challenges_and_risks`, `action_items` (JSON list), `is_referenceable`, `reference_types_permitted` (JSON list), `case_study_status` (`none`, `identified`, `interview_scheduled`, `drafting`, `approved`, `published`), `testimonial_quote`, `notes`.
+
+### 8.11 Core Spine Reuse
+Strictly adheres to NavERP core spine design:
+- Customer accounts: `core.Party` (with `PartyRole(role="customer")`) — zero duplicate customer tables.
+- Original contract anchors: `scm.SalesOrder` (`.number` document reference).
+- Expansion and upsell tracking: `crm.Opportunity`.
+- Strategic account alignment: `sales.AccountPlan`.
+- Multi-currency ARR: `accounting.Currency` (global master).
+- CSMs and account owners: `accounts.User`.
+
+### 8.11 Routes & URLs (`apps/sales/urls/CustomerSuccess/`)
+Mounted under `sales:` namespace (25 total endpoints):
+- **Consoles & Hubs**:
+  - `sales:customer_health_console` (`/sales/customer-success/health-console/`)
+  - `sales:customer_renewal_pipeline` (`/sales/customer-success/renewal-pipeline/`)
+  - `sales:customer_onboarding_hub` (`/sales/customer-success/onboarding-hub/`)
+  - `sales:customer_advocacy_hub` (`/sales/customer-success/advocacy-hub/`)
+  - `sales:customer_qbr_studio` (`/sales/customer-success/qbr-studio/`)
+- **CRUD Operations**:
+  - Health Scores: `sales:customer_health_score_{list,create,detail,edit,delete}`
+  - Renewals: `sales:customer_renewal_{list,create,detail,edit,delete}`
+  - Onboardings: `sales:customer_onboarding_{list,create,detail,edit,delete}`
+  - Business Reviews: `sales:customer_business_review_{list,create,detail,edit,delete}`
+
+### 8.11 Templates (`templates/sales/customersuccess/`)
+- Consoles: `health_console.html`, `renewal_pipeline.html`, `onboarding_hub.html`, `advocacy_hub.html`, `qbr_studio.html`
+- Entity CRUD:
+  - `customerhealthscore/{list,detail,form}.html`
+  - `customerrenewal/{list,detail,form}.html`
+  - `customeronboarding/{list,detail,form}.html`
+  - `customerbusinessreview/{list,detail,form}.html`
+
+### 8.11 Navigation Wiring (`apps/core/navigation.py`)
+`LIVE_LINKS["8.11"]` maps all 5 NavERP.md feature bullets verbatim:
+- Health Scoring & Risk Alerts -> `sales:customer_health_console`
+- Renewal & Expansion Pipeline -> `sales:customer_renewal_pipeline`
+- Onboarding & Implementation -> `sales:customer_onboarding_hub`
+- Advocacy & Reference Management -> `sales:customer_advocacy_hub`
+- Quarterly Business Reviews (QBRs) -> `sales:customer_qbr_studio`
+- Plus 4 direct CRUD leaf links: Customer Health Scores, Renewal Pipeline, Onboarding Implementations, Business Reviews (QBR).
+
+### 8.11 Seeder (`apps/sales/management/commands/seed_sales.py`)
+`_seed_customer_success` is fully idempotent and seeds realistic corporate demo accounts:
+- Health scores across green, yellow, and red bands with churn risk flags and alert messages.
+- Active renewals spanning upcoming, engagement, negotiation, renewed, and expanded stages.
+- Enterprise high-touch and mid-market onboarding playbooks with milestones.
+- QBR reviews with completed executive ROI retrospectives, testimonials, and case study pipeline.
+
+### 8.11 Conventions & Gotchas
+- **Audit Logging**: `write_audit_log` parameter signature is `(user, obj, action, message, tenant=request.tenant)`. For delete views, `write_audit_log` must be called *before* `obj.delete()`.
+- **SalesOrder Document Number**: Document number on `scm.SalesOrder` is `.number` (`SO-00001`), inherited from `TenantNumbered` (not `order_number`).
+- **Health Score Delta**: Computed cleanly via model property `score_delta` (`overall_score - previous_score` or `None`).
+- **Time to Value Calculation**: Onboarding `time_to_value_days` is system-derived in `save()` from `(actual_go_live_date - kickoff_date).days` and excluded from user-facing forms.
+- **RBAC on Deletion**: All 4 delete views enforce `@tenant_admin_required` and `@require_POST`. Templates conditionally display delete buttons only for tenant admins or superusers.
+- **Database Composite Indexes**: Composite indexes on `(tenant, status)`, `(tenant, stage)`, `(tenant, account)`, and `(tenant, evaluation_date)` ensure sub-millisecond execution for console aggregates.
+- **Foreign Key Isolation**: Form `_reject_foreign` verifies all submitted foreign keys belong strictly to the current tenant.
+
 
 
