@@ -256,7 +256,8 @@ VELOCITY_STATUS_CHOICES = [("draft", "Draft"), ("reviewed", "Reviewed"), ("appro
   - `UniqueConstraint(fields=["tenant", "pipeline_stage", "period_start"], name="sales_vca_stage_period_uniq")`
 - `Meta.indexes`:
   - `Index(fields=["tenant", "status"], name="sales_vca_tenant_status_idx")`
-  - `Index(fields=["tenant", "is_bottleneck"], name="sales_vca_tenant_bottleneck_idx")`
+  - `Index(fields=["tenant", "is_bottleneck"], name="sales_vca_tenant_bneck_idx")` — ⚠ Django caps an index
+    name at **30 characters** (`models.E034`); the obvious `sales_vca_tenant_bottleneck_idx` is 32 and is rejected.
   - `Index(fields=["tenant", "pipeline"], name="sales_vca_tenant_pipeline_idx")`
 - `clean()`: `pipeline_stage.pipeline_id == pipeline_id` (the stage must belong to the selected pipeline);
   tenant checks for `pipeline`, `pipeline_stage`; `period_end >= period_start`.
