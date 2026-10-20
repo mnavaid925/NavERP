@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Add Registration — {{ event.name }} — NavERP{% endblock %}
+{% block title %}{% if is_edit %}Edit Registration{% else %}Add Registration{% endif %} — {{ event.name }} — NavERP{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -14,9 +14,11 @@
             <span>/</span>
             <a href="{% url 'sales:marketing_event_detail' event.pk %}">{{ event.name }}</a>
             <span>/</span>
-            <span>Add Registration</span>
+            <a href="{% url 'sales:marketing_event_registrations' event.pk %}">Registrations</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Registration{% else %}Add Registration{% endif %}</span>
         </div>
-        <h1 class="page-title">Add Registration</h1>
+        <h1 class="page-title">{% if is_edit %}Edit Registration{% else %}Add Registration{% endif %}</h1>
         <p class="text-sm text-slate-500 mt-1">{{ event.name }} — {{ event.start_at|date:"F d, Y H:i" }}</p>
     </div>
     <div class="page-actions">
@@ -150,7 +152,7 @@
         </a>
         <button type="submit" class="btn btn-primary">
             <i data-lucide="check"></i>
-            <span>Add Registration</span>
+            <span>{% if is_edit %}Save Changes{% else %}Add Registration{% endif %}</span>
         </button>
     </div>
 </form>
