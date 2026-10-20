@@ -42,6 +42,10 @@ from .CustomerSuccess import urlpatterns as _customer_success
 # 8.13 Marketing Alignment & Attribution. Extends crm.Campaign / crm.Lead / crm.Opportunity and
 # sales.EnablementContent by FK; declares no second campaign, lead, opportunity or content master.
 from .MarketingAlignment import urlpatterns as _marketing_alignment
+# 8.12 Sales Analytics & Intelligence. Extends the Sales 8.2 win/loss spine and the CRM
+# opportunity / lead / territory masters by FK; declares no second reason, outcome,
+# competitor, quota, currency, activity or report master.
+from .SalesAnalytics import urlpatterns as _sales_analytics
 
 app_name = "sales"
 
@@ -78,6 +82,8 @@ urlpatterns = [
     *_customer_success,
     # 8.13 Marketing Alignment & Attribution.
     *_marketing_alignment,
+    # 8.12 Sales Analytics & Intelligence.
+    *_sales_analytics,
     *_pipelines,
     *_teams,
     *_competitors,
