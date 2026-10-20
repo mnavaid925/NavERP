@@ -164,9 +164,9 @@
                         {% endif %}
                     </td>
                     <td>
-                        {% if touchpoint.touch_position == "first" %}
+                        {% if touchpoint.is_first_touch %}
                         <span class="badge badge-green">First Touch</span>
-                        {% elif touchpoint.touch_position == "last" %}
+                        {% elif touchpoint.is_last_touch %}
                         <span class="badge badge-info">Last Touch</span>
                         {% else %}
                         <span class="badge badge-muted">Middle Touch</span>
