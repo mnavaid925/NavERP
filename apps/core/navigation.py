@@ -2512,6 +2512,31 @@ LIVE_LINKS = {
         "Customer Onboardings": "sales:customer_onboarding_list",
         "Business Reviews": "sales:customer_business_review_list",
     },
+    "8.12": {
+        # OWNERSHIP RULING (L36/L37)
+        # EXTENDS (never redeclares) the Sales 8.2 win/loss spine -- WinLossReason (WLR-) and
+        # OpportunityOutcome (OUT-); links the Sales 8.9 CoachingScorecard (CSC-) call rubric by
+        # FK. Reuses crm.Opportunity (OPP-), crm.Lead (LEAD-), crm.Territory,
+        # crm.CommunicationLog (COM-), crm.AnalyticsReport / AnalyticsDashboard / DashboardWidget
+        # / ReportSnapshot (the CRM 1.6 report engine), sales.Pipeline (PIPE-) / PipelineStage
+        # (target_days) / OpportunityPipelinePlacement (stage_entered_at), sales.ActivityLog
+        # (SAL-) / ActivityType, sales.QuotaPlan (QPA-), sales.ForecastPeriod, core.Party,
+        # accounting.Currency and accounts.User. The six consoles RENDER OVER the existing
+        # apps/sales/opportunity_analytics.py and apps/crm/analytics.py engines.
+        # Zero duplicate reason, outcome, competitor, report, widget, quota, currency, activity,
+        # coaching-scorecard, benchmark or funnel-stage models declared.
+        "Win/Loss Analysis": "sales:win_loss_console",
+        "Sales Velocity & Cycle Time": "sales:velocity_console",
+        "Conversion Funnel Analytics": "sales:funnel_console",
+        "Rep Performance Scorecards": "sales:rep_scorecard_console",
+        "Benchmarking & Peer Comparison": "sales:benchmark_console",
+        # Extra live leaves
+        "Sales Analytics Console": "sales:analytics_console",
+        "Win/Loss Debriefs": "sales:win_loss_debrief_list",
+        "Stage Velocity Analyses": "sales:stage_velocity_analysis_list",
+        "Funnel Conversion Records": "sales:funnel_conversion_record_list",
+        "Rep Scorecard Records": "sales:rep_performance_scorecard_list",
+    },
     "8.13": {
         # OWNERSHIP RULING (L36/L37)
         # Reuses crm.Campaign (CAM-) for the campaign master -- budget, actual spend and the
@@ -2519,7 +2544,12 @@ LIVE_LINKS = {
         # the conversion endpoint; reuses core.Party for customer accounts; reuses
         # sales.EnablementContent (ECN-) for the content master.
         # Zero duplicate campaign, lead, opportunity, account or content models declared.
-        "Campaign Influence & Attribution": "sales:marketing_attribution_console",
+        # "Campaign Influence & Attribution" points at the touch ledger (its own landing page)
+        # rather than at the console: two top-level NavERP bullets resolving to the SAME url
+        # would render the identical page twice under two bullet names. The console stays the
+        # landing page for "Campaign Performance Integration", which is the bullet that owns
+        # ROI / cost-per-lead / pipeline.
+        "Campaign Influence & Attribution": "sales:attribution_touchpoint_list",
         "MQL-to-SQL Tracking": "sales:mql_handoff_list",
         "Campaign Performance Integration": "sales:marketing_attribution_console",
         "Content Performance & Engagement": "sales:content_engagement_list",
