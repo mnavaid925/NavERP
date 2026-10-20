@@ -1,0 +1,376 @@
+{% extends "base.html" %}
+
+{% block title %}Benchmarking &amp; Peer Comparison Console — Sales Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Sales Analytics</span>
+            <span>/</span>
+            <span>Benchmarks</span>
+        </div>
+        <h1 class="page-title">Benchmarking &amp; Peer Comparison</h1>
+        <p class="text-sm text-slate-500 mt-1">How the team compares with its peers, every metric that carries a benchmark, and where the quota gap still bites.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:analytics_console' %}" class="btn btn-outline">
+            <i data-lucide="gauge"></i>
+            <span>Overview</span>
+        </a>
+        <a href="{% url 'sales:win_loss_console' %}" class="btn btn-outline">
+            <i data-lucide="split"></i>
+            <span>Win/Loss</span>
+        </a>
+        <a href="{% url 'sales:velocity_console' %}" class="btn btn-outline">
+            <i data-lucide="gauge"></i>
+            <span>Velocity</span>
+        </a>
+        <a href="{% url 'sales:funnel_console' %}" class="btn btn-outline">
+            <i data-lucide="filter"></i>
+            <span>Funnel</span>
+        </a>
+        <a href="{% url 'sales:rep_scorecard_console' %}" class="btn btn-outline">
+            <i data-lucide="award"></i>
+            <span>Rep Scorecards</span>
+        </a>
+        <a href="{% url 'sales:rep_performance_scorecard_list' %}" class="btn btn-primary">
+            <i data-lucide="list"></i>
+            <span>All Scorecards</span>
+        </a>
+    </div>
+</div>
+
+{% comment %}
+    Console 6 — Benchmarking and Peer Comparison. Renders over the benchmark fields
+    carried by the scorecard, funnel and velocity records, plus the quota plans behind
+    the goal gap. Read-only: the console never writes a benchmark.
+{% endcomment %}
+
+<!-- Headline stats -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="users"></i>
+        </div>
+        <div class="stat-value">{{ stats.peer_count|default:"0" }}</div>
+        <div class="stat-label">Peers Compared</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="percent"></i>
+        </div>
+        <div class="stat-value">{% if stats.avg_win_rate_pct is not None %}{{ stats.avg_win_rate_pct|floatformat:1 }}%{% else %}—{% endif %}</div>
+        <div class="stat-label">Avg Win Rate</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="bar-chart-3"></i>
+        </div>
+        <div class="stat-value">{% if stats.median_win_rate_pct is not None %}{{ stats.median_win_rate_pct|floatformat:1 }}%{% else %}—{% endif %}</div>
+        <div class="stat-label">Median Win Rate</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div class="stat-value">{% if stats.p75_win_rate_pct is not None %}{{ stats.p75_win_rate_pct|floatformat:1 }}%{% else %}—{% endif %}</div>
+        <div class="stat-label">75th Percentile</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="target"></i>
+        </div>
+        <div class="stat-value">{% if stats.p90_win_rate_pct is not None %}{{ stats.p90_win_rate_pct|floatformat:1 }}%{% else %}—{% endif %}</div>
+        <div class="stat-label">90th Percentile</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="target"></i>
+        </div>
+        <div class="stat-value">{{ stats.benchmark_rows|default:"0" }}</div>
+        <div class="stat-label">Benchmarked Metrics</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div class="stat-value">{{ stats.goal_gap_count|default:"0" }}</div>
+        <div class="stat-label">Reps With A Goal Gap</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="circle-dollar-sign"></i>
+        </div>
+        <div class="stat-value">{{ stats.total_goal_gap|default:"0" }}</div>
+        <div class="stat-label">Total Goal Gap</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="file-text"></i>
+        </div>
+        <div class="stat-value">{{ stats.quota_plan_count|default:"0" }}</div>
+        <div class="stat-label">Quota Plans</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="target"></i>
+        </div>
+        <div class="stat-value">{{ stats.quota_target_total|default:"0" }}</div>
+        <div class="stat-label">Quota Target Total</div>
+    </div>
+</div>
+
+<!-- Percentile bands and worst gap -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Win Rate Percentile Bands</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Median</dt>
+                    <dd>{% if percentile_bands.median is not None %}{{ percentile_bands.median|floatformat:1 }}%{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>75th Percentile</dt>
+                    <dd>{% if percentile_bands.p75 is not None %}{{ percentile_bands.p75|floatformat:1 }}%{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>90th Percentile</dt>
+                    <dd>{% if percentile_bands.p90 is not None %}{{ percentile_bands.p90|floatformat:1 }}%{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Worst Goal Gap</dt>
+                    <dd>{% if stats.worst_goal_gap is not None %}{{ stats.worst_goal_gap|floatformat:2 }}{% else %}—{% endif %}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Quota Attainment</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Median Attainment</dt>
+                    <dd>{% if stats.avg_quota_attainment_pct is not None %}{{ stats.avg_quota_attainment_pct|floatformat:1 }}%{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Scorecards</dt>
+                    <dd>{{ stats.total_scorecards|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Reps</dt>
+                    <dd>{{ stats.rep_count|default:"0" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Quota Target Total</dt>
+                    <dd>{{ stats.quota_target_total|default:"0" }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+
+<!-- Peer comparison -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Peer Comparison</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Rep</th>
+                    <th>Segment</th>
+                    <th>Win Rate</th>
+                    <th>Revenue Closed</th>
+                    <th>Attainment</th>
+                    <th>Rating</th>
+                    <th>Goal Gap</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in peer_rows %}
+                <tr>
+                    <td>
+                        {% if row.scorecard %}
+                        <a href="{% url 'sales:rep_performance_scorecard_detail' row.scorecard.pk %}" class="font-semibold text-slate-900 hover:underline">
+                            {{ row.rep_name|default:"—" }}
+                        </a>
+                        {% else %}
+                        <span class="font-semibold text-slate-900">{{ row.rep_name|default:"—" }}</span>
+                        {% endif %}
+                        <div class="text-xs text-slate-500 font-mono">{{ row.number|default:"—" }}</div>
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.segment|default:"—" }}</span>
+                    </td>
+                    <td>
+                        {% if row.win_rate_pct is not None %}{{ row.win_rate_pct|floatformat:1 }}%{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{{ row.revenue_closed|default:"0" }}</span>
+                    </td>
+                    <td>
+                        {% if row.quota_attainment_pct is not None %}{{ row.quota_attainment_pct|floatformat:1 }}%{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{{ row.rating_display|default:"—" }}</span>
+                    </td>
+                    <td>
+                        {% if row.goal_gap_value is not None %}
+                        <span class="text-slate-800">{{ row.goal_gap_value|floatformat:2 }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="users"></i>
+                            <h3>No peers to compare</h3>
+                            <p>Score at least one rep and the peer comparison is built from the most recent scorecard per rep.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Benchmark register -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Benchmark Register</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Source Model</th>
+                    <th>Our Value</th>
+                    <th>Benchmark</th>
+                    <th>Delta</th>
+                    <th>Source</th>
+                    <th>As Of</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in benchmark_rows %}
+                <tr>
+                    <td>
+                        <span class="font-medium text-slate-900">{{ row.label|default:"—" }}</span>
+                        {% if row.number %}
+                        <div class="text-xs text-slate-500 font-mono">{{ row.number }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.model|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-900">{% if row.value is not None %}{{ row.value|floatformat:2 }}{% else %}—{% endif %}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{% if row.benchmark is not None %}{{ row.benchmark|floatformat:2 }}{% else %}—{% endif %}</span>
+                    </td>
+                    <td>
+                        {% if row.delta is not None %}
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{{ row.delta|floatformat:2 }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-slate-700 text-sm">{{ row.source|default:"—" }}</span>
+                    </td>
+                    <td class="text-slate-600 text-sm">{{ row.as_of|date:"M d, Y"|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="target"></i>
+                            <h3>No benchmarks recorded</h3>
+                            <p>Set a benchmark on a scorecard, funnel record or velocity analysis and it is registered here.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Goal gaps -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Goal Gaps — Worst First</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Rep</th>
+                    <th>Goal Gap</th>
+                    <th>Quota Target</th>
+                    <th>Revenue Closed</th>
+                    <th>Attainment</th>
+                    <th>Period</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in goal_gap_rows %}
+                <tr>
+                    <td>
+                        {% if row.scorecard %}
+                        <a href="{% url 'sales:rep_performance_scorecard_detail' row.scorecard.pk %}" class="font-semibold text-slate-900 hover:underline">
+                            {{ row.rep_name|default:"—" }}
+                        </a>
+                        {% else %}
+                        <span class="font-semibold text-slate-900">{{ row.rep_name|default:"—" }}</span>
+                        {% endif %}
+                        <div class="text-xs text-slate-500 font-mono">{{ row.number|default:"—" }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {% if row.badge %}{{ row.badge }}{% else %}badge-slate{% endif %}">{% if row.goal_gap_value is not None %}{{ row.goal_gap_value|floatformat:2 }}{% else %}—{% endif %}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.quota_target|default:"0" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-slate-800">{{ row.revenue_closed|default:"0" }}</span>
+                    </td>
+                    <td>
+                        {% if row.quota_attainment_pct is not None %}{{ row.quota_attainment_pct|floatformat:1 }}%{% else %}—{% endif %}
+                    </td>
+                    <td class="text-slate-600 text-sm">
+                        {{ row.period_start|date:"M d, Y"|default:"—" }} → {{ row.period_end|date:"M d, Y"|default:"—" }}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state">
+                            <i data-lucide="check-circle-2"></i>
+                            <h3>No goal gaps</h3>
+                            <p>Every scored rep has a quota target and no recorded gap against it.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
