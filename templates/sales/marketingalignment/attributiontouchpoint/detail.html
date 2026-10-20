@@ -17,9 +17,9 @@
         <div class="flex items-center gap-3 mt-1">
             <h1 class="page-title">Touch {{ obj.number }}</h1>
             <span class="badge badge-info">{{ obj.get_channel_display }}</span>
-            {% if obj.touch_position == "first" %}
+            {% if obj.is_first_touch %}
             <span class="badge badge-green">First Touch</span>
-            {% elif obj.touch_position == "last" %}
+            {% elif obj.is_last_touch %}
             <span class="badge badge-info">Last Touch</span>
             {% else %}
             <span class="badge badge-muted">Middle Touch</span>
