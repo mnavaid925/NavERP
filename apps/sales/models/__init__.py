@@ -98,6 +98,25 @@ from .MarketingAlignment import (
     MqlHandoff,
 )
 
+# 8.12 Sales Analytics & Intelligence. These EXTEND the Sales 8.2 win/loss spine
+# (WinLossReason / OpportunityOutcome) and the Sales 8.9 coaching rubric by FK, and they
+# EXTEND the CRM opportunity / lead / territory / communication-log masters by FK. They
+# declare NO reason, outcome, competitor, quota, currency, activity, report or coaching
+# master of their own -- see the package docstring for the L36/L37 ruling.
+from .SalesAnalytics import (
+    DEBRIEF_STATUS_CHOICES,
+    FEEDBACK_TEAM_CHOICES,
+    FUNNEL_SCOPE_CHOICES,
+    INTERVIEW_CHANNEL_CHOICES,
+    SCORECARD_RATING_CHOICES,
+    SCORECARD_STATUS_CHOICES,
+    VELOCITY_STATUS_CHOICES,
+    FunnelConversionRecord,
+    RepPerformanceScorecard,
+    StageVelocityAnalysis,
+    WinLossDebrief,
+)
+
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
     "LeadQualification", "LeadRoutingRule", "LeadNurtureEnrollment", "validate_routing_conditions",
@@ -138,6 +157,12 @@ __all__ = [
     "EVENT_TYPE_CHOICES", "EVENT_STATUS_CHOICES",
     "REGISTRATION_STATUS_CHOICES", "REGISTRATION_SOURCE_CHOICES",
     "FOLLOWUP_STATUS_CHOICES",
+    # 8.12 Sales Analytics & Intelligence
+    "WinLossDebrief", "StageVelocityAnalysis",
+    "FunnelConversionRecord", "RepPerformanceScorecard",
+    "INTERVIEW_CHANNEL_CHOICES", "FEEDBACK_TEAM_CHOICES", "DEBRIEF_STATUS_CHOICES",
+    "VELOCITY_STATUS_CHOICES", "FUNNEL_SCOPE_CHOICES",
+    "SCORECARD_RATING_CHOICES", "SCORECARD_STATUS_CHOICES",
 ]
 
 
