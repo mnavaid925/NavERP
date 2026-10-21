@@ -36,6 +36,15 @@
             <i data-lucide="pencil"></i>
             <span>Edit / Adjudicate</span>
         </a>
+        {% if request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'sales:channel_conflict_delete' conflict.pk %}" onsubmit="return confirm('Delete this channel conflict dispute?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
     </div>
 </div>
 
