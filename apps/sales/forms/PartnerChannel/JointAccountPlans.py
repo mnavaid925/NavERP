@@ -76,7 +76,7 @@ class JointAccountPlanForm(TenantUniqueMixin, TenantModelForm):
                 User.objects.filter(tenant=self.tenant, is_active=True).order_by("first_name", "last_name")
             )
             self.fields["collateral_document"].queryset = (
-                Document.objects.filter(tenant=self.tenant).order_by("-created_at")
+                Document.objects.filter(tenant=self.tenant).order_by("-uploaded_at")
             )
 
         self.fields["currency"].queryset = Currency.objects.all().order_by("code")
