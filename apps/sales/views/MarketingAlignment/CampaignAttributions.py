@@ -71,7 +71,7 @@ def campaign_attribution_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    campaigns = Campaign.objects.filter(tenant=request.tenant).order_by("name")
+    campaigns = Campaign.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     context = {
         "page_obj": page_obj,
@@ -121,7 +121,10 @@ def campaign_attribution_create(request):
     if request.method == "POST":
         form = CampaignAttributionForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            obj = form.save()
+            obj = form.save(commit=False)
+            if not obj.computed_by_id and request.user.is_authenticated:
+                obj.computed_by = request.user
+            obj.save()
             write_audit_log(
                 request.user,
                 obj,
@@ -153,7 +156,10 @@ def campaign_attribution_edit(request, pk):
             request.POST, instance=obj, tenant=request.tenant
         )
         if form.is_valid():
-            obj = form.save()
+            obj = form.save(commit=False)
+            if not obj.computed_by_id and request.user.is_authenticated:
+                obj.computed_by = request.user
+            obj.save()
             write_audit_log(
                 request.user,
                 obj,
