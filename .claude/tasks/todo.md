@@ -16268,3 +16268,397 @@ Each **form** page: `{% csrf_token %}`, the form fields, Save / Cancel. Derived 
 
 ## Review notes
 (filled in at the end)
+
+
+---
+# Sub-module 8.14 — Partner & Channel Management (Module 8: Sales Management System, sales) — plan from research-sales-8.14.md  (2026-10-21)
+
+**Input:** `.claude/tasks/research-sales-8.14.md` (197 lines; 10 leaders surveyed — Salesforce PRM, Impartner, Channeltivity, Allbound, Magentrix, ZiftONE, PartnerStack, WorkSpan, Crossbeam, ZINFI). **App `apps/sales` already exists → this is an EXTEND run.** No scaffold, no `apps.py`, **no `config/settings.py` INSTALLED_APPS change, no `config/urls.py` change.** The ONLY navigation change is one new `LIVE_LINKS["8.14"]` entry in `apps/core/navigation.py`.
+
+**Next migration: `0025`** — verified now: `apps/sales/migrations/` ends at `0024_funnelconversionrecord_repperformancescorecard_and_more.py`. **Re-verify the number at generation time (L43)**.
+
+## The five non-negotiable rulings this plan is built on
+
+**(a) Zero duplicate masters (L36/L37).** 8.14 declares NO Company/Partner table, NO Opportunity table, NO Territory master, NO Currency master, NO Document/File table, NO Rep/User master, and NO financial ledger. It **EXTENDS by FK**:
+- `core.Party` + `core.PartyRole` (`role="partner"`) for partner company profiles; `role="customer"` for end-clients;
+- `crm.Opportunity` (`OPP-`) for deal master — approved deal registrations convert into this;
+- `crm.Territory` (`TER-`) for geographic/segment territory rules in channel conflicts;
+- `accounting.Currency` for ISO monetary amounts;
+- `core.Document` (`DOC-`) for executed partner agreements and co-sell collateral;
+- `accounts.User` (`settings.AUTH_USER_MODEL`) for Channel Account Managers (CAMs), Direct Reps, and Channel Chiefs.
+
+**(b) Deal Registration is a temporary protection claim that converts into `crm.Opportunity` (`OPP-`).** A deal registration (`DLR-`) acts as an approval firewall with time-bound exclusivity (e.g. 90-180 days) and protected margin. Upon approval and deal progression, one-click conversion creates/links an active `crm.Opportunity` (`OPP-`).
+
+**(c) 4 models, 1 derived console page, 0 console tables.** The five NavERP.md bullets map to five distinct navigation destinations (L30). The four model list pages are management registries, and `partner_performance_console` is a derived, real-time computed performance dashboard (revenue, win rate, tier distribution, SLA compliance).
+
+**(d) Multi-tenant isolation inherited, never redeclared.** `apps/sales/models/_base.py::TenantNumbered` already declares `tenant = FK("core.Tenant", on_delete=CASCADE, related_name="+", db_index=True)` plus `number` (`editable=False`), `created_at`, `updated_at`. All four models inherit from `TenantNumbered`.
+
+**(e) Prefix registry — `PTR`, `DLR`, `JAP`, `CCF`.** All four prefixes are verified collision-free across the entire NavERP repository:
+- `PTR` = `PartnerProfile`
+- `DLR` = `DealRegistration`
+- `JAP` = `JointAccountPlan`
+- `CCF` = `ChannelConflict`
+
+## Models (from research — 1–4)
+
+All four live in a **new** package `apps/sales/models/PartnerChannel/`, extend `TenantNumbered`, and are re-exported from `apps/sales/models/__init__.py`.
+
+### 1. `PartnerProfile` [`PTR-`] — `apps/sales/models/PartnerChannel/PartnerProfiles.py` — **bullets 1 & 4 (Partner Recruitment, Onboarding & Performance)**
+Drivers: Web/portal intake & onboarding journey (R1, R2) · Tier progression (Bronze/Silver/Gold/Platinum) (P1) · Partner agreement and NDA tracking via `core.Document` (R5) · Certification compliance tracking (P3) · Commercial terms (base discount % and deal reg margin %) (P4) · Revenue target vs actuals (P2).
+
+| Field | Type | Notes |
+|---|---|---|
+| `partner` | FK `core.Party`, CASCADE, `related_name="partner_profiles"` | Partner organization (`core.Party` with `PartyRole(role="partner")`) |
+| `partner_type` | Char(30), `PARTNER_TYPE_CHOICES`, default `reseller` | reseller / system_integrator / msp / distributor / isv / referral_agent / strategic_alliance |
+| `onboarding_status` | Char(30), `ONBOARDING_STATUS_CHOICES`, default `applied` | applied / under_review / onboarding / active / suspended / terminated |
+| `tier` | Char(20), `PARTNER_TIER_CHOICES`, default `bronze` | bronze / silver / gold / platinum (explicit NavERP.md spec) |
+| `tier_effective_date` | DateField, null, blank | Date current tier became effective |
+| `tier_review_date` | DateField, null, blank | Next scheduled tier review date |
+| `application_date` | DateField, default `timezone.now` | Application submission date |
+| `agreement_signed_at` | DateField, null, blank | Date partner agreement was executed |
+| `agreement_document` | FK `core.Document`, SET_NULL, null, blank, `related_name="partner_agreements"` | Reuses `core.Document` for executed contract / NDA |
+| `channel_manager` | FK `settings.AUTH_USER_MODEL`, SET_NULL, null, blank, `related_name="managed_partners"` | Assigned Channel Account Manager (CAM) |
+| `authorized_territory` | FK `crm.Territory`, SET_NULL, null, blank, `related_name="authorized_partners"` | Authorized geographic / segment territory |
+| `currency` | FK `accounting.Currency`, PROTECT, `related_name="+"` | Operating currency for revenue targets |
+| `annual_revenue_target` | Decimal(14,2), default 0.00, `MinValueValidator(0)` | Annual revenue target |
+| `actual_revenue_ytd` | Decimal(14,2), default 0.00, `MinValueValidator(0)` | Actual closed-won revenue year-to-date (updated from deals/orders) |
+| `required_certifications_count` | PositiveIntegerField, default 1 | Mandatory certified personnel count for tier |
+| `active_certifications_count` | PositiveIntegerField, default 0 | Active certified reps count |
+| `base_discount_pct` | Decimal(5,2), default 10.00, `MinValueValidator(0)`, `MaxValueValidator(100)` | Standard partner product discount % |
+| `deal_reg_margin_pct` | Decimal(5,2), default 15.00, `MinValueValidator(0)`, `MaxValueValidator(100)` | Additional deal registration protection margin % |
+| `portal_access_enabled` | BooleanField, default False | Portal access activation flag |
+| `notes` | TextField, blank | Administrative notes |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto), `actual_revenue_ytd` (computed/updated from closed transactions).
+- **Validation in `clean()`:**
+  - `tier_review_date >= tier_effective_date` when both set.
+  - Multi-tenant guard: `partner`, `agreement_document`, `channel_manager`, and `authorized_territory` must match `self.tenant`.
+- **Meta:**
+  - `ordering = ["-annual_revenue_target", "partner__name"]`
+  - `constraints`: `UniqueConstraint(fields=["tenant", "number"], name="sales_ptr_ten_num_uniq")`, `UniqueConstraint(fields=["tenant", "partner"], name="sales_ptr_ten_party_uniq")`
+  - `indexes`: `["tenant", "tier"]` (`sales_ptr_ten_tier_idx`), `["tenant", "onboarding_status"]` (`sales_ptr_ten_status_idx`), `["tenant", "channel_manager"]` (`sales_ptr_ten_cam_idx`)
+
+### 2. `DealRegistration` [`DLR-`] — `apps/sales/models/PartnerChannel/DealRegistrations.py` — **bullet 2 (Deal Registration & Protection)**
+Drivers: Partner-submitted opportunity registration (D1) · Approval SLA workflow (D2) · Collision / duplicate detection flag (D3) · Exclusivity clock and protection window (D4) · Margin protection % (D5) · Exclusivity extension count (D6) · One-click conversion to `crm.Opportunity` (D7).
+
+| Field | Type | Notes |
+|---|---|---|
+| `partner` | FK `core.Party`, CASCADE, `related_name="deal_registrations"` | Submitting partner organization |
+| `customer_account` | FK `core.Party`, CASCADE, `related_name="partner_deal_registrations"` | Prospective customer / client account |
+| `deal_name` | Char(255) | Name / title of prospective deal |
+| `estimated_value` | Decimal(14,2), `MinValueValidator(0.01)` | Estimated deal monetary value |
+| `currency` | FK `accounting.Currency`, PROTECT, `related_name="+"` | ISO deal currency |
+| `expected_close_date` | DateField | Anticipated closing date |
+| `submission_date` | DateField, default `timezone.now` | Date registration was submitted |
+| `status` | Char(30), `DEAL_REG_STATUS_CHOICES`, default `submitted` | submitted / under_review / approved / rejected / expired / converted / conflicted |
+| `rejection_reason` | TextField, blank | Mandatory explanation if rejected |
+| `protection_start_date` | DateField, null, blank | Start date of deal exclusivity |
+| `protection_end_date` | DateField, null, blank | Expiration date of exclusivity lock |
+| `exclusivity_status` | Char(20), `EXCLUSIVITY_STATUS_CHOICES`, default `pending` | pending / active / extended / expired / released |
+| `protected_margin_pct` | Decimal(5,2), default 15.00, `MinValueValidator(0)`, `MaxValueValidator(100)` | Guaranteed partner margin protection % |
+| `extension_count` | PositiveIntegerField, default 0 | Number of 30/60 day protection extensions granted |
+| `is_conflicted` | BooleanField, default False | Flag indicating active dispute with direct or competing partner |
+| `conflict_summary` | TextField, blank | Summary of detected collisions / account claims |
+| `opportunity` | FK `crm.Opportunity`, SET_NULL, null, blank, `related_name="deal_registrations"` | Linked `crm.Opportunity` (`OPP-`) post-conversion |
+| `reviewed_by` | FK `settings.AUTH_USER_MODEL`, SET_NULL, null, blank, `related_name="reviewed_deal_registrations"` | CAM / manager who reviewed the submission |
+| `reviewed_at` | DateTimeField, null, blank | Review decision timestamp |
+| `partner_rep_name` | Char(120), blank | Submitting partner sales rep name |
+| `partner_rep_email` | EmailField, blank | Submitting partner sales rep email |
+| `notes` | TextField, blank | General deal notes |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto), `reviewed_by`, `reviewed_at`, `extension_count`, `opportunity` (linked on conversion), `is_conflicted` (system/conflict-managed).
+- **Validation in `clean()`:**
+  - `protection_end_date >= protection_start_date` when both set.
+  - `partner != customer_account` (partner cannot register a deal where they are the end customer).
+  - If `status == "converted"`, require `opportunity` FK.
+  - If `status == "rejected"`, require non-empty `rejection_reason`.
+  - Multi-tenant guard: all FKs must belong to `self.tenant`.
+- **Meta:**
+  - `ordering = ["-submission_date", "-estimated_value"]`
+  - `constraints`: `UniqueConstraint(fields=["tenant", "number"], name="sales_dlr_ten_num_uniq")`
+  - `indexes`: `["tenant", "status"]` (`sales_dlr_ten_status_idx`), `["tenant", "partner"]` (`sales_dlr_ten_partner_idx`), `["tenant", "customer_account"]` (`sales_dlr_ten_cust_idx`), `["tenant", "protection_end_date"]` (`sales_dlr_ten_prot_idx`)
+
+### 3. `JointAccountPlan` [`JAP-`] — `apps/sales/models/PartnerChannel/JointAccountPlans.py` — **bullet 3 (Partner Portal & Collaboration)**
+Drivers: Joint business/account planning (JBP) with target enterprise client (C2) · Co-sell motion specification (partner-led vs vendor-led vs joint-pursuit) (C3) · Co-branded collateral linkage via `core.Document` (C4) · Mutual strategic objectives and revenue targets (P2).
+
+| Field | Type | Notes |
+|---|---|---|
+| `partner` | FK `core.Party`, CASCADE, `related_name="joint_account_plans"` | Collaborating partner organization |
+| `client_account` | FK `core.Party`, CASCADE, `related_name="client_joint_account_plans"` | Target enterprise client / prospect account |
+| `plan_name` | Char(255) | Name of joint account plan |
+| `plan_year` | PositiveIntegerField, default 2026 | Fiscal planning year |
+| `period_start` | DateField | Plan execution start date |
+| `period_end` | DateField | Plan execution end date |
+| `status` | Char(30), `JAP_STATUS_CHOICES`, default `draft` | draft / active / in_review / achieved / abandoned |
+| `target_revenue` | Decimal(14,2), default 0.00, `MinValueValidator(0)` | Joint target sales booking value |
+| `actual_revenue` | Decimal(14,2), default 0.00, `MinValueValidator(0)` | Closed-won revenue achieved under this plan |
+| `currency` | FK `accounting.Currency`, PROTECT, `related_name="+"` | ISO currency for revenue tracking |
+| `vendor_lead` | FK `settings.AUTH_USER_MODEL`, SET_NULL, null, blank, `related_name="vendor_joint_plans"` | Internal direct rep or CAM lead |
+| `partner_lead_name` | Char(120), blank | Partner lead executive / account manager |
+| `partner_lead_email` | EmailField, blank | Partner lead contact email |
+| `co_sell_motion` | Char(30), `CO_SELL_MOTION_CHOICES`, default `joint_pursuit` | partner_led / vendor_led / joint_pursuit / services_only |
+| `strategic_objectives` | TextField, blank | Key strategic targets, technical architectures, win strategies |
+| `joint_value_proposition` | TextField, blank | Combined solution pitch and customer differentiation |
+| `action_items` | TextField, blank | Joint quarterly action items and meeting cadences |
+| `collateral_document` | FK `core.Document`, SET_NULL, null, blank, `related_name="joint_plan_documents"` | Attached joint proposal / co-branded solution brief |
+| `notes` | TextField, blank | Internal execution notes |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto), `actual_revenue` (derived/updated on closed deals).
+- **Validation in `clean()`:**
+  - `period_end >= period_start`.
+  - `partner != client_account`.
+  - Multi-tenant guard: all FKs must belong to `self.tenant`.
+- **Meta:**
+  - `ordering = ["-plan_year", "client_account__name"]`
+  - `constraints`: `UniqueConstraint(fields=["tenant", "number"], name="sales_jap_ten_num_uniq")`, `UniqueConstraint(fields=["tenant", "partner", "client_account", "plan_year"], name="sales_jap_ptr_clt_yr_uniq")`
+  - `indexes`: `["tenant", "status"]` (`sales_jap_ten_status_idx`), `["tenant", "partner"]` (`sales_jap_ten_partner_idx`), `["tenant", "client_account"]` (`sales_jap_ten_client_idx`)
+
+### 4. `ChannelConflict` [`CCF-`] — `apps/sales/models/PartnerChannel/ChannelConflicts.py` — **bullet 5 (Channel Conflict Management)**
+Drivers: Direct vs. indirect deal detection (X1) · Partner vs. partner collision dispute (X2) · Territory rules enforcement via `crm.Territory` (X3) · 3-tier escalation ladder (CAM -> Channel Chief -> CRO) (X4) · Adjudication & commission/revenue split resolution % (X5) · Durable resolution audit log (X6).
+
+| Field | Type | Notes |
+|---|---|---|
+| `conflict_type` | Char(35), `CONFLICT_TYPE_CHOICES`, default `direct_vs_indirect` | direct_vs_indirect / partner_vs_partner / territory_overlap / named_account_infringement |
+| `severity` | Char(20), `CONFLICT_SEVERITY_CHOICES`, default `medium` | low / medium / high / critical |
+| `status` | Char(30), `CONFLICT_STATUS_CHOICES`, default `detected` | detected / under_investigation / escalated_l1 / escalated_l2 / escalated_l3 / resolved / dismissed |
+| `deal_registration` | FK `sales.DealRegistration`, SET_NULL, null, blank, `related_name="conflicts"` | In-dispute deal registration |
+| `opportunity` | FK `crm.Opportunity`, SET_NULL, null, blank, `related_name="channel_conflicts"` | In-dispute active opportunity |
+| `claimant_partner` | FK `core.Party`, CASCADE, `related_name="partner_conflict_claims"` | Partner asserting claim / protection |
+| `competing_partner` | FK `core.Party`, SET_NULL, null, blank, `related_name="partner_competing_claims"` | Competing partner in partner-vs-partner dispute |
+| `direct_sales_rep` | FK `settings.AUTH_USER_MODEL`, SET_NULL, null, blank, `related_name="direct_rep_channel_conflicts"` | Direct rep in direct-vs-indirect dispute |
+| `client_account` | FK `core.Party`, CASCADE, `related_name="client_channel_conflicts"` | Prospective customer / account in dispute |
+| `territory` | FK `crm.Territory`, SET_NULL, null, blank, `related_name="territory_channel_conflicts"` | Territory master where conflict occurred |
+| `escalation_level` | Char(25), `ESCALATION_LEVEL_CHOICES`, default `l1_cam` | l1_cam / l2_channel_chief / l3_executive_cro (formal 3-tier ladder) |
+| `escalated_to` | FK `settings.AUTH_USER_MODEL`, SET_NULL, null, blank, `related_name="escalated_conflicts"` | Current adjudicator / assignee |
+| `resolution_outcome` | Char(30), `RESOLUTION_OUTCOME_CHOICES`, default `pending` | pending / partner_favored / direct_favored / split_commission / co_sell_mandate / deal_cancelled |
+| `split_percentage` | Decimal(5,2), default 0.00, `MinValueValidator(0)`, `MaxValueValidator(100)` | Partner credit/split % if outcome is split_commission |
+| `resolution_rationale` | TextField, blank | Documented reasoning / precedent for adjudication |
+| `resolved_by` | FK `settings.AUTH_USER_MODEL`, SET_NULL, null, blank, `related_name="resolved_channel_conflicts"` | Adjudicating user who closed the conflict |
+| `resolved_at` | DateTimeField, null, blank | Resolution timestamp |
+| `description` | TextField, blank | Initial dispute description and evidence |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto), `resolved_by`, `resolved_at` (managed via resolve workflow view).
+- **Validation in `clean()`:**
+  - If `status == "resolved"`, require `resolution_outcome != "pending"` and non-empty `resolution_rationale`.
+  - If `resolution_outcome == "split_commission"`, require `split_percentage > 0.00` and `< 100.00`.
+  - `claimant_partner != competing_partner`.
+  - `claimant_partner != client_account`.
+  - Multi-tenant guard: all FKs must belong to `self.tenant`.
+- **Meta:**
+  - `ordering = ["-created_at", "severity"]`
+  - `constraints`: `UniqueConstraint(fields=["tenant", "number"], name="sales_ccf_ten_num_uniq")`
+  - `indexes`: `["tenant", "status"]` (`sales_ccf_ten_status_idx`), `["tenant", "conflict_type"]` (`sales_ccf_ten_type_idx`), `["tenant", "escalation_level"]` (`sales_ccf_ten_esc_idx`), `["tenant", "client_account"]` (`sales_ccf_ten_client_idx`)
+
+---
+
+### Derived Console: `partner_performance_console` — **bullet 4 (Partner Performance Tracking)**
+URL: `sales:partner_performance_console`  
+View: `apps/sales/views/PartnerChannel/PartnerPerformanceConsoles.py::partner_performance_console`  
+Template: `templates/sales/partnerchannel/boards/partner_performance_console.html`  
+Pure query projection (0 new tables). Computes:
+- Total Partner Revenue YTD across all accredited partners
+- Target Attainment % (`actual_revenue_ytd / annual_revenue_target * 100`)
+- Active Partner Count by Tier (`Bronze`, `Silver`, `Gold`, `Platinum`)
+- Deal Registration Pipeline: count and volume by status (`submitted`, `under_review`, `approved`, `converted`, `rejected`, `expired`, `conflicted`)
+- Deal Registration Win / Conversion Rate %
+- Active Channel Conflict count (by escalation level: L1 CAM, L2 Channel Chief, L3 CRO)
+- Certification compliance rate (partners with `active_certifications >= required_certifications`)
+
+---
+
+## Backend (`apps/sales/{models,forms,views,urls}/PartnerChannel/`)
+
+### Models (`apps/sales/models/PartnerChannel/`)
+- [ ] `apps/sales/models/PartnerChannel/__init__.py` — re-export all models and choices constants
+- [ ] `apps/sales/models/PartnerChannel/PartnerProfiles.py` — `PartnerProfile`
+- [ ] `apps/sales/models/PartnerChannel/DealRegistrations.py` — `DealRegistration`
+- [ ] `apps/sales/models/PartnerChannel/JointAccountPlans.py` — `JointAccountPlan`
+- [ ] `apps/sales/models/PartnerChannel/ChannelConflicts.py` — `ChannelConflict`
+
+### Forms (`apps/sales/forms/PartnerChannel/`)
+- [ ] `apps/sales/forms/PartnerChannel/__init__.py` — re-export all forms
+- [ ] `apps/sales/forms/PartnerChannel/PartnerProfiles.py` — `PartnerProfileForm`, `PartnerProfileFilterForm`
+- [ ] `apps/sales/forms/PartnerChannel/DealRegistrations.py` — `DealRegistrationForm`, `DealRegistrationFilterForm`, `DealRegistrationReviewForm`, `DealRegistrationExtensionForm`
+- [ ] `apps/sales/forms/PartnerChannel/JointAccountPlans.py` — `JointAccountPlanForm`, `JointAccountPlanFilterForm`
+- [ ] `apps/sales/forms/PartnerChannel/ChannelConflicts.py` — `ChannelConflictForm`, `ChannelConflictFilterForm`, `ChannelConflictEscalationForm`, `ChannelConflictResolutionForm`
+
+### Views (`apps/sales/views/PartnerChannel/`)
+- [ ] `apps/sales/views/PartnerChannel/__init__.py` — re-export all views
+- [ ] `apps/sales/views/PartnerChannel/PartnerProfiles.py`:
+  - `partner_profile_list` (search, filters by tier, status, CAM; stats cards, pagination)
+  - `partner_profile_create` (validates tenant, assigns CAM)
+  - `partner_profile_detail` (full profile, certification gauge, deal registrations tab, joint plans tab)
+  - `partner_profile_edit`
+  - `partner_profile_delete` (POST with confirmation)
+  - `partner_profile_approve` (moves onboarding status from `under_review` to `onboarding` or `active`)
+- [ ] `apps/sales/views/PartnerChannel/DealRegistrations.py`:
+  - `deal_registration_list` (search, filters by partner, status, exclusivity; stats cards, pagination)
+  - `deal_registration_create`
+  - `deal_registration_detail` (timeline, margin protection banner, conflict check status)
+  - `deal_registration_edit`
+  - `deal_registration_delete` (POST with confirmation)
+  - `deal_registration_approve` (grants margin protection & sets exclusivity dates)
+  - `deal_registration_reject` (captures rejection reason)
+  - `deal_registration_convert` (creates or links `crm.Opportunity` `OPP-`)
+  - `deal_registration_extend` (extends protection window by 30/60 days, increments `extension_count`)
+- [ ] `apps/sales/views/PartnerChannel/JointAccountPlans.py`:
+  - `joint_account_plan_list` (search, filters by partner, client account, co-sell motion, status)
+  - `joint_account_plan_create`
+  - `joint_account_plan_detail` (strategic objectives, joint value proposition, action items)
+  - `joint_account_plan_edit`
+  - `joint_account_plan_delete` (POST with confirmation)
+- [ ] `apps/sales/views/PartnerChannel/ChannelConflicts.py`:
+  - `channel_conflict_list` (search, filters by conflict type, severity, escalation level, status)
+  - `channel_conflict_create`
+  - `channel_conflict_detail` (dispute parties, escalation history, resolution outcome)
+  - `channel_conflict_edit`
+  - `channel_conflict_delete` (POST with confirmation)
+  - `channel_conflict_escalate` (advances escalation level L1 -> L2 -> L3)
+  - `channel_conflict_resolve` (captures outcome, split %, and rationale)
+- [ ] `apps/sales/views/PartnerChannel/PartnerPerformanceConsoles.py`:
+  - `partner_performance_console` (executive KPIs, partner tier scorecard, conversion analytics)
+
+### URLs (`apps/sales/urls/PartnerChannel/`)
+- [ ] `apps/sales/urls/PartnerChannel/__init__.py` — combines all 5 url modules
+- [ ] `apps/sales/urls/PartnerChannel/PartnerProfiles.py`
+- [ ] `apps/sales/urls/PartnerChannel/DealRegistrations.py`
+- [ ] `apps/sales/urls/PartnerChannel/JointAccountPlans.py`
+- [ ] `apps/sales/urls/PartnerChannel/ChannelConflicts.py`
+- [ ] `apps/sales/urls/PartnerChannel/PartnerPerformanceConsoles.py`
+
+### Package Re-exports & Admin & Seeder
+- [ ] `apps/sales/models/__init__.py` — add Sub-module 8.14 re-export block (models + choices)
+- [ ] `apps/sales/forms/__init__.py` — add Sub-module 8.14 re-export block
+- [ ] `apps/sales/views/__init__.py` — add Sub-module 8.14 re-export block
+- [ ] `apps/sales/urls/__init__.py` — wire `*_partner_channel` into `urlpatterns` (literal paths first)
+- [ ] `apps/sales/admin.py` — register `PartnerProfile`, `DealRegistration`, `JointAccountPlan`, and `ChannelConflict` with `TenantScopedAdmin` / FK narrowing
+- [ ] `apps/sales/migrations/0025_*.py` — `makemigrations sales`
+- [ ] `apps/sales/management/commands/seed_sales.py` — extend with `_seed_partner_channel(self, tenant, user)` (idempotent, per-tenant guard, reusing existing Acme Corp and Globex `Party` rows)
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py`: add `LIVE_LINKS["8.14"]` mapping the exact five NavERP.md feature bullets + extra leaves:
+  ```python
+  "8.14": {
+      # OWNERSHIP RULING (L36/L37)
+      # Reuses core.Party (role="partner") for partner organization master;
+      # reuses crm.Opportunity (OPP-) as the deal master that approved deal registrations convert into;
+      # reuses crm.Territory (TER-) for territory boundary rules and conflict detection;
+      # reuses accounting.Currency for monetary amounts;
+      # reuses core.Document (DOC-) for partner agreements and co-sell collateral;
+      # reuses accounts.User for CAMs, direct sales reps, and Channel Chiefs.
+      # Zero duplicate partner/company, opportunity, territory, currency or document tables declared.
+      "Partner Recruitment & Onboarding": "sales:partner_profile_list",
+      "Deal Registration & Protection": "sales:deal_registration_list",
+      "Partner Portal & Collaboration": "sales:joint_account_plan_list",
+      "Partner Performance Tracking": "sales:partner_performance_console",
+      "Channel Conflict Management": "sales:channel_conflict_list",
+      # Extra live leaves
+      "Partner Profiles": "sales:partner_profile_list",
+      "Deal Registrations": "sales:deal_registration_list",
+      "Joint Account Plans": "sales:joint_account_plan_list",
+      "Channel Conflicts": "sales:channel_conflict_list",
+      "Partner Performance Console": "sales:partner_performance_console",
+  },
+  ```
+
+---
+
+## Templates (`templates/sales/partnerchannel/`)
+
+13 templates: 4 entities × 3 pages (`list`, `detail`, `form`) + 1 console template:
+- [ ] `templates/sales/partnerchannel/partnerprofile/{list,detail,form}.html`
+- [ ] `templates/sales/partnerchannel/dealregistration/{list,detail,form}.html`
+- [ ] `templates/sales/partnerchannel/jointaccountplan/{list,detail,form}.html`
+- [ ] `templates/sales/partnerchannel/channelconflict/{list,detail,form}.html`
+- [ ] `templates/sales/partnerchannel/boards/partner_performance_console.html`
+
+### UI/UX & Theme Invariants:
+- All pages extend `base.html` and include standard breadcrumbs.
+- Each **list** page:
+  - `.page-header` + `.stat-grid` of `.stat-card` / `.stat-icon`
+  - `.card > .card-body > <form method="get" class="filter-bar">` reflecting `request.GET` + Apply + Reset
+  - FK select controls compare via `|stringformat:"d"`
+  - Data table with dedicated **Actions column** (view / edit / delete-POST with CSRF and confirm dialog)
+  - `{% empty %}` empty state
+  - `{% include "partials/pagination.html" %}` with `has_previous`/`has_next` guards (L9)
+- Badges use color-named theme classes (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`). Never semantic `-success`/`-danger` (L33).
+- Each **detail** page:
+  - Header with title, auto-number badge, status badge
+  - Actions bar: Edit (conditional on status), Action modals (Approve / Reject / Convert / Extend / Escalate / Resolve), Delete (POST with confirm), Back to List
+  - Structured cards for commercial terms, ownership, linked records, and timeline
+- Each **form** page:
+  - `{% csrf_token %}`, styled input fields, clear error placement, Save / Cancel buttons
+  - Excluded fields (`tenant`, `number`, `created_at`, `updated_at`, etc.) are never rendered as inputs
+
+---
+
+## Verify
+
+- [ ] `venv\Scripts\python.exe manage.py makemigrations sales` → `0025_partnerprofile_dealregistration_and_more.py` (re-verify number first)
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_sales` — run **twice**; second run produces identical counts (idempotent)
+- [ ] `venv\Scripts\python.exe manage.py check` → `System check identified no issues (0 silenced)`
+- [ ] `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` → `No changes detected`
+- [ ] All 24 new url names reverse cleanly without `NoReverseMatch`
+- [ ] **temp/ smoke sweep as `admin_acme` / `password`** — assert content, not just status codes:
+  - 4 list pages → 200, each containing seeded records (`PTR-`, `DLR-`, `JAP-`, `CCF-`)
+  - 4 detail + 4 create + 4 edit pages → 200
+  - 1 console page (`partner_performance_console`) → 200 with populated KPI metrics and partner tables
+  - Filter GET parameters on every list page and console → no 500, clean filter matching
+  - Hostile junk params (`?page=999`, `?status=invalid`, `?partner=999999999999`) → 200, no 500, fallback to unfiltered view
+  - Page 2 on pagination → 200
+  - **Cross-tenant IDOR** → a `admin_globex` pk returns 404 on detail/edit routes for `admin_acme`
+  - Grep rendered HTML for `{#` and `{% comment` → zero hits (L2)
+  - Grep rendered HTML for `badge-success|badge-danger|badge-warning|badge-purple` → zero hits (L33)
+- [ ] **Sidebar check**: `LIVE_LINKS["8.14"]` present; sidebar displays 8.14 with 5 Live bullets resolving to distinct hrefs (L30)
+- [ ] `.agents/tasks/gaps-sales-8.14.md` created in integrate step and linked in review/close-out block
+
+---
+
+## Close-out
+
+- [ ] **Phase 4 — six reviewers, ONE AFTER ANOTHER**:
+  `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`, each reading `BASE...HEAD`, appending findings to `.claude/tasks/review-sales-8.14.md` (dedupe, sort Critical → Important → Minor, assign `C1` / `I3` / `M7` IDs, commit).
+- [ ] **Phase 5 — `code-fixer`**: fixes every finding in ID order, one commit per file, marking each `[x] fixed` / `[~] skipped — reason`.
+- [ ] **Phase 6 — Tests (serial)**:
+  - Write test contract and shared helpers
+  - Four test modules one after another:
+    - `apps/sales/tests/test_partnerchannel_models.py`
+    - `apps/sales/tests/test_partnerchannel_forms.py`
+    - `apps/sales/tests/test_partnerchannel_views.py`
+    - `apps/sales/tests/test_partnerchannel_security.py`
+  - Full unfiltered test suite passes green (`pytest apps/sales/tests/`)
+- [ ] **Phase 7 — Skill + README**:
+  - Update `.claude/skills/sales/SKILL.md` with 8.14 models, routes, templates, and seeder info
+  - Update `README.md` marking Sub-module 8.14 complete
+
+---
+
+## Later passes / deferred (Gap Register items for `.agents/tasks/gaps-sales-8.14.md`)
+
+- **GAP-sales-8.14-01: External Partner Portal SAML/SSO Authentication** — Self-service external identity provider login for partner reps.
+- **GAP-sales-8.14-02: Third-Party Ecosystem Account Mapping Network (Crossbeam API)** — Automated secure pipeline data mesh and account overlap discovery.
+- **GAP-sales-8.14-03: Hyperscaler Marketplace Co-Sell Sync (AWS ACE / Microsoft Azure Partner Center)** — Automated bidirectional synchronization of deal registrations to hyperscaler co-sell portals.
+- **GAP-sales-8.14-04: Embedded SCORM LMS Training & Video Exam Engine** — Video courseware streaming and automated quiz accreditation.
+- **GAP-sales-8.14-05: Electronic Signature API Integration (DocuSign / Adobe Sign)** — Webhook-driven contract signature execution for partner agreements.
+- **MDF (Market Development Funds) Budget & Claim Ledger** — Parked to Marketing & Accounting cross-module integration.
+
+---
+
+## Declined, with reasons (so it is not re-litigated)
+
+- **A duplicate Company / Partner table** — L36/L37. `core.Party` (`apps/core/models/Party.py`) with `PartyRole(role="partner")` is the enterprise entity master. 8.14 extends it by FK; never declares a second company table.
+- **A duplicate Opportunity table** — L36/L37. Deal registrations represent temporary claims with exclusivity clocks. Approved registrations convert into `crm.Opportunity` (`OPP-`).
+- **A duplicate Territory master table** — CRM 1.2 owns `crm.Territory` (`TER-`). Channel conflict boundary rules reference it by FK.
+- **A second financial ledger (L29)** — Partner revenue targets and closed-won rollups are operational sales figures. Formal commission statements belong to Sales 8.10 (`apps/sales/models/IncentiveCompensation/`) and settlements to Module 2 Accounting.
+- **A duplicate Document / File master** — DMS / Core owns `core.Document` (`DOC-`). Partner agreements and collateral attach via FK.
+- **A duplicate User / Rep table** — `accounts.User` is the authentication and rep master. CAMs, Partner Leads, and Channel Chiefs reference it by FK.
+- **A separate table for the Partner Performance Console** — The console is a real-time computed aggregation over `PartnerProfile`, `DealRegistration`, `JointAccountPlan`, and `ChannelConflict` records. No drift-prone duplicate rollup table.
+
+---
+
+## Review notes
+(filled in at the end)
