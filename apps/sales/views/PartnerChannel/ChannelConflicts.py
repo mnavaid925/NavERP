@@ -2,6 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -111,23 +112,24 @@ def channel_conflict_create(request):
     if request.method == "POST":
         form = ChannelConflictForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            obj = form.save(commit=False)
-            obj.tenant = request.tenant
-            obj.save()
-            # If linked to deal registration, flag registration as conflicted
-            if obj.deal_registration:
-                obj.deal_registration.is_conflicted = True
-                obj.deal_registration.conflict_summary = f"Conflict {obj.number} filed: {obj.get_conflict_type_display()}"
-                obj.deal_registration.save(update_fields=["is_conflicted", "conflict_summary", "updated_at"])
+            with transaction.atomic():
+                obj = form.save(commit=False)
+                obj.tenant = request.tenant
+                obj.save()
+                # If linked to deal registration, flag registration as conflicted
+                if obj.deal_registration:
+                    obj.deal_registration.is_conflicted = True
+                    obj.deal_registration.conflict_summary = f"Conflict {obj.number} filed: {obj.get_conflict_type_display()}"
+                    obj.deal_registration.save(update_fields=["is_conflicted", "conflict_summary", "updated_at"])
 
-            write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="ChannelConflict",
-                object_id=str(obj.pk),
-                details=f"Filed channel conflict {obj.number} — {obj.get_conflict_type_display()}",
-            )
+                write_audit_log(
+                    tenant=request.tenant,
+                    user=request.user,
+                    action="create",
+                    model_name="ChannelConflict",
+                    object_id=str(obj.pk),
+                    details=f"Filed channel conflict {obj.number} — {obj.get_conflict_type_display()}",
+                )
             messages.success(request, f"Channel conflict dispute {obj.number} filed successfully.")
             return redirect("sales:channel_conflict_detail", pk=obj.pk)
     else:
