@@ -117,6 +117,9 @@ def deal_registration_create(request):
                 obj.protection_start_date = timezone.localdate()
                 obj.protection_end_date = obj.protection_start_date + timezone.timedelta(days=90)
                 obj.exclusivity_status = "exclusive"
+            if obj.status in ("approved", "rejected") and not obj.reviewed_at:
+                obj.reviewed_at = timezone.now()
+                obj.reviewed_by = request.user
             obj.save()
             write_audit_log(
                 tenant=request.tenant,
@@ -145,6 +148,9 @@ def deal_registration_edit(request, pk):
                 reg.protection_start_date = timezone.localdate()
                 reg.protection_end_date = reg.protection_start_date + timezone.timedelta(days=90)
                 reg.exclusivity_status = "exclusive"
+            if reg.status in ("approved", "rejected") and not reg.reviewed_at:
+                reg.reviewed_at = timezone.now()
+                reg.reviewed_by = request.user
             reg.save()
             write_audit_log(
                 tenant=request.tenant,
