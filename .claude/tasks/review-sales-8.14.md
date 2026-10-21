@@ -66,4 +66,23 @@ Needs Fixes — 1 Critical regression risk (Lesson L10 filter-argument 500 on nu
 - `templates/sales/partnerchannel/jointaccountplan/list.html:154` & `detail.html:22` — Ad-hoc badge pill styling `<span class="text-xs font-medium px-2 py-1 rounded bg-slate-100 text-slate-800">` instead of design system `<span class="badge badge-slate">`.
 - All four `list.html` templates — Missing `aria-label` attributes on icon-only table action buttons.
 
+---
+
+## 4. Performance Reviewer Findings
+
+### Verdict
+Safe to commit after fixing Important findings (no Critical issues found; list views have zero N+1 and full select_related coverage). Console dashboard queries can be reduced from 19 to 7.
+
+### Critical
+None.
+
+### Important
+- `apps/sales/views/PartnerChannel/PartnerProfiles.py:219-230` — Tier distribution in `partner_performance_console` generates 10 queries via loop (iterating over 5 tiers with `.count()` and `.aggregate(Sum())`). Fix: replace loop with a single grouped aggregation query using `values("tier").annotate(count=Count("id"), revenue=Sum("actual_revenue_ytd"))`.
+- `apps/sales/views/PartnerChannel/PartnerProfiles.py:205-217` — Redundant single-metric queries for console stat cards (3 queries on partners, 2 queries on registrations). Fix: collapse into two single `.aggregate(...)` statements with conditional `Count`/`Sum`.
+
+### Minor
+- `apps/sales/views/PartnerChannel/DealRegistrations.py:99` — Unbounded child query on `deal_registration_detail`: `conflicts` queryset lacks slice. Fix: append `[:10]`.
+- Composite indexes missing on tenant-filtered dropdown columns (`PartnerProfile.partner_type`, `DealRegistration.exclusivity_status`, `JointAccountPlan.co_sell_motion`).
+
+
 
