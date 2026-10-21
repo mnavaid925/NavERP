@@ -29,6 +29,7 @@ class JointAccountPlanForm(TenantUniqueMixin, TenantModelForm):
             "co_sell_motion",
             "strategic_objectives",
             "joint_value_proposition",
+            "action_items",
             "collateral_document",
             "notes",
         ]
@@ -49,6 +50,7 @@ class JointAccountPlanForm(TenantUniqueMixin, TenantModelForm):
             "co_sell_motion": forms.Select(attrs={"class": "form-select"}),
             "strategic_objectives": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
             "joint_value_proposition": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
+            "action_items": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": '[{"action": "Joint Solution Demo", "owner": "Partner CAM"}]'}),
             "collateral_document": forms.Select(attrs={"class": "form-select"}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
