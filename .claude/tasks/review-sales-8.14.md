@@ -25,3 +25,24 @@ None.
 - `templates/sales/partnerchannel/partnerprofile/list.html:72-104` — `channel_managers` is queried and passed in the view context, and `channel_manager` is parsed from `request.GET`, but no `<select name="channel_manager">` filter dropdown is rendered in the filter form. Fix: add CAM dropdown to the list filter form.
 - `apps/sales/forms/PartnerChannel/DealRegistrations.py:35` & `apps/sales/forms/PartnerChannel/ChannelConflicts.py:33` — `reviewed_at` and `resolved_at` are exposed as editable `datetime-local` inputs in the form `Meta.fields` despite being view-managed timestamps. Fix: exclude system timestamp fields from form `Meta.fields` and let the view set them on adjudication/approval.
 - `apps/sales/management/commands/seed_sales.py:154` — The completion message in `seed_sales.py` logs "Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, and 8.13 seed complete" but omits 8.14. Fix: append 8.14 to the stdout success message.
+
+---
+
+## 2. Explorer Findings
+
+### Verdict
+Commit after fixing Important and Minor contract drift items (no Critical issues found; multi-tenancy, Core spine reuse, and package architecture are rock solid).
+
+### Critical
+None.
+
+### Important
+- URL Route Pattern Drift from Contract (`.../create/` vs `.../new/`): In `.claude/tasks/contract-sales-8.14.md` (Section 3), create route paths are pinned as `partner-channel/partners/new/`, `partner-channel/deal-registrations/new/`, `partner-channel/joint-plans/new/`, `partner-channel/conflicts/new/`. In `apps/sales/urls/PartnerChannel/`, all 4 route patterns were implemented with `/create/`. Fix: update route paths to `.../new/` (or provide aliases).
+- Missing `action_items` in `JointAccountPlanForm.Meta.fields`: In `.claude/tasks/contract-sales-8.14.md` (Section 2.3), `JointAccountPlanForm.Meta.fields` specifies `action_items`. In `apps/sales/forms/PartnerChannel/JointAccountPlans.py:16-34`, `action_items` is omitted. Fix: include `action_items` in `Meta.fields` with textarea widget.
+- Missing Gap Register File (`.agents/tasks/gaps-sales-8.14.md`): Five deferred features were outlined in `todo.md` (`GAP-sales-8.14-01` to `GAP-sales-8.14-05`), but `.agents/tasks/gaps-sales-8.14.md` has not been authored yet. Fix: author `.agents/tasks/gaps-sales-8.14.md` per project standards.
+
+### Minor
+- `templates/sales/partnerchannel/partnerprofile/list.html:72-104` — `channel_managers` is passed in view context but missing `<select name="channel_manager">` in template filter form.
+- `templates/sales/partnerchannel/channelconflict/list.html:72-105` — `escalation_level_choices` and `selected_level` are passed in view context but missing `<select name="escalation_level">` in template filter form.
+- `apps/sales/urls/PartnerChannel/PartnerProfiles.py:12` & `apps/sales/views/PartnerChannel/PartnerProfiles.py:197` — Console route and view are co-located in `PartnerProfiles.py` rather than separate `PartnerPerformanceConsoles.py` files.
+
