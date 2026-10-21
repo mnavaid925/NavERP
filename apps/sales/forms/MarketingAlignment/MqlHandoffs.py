@@ -79,6 +79,9 @@ class MqlHandoffForm(TenantUniqueMixin, TenantModelForm):
             self.fields["currency"].queryset = Currency.objects.filter(
                 is_active=True
             ).order_by("code")
+        if not self.instance.pk and "status" in self.fields:
+            self.fields["status"].initial = "pending"
+            self.fields["status"].disabled = True
 
     def clean(self):
         cleaned_data = super().clean()
