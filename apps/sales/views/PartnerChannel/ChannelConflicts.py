@@ -126,12 +126,11 @@ def channel_conflict_create(request):
                     obj.deal_registration.save(update_fields=["is_conflicted", "conflict_summary", "updated_at"])
 
                 write_audit_log(
-                    tenant=request.tenant,
                     user=request.user,
+                    obj=obj,
                     action="create",
-                    model_name="ChannelConflict",
-                    object_id=str(obj.pk),
-                    details=f"Filed channel conflict {obj.number} — {obj.get_conflict_type_display()}",
+                    changes=f"Filed channel conflict {obj.number} — {obj.get_conflict_type_display()}",
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Channel conflict dispute {obj.number} filed successfully.")
             return redirect("sales:channel_conflict_detail", pk=obj.pk)
@@ -154,12 +153,11 @@ def channel_conflict_edit(request, pk):
             ccf.save()
 
             write_audit_log(
-                tenant=request.tenant,
                 user=request.user,
+                obj=obj,
                 action="update",
-                model_name="ChannelConflict",
-                object_id=str(obj.pk),
-                details=f"Updated channel conflict {obj.number} (Status: {obj.get_status_display()})",
+                changes=f"Updated channel conflict {obj.number} (Status: {obj.get_status_display()})",
+                tenant=request.tenant,
             )
             messages.success(request, f"Channel conflict {obj.number} updated successfully.")
             return redirect("sales:channel_conflict_detail", pk=obj.pk)
@@ -181,12 +179,11 @@ def channel_conflict_delete(request, pk):
     number = obj.number
     obj.delete()
     write_audit_log(
-        tenant=request.tenant,
         user=request.user,
+        obj=obj,
         action="delete",
-        model_name="ChannelConflict",
-        object_id=str(pk),
-        details=f"Deleted channel conflict {number}",
+        changes=f"Deleted channel conflict {number}",
+        tenant=request.tenant,
     )
     messages.success(request, f"Channel conflict dispute {number} deleted successfully.")
     return redirect("sales:channel_conflict_list")
