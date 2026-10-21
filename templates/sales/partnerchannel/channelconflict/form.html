@@ -214,25 +214,11 @@
                             {% endif %}
                         </div>
 
-                        <div class="form-group">
-                            <label class="form-label font-medium" for="{{ form.resolved_by.id_for_label }}">
-                                Adjudicating Officer
-                            </label>
-                            {{ form.resolved_by }}
-                            {% if form.resolved_by.errors %}
-                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.resolved_by.errors.0 }}</div>
-                            {% endif %}
+                        {% if is_edit and conflict.resolved_at %}
+                        <div class="form-group sm:col-span-2 p-3 bg-slate-50 rounded border border-slate-200 text-xs text-slate-600">
+                            <strong>Resolution Audit:</strong> Adjudicated by {{ conflict.resolved_by.get_full_name|default:conflict.resolved_by.username|default:"System" }} on {{ conflict.resolved_at|date:"Y-m-d H:i" }}
                         </div>
-
-                        <div class="form-group">
-                            <label class="form-label font-medium" for="{{ form.resolved_at.id_for_label }}">
-                                Resolution Timestamp
-                            </label>
-                            {{ form.resolved_at }}
-                            {% if form.resolved_at.errors %}
-                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.resolved_at.errors.0 }}</div>
-                            {% endif %}
-                        </div>
+                        {% endif %}
 
                         <div class="form-group sm:col-span-2">
                             <label class="form-label font-medium" for="{{ form.resolution_rationale.id_for_label }}">
