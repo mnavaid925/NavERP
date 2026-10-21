@@ -177,6 +177,9 @@ class ChannelConflict(TenantNumbered):
             if self.client_account.tenant_id != self.tenant_id:
                 raise ValidationError({"client_account": "The customer account belongs to another workspace."})
 
+        if self.claimant_partner_id and self.client_account_id and self.claimant_partner_id == self.client_account_id:
+            raise ValidationError({"client_account": "The claimant partner cannot lodge a conflict against itself as the customer account."})
+
         if self.competing_partner_id and hasattr(self, "tenant_id"):
             if self.competing_partner.tenant_id != self.tenant_id:
                 raise ValidationError({"competing_partner": "The competing partner belongs to another workspace."})
