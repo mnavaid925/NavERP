@@ -29,8 +29,6 @@ class ChannelConflictForm(TenantUniqueMixin, TenantModelForm):
             "resolution_outcome",
             "split_percentage",
             "resolution_rationale",
-            "resolved_by",
-            "resolved_at",
             "description",
         ]
         widgets = {
@@ -49,8 +47,6 @@ class ChannelConflictForm(TenantUniqueMixin, TenantModelForm):
             "resolution_outcome": forms.Select(attrs={"class": "form-select"}),
             "split_percentage": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": 0, "max": 100}),
             "resolution_rationale": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
-            "resolved_by": forms.Select(attrs={"class": "form-select"}),
-            "resolved_at": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}),
             "description": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
 
@@ -91,7 +87,6 @@ class ChannelConflictForm(TenantUniqueMixin, TenantModelForm):
             users_qs = User.objects.filter(tenant=self.tenant, is_active=True).order_by("first_name", "last_name")
             self.fields["direct_sales_rep"].queryset = users_qs
             self.fields["escalated_to"].queryset = users_qs
-            self.fields["resolved_by"].queryset = users_qs
 
     def clean(self):
         cleaned_data = super().clean()
@@ -107,7 +102,6 @@ class ChannelConflictForm(TenantUniqueMixin, TenantModelForm):
                 "territory",
                 "direct_sales_rep",
                 "escalated_to",
-                "resolved_by",
             ],
         )
         return cleaned_data
