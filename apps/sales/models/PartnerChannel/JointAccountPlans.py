@@ -98,6 +98,7 @@ class JointAccountPlan(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "partner", "client_account"], name="sales_jap_part_client_idx"),
             models.Index(fields=["tenant", "status"], name="sales_jap_status_idx"),
+            models.Index(fields=["tenant", "co_sell_motion"], name="sales_jap_motion_idx"),
         ]
 
     def __str__(self):
