@@ -108,12 +108,11 @@ def joint_account_plan_create(request):
             obj.tenant = request.tenant
             obj.save()
             write_audit_log(
-                tenant=request.tenant,
                 user=request.user,
+                obj=obj,
                 action="create",
-                model_name="JointAccountPlan",
-                object_id=str(obj.pk),
-                details=f"Created joint account plan {obj.number} — {obj.plan_name}",
+                changes=f"Created joint account plan {obj.number} — {obj.plan_name}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Joint account plan {obj.number} created successfully.")
             return redirect("sales:joint_account_plan_detail", pk=obj.pk)
@@ -131,12 +130,11 @@ def joint_account_plan_edit(request, pk):
         if form.is_valid():
             form.save()
             write_audit_log(
-                tenant=request.tenant,
                 user=request.user,
+                obj=obj,
                 action="update",
-                model_name="JointAccountPlan",
-                object_id=str(obj.pk),
-                details=f"Updated joint account plan {obj.number}",
+                changes=f"Updated joint account plan {obj.number}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Joint account plan {obj.number} updated successfully.")
             return redirect("sales:joint_account_plan_detail", pk=obj.pk)
@@ -158,12 +156,11 @@ def joint_account_plan_delete(request, pk):
     number = obj.number
     obj.delete()
     write_audit_log(
-        tenant=request.tenant,
         user=request.user,
+        obj=obj,
         action="delete",
-        model_name="JointAccountPlan",
-        object_id=str(pk),
-        details=f"Deleted joint account plan {number}",
+        changes=f"Deleted joint account plan {number}",
+        tenant=request.tenant,
     )
     messages.success(request, f"Joint account plan {number} deleted successfully.")
     return redirect("sales:joint_account_plan_list")
