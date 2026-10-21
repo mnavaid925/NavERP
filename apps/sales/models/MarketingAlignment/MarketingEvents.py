@@ -201,14 +201,17 @@ class MarketingEvent(TenantNumbered):
         registered = self.registered_count
         if not registered:
             return None
-        cached = getattr(self, "_prefetched_objects_cache", {}).get("registrations")
-        if cached is not None:
-            total = sum((r.revenue_attributed or Decimal("0.00")) for r in cached)
+        if "revenue_total" in self.__dict__:
+            total = self.__dict__["revenue_total"] or Decimal("0.00")
         else:
-            total = (
-                self.registrations.aggregate(total=Sum("revenue_attributed"))["total"]
-                or Decimal("0.00")
-            )
+            cached = getattr(self, "_prefetched_objects_cache", {}).get("registrations")
+            if cached is not None:
+                total = sum((r.revenue_attributed or Decimal("0.00")) for r in cached)
+            else:
+                total = (
+                    self.registrations.aggregate(total=Sum("revenue_attributed"))["total"]
+                    or Decimal("0.00")
+                )
         return total / registered
 
     def clean(self):
