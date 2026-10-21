@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}Deal Registrations & Protection — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:partner_performance_console' %}">Partner & Channel</a>
+            <span>/</span>
+            <span>Deal Registrations</span>
+        </div>
+        <h1 class="page-title">Deal Registrations & Protection</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:partner_performance_console' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Performance Console</span>
+        </a>
+        <a href="{% url 'sales:deal_registration_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Register Deal</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Bar -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-text"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Registered</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Approved Protected</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.approved_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Pending Review</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.pending_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Conflicted Deals</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.conflicted_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Pipeline Value</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_pipeline|default:"0.00"|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+            <div>
+                <label class="form-label">Search Deals</label>
+                <input type="text" name="q" value="{{ q }}" placeholder="Deal, partner, client..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label">Registration Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if selected_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Exclusivity Status</label>
+                <select name="exclusivity_status" class="form-select">
+                    <option value="">All Exclusivity Types</option>
+                    {% for code, label in exclusivity_choices %}
+                    <option value="{{ code }}" {% if selected_exclusivity == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Partner Firm</label>
+                <select name="partner" class="form-select">
+                    <option value="">All Partners</option>
+                    {% for p in partners %}
+                    <option value="{{ p.pk }}" {% if selected_partner == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'sales:deal_registration_list' %}" class="btn btn-outline" title="Reset filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-body p-0">
+        {% if deal_registrations %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Deal Name</th>
+                        <th>Partner</th>
+                        <th>Client Account</th>
+                        <th>Estimated Value</th>
+                        <th>Status</th>
+                        <th>Exclusivity</th>
+                        <th>Protection Expiry</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in deal_registrations %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">
+                                <a href="{% url 'sales:deal_registration_detail' item.pk %}" class="hover:text-blue-600">
+                                    {{ item.deal_name }}
+                                </a>
+                            </div>
+                            <div class="text-xs text-slate-500">{{ item.number }}</div>
+                        </td>
+                        <td>
+                            <span class="text-sm font-medium text-slate-900">{{ item.partner.name }}</span>
+                        </td>
+                        <td>
+                            <span class="text-sm text-slate-700">{{ item.customer_account.name }}</span>
+                        </td>
+                        <td>
+                            <span class="text-sm font-semibold text-slate-900">
+                                {{ item.currency.code }} {{ item.estimated_value|floatformat:2 }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge {{ item.status_badge_class }}">
+                                {{ item.get_status_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge {{ item.exclusivity_badge_class }}">
+                                {{ item.get_exclusivity_status_display }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if item.protection_end_date %}
+                            <div class="text-sm {% if item.is_protection_active %}text-emerald-700 font-medium{% else %}text-slate-400{% endif %}">
+                                {{ item.protection_end_date }}
+                            </div>
+                            <div class="text-xs text-slate-500">
+                                {% if item.is_protection_active %}
+                                {{ item.days_remaining }} days left
+                                {% else %}
+                                Expired
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <span class="text-slate-400">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="table-actions text-right">
+                            <a href="{% url 'sales:deal_registration_detail' item.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'sales:deal_registration_edit' item.pk %}" class="btn btn-icon" title="Edit registration">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form action="{% url 'sales:deal_registration_delete' item.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete deal registration {{ item.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-rose-600 hover:bg-rose-50" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} registrations
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}&q={{ q }}&status={{ selected_status }}&exclusivity_status={{ selected_exclusivity }}&partner={{ selected_partner }}" class="btn btn-outline py-1 px-3">
+                    Previous
+                </a>
+                {% endif %}
+                <span class="py-1 px-3 text-sm font-medium text-slate-700">
+                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                </span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&q={{ q }}&status={{ selected_status }}&exclusivity_status={{ selected_exclusivity }}&partner={{ selected_partner }}" class="btn btn-outline py-1 px-3">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state p-12 text-center">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 text-blue-600 mb-4">
+                <i data-lucide="shield-check" class="w-8 h-8"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-slate-900 mb-1">No Deal Registrations</h3>
+            <p class="text-sm text-slate-500 max-w-sm mx-auto mb-6">
+                {% if q or selected_status or selected_exclusivity or selected_partner %}
+                No deal registrations matched your filters.
+                {% else %}
+                No partner opportunities have been registered yet. Partners register deals to secure margin protection.
+                {% endif %}
+            </p>
+            <a href="{% url 'sales:deal_registration_create' %}" class="btn btn-primary">
+                <i data-lucide="plus"></i>
+                <span>Register Deal</span>
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
