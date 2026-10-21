@@ -151,7 +151,7 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, backfill=backfill)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, and 8.13 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12, 8.13, and 8.14 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
