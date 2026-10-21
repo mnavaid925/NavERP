@@ -107,6 +107,7 @@ class DealRegistration(TenantNumbered):
             models.Index(fields=["tenant", "customer_account"], name="sales_dlr_cust_idx"),
             models.Index(fields=["tenant", "protection_end_date"], name="sales_dlr_prot_end_idx"),
             models.Index(fields=["tenant", "status"], name="sales_dlr_stat_idx"),
+            models.Index(fields=["tenant", "exclusivity_status"], name="sales_dlr_excl_idx"),
         ]
 
     def __str__(self):
