@@ -17,18 +17,13 @@ caching takes **20 to 45 minutes per run** just replaying migrations (Lesson L48
    - NEVER run `pytest -q apps/<app>` while authoring/iterating. That executes 40+ legacy test files and hundreds of tests.
    - Run ONLY the single file you are writing: `venv\Scripts\python.exe -m pytest apps/<app>/tests/<target_file>.py ...`
 
-2. **FAST EXECUTION (Pick One — Runs in 5–15 seconds):**
-   - **Option A (Fastest for iterative authoring — recommended):** Use `--no-migrations`.
+2. **FAST EXECUTION (Runs in 2–15 seconds):**
+   - `pytest.ini` now includes `--no-migrations` in `addopts` by default. This creates SQLite schema directly from model metadata in seconds via syncdb.
+   - Run your target test with fail-fast flags:
      ```powershell
-     venv\Scripts\python.exe -m pytest apps/<app>/tests/<target_file>.py -q --no-migrations -x --tb=short
-     ```
-     This creates SQLite schema directly from model metadata via syncdb in seconds, skipping all 270 migration files.
-   - **Option B (Persistent SQLite cached DB):** Set `$env:NAVERP_TEST_DB = "nav_erp_test.sqlite3"`.
-     ```powershell
-     $env:NAVERP_TEST_DB = "nav_erp_test.sqlite3"
      venv\Scripts\python.exe -m pytest apps/<app>/tests/<target_file>.py -q -x --tb=short
      ```
-     With `TEST["NAME"]` set, `pytest.ini`'s `--reuse-db` caches the database file after the first run.
+   - If persistent database caching is desired, set `$env:NAVERP_TEST_DB = "nav_erp_test.sqlite3"`.
 
 3. **CHEAP PRE-FLIGHT GATES (Zero DB Overhead):**
    - **Syntax check (<0.1s):** `venv\Scripts\python.exe -m py_compile apps/<app>/tests/<target_file>.py`
@@ -60,47 +55,136 @@ caching takes **20 to 45 minutes per run** just replaying migrations (Lesson L48
 
 ## What to Cover
 
-1. **Models:**
-   - Defaults, `__str__`, status `CHOICES`, auto-numbers (`INV-#####`, `PO-#####`, etc.), computed properties, and `unique_together` with tenant.
-   - For ledgers / financial records: verify balances/quantities are DERIVED via aggregation, never raw stored values.
-2. **Forms:**
-   - Required fields, invalid inputs, and validation error messages.
-   - Assert `tenant`, auto-`number`, `owner`, workflow-`status`, secret/hash fields, system `*_at` timestamps, and derived counters are NOT in form fields (`Meta.fields`) (Lessons L20/L22).
-3. **Views / CRUD:**
-   - List view: returns 200, handles search/filter/pagination, passes required context variables.
-   - Create: POST saves object linked to request tenant.
-   - Edit: GET renders object data; POST updates object.
-   - Delete: POST-only deletes object; GET must reject deletion.
-   - Assert expected template used and context keys populated (avoid silent-blank renders, Lesson L8).
-4. **Negative-Input Hardening (Prevent 500 Errors):**
-   - Junk FK filter params (`?category=abc` → 200, not 500 — L11).
-   - Pagination guards (page 2 and page past the end when rows exceed page size — L9).
-   - Numerical POST inputs: `"NaN"`, `"Infinity"`, garbage string, negative value, and over-`max_digits` decimals → friendly form/validation error, never 500 (L35).
-5. **Multi-Tenant Isolation (Mandatory):**
-   - Log in as Tenant A, request Tenant B's object pk on detail/edit/delete → assert **404**.
-   - Tenant A's list view must NEVER contain Tenant B's records.
-   - Crafted POST with Tenant B's pk in an FK field must be rejected.
-6. **Auth & Permissions:**
-   - Anonymous user → redirected to login.
-   - Admin-only actions (`@tenant_admin_required`) blocked for non-admin tenant members (403 or redirect).
-   - CSRF enforced on state-changing POST requests (`Client(enforce_csrf_checks=True)`).
-7. **Performance Guard:**
-   - Use `django_assert_max_num_queries` on list views to prevent N+1 query regressions.
+1. **Models:** Defaults, `__str__`, status `CHOICES`, auto-numbers (`INV-#####`, `PO-#####`, etc.), computed properties, and `unique_together` with tenant. Derived ledger aggregates.
+2. **Forms:** Required fields, invalid inputs, error messages. Assert `tenant`, auto-`number`, `owner`, workflow-`status`, secret/hash fields, system `*_at` timestamps, and derived counters are NOT in `Meta.fields` (L20/L22).
+3. **Views / CRUD:** List (200 + filters + context keys), create (POST links tenant), edit (GET + POST), delete (POST-only; GET rejected). Assert content rendered (L8).
+4. **Negative-Input Hardening:** Junk FK filter params (`?category=abc` → 200, not 500 — L11); pagination guards (page 2 and out-of-range — L9); numerical inputs (`"NaN"`, `"Infinity"`, garbage string, negative decimals → friendly error, never 500 — L35).
+5. **Multi-Tenant Isolation (Mandatory):** Tenant A requests Tenant B's object pk on detail/edit/delete → assert **404**; Tenant A's list never contains Tenant B's records; forged POST with Tenant B's pk in FK rejected.
+6. **Auth & Permissions:** Anonymous redirected to login; `@tenant_admin_required` blocked for regular members (403/redirect); CSRF enforced on POST.
+7. **Performance Guard:** Use `django_assert_max_num_queries` on list views to prevent N+1 query regressions.
 
 ## Determinism & Date Handling (Lesson L16)
 
 With `USE_TZ=True`, always derive reference dates from the SAME basis the code under test uses:
 `timezone.now().date()` or `timezone.localdate()`, **NEVER `datetime.date.today()`** (prevents UTC offset assertion flakes).
 
+---
+
+## 📋 Standard Test Lane Blueprints (Use as Structural Templates)
+
+### 1. Models Blueprint (`test_<subslug>_models.py`)
+```python
+import pytest
+from django.utils import timezone
+from apps.<app>.models import <Entity>
+
+pytestmark = pytest.mark.django_db
+
+class Test<Entity>ModelInvariants:
+    def test_<subslug>_create_and_str(self, tenant_a):
+        obj = <Entity>.objects.create(tenant=tenant_a, name="Test Item", status="draft")
+        assert str(obj) == "Test Item"
+        assert obj.tenant == tenant_a
+        assert obj.pk is not None
+
+    def test_<subslug>_status_choices(self, tenant_a):
+        valid_statuses = [c[0] for c in <Entity>.STATUS_CHOICES]
+        assert "draft" in valid_statuses
+```
+
+### 2. Forms Blueprint (`test_<subslug>_forms.py`)
+```python
+import pytest
+from apps.<app>.forms import <Entity>Form
+
+pytestmark = pytest.mark.django_db
+
+class Test<Entity>FormValidation:
+    def test_<subslug>_excluded_system_fields(self):
+        form = <Entity>Form()
+        for field in ["tenant", "created_at", "updated_at"]:
+            assert field not in form.fields
+
+    def test_<subslug>_valid_submission(self, tenant_a):
+        form = <Entity>Form(data={"name": "Valid Name", "status": "active"}, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_<subslug>_required_fields(self, tenant_a):
+        form = <Entity>Form(data={}, tenant=tenant_a)
+        assert not form.is_valid()
+        assert "name" in form.errors
+```
+
+### 3. Views / CRUD Blueprint (`test_<subslug>_views.py`)
+```python
+import pytest
+from django.urls import reverse
+from apps.<app>.models import <Entity>
+
+pytestmark = pytest.mark.django_db
+
+class Test<Entity>Views:
+    def test_<subslug>_list_200_and_content(self, client_a, tenant_a):
+        <Entity>.objects.create(tenant=tenant_a, name="Alpha")
+        url = reverse("<app>:<subslug>_list")
+        res = client_a.get(url)
+        assert res.status_code == 200
+        assert b"Alpha" in res.content
+
+    def test_<subslug>_create_post(self, client_a, tenant_a):
+        url = reverse("<app>:<subslug>_create")
+        res = client_a.post(url, data={"name": "New Record", "status": "draft"})
+        assert res.status_code in (302, 200)
+        assert <Entity>.objects.filter(tenant=tenant_a, name="New Record").exists()
+
+    def test_<subslug>_negative_params_handling(self, client_a):
+        url = reverse("<app>:<subslug>_list") + "?category=abc&page=999"
+        res = client_a.get(url)
+        assert res.status_code == 200  # Junk FK / page out of range must not 500
+```
+
+### 4. Security & Multi-Tenancy Blueprint (`test_<subslug>_security.py`)
+```python
+import pytest
+from django.urls import reverse
+from apps.<app>.models import <Entity>
+
+pytestmark = pytest.mark.django_db
+
+class Test<Entity>Security:
+    def test_<subslug>_anonymous_redirect(self, client):
+        url = reverse("<app>:<subslug>_list")
+        res = client.get(url)
+        assert res.status_code == 302
+        assert "/accounts/login" in res.url
+
+    def test_<subslug>_cross_tenant_idor_404(self, client_a, tenant_b):
+        b_obj = <Entity>.objects.create(tenant=tenant_b, name="Tenant B Secret")
+        detail_url = reverse("<app>:<subslug>_detail", args=[b_obj.pk])
+        # Tenant A must never read or delete Tenant B's entity
+        assert client_a.get(detail_url).status_code == 404
+        assert client_a.post(reverse("<app>:<subslug>_delete", args=[b_obj.pk])).status_code == 404
+
+    def test_<subslug>_csrf_enforced(self, tenant_a, admin_user):
+        from django.test import Client
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(admin_user)
+        url = reverse("<app>:<subslug>_create")
+        res = csrf_client.post(url, data={"name": "No CSRF Token"})
+        assert res.status_code == 403
+```
+
+---
+
 ## Workflow & Reporting
 
 1. Read the target models/forms/views/urls and `apps/<app>/tests/conftest.py` before writing code.
-2. Write the test file following the naming convention (`test_<subslug>_<lane>.py`).
+2. Write the test file following the naming convention (`test_<subslug>_<lane>.py`) using the blueprints above.
 3. Pre-flight check:
    `venv\Scripts\python.exe -m py_compile apps/<app>/tests/<test_file>.py`
    `venv\Scripts\python.exe -m pytest apps/<app>/tests/<test_file>.py --collect-only -q`
 4. Run & iterate with fast flags until green:
-   `venv\Scripts\python.exe -m pytest apps/<app>/tests/<test_file>.py -q --no-migrations -x --tb=short`
+   `venv\Scripts\python.exe -m pytest apps/<app>/tests/<test_file>.py -q -x --tb=short`
 5. Report:
    - Target test file added/updated
    - Test count and pass/fail summary
