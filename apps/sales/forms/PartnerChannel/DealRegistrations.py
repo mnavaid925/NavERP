@@ -1,7 +1,6 @@
 """Sales 8.14 — Forms for `DealRegistration`."""
 from django import forms
 
-from apps.accounts.models import User
 from apps.accounting.models import Currency
 from apps.core.forms import TenantModelForm
 from apps.core.models import Party
@@ -31,8 +30,6 @@ class DealRegistrationForm(TenantUniqueMixin, TenantModelForm):
             "is_conflicted",
             "conflict_summary",
             "opportunity",
-            "reviewed_by",
-            "reviewed_at",
             "partner_rep_name",
             "partner_rep_email",
             "notes",
@@ -55,8 +52,6 @@ class DealRegistrationForm(TenantUniqueMixin, TenantModelForm):
             "is_conflicted": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
             "conflict_summary": forms.Textarea(attrs={"class": "form-textarea", "rows": 2}),
             "opportunity": forms.Select(attrs={"class": "form-select"}),
-            "reviewed_by": forms.Select(attrs={"class": "form-select"}),
-            "reviewed_at": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}),
             "partner_rep_name": forms.TextInput(attrs={"class": "form-input"}),
             "partner_rep_email": forms.EmailInput(attrs={"class": "form-input"}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
@@ -84,13 +79,10 @@ class DealRegistrationForm(TenantUniqueMixin, TenantModelForm):
             self.fields["opportunity"].queryset = (
                 Opportunity.objects.filter(tenant=self.tenant).order_by("-created_at")
             )
-            self.fields["reviewed_by"].queryset = (
-                User.objects.filter(tenant=self.tenant, is_active=True).order_by("first_name", "last_name")
-            )
 
         self.fields["currency"].queryset = Currency.objects.all().order_by("code")
 
     def clean(self):
         cleaned_data = super().clean()
-        _reject_foreign(self, cleaned_data, ["partner", "customer_account", "opportunity", "reviewed_by"])
+        _reject_foreign(self, cleaned_data, ["partner", "customer_account", "opportunity"])
         return cleaned_data
