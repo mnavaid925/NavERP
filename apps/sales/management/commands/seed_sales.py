@@ -189,6 +189,7 @@ class Command(BaseCommand):
         self._seed_customer_success(tenant, owner)
         self._seed_marketing_alignment(tenant, owner)
         self._seed_sales_analytics(tenant, owner)
+        self._seed_partner_channel(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -3491,11 +3492,15 @@ class Command(BaseCommand):
             f"{RepPerformanceScorecard.objects.filter(tenant=tenant).count()} rep scorecards)."
         )
 
+    def _seed_partner_channel(self, tenant, owner):
+        """Seed Sales 8.14 Partner & Channel Management demo data."""
         # =====================================================================================
         # 8.14 Partner & Channel Management
         # =====================================================================================
         if not PartnerProfile.objects.filter(tenant=tenant).exists():
+            today = timezone.localdate()
             currency = Currency.objects.filter(code="USD").first() or Currency.objects.first()
+            reps = list(User.objects.filter(tenant=tenant, is_active=True).order_by("pk"))
             cam = reps[0] if reps else owner
 
             # 1. Partner Parties with partner role
