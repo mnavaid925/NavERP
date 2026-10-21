@@ -48,12 +48,12 @@ each one reports. When all six have reported, the file is deduped, sorted
 | # | Reviewer | Scope | Status | Findings |
 |---|---|---|---|---|
 | 0 | `qa-smoke-tester` (Phase 3 gate) | rendered pages, filters, pagination, IDOR, content | **done** | 4 (I1, I2, M1, M2) — all fixed in the main session |
-| 1 | `code-reviewer` | correctness, contract drift, Django idioms | pending | — |
-| 2 | `explorer` | code/structure mapping, duplication, dead paths | pending | — |
-| 3 | `frontend-reviewer` | templates, design system, filters, accessibility | pending | — |
-| 4 | `performance-reviewer` | queries, N+1, indexes, aggregation | pending | — |
-| 5 | `qa-smoke-tester` | rendered pages, filters, pagination, IDOR | pending | — |
-| 6 | `security-reviewer` | tenant isolation, IDOR, injection, data exposure | pending | — |
+| 1 | `code-reviewer` | correctness, contract drift, Django idioms | **done** | 12 (1 Critical, 5 Important, 7 Minor) — fixed in Phase 5 |
+| 2 | `explorer` | code/structure mapping, duplication, dead paths | **done** | 7 (2 Important, 5 Minor) — fixed in Phase 5 |
+| 3 | `frontend-reviewer` | templates, design system, filters, accessibility | **done** | 11 (1 Critical, 3 Important, 7 Minor) |
+| 4 | `performance-reviewer` | queries, N+1, indexes, aggregation | **done** | 8 (2 Critical, 4 Important, 2 Minor) |
+| 5 | `qa-smoke-tester` | rendered pages, filters, pagination, IDOR | **done** | 3 (1 Important, 2 Minor) |
+| 6 | `security-reviewer` | tenant isolation, IDOR, injection, data exposure | **done** | 5 (2 Important, 3 Minor) |
 
 ---
 
@@ -572,8 +572,105 @@ variant was found and the app's dark-mode behaviour was not checked); screen-rea
 8.12's `templates/sales/customersuccess/**`, which were used only as the reference convention.
 
 ---
-### `qa-smoke-tester` (Phase 4 pass) — pending
-### `security-reviewer` — pending
+
+### `performance-reviewer` — **8 findings: 2 Critical, 4 Important, 2 Minor**
+
+A query and aggregation audit of the 8.13 models, views, and templates.
+
+#### PERF-C1 — CRITICAL — Unintentional GROUP BY expansion via `Meta.ordering` in `AttributionConsole.py`
+- **Location**: `apps/sales/views/MarketingAlignment/AttributionConsole.py:69-82, 120-131`
+- **Impact**: `touchpoints.values("campaign_id").annotate(...)` and `attributions.values("touchpoint__campaign_id").annotate(...)` without `.order_by()` causes Django to inject `Meta.ordering` fields (`touch_date`, `created_at`, `computed_on`) into the `GROUP BY` clause. This splits rollups by date/timestamp rather than campaign/channel, causing campaign pipeline values and attributed revenues to be under-reported.
+- **Fix**: Prepend `.order_by()` before `.values()` to clear default ordering.
+
+#### PERF-C2 — CRITICAL — Correlated Subquery multi-row return risk due to `Meta.ordering` in `_event_annotations`
+- **Location**: `apps/sales/views/MarketingAlignment/MarketingEvents.py:40-57`
+- **Impact**: Scalar subqueries for `registered` and `attended` omit `.order_by()`, so Django appends `EventRegistration.Meta.ordering` (`registered_at`, `created_at`) to `GROUP BY`. As soon as registrations differ by timestamp, the subquery produces multiple rows and raises `Subquery returns more than 1 row` in MariaDB/PostgreSQL/SQLite.
+- **Fix**: Prepend `.order_by()` on both subqueries.
+
+#### PERF-I1 — IMPORTANT — Unbounded O(N) duplicate ID fetch and sorting in `single_currency()`
+- **Location**: `apps/sales/views/MarketingAlignment/_common.py:91-95`
+- **Impact**: Fetches all foreign key IDs across all matching rows without `.distinct()` and with full model ordering.
+- **Fix**: Use `.order_by().values_list(f"{field}_id", flat=True).distinct()[:2]`.
+
+#### PERF-I2 — IMPORTANT — Duplicate unbounded currency fetch in `AttributionConsole.py`
+- **Location**: `apps/sales/views/MarketingAlignment/AttributionConsole.py:271-278`
+- **Impact**: Redundant full scan fetching every touchpoint's currency_id across the tenant without distinct.
+- **Fix**: Reuse `single_currency(touchpoints)`.
+
+#### PERF-I3 — IMPORTANT — Uncached SQL aggregation inside property `MarketingEvent.revenue_per_registrant`
+- **Location**: `apps/sales/models/MarketingAlignment/MarketingEvents.py:199-213`
+- **Impact**: Detail view doesn't annotate revenue_total, so accessing the property triggers an unexpected synchronous query.
+- **Fix**: Check `__dict__` for `revenue_total` and precompute/annotate where used.
+
+#### PERF-I4 — IMPORTANT — Redundant query on `obj.attributed_revenue` in `attribution_touchpoint_detail`
+- **Location**: `apps/sales/models/MarketingAlignment/AttributionTouchpoints.py:173-177`
+- **Impact**: Accessing `attributed_revenue` triggers a fresh `attributions.all()` query when the view already queried `attributions`.
+- **Fix**: Check `_prefetched_objects_cache` or reuse the view's computed sum.
+
+#### PERF-M1 — MINOR — Heavy column loading on dropdown filter querysets
+- **Location**: `AttributionTouchpoints.py:81`, `CampaignAttributions.py:74`, `ContentEngagements.py:81`, `MqlHandoffs.py:85`, `MarketingEvents.py:114`
+- **Fix**: Add `.only("id", "name")` / `.only("id", "username", ...)` on dropdown querysets.
+
+#### PERF-M2 — MINOR — Split count queries in `AttributionConsole.py` headline stats
+- **Location**: `apps/sales/views/MarketingAlignment/AttributionConsole.py:256-261`
+- **Fix**: Combine `total_touchpoints` and `total_leads` into a single aggregate query.
+
+---
+
+### `qa-smoke-tester` (Phase 4 pass) — **3 findings: 1 Important, 2 Minor**
+
+A runtime sweep of all 30 routes across 173 HTTP requests as `admin_acme` with cross-tenant checks against `admin_globex`.
+- HTTP 500 errors: **0**
+- Comment leaks (`{#`, `{% comment`): **0**
+- Cross-tenant IDOR 404 assertions: **20 / 20 PASS**
+- Junk and hostile query string fuzzing: **PASS**
+
+#### QA-I1 — IMPORTANT — Edit page title inconsistency on MQL handoff
+- **Location**: `templates/sales/marketingalignment/mqlhandoff/form.html`
+- **Issue**: Displays `"Edit MQL Handoff"` while list/create use `"MQL-to-SQL Handoffs"`.
+- **Fix**: Align title to `"Edit MQL-to-SQL Handoff {{ obj.number }}"`.
+
+#### QA-M1 — MINOR — L33 forbidden theme class in MQL handoff list
+- **Location**: `templates/sales/marketingalignment/mqlhandoff/list.html:59`
+- **Issue**: Uses `<div class="stat-icon red">` which does not exist in `theme.css`.
+- **Fix**: Change `red` to `orange` (allowed: `blue/green/orange/purple/slate`).
+
+#### QA-M2 — MINOR — Filter bar accessibility / form labels
+- **Location**: Filter dropdowns in list templates.
+- **Issue**: Filter `<select>` elements use `aria-label` without corresponding `<label for="...">`.
+- **Fix**: Ensure explicit `id` attributes and associate labels.
+
+---
+
+### `security-reviewer` — **5 findings: 2 Important, 3 Minor**
+
+A security audit covering multi-tenancy, authorization, mass assignment, injection, and audit logs.
+- Multi-tenant IDOR: **Clean** on views and CRUD routes (all scoped by `tenant=request.tenant`).
+- Auth gates: **Clean** (`@login_required`, `@tenant_admin_required`, `@require_POST` on deletes).
+- CSRF: **Clean** on all forms.
+- SQL injection: **Clean** (zero raw SQL).
+
+#### SEC-01 — IMPORTANT — Stored XSS / JS Context Breakout in Event Registration Delete Confirmation
+- **Location**: `templates/sales/marketingalignment/marketingevent/registrations.html:137`
+- **Issue**: Interpolates `{{ registration.registrant_name }}` directly inside inline `onsubmit="return confirm('...')"`. Single quotes decode in HTML attributes before JS evaluation, enabling script breakout.
+- **Fix**: Standardize confirmation prompt without dynamic variable interpolation: `return confirm('Are you sure you want to remove this registration?');`.
+
+#### SEC-02 — IMPORTANT — Model-layer cross-tenant isolation check in `MqlHandoff.clean()` omits `lead`
+- **Location**: `apps/sales/models/MarketingAlignment/MqlHandoffs.py:276-289`
+- **Issue**: The tenant validation loop checks `campaign`, `account`, `owner`, `assigned_to`, `opportunity`, but misses `lead`. Programmatic saves or admin operations could associate a cross-tenant lead.
+- **Fix**: Add `("lead", "Lead")` to the tenant validation loop in `clean()`.
+
+#### SEC-03 — MINOR — Mass assignment / user spoofing via `computed_by` in `CampaignAttributionForm`
+- **Location**: `apps/sales/forms/MarketingAlignment/CampaignAttributions.py:29`
+- **Fix**: Default `computed_by` to `request.user` in the create view if not supplied.
+
+#### SEC-04 — MINOR — Workflow lifecycle bypass via `status` in `MqlHandoffForm`
+- **Location**: `apps/sales/forms/MarketingAlignment/MqlHandoffs.py:24`
+- **Fix**: Set `status` initial to `pending` and disabled on creation form so initial state is pending.
+
+#### SEC-05 — MINOR — Inclusion of rejected attributions in `AttributionConsole` aggregations
+- **Location**: `apps/sales/views/MarketingAlignment/AttributionConsole.py:64-66`
+- **Fix**: Add `.exclude(status="rejected")` to attributions queryset on console.
 
 ---
 
