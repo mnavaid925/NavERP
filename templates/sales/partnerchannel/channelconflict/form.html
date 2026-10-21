@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_edit %}Edit Channel Conflict {{ conflict.number }}{% else %}File Channel Conflict Dispute{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:partner_performance_console' %}">Partner & Channel</a>
+            <span>/</span>
+            <a href="{% url 'sales:channel_conflict_list' %}">Channel Conflicts</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ conflict.number }}{% else %}New Dispute{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Channel Conflict {{ conflict.number }}{% else %}File Channel Conflict Dispute{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:channel_conflict_detail' conflict.pk %}{% else %}{% url 'sales:channel_conflict_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="space-y-6">
+                <!-- Conflict Classification & Severity -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        1. Conflict Classification & Severity
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.conflict_type.id_for_label }}">
+                                Conflict Classification <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.conflict_type }}
+                            {% if form.conflict_type.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.conflict_type.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.severity.id_for_label }}">
+                                Severity Level
+                            </label>
+                            {{ form.severity }}
+                            {% if form.severity.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.severity.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.status.id_for_label }}">
+                                Investigation Status
+                            </label>
+                            {{ form.status }}
+                            {% if form.status.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.status.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.escalation_level.id_for_label }}">
+                                Escalation Tier
+                            </label>
+                            {{ form.escalation_level }}
+                            {% if form.escalation_level.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.escalation_level.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.escalated_to.id_for_label }}">
+                                Escalated To (Assignee)
+                            </label>
+                            {{ form.escalated_to }}
+                            {% if form.escalated_to.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.escalated_to.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parties & Contested Records -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        2. Disputing Parties & Contested Accounts
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.claimant_partner.id_for_label }}">
+                                Claimant Partner <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.claimant_partner }}
+                            {% if form.claimant_partner.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.claimant_partner.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.client_account.id_for_label }}">
+                                Contested Customer Account <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.client_account }}
+                            {% if form.client_account.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.client_account.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.direct_sales_rep.id_for_label }}">
+                                Direct Sales Rep (if direct vs. indirect)
+                            </label>
+                            {{ form.direct_sales_rep }}
+                            {% if form.direct_sales_rep.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.direct_sales_rep.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.competing_partner.id_for_label }}">
+                                Competing Partner (if partner collision)
+                            </label>
+                            {{ form.competing_partner }}
+                            {% if form.competing_partner.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.competing_partner.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.deal_registration.id_for_label }}">
+                                Disputed Deal Registration
+                            </label>
+                            {{ form.deal_registration }}
+                            {% if form.deal_registration.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.deal_registration.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.opportunity.id_for_label }}">
+                                Contested CRM Opportunity
+                            </label>
+                            {{ form.opportunity }}
+                            {% if form.opportunity.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.opportunity.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.territory.id_for_label }}">
+                                Contested Geographic Territory
+                            </label>
+                            {{ form.territory }}
+                            {% if form.territory.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.territory.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.description.id_for_label }}">
+                                Dispute Description & Factual Basis
+                            </label>
+                            {{ form.description }}
+                            {% if form.description.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.description.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Adjudication & Resolution -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        3. Adjudication Ruling & Settlement
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.resolution_outcome.id_for_label }}">
+                                Adjudication Outcome
+                            </label>
+                            {{ form.resolution_outcome }}
+                            {% if form.resolution_outcome.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.resolution_outcome.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.split_percentage.id_for_label }}">
+                                Revenue / Commission Split (%)
+                            </label>
+                            {{ form.split_percentage }}
+                            {% if form.split_percentage.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.split_percentage.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.resolved_by.id_for_label }}">
+                                Adjudicating Officer
+                            </label>
+                            {{ form.resolved_by }}
+                            {% if form.resolved_by.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.resolved_by.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.resolved_at.id_for_label }}">
+                                Resolution Timestamp
+                            </label>
+                            {{ form.resolved_at }}
+                            {% if form.resolved_at.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.resolved_at.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.resolution_rationale.id_for_label }}">
+                                Formal Adjudication Rationale
+                            </label>
+                            {{ form.resolution_rationale }}
+                            {% if form.resolution_rationale.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.resolution_rationale.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 mt-8 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'sales:channel_conflict_detail' conflict.pk %}{% else %}{% url 'sales:channel_conflict_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Dispute Updates{% else %}Submit Dispute{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
