@@ -4260,5 +4260,350 @@ def cs_qbr_b(tenant_b, cs_account_b, admin_b):
     return _customersuccess_business_review(tenant_b, cs_account_b, admin_b)
 
 
+# ==============================================================================
+# 8.14 Partner & Channel Management Test Contract & Fixtures
+# ==============================================================================
+
+PARTNERCHANNEL_PAGE_SIZE = 15
+
+PARTNERCHANNEL_MODEL_FIELDS = {
+    "PartnerProfile": (
+        "tenant", "created_at", "updated_at", "number", "partner", "partner_type",
+        "onboarding_status", "tier", "tier_effective_date", "tier_review_date",
+        "application_date", "agreement_signed_at", "agreement_document", "channel_manager",
+        "authorized_territory", "annual_revenue_target", "actual_revenue_ytd", "currency",
+        "pipeline_discount_pct", "portal_access_enabled", "portal_last_login_at",
+        "active_certifications_count", "notes",
+    ),
+    "DealRegistration": (
+        "tenant", "created_at", "updated_at", "number", "partner", "customer_account",
+        "deal_name", "estimated_value", "currency", "submission_date", "status",
+        "exclusivity_status", "protection_start_date", "protection_end_date",
+        "approved_discount_pct", "rejection_reason", "opportunity", "reviewed_by",
+        "reviewed_at", "notes", "is_conflicted", "conflict_summary", "extension_count",
+    ),
+    "JointAccountPlan": (
+        "tenant", "created_at", "updated_at", "number", "partner", "client_account",
+        "plan_name", "plan_year", "period_start", "period_end", "status",
+        "target_revenue", "actual_revenue", "currency", "vendor_lead", "partner_lead_name",
+        "partner_lead_email", "co_sell_motion", "strategic_objectives",
+        "joint_value_proposition", "action_items", "collateral_document", "notes",
+    ),
+    "ChannelConflict": (
+        "tenant", "created_at", "updated_at", "number", "conflict_type", "severity",
+        "status", "deal_registration", "opportunity", "claimant_partner", "competing_partner",
+        "direct_sales_rep", "client_account", "territory", "escalation_level",
+        "escalated_to", "resolution_outcome", "split_percentage", "resolution_rationale",
+        "resolved_by", "resolved_at", "description",
+    ),
+}
+
+PARTNERCHANNEL_CHOICES = {
+    "PartnerProfile": {
+        "partner_type": (
+            ("reseller", "Value-Added Reseller (VAR)"),
+            ("system_integrator", "System Integrator (SI)"),
+            ("isv", "Independent Software Vendor (ISV)"),
+            ("referral", "Referral / Affiliate Partner"),
+            ("distributor", "Distributor"),
+            ("oem", "OEM Partner"),
+            ("agency", "Digital Agency / Consultancy"),
+        ),
+        "onboarding_status": (
+            ("applied", "Application Submitted"),
+            ("under_review", "Under Compliance Review"),
+            ("agreement_pending", "Agreement Pending Signature"),
+            ("active", "Active Certified Partner"),
+            ("suspended", "Suspended / Inactive"),
+            ("terminated", "Terminated"),
+        ),
+        "tier": (
+            ("registered", "Registered"),
+            ("bronze", "Bronze"),
+            ("silver", "Silver"),
+            ("gold", "Gold"),
+            ("platinum", "Platinum"),
+        ),
+    },
+    "DealRegistration": {
+        "status": (
+            ("draft", "Draft"),
+            ("submitted", "Submitted / Pending Review"),
+            ("under_review", "Under Review"),
+            ("approved", "Approved & Protected"),
+            ("rejected", "Rejected / Ineligible"),
+            ("expired", "Protection Expired"),
+            ("converted", "Converted to Opportunity"),
+            ("closed_won", "Closed Won"),
+            ("closed_lost", "Closed Lost"),
+        ),
+        "exclusivity_status": (
+            ("none", "No Exclusivity"),
+            ("standard", "Standard Margin Protection (10%)"),
+            ("exclusive", "Full Deal Exclusivity (Protected AE Non-Compete)"),
+            ("co_sell", "Authorized Joint Co-Sell"),
+        ),
+    },
+    "JointAccountPlan": {
+        "status": (
+            ("draft", "Draft"),
+            ("in_review", "In Joint Review"),
+            ("active", "Active Co-Selling"),
+            ("completed", "Plan Completed"),
+            ("stalled", "Stalled / Blocked"),
+            ("cancelled", "Cancelled"),
+        ),
+        "co_sell_motion": (
+            ("partner_led", "Partner-Led Co-Sell"),
+            ("vendor_led", "Vendor-Led Co-Sell"),
+            ("joint_equal", "Joint Equal Pursuit"),
+            ("influence_only", "Partner Influence Only"),
+        ),
+    },
+    "ChannelConflict": {
+        "conflict_type": (
+            ("direct_vs_indirect", "Direct Sales vs. Partner Conflict"),
+            ("partner_vs_partner", "Partner vs. Partner Collision"),
+            ("territory_overlap", "Territory Boundary Dispute"),
+            ("named_account_infringement", "Named Enterprise Account Infringement"),
+        ),
+        "severity": (
+            ("low", "Low"),
+            ("medium", "Medium"),
+            ("high", "High"),
+            ("critical", "Critical (Escalated to CRO)"),
+        ),
+        "status": (
+            ("open", "Open / Investigating"),
+            ("in_mediation", "In Active Mediation"),
+            ("resolved", "Resolved & Adjudicated"),
+            ("dismissed", "Dismissed / Ineligible"),
+            ("escalated", "Escalated to Executive"),
+        ),
+        "escalation_level": (
+            ("l1_cam", "Level 1: Channel Account Manager (CAM)"),
+            ("l2_channel_chief", "Level 2: Channel Chief / VP Channels"),
+            ("l3_executive_cro", "Level 3: Executive Adjudication (CRO)"),
+        ),
+        "resolution_outcome": (
+            ("pending", "Pending Determination"),
+            ("partner_favored", "Partner Exclusivity Upheld"),
+            ("direct_favored", "Direct Sales Precedence Upheld"),
+            ("split_commission", "Commission / Revenue Split Imposed"),
+            ("co_sell_mandate", "Mandated Joint Co-Sell Agreement"),
+            ("deal_cancelled", "Deal Cancelled / Disqualified"),
+        ),
+    },
+}
+
+PARTNERCHANNEL_URL_PATTERNS = {
+    "partner_profile_list": "partner-channel/partners/",
+    "partner_profile_create": "partner-channel/partners/new/",
+    "partner_profile_detail": "partner-channel/partners/<int:pk>/",
+    "partner_profile_edit": "partner-channel/partners/<int:pk>/edit/",
+    "partner_profile_delete": "partner-channel/partners/<int:pk>/delete/",
+    "deal_registration_list": "partner-channel/deal-registrations/",
+    "deal_registration_create": "partner-channel/deal-registrations/new/",
+    "deal_registration_detail": "partner-channel/deal-registrations/<int:pk>/",
+    "deal_registration_edit": "partner-channel/deal-registrations/<int:pk>/edit/",
+    "deal_registration_delete": "partner-channel/deal-registrations/<int:pk>/delete/",
+    "deal_registration_approve": "partner-channel/deal-registrations/<int:pk>/approve/",
+    "deal_registration_reject": "partner-channel/deal-registrations/<int:pk>/reject/",
+    "deal_registration_convert": "partner-channel/deal-registrations/<int:pk>/convert/",
+    "joint_account_plan_list": "partner-channel/joint-plans/",
+    "joint_account_plan_create": "partner-channel/joint-plans/new/",
+    "joint_account_plan_detail": "partner-channel/joint-plans/<int:pk>/",
+    "joint_account_plan_edit": "partner-channel/joint-plans/<int:pk>/edit/",
+    "joint_account_plan_delete": "partner-channel/joint-plans/<int:pk>/delete/",
+    "channel_conflict_list": "partner-channel/conflicts/",
+    "channel_conflict_create": "partner-channel/conflicts/new/",
+    "channel_conflict_detail": "partner-channel/conflicts/<int:pk>/",
+    "channel_conflict_edit": "partner-channel/conflicts/<int:pk>/edit/",
+    "channel_conflict_delete": "partner-channel/conflicts/<int:pk>/delete/",
+    "channel_conflict_escalate": "partner-channel/conflicts/<int:pk>/escalate/",
+    "channel_conflict_resolve": "partner-channel/conflicts/<int:pk>/resolve/",
+    "partner_performance_console": "partner-channel/console/",
+}
+
+
+def _partnerchannel_currency(code="USD", symbol="$", name="US Dollar"):
+    from apps.accounting.models import Currency
+    currency, _ = Currency.objects.get_or_create(
+        code=code,
+        defaults={"name": name, "symbol": symbol, "is_active": True},
+    )
+    return currency
+
+
+def _partnerchannel_party(tenant, name="Partner Acme", role="partner"):
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant, name=name, kind="organization")
+    PartyRole.objects.create(tenant=tenant, party=party, role=role)
+    return party
+
+
+def _partnerchannel_partner_profile(tenant, partner, currency, **overrides):
+    from apps.sales.models import PartnerProfile
+    from django.utils import timezone
+    defaults = {
+        "tenant": tenant,
+        "partner": partner,
+        "partner_type": "reseller",
+        "onboarding_status": "active",
+        "tier": "gold",
+        "tier_effective_date": timezone.localdate(),
+        "application_date": timezone.localdate(),
+        "agreement_signed_at": timezone.now(),
+        "annual_revenue_target": Decimal("500000.00"),
+        "actual_revenue_ytd": Decimal("250000.00"),
+        "currency": currency,
+        "pipeline_discount_pct": Decimal("15.00"),
+        "portal_access_enabled": True,
+        "active_certifications_count": 4,
+    }
+    defaults.update(overrides)
+    return PartnerProfile.objects.create(**defaults)
+
+
+def _partnerchannel_deal_registration(tenant, partner, customer_account, currency, **overrides):
+    from apps.sales.models import DealRegistration
+    from datetime import timedelta
+    from django.utils import timezone
+    now = timezone.localdate()
+    defaults = {
+        "tenant": tenant,
+        "partner": partner,
+        "customer_account": customer_account,
+        "deal_name": "Enterprise Cloud Migration",
+        "estimated_value": Decimal("120000.00"),
+        "currency": currency,
+        "submission_date": now,
+        "status": "approved",
+        "exclusivity_status": "exclusive",
+        "protection_start_date": now,
+        "protection_end_date": now + timedelta(days=90),
+        "approved_discount_pct": Decimal("20.00"),
+    }
+    defaults.update(overrides)
+    return DealRegistration.objects.create(**defaults)
+
+
+def _partnerchannel_joint_account_plan(tenant, partner, client_account, currency, **overrides):
+    from apps.sales.models import JointAccountPlan
+    from datetime import timedelta
+    from django.utils import timezone
+    now = timezone.localdate()
+    defaults = {
+        "tenant": tenant,
+        "partner": partner,
+        "client_account": client_account,
+        "plan_name": "2026 Enterprise Co-Sell Strategy",
+        "plan_year": 2026,
+        "period_start": now,
+        "period_end": now + timedelta(days=180),
+        "status": "active",
+        "target_revenue": Decimal("350000.00"),
+        "actual_revenue": Decimal("75000.00"),
+        "currency": currency,
+        "co_sell_motion": "joint_equal",
+        "strategic_objectives": "Joint cloud modernization",
+        "joint_value_proposition": "Turnkey ERP + managed services",
+        "action_items": "Q1 discovery workshop, Q2 architecture review",
+    }
+    defaults.update(overrides)
+    return JointAccountPlan.objects.create(**defaults)
+
+
+def _partnerchannel_channel_conflict(tenant, claimant_partner, client_account, **overrides):
+    from apps.sales.models import ChannelConflict
+    defaults = {
+        "tenant": tenant,
+        "conflict_type": "direct_vs_indirect",
+        "severity": "medium",
+        "status": "open",
+        "claimant_partner": claimant_partner,
+        "client_account": client_account,
+        "escalation_level": "l1_cam",
+        "split_percentage": Decimal("0.00"),
+        "description": "Direct rep engaged account already registered by partner",
+    }
+    defaults.update(overrides)
+    return ChannelConflict.objects.create(**defaults)
+
+
+@pytest.fixture
+def pc_currency():
+    return _partnerchannel_currency()
+
+
+@pytest.fixture
+def pc_partner_a(tenant_a):
+    return _partnerchannel_party(tenant_a, name="Acme Premier Partner", role="partner")
+
+
+@pytest.fixture
+def pc_partner_b(tenant_b):
+    return _partnerchannel_party(tenant_b, name="Globex Channel Partner", role="partner")
+
+
+@pytest.fixture
+def pc_customer_a(tenant_a):
+    return _partnerchannel_party(tenant_a, name="Acme Enterprise Client", role="customer")
+
+
+@pytest.fixture
+def pc_customer_b(tenant_b):
+    return _partnerchannel_party(tenant_b, name="Globex Enterprise Client", role="customer")
+
+
+@pytest.fixture
+def pc_profile_a(tenant_a, pc_partner_a, pc_currency, admin_user):
+    return _partnerchannel_partner_profile(tenant_a, pc_partner_a, pc_currency, channel_manager=admin_user)
+
+
+@pytest.fixture
+def pc_profile_b(tenant_b, pc_partner_b, pc_currency, admin_b):
+    return _partnerchannel_partner_profile(tenant_b, pc_partner_b, pc_currency, channel_manager=admin_b)
+
+
+@pytest.fixture
+def pc_deal_reg_a(tenant_a, pc_partner_a, pc_customer_a, pc_currency):
+    return _partnerchannel_deal_registration(tenant_a, pc_partner_a, pc_customer_a, pc_currency)
+
+
+@pytest.fixture
+def pc_deal_reg_b(tenant_b, pc_partner_b, pc_customer_b, pc_currency):
+    return _partnerchannel_deal_registration(tenant_b, pc_partner_b, pc_customer_b, pc_currency)
+
+
+@pytest.fixture
+def pc_joint_plan_a(tenant_a, pc_partner_a, pc_customer_a, pc_currency, admin_user):
+    return _partnerchannel_joint_account_plan(
+        tenant_a, pc_partner_a, pc_customer_a, pc_currency, vendor_lead=admin_user
+    )
+
+
+@pytest.fixture
+def pc_joint_plan_b(tenant_b, pc_partner_b, pc_customer_b, pc_currency, admin_b):
+    return _partnerchannel_joint_account_plan(
+        tenant_b, pc_partner_b, pc_customer_b, pc_currency, vendor_lead=admin_b
+    )
+
+
+@pytest.fixture
+def pc_conflict_a(tenant_a, pc_partner_a, pc_customer_a, pc_deal_reg_a):
+    return _partnerchannel_channel_conflict(
+        tenant_a, pc_partner_a, pc_customer_a, deal_registration=pc_deal_reg_a
+    )
+
+
+@pytest.fixture
+def pc_conflict_b(tenant_b, pc_partner_b, pc_customer_b, pc_deal_reg_b):
+    return _partnerchannel_channel_conflict(
+        tenant_b, pc_partner_b, pc_customer_b, deal_registration=pc_deal_reg_b
+    )
+
+
+
 
 
