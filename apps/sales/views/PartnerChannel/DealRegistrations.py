@@ -122,12 +122,11 @@ def deal_registration_create(request):
                 obj.reviewed_by = request.user
             obj.save()
             write_audit_log(
-                tenant=request.tenant,
                 user=request.user,
+                obj=obj,
                 action="create",
-                model_name="DealRegistration",
-                object_id=str(obj.pk),
-                details=f"Registered deal {obj.number} — {obj.deal_name}",
+                changes=f"Registered deal {obj.number} — {obj.deal_name}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Deal registration {obj.number} created successfully.")
             return redirect("sales:deal_registration_detail", pk=obj.pk)
@@ -153,12 +152,11 @@ def deal_registration_edit(request, pk):
                 reg.reviewed_by = request.user
             reg.save()
             write_audit_log(
-                tenant=request.tenant,
                 user=request.user,
+                obj=reg,
                 action="update",
-                model_name="DealRegistration",
-                object_id=str(obj.pk),
-                details=f"Updated deal registration {obj.number}",
+                changes=f"Updated deal registration {obj.number}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Deal registration {obj.number} updated successfully.")
             return redirect("sales:deal_registration_detail", pk=obj.pk)
@@ -180,12 +178,11 @@ def deal_registration_delete(request, pk):
     number = obj.number
     obj.delete()
     write_audit_log(
-        tenant=request.tenant,
         user=request.user,
+        obj=obj,
         action="delete",
-        model_name="DealRegistration",
-        object_id=str(pk),
-        details=f"Deleted deal registration {number}",
+        changes=f"Deleted deal registration {number}",
+        tenant=request.tenant,
     )
     messages.success(request, f"Deal registration {number} deleted successfully.")
     return redirect("sales:deal_registration_list")
@@ -209,12 +206,12 @@ def deal_registration_convert(request, pk):
         opp = Opportunity.objects.create(
             tenant=request.tenant,
             account=reg.customer_account,
-            title=reg.deal_name,
+            name=reg.deal_name,
             amount=reg.estimated_value,
-            expected_close_date=reg.expected_close_date,
-            stage="Proposal/Price Quote",
+            currency=reg.currency,
+            close_date=reg.expected_close_date,
+            stage="proposal",
             probability=60,
-            lead_source="Partner",
             description=f"Converted from Partner Deal Registration {reg.number} (Partner: {reg.partner.name})",
         )
         reg.opportunity = opp
@@ -222,12 +219,11 @@ def deal_registration_convert(request, pk):
         reg.save(update_fields=["opportunity", "status", "updated_at"])
 
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
+            obj=reg,
             action="convert",
-            model_name="DealRegistration",
-            object_id=str(reg.pk),
-            details=f"Converted deal registration {reg.number} to Opportunity {opp.number}",
+            changes=f"Converted deal registration {reg.number} to Opportunity {opp.number}",
+            tenant=request.tenant,
         )
 
     messages.success(request, f"Deal registration {reg.number} successfully converted to Opportunity {opp.number}.")
