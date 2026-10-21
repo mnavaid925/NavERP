@@ -57,8 +57,8 @@ def _partnerchannel_currency(code="USD"):
     return curr
 
 
-def _partnerchannel_doc(tenant, title="Partner Contract"):
-    return Document.objects.create(tenant=tenant, title=title)
+def _partnerchannel_doc(tenant, name="Partner Contract"):
+    return Document.objects.create(tenant=tenant, name=name)
 
 
 def _partnerchannel_territory(tenant, name="North America East"):
@@ -423,6 +423,7 @@ def test_partnerchannel_deal_registration_form_valid_save(tenant_a):
         "status": "submitted",
         "exclusivity_status": "pending",
         "protected_margin_pct": "15.00",
+        "extension_count": 0,
         "partner_rep_name": "Alice Channel",
         "partner_rep_email": "alice@partner.example.com",
     }
