@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Partner Performance Console — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Partner & Channel</span>
+            <span>/</span>
+            <span>Performance Console</span>
+        </div>
+        <h1 class="page-title">Partner Performance & Ecosystem Console</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:partner_profile_list' %}" class="btn btn-outline">
+            <i data-lucide="users"></i>
+            <span>Partner Directory</span>
+        </a>
+        <a href="{% url 'sales:deal_registration_list' %}" class="btn btn-outline">
+            <i data-lucide="shield-check"></i>
+            <span>Deal Registrations</span>
+        </a>
+        <a href="{% url 'sales:joint_account_plan_list' %}" class="btn btn-outline">
+            <i data-lucide="folder-kanban"></i>
+            <span>Joint Plans</span>
+        </a>
+        <a href="{% url 'sales:channel_conflict_list' %}" class="btn btn-outline">
+            <i data-lucide="alert-circle"></i>
+            <span>Conflict Disputes</span>
+        </a>
+    </div>
+</div>
+
+<!-- Key Performance Metrics -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Partners</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.active_partners_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Closed YTD Revenue</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_partner_revenue|default:"0.00"|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Registered Deals</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.registered_deals_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Protected Pipeline</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.pipeline_value|default:"0.00"|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Conflicts</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.open_conflicts_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="book-open"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Avg Certifications</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.avg_certifications|default:"0"|floatformat:1 }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Top Partners & Tier Progression -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Tier Breakdown Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Partner Tier Progression & Revenue Contribution</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-5 gap-4">
+                    {% for item in tier_distribution %}
+                    <div class="p-4 rounded-lg bg-slate-50 border border-slate-200 text-center">
+                        <div class="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                            {{ item.label }}
+                        </div>
+                        <div class="text-xl font-bold text-slate-900">{{ item.count }}</div>
+                        <div class="text-xs text-slate-500 mt-1">${{ item.revenue|default:"0.00"|floatformat:0 }} closed</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Revenue Partners Table -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Leading Revenue Partners (YTD)</h3>
+                <a href="{% url 'sales:partner_profile_list' %}" class="text-xs font-medium text-blue-600 hover:underline">
+                    View All Partners
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if top_partners %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Partner</th>
+                                <th>Tier</th>
+                                <th>CAM Lead</th>
+                                <th>Quota Target</th>
+                                <th>Closed Revenue</th>
+                                <th>Attainment</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in top_partners %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'sales:partner_profile_detail' p.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
+                                        {{ p.partner.name }}
+                                    </a>
+                                    <div class="text-xs text-slate-500">{{ p.number }}</div>
+                                </td>
+                                <td>
+                                    <span class="badge {{ p.tier_badge_class }}">
+                                        {{ p.get_tier_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="text-sm text-slate-700">
+                                        {% if p.channel_manager %}
+                                        {{ p.channel_manager.get_full_name|default:p.channel_manager.username }}
+                                        {% else %}
+                                        <span class="text-slate-400">Unassigned</span>
+                                        {% endif %}
+                                    </span>
+                                </td>
+                                <td>{{ p.currency.code }} {{ p.annual_revenue_target|floatformat:2 }}</td>
+                                <td class="font-semibold text-slate-900">{{ p.currency.code }} {{ p.actual_revenue_ytd|floatformat:2 }}</td>
+                                <td>
+                                    <span class="text-xs font-semibold {% if p.revenue_attainment_pct >= 100 %}text-emerald-600{% elif p.revenue_attainment_pct >= 75 %}text-blue-600{% else %}text-amber-600{% endif %}">
+                                        {{ p.revenue_attainment_pct }}%
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-6 text-center text-sm text-slate-500">
+                    No partner revenue records registered yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Side: Expiring Deals & Conflicts -->
+    <div class="space-y-6">
+        <!-- Expiring Registrations Card -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Expiring Deal Exclusivity (30 Days)</h3>
+                <a href="{% url 'sales:deal_registration_list' %}" class="text-xs font-medium text-blue-600 hover:underline">
+                    View Deals
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if expiring_registrations %}
+                <ul class="divide-y divide-slate-100">
+                    {% for reg in expiring_registrations %}
+                    <li class="p-4 hover:bg-slate-50">
+                        <div class="flex items-center justify-between">
+                            <a href="{% url 'sales:deal_registration_detail' reg.pk %}" class="text-sm font-medium text-slate-900 hover:text-blue-600">
+                                {{ reg.deal_name }}
+                            </a>
+                            <span class="badge badge-amber text-xs">
+                                {{ reg.days_remaining }}d left
+                            </span>
+                        </div>
+                        <div class="text-xs text-slate-500 mt-1">
+                            Partner: {{ reg.partner.name }} · {{ reg.currency.code }} {{ reg.estimated_value|floatformat:0 }}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-6 text-center text-sm text-slate-500">
+                    No protected deals expiring in the next 30 days.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Recent Conflicts Card -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Active Channel Conflicts</h3>
+                <a href="{% url 'sales:channel_conflict_list' %}" class="text-xs font-medium text-blue-600 hover:underline">
+                    View Conflicts
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_conflicts %}
+                <ul class="divide-y divide-slate-100">
+                    {% for ccf in recent_conflicts %}
+                    <li class="p-4 hover:bg-slate-50">
+                        <div class="flex items-center justify-between">
+                            <a href="{% url 'sales:channel_conflict_detail' ccf.pk %}" class="text-sm font-medium text-slate-900 hover:text-blue-600">
+                                {{ ccf.number }}
+                            </a>
+                            <span class="badge {{ ccf.severity_badge_class }} text-xs">
+                                {{ ccf.get_severity_display }}
+                            </span>
+                        </div>
+                        <div class="text-xs text-slate-600 mt-1">
+                            {{ ccf.get_conflict_type_display }}
+                        </div>
+                        <div class="text-xs text-slate-400 mt-0.5">
+                            Claimant: {{ ccf.claimant_partner.name }} vs {{ ccf.client_account.name }}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-6 text-center text-sm text-slate-500">
+                    Zero open channel conflicts requiring adjudication.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
