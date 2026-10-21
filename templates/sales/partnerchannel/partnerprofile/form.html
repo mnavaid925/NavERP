@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_edit %}Edit Partner Profile {{ partner_profile.number }}{% else %}Register Channel Partner{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:partner_performance_console' %}">Partner & Channel</a>
+            <span>/</span>
+            <a href="{% url 'sales:partner_profile_list' %}">Partners</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ partner_profile.number }}{% else %}New Partner{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Partner Profile {{ partner_profile.number }}{% else %}Register Channel Partner{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:partner_profile_detail' partner_profile.pk %}{% else %}{% url 'sales:partner_profile_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="space-y-6">
+                <!-- Core Organization & Categorization -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        1. Partner Organization & Program Classification
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.partner.id_for_label }}">
+                                Partner Organization (Party) <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.partner }}
+                            {% if form.partner.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.partner.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.partner_type.id_for_label }}">
+                                Partner Type
+                            </label>
+                            {{ form.partner_type }}
+                            {% if form.partner_type.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.partner_type.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.onboarding_status.id_for_label }}">
+                                Onboarding Status
+                            </label>
+                            {{ form.onboarding_status }}
+                            {% if form.onboarding_status.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.onboarding_status.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.tier.id_for_label }}">
+                                Partner Tier
+                            </label>
+                            {{ form.tier }}
+                            {% if form.tier.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.tier.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.channel_manager.id_for_label }}">
+                                Channel Account Manager (CAM)
+                            </label>
+                            {{ form.channel_manager }}
+                            {% if form.channel_manager.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.channel_manager.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.authorized_territory.id_for_label }}">
+                                Authorized Territory
+                            </label>
+                            {{ form.authorized_territory }}
+                            {% if form.authorized_territory.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.authorized_territory.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.currency.id_for_label }}">
+                                Operating Currency <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.currency }}
+                            {% if form.currency.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.currency.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agreement & Dates -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        2. Agreement & Timeline
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.application_date.id_for_label }}">
+                                Application Date
+                            </label>
+                            {{ form.application_date }}
+                            {% if form.application_date.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.application_date.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.agreement_signed_at.id_for_label }}">
+                                Agreement Signed Timestamp
+                            </label>
+                            {{ form.agreement_signed_at }}
+                            {% if form.agreement_signed_at.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.agreement_signed_at.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.agreement_document.id_for_label }}">
+                                Partner Agreement Document (core.Document)
+                            </label>
+                            {{ form.agreement_document }}
+                            {% if form.agreement_document.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.agreement_document.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.tier_effective_date.id_for_label }}">
+                                Tier Effective Date
+                            </label>
+                            {{ form.tier_effective_date }}
+                            {% if form.tier_effective_date.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.tier_effective_date.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.tier_review_date.id_for_label }}">
+                                Next Tier Review Date
+                            </label>
+                            {{ form.tier_review_date }}
+                            {% if form.tier_review_date.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.tier_review_date.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Financial Targets & Margins -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        3. Revenue Targets, Discounts & Certifications
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.annual_revenue_target.id_for_label }}">
+                                Annual Revenue Quota Target
+                            </label>
+                            {{ form.annual_revenue_target }}
+                            {% if form.annual_revenue_target.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.annual_revenue_target.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.actual_revenue_ytd.id_for_label }}">
+                                Actual Revenue Closed YTD
+                            </label>
+                            {{ form.actual_revenue_ytd }}
+                            {% if form.actual_revenue_ytd.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.actual_revenue_ytd.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.base_discount_pct.id_for_label }}">
+                                Base Tier Discount Margin (%)
+                            </label>
+                            {{ form.base_discount_pct }}
+                            {% if form.base_discount_pct.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.base_discount_pct.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.deal_reg_margin_pct.id_for_label }}">
+                                Protected Deal Reg Margin (%)
+                            </label>
+                            {{ form.deal_reg_margin_pct }}
+                            {% if form.deal_reg_margin_pct.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.deal_reg_margin_pct.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.required_certifications_count.id_for_label }}">
+                                Required Certifications
+                            </label>
+                            {{ form.required_certifications_count }}
+                            {% if form.required_certifications_count.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.required_certifications_count.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.active_certifications_count.id_for_label }}">
+                                Active Certified Reps
+                            </label>
+                            {{ form.active_certifications_count }}
+                            {% if form.active_certifications_count.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.active_certifications_count.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2 flex items-center gap-2 pt-2">
+                            {{ form.portal_access_enabled }}
+                            <label class="text-sm font-medium text-slate-800" for="{{ form.portal_access_enabled.id_for_label }}">
+                                Enable Partner Portal Access
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        4. Strategic Notes
+                    </h3>
+                    <div class="form-group">
+                        {{ form.notes }}
+                        {% if form.notes.errors %}
+                        <div class="form-error text-xs text-rose-600 mt-1">{{ form.notes.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 mt-8 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'sales:partner_profile_detail' partner_profile.pk %}{% else %}{% url 'sales:partner_profile_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Register Partner{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
