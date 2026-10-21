@@ -369,6 +369,30 @@ from .SalesAnalytics import (
     win_loss_debrief_edit,
     win_loss_debrief_list,
 )
+from .PartnerChannel import (
+    channel_conflict_create,
+    channel_conflict_delete,
+    channel_conflict_detail,
+    channel_conflict_edit,
+    channel_conflict_list,
+    deal_registration_convert,
+    deal_registration_create,
+    deal_registration_delete,
+    deal_registration_detail,
+    deal_registration_edit,
+    deal_registration_list,
+    joint_account_plan_create,
+    joint_account_plan_delete,
+    joint_account_plan_detail,
+    joint_account_plan_edit,
+    joint_account_plan_list,
+    partner_performance_console,
+    partner_profile_create,
+    partner_profile_delete,
+    partner_profile_detail,
+    partner_profile_edit,
+    partner_profile_list,
+)
 
 # View functions exported for URLconf routing and external imports
 __all__ = [
@@ -406,6 +430,9 @@ __all__ = [
         "rep_performance_scorecard_",
         "analytics_console", "win_loss_console", "velocity_console",
         "funnel_console", "rep_scorecard_console", "benchmark_console",
+        # 8.14 Partner & Channel Management
+        "partner_profile_", "partner_performance_console",
+        "deal_registration_", "joint_account_plan_", "channel_conflict_",
     ))
 ]
 
