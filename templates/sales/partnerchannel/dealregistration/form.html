@@ -186,25 +186,11 @@
                             {% endif %}
                         </div>
 
-                        <div class="form-group">
-                            <label class="form-label font-medium" for="{{ form.reviewed_by.id_for_label }}">
-                                Reviewed By (CAM)
-                            </label>
-                            {{ form.reviewed_by }}
-                            {% if form.reviewed_by.errors %}
-                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.reviewed_by.errors.0 }}</div>
-                            {% endif %}
+                        {% if is_edit and deal_registration.reviewed_at %}
+                        <div class="form-group sm:col-span-2 p-3 bg-slate-50 rounded border border-slate-200 text-xs text-slate-600">
+                            <strong>Review Audit:</strong> Reviewed by {{ deal_registration.reviewed_by.get_full_name|default:deal_registration.reviewed_by.username|default:"System" }} on {{ deal_registration.reviewed_at|date:"Y-m-d H:i" }}
                         </div>
-
-                        <div class="form-group">
-                            <label class="form-label font-medium" for="{{ form.reviewed_at.id_for_label }}">
-                                Reviewed Timestamp
-                            </label>
-                            {{ form.reviewed_at }}
-                            {% if form.reviewed_at.errors %}
-                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.reviewed_at.errors.0 }}</div>
-                            {% endif %}
-                        </div>
+                        {% endif %}
 
                         <div class="form-group sm:col-span-2">
                             <label class="form-label font-medium" for="{{ form.rejection_reason.id_for_label }}">
