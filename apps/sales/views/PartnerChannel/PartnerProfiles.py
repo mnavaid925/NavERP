@@ -178,7 +178,6 @@ def partner_profile_edit(request, pk):
 def partner_profile_delete(request, pk):
     obj = get_object_or_404(PartnerProfile.objects.filter(tenant=request.tenant), pk=pk)
     number = obj.number
-    obj.delete()
     write_audit_log(
         user=request.user,
         obj=obj,
@@ -186,6 +185,7 @@ def partner_profile_delete(request, pk):
         changes=f"Deleted partner profile {number}",
         tenant=request.tenant,
     )
+    obj.delete()
     messages.success(request, f"Partner profile {number} deleted successfully.")
     return redirect("sales:partner_profile_list")
 
