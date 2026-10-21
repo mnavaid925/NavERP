@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Channel Conflict Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:partner_performance_console' %}">Partner & Channel</a>
+            <span>/</span>
+            <span>Channel Conflicts</span>
+        </div>
+        <h1 class="page-title">Channel Conflict Management</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:partner_performance_console' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Performance Console</span>
+        </a>
+        <a href="{% url 'sales:channel_conflict_create' %}" class="btn btn-primary">
+            <i data-lucide="alert-circle"></i>
+            <span>File Conflict Dispute</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Bar -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Disputes</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.total_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Open / Mediation</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.open_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Escalated to Exec</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.escalated_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Resolved / Ruled</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ stats.resolved_count|default:"0" }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div>
+                <label class="form-label">Search Disputes</label>
+                <input type="text" name="q" value="{{ q }}" placeholder="Dispute #, partner, client, description..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label">Conflict Type</label>
+                <select name="conflict_type" class="form-select">
+                    <option value="">All Conflict Types</option>
+                    {% for code, label in conflict_type_choices %}
+                    <option value="{{ code }}" {% if selected_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if selected_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'sales:channel_conflict_list' %}" class="btn btn-outline" title="Reset filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-body p-0">
+        {% if conflicts %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Dispute</th>
+                        <th>Type</th>
+                        <th>Claimant Partner</th>
+                        <th>Contested Account</th>
+                        <th>Severity</th>
+                        <th>Escalation Level</th>
+                        <th>Status</th>
+                        <th>Resolution Outcome</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in conflicts %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">
+                                <a href="{% url 'sales:channel_conflict_detail' item.pk %}" class="hover:text-blue-600">
+                                    {{ item.number }}
+                                </a>
+                            </div>
+                            <div class="text-xs text-slate-500">{{ item.created_at|date:"M d, Y" }}</div>
+                        </td>
+                        <td>
+                            <span class="text-sm text-slate-800">{{ item.get_conflict_type_display }}</span>
+                        </td>
+                        <td>
+                            <span class="text-sm font-medium text-slate-900">{{ item.claimant_partner.name }}</span>
+                        </td>
+                        <td>
+                            <span class="text-sm text-slate-700">{{ item.client_account.name }}</span>
+                        </td>
+                        <td>
+                            <span class="badge {{ item.severity_badge_class }}">
+                                {{ item.get_severity_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge {{ item.escalation_badge_class }}">
+                                {{ item.get_escalation_level_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge {{ item.status_badge_class }}">
+                                {{ item.get_status_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="text-xs font-medium text-slate-700">
+                                {{ item.get_resolution_outcome_display }}
+                                {% if item.split_percentage > 0 %}
+                                ({{ item.split_percentage }}% split)
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td class="table-actions text-right">
+                            <a href="{% url 'sales:channel_conflict_detail' item.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'sales:channel_conflict_edit' item.pk %}" class="btn btn-icon" title="Edit dispute">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form action="{% url 'sales:channel_conflict_delete' item.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete conflict dispute {{ item.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-rose-600 hover:bg-rose-50" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} disputes
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}&q={{ q }}&conflict_type={{ selected_type }}&status={{ selected_status }}&escalation_level={{ selected_level }}" class="btn btn-outline py-1 px-3">
+                    Previous
+                </a>
+                {% endif %}
+                <span class="py-1 px-3 text-sm font-medium text-slate-700">
+                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                </span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&q={{ q }}&conflict_type={{ selected_type }}&status={{ selected_status }}&escalation_level={{ selected_level }}" class="btn btn-outline py-1 px-3">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state p-12 text-center">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 text-blue-600 mb-4">
+                <i data-lucide="shield-check" class="w-8 h-8"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-slate-900 mb-1">No Channel Conflicts</h3>
+            <p class="text-sm text-slate-500 max-w-sm mx-auto mb-6">
+                {% if q or selected_type or selected_status %}
+                No disputes matched your filter criteria.
+                {% else %}
+                All channel partnerships and direct sales teams are operating without active disputes.
+                {% endif %}
+            </p>
+            <a href="{% url 'sales:channel_conflict_create' %}" class="btn btn-primary">
+                <i data-lucide="alert-circle"></i>
+                <span>File Dispute</span>
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
