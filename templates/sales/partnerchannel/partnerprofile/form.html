@@ -259,6 +259,7 @@
                         4. Strategic Notes
                     </h3>
                     <div class="form-group">
+                        <label class="form-label" for="{{ form.notes.id_for_label }}">Strategic Notes</label>
                         {{ form.notes }}
                         {% if form.notes.errors %}
                         <div class="form-error text-xs text-rose-600 mt-1">{{ form.notes.errors.0 }}</div>
