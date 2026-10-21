@@ -69,7 +69,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
             <div>
                 <label class="form-label">Search Disputes</label>
                 <input type="text" name="q" value="{{ q }}" placeholder="Dispute #, partner, client, description..." class="form-input">
@@ -89,6 +89,15 @@
                     <option value="">All Statuses</option>
                     {% for code, label in status_choices %}
                     <option value="{{ code }}" {% if selected_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Escalation Tier</label>
+                <select name="escalation_level" class="form-select">
+                    <option value="">All Tiers</option>
+                    {% for code, label in escalation_level_choices %}
+                    <option value="{{ code }}" {% if selected_level == code or request.GET.escalation_level == code %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
