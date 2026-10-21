@@ -177,7 +177,6 @@ def channel_conflict_edit(request, pk):
 def channel_conflict_delete(request, pk):
     obj = get_object_or_404(ChannelConflict.objects.filter(tenant=request.tenant), pk=pk)
     number = obj.number
-    obj.delete()
     write_audit_log(
         user=request.user,
         obj=obj,
@@ -185,5 +184,6 @@ def channel_conflict_delete(request, pk):
         changes=f"Deleted channel conflict {number}",
         tenant=request.tenant,
     )
+    obj.delete()
     messages.success(request, f"Channel conflict dispute {number} deleted successfully.")
     return redirect("sales:channel_conflict_list")
