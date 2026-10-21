@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_edit %}Edit Joint Account Plan {{ joint_plan.number }}{% else %}New Joint Account Plan{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:partner_performance_console' %}">Partner & Channel</a>
+            <span>/</span>
+            <a href="{% url 'sales:joint_account_plan_list' %}">Joint Plans</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ joint_plan.number }}{% else %}New Plan{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Joint Account Plan {{ joint_plan.number }}{% else %}New Joint Account Plan{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:joint_account_plan_detail' joint_plan.pk %}{% else %}{% url 'sales:joint_account_plan_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="space-y-6">
+                <!-- Plan Identification -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        1. Plan & Account Alignment
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.plan_name.id_for_label }}">
+                                Joint Plan Name <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.plan_name }}
+                            {% if form.plan_name.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.plan_name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.partner.id_for_label }}">
+                                Partner Organization <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.partner }}
+                            {% if form.partner.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.partner.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.client_account.id_for_label }}">
+                                Target Client Account <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.client_account }}
+                            {% if form.client_account.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.client_account.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.co_sell_motion.id_for_label }}">
+                                Co-Sell Motion
+                            </label>
+                            {{ form.co_sell_motion }}
+                            {% if form.co_sell_motion.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.co_sell_motion.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.status.id_for_label }}">
+                                Plan Status
+                            </label>
+                            {{ form.status }}
+                            {% if form.status.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.status.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline & Revenue Goals -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        2. Timeline & Revenue Targets
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.plan_year.id_for_label }}">
+                                Plan Year
+                            </label>
+                            {{ form.plan_year }}
+                            {% if form.plan_year.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.plan_year.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.currency.id_for_label }}">
+                                Plan Currency <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.currency }}
+                            {% if form.currency.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.currency.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.period_start.id_for_label }}">
+                                Execution Start Date
+                            </label>
+                            {{ form.period_start }}
+                            {% if form.period_start.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.period_start.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.period_end.id_for_label }}">
+                                Execution End Date <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.period_end }}
+                            {% if form.period_end.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.period_end.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.target_revenue.id_for_label }}">
+                                Co-Sell Target Revenue
+                            </label>
+                            {{ form.target_revenue }}
+                            {% if form.target_revenue.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.target_revenue.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.actual_revenue.id_for_label }}">
+                                Actual Co-Sell Revenue Closed
+                            </label>
+                            {{ form.actual_revenue }}
+                            {% if form.actual_revenue.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.actual_revenue.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Team & Strategy -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        3. Co-Sell Leads & Strategic Collateral
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.partner_lead_name.id_for_label }}">
+                                Partner Lead Champion <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.partner_lead_name }}
+                            {% if form.partner_lead_name.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.partner_lead_name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.partner_lead_email.id_for_label }}">
+                                Partner Lead Email
+                            </label>
+                            {{ form.partner_lead_email }}
+                            {% if form.partner_lead_email.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.partner_lead_email.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.vendor_lead.id_for_label }}">
+                                Internal Direct AE Lead
+                            </label>
+                            {{ form.vendor_lead }}
+                            {% if form.vendor_lead.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.vendor_lead.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.collateral_document.id_for_label }}">
+                                Co-Branded Collateral Document
+                            </label>
+                            {{ form.collateral_document }}
+                            {% if form.collateral_document.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.collateral_document.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.strategic_objectives.id_for_label }}">
+                                Strategic Objectives & Milestones
+                            </label>
+                            {{ form.strategic_objectives }}
+                            {% if form.strategic_objectives.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.strategic_objectives.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.joint_value_proposition.id_for_label }}">
+                                Joint Value Proposition
+                            </label>
+                            {{ form.joint_value_proposition }}
+                            {% if form.joint_value_proposition.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.joint_value_proposition.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.notes.id_for_label }}">
+                                Plan Notes
+                            </label>
+                            {{ form.notes }}
+                            {% if form.notes.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.notes.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 mt-8 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'sales:joint_account_plan_detail' joint_plan.pk %}{% else %}{% url 'sales:joint_account_plan_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Plan{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
