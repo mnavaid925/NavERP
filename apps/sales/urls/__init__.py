@@ -46,6 +46,8 @@ from .MarketingAlignment import urlpatterns as _marketing_alignment
 # opportunity / lead / territory masters by FK; declares no second reason, outcome,
 # competitor, quota, currency, activity or report master.
 from .SalesAnalytics import urlpatterns as _sales_analytics
+# 8.14 Partner & Channel Management.
+from .PartnerChannel import urlpatterns as _partner_channel
 
 app_name = "sales"
 
@@ -84,6 +86,8 @@ urlpatterns = [
     *_marketing_alignment,
     # 8.12 Sales Analytics & Intelligence.
     *_sales_analytics,
+    # 8.14 Partner & Channel Management.
+    *_partner_channel,
     *_pipelines,
     *_teams,
     *_competitors,
