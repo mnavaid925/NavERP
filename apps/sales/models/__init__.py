@@ -116,6 +116,14 @@ from .SalesAnalytics import (
     StageVelocityAnalysis,
     WinLossDebrief,
 )
+# 8.14 Partner & Channel Management. These EXTEND core.Party, crm.Opportunity,
+# crm.Territory and accounting.Currency -- none is a duplicate company or deal table.
+from .PartnerChannel import (
+    ChannelConflict,
+    DealRegistration,
+    JointAccountPlan,
+    PartnerProfile,
+)
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
@@ -163,6 +171,8 @@ __all__ = [
     "INTERVIEW_CHANNEL_CHOICES", "FEEDBACK_TEAM_CHOICES", "DEBRIEF_STATUS_CHOICES",
     "VELOCITY_STATUS_CHOICES", "FUNNEL_SCOPE_CHOICES",
     "SCORECARD_RATING_CHOICES", "SCORECARD_STATUS_CHOICES",
+    # 8.14 Partner & Channel Management
+    "PartnerProfile", "DealRegistration", "JointAccountPlan", "ChannelConflict",
 ]
 
 
