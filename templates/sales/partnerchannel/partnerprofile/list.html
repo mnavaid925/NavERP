@@ -69,7 +69,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
             <div>
                 <label class="form-label">Search Partners</label>
                 <input type="text" name="q" value="{{ q }}" placeholder="Name, code, notes..." class="form-input">
@@ -98,6 +98,17 @@
                     <option value="">All Tiers</option>
                     {% for code, label in tier_choices %}
                     <option value="{{ code }}" {% if selected_tier == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Channel Manager</label>
+                <select name="channel_manager" class="form-select">
+                    <option value="">All Managers</option>
+                    {% for cm in channel_managers %}
+                    <option value="{{ cm.pk }}" {% if request.GET.channel_manager == cm.pk|stringformat:"d" or selected_cam == cm.pk|stringformat:"d" %}selected{% endif %}>
+                        {{ cm.get_full_name|default:cm.username }}
+                    </option>
                     {% endfor %}
                 </select>
             </div>
