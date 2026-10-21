@@ -62,7 +62,7 @@ def _partnerchannel_doc(tenant, name="Partner Contract"):
 
 
 def _partnerchannel_territory(tenant, name="North America East"):
-    return Territory.objects.create(tenant=tenant, name=name, code=name[:10].upper().replace(" ", "-"))
+    return Territory.objects.create(tenant=tenant, name=name, region="North America")
 
 
 # ============================================================================
