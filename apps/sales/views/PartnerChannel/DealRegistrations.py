@@ -96,7 +96,7 @@ def deal_registration_detail(request, pk):
         pk=pk,
     )
 
-    conflicts = deal_registration.channel_conflicts.filter(tenant=request.tenant).order_by("-created_at")
+    conflicts = deal_registration.channel_conflicts.filter(tenant=request.tenant).order_by("-created_at")[:10]
 
     context = {
         "deal_registration": deal_registration,
