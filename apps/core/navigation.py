@@ -2558,6 +2558,18 @@ LIVE_LINKS = {
         "Attribution Touchpoints": "sales:attribution_touchpoint_list",
         "Campaign Attributions": "sales:campaign_attribution_list",
     },
+    "8.14": {
+        "Partner Recruitment & Onboarding": "sales:partner_profile_list",
+        "Deal Registration & Protection": "sales:deal_registration_list",
+        "Partner Portal & Collaboration": "sales:joint_account_plan_list",
+        "Partner Performance Tracking": "sales:partner_performance_console",
+        "Channel Conflict Management": "sales:channel_conflict_list",
+        # Extra live leaves
+        "Partner Profiles": "sales:partner_profile_list",
+        "Deal Registrations": "sales:deal_registration_list",
+        "Joint Account Plans": "sales:joint_account_plan_list",
+        "Channel Conflicts": "sales:channel_conflict_list",
+    },
 
 
 
