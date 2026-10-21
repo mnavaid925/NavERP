@@ -7,7 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounting.models import Currency
-from apps.core.models import ConsentPurpose, Document, Party, Tenant
+from apps.core.models import ConsentPurpose, Document, Party, PartyRole, Tenant
 from apps.crm.models import (
     AccountProfile, Campaign, CommunicationLog, ContactProfile, CrmTask,
     EmailCampaign, EmailTemplate, Lead, Opportunity, SalesQuota, Territory,
