@@ -71,6 +71,11 @@ from .models import (
     StageVelocityAnalysis,
     FunnelConversionRecord,
     RepPerformanceScorecard,
+    # 8.14 Partner & Channel Management
+    PartnerProfile,
+    DealRegistration,
+    JointAccountPlan,
+    ChannelConflict,
 )
 
 
@@ -851,7 +856,7 @@ class AttributionTouchpointAdmin(admin.ModelAdmin):
 
 
 class TenantScopedFKAdmin(admin.ModelAdmin):
-    """Base admin for the 8.13 entities: narrows EVERY tenant-scoped FK to the tenant.
+    """Base admin for the 8.13 and 8.12 entities: narrows EVERY tenant-scoped FK to the tenant.
 
     ``accounts.User.tenant`` is nullable -- the platform superuser has no tenant -- so a user FK
     is filtered on ``tenant=request.tenant, is_active=True``, which also excludes that
@@ -997,6 +1002,56 @@ class RepPerformanceScorecardAdmin(TenantScopedFKAdmin):
     raw_id_fields = ("rep", "territory", "manager", "forecast_period", "quota_plan", "coaching_scorecard", "currency")
     tenant_fk_fields = ("territory", "forecast_period", "quota_plan", "coaching_scorecard")
     tenant_user_fk_fields = ("rep", "manager")
+
+
+# 8.14 Partner & Channel Management Admins
+@admin.register(PartnerProfile)
+class PartnerProfileAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "partner", "partner_type", "tier", "onboarding_status", "channel_manager", "annual_revenue_target", "actual_revenue_ytd", "tenant")
+    list_filter = ("partner_type", "tier", "onboarding_status", "portal_access_enabled", "tenant")
+    search_fields = ("number", "partner__name", "notes")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("partner", "channel_manager", "authorized_territory", "currency", "tenant")
+    raw_id_fields = ("partner", "channel_manager", "authorized_territory", "agreement_document", "currency")
+    tenant_fk_fields = ("partner", "authorized_territory", "agreement_document")
+    tenant_user_fk_fields = ("channel_manager",)
+
+
+@admin.register(DealRegistration)
+class DealRegistrationAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "deal_name", "partner", "customer_account", "estimated_value", "status", "exclusivity_status", "protection_end_date", "tenant")
+    list_filter = ("status", "exclusivity_status", "is_conflicted", "tenant")
+    search_fields = ("number", "deal_name", "partner__name", "customer_account__name", "partner_rep_name")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("partner", "customer_account", "currency", "reviewed_by", "opportunity", "tenant")
+    raw_id_fields = ("partner", "customer_account", "opportunity", "reviewed_by", "currency")
+    tenant_fk_fields = ("partner", "customer_account", "opportunity")
+    tenant_user_fk_fields = ("reviewed_by",)
+
+
+@admin.register(JointAccountPlan)
+class JointAccountPlanAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "plan_name", "partner", "client_account", "plan_year", "co_sell_motion", "status", "target_revenue", "actual_revenue", "tenant")
+    list_filter = ("status", "co_sell_motion", "plan_year", "tenant")
+    search_fields = ("number", "plan_name", "partner__name", "client_account__name", "partner_lead_name")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("partner", "client_account", "currency", "vendor_lead", "collateral_document", "tenant")
+    raw_id_fields = ("partner", "client_account", "vendor_lead", "collateral_document", "currency")
+    tenant_fk_fields = ("partner", "client_account", "collateral_document")
+    tenant_user_fk_fields = ("vendor_lead",)
+
+
+@admin.register(ChannelConflict)
+class ChannelConflictAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "conflict_type", "severity", "status", "claimant_partner", "client_account", "escalation_level", "resolution_outcome", "tenant")
+    list_filter = ("conflict_type", "severity", "status", "escalation_level", "resolution_outcome", "tenant")
+    search_fields = ("number", "claimant_partner__name", "client_account__name", "description", "resolution_rationale")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("claimant_partner", "competing_partner", "client_account", "direct_sales_rep", "territory", "deal_registration", "opportunity", "escalated_to", "resolved_by", "tenant")
+    raw_id_fields = ("claimant_partner", "competing_partner", "client_account", "direct_sales_rep", "territory", "deal_registration", "opportunity", "escalated_to", "resolved_by")
+    tenant_fk_fields = ("claimant_partner", "competing_partner", "client_account", "territory", "deal_registration", "opportunity")
+    tenant_user_fk_fields = ("direct_sales_rep", "escalated_to", "resolved_by")
+
 
 
 
