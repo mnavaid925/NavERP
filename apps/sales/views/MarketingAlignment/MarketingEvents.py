@@ -39,6 +39,7 @@ def _event_annotations(queryset, tenant):
     """
     registered = (
         EventRegistration.objects.filter(tenant=tenant, event=OuterRef("pk"))
+        .order_by()
         .values("event")
         .annotate(c=Count("id"))
         .values("c")
@@ -47,6 +48,7 @@ def _event_annotations(queryset, tenant):
         EventRegistration.objects.filter(
             tenant=tenant, event=OuterRef("pk"), registration_status="attended"
         )
+        .order_by()
         .values("event")
         .annotate(c=Count("id"))
         .values("c")
@@ -111,8 +113,8 @@ def marketing_event_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    owners = User.objects.filter(tenant=request.tenant).order_by("username")
-    campaigns = Campaign.objects.filter(tenant=request.tenant).order_by("name")
+    owners = User.objects.filter(tenant=request.tenant).only("id", "username", "first_name", "last_name").order_by("username")
+    campaigns = Campaign.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     context = {
         "page_obj": page_obj,
