@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}{{ deal_registration.deal_name }} — Deal Registration — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:partner_performance_console' %}">Partner & Channel</a>
+            <span>/</span>
+            <a href="{% url 'sales:deal_registration_list' %}">Deal Registrations</a>
+            <span>/</span>
+            <span>{{ deal_registration.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ deal_registration.deal_name }}</h1>
+            <span class="badge {{ deal_registration.status_badge_class }}">
+                {{ deal_registration.get_status_display }}
+            </span>
+            <span class="badge {{ deal_registration.exclusivity_badge_class }}">
+                {{ deal_registration.get_exclusivity_status_display }}
+            </span>
+            {% if deal_registration.is_conflicted %}
+            <span class="badge badge-red">Channel Conflicted</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:deal_registration_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to List</span>
+        </a>
+        {% if deal_registration.status == "approved" and not deal_registration.opportunity %}
+        <form action="{% url 'sales:deal_registration_convert' deal_registration.pk %}" method="post" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline border-emerald-600 text-emerald-700 hover:bg-emerald-50">
+                <i data-lucide="arrow-right-circle"></i>
+                <span>Convert to Opportunity</span>
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'sales:deal_registration_edit' deal_registration.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Registration</span>
+        </a>
+    </div>
+</div>
+
+<!-- Header Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Estimated Value</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ deal_registration.currency.code }} {{ deal_registration.estimated_value|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="percent"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Protected Margin</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ deal_registration.protected_margin_pct }}%
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="shield"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Exclusivity Window</div>
+            <div class="text-lg font-bold text-slate-900 mt-1">
+                {% if deal_registration.is_protection_active %}
+                <span class="text-emerald-600">{{ deal_registration.days_remaining }} days remaining</span>
+                {% elif deal_registration.protection_end_date %}
+                <span class="text-slate-400">Expired</span>
+                {% else %}
+                <span class="text-slate-400">Pending Approval</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Target Close Date</div>
+            <div class="text-lg font-bold text-slate-900 mt-1">
+                {{ deal_registration.expected_close_date }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left: Registration Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Registration Details</h3>
+                <span class="text-xs text-slate-500 font-mono">{{ deal_registration.number }}</span>
+            </div>
+            <div class="card-body">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Partner Organization</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ deal_registration.partner.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Prospective Client Account</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ deal_registration.customer_account.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Partner Sales Rep</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {{ deal_registration.partner_rep_name|default:"-" }}
+                            {% if deal_registration.partner_rep_email %}
+                            <span class="text-xs text-slate-500">({{ deal_registration.partner_rep_email }})</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Submission Date</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ deal_registration.submission_date }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Reviewed By (CAM)</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {% if deal_registration.reviewed_by %}
+                            {{ deal_registration.reviewed_by.get_full_name|default:deal_registration.reviewed_by.username }}
+                            {% else %}
+                            <span class="text-slate-400">Unreviewed</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Review Timestamp</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {{ deal_registration.reviewed_at|date:"M d, Y H:i"|default:"-" }}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Protection Window</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {% if deal_registration.protection_start_date and deal_registration.protection_end_date %}
+                            {{ deal_registration.protection_start_date }} to {{ deal_registration.protection_end_date }}
+                            {% else %}
+                            <span class="text-slate-400">Not locked</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Extensions Granted</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ deal_registration.extension_count }}</dd>
+                    </div>
+                </dl>
+
+                {% if deal_registration.opportunity %}
+                <div class="mt-6 p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="check-circle" class="w-5 h-5 text-emerald-600"></i>
+                        <span class="text-sm font-medium text-emerald-900">
+                            Converted into Opportunity:
+                            <strong>{{ deal_registration.opportunity.title }} ({{ deal_registration.opportunity.number }})</strong>
+                        </span>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if deal_registration.rejection_reason %}
+                <div class="mt-6 p-4 rounded-lg bg-rose-50 border border-rose-200">
+                    <h4 class="text-xs text-rose-800 font-semibold uppercase tracking-wider mb-1">Rejection Reason</h4>
+                    <p class="text-sm text-rose-900">{{ deal_registration.rejection_reason }}</p>
+                </div>
+                {% endif %}
+
+                {% if deal_registration.notes %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs text-slate-500 uppercase tracking-wider mb-2">Deal Notes / Scope</h4>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ deal_registration.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Conflicts -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Channel Conflicts</h3>
+                <a href="{% url 'sales:channel_conflict_create' %}" class="btn btn-outline py-1 px-3 text-xs">
+                    <i data-lucide="alert-circle"></i>
+                    <span>File Dispute</span>
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if conflicts %}
+                <ul class="divide-y divide-slate-100">
+                    {% for ccf in conflicts %}
+                    <li class="p-4 hover:bg-slate-50">
+                        <div class="flex items-center justify-between">
+                            <a href="{% url 'sales:channel_conflict_detail' ccf.pk %}" class="font-medium text-sm text-slate-900 hover:text-blue-600">
+                                {{ ccf.number }}
+                            </a>
+                            <span class="badge {{ ccf.status_badge_class }} text-xs">
+                                {{ ccf.get_status_display }}
+                            </span>
+                        </div>
+                        <div class="text-xs text-slate-500 mt-1">
+                            {{ ccf.get_conflict_type_display }}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-6 text-center text-sm text-slate-500">
+                    Zero channel conflicts logged for this deal.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
