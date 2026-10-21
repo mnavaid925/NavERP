@@ -154,7 +154,6 @@ def joint_account_plan_edit(request, pk):
 def joint_account_plan_delete(request, pk):
     obj = get_object_or_404(JointAccountPlan.objects.filter(tenant=request.tenant), pk=pk)
     number = obj.number
-    obj.delete()
     write_audit_log(
         user=request.user,
         obj=obj,
@@ -162,5 +161,6 @@ def joint_account_plan_delete(request, pk):
         changes=f"Deleted joint account plan {number}",
         tenant=request.tenant,
     )
+    obj.delete()
     messages.success(request, f"Joint account plan {number} deleted successfully.")
     return redirect("sales:joint_account_plan_list")
