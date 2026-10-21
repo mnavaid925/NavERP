@@ -85,7 +85,7 @@
                 {{ joint_plan.partner_lead_name }}
             </div>
             <div class="text-xs text-slate-500 mt-1">
-                Direct AE: {{ joint_plan.vendor_lead.get_full_name|default:joint_plan.vendor_lead.username|default:"Unassigned" }}
+                Direct AE: {% if joint_plan.vendor_lead %}{{ joint_plan.vendor_lead.get_full_name|default:joint_plan.vendor_lead.username }}{% else %}Unassigned{% endif %}
             </div>
         </div>
     </div>
