@@ -37,7 +37,7 @@ from apps.sales.models.MarketingAlignment.MarketingEvents import (
 )
 from apps.sales.models.MarketingAlignment.MqlHandoffs import MqlHandoff
 from apps.sales.models.SalesEnablement.EnablementContents import EnablementContent
-from apps.sales.views.MarketingAlignment._common import avg_response_hours
+from apps.sales.views.MarketingAlignment._common import avg_response_hours, single_currency
 
 ZERO = Decimal("0.00")
 
@@ -63,12 +63,12 @@ def marketing_attribution_console(request):
     touchpoints = AttributionTouchpoint.objects.filter(tenant=tenant)
     attributions = CampaignAttribution.objects.filter(
         tenant=tenant, attribution_model=active_model
-    )
+    ).exclude(status="rejected")
 
     # ---- Campaign rollup -------------------------------------------------------------------
     tp_by_campaign = {
         row["campaign_id"]: row
-        for row in touchpoints.values("campaign_id").annotate(
+        for row in touchpoints.order_by().values("campaign_id").annotate(
             touchpoint_count=Count("id"),
             lead_count=Count("lead_id", distinct=True),
             pipeline_value=Sum("engagement_value"),
@@ -76,7 +76,7 @@ def marketing_attribution_console(request):
     }
     attr_by_campaign = {
         row["touchpoint__campaign_id"]: row
-        for row in attributions.values("touchpoint__campaign_id").annotate(
+        for row in attributions.order_by().values("touchpoint__campaign_id").annotate(
             attributed_revenue=Sum("attributed_revenue"),
         )
     }
@@ -118,14 +118,14 @@ def marketing_attribution_console(request):
     # ---- Channel rollup -------------------------------------------------------------------
     tp_by_channel = {
         row["channel"]: row
-        for row in touchpoints.values("channel").annotate(
+        for row in touchpoints.order_by().values("channel").annotate(
             touchpoints=Count("id"),
             cost=Sum("cost"),
         )
     }
     attr_by_channel = {
         row["touchpoint__channel"]: row
-        for row in attributions.values("touchpoint__channel").annotate(
+        for row in attributions.order_by().values("touchpoint__channel").annotate(
             attributed_revenue=Sum("attributed_revenue"),
         )
     }
@@ -253,12 +253,14 @@ def marketing_attribution_console(request):
     # touched two campaigns is one lead, not two. Summing the per-campaign `lead_count`
     # (each a `Count("lead_id", distinct=True)`) would double-count such a lead, so the
     # denominator is one distinct count over the tenant's touchpoints instead.
-    total_leads = (
-        touchpoints.aggregate(total_leads=Count("lead_id", distinct=True))["total_leads"] or 0
+    tp_counts = touchpoints.aggregate(
+        total_touchpoints=Count("id"),
+        total_leads=Count("lead_id", distinct=True),
     )
+    total_leads = tp_counts["total_leads"] or 0
     avg_cost_per_lead = (total_spend / total_leads) if (total_leads and total_spend) else None
     stats = {
-        "total_touchpoints": touchpoints.count(),
+        "total_touchpoints": tp_counts["total_touchpoints"] or 0,
         "total_spend": total_spend,
         "total_attributed_revenue": total_attributed_revenue,
         "blended_roi_pct": _roi_pct(total_attributed_revenue, total_spend),
@@ -268,14 +270,7 @@ def marketing_attribution_console(request):
     # The console's money figures are denominated in the currency of the touchpoints they are
     # derived from. A symbol is only shown when EVERY touchpoint in the tenant uses the SAME
     # currency; otherwise the totals are rendered without a symbol rather than mislabelled.
-    currency_ids = set(
-        touchpoints.exclude(currency__isnull=True).values_list("currency_id", flat=True)
-    )
-    console_currency = (
-        Currency.objects.filter(pk=currency_ids.pop()).first()
-        if len(currency_ids) == 1
-        else None
-    )
+    console_currency = single_currency(touchpoints)
 
     context = {
         "stats": stats,
