@@ -80,14 +80,16 @@ def content_engagement_list(request):
 
     contents = (
         EnablementContent.objects.filter(tenant=request.tenant, is_active=True)
+        .only("id", "title")
         .order_by("title")
     )
     accounts = (
         Party.objects.filter(tenant=request.tenant, roles__role="customer")
+        .only("id", "name")
         .distinct()
         .order_by("name")
     )
-    campaigns = Campaign.objects.filter(tenant=request.tenant).order_by("name")
+    campaigns = Campaign.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     context = {
         "page_obj": page_obj,
