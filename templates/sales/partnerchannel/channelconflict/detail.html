@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}Conflict {{ conflict.number }} — Channel Conflict — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:partner_performance_console' %}">Partner & Channel</a>
+            <span>/</span>
+            <a href="{% url 'sales:channel_conflict_list' %}">Channel Conflicts</a>
+            <span>/</span>
+            <span>{{ conflict.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ conflict.get_conflict_type_display }}</h1>
+            <span class="badge {{ conflict.status_badge_class }}">
+                {{ conflict.get_status_display }}
+            </span>
+            <span class="badge {{ conflict.severity_badge_class }}">
+                {{ conflict.get_severity_display }}
+            </span>
+            <span class="badge {{ conflict.escalation_badge_class }}">
+                {{ conflict.get_escalation_level_display }}
+            </span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:channel_conflict_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Disputes</span>
+        </a>
+        <a href="{% url 'sales:channel_conflict_edit' conflict.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit / Adjudicate</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left: Dispute Facts & Resolution -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Dispute Parties & Details</h3>
+                <span class="text-xs text-slate-500 font-mono">{{ conflict.number }}</span>
+            </div>
+            <div class="card-body">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Claimant Partner</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            <a href="{% url 'sales:partner_profile_list' %}?q={{ conflict.claimant_partner.name }}" class="hover:text-blue-600">
+                                {{ conflict.claimant_partner.name }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Contested Client Account</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ conflict.client_account.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Direct Sales Representative</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {% if conflict.direct_sales_rep %}
+                            {{ conflict.direct_sales_rep.get_full_name|default:conflict.direct_sales_rep.username }}
+                            {% else %}
+                            <span class="text-slate-400">None</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Competing Partner</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {% if conflict.competing_partner %}
+                            {{ conflict.competing_partner.name }}
+                            {% else %}
+                            <span class="text-slate-400">None (Direct conflict)</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Contested Territory</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {% if conflict.territory %}
+                            {{ conflict.territory.name }}
+                            {% else %}
+                            <span class="text-slate-400">Unspecified</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Escalated To</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {% if conflict.escalated_to %}
+                            {{ conflict.escalated_to.get_full_name|default:conflict.escalated_to.username }}
+                            {% else %}
+                            <span class="text-slate-400">Unassigned</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+
+                {% if conflict.description %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs text-slate-500 uppercase tracking-wider mb-2">Dispute Description & Claims</h4>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ conflict.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Adjudication Ruling -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Executive Adjudication Ruling</h3>
+            </div>
+            <div class="card-body">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Resolution Outcome</dt>
+                        <dd class="text-sm font-semibold text-slate-900 mt-1">
+                            {{ conflict.get_resolution_outcome_display }}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Partner Commission / Revenue Split</dt>
+                        <dd class="text-sm font-semibold text-slate-900 mt-1">
+                            {{ conflict.split_percentage }}%
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Resolved By</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {% if conflict.resolved_by %}
+                            {{ conflict.resolved_by.get_full_name|default:conflict.resolved_by.username }}
+                            {% else %}
+                            <span class="text-slate-400">Pending Adjudication</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Resolution Timestamp</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {{ conflict.resolved_at|date:"M d, Y H:i"|default:"-" }}
+                        </dd>
+                    </div>
+                </dl>
+
+                {% if conflict.resolution_rationale %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs text-slate-500 uppercase tracking-wider mb-2">Formal Adjudication Rationale</h4>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ conflict.resolution_rationale }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Linked Records -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Contested Deal Records</h3>
+            </div>
+            <div class="card-body space-y-4">
+                {% if conflict.deal_registration %}
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider">Disputed Deal Registration</div>
+                    <div class="mt-1">
+                        <a href="{% url 'sales:deal_registration_detail' conflict.deal_registration.pk %}" class="text-sm font-medium text-blue-600 hover:underline">
+                            {{ conflict.deal_registration.deal_name }} ({{ conflict.deal_registration.number }})
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if conflict.opportunity %}
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider">Contested CRM Opportunity</div>
+                    <div class="mt-1">
+                        <span class="text-sm font-medium text-slate-900">
+                            {{ conflict.opportunity.title }} ({{ conflict.opportunity.number }})
+                        </span>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if not conflict.deal_registration and not conflict.opportunity %}
+                <div class="text-center py-4 text-sm text-slate-400">
+                    No specific deal or opportunity linked.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
