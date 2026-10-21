@@ -195,6 +195,10 @@ def deal_registration_convert(request, pk):
         messages.info(request, f"Deal registration {reg.number} was already converted to opportunity {reg.opportunity.number}.")
         return redirect("sales:deal_registration_detail", pk=reg.pk)
 
+    if reg.status != "approved":
+        messages.error(request, f"Deal registration {reg.number} cannot be converted because it is not approved.")
+        return redirect("sales:deal_registration_detail", pk=reg.pk)
+
     with transaction.atomic():
         opp = Opportunity.objects.create(
             tenant=request.tenant,
