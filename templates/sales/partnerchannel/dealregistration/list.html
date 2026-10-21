@@ -115,7 +115,7 @@
                     <i data-lucide="filter"></i>
                     <span>Filter</span>
                 </button>
-                <a href="{% url 'sales:deal_registration_list' %}" class="btn btn-outline" title="Reset filters">
+                <a href="{% url 'sales:deal_registration_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
                     <i data-lucide="rotate-ccw"></i>
                 </a>
             </div>
@@ -190,18 +190,20 @@
                             {% endif %}
                         </td>
                         <td class="table-actions text-right">
-                            <a href="{% url 'sales:deal_registration_detail' item.pk %}" class="btn btn-icon" title="View details">
+                            <a href="{% url 'sales:deal_registration_detail' item.pk %}" class="btn btn-icon" title="View details" aria-label="View details">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'sales:deal_registration_edit' item.pk %}" class="btn btn-icon" title="Edit registration">
+                            <a href="{% url 'sales:deal_registration_edit' item.pk %}" class="btn btn-icon" title="Edit registration" aria-label="Edit registration">
                                 <i data-lucide="pencil"></i>
                             </a>
+                            {% if request.user.is_tenant_admin %}
                             <form action="{% url 'sales:deal_registration_delete' item.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete deal registration {{ item.number }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-rose-600 hover:bg-rose-50" title="Delete">
+                                <button type="submit" class="btn btn-icon text-rose-600 hover:bg-rose-50" title="Delete" aria-label="Delete">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
