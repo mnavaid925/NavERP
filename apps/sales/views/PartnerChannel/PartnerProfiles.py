@@ -132,12 +132,11 @@ def partner_profile_create(request):
             obj.tenant = request.tenant
             obj.save()
             write_audit_log(
-                tenant=request.tenant,
                 user=request.user,
+                obj=obj,
                 action="create",
-                model_name="PartnerProfile",
-                object_id=str(obj.pk),
-                details=f"Created partner profile {obj.number} for {obj.partner.name}",
+                changes=f"Created partner profile {obj.number} for {obj.partner.name}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Partner profile {obj.number} created successfully.")
             return redirect("sales:partner_profile_detail", pk=obj.pk)
@@ -155,12 +154,11 @@ def partner_profile_edit(request, pk):
         if form.is_valid():
             form.save()
             write_audit_log(
-                tenant=request.tenant,
                 user=request.user,
+                obj=obj,
                 action="update",
-                model_name="PartnerProfile",
-                object_id=str(obj.pk),
-                details=f"Updated partner profile {obj.number}",
+                changes=f"Updated partner profile {obj.number}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Partner profile {obj.number} updated successfully.")
             return redirect("sales:partner_profile_detail", pk=obj.pk)
@@ -182,12 +180,11 @@ def partner_profile_delete(request, pk):
     number = obj.number
     obj.delete()
     write_audit_log(
-        tenant=request.tenant,
         user=request.user,
+        obj=obj,
         action="delete",
-        model_name="PartnerProfile",
-        object_id=str(pk),
-        details=f"Deleted partner profile {number}",
+        changes=f"Deleted partner profile {number}",
+        tenant=request.tenant,
     )
     messages.success(request, f"Partner profile {number} deleted successfully.")
     return redirect("sales:partner_profile_list")
