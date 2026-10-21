@@ -33,6 +33,15 @@
             <i data-lucide="pencil"></i>
             <span>Edit Profile</span>
         </a>
+        {% if request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'sales:partner_profile_delete' partner_profile.pk %}" onsubmit="return confirm('Delete this partner profile?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
     </div>
 </div>
 
