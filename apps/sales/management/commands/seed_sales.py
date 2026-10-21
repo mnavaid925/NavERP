@@ -86,6 +86,11 @@ from apps.sales.models import (
     ContentEngagement,
     MarketingEvent,
     EventRegistration,
+    # 8.14 Partner & Channel Management
+    PartnerProfile,
+    DealRegistration,
+    JointAccountPlan,
+    ChannelConflict,
 )
 
 from apps.sales.cpq_services import cpq_recalc_quote_totals, cpq_render_proposal_html, cpq_convert_to_sales_order
@@ -107,6 +112,23 @@ from apps.sales.services import (
 
 
 User = get_user_model()
+
+
+def _group_by_pipeline(stages):
+    """Group pipeline stages by their pipeline, preserving the given order.
+
+    Used by the 8.12 seeder to pick a ``from_stage``/``to_stage`` pair that belongs to
+    ONE pipeline, so the seeded funnel record satisfies the model's own
+    ``to_stage.sequence > from_stage.sequence`` rule (a rule ``objects.create()`` does
+    not enforce, because it never calls ``clean()``).
+    """
+    grouped = []
+    for stage in stages:
+        if grouped and grouped[-1][0].pipeline_id == stage.pipeline_id:
+            grouped[-1][1].append(stage)
+        else:
+            grouped.append((stage, [stage]))
+    return [pipeline_stages for _, pipeline_stages in grouped]
 
 
 class Command(BaseCommand):
@@ -3230,7 +3252,15 @@ class Command(BaseCommand):
             return
 
         today = timezone.localdate()
-        period_start = today - timedelta(days=90)
+        # The period is anchored to the START OF THE CURRENT QUARTER, not to "today minus 90
+        # days". Three of the four idempotency guards key on `period_start`, so a sliding
+        # window would change the key every day and the guard would miss on the next run --
+        # the seeder would then add a fresh VCA/FNL/RPS set per tenant per day, unbounded,
+        # inflating the console stat cards and the peer/percentile aggregates. A quarter
+        # boundary is stable for ~90 days, so a daily run stays idempotent.
+        period_start = today.replace(
+            month=3 * ((today.month - 1) // 3) + 1, day=1
+        )
         period_end = today
 
         # ---- 1. WinLossDebrief (the qualitative win/loss record) ---------------------------
@@ -3310,7 +3340,12 @@ class Command(BaseCommand):
                 tenant=tenant, pipeline_stage=stage, period_start=period_start
             ).exists():
                 continue
-            median_days = Decimal(4 + idx * 6)
+            # The median DESCENDS with idx, so the FIRST stage is the slowest one. The
+            # console re-ranks the rows live by `median_days_in_stage` descending and shows
+            # that live rank BESIDE the stored `bottleneck_rank` -- so the stored judgement
+            # and the live ranking must agree. A seeded "bottleneck" that was actually the
+            # fastest stage would make the demo board contradict itself.
+            median_days = Decimal(16 - idx * 6)
             StageVelocityAnalysis.objects.create(
                 tenant=tenant,
                 pipeline=stage.pipeline,
@@ -3324,7 +3359,7 @@ class Command(BaseCommand):
                 sales_cycle_days=median_days * Decimal("2.1"),
                 velocity_value=Decimal("480000.00") - Decimal(idx * 90000),
                 is_bottleneck=idx == 0,
-                bottleneck_rank=idx + 1 if idx == 0 else None,
+                bottleneck_rank=1 if idx == 0 else None,
                 recommendation=(
                     "This stage is the slowest in the pipeline -- tighten the entry criteria "
                     "and add a qualified-need check before the next stage."
@@ -3350,12 +3385,23 @@ class Command(BaseCommand):
                 tenant=tenant, label=label, period_start=period_start
             ).exists():
                 continue
+            # `objects.create()` does NOT call `clean()`, so a seeded row can violate the
+            # model's own rules. The `stage_to_stage` scope requires
+            # `to_stage.sequence > from_stage.sequence` -- and `open_stages` is ordered by
+            # (pipeline, sequence), so the first two entries can come from DIFFERENT
+            # pipelines and break that rule. Pick the pair from ONE pipeline instead.
+            from_stage = to_stage = None
+            if scope == "stage_to_stage":
+                for pipeline_stages in _group_by_pipeline(open_stages):
+                    if len(pipeline_stages) >= 2:
+                        from_stage, to_stage = pipeline_stages[0], pipeline_stages[1]
+                        break
             FunnelConversionRecord.objects.create(
                 tenant=tenant,
                 label=label,
                 funnel_scope=scope,
-                from_stage=open_stages[0] if open_stages else None,
-                to_stage=open_stages[1] if len(open_stages) > 1 else None,
+                from_stage=from_stage,
+                to_stage=to_stage,
                 territory=None,
                 owner=owner,
                 source_channel=channel,
@@ -3365,7 +3411,10 @@ class Command(BaseCommand):
                 converted_count=converted,
                 skipped_count=idx * 4,
                 avg_cycle_days=Decimal(18 + idx * 9),
-                benchmark_pct=Decimal("30.00"),
+                # The benchmark is set ABOVE the first record's computed rate (31.67%), so the
+                # seeded data exercises the "below benchmark" filter and badge instead of
+                # leaving that path permanently empty in the demo tenant.
+                benchmark_pct=Decimal("35.00"),
                 benchmark_source="Seeded internal benchmark",
                 benchmark_as_of=period_end,
                 segment="All segments",
@@ -3440,6 +3489,137 @@ class Command(BaseCommand):
             f"{StageVelocityAnalysis.objects.filter(tenant=tenant).count()} velocity analyses, "
             f"{FunnelConversionRecord.objects.filter(tenant=tenant).count()} funnel records, "
             f"{RepPerformanceScorecard.objects.filter(tenant=tenant).count()} rep scorecards)."
+        )
+
+        # =====================================================================================
+        # 8.14 Partner & Channel Management
+        # =====================================================================================
+        if not PartnerProfile.objects.filter(tenant=tenant).exists():
+            currency = Currency.objects.filter(code="USD").first() or Currency.objects.first()
+            cam = reps[0] if reps else owner
+
+            # 1. Partner Parties with partner role
+            partner_specs = [
+                ("Apex Cloud Solutions", "reseller", "active", "platinum", Decimal("1000000.00"), Decimal("850000.00"), 4, 4),
+                ("Beacon Systems Integration", "system_integrator", "onboarding", "gold", Decimal("600000.00"), Decimal("220000.00"), 3, 2),
+            ]
+            seeded_partners = []
+            for p_name, p_type, p_status, p_tier, p_target, p_actual, req_cert, act_cert in partner_specs:
+                p_party, _ = Party.objects.get_or_create(
+                    tenant=tenant,
+                    name=p_name,
+                    defaults={"kind": "organization"},
+                )
+                PartyRole.objects.get_or_create(
+                    tenant=tenant,
+                    party=p_party,
+                    role="partner",
+                )
+                ptr_prof = PartnerProfile.objects.create(
+                    tenant=tenant,
+                    partner=p_party,
+                    partner_type=p_type,
+                    onboarding_status=p_status,
+                    tier=p_tier,
+                    tier_effective_date=today - timezone.timedelta(days=180),
+                    tier_review_date=today + timezone.timedelta(days=180),
+                    application_date=today - timezone.timedelta(days=240),
+                    agreement_signed_at=timezone.now() - timezone.timedelta(days=200) if p_status == "active" else None,
+                    channel_manager=cam,
+                    currency=currency,
+                    annual_revenue_target=p_target,
+                    actual_revenue_ytd=p_actual,
+                    required_certifications_count=req_cert,
+                    active_certifications_count=act_cert,
+                    base_discount_pct=Decimal("15.00") if p_tier == "platinum" else Decimal("10.00"),
+                    deal_reg_margin_pct=Decimal("20.00") if p_tier == "platinum" else Decimal("15.00"),
+                    portal_access_enabled=True,
+                    notes=f"Seeded 8.14 {p_tier} partner profile.",
+                )
+                seeded_partners.append(ptr_prof)
+
+            # 2. Customer Parties for deal registrations
+            client_party = Party.objects.filter(tenant=tenant, roles__role="customer").exclude(pk__in=[sp.partner_id for sp in seeded_partners]).first()
+            if not client_party:
+                client_party, _ = Party.objects.get_or_create(
+                    tenant=tenant,
+                    name="Global Horizon Logistics",
+                    defaults={"kind": "organization"},
+                )
+                PartyRole.objects.get_or_create(tenant=tenant, party=client_party, role="customer")
+
+            # 3. Deal Registrations
+            dlr_specs = [
+                (seeded_partners[0].partner, client_party, "Enterprise Cloud ERP Rollout", Decimal("350000.00"), "approved", "exclusive", today - timezone.timedelta(days=30), today + timezone.timedelta(days=60)),
+                (seeded_partners[1].partner, client_party, "Omnichannel CRM Integration", Decimal("180000.00"), "submitted", "pending", None, None),
+            ]
+            seeded_regs = []
+            for p_party, c_party, d_name, d_val, d_stat, d_excl, start_d, end_d in dlr_specs:
+                dlr = DealRegistration.objects.create(
+                    tenant=tenant,
+                    partner=p_party,
+                    customer_account=c_party,
+                    deal_name=d_name,
+                    estimated_value=d_val,
+                    currency=currency,
+                    expected_close_date=today + timezone.timedelta(days=90),
+                    submission_date=today - timezone.timedelta(days=15),
+                    status=d_stat,
+                    protection_start_date=start_d,
+                    protection_end_date=end_d,
+                    exclusivity_status=d_excl,
+                    protected_margin_pct=Decimal("18.00"),
+                    partner_rep_name="Alex Morgan",
+                    partner_rep_email="alex.morgan@partner.example.com",
+                    notes="Seeded 8.14 deal registration.",
+                )
+                seeded_regs.append(dlr)
+
+            # 4. Joint Account Plan
+            JointAccountPlan.objects.create(
+                tenant=tenant,
+                partner=seeded_partners[0].partner,
+                client_account=client_party,
+                plan_name="2026 Strategic Enterprise Co-Sell Plan",
+                plan_year=today.year,
+                period_start=today - timezone.timedelta(days=60),
+                period_end=today + timezone.timedelta(days=300),
+                status="active",
+                target_revenue=Decimal("500000.00"),
+                actual_revenue=Decimal("180000.00"),
+                currency=currency,
+                vendor_lead=cam,
+                partner_lead_name="Sarah Jenkins",
+                partner_lead_email="sarah.jenkins@partner.example.com",
+                co_sell_motion="joint_pursuit",
+                strategic_objectives="Scale cloud adoption across 4 global subsidiaries with localized system integration support.",
+                joint_value_proposition="Combining NavERP core transactional capability with Apex domain consulting and migration expertise.",
+                notes="Seeded 8.14 joint account plan.",
+            )
+
+            # 5. Channel Conflict
+            ChannelConflict.objects.create(
+                tenant=tenant,
+                conflict_type="direct_vs_indirect",
+                severity="medium",
+                status="in_mediation",
+                deal_registration=seeded_regs[0],
+                claimant_partner=seeded_partners[0].partner,
+                direct_sales_rep=owner,
+                client_account=client_party,
+                escalation_level="l1_cam",
+                escalated_to=cam,
+                resolution_outcome="pending",
+                split_percentage=Decimal("0.00"),
+                description="Direct enterprise rep initiated contact with regional subsidiary while partner registration was active.",
+            )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.14 partner & channel demo rows ensured "
+            f"({PartnerProfile.objects.filter(tenant=tenant).count()} partner profiles, "
+            f"{DealRegistration.objects.filter(tenant=tenant).count()} deal registrations, "
+            f"{JointAccountPlan.objects.filter(tenant=tenant).count()} joint plans, "
+            f"{ChannelConflict.objects.filter(tenant=tenant).count()} channel conflicts)."
         )
 
 
