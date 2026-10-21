@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}{{ joint_plan.plan_name }} — Joint Account Plan — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:partner_performance_console' %}">Partner & Channel</a>
+            <span>/</span>
+            <a href="{% url 'sales:joint_account_plan_list' %}">Joint Plans</a>
+            <span>/</span>
+            <span>{{ joint_plan.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ joint_plan.plan_name }}</h1>
+            <span class="badge {{ joint_plan.status_badge_class }}">
+                {{ joint_plan.get_status_display }}
+            </span>
+            <span class="text-xs font-medium px-2 py-1 rounded bg-slate-100 text-slate-800">
+                {{ joint_plan.get_co_sell_motion_display }}
+            </span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:joint_account_plan_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to List</span>
+        </a>
+        <a href="{% url 'sales:joint_account_plan_edit' joint_plan.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Plan</span>
+        </a>
+    </div>
+</div>
+
+<!-- Header Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="target"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Target Co-Sell Revenue</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ joint_plan.currency.code }} {{ joint_plan.target_revenue|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Actual Co-Sell Revenue</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ joint_plan.currency.code }} {{ joint_plan.actual_revenue|floatformat:2 }}
+            </div>
+            <div class="text-xs text-emerald-600 font-semibold mt-1">
+                {{ joint_plan.revenue_attainment_pct }}% of target
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Plan Horizon</div>
+            <div class="text-sm font-semibold text-slate-900 mt-1">
+                {{ joint_plan.period_start }} to {{ joint_plan.period_end }}
+            </div>
+            <div class="text-xs text-slate-500 mt-1">Year {{ joint_plan.plan_year }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="users"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Co-Sell Team</div>
+            <div class="text-sm font-semibold text-slate-900 mt-1">
+                {{ joint_plan.partner_lead_name }}
+            </div>
+            <div class="text-xs text-slate-500 mt-1">
+                Direct AE: {{ joint_plan.vendor_lead.get_full_name|default:joint_plan.vendor_lead.username|default:"Unassigned" }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left: Plan Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Co-Selling Strategy & Alignment</h3>
+                <span class="text-xs text-slate-500 font-mono">{{ joint_plan.number }}</span>
+            </div>
+            <div class="card-body">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Partner Organization</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            <a href="{% url 'sales:partner_profile_list' %}?q={{ joint_plan.partner.name }}" class="hover:text-blue-600">
+                                {{ joint_plan.partner.name }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Target Client Account</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ joint_plan.client_account.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Partner Lead Champion</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {{ joint_plan.partner_lead_name }}
+                            {% if joint_plan.partner_lead_email %}
+                            <span class="text-xs text-slate-500">({{ joint_plan.partner_lead_email }})</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Internal Vendor Lead (AE)</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {% if joint_plan.vendor_lead %}
+                            {{ joint_plan.vendor_lead.get_full_name|default:joint_plan.vendor_lead.username }}
+                            {% else %}
+                            <span class="text-slate-400">Unassigned</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+
+                {% if joint_plan.strategic_objectives %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs text-slate-500 uppercase tracking-wider mb-2">Strategic Objectives</h4>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ joint_plan.strategic_objectives }}</p>
+                </div>
+                {% endif %}
+
+                {% if joint_plan.joint_value_proposition %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs text-slate-500 uppercase tracking-wider mb-2">Joint Value Proposition</h4>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ joint_plan.joint_value_proposition }}</p>
+                </div>
+                {% endif %}
+
+                {% if joint_plan.notes %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs text-slate-500 uppercase tracking-wider mb-2">Internal Plan Notes</h4>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ joint_plan.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Collateral & Metadata -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Co-Branded Collateral</h3>
+            </div>
+            <div class="card-body">
+                {% if joint_plan.collateral_document %}
+                <div class="flex items-center gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50">
+                    <i data-lucide="file" class="w-6 h-6 text-blue-600"></i>
+                    <div class="min-w-0 flex-1">
+                        <div class="text-sm font-medium text-slate-900 truncate">
+                            {{ joint_plan.collateral_document.title }}
+                        </div>
+                        <div class="text-xs text-slate-500">Document attachment</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center p-4 text-sm text-slate-400">
+                    No collateral document attached.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
