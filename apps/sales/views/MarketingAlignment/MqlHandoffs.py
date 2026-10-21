@@ -82,8 +82,8 @@ def mql_handoff_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    campaigns = Campaign.objects.filter(tenant=request.tenant).order_by("name")
-    owners = User.objects.filter(tenant=request.tenant).order_by("username")
+    campaigns = Campaign.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
+    owners = User.objects.filter(tenant=request.tenant).only("id", "username", "first_name", "last_name").order_by("username")
 
     context = {
         "page_obj": page_obj,
