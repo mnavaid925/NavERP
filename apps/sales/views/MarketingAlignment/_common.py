@@ -89,9 +89,10 @@ def single_currency(queryset, field="currency"):
     model that carries it on its parent.
     """
     currency_ids = set(
-        queryset.exclude(**{f"{field}__isnull": True}).values_list(
-            f"{field}_id", flat=True
-        )
+        queryset.order_by()
+        .exclude(**{f"{field}__isnull": True})
+        .values_list(f"{field}_id", flat=True)
+        .distinct()[:2]
     )
     if len(currency_ids) != 1:
         return None
