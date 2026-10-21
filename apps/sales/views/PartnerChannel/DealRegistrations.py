@@ -176,7 +176,6 @@ def deal_registration_edit(request, pk):
 def deal_registration_delete(request, pk):
     obj = get_object_or_404(DealRegistration.objects.filter(tenant=request.tenant), pk=pk)
     number = obj.number
-    obj.delete()
     write_audit_log(
         user=request.user,
         obj=obj,
@@ -184,6 +183,7 @@ def deal_registration_delete(request, pk):
         changes=f"Deleted deal registration {number}",
         tenant=request.tenant,
     )
+    obj.delete()
     messages.success(request, f"Deal registration {number} deleted successfully.")
     return redirect("sales:deal_registration_list")
 
