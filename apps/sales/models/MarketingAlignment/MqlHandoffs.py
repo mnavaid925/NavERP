@@ -274,6 +274,7 @@ class MqlHandoff(TenantNumbered):
             # tenant FK, so `getattr(currency, "tenant_id", None)` is None and every currency would
             # be rejected as cross-tenant (L29 -- Currency is never tenant-checked).
             for field_name, label in (
+                ("lead", "Lead"),
                 ("campaign", "Campaign"),
                 ("account", "Account"),
                 ("owner", "Owner"),
