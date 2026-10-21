@@ -84,5 +84,23 @@ None.
 - `apps/sales/views/PartnerChannel/DealRegistrations.py:99` — Unbounded child query on `deal_registration_detail`: `conflicts` queryset lacks slice. Fix: append `[:10]`.
 - Composite indexes missing on tenant-filtered dropdown columns (`PartnerProfile.partner_type`, `DealRegistration.exclusivity_status`, `JointAccountPlan.co_sell_motion`).
 
+---
+
+## 5. QA Smoke Tester Findings
+
+### Verdict
+Clean pass. All 17 sub-module 8.14 routes render cleanly with HTTP 200 for tenant admin `admin_acme`. All list, detail, create, and edit views verified against seeded records with accurate content assertions and no comment leaks. Cross-tenant IDOR verified on all entity endpoints, all returning HTTP 404 when accessing Globex records.
+
+### Critical
+None.
+
+### Important
+None.
+
+### Minor
+- `apps/sales/views/PartnerChannel/DealRegistrations.py` — In `deal_registration_convert`, stage and probability are hardcoded (`stage="Proposal/Price Quote"`, `probability=60`).
+- `apps/sales/views/PartnerChannel/PartnerProfiles.py` — Full name searching across `channel_manager__first_name` and `last_name` does not match concatenated strings.
+
+
 
 
