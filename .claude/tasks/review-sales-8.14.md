@@ -46,3 +46,24 @@ None.
 - `templates/sales/partnerchannel/channelconflict/list.html:72-105` — `escalation_level_choices` and `selected_level` are passed in view context but missing `<select name="escalation_level">` in template filter form.
 - `apps/sales/urls/PartnerChannel/PartnerProfiles.py:12` & `apps/sales/views/PartnerChannel/PartnerProfiles.py:197` — Console route and view are co-located in `PartnerProfiles.py` rather than separate `PartnerPerformanceConsoles.py` files.
 
+---
+
+## 3. Frontend Reviewer Findings
+
+### Verdict
+Needs Fixes — 1 Critical regression risk (Lesson L10 filter-argument 500 on nullable FK), 3 Important findings (missing POST-only Delete actions on all 4 detail views; missing filter dropdowns for channel manager and escalation level), and 3 Minor findings.
+
+### Critical
+- `templates/sales/partnerchannel/jointaccountplan/detail.html:88` — Lesson L10 unguarded dotted FK filter argument: evaluating `joint_plan.vendor_lead.username` as an argument to `|default:` when `vendor_lead` is None raises VariableDoesNotExist and causes runtime 500 crash. Fix: wrap with `{% if joint_plan.vendor_lead %}{{ joint_plan.vendor_lead.get_full_name|default:joint_plan.vendor_lead.username }}{% else %}Unassigned{% endif %}`.
+
+### Important
+- Missing POST-only Delete action on all 4 detail views (`templates/sales/partnerchannel/{partnerprofile,dealregistration,jointaccountplan,channelconflict}/detail.html`). Fix: add POST delete form in page-actions with CSRF token and confirm dialog.
+- Incomplete filter bar in Partner Profile Directory (`templates/sales/partnerchannel/partnerprofile/list.html:72-113`): `channel_manager` dropdown is omitted despite view support and pagination preservation. Fix: add `<select name="channel_manager">`.
+- Incomplete filter bar in Channel Conflict Management (`templates/sales/partnerchannel/channelconflict/list.html:72-105`): `escalation_level` dropdown is omitted despite view support and pagination preservation. Fix: add `<select name="escalation_level">`.
+
+### Minor
+- `templates/sales/partnerchannel/partnerprofile/form.html:261` — Missing `<label for>` on notes field in Partner Profile form.
+- `templates/sales/partnerchannel/jointaccountplan/list.html:154` & `detail.html:22` — Ad-hoc badge pill styling `<span class="text-xs font-medium px-2 py-1 rounded bg-slate-100 text-slate-800">` instead of design system `<span class="badge badge-slate">`.
+- All four `list.html` templates — Missing `aria-label` attributes on icon-only table action buttons.
+
+
