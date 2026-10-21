@@ -172,6 +172,9 @@ class AttributionTouchpoint(TenantNumbered):
     @property
     def attributed_revenue(self):
         """Revenue credited to this touch across every attribution model."""
+        cached = getattr(self, "_prefetched_objects_cache", {}).get("attributions")
+        if cached is not None:
+            return sum((a.attributed_revenue or Decimal("0.00")) for a in cached)
         return sum(
             (a.attributed_revenue or Decimal("0.00")) for a in self.attributions.all()
         )
