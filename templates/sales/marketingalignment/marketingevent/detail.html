@@ -19,6 +19,8 @@
             <span class="badge badge-info">{{ obj.get_event_type_display }}</span>
             {% if obj.status == "published" %}
             <span class="badge badge-green">Published</span>
+            {% elif obj.status == "ongoing" %}
+            <span class="badge badge-info">Ongoing</span>
             {% elif obj.status == "completed" %}
             <span class="badge badge-muted">Completed</span>
             {% elif obj.status == "cancelled" %}
@@ -91,7 +93,7 @@
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Revenue / Registrant</div>
             <div class="text-2xl font-bold text-slate-900 mt-1">
-                {% if obj.revenue_per_registrant is not None %}${{ obj.revenue_per_registrant|floatformat:2 }}{% else %}—{% endif %}
+                {% if obj.revenue_per_registrant is not None %}{{ obj.currency.symbol|default:"$" }}{{ obj.revenue_per_registrant|floatformat:2 }}{% else %}—{% endif %}
             </div>
         </div>
     </div>
@@ -139,7 +141,7 @@
                 </div>
                 <div class="py-2.5 flex justify-between">
                     <dt class="text-slate-500 font-medium">Budget</dt>
-                    <dd class="text-slate-900 font-semibold">${{ obj.budget|floatformat:2 }}</dd>
+                    <dd class="text-slate-900 font-semibold">{{ obj.currency.symbol|default:"$" }}{{ obj.budget|floatformat:2 }}</dd>
                 </div>
             </dl>
         </div>
@@ -237,7 +239,17 @@
                         {% endif %}
                     </td>
                     <td>
-                        <span class="badge badge-slate">{{ registration.get_followup_status_display }}</span>
+                        {% if registration.followup_status == "opportunity_created" %}
+                        <span class="badge badge-green">Opportunity Created</span>
+                        {% elif registration.followup_status == "meeting_booked" %}
+                        <span class="badge badge-info">Meeting Booked</span>
+                        {% elif registration.followup_status == "sent" %}
+                        <span class="badge badge-slate">Follow-Up Sent</span>
+                        {% elif registration.followup_status == "no_action" %}
+                        <span class="badge badge-muted">No Action</span>
+                        {% else %}
+                        <span class="badge badge-amber">{{ registration.get_followup_status_display }}</span>
+                        {% endif %}
                     </td>
                     <td>
                         <span class="text-sm text-slate-700">{{ registration.engagement_score }}</span>
