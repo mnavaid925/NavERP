@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}{{ partner_profile.partner.name }} — Partner Profile — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:partner_performance_console' %}">Partner & Channel</a>
+            <span>/</span>
+            <a href="{% url 'sales:partner_profile_list' %}">Partners</a>
+            <span>/</span>
+            <span>{{ partner_profile.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ partner_profile.partner.name }}</h1>
+            <span class="badge {{ partner_profile.tier_badge_class }}">
+                {{ partner_profile.get_tier_display }}
+            </span>
+            <span class="badge {{ partner_profile.status_badge_class }}">
+                {{ partner_profile.get_onboarding_status_display }}
+            </span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:partner_profile_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Directory</span>
+        </a>
+        <a href="{% url 'sales:partner_profile_edit' partner_profile.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Profile</span>
+        </a>
+    </div>
+</div>
+
+<!-- Header Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Annual Quota Target</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ partner_profile.currency.code }} {{ partner_profile.annual_revenue_target|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Closed YTD Revenue</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ partner_profile.currency.code }} {{ partner_profile.actual_revenue_ytd|floatformat:2 }}
+            </div>
+            <div class="text-xs text-emerald-600 font-semibold mt-1">
+                {{ partner_profile.revenue_attainment_pct }}% of target
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="percent"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Base / Deal Reg Margin</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ partner_profile.base_discount_pct }}% / {{ partner_profile.deal_reg_margin_pct }}%
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Certifications</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ partner_profile.active_certifications_count }} / {{ partner_profile.required_certifications_count }}
+            </div>
+            <div class="text-xs text-slate-500 mt-1">
+                {{ partner_profile.certification_compliance_pct }}% compliance
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Profile Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Partner Agreement & Channel Information</h3>
+                <span class="text-xs text-slate-500 font-mono">{{ partner_profile.number }}</span>
+            </div>
+            <div class="card-body">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Partner Organization</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ partner_profile.partner.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Partner Type</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ partner_profile.get_partner_type_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Channel Account Manager (CAM)</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {% if partner_profile.channel_manager %}
+                            {{ partner_profile.channel_manager.get_full_name|default:partner_profile.channel_manager.username }}
+                            {% else %}
+                            <span class="text-slate-400">Unassigned</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Authorized Territory</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {% if partner_profile.authorized_territory %}
+                            {{ partner_profile.authorized_territory.name }}
+                            {% else %}
+                            <span class="text-slate-400">Global / Unrestricted</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Application Date</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ partner_profile.application_date|default:"-" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Agreement Signed At</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {% if partner_profile.agreement_signed_at %}
+                            {{ partner_profile.agreement_signed_at|date:"M d, Y H:i" }}
+                            {% else %}
+                            <span class="text-amber-600 font-medium">Pending Signature</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Tier Review Date</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ partner_profile.tier_review_date|default:"-" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase tracking-wider">Portal Access</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">
+                            {% if partner_profile.portal_access_enabled %}
+                            <span class="inline-flex items-center gap-1 text-emerald-600 font-semibold">
+                                <i data-lucide="check-circle" class="w-4 h-4"></i> Enabled
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 text-slate-400">
+                                <i data-lucide="x-circle" class="w-4 h-4"></i> Disabled
+                            </span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+
+                {% if partner_profile.notes %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs text-slate-500 uppercase tracking-wider mb-2">Relationship Notes</h4>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ partner_profile.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Deal Registrations Tab/Section -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Recent Deal Registrations</h3>
+                <a href="{% url 'sales:deal_registration_create' %}" class="btn btn-outline py-1 px-3 text-xs">
+                    <i data-lucide="plus"></i>
+                    <span>Register Deal</span>
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if registrations %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Deal</th>
+                                <th>Client Account</th>
+                                <th>Value</th>
+                                <th>Status</th>
+                                <th>Protection Expiry</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for reg in registrations %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'sales:deal_registration_detail' reg.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
+                                        {{ reg.deal_name }}
+                                    </a>
+                                    <div class="text-xs text-slate-500">{{ reg.number }}</div>
+                                </td>
+                                <td>{{ reg.customer_account.name }}</td>
+                                <td>{{ reg.currency.code }} {{ reg.estimated_value|floatformat:2 }}</td>
+                                <td>
+                                    <span class="badge {{ reg.status_badge_class }}">
+                                        {{ reg.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if reg.protection_end_date %}
+                                    {{ reg.protection_end_date }}
+                                    {% else %}
+                                    <span class="text-slate-400">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-6 text-center text-sm text-slate-500">
+                    No deal registrations logged for this partner yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Meta & Actions -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Active Joint Account Plans</h3>
+            </div>
+            <div class="card-body p-0">
+                {% if joint_plans %}
+                <ul class="divide-y divide-slate-100">
+                    {% for plan in joint_plans %}
+                    <li class="p-4 hover:bg-slate-50">
+                        <div class="flex items-center justify-between">
+                            <a href="{% url 'sales:joint_account_plan_detail' plan.pk %}" class="font-medium text-sm text-slate-900 hover:text-blue-600">
+                                {{ plan.plan_name }}
+                            </a>
+                            <span class="badge {{ plan.status_badge_class }} text-xs">
+                                {{ plan.get_status_display }}
+                            </span>
+                        </div>
+                        <div class="text-xs text-slate-500 mt-1">
+                            Client: {{ plan.client_account.name }} · {{ plan.plan_year }}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-6 text-center text-sm text-slate-500">
+                    No joint account plans established.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Channel Conflicts</h3>
+            </div>
+            <div class="card-body p-0">
+                {% if conflicts %}
+                <ul class="divide-y divide-slate-100">
+                    {% for ccf in conflicts %}
+                    <li class="p-4 hover:bg-slate-50">
+                        <div class="flex items-center justify-between">
+                            <a href="{% url 'sales:channel_conflict_detail' ccf.pk %}" class="font-medium text-sm text-slate-900 hover:text-blue-600">
+                                {{ ccf.number }}
+                            </a>
+                            <span class="badge {{ ccf.status_badge_class }} text-xs">
+                                {{ ccf.get_status_display }}
+                            </span>
+                        </div>
+                        <div class="text-xs text-slate-500 mt-1">
+                            {{ ccf.get_conflict_type_display }}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-6 text-center text-sm text-slate-500">
+                    Zero open channel conflicts recorded.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
