@@ -1105,5 +1105,88 @@ Mounted under `sales:` namespace (25 total endpoints):
 - **Database Composite Indexes**: Composite indexes on `(tenant, status)`, `(tenant, stage)`, `(tenant, account)`, and `(tenant, evaluation_date)` ensure sub-millisecond execution for console aggregates.
 - **Foreign Key Isolation**: Form `_reject_foreign` verifies all submitted foreign keys belong strictly to the current tenant.
 
+---
+
+## Sub-module 8.14: Partner & Channel Management (`apps/sales/models/PartnerChannel/`)
+
+### 8.14 Overview
+Covers partner recruitment and onboarding, deal registration with margin protection, joint account plans for co-selling, partner performance analytics, and multi-tier channel conflict adjudication.
+
+### 8.14 Models
+- `PartnerProfile` (`PTR-`): Partner relationship master extending `core.Party` (`roles__role="partner"`). Fields: `partner`, `partner_type`, `onboarding_status`, `tier`, `tier_effective_date`, `tier_review_date`, `application_date`, `agreement_signed_at`, `agreement_document` (FK `core.Document`), `channel_manager` (FK `settings.AUTH_USER_MODEL`), `authorized_territory` (FK `crm.Territory`), `currency` (FK `accounting.Currency`), `annual_revenue_target`, `actual_revenue_ytd`, `required_certifications_count`, `active_certifications_count`, `base_discount_pct`, `deal_reg_margin_pct`, `portal_access_enabled`, `notes`.
+- `DealRegistration` (`DLR-`): Partner deal registration and exclusivity protection. Fields: `partner`, `customer_account` (FK `core.Party`), `deal_name`, `estimated_value`, `currency`, `expected_close_date`, `submission_date`, `status`, `rejection_reason`, `protection_start_date`, `protection_end_date`, `exclusivity_status`, `protected_margin_pct`, `extension_count`, `is_conflicted`, `conflict_summary`, `opportunity` (FK `crm.Opportunity`), `reviewed_by`, `reviewed_at`, `partner_rep_name`, `partner_rep_email`, `notes`.
+- `JointAccountPlan` (`JAP-`): Strategic co-selling account plan. Fields: `partner`, `client_account` (FK `core.Party`), `plan_name`, `plan_year`, `period_start`, `period_end`, `status`, `target_revenue`, `actual_revenue`, `currency`, `vendor_lead` (FK `settings.AUTH_USER_MODEL`), `partner_lead_name`, `partner_lead_email`, `co_sell_motion`, `strategic_objectives`, `joint_value_proposition`, `action_items` (JSON list), `collateral_document` (FK `core.Document`), `notes`.
+- `ChannelConflict` (`CCF-`): Dispute resolution and mediation vehicle. Fields: `conflict_type`, `severity`, `status`, `deal_registration` (FK `DealRegistration`), `opportunity` (FK `crm.Opportunity`), `claimant_partner` (FK `core.Party`), `competing_partner` (FK `core.Party`), `direct_sales_rep` (FK `settings.AUTH_USER_MODEL`), `client_account` (FK `core.Party`), `territory` (FK `crm.Territory`), `escalation_level`, `escalated_to` (FK `settings.AUTH_USER_MODEL`), `resolution_outcome`, `split_percentage`, `resolution_rationale`, `resolved_by` (FK `settings.AUTH_USER_MODEL`), `resolved_at`, `description`.
+
+### 8.14 Core Spine Reuse
+Strictly adheres to NavERP core spine design (L36/L37):
+- Partner & Client accounts: `core.Party` (with `PartyRole.role="partner"` and role `"customer"`) — zero duplicate partner or company tables.
+- Deals & Opportunities: `crm.Opportunity` (`OPP-`) — approved deal registrations convert into standard opportunities.
+- Territories: `crm.Territory` (`TER-`) for channel authorization and conflict jurisdiction.
+- Collateral & Agreements: `core.Document` (`DOC-`) for partnership contracts and co-sell collateral.
+- Currencies: `accounting.Currency` (global ISO 4217 master).
+- CAMs & Sales Reps: `accounts.User` (`settings.AUTH_USER_MODEL`).
+
+### 8.14 Routes & URLs (`apps/sales/urls/PartnerChannel/`)
+Mounted under `sales:` namespace (22 total endpoints):
+- **Executive Console**:
+  - `sales:partner_performance_console` (`/sales/partner-channel/console/`)
+- **Partner Profiles**:
+  - `sales:partner_profile_list` (`/sales/partner-channel/partners/`)
+  - `sales:partner_profile_create` (`/sales/partner-channel/partners/new/`)
+  - `sales:partner_profile_detail` (`/sales/partner-channel/partners/<int:pk>/`)
+  - `sales:partner_profile_edit` (`/sales/partner-channel/partners/<int:pk>/edit/`)
+  - `sales:partner_profile_delete` (`/sales/partner-channel/partners/<int:pk>/delete/`)
+- **Deal Registrations**:
+  - `sales:deal_registration_list` (`/sales/partner-channel/deal-registrations/`)
+  - `sales:deal_registration_create` (`/sales/partner-channel/deal-registrations/new/`)
+  - `sales:deal_registration_detail` (`/sales/partner-channel/deal-registrations/<int:pk>/`)
+  - `sales:deal_registration_edit` (`/sales/partner-channel/deal-registrations/<int:pk>/edit/`)
+  - `sales:deal_registration_delete` (`/sales/partner-channel/deal-registrations/<int:pk>/delete/`)
+  - `sales:deal_registration_convert` (`/sales/partner-channel/deal-registrations/<int:pk>/convert/`)
+- **Joint Account Plans**:
+  - `sales:joint_account_plan_list` (`/sales/partner-channel/joint-plans/`)
+  - `sales:joint_account_plan_create` (`/sales/partner-channel/joint-plans/new/`)
+  - `sales:joint_account_plan_detail` (`/sales/partner-channel/joint-plans/<int:pk>/`)
+  - `sales:joint_account_plan_edit` (`/sales/partner-channel/joint-plans/<int:pk>/edit/`)
+  - `sales:joint_account_plan_delete` (`/sales/partner-channel/joint-plans/<int:pk>/delete/`)
+- **Channel Conflicts**:
+  - `sales:channel_conflict_list` (`/sales/partner-channel/conflicts/`)
+  - `sales:channel_conflict_create` (`/sales/partner-channel/conflicts/new/`)
+  - `sales:channel_conflict_detail` (`/sales/partner-channel/conflicts/<int:pk>/`)
+  - `sales:channel_conflict_edit` (`/sales/partner-channel/conflicts/<int:pk>/edit/`)
+  - `sales:channel_conflict_delete` (`/sales/partner-channel/conflicts/<int:pk>/delete/`)
+
+### 8.14 Templates (`templates/sales/partnerchannel/`)
+- Console: `boards/partner_performance_console.html`
+- Entity CRUD:
+  - `partnerprofile/{list,detail,form}.html`
+  - `dealregistration/{list,detail,form}.html`
+  - `jointaccountplan/{list,detail,form}.html`
+  - `channelconflict/{list,detail,form}.html`
+
+### 8.14 Navigation Wiring (`apps/core/navigation.py`)
+`LIVE_LINKS["8.14"]` maps all 5 NavERP.md feature bullets verbatim:
+- Partner Recruitment & Onboarding -> `sales:partner_profile_list`
+- Deal Registration & Protection -> `sales:deal_registration_list`
+- Partner Portal & Collaboration -> `sales:joint_account_plan_list`
+- Partner Performance Tracking -> `sales:partner_performance_console`
+- Channel Conflict Management -> `sales:channel_conflict_list`
+- Plus 5 direct CRUD leaf links: Partner Profiles, Deal Registrations, Joint Account Plans, Channel Conflicts, Partner Performance Console.
+
+### 8.14 Seeder (`apps/sales/management/commands/seed_sales.py`)
+`_seed_partner_channel` is fully idempotent and seeds:
+- 2 Partner Profiles (Gold VAR and Silver System Integrator) with active certifications and revenue targets.
+- 2 Deal Registrations (approved and under review) with protection windows and locked margins.
+- 1 Joint Account Plan (active co-selling with milestones and target revenues).
+- 1 Channel Conflict (direct vs. indirect dispute with CAM escalation).
+
+### 8.14 Conventions & Gotchas
+- **Audit Logging**: `write_audit_log(user=request.user, obj=obj, action=verb, changes=msg, tenant=request.tenant)`. In delete views, `write_audit_log` must be called *before* `obj.delete()`.
+- **Conversion to Opportunity**: `deal_registration_convert` creates a `crm.Opportunity` with `close_date=reg.expected_close_date` and `stage="proposal"`.
+- **RBAC on Deletion**: All 4 delete views enforce `@tenant_admin_required` and `@require_POST`.
+- **Composite Indexes**: Composite indexes on `(tenant, partner_type)`, `(tenant, exclusivity_status)`, `(tenant, co_sell_motion)`, and `(tenant, status)` guarantee sub-millisecond console queries.
+- **Foreign Key Isolation**: Form `_reject_foreign` verifies all submitted foreign keys belong strictly to the current tenant.
+
 
 
