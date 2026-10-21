@@ -99,17 +99,17 @@ def partner_profile_detail(request, pk):
 
     # Linked registrations, plans, and conflicts
     registrations = (
-        partner_profile.sales_partner_deal_registrations.filter(tenant=request.tenant)
+        partner_profile.partner.sales_partner_deal_registrations.filter(tenant=request.tenant)
         .select_related("customer_account", "currency")
         .order_by("-submission_date")[:10]
     )
     joint_plans = (
-        partner_profile.sales_partner_joint_plans.filter(tenant=request.tenant)
+        partner_profile.partner.sales_partner_joint_plans.filter(tenant=request.tenant)
         .select_related("client_account", "currency")
         .order_by("-period_end")[:10]
     )
     conflicts = (
-        partner_profile.sales_claimed_conflicts.filter(tenant=request.tenant)
+        partner_profile.partner.sales_claimed_conflicts.filter(tenant=request.tenant)
         .select_related("client_account", "direct_sales_rep")
         .order_by("-created_at")[:10]
     )
