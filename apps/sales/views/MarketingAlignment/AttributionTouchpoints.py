@@ -78,8 +78,8 @@ def attribution_touchpoint_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    campaigns = Campaign.objects.filter(tenant=request.tenant).order_by("name")
-    leads = Lead.objects.filter(tenant=request.tenant).order_by("name")
+    campaigns = Campaign.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
+    leads = Lead.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     context = {
         "page_obj": page_obj,
@@ -114,7 +114,7 @@ def attribution_touchpoint_detail(request, pk):
     obj = get_object_or_404(
         AttributionTouchpoint.objects.filter(tenant=request.tenant).select_related(
             "campaign", "lead", "opportunity", "currency"
-        ),
+        ).prefetch_related("attributions"),
         pk=pk,
     )
     # The credit rows for this touch under every attribution model -- the per-model
