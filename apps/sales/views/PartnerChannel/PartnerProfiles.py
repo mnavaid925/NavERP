@@ -202,30 +202,40 @@ def partner_performance_console(request):
     registrations = DealRegistration.objects.filter(tenant=request.tenant)
     conflicts = ChannelConflict.objects.filter(tenant=request.tenant)
 
-    total_revenue = partners.aggregate(Sum("actual_revenue_ytd"))["actual_revenue_ytd__sum"] or Decimal("0.00")
-    pipeline_val = registrations.filter(status__in=["submitted", "under_review", "approved"]).aggregate(
-        Sum("estimated_value")
-    )["estimated_value__sum"] or Decimal("0.00")
+    partner_stats = partners.aggregate(
+        total_partner_revenue=Sum("actual_revenue_ytd"),
+        active_partners_count=Count("id", filter=Q(onboarding_status="active")),
+        avg_certifications=Avg("active_certifications_count"),
+    )
+    registration_stats = registrations.aggregate(
+        registered_deals_count=Count("id"),
+        pipeline_value=Sum("estimated_value", filter=Q(status__in=["submitted", "under_review", "approved"])),
+    )
 
     stats = {
-        "active_partners_count": partners.filter(onboarding_status="active").count(),
-        "total_partner_revenue": total_revenue,
-        "registered_deals_count": registrations.count(),
-        "pipeline_value": pipeline_val,
+        "active_partners_count": partner_stats["active_partners_count"] or 0,
+        "total_partner_revenue": partner_stats["total_partner_revenue"] or Decimal("0.00"),
+        "registered_deals_count": registration_stats["registered_deals_count"] or 0,
+        "pipeline_value": registration_stats["pipeline_value"] or Decimal("0.00"),
         "open_conflicts_count": conflicts.filter(status__in=["open", "in_mediation", "escalated"]).count(),
-        "avg_certifications": partners.aggregate(Avg("active_certifications_count"))["active_certifications_count__avg"] or 0,
+        "avg_certifications": partner_stats["avg_certifications"] or 0,
     }
 
+    tier_aggregates = {
+        row["tier"]: row
+        for row in partners.values("tier").annotate(
+            count=Count("id"),
+            revenue=Sum("actual_revenue_ytd"),
+        )
+    }
     tier_distribution = []
     for tier_code, tier_label in PARTNER_TIER_CHOICES:
-        tier_partners = partners.filter(tier=tier_code)
-        tier_count = tier_partners.count()
-        tier_rev = tier_partners.aggregate(Sum("actual_revenue_ytd"))["actual_revenue_ytd__sum"] or Decimal("0.00")
+        data = tier_aggregates.get(tier_code)
         tier_distribution.append({
             "code": tier_code,
             "label": tier_label,
-            "count": tier_count,
-            "revenue": tier_rev,
+            "count": data["count"] if data else 0,
+            "revenue": (data["revenue"] if data and data["revenue"] is not None else Decimal("0.00")),
         })
 
     top_partners = (
