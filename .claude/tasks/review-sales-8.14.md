@@ -4,103 +4,77 @@ Target: Sub-module 8.14 Partner & Channel Management (`apps/sales`)
 Base SHA: `d1a87b0f7d6421a166f253bef8ff624c0aeddfa8`
 Head SHA: `da85d11a4f51fe395bad9b51ace6dcf994567179`
 
----
-
-## 1. Code Reviewer Findings
-
-### Verdict
-Commit after fixing Important findings (no Critical issues found; multi-tenancy and core spine reuse are robust).
-
-### Critical
-None.
-
-### Important
-- `templates/sales/partnerchannel/jointaccountplan/detail.html:88` — Unhandled nullable Foreign Key traversal inside template filter argument: `Direct AE: {{ joint_plan.vendor_lead.get_full_name|default:joint_plan.vendor_lead.username|default:"Unassigned" }}` evaluates against nullable `vendor_lead`. Passing an unverified lookup `joint_plan.vendor_lead.username` into the `default` filter risks raising an evaluation exception when `vendor_lead` is `None` (Lesson L10). Fix: wrap in `{% if joint_plan.vendor_lead %}` guard matching line 128 of the same file.
-- `apps/sales/views/PartnerChannel/DealRegistrations.py:190` — Missing view-level status guard in `deal_registration_convert`. The view converts any registration with `reg.opportunity is None` without validating that `reg.status == "approved"`, allowing direct POSTs to convert draft, submitted, rejected, or expired registrations. Fix: enforce `if reg.status != "approved": messages.error(request, "Only approved registrations can be converted."); return redirect(...)` in the view.
-- `apps/sales/views/PartnerChannel/ChannelConflicts.py:117-122` — Multi-model write in `channel_conflict_create` (`obj.save()` followed by `obj.deal_registration.save(update_fields=[...])`) lacks `transaction.atomic()`. A failure during registration update leaves an orphan dispute row without the linked deal being marked conflicted. Fix: wrap lines 114–122 in `with transaction.atomic():`.
-- `templates/sales/partnerchannel/{partnerprofile,dealregistration,jointaccountplan,channelconflict}/detail.html` — Missing POST-only Delete action on all 4 detail pages. The NavERP CRUD specification (Checklist item 6) requires every detail page to provide an Actions block with Back-to-List, Edit, and a POST-only Delete form with CSRF and confirm prompt. Fix: add the standard POST-only delete form to the header/sidebar actions of all 4 detail templates.
-- `apps/sales/management/commands/seed_sales.py:3494-3623` — Structural defect in seeder: 8.14 partner and channel management demo data creation is nested inside `_seed_sales_analytics(self, tenant, owner)` instead of residing in its own `_seed_partner_channel(self, tenant, owner)` helper called from `_seed_tenant`. Fix: extract lines 3494–3623 into `def _seed_partner_channel(self, tenant, owner):` and call `self._seed_partner_channel(tenant, owner)` in `_seed_tenant`.
-
-### Minor
-- `templates/sales/partnerchannel/partnerprofile/list.html:72-104` — `channel_managers` is queried and passed in the view context, and `channel_manager` is parsed from `request.GET`, but no `<select name="channel_manager">` filter dropdown is rendered in the filter form. Fix: add CAM dropdown to the list filter form.
-- `apps/sales/forms/PartnerChannel/DealRegistrations.py:35` & `apps/sales/forms/PartnerChannel/ChannelConflicts.py:33` — `reviewed_at` and `resolved_at` are exposed as editable `datetime-local` inputs in the form `Meta.fields` despite being view-managed timestamps. Fix: exclude system timestamp fields from form `Meta.fields` and let the view set them on adjudication/approval.
-- `apps/sales/management/commands/seed_sales.py:154` — The completion message in `seed_sales.py` logs "Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, and 8.13 seed complete" but omits 8.14. Fix: append 8.14 to the stdout success message.
+Six Reviewers Run:
+1. `code-reviewer` — Completed
+2. `explorer` — Completed
+3. `frontend-reviewer` — Completed
+4. `performance-reviewer` — Completed
+5. `qa-smoke-tester` — Completed (100% routes 200, IDOR 404, 0 comment leaks)
+6. `security-reviewer` — Completed
 
 ---
 
-## 2. Explorer Findings
-
-### Verdict
-Commit after fixing Important and Minor contract drift items (no Critical issues found; multi-tenancy, Core spine reuse, and package architecture are rock solid).
+## Consolidated Findings Register
 
 ### Critical
-None.
+
+- [ ] **C1** — `templates/sales/partnerchannel/jointaccountplan/detail.html:88`: Lesson L10 unguarded dotted FK filter argument `{{ joint_plan.vendor_lead.get_full_name|default:joint_plan.vendor_lead.username|default:"Unassigned" }}` causes VariableDoesNotExist and runtime 500 when `vendor_lead` is None.
+  - *Fix*: Wrap with `{% if joint_plan.vendor_lead %}{{ joint_plan.vendor_lead.get_full_name|default:joint_plan.vendor_lead.username }}{% else %}Unassigned{% endif %}`.
 
 ### Important
-- URL Route Pattern Drift from Contract (`.../create/` vs `.../new/`): In `.claude/tasks/contract-sales-8.14.md` (Section 3), create route paths are pinned as `partner-channel/partners/new/`, `partner-channel/deal-registrations/new/`, `partner-channel/joint-plans/new/`, `partner-channel/conflicts/new/`. In `apps/sales/urls/PartnerChannel/`, all 4 route patterns were implemented with `/create/`. Fix: update route paths to `.../new/` (or provide aliases).
-- Missing `action_items` in `JointAccountPlanForm.Meta.fields`: In `.claude/tasks/contract-sales-8.14.md` (Section 2.3), `JointAccountPlanForm.Meta.fields` specifies `action_items`. In `apps/sales/forms/PartnerChannel/JointAccountPlans.py:16-34`, `action_items` is omitted. Fix: include `action_items` in `Meta.fields` with textarea widget.
-- Missing Gap Register File (`.agents/tasks/gaps-sales-8.14.md`): Five deferred features were outlined in `todo.md` (`GAP-sales-8.14-01` to `GAP-sales-8.14-05`), but `.agents/tasks/gaps-sales-8.14.md` has not been authored yet. Fix: author `.agents/tasks/gaps-sales-8.14.md` per project standards.
+
+- [ ] **I1** — `apps/sales/views/PartnerChannel/DealRegistrations.py:190`: Missing view-level status guard in `deal_registration_convert`. A direct POST allows converting non-approved deal registrations (draft, submitted, rejected, conflicted) into CRM opportunities.
+  - *Fix*: Enforce `if reg.status != "approved": messages.error(request, f"Deal registration {reg.number} cannot be converted because it is not approved."); return redirect(...)` in the view.
+
+- [ ] **I2** — `apps/sales/views/PartnerChannel/ChannelConflicts.py:114-122`: Multi-model write in `channel_conflict_create` (`obj.save()` and `obj.deal_registration.save(update_fields=...)`) lacks `transaction.atomic()`. A failure during registration update leaves an orphan dispute row without the linked deal being marked conflicted.
+  - *Fix*: Wrap operations in `with transaction.atomic():`.
+
+- [ ] **I3** — `templates/sales/partnerchannel/{partnerprofile,dealregistration,jointaccountplan,channelconflict}/detail.html`: Missing POST-only Delete action on all 4 detail templates. Standard NavERP CRUD requires an Actions block with Back-to-List, Edit, and POST-only Delete form with CSRF and confirm prompt.
+  - *Fix*: Add POST-only delete form inside `page-actions` across all 4 detail templates, gated by `{% if request.user.is_tenant_admin %}`.
+
+- [ ] **I4** — `apps/sales/forms/PartnerChannel/DealRegistrations.py:16-39` & `apps/sales/forms/PartnerChannel/ChannelConflicts.py:16-35`: Mass assignment of system timestamps and review/adjudication fields in ModelForms (`reviewed_at`, `reviewed_by` in `DealRegistrationForm`; `resolved_at`, `resolved_by` in `ChannelConflictForm`).
+  - *Fix*: Exclude `reviewed_at`, `reviewed_by` from `DealRegistrationForm.Meta.fields`, and `resolved_at`, `resolved_by` from `ChannelConflictForm.Meta.fields`. Manage these fields server-side in views.
+
+- [ ] **I5** — `apps/sales/management/commands/seed_sales.py:3494-3623`: Structural defect in seeder: 8.14 demo data generation logic is nested inside `_seed_sales_analytics` instead of having its own dedicated `_seed_partner_channel(self, tenant, owner)` helper called from `_seed_tenant`.
+  - *Fix*: Extract lines 3494–3623 into `def _seed_partner_channel(self, tenant, owner):` and call `self._seed_partner_channel(tenant, owner)` in `_seed_tenant`.
+
+- [ ] **I6** — `apps/sales/urls/PartnerChannel/*.py`: Contract route pattern drift: Contract specified `.../new/` while URLconf implemented `.../create/`.
+  - *Fix*: Add route patterns for `.../new/` to match contract (while keeping `.../create/` as alias if needed).
+
+- [ ] **I7** — `apps/sales/forms/PartnerChannel/JointAccountPlans.py:16-34`: Contract drift: `action_items` is in model and contract `Meta.fields`, but omitted from `JointAccountPlanForm.Meta.fields`.
+  - *Fix*: Include `action_items` in `Meta.fields` with textarea widget.
+
+- [ ] **I8** — `templates/sales/partnerchannel/partnerprofile/list.html:72-113`: Incomplete filter bar: `channel_manager` is parsed in view and preserved in pagination, but `<select name="channel_manager">` is missing from the filter form.
+  - *Fix*: Add Channel Account Manager dropdown to the list filter form.
+
+- [ ] **I9** — `templates/sales/partnerchannel/channelconflict/list.html:72-105`: Incomplete filter bar: `escalation_level` is parsed in view and preserved in pagination, but `<select name="escalation_level">` is missing from the filter form.
+  - *Fix*: Add Escalation Tier dropdown to the list filter form.
+
+- [ ] **I10** — `apps/sales/views/PartnerChannel/PartnerProfiles.py:205-230`: Inefficient queries in `partner_performance_console`: 10 queries via per-tier loop and 5 redundant single-metric queries for stat cards.
+  - *Fix*: Replace per-tier loop with single grouped `values("tier").annotate(...)`, and collapse separate card queries into two `.aggregate(...)` calls.
+
+- [ ] **I11** — `.agents/tasks/gaps-sales-8.14.md`: Missing Gap Register File per project standards documenting deferred features (`GAP-sales-8.14-01` through `GAP-sales-8.14-05`).
+  - *Fix*: Author `.agents/tasks/gaps-sales-8.14.md` documenting deferred items with owners, blocking conditions, and acceptance criteria.
 
 ### Minor
-- `templates/sales/partnerchannel/partnerprofile/list.html:72-104` — `channel_managers` is passed in view context but missing `<select name="channel_manager">` in template filter form.
-- `templates/sales/partnerchannel/channelconflict/list.html:72-105` — `escalation_level_choices` and `selected_level` are passed in view context but missing `<select name="escalation_level">` in template filter form.
-- `apps/sales/urls/PartnerChannel/PartnerProfiles.py:12` & `apps/sales/views/PartnerChannel/PartnerProfiles.py:197` — Console route and view are co-located in `PartnerProfiles.py` rather than separate `PartnerPerformanceConsoles.py` files.
 
----
+- [ ] **M1** — `apps/sales/views/PartnerChannel/DealRegistrations.py:99`: Unbounded child query on `deal_registration_detail`: `conflicts` queryset lacks slice.
+  - *Fix*: Append `[:10]`.
 
-## 3. Frontend Reviewer Findings
+- [ ] **M2** — `templates/sales/partnerchannel/jointaccountplan/list.html:154` & `detail.html:22`: Ad-hoc badge pill styling `<span class="text-xs font-medium px-2 py-1 rounded bg-slate-100 text-slate-800">` instead of design system `<span class="badge badge-slate">`.
+  - *Fix*: Replace with `<span class="badge badge-slate">{{ item.get_co_sell_motion_display }}</span>`.
 
-### Verdict
-Needs Fixes — 1 Critical regression risk (Lesson L10 filter-argument 500 on nullable FK), 3 Important findings (missing POST-only Delete actions on all 4 detail views; missing filter dropdowns for channel manager and escalation level), and 3 Minor findings.
+- [ ] **M3** — `templates/sales/partnerchannel/partnerprofile/form.html:261`: Missing `<label for>` on notes field in Partner Profile form.
+  - *Fix*: Add `<label class="form-label" for="{{ form.notes.id_for_label }}">Strategic Notes</label>`.
 
-### Critical
-- `templates/sales/partnerchannel/jointaccountplan/detail.html:88` — Lesson L10 unguarded dotted FK filter argument: evaluating `joint_plan.vendor_lead.username` as an argument to `|default:` when `vendor_lead` is None raises VariableDoesNotExist and causes runtime 500 crash. Fix: wrap with `{% if joint_plan.vendor_lead %}{{ joint_plan.vendor_lead.get_full_name|default:joint_plan.vendor_lead.username }}{% else %}Unassigned{% endif %}`.
+- [ ] **M4** — All four `list.html` templates: Delete buttons in list table actions rendered unconditionally without `{% if request.user.is_tenant_admin %}` check.
+  - *Fix*: Wrap in `{% if request.user.is_tenant_admin %}`.
 
-### Important
-- Missing POST-only Delete action on all 4 detail views (`templates/sales/partnerchannel/{partnerprofile,dealregistration,jointaccountplan,channelconflict}/detail.html`). Fix: add POST delete form in page-actions with CSRF token and confirm dialog.
-- Incomplete filter bar in Partner Profile Directory (`templates/sales/partnerchannel/partnerprofile/list.html:72-113`): `channel_manager` dropdown is omitted despite view support and pagination preservation. Fix: add `<select name="channel_manager">`.
-- Incomplete filter bar in Channel Conflict Management (`templates/sales/partnerchannel/channelconflict/list.html:72-105`): `escalation_level` dropdown is omitted despite view support and pagination preservation. Fix: add `<select name="escalation_level">`.
+- [ ] **M5** — All four `list.html` templates: Missing `aria-label` attributes on icon-only table action buttons.
+  - *Fix*: Add `aria-label` matching `title`.
 
-### Minor
-- `templates/sales/partnerchannel/partnerprofile/form.html:261` — Missing `<label for>` on notes field in Partner Profile form.
-- `templates/sales/partnerchannel/jointaccountplan/list.html:154` & `detail.html:22` — Ad-hoc badge pill styling `<span class="text-xs font-medium px-2 py-1 rounded bg-slate-100 text-slate-800">` instead of design system `<span class="badge badge-slate">`.
-- All four `list.html` templates — Missing `aria-label` attributes on icon-only table action buttons.
+- [ ] **M6** — `apps/sales/management/commands/seed_sales.py:154`: Success output message in `seed_sales.py` omits 8.14.
+  - *Fix*: Append 8.14 to stdout log message.
 
----
-
-## 4. Performance Reviewer Findings
-
-### Verdict
-Safe to commit after fixing Important findings (no Critical issues found; list views have zero N+1 and full select_related coverage). Console dashboard queries can be reduced from 19 to 7.
-
-### Critical
-None.
-
-### Important
-- `apps/sales/views/PartnerChannel/PartnerProfiles.py:219-230` — Tier distribution in `partner_performance_console` generates 10 queries via loop (iterating over 5 tiers with `.count()` and `.aggregate(Sum())`). Fix: replace loop with a single grouped aggregation query using `values("tier").annotate(count=Count("id"), revenue=Sum("actual_revenue_ytd"))`.
-- `apps/sales/views/PartnerChannel/PartnerProfiles.py:205-217` — Redundant single-metric queries for console stat cards (3 queries on partners, 2 queries on registrations). Fix: collapse into two single `.aggregate(...)` statements with conditional `Count`/`Sum`.
-
-### Minor
-- `apps/sales/views/PartnerChannel/DealRegistrations.py:99` — Unbounded child query on `deal_registration_detail`: `conflicts` queryset lacks slice. Fix: append `[:10]`.
-- Composite indexes missing on tenant-filtered dropdown columns (`PartnerProfile.partner_type`, `DealRegistration.exclusivity_status`, `JointAccountPlan.co_sell_motion`).
-
----
-
-## 5. QA Smoke Tester Findings
-
-### Verdict
-Clean pass. All 17 sub-module 8.14 routes render cleanly with HTTP 200 for tenant admin `admin_acme`. All list, detail, create, and edit views verified against seeded records with accurate content assertions and no comment leaks. Cross-tenant IDOR verified on all entity endpoints, all returning HTTP 404 when accessing Globex records.
-
-### Critical
-None.
-
-### Important
-None.
-
-### Minor
-- `apps/sales/views/PartnerChannel/DealRegistrations.py` — In `deal_registration_convert`, stage and probability are hardcoded (`stage="Proposal/Price Quote"`, `probability=60`).
-- `apps/sales/views/PartnerChannel/PartnerProfiles.py` — Full name searching across `channel_manager__first_name` and `last_name` does not match concatenated strings.
-
-
-
-
+- [ ] **M7** — Composite indexes missing on tenant-filtered dropdown columns (`PartnerProfile.partner_type`, `DealRegistration.exclusivity_status`, `JointAccountPlan.co_sell_motion`).
+  - *Fix*: Add composite `models.Index` in Meta.indexes.
