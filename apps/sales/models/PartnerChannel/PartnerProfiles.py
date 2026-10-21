@@ -127,6 +127,7 @@ class PartnerProfile(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "onboarding_status"], name="sales_ptr_onboard_idx"),
             models.Index(fields=["tenant", "tier"], name="sales_ptr_tier_idx"),
+            models.Index(fields=["tenant", "partner_type"], name="sales_ptr_type_idx"),
             models.Index(fields=["tenant", "channel_manager"], name="sales_ptr_cam_idx"),
         ]
 
