@@ -115,6 +115,9 @@ def channel_conflict_create(request):
             with transaction.atomic():
                 obj = form.save(commit=False)
                 obj.tenant = request.tenant
+                if obj.status == "resolved" and not obj.resolved_at:
+                    obj.resolved_at = timezone.now()
+                    obj.resolved_by = request.user
                 obj.save()
                 # If linked to deal registration, flag registration as conflicted
                 if obj.deal_registration:
