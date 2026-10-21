@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_edit %}Edit Deal Registration {{ deal_registration.number }}{% else %}Register Partner Opportunity{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:partner_performance_console' %}">Partner & Channel</a>
+            <span>/</span>
+            <a href="{% url 'sales:deal_registration_list' %}">Deal Registrations</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ deal_registration.number }}{% else %}New Deal Registration{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Deal Registration {{ deal_registration.number }}{% else %}Register Partner Opportunity{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'sales:deal_registration_detail' deal_registration.pk %}{% else %}{% url 'sales:deal_registration_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="space-y-6">
+                <!-- Deal Identification -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        1. Deal & Account Identification
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.deal_name.id_for_label }}">
+                                Deal / Project Name <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.deal_name }}
+                            {% if form.deal_name.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.deal_name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.partner.id_for_label }}">
+                                Partner Organization <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.partner }}
+                            {% if form.partner.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.partner.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.customer_account.id_for_label }}">
+                                Prospective Client Account <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.customer_account }}
+                            {% if form.customer_account.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.customer_account.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.estimated_value.id_for_label }}">
+                                Estimated Deal Value <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.estimated_value }}
+                            {% if form.estimated_value.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.estimated_value.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.currency.id_for_label }}">
+                                Deal Currency <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.currency }}
+                            {% if form.currency.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.currency.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.submission_date.id_for_label }}">
+                                Submission Date
+                            </label>
+                            {{ form.submission_date }}
+                            {% if form.submission_date.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.submission_date.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.expected_close_date.id_for_label }}">
+                                Expected Close Date <span class="text-rose-500">*</span>
+                            </label>
+                            {{ form.expected_close_date }}
+                            {% if form.expected_close_date.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.expected_close_date.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Review, Status & Protection -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        2. Review, Status & Margin Protection
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.status.id_for_label }}">
+                                Registration Status
+                            </label>
+                            {{ form.status }}
+                            {% if form.status.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.status.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.exclusivity_status.id_for_label }}">
+                                Exclusivity Status
+                            </label>
+                            {{ form.exclusivity_status }}
+                            {% if form.exclusivity_status.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.exclusivity_status.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.protected_margin_pct.id_for_label }}">
+                                Protected Margin (%)
+                            </label>
+                            {{ form.protected_margin_pct }}
+                            {% if form.protected_margin_pct.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.protected_margin_pct.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.extension_count.id_for_label }}">
+                                Extensions Granted
+                            </label>
+                            {{ form.extension_count }}
+                            {% if form.extension_count.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.extension_count.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.protection_start_date.id_for_label }}">
+                                Protection Start Date
+                            </label>
+                            {{ form.protection_start_date }}
+                            {% if form.protection_start_date.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.protection_start_date.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.protection_end_date.id_for_label }}">
+                                Protection End Date
+                            </label>
+                            {{ form.protection_end_date }}
+                            {% if form.protection_end_date.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.protection_end_date.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.reviewed_by.id_for_label }}">
+                                Reviewed By (CAM)
+                            </label>
+                            {{ form.reviewed_by }}
+                            {% if form.reviewed_by.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.reviewed_by.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.reviewed_at.id_for_label }}">
+                                Reviewed Timestamp
+                            </label>
+                            {{ form.reviewed_at }}
+                            {% if form.reviewed_at.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.reviewed_at.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.rejection_reason.id_for_label }}">
+                                Rejection Reason (if rejected)
+                            </label>
+                            {{ form.rejection_reason }}
+                            {% if form.rejection_reason.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.rejection_reason.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2 flex items-center gap-2 pt-2">
+                            {{ form.is_conflicted }}
+                            <label class="text-sm font-medium text-rose-700" for="{{ form.is_conflicted.id_for_label }}">
+                                Flag as Channel Conflicted
+                            </label>
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.conflict_summary.id_for_label }}">
+                                Conflict Summary (if applicable)
+                            </label>
+                            {{ form.conflict_summary }}
+                            {% if form.conflict_summary.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.conflict_summary.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rep Contact & Conversion -->
+                <div>
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4 pb-2 border-b border-slate-200">
+                        3. Partner Rep Contact & Opportunity Linking
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.partner_rep_name.id_for_label }}">
+                                Partner Sales Representative
+                            </label>
+                            {{ form.partner_rep_name }}
+                            {% if form.partner_rep_name.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.partner_rep_name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label font-medium" for="{{ form.partner_rep_email.id_for_label }}">
+                                Partner Rep Email
+                            </label>
+                            {{ form.partner_rep_email }}
+                            {% if form.partner_rep_email.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.partner_rep_email.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.opportunity.id_for_label }}">
+                                Converted CRM Opportunity (crm.Opportunity)
+                            </label>
+                            {{ form.opportunity }}
+                            {% if form.opportunity.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.opportunity.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label font-medium" for="{{ form.notes.id_for_label }}">
+                                Deal Scope & Notes
+                            </label>
+                            {{ form.notes }}
+                            {% if form.notes.errors %}
+                            <div class="form-error text-xs text-rose-600 mt-1">{{ form.notes.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 mt-8 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'sales:deal_registration_detail' deal_registration.pk %}{% else %}{% url 'sales:deal_registration_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Register Deal{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
