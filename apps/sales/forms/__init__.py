@@ -99,6 +99,14 @@ from .SalesAnalytics import (
     WinLossDebriefForm,
 )
 
+# 8.14 Partner & Channel Management
+from .PartnerChannel import (
+    ChannelConflictForm,
+    DealRegistrationForm,
+    JointAccountPlanForm,
+    PartnerProfileForm,
+)
+
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
     "LeadQualificationForm", "LeadRoutingPreviewForm", "LeadRoutingRuleForm", "LeadRoutingRunForm",
@@ -141,6 +149,9 @@ __all__ = [
     # 8.12 Sales Analytics & Intelligence
     "WinLossDebriefForm", "StageVelocityAnalysisForm",
     "FunnelConversionRecordForm", "RepPerformanceScorecardForm",
+    # 8.14 Partner & Channel Management
+    "PartnerProfileForm", "DealRegistrationForm",
+    "JointAccountPlanForm", "ChannelConflictForm",
 ]
 
 
