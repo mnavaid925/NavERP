@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Usage Record {{ usage_record.number }}{% else %}Log Usage Meter Record{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:usage_meter_record_list' %}">Usage Meters</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ usage_record.number }}{% else %}New Record{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Usage Record: {{ usage_record.number }}{% else %}Log Usage Meter Record{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-header">
+        <h3 class="font-semibold text-slate-800">Metered Consumption Parameters</h3>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="p-4 mb-6 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                <p class="font-bold">Please correct the following errors:</p>
+                <ul class="list-disc pl-5 mt-1 space-y-1">
+                    {% for field in form %}
+                        {% for error in field.errors %}
+                            <li>{{ field.label }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                    {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.subscription.id_for_label }}">Customer Subscription *</label>
+                    {{ form.subscription }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.meter_name.id_for_label }}">Metric Name (e.g. API Calls, Storage GB) *</label>
+                    {{ form.meter_name }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.unit_of_measure.id_for_label }}">Unit of Measure *</label>
+                    {{ form.unit_of_measure }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.billing_period_start.id_for_label }}">Cycle Start Date *</label>
+                    {{ form.billing_period_start }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.billing_period_end.id_for_label }}">Cycle End Date *</label>
+                    {{ form.billing_period_end }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.included_allowance.id_for_label }}">Included Base Allowance (Free Units) *</label>
+                    {{ form.included_allowance }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.reported_usage.id_for_label }}">Actual Reported Consumption *</label>
+                    {{ form.reported_usage }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.overage_unit_price.id_for_label }}">Overage Unit Price ($ per extra unit) *</label>
+                    {{ form.overage_unit_price }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Billing Status *</label>
+                    {{ form.status }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Operational Notes & Source Links</label>
+                    {{ form.notes }}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 mt-6 pt-4 border-t">
+                {% if is_edit %}
+                <a href="{% url 'sales:usage_meter_record_detail' usage_record.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'sales:usage_meter_record_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Log Record{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
