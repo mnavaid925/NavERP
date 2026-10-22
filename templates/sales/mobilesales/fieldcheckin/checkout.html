@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Check-Out — {{ check_in.party.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="page-header flex items-center justify-between">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'sales:dashboard' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:field_check_in_list' %}" class="hover:text-primary">Field Check-Ins</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:field_check_in_detail' check_in.pk %}" class="hover:text-primary">{{ check_in.number }}</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Check-Out</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Record Departure & Outcome</h1>
+            <p class="text-sm text-slate-500 mt-1">Conclude visit at {{ check_in.party.name }} and log final discussion notes.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'sales:field_check_in_detail' check_in.pk %}" class="btn btn-outline">Cancel</a>
+        </div>
+    </div>
+
+    <!-- Check-Out Card -->
+    <div class="card p-6">
+        <div class="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-lg flex items-center justify-between">
+            <div>
+                <span class="text-xs text-blue-500 font-medium uppercase tracking-wider block">Arrival Timestamp</span>
+                <span class="text-base font-bold text-blue-900">{{ check_in.check_in_at|date:"Y-m-d H:i:s" }}</span>
+            </div>
+            <div class="text-right">
+                <span class="text-xs text-blue-500 font-medium uppercase tracking-wider block">Account / Client</span>
+                <span class="text-base font-bold text-blue-900">{{ check_in.party.name }}</span>
+            </div>
+        </div>
+
+        <form method="post" class="space-y-4" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Departure Latitude</label>
+                    {{ form.check_out_lat }}
+                    {% if form.check_out_lat.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.check_out_lat.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Departure Longitude</label>
+                    {{ form.check_out_lng }}
+                    {% if form.check_out_lng.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.check_out_lng.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Meeting Outcome <span class="text-red-500">*</span></label>
+                {{ form.outcome }}
+                {% if form.outcome.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.outcome.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Final Meeting Notes / Wrap-Up</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Follow-Up Action</label>
+                    {{ form.next_step }}
+                    {% if form.next_step.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.next_step.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Follow-Up Due Date</label>
+                    {{ form.next_step_due }}
+                    {% if form.next_step_due.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.next_step_due.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% url 'sales:field_check_in_detail' check_in.pk %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary flex items-center gap-2">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    <span>Confirm Departure Check-Out</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
