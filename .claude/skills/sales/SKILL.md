@@ -962,9 +962,12 @@ per touch per model, so the two can never overwrite each other.
   `None` (rendered as "—"), not zero — a zero would read as "broke even".
 - **`EventRegistration.event` is fixed by the URL** on the add-registration form; the view
   overrides the posted value and the form field is disabled.
-- **The 8.13 test suite is not written** — the `test-writer` agent was skipped at the user's
-  instruction for this run. The test contract is pinned in `.claude/tasks/contract-sales-8.13.md`
-  §1–§4. See `GAP-sales-8.13-09`.
+- **The 8.13 test suite is complete & green (85 tests):**
+  - Models (`test_marketingalignment_models.py`, 20 tests): field contracts, auto-numbering, properties, SLA and cross-tenant clean() validation.
+  - Forms (`test_marketingalignment_forms.py`, 17 tests): queryset tenant scoping, disabled fields on create, custom clean validation, `_reject_foreign`.
+  - Views (`test_marketingalignment_views.py`, 23 tests): attribution console analytics, list filtering/search, detail views, CRUD round-trips, attendee management.
+  - Security (`test_marketingalignment_security.py`, 25 tests): cross-tenant IDOR defense (404 on all 6 entities), non-admin deletion gates (403), unauthenticated redirects.
+  - Shared fixtures and model contracts in `apps/sales/tests/conftest.py`. See `GAP-sales-8.13-09` (closed).
 - **Known scope gaps** for 8.13 (W-shaped attribution, data-driven attribution, ad-platform
   spend connectors, automatic handoff generation, event email automation, live webinar
   micro-engagement capture, AI content recommendations, funnel-based attribution) are registered
