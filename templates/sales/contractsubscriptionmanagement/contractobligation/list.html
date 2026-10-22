@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}Contract Obligations & SLAs — Sales — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:contract_subscription_workspace' %}">Contracts & Subscriptions</a>
+            <span>/</span>
+            <span>Obligations</span>
+        </div>
+        <h1 class="page-title">Contract Obligations & SLAs</h1>
+        <p class="text-sm text-slate-500 mt-1">Track post-signature delivery milestones, SLA uptime/response compliance, and service credits.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:contract_obligation_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Obligation</span>
+        </a>
+    </div>
+</div>
+
+<!-- KPI Stats -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Breached Obligations</div>
+            <div class="text-2xl font-bold text-slate-800">{{ breached_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Assessed Penalty Exposure</div>
+            <div class="text-2xl font-bold text-slate-800">${{ penalty_exposure|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="check-square"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Obligations</div>
+            <div class="text-2xl font-bold text-slate-800">{{ page_obj.paginator.count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group mb-0">
+                <input type="text" name="q" value="{{ request.GET.q|default:'' }}" placeholder="Search title or benchmark..." class="form-input text-sm">
+            </div>
+            <div class="form-group mb-0">
+                <select name="obligation_type" class="form-select text-sm">
+                    <option value="">All Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.obligation_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="contract" class="form-select text-sm">
+                    <option value="">All Contracts</option>
+                    {% for c in filter_form.fields.contract.queryset %}
+                    <option value="{{ c.pk }}" {% if request.GET.contract == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} ({{ c.title|truncatechars:20 }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary text-sm flex-1">Filter</button>
+                <a href="{% url 'sales:contract_obligation_list' %}" class="btn btn-outline text-sm">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Obligations Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Obligation & Contract</th>
+                    <th>Type</th>
+                    <th>Target Benchmark</th>
+                    <th>Status</th>
+                    <th>Due Date</th>
+                    <th>Penalty Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for o in obligations %}
+                <tr>
+                    <td class="font-semibold text-slate-800">
+                        <a href="{% url 'sales:contract_obligation_detail' o.pk %}" class="text-blue-600 hover:underline">
+                            {{ o.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ o.title }}</div>
+                        <div class="text-xs text-slate-500">
+                            {% if o.contract %}
+                            {{ o.contract.number }} — {{ o.contract.title|truncatechars:25 }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600">{{ o.get_obligation_type_display }}</span>
+                    </td>
+                    <td>
+                        <span class="text-xs font-mono text-slate-700 font-medium">{{ o.target_metric }}</span>
+                    </td>
+                    <td>
+                        {% if o.status == 'fulfilled' %}
+                        <span class="badge badge-green">Fulfilled</span>
+                        {% elif o.status == 'at_risk' %}
+                        <span class="badge badge-amber">At Risk</span>
+                        {% elif o.status == 'breached' %}
+                        <span class="badge badge-red">Breached</span>
+                        {% elif o.status == 'waived' %}
+                        <span class="badge badge-muted">Waived</span>
+                        {% else %}
+                        <span class="badge badge-slate">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {% if o.due_date %}{{ o.due_date|date:"M d, Y" }}{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if o.penalty_status == 'assessed' %}
+                        <span class="badge badge-amber">${{ o.penalty_amount }} Assessed</span>
+                        {% elif o.penalty_status == 'credited' %}
+                        <span class="badge badge-green">${{ o.penalty_amount }} Credited</span>
+                        {% elif o.penalty_status == 'waived' %}
+                        <span class="badge badge-muted">Waived</span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">None</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'sales:contract_obligation_detail' o.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:contract_obligation_edit' o.pk %}" class="btn btn-icon" title="Edit Obligation">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'sales:contract_obligation_delete' o.pk %}" class="inline" onsubmit="return confirm('Delete obligation {{ o.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="shield-check" class="mx-auto h-10 w-10 text-slate-300 mb-2"></i>
+                            <h3 class="text-base font-medium text-slate-700">No obligations found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Set up SLA uptime benchmarks, support SLAs, and contractual milestones.</p>
+                            <a href="{% url 'sales:contract_obligation_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create Obligation</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer flex justify-between items-center text-sm text-slate-500 px-4 py-3 border-t">
+        <div>
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} obligations
+        </div>
+        <div class="pagination flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
+            {% else %}
+            <span class="btn btn-outline text-xs px-2 py-1 opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-2 py-1 text-xs text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
+            {% else %}
+            <span class="btn btn-outline text-xs px-2 py-1 opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
