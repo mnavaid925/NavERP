@@ -18,9 +18,9 @@
             <h1 class="page-title">{{ obj.number }} · {{ obj.pipeline_stage.name }}</h1>
             <span class="badge {{ obj.status_badge_class }}">{{ obj.get_status_display }}</span>
             {% if obj.is_bottleneck %}
-            <span class="badge {{ obj.bottleneck_badge_class }}">Bottleneck</span>
+            <span class="badge {{ obj.bottleneck_badge_class }}">{{ obj.bottleneck_display }}</span>
             {% else %}
-            <span class="badge {{ obj.bottleneck_badge_class }}">{{ obj.get_is_bottleneck_display }}</span>
+            <span class="badge {{ obj.bottleneck_badge_class }}">{{ obj.bottleneck_display }}</span>
             {% endif %}
         </div>
     </div>
@@ -141,9 +141,9 @@
                         <dt class="text-slate-500 font-medium">Bottleneck</dt>
                         <dd class="text-slate-900">
                             {% if obj.is_bottleneck %}
-                            <span class="badge {{ obj.bottleneck_badge_class }}">Bottleneck</span>
+                            <span class="badge {{ obj.bottleneck_badge_class }}">{{ obj.bottleneck_display }}</span>
                             {% else %}
-                            <span class="badge {{ obj.bottleneck_badge_class }}">{{ obj.get_is_bottleneck_display }}</span>
+                            <span class="badge {{ obj.bottleneck_badge_class }}">{{ obj.bottleneck_display }}</span>
                             {% endif %}
                         </dd>
                     </div>
@@ -247,9 +247,9 @@
                 <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Bottleneck Flag</div>
                 <div class="mb-3">
                     {% if obj.is_bottleneck %}
-                    <span class="badge {{ obj.bottleneck_badge_class }}">Bottleneck</span>
+                    <span class="badge {{ obj.bottleneck_badge_class }}">{{ obj.bottleneck_display }}</span>
                     {% else %}
-                    <span class="badge {{ obj.bottleneck_badge_class }}">{{ obj.get_is_bottleneck_display }}</span>
+                    <span class="badge {{ obj.bottleneck_badge_class }}">{{ obj.bottleneck_display }}</span>
                     {% endif %}
                 </div>
 
