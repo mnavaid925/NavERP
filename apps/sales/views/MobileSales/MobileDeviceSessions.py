@@ -2,6 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -82,6 +83,7 @@ def mobile_device_session_detail(request, pk):
 
 
 @login_required
+@transaction.atomic
 def mobile_device_session_create(request):
     tenant = request.tenant
     if request.method == "POST":
@@ -110,6 +112,7 @@ def mobile_device_session_create(request):
 
 
 @login_required
+@transaction.atomic
 def mobile_device_session_edit(request, pk):
     tenant = request.tenant
     device = get_object_or_404(MobileDeviceSession.objects.filter(tenant=tenant), pk=pk)
@@ -139,6 +142,7 @@ def mobile_device_session_edit(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def mobile_device_session_delete(request, pk):
     tenant = request.tenant
     device = get_object_or_404(MobileDeviceSession.objects.filter(tenant=tenant), pk=pk)
@@ -156,6 +160,7 @@ def mobile_device_session_delete(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def mobile_device_session_sync(request, pk):
     tenant = request.tenant
     device = get_object_or_404(MobileDeviceSession.objects.filter(tenant=tenant), pk=pk)
