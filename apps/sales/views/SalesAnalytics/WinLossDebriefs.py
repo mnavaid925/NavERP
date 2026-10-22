@@ -150,7 +150,7 @@ def win_loss_debrief_detail(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 def win_loss_debrief_create(request):
     if request.method == "POST":
         form = WinLossDebriefForm(request.POST, tenant=request.tenant)
@@ -175,7 +175,7 @@ def win_loss_debrief_create(request):
     )
 
 
-@login_required
+@tenant_admin_required
 def win_loss_debrief_edit(request, pk):
     obj = get_object_or_404(
         WinLossDebrief.objects.filter(tenant=request.tenant),
