@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ alert.number }} — {{ alert.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'sales:dashboard' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:mobile_deal_alert_list' %}" class="hover:text-primary">Mobile Deal Alerts</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ alert.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">{{ alert.title }}</h1>
+                {% if alert.urgency == 'urgent' %}
+                    <span class="badge badge-red">Urgent</span>
+                {% elif alert.urgency == 'high' %}
+                    <span class="badge badge-amber">High</span>
+                {% elif alert.urgency == 'normal' %}
+                    <span class="badge badge-slate">Normal</span>
+                {% else %}
+                    <span class="badge badge-muted">Low</span>
+                {% endif %}
+                <span class="text-xs text-slate-400 font-mono">({{ alert.number }})</span>
+            </div>
+            <p class="text-sm text-slate-500 mt-1">Type: {{ alert.get_alert_type_display }} · Dispatched: {{ alert.created_at|date:"F d, Y H:i" }}</p>
+        </div>
+        <div class="page-actions flex flex-wrap items-center gap-2">
+            {% if not alert.is_read %}
+            <form method="post" action="{% url 'sales:mobile_deal_alert_mark_read' alert.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary flex items-center gap-2">
+                    <i data-lucide="check" class="w-4 h-4"></i>
+                    <span>Mark as Read</span>
+                </button>
+            </form>
+            {% endif %}
+            <a href="{% url 'sales:mobile_deal_alert_edit' alert.pk %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+                <span>Edit</span>
+            </a>
+            <form method="post" action="{% url 'sales:mobile_deal_alert_delete' alert.pk %}" class="inline" onsubmit="return confirm('Delete this deal notification?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-icon" title="Delete">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Quick Status Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Read Status</div>
+            <div class="mt-2">
+                {% if alert.is_read %}
+                    <span class="badge badge-green flex items-center gap-1 w-fit">
+                        <i data-lucide="check-check" class="w-3.5 h-3.5"></i>
+                        <span>Read</span>
+                    </span>
+                {% else %}
+                    <span class="badge badge-info flex items-center gap-1 w-fit">
+                        <i data-lucide="mail" class="w-3.5 h-3.5"></i>
+                        <span>Unread</span>
+                    </span>
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 mt-2">
+                {% if alert.read_at %}
+                    Read at {{ alert.read_at|date:"Y-m-d H:i" }}
+                {% else %}
+                    Awaiting recipient review
+                {% endif %}
+            </div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Push Status</div>
+            <div class="mt-2">
+                {% if alert.push_status == 'sent' or alert.push_status == 'delivered' %}
+                    <span class="badge badge-green">{{ alert.get_push_status_display }}</span>
+                {% elif alert.push_status == 'failed' %}
+                    <span class="badge badge-red">Failed</span>
+                {% else %}
+                    <span class="badge badge-slate">Pending</span>
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 mt-2 font-mono">
+                {% if alert.push_sent_at %}
+                    {{ alert.push_sent_at|date:"Y-m-d H:i" }}
+                {% else %}
+                    Not dispatched
+                {% endif %}
+            </div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Recipient User</div>
+            <div class="text-sm font-semibold text-slate-900 mt-1">
+                {{ alert.recipient.get_full_name|default:alert.recipient.username }}
+            </div>
+            <div class="text-xs text-slate-500 mt-2">{{ alert.recipient.email }}</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Target Hardware</div>
+            <div class="text-sm font-semibold text-slate-900 mt-1">
+                {% if alert.device %}
+                    <a href="{% url 'sales:mobile_device_session_detail' alert.device.pk %}" class="text-primary hover:underline">
+                        {{ alert.device.device_name }}
+                    </a>
+                {% else %}
+                    <span class="text-slate-400">All registered devices</span>
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 mt-2">Mobile device session</div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Message Content Body -->
+        <div class="space-y-6 lg:col-span-2">
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="message-square" class="w-4 h-4 text-primary"></i>
+                        <span>Notification Content</span>
+                    </h2>
+                </div>
+                <div class="card-body p-6">
+                    <div class="text-slate-800 text-sm whitespace-pre-line leading-relaxed bg-slate-50 p-4 rounded-lg border border-slate-100">
+                        {{ alert.message }}
+                    </div>
+
+                    {% if alert.related_quote %}
+                    <div class="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-100 flex items-center justify-between">
+                        <div>
+                            <span class="text-xs font-medium text-purple-600 uppercase tracking-wider block">One-Tap Discount Action</span>
+                            <span class="text-sm font-semibold text-purple-900">Requires CPQ Quote Sign-Off ({{ alert.related_quote.number }})</span>
+                        </div>
+                        <a href="{% url 'sales:cpq_quote_detail' alert.related_quote.pk %}" class="btn btn-primary btn-sm">
+                            <span>Open Quote</span>
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Linked Context / Spine Entities -->
+        <div class="space-y-6 lg:col-span-1">
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="link" class="w-4 h-4 text-primary"></i>
+                        <span>Related Sales Records</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 space-y-3 text-sm">
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Opportunity / Deal</span>
+                        {% if alert.related_opportunity %}
+                            <a href="{% url 'sales:opportunity_detail' alert.related_opportunity.pk %}" class="text-primary hover:underline font-medium">
+                                {{ alert.related_opportunity.name }}
+                            </a>
+                        {% else %}
+                            <span class="text-slate-400">— None linked —</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">CPQ Proposal</span>
+                        {% if alert.related_quote %}
+                            <a href="{% url 'sales:cpq_quote_detail' alert.related_quote.pk %}" class="text-primary hover:underline font-medium font-mono">
+                                {{ alert.related_quote.number }}
+                            </a>
+                        {% else %}
+                            <span class="text-slate-400">— None linked —</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Assigned Route</span>
+                        {% if alert.related_route %}
+                            <a href="{% url 'sales:field_sales_route_detail' alert.related_route.pk %}" class="text-primary hover:underline font-medium">
+                                {{ alert.related_route.name }}
+                            </a>
+                        {% else %}
+                            <span class="text-slate-400">— None linked —</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
