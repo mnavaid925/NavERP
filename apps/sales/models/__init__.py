@@ -124,6 +124,24 @@ from .PartnerChannel import (
     JointAccountPlan,
     PartnerProfile,
 )
+# 8.15 Contract & Subscription Management. Reuses core.Party, sales.CPQQuote,
+# scm.SalesOrder, accounting.Currency, core.Document, crm.DocTemplate, accounts.User.
+# Commercial customer subscriptions (CSB-) separate from tenants.Subscription.
+from .ContractSubscriptionManagement import (
+    BILLING_CADENCE_CHOICES,
+    CONTRACT_STATUS_CHOICES,
+    CONTRACT_TYPE_CHOICES,
+    OBLIGATION_STATUS_CHOICES,
+    OBLIGATION_TYPE_CHOICES,
+    PENALTY_STATUS_CHOICES,
+    PRICING_MODEL_CHOICES,
+    SUBSCRIPTION_STATUS_CHOICES,
+    USAGE_STATUS_CHOICES,
+    ContractObligation,
+    CustomerContract,
+    CustomerSubscription,
+    UsageMeterRecord,
+)
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
@@ -173,6 +191,12 @@ __all__ = [
     "SCORECARD_RATING_CHOICES", "SCORECARD_STATUS_CHOICES",
     # 8.14 Partner & Channel Management
     "PartnerProfile", "DealRegistration", "JointAccountPlan", "ChannelConflict",
+    # 8.15 Contract & Subscription Management
+    "CustomerContract", "CustomerSubscription", "UsageMeterRecord", "ContractObligation",
+    "CONTRACT_TYPE_CHOICES", "CONTRACT_STATUS_CHOICES",
+    "SUBSCRIPTION_STATUS_CHOICES", "PRICING_MODEL_CHOICES", "BILLING_CADENCE_CHOICES",
+    "USAGE_STATUS_CHOICES", "OBLIGATION_TYPE_CHOICES", "OBLIGATION_STATUS_CHOICES",
+    "PENALTY_STATUS_CHOICES",
 ]
 
 
