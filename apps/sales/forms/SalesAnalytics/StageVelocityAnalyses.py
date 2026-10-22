@@ -58,12 +58,13 @@ class StageVelocityAnalysisForm(TenantUniqueMixin, TenantModelForm):
         if "pipeline_stage" in self.fields:
             self.fields["pipeline_stage"].queryset = self.fields["pipeline_stage"].queryset.select_related("pipeline")
 
-    def clean_pipeline_stage(self, value):
+    def clean_pipeline_stage(self):
         """The stage must belong to the chosen pipeline.
 
         The FK is a plain stage reference, so a stage from another pipeline is
         otherwise a legal pick that would silently report the wrong stage.
         """
+        value = self.cleaned_data.get("pipeline_stage")
         if value is None:
             return value
         pipeline = self.cleaned_data.get("pipeline")
