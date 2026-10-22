@@ -177,7 +177,7 @@
                 </div>
                 <div>
                     <div class="text-xs text-slate-500">Plan Code</div>
-                    <div class="font-mono text-slate-800 mt-1">{{ usage_record.subscription.plan_code }}</div>
+                    <div class="font-mono text-slate-800 mt-1">{{ usage_record.subscription.plan_code|default:"—" }}</div>
                 </div>
             </div>
         </div>
