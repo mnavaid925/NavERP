@@ -9,7 +9,9 @@
     <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
             <div class="breadcrumb text-sm text-slate-500 mb-1">
-                <a href="{% url 'sales:dashboard' %}" class="hover:text-primary">Sales</a>
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:mobile_sales_dashboard' %}" class="hover:text-primary">Mobile Sales</a>
                 <span class="mx-1">/</span>
                 <span class="text-slate-700 font-medium">Mobile Devices</span>
             </div>
