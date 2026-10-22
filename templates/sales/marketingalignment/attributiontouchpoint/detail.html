@@ -64,7 +64,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Touch Cost</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.cost|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.currency.symbol|default:"$" }}{{ obj.cost|floatformat:2 }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -73,7 +73,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Engagement Value</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.engagement_value|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.currency.symbol|default:"$" }}{{ obj.engagement_value|floatformat:2 }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -82,7 +82,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Credit Assigned</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.attributed_revenue|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.currency.symbol|default:"$" }}{{ obj.attributed_revenue|floatformat:2 }}</div>
         </div>
     </div>
 </div>
@@ -168,15 +168,15 @@
                 </div>
                 <div class="py-2.5 flex justify-between">
                     <dt class="text-slate-500 font-medium">Cost</dt>
-                    <dd class="text-slate-900 font-semibold">${{ obj.cost|floatformat:2 }}</dd>
+                    <dd class="text-slate-900 font-semibold">{{ obj.currency.symbol|default:"$" }}{{ obj.cost|floatformat:2 }}</dd>
                 </div>
                 <div class="py-2.5 flex justify-between">
                     <dt class="text-slate-500 font-medium">Engagement Value</dt>
-                    <dd class="text-slate-900 font-semibold">${{ obj.engagement_value|floatformat:2 }}</dd>
+                    <dd class="text-slate-900 font-semibold">{{ obj.currency.symbol|default:"$" }}{{ obj.engagement_value|floatformat:2 }}</dd>
                 </div>
                 <div class="py-2.5 flex justify-between">
                     <dt class="text-slate-500 font-medium">Credit Assigned (all models)</dt>
-                    <dd class="text-slate-900 font-semibold">${{ obj.attributed_revenue|floatformat:2 }}</dd>
+                    <dd class="text-slate-900 font-semibold">{{ obj.currency.symbol|default:"$" }}{{ obj.attributed_revenue|floatformat:2 }}</dd>
                 </div>
             </dl>
 
@@ -222,10 +222,10 @@
                         <span class="font-semibold text-slate-900">{{ attribution.credit_pct|floatformat:2 }}%</span>
                     </td>
                     <td>
-                        <span class="font-semibold text-slate-900">${{ attribution.attributed_revenue|floatformat:2 }}</span>
+                        <span class="font-semibold text-slate-900">{{ obj.currency.symbol|default:"$" }}{{ attribution.attributed_revenue|floatformat:2 }}</span>
                     </td>
                     <td>
-                        <span class="text-slate-700">${{ attribution.attributed_cost|floatformat:2 }}</span>
+                        <span class="text-slate-700">{{ obj.currency.symbol|default:"$" }}{{ attribution.attributed_cost|floatformat:2 }}</span>
                     </td>
                     <td>
                         {% if attribution.status == "approved" %}
