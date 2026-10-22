@@ -51,9 +51,9 @@
 
 ### Critical
 
-- [ ] **C1 — `_pk_filter` raises `ValueError` on superscript / circled Unicode digits → HTTP 500 on all four 8.12 list pages.**
+- [x] **C1 — `_pk_filter` raises `ValueError` on superscript / circled Unicode digits → HTTP 500 on all four 8.12 list pages.**
   `apps/sales/views/SalesAnalytics/_helpers.py:23-25`. The guard `if not value or not value.isdigit(): return None` followed by `int(value)` fails because `str.isdigit()` accepts characters like `'²'` (U+00B2) and `'①'` (U+2460) that `int()` refuses.
-  *Fix:* Delegate to house helper `from apps.core.crud import as_db_int` (which uses `.isdecimal()` and handles overflow).
+  *Fix:* Delegate to house helper `from apps.core.crud import as_db_int` (which uses `.isdecimal()` and handles overflow). Fixed — `9ff8a760` `fix(sales): delegate _pk_filter to as_db_int to handle unicode digits and overflow`.
 
 - [ ] **C2 — N+1 chained FK hops in `funnel_conversion_record_detail` and edit views.**
   `apps/sales/views/SalesAnalytics/FunnelConversionRecords.py:126-134`. Detail template displays `{{ obj.from_stage.pipeline.name }}` and `{{ obj.to_stage.pipeline.name }}`. `select_related` selects `from_stage` and `to_stage`, but omits `from_stage__pipeline` and `to_stage__pipeline`, triggering 2 extra queries per detail/edit page view.
