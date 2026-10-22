@@ -4609,3 +4609,435 @@ def pc_conflict_b(tenant_b, pc_partner_b, pc_customer_b, pc_deal_reg_b):
 
 
 
+
+
+# ==============================================================================
+# 8.13 Marketing Alignment & Attribution Test Contract & Fixtures
+# ==============================================================================
+
+MARKETINGALIGNMENT_PAGE_SIZE = 15
+
+MARKETINGALIGNMENT_MODEL_FIELDS = {
+    "AttributionTouchpoint": (
+        "tenant", "created_at", "updated_at", "number", "campaign", "lead", "opportunity",
+        "channel", "touch_type", "touch_position", "touch_date", "cost", "engagement_value",
+        "currency", "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+        "landing_page_url", "referrer_url", "device_type", "notes",
+    ),
+    "CampaignAttribution": (
+        "tenant", "created_at", "updated_at", "number", "touchpoint", "attribution_model",
+        "credit_pct", "attributed_revenue", "attributed_cost", "status", "computed_on",
+        "computed_by", "notes",
+    ),
+    "MqlHandoff": (
+        "tenant", "created_at", "updated_at", "number", "lead", "campaign", "account",
+        "owner", "assigned_to", "opportunity", "status", "source_kind", "handoff_at",
+        "sla_due_at", "responded_at", "acceptance_reason", "rejection_reason", "lead_score",
+        "estimated_value", "currency", "notes",
+    ),
+    "ContentEngagement": (
+        "tenant", "created_at", "updated_at", "number", "content", "account", "lead",
+        "campaign", "engagement_type", "engagement_channel", "engagement_score",
+        "time_spent_seconds", "page_depth", "is_download", "revenue_attributed", "currency",
+        "engaged_at", "notes",
+    ),
+    "MarketingEvent": (
+        "tenant", "created_at", "updated_at", "number", "name", "event_type", "status",
+        "start_at", "end_at", "timezone_name", "venue", "virtual_url", "capacity", "budget",
+        "currency", "owner", "campaign", "description", "notes",
+    ),
+    "EventRegistration": (
+        "tenant", "created_at", "updated_at", "event", "lead", "account", "registrant_name",
+        "registrant_email", "registrant_company", "registrant_title", "registration_status",
+        "followup_status", "registered_at", "attended_at", "engagement_score", "campaign",
+        "opportunity", "revenue_attributed", "notes",
+    ),
+}
+
+MARKETINGALIGNMENT_CHOICES = {
+    "AttributionTouchpoint": {
+        "channel": (
+            ("email", "Email"), ("paid_search", "Paid Search"), ("organic_search", "Organic Search"),
+            ("social", "Social Media"), ("display", "Display / Banner"), ("webinar", "Webinar"),
+            ("event", "Event"), ("referral", "Referral / Partner"), ("direct_mail", "Direct Mail"),
+            ("website", "Website / Organic Visit"), ("other", "Other"),
+        ),
+        "touch_type": (
+            ("impression", "Ad Impression"), ("click", "Click / Visit"), ("email_open", "Email Open"),
+            ("email_click", "Email Click"), ("content_download", "Content Download"),
+            ("event_registration", "Event Registration"), ("event_attendance", "Event Attendance"),
+            ("meeting", "Sales Meeting"), ("trial_start", "Trial Start"), ("demo_request", "Demo Request"),
+        ),
+        "touch_position": (
+            ("first", "First Touch"), ("middle", "Middle Touch"), ("last", "Last Touch"),
+        ),
+    },
+    "CampaignAttribution": {
+        "attribution_model": (
+            ("first_touch", "First Touch (100% first)"),
+            ("last_touch", "Last Touch (100% last)"),
+            ("linear", "Linear (Equal credit)"),
+            ("time_decay", "Time Decay (7-day half-life)"),
+            ("u_shaped", "U-Shaped / Position-Based (40/20/40)"),
+            ("custom", "Custom / Algorithmic"),
+        ),
+        "status": (
+            ("draft", "Draft"), ("computed", "Computed"),
+            ("approved", "Approved"), ("rejected", "Rejected"),
+        ),
+    },
+    "MqlHandoff": {
+        "status": (
+            ("pending", "Pending Sales Review"), ("accepted", "Accepted by Sales"),
+            ("rejected", "Rejected / Returned"), ("converted", "Converted to Opportunity"),
+            ("expired", "Expired SLA"),
+        ),
+        "source_kind": (
+            ("scoring_threshold", "Lead Score Threshold"), ("content_gate", "High-Intent Content"),
+            ("event_attendance", "Event / Webinar Attendance"), ("demo_request", "Direct Demo Request"),
+            ("contact_us", "Contact Sales Form"), ("manual", "Manual SDR Handoff"),
+        ),
+    },
+    "ContentEngagement": {
+        "engagement_type": (
+            ("view", "Content View"), ("download", "Content Download"), ("share", "Share / Forward"),
+            ("print", "Print"), ("presentation_view", "Pitch Deck View"),
+            ("quote_interaction", "Interactive Quote View"),
+        ),
+        "engagement_channel": (
+            ("email_link", "Email Link"), ("portal", "Client / Partner Portal"),
+            ("sales_rep", "Rep-Shared Link"), ("direct_url", "Direct URL"),
+            ("website", "Public Website Gate"),
+        ),
+    },
+    "MarketingEvent": {
+        "event_type": (
+            ("webinar", "Live Webinar"), ("virtual_summit", "Virtual Summit"),
+            ("in_person_seminar", "In-Person Seminar"), ("trade_show", "Trade Show / Expo"),
+            ("roundtable", "Executive Roundtable"), ("workshop", "Hands-on Workshop"),
+            ("networking", "VIP Networking Dinner"),
+        ),
+        "status": (
+            ("planned", "Planned"), ("published", "Published / Open for Registration"),
+            ("ongoing", "Ongoing / Live"), ("completed", "Completed"), ("cancelled", "Cancelled"),
+        ),
+    },
+    "EventRegistration": {
+        "registration_status": (
+            ("registered", "Registered"), ("confirmed", "Confirmed"),
+            ("attended", "Attended"), ("no_show", "No-Show"),
+            ("cancelled", "Cancelled"), ("waitlisted", "Waitlisted"),
+        ),
+        "followup_status": (
+            ("pending", "Pending"), ("sent", "Follow-Up Sent"),
+            ("meeting_booked", "Meeting Booked"),
+            ("opportunity_created", "Opportunity Created"),
+            ("no_action", "No Action Required"),
+        ),
+    },
+}
+
+
+def _marketingalignment_currency(code="USD", name="US Dollar", symbol="$"):
+    from apps.accounting.models import Currency
+    curr, _ = Currency.objects.get_or_create(
+        code=code, defaults={"name": name, "symbol": symbol, "is_active": True}
+    )
+    return curr
+
+
+def _marketingalignment_campaign(tenant, name="Enterprise Growth Campaign", **overrides):
+    from apps.crm.models import Campaign
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "status": "in_progress",
+        "budget_planned": Decimal("50000.00"),
+        "budget_actual": Decimal("35000.00"),
+        "expected_revenue": Decimal("200000.00"),
+        "actual_revenue": Decimal("150000.00"),
+        "utm_campaign": "growth-2026",
+    }
+    defaults.update(overrides)
+    return Campaign.objects.create(**defaults)
+
+
+def _marketingalignment_lead(tenant, name="Marketing Lead Rivera", **overrides):
+    from apps.crm.models import Lead
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "company_name": "Rivera Industries",
+        "status": "qualified",
+        "lead_score": 85,
+        "email": "alex.rivera@example.com",
+    }
+    defaults.update(overrides)
+    return Lead.objects.create(**defaults)
+
+
+def _marketingalignment_opportunity(tenant, lead=None, name="Enterprise CRM Expansion", **overrides):
+    from apps.crm.models import Opportunity
+    defaults = {
+        "tenant": tenant,
+        "lead": lead,
+        "name": name,
+        "stage": "proposal",
+        "amount": Decimal("120000.00"),
+        "probability": 75,
+        "expected_close_date": timezone.now().date() + timezone.timedelta(days=60),
+    }
+    defaults.update(overrides)
+    return Opportunity.objects.create(**defaults)
+
+
+def _marketingalignment_customer(tenant, name="Apex Enterprise Client", **overrides):
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant, name=name, party_type="organization")
+    PartyRole.objects.get_or_create(tenant=tenant, party=party, role="customer")
+    return party
+
+
+def _marketingalignment_content(tenant, title="Cloud Transformation Whitepaper", **overrides):
+    from apps.sales.models import EnablementContent
+    defaults = {
+        "tenant": tenant,
+        "title": title,
+        "content_type": "whitepaper",
+        "stage": "awareness",
+        "is_active": True,
+        "is_external": True,
+    }
+    defaults.update(overrides)
+    return EnablementContent.objects.create(**defaults)
+
+
+def _marketingalignment_touchpoint(tenant, campaign=None, lead=None, currency=None, **overrides):
+    from apps.sales.models import AttributionTouchpoint
+    defaults = {
+        "tenant": tenant,
+        "campaign": campaign,
+        "lead": lead,
+        "channel": "paid_search",
+        "touch_type": "click",
+        "touch_position": "first",
+        "touch_date": timezone.now().date(),
+        "cost": Decimal("25.00"),
+        "engagement_value": Decimal("250.00"),
+        "currency": currency,
+        "utm_source": "google",
+        "utm_medium": "cpc",
+        "utm_campaign": "growth-2026",
+    }
+    defaults.update(overrides)
+    return AttributionTouchpoint.objects.create(**defaults)
+
+
+def _marketingalignment_attribution(tenant, touchpoint, computed_by=None, **overrides):
+    from apps.sales.models import CampaignAttribution
+    defaults = {
+        "tenant": tenant,
+        "touchpoint": touchpoint,
+        "attribution_model": "first_touch",
+        "credit_pct": Decimal("100.00"),
+        "attributed_revenue": Decimal("25000.00"),
+        "attributed_cost": Decimal("25.00"),
+        "status": "approved",
+        "computed_on": timezone.now().date(),
+        "computed_by": computed_by,
+    }
+    defaults.update(overrides)
+    return CampaignAttribution.objects.create(**defaults)
+
+
+def _marketingalignment_handoff(tenant, lead, campaign=None, account=None, owner=None, currency=None, **overrides):
+    from apps.sales.models import MqlHandoff
+    now = timezone.now()
+    defaults = {
+        "tenant": tenant,
+        "lead": lead,
+        "campaign": campaign,
+        "account": account,
+        "owner": owner,
+        "assigned_to": owner,
+        "status": "pending",
+        "source_kind": "scoring_threshold",
+        "handoff_at": now - timezone.timedelta(hours=2),
+        "sla_due_at": now + timezone.timedelta(hours=22),
+        "lead_score": 88,
+        "estimated_value": Decimal("45000.00"),
+        "currency": currency,
+    }
+    defaults.update(overrides)
+    return MqlHandoff.objects.create(**defaults)
+
+
+def _marketingalignment_engagement(tenant, content, account=None, lead=None, campaign=None, currency=None, **overrides):
+    from apps.sales.models import ContentEngagement
+    defaults = {
+        "tenant": tenant,
+        "content": content,
+        "account": account,
+        "lead": lead,
+        "campaign": campaign,
+        "engagement_type": "download",
+        "engagement_channel": "website",
+        "engagement_score": 85,
+        "time_spent_seconds": 320,
+        "page_depth": 14,
+        "is_download": True,
+        "revenue_attributed": Decimal("15000.00"),
+        "currency": currency,
+        "engaged_at": timezone.now(),
+    }
+    defaults.update(overrides)
+    return ContentEngagement.objects.create(**defaults)
+
+
+def _marketingalignment_event(tenant, owner=None, campaign=None, currency=None, **overrides):
+    from apps.sales.models import MarketingEvent
+    now = timezone.now()
+    defaults = {
+        "tenant": tenant,
+        "name": "Global Enterprise Architecture Summit",
+        "event_type": "webinar",
+        "status": "published",
+        "start_at": now + timezone.timedelta(days=7),
+        "end_at": now + timezone.timedelta(days=7, hours=2),
+        "timezone_name": "UTC",
+        "venue": "Virtual Stage A",
+        "virtual_url": "https://webinar.example.com/summit-2026",
+        "capacity": 500,
+        "budget": Decimal("10000.00"),
+        "currency": currency,
+        "owner": owner,
+        "campaign": campaign,
+    }
+    defaults.update(overrides)
+    return MarketingEvent.objects.create(**defaults)
+
+
+def _marketingalignment_registration(tenant, event, lead=None, account=None, **overrides):
+    from apps.sales.models import EventRegistration
+    defaults = {
+        "tenant": tenant,
+        "event": event,
+        "lead": lead,
+        "account": account,
+        "registrant_name": "Sarah Connor",
+        "registrant_email": "sarah.connor@cyberdyne.example",
+        "registrant_company": "Cyberdyne Systems",
+        "registrant_title": "VP Engineering",
+        "registration_status": "registered",
+        "followup_status": "pending",
+        "engagement_score": 75,
+        "revenue_attributed": Decimal("5000.00"),
+    }
+    defaults.update(overrides)
+    return EventRegistration.objects.create(**defaults)
+
+
+# Fixtures
+@pytest.fixture
+def ma_currency():
+    return _marketingalignment_currency()
+
+
+@pytest.fixture
+def ma_campaign_a(tenant_a):
+    return _marketingalignment_campaign(tenant_a, name="Acme Q4 Enterprise Campaign")
+
+
+@pytest.fixture
+def ma_campaign_b(tenant_b):
+    return _marketingalignment_campaign(tenant_b, name="Globex Q4 Regional Campaign")
+
+
+@pytest.fixture
+def ma_lead_a(tenant_a):
+    return _marketingalignment_lead(tenant_a, name="Acme Lead Rivera")
+
+
+@pytest.fixture
+def ma_lead_b(tenant_b):
+    return _marketingalignment_lead(tenant_b, name="Globex Lead Vance")
+
+
+@pytest.fixture
+def ma_customer_a(tenant_a):
+    return _marketingalignment_customer(tenant_a, name="Acme Strategic Account")
+
+
+@pytest.fixture
+def ma_customer_b(tenant_b):
+    return _marketingalignment_customer(tenant_b, name="Globex Regional Client")
+
+
+@pytest.fixture
+def ma_content_a(tenant_a):
+    return _marketingalignment_content(tenant_a, title="Acme Cloud Whitepaper")
+
+
+@pytest.fixture
+def ma_content_b(tenant_b):
+    return _marketingalignment_content(tenant_b, title="Globex Security Brief")
+
+
+@pytest.fixture
+def ma_touchpoint_a(tenant_a, ma_campaign_a, ma_lead_a, ma_currency):
+    return _marketingalignment_touchpoint(tenant_a, ma_campaign_a, ma_lead_a, ma_currency)
+
+
+@pytest.fixture
+def ma_touchpoint_b(tenant_b, ma_campaign_b, ma_lead_b, ma_currency):
+    return _marketingalignment_touchpoint(tenant_b, ma_campaign_b, ma_lead_b, ma_currency)
+
+
+@pytest.fixture
+def ma_attribution_a(tenant_a, ma_touchpoint_a, admin_user):
+    return _marketingalignment_attribution(tenant_a, ma_touchpoint_a, computed_by=admin_user)
+
+
+@pytest.fixture
+def ma_attribution_b(tenant_b, ma_touchpoint_b, admin_b):
+    return _marketingalignment_attribution(tenant_b, ma_touchpoint_b, computed_by=admin_b)
+
+
+@pytest.fixture
+def ma_handoff_a(tenant_a, ma_lead_a, ma_campaign_a, ma_customer_a, admin_user, ma_currency):
+    return _marketingalignment_handoff(tenant_a, ma_lead_a, ma_campaign_a, ma_customer_a, admin_user, ma_currency)
+
+
+@pytest.fixture
+def ma_handoff_b(tenant_b, ma_lead_b, ma_campaign_b, ma_customer_b, admin_b, ma_currency):
+    return _marketingalignment_handoff(tenant_b, ma_lead_b, ma_campaign_b, ma_customer_b, admin_b, ma_currency)
+
+
+@pytest.fixture
+def ma_engagement_a(tenant_a, ma_content_a, ma_customer_a, ma_lead_a, ma_campaign_a, ma_currency):
+    return _marketingalignment_engagement(tenant_a, ma_content_a, ma_customer_a, ma_lead_a, ma_campaign_a, ma_currency)
+
+
+@pytest.fixture
+def ma_engagement_b(tenant_b, ma_content_b, ma_customer_b, ma_lead_b, ma_campaign_b, ma_currency):
+    return _marketingalignment_engagement(tenant_b, ma_content_b, ma_customer_b, ma_lead_b, ma_campaign_b, ma_currency)
+
+
+@pytest.fixture
+def ma_event_a(tenant_a, admin_user, ma_campaign_a, ma_currency):
+    return _marketingalignment_event(tenant_a, admin_user, ma_campaign_a, ma_currency)
+
+
+@pytest.fixture
+def ma_event_b(tenant_b, admin_b, ma_campaign_b, ma_currency):
+    return _marketingalignment_event(tenant_b, admin_b, ma_campaign_b, ma_currency)
+
+
+@pytest.fixture
+def ma_registration_a(tenant_a, ma_event_a, ma_lead_a, ma_customer_a):
+    return _marketingalignment_registration(tenant_a, ma_event_a, ma_lead_a, ma_customer_a)
+
+
+@pytest.fixture
+def ma_registration_b(tenant_b, ma_event_b, ma_lead_b, ma_customer_b):
+    return _marketingalignment_registration(tenant_b, ma_event_b, ma_lead_b, ma_customer_b)
