@@ -75,9 +75,9 @@
 
 ### Important
 
-- [ ] **I1 — `quota_attainment_pct` overflows its `DECIMAL(6,2)` column; `editable=False` removes it from validation.**
+- [x] **I1 — `quota_attainment_pct` overflows its `DECIMAL(6,2)` column; `editable=False` removes it from validation.**
   `apps/sales/models/SalesAnalytics/RepPerformanceScorecards.py:194-199, 321-325`. Computed as `revenue_closed / quota_target * 100` with no upper bound; `quota_target` can be `0.01`, producing values > 9999.99. `average_deal_size` has the same issue.
-  *Fix:* In `RepPerformanceScorecard.save()`, clamp with `min(computed, _MAX_QUOTA_ATTAINMENT_PCT)` and `min(computed, _MAX_AVERAGE_DEAL_SIZE)`.
+  *Fix:* In `RepPerformanceScorecard.save()`, clamp with `min(computed, _MAX_QUOTA_ATTAINMENT_PCT)` and `min(computed, _MAX_AVERAGE_DEAL_SIZE)`. Fixed — `e713b70d` `fix(sales): clamp average_deal_size and quota_attainment_pct in RepPerformanceScorecard save`.
 
 - [ ] **I2 — The seeder is idempotent only within a calendar day — three of the four key sets accumulate a new row per day.**
   `apps/sales/management/commands/seed_sales.py:3232-3234`. `period_start = today - timedelta(days=90)` and `period_end = today`; three guards key on `(entity, period_start)`, which drifts daily.
