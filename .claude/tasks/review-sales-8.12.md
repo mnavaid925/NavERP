@@ -95,9 +95,9 @@
   `WinLossDebriefs.py:154, 179`, `StageVelocityAnalyses.py:115, 140`, `FunnelConversionRecords.py:143, 168`, `RepPerformanceScorecards.py:157, 182`. All 4 `create` and `edit` views use `@login_required` instead of `@tenant_admin_required`.
   *Fix:* Apply `@tenant_admin_required` decorator to all 8 create and edit views. Fixed — `113219b7`, `6d785c18`, `aff71c66`, `15635035` `fix(sales): require tenant_admin_required on create and edit views across SalesAnalytics`.
 
-- [ ] **I6 — Empty badge pill rendered via non-existent `get_is_bottleneck_display` on `BooleanField` in templates.**
+- [x] **I6 — Empty badge pill rendered via non-existent `get_is_bottleneck_display` on `BooleanField` in templates.**
   `templates/sales/salesanalytics/stagevelocityanalysis/list.html:184`, `detail.html:23, 146, 252`. `is_bottleneck` is `models.BooleanField(default=False)` without choices. `{{ analysis.get_is_bottleneck_display }}` evaluates to `""`, rendering an empty badge `<span class="badge badge-muted"></span>`.
-  *Fix:* Add `@property def bottleneck_display(self): return "Bottleneck" if self.is_bottleneck else "Normal"` to `StageVelocityAnalysis` and update templates.
+  *Fix:* Add `@property def bottleneck_display(self): return "Bottleneck" if self.is_bottleneck else "Normal"` to `StageVelocityAnalysis` and update templates. Fixed — `2d6949e9`, `d6c8ff32`, `188d5732` `feat/fix(sales): add bottleneck_display property and update stage velocity analysis templates`.
 
 - [ ] **I7 — Python loop aggregation over entire model table in `benchmark_console`.**
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:1221-1226`. Loads all `QuotaPlan` rows into memory and sums `quota_ref.target_amount` in Python.
