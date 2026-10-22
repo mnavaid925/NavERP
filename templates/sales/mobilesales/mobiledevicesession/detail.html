@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ device.number }} — {{ device.device_name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'sales:dashboard' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:mobile_device_session_list' %}" class="hover:text-primary">Mobile Devices</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ device.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">{{ device.device_name }}</h1>
+                {% if device.last_sync_status == 'success' %}
+                    <span class="badge badge-green">Synchronized</span>
+                {% elif device.last_sync_status == 'partial' %}
+                    <span class="badge badge-amber">Partial Sync</span>
+                {% elif device.last_sync_status == 'failed' %}
+                    <span class="badge badge-red">Sync Failed</span>
+                {% else %}
+                    <span class="badge badge-slate">Pending Sync</span>
+                {% endif %}
+                <span class="text-xs text-slate-400 font-mono">({{ device.number }})</span>
+            </div>
+            <p class="text-sm text-slate-500 mt-1">Assigned to: {{ device.user.get_full_name|default:device.user.username }} · Platform: {{ device.get_platform_display }}</p>
+        </div>
+        <div class="page-actions flex flex-wrap items-center gap-2">
+            <form method="post" action="{% url 'sales:mobile_device_session_sync' device.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary flex items-center gap-2">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    <span>Trigger Delta Sync</span>
+                </button>
+            </form>
+            <a href="{% url 'sales:mobile_device_session_edit' device.pk %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+                <span>Edit</span>
+            </a>
+            <form method="post" action="{% url 'sales:mobile_device_session_delete' device.pk %}" class="inline" onsubmit="return confirm('Remove this mobile device registration?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-icon" title="Remove">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Quick Status Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Offline Records Cached</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1 font-mono">{{ device.offline_records_cached }}</div>
+            <div class="text-xs text-slate-500 mt-2">Accounts, routes & price books</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Pending Uploads</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1 font-mono">
+                {% if device.pending_uploads_count > 0 %}
+                    <span class="text-amber-600">{{ device.pending_uploads_count }}</span>
+                {% else %}
+                    <span class="text-green-600">0</span>
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 mt-2">Offline modifications in queue</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Security Trust</div>
+            <div class="mt-2">
+                {% if device.is_trusted %}
+                    <span class="badge badge-green flex items-center gap-1 w-fit">
+                        <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+                        <span>Trusted Device</span>
+                    </span>
+                {% else %}
+                    <span class="badge badge-amber flex items-center gap-1 w-fit">
+                        <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
+                        <span>Pending Security Approval</span>
+                    </span>
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 mt-2">Active: {{ device.is_active|yesno:"Yes,No" }}</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Last Sync Activity</div>
+            <div class="text-sm font-semibold text-slate-900 mt-1 font-mono">
+                {% if device.last_sync_at %}
+                    {{ device.last_sync_at|date:"Y-m-d H:i" }}
+                {% else %}
+                    Never
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 mt-2">
+                {% if device.is_outdated %}
+                    <span class="text-red-500 font-medium">Cache outdated (>24h)</span>
+                {% else %}
+                    <span class="text-green-600 font-medium">Cache fresh</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Device Info & Hardware Specs -->
+        <div class="space-y-6 lg:col-span-1">
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="cpu" class="w-4 h-4 text-primary"></i>
+                        <span>Hardware & Telemetry</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 space-y-3 text-sm">
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Device UUID / Hash</span>
+                        <span class="font-mono text-slate-800 text-xs break-all">{{ device.device_uuid }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Platform / OS</span>
+                        <span class="font-medium text-slate-800">{{ device.get_platform_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">App Version</span>
+                        <span class="font-mono text-slate-800">{{ device.app_version|default:"1.0.0" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Last Client IP</span>
+                        <span class="font-mono text-slate-800">{{ device.last_ip_address|default:"127.0.0.1" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Last Telemetry GPS</span>
+                        {% if device.last_known_lat and device.last_known_lng %}
+                            <span class="font-mono text-slate-800">{{ device.last_known_lat }}, {{ device.last_known_lng }}</span>
+                        {% else %}
+                            <span class="text-slate-400">— Not recorded —</span>
+                        {% endif %}
+                    </div>
+                    <div class="pt-2 border-t border-slate-100">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Push Notification Token</span>
+                        {% if device.push_token %}
+                            <span class="font-mono text-slate-600 text-xs break-all block mt-1 bg-slate-50 p-2 rounded border border-slate-100">
+                                {{ device.push_token|truncatechars:60 }}
+                            </span>
+                        {% else %}
+                            <span class="text-slate-400 text-xs">— No push token registered —</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Push Alerts Dispatched to this Device -->
+        <div class="space-y-6 lg:col-span-2">
+            <div class="card">
+                <div class="card-header border-b p-4 flex items-center justify-between">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="bell" class="w-4 h-4 text-primary"></i>
+                        <span>Dispatched Mobile Deal Alerts ({{ recent_alerts.count }})</span>
+                    </h2>
+                    <a href="{% url 'sales:mobile_deal_alert_create' %}?device={{ device.pk }}" class="btn btn-outline btn-sm flex items-center gap-1">
+                        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                        <span>Send Alert</span>
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    {% if recent_alerts %}
+                    <div class="table-wrap overflow-x-auto">
+                        <table class="table w-full text-left text-sm">
+                            <thead>
+                                <tr class="border-b text-slate-500 bg-slate-50">
+                                    <th class="p-3">Alert</th>
+                                    <th class="p-3">Type</th>
+                                    <th class="p-3">Urgency</th>
+                                    <th class="p-3">Status</th>
+                                    <th class="p-3">Sent Time</th>
+                                    <th class="p-3 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                {% for alert in recent_alerts %}
+                                <tr class="hover:bg-slate-50 transition">
+                                    <td class="p-3 font-medium text-slate-900">
+                                        <a href="{% url 'sales:mobile_deal_alert_detail' alert.pk %}" class="text-primary hover:underline">
+                                            {{ alert.title }}
+                                        </a>
+                                    </td>
+                                    <td class="p-3 text-xs text-slate-600">{{ alert.get_alert_type_display }}</td>
+                                    <td class="p-3">
+                                        {% if alert.urgency == 'urgent' %}
+                                            <span class="badge badge-red">Urgent</span>
+                                        {% elif alert.urgency == 'high' %}
+                                            <span class="badge badge-amber">High</span>
+                                        {% else %}
+                                            <span class="badge badge-slate">Normal</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-3">
+                                        {% if alert.is_read %}
+                                            <span class="badge badge-green">Read</span>
+                                        {% else %}
+                                            <span class="badge badge-info">Unread</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-3 text-xs text-slate-600 font-mono">{{ alert.created_at|date:"Y-m-d H:i" }}</td>
+                                    <td class="p-3 text-right">
+                                        <a href="{% url 'sales:mobile_deal_alert_detail' alert.pk %}" class="btn btn-icon btn-outline" title="View Alert">
+                                            <i data-lucide="eye" class="w-4 h-4"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-8 text-center text-slate-500">
+                        <i data-lucide="bell-off" class="w-8 h-8 mx-auto text-slate-300 mb-2"></i>
+                        <p class="text-sm font-medium text-slate-700">No push alerts sent to this device</p>
+                        <p class="text-xs text-slate-400 mt-1">High-urgency deal transitions and quote discount approvals delivered to this mobile device will show here.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
