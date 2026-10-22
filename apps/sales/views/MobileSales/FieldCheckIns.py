@@ -2,6 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import F, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -99,6 +100,7 @@ def field_check_in_detail(request, pk):
 
 
 @login_required
+@transaction.atomic
 def field_check_in_create(request):
     tenant = request.tenant
     route_id = request.GET.get("route")
@@ -135,6 +137,7 @@ def field_check_in_create(request):
 
 
 @login_required
+@transaction.atomic
 def field_check_in_edit(request, pk):
     tenant = request.tenant
     check_in = get_object_or_404(FieldCheckIn.objects.filter(tenant=tenant), pk=pk)
@@ -164,6 +167,7 @@ def field_check_in_edit(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def field_check_in_delete(request, pk):
     tenant = request.tenant
     check_in = get_object_or_404(FieldCheckIn.objects.filter(tenant=tenant), pk=pk)
@@ -187,6 +191,7 @@ def field_check_in_delete(request, pk):
 
 
 @login_required
+@transaction.atomic
 def field_check_in_checkout(request, pk):
     tenant = request.tenant
     check_in = get_object_or_404(FieldCheckIn.objects.filter(tenant=tenant), pk=pk)
