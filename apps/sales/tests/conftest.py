@@ -4644,13 +4644,13 @@ MARKETINGALIGNMENT_MODEL_FIELDS = {
     "MarketingEvent": (
         "tenant", "created_at", "updated_at", "number", "name", "event_type", "status",
         "start_at", "end_at", "timezone_name", "venue", "virtual_url", "capacity", "budget",
-        "currency", "owner", "campaign", "description", "notes",
+        "currency", "owner", "campaign", "description",
     ),
     "EventRegistration": (
         "tenant", "created_at", "updated_at", "event", "lead", "account", "registrant_name",
-        "registrant_email", "registrant_company", "registrant_title", "registration_status",
-        "followup_status", "registered_at", "attended_at", "engagement_score", "campaign",
-        "opportunity", "revenue_attributed", "notes",
+        "registrant_email", "registration_status", "source_channel", "followup_status",
+        "registered_at", "attended_at", "engagement_score", "campaign", "opportunity",
+        "revenue_attributed", "followup_notes",
     ),
 }
 
@@ -4926,10 +4926,10 @@ def _marketingalignment_registration(tenant, event, lead=None, account=None, **o
         "account": account,
         "registrant_name": "Sarah Connor",
         "registrant_email": "sarah.connor@cyberdyne.example",
-        "registrant_company": "Cyberdyne Systems",
-        "registrant_title": "VP Engineering",
         "registration_status": "registered",
+        "source_channel": "campaign",
         "followup_status": "pending",
+        "followup_notes": "Follow-up call scheduled.",
         "engagement_score": 75,
         "revenue_attributed": Decimal("5000.00"),
     }
