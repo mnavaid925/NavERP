@@ -1,4 +1,5 @@
 """Sales 8.15 — ContractObligation forms."""
+from decimal import Decimal
 from django import forms
 
 from apps.accounts.models import User
