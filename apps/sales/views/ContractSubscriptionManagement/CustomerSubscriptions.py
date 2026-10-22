@@ -62,8 +62,10 @@ def customer_subscription_list(request):
 
     # Aggregates
     all_subs = CustomerSubscription.objects.filter(tenant=tenant)
-    total_mrr = all_subs.filter(status="active").aggregate(total=Sum("mrr"))["total"] or Decimal("0.00")
-    active_count = all_subs.filter(status="active").count()
+    active_agg = all_subs.filter(status="active").aggregate(total=Sum("mrr"), count=Count("id"))
+    total_mrr = active_agg["total"] or Decimal("0.00")
+    total_arr = (total_mrr * Decimal("12.00")).quantize(Decimal("0.01"))
+    active_count = active_agg["count"] or 0
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
@@ -77,6 +79,7 @@ def customer_subscription_list(request):
         "pricing_model_choices": PRICING_MODEL_CHOICES,
         "cadence_choices": BILLING_CADENCE_CHOICES,
         "total_mrr": total_mrr,
+        "total_arr": total_arr,
         "active_count": active_count,
     }
     return render(request, "sales/contractsubscriptionmanagement/customersubscription/list.html", context)
