@@ -1281,3 +1281,96 @@ Mounted under `sales:` namespace (26 total endpoints):
 - **RBAC on Mutations**: All create, edit, and delete endpoints enforce `@tenant_admin_required`, while delete actions additionally require POST (`@require_POST`).
 - **Database Composite Indexes**: Composite indexes on `(tenant, debriefed_on)`, `(tenant, is_bottleneck)`, `(tenant, funnel_scope)`, and `(tenant, rating)` ensure sub-millisecond aggregation on console dashboards.
 - **Decision Drivers Schema Guard**: `WinLossDebriefForm` validates `decision_drivers` against a strict JSON schema (driver string, sentiment allowlist, weight 1-5, max 50 items).
+
+
+---
+
+### 8.15 Overview
+Sub-module 8.15: Contract & Subscription Management covers commercial sell-side customer contracts, recurring subscription lifecycles, renewal radar & auto-renewal automation, metered usage billing with tiered overages, and SLA contractual commitments with penalty tracking.
+
+### 8.15 Models (`apps/sales/models/ContractSubscriptionManagement/`)
+- **`CustomerContract`** (`NUMBER_PREFIX = "CCT"`): Represents sell-side legal customer agreements (MSAs, SOWs, Subscription Agreements). Key fields: `account` (`core.Party`), `title`, `contract_type`, `status` (`draft`, `internal_review`, `negotiating`, `active`, `amended`, `terminated`, `expired`), `currency` (`accounting.Currency`), `total_contract_value`, `annual_contract_value`, `start_date`, `end_date`, `auto_renew`, `renewal_term_months`, `notice_period_days`, `price_uplift_pct`, `originating_quote` (`sales.CPQQuote`), `originating_order` (`scm.SalesOrder`), `template` (`crm.DocTemplate`), `document` (`core.Document`), `owner` (`accounts.User`).
+- **`CustomerSubscription`** (`NUMBER_PREFIX = "CSB"`): Represents recurring commercial subscription services for customers. Disambiguated from `tenants.Subscription` (which manages tenant platform SaaS billing). Key fields: `contract` (`sales.CustomerContract`), `account` (`core.Party`), `subscription_name`, `plan_code`, `status` (`draft`, `trialing`, `active`, `paused`, `past_due`, `cancelled`, `expired`), `pricing_model` (`flat_fee`, `per_seat`, `usage_metered`, `tiered`, `hybrid`), `billing_cadence` (`monthly`, `quarterly`, `semi_annual`, `annual`), `currency` (`accounting.Currency`), `quantity`, `unit_price`, `mrr`, `start_date`, `current_term_start`, `current_term_end`, `trial_ends_at`, `auto_renew`, `renewal_notice_days`, `cancelled_at`, `cancellation_reason`, `paused_at`, `owner` (`accounts.User`).
+- **`UsageMeterRecord`** (`NUMBER_PREFIX = "UMR"`): Logs metered service consumption and calculates billable overages. Key fields: `subscription` (`sales.CustomerSubscription`), `meter_name`, `unit_of_measure`, `billing_period_start`, `billing_period_end`, `included_allowance`, `reported_usage`, `billable_overage_units`, `overage_unit_price`, `overage_total_charge`, `status` (`metering`, `calculated`, `invoiced`, `disputed`), `invoiced_at`.
+- **`ContractObligation`** (`NUMBER_PREFIX = "OBL"`): Tracks contractual commitments, SLAs, and penalties. Key fields: `contract` (`sales.CustomerContract`), `subscription` (`sales.CustomerSubscription`), `title`, `obligation_type` (`sla_uptime`, `sla_response_time`, `milestone_delivery`, `reporting`, `security_compliance`, `support_coverage`, `other`), `target_metric`, `due_date`, `status` (`pending`, `fulfilled`, `at_risk`, `breached`, `waived`), `fulfilled_at`, `fulfillment_evidence`, `penalty_amount`, `penalty_status` (`none`, `assessed`, `credited`, `waived`), `assigned_to` (`accounts.User`).
+
+### 8.15 Core Spine Reuse
+- **`core.Party`**: Reused for contract counterparty client accounts. Restricted to parties with active `customer` `PartyRole`.
+- **`sales.CPQQuote`**: Reused for originating proposals (`originating_quote`) and automatic generation of renewal quotes (`customer_contract_generate_renewal_quote`).
+- **`scm.SalesOrder`**: Reused for originating commercial orders.
+- **`accounting.Currency`**: Reused for all financial metrics (TCV, ACV, MRR, overage charges, penalty amounts).
+- **`crm.DocTemplate`**: Reused for standardized legal contract drafting and clause merge templates.
+- **`core.Document`**: Reused for storing signed/executed PDF contract documents.
+- **`accounts.User`**: Reused for contract owners, CSMs, and obligation assignees.
+- **`tenants.Subscription` separation**: Dedicated models `CustomerContract` and `CustomerSubscription` ensure absolute separation between tenant platform billing and end-customer commercial contracts.
+
+### 8.15 Routes & URLs (`apps/sales/urls/ContractSubscriptionManagement/`)
+- **Dashboards & Workspaces**:
+  - `sales:contract_subscription_workspace` (`/sales/contracts/workspace/`)
+  - `sales:renewal_automation_dashboard` (`/sales/contracts/renewal-radar/`)
+- **Customer Contracts**:
+  - `sales:customer_contract_list` (`/sales/contracts/`)
+  - `sales:customer_contract_create` (`/sales/contracts/create/`)
+  - `sales:customer_contract_detail` (`/sales/contracts/<int:pk>/`)
+  - `sales:customer_contract_edit` (`/sales/contracts/<int:pk>/edit/`)
+  - `sales:customer_contract_delete` (`/sales/contracts/<int:pk>/delete/`)
+  - `sales:customer_contract_activate` (`/sales/contracts/<int:pk>/activate/`)
+  - `sales:customer_contract_generate_renewal_quote` (`/sales/contracts/<int:pk>/generate-renewal-quote/`)
+  - `sales:customer_contract_execute_auto_renew` (`/sales/contracts/<int:pk>/execute-auto-renew/`)
+- **Customer Subscriptions**:
+  - `sales:customer_subscription_list` (`/sales/subscriptions/`)
+  - `sales:customer_subscription_create` (`/sales/subscriptions/create/`)
+  - `sales:customer_subscription_detail` (`/sales/subscriptions/<int:pk>/`)
+  - `sales:customer_subscription_edit` (`/sales/subscriptions/<int:pk>/edit/`)
+  - `sales:customer_subscription_delete` (`/sales/subscriptions/<int:pk>/delete/`)
+  - `sales:customer_subscription_pause` (`/sales/subscriptions/<int:pk>/pause/`)
+  - `sales:customer_subscription_resume` (`/sales/subscriptions/<int:pk>/resume/`)
+  - `sales:customer_subscription_cancel` (`/sales/subscriptions/<int:pk>/cancel/`)
+  - `sales:customer_subscription_upgrade` (`/sales/subscriptions/<int:pk>/upgrade/`)
+- **Usage Meter Records**:
+  - `sales:usage_meter_record_list` (`/sales/usage-meters/`)
+  - `sales:usage_meter_record_create` (`/sales/usage-meters/create/`)
+  - `sales:usage_meter_record_detail` (`/sales/usage-meters/<int:pk>/`)
+  - `sales:usage_meter_record_edit` (`/sales/usage-meters/<int:pk>/edit/`)
+  - `sales:usage_meter_record_delete` (`/sales/usage-meters/<int:pk>/delete/`)
+  - `sales:usage_meter_record_calculate` (`/sales/usage-meters/<int:pk>/calculate/`)
+  - `sales:usage_meter_record_invoice` (`/sales/usage-meters/<int:pk>/invoice/`)
+- **Contract Obligations**:
+  - `sales:contract_obligation_list` (`/sales/obligations/`)
+  - `sales:contract_obligation_create` (`/sales/obligations/create/`)
+  - `sales:contract_obligation_detail` (`/sales/obligations/<int:pk>/`)
+  - `sales:contract_obligation_edit` (`/sales/obligations/<int:pk>/edit/`)
+  - `sales:contract_obligation_delete` (`/sales/obligations/<int:pk>/delete/`)
+  - `sales:contract_obligation_fulfill` (`/sales/obligations/<int:pk>/fulfill/`)
+  - `sales:contract_obligation_breach` (`/sales/obligations/<int:pk>/breach/`)
+
+### 8.15 Templates (`templates/sales/contractsubscriptionmanagement/`)
+- 2 Dashboards in `boards/`: `contract_subscription_workspace.html`, `renewal_automation_dashboard.html`.
+- 12 Entity CRUD Templates:
+  - `customercontract/{list,detail,form}.html`
+  - `customersubscription/{list,detail,form}.html`
+  - `usagemeterrecord/{list,detail,form}.html`
+  - `contractobligation/{list,detail,form}.html`
+
+### 8.15 Navigation Wiring (`apps/core/navigation.py`)
+`LIVE_LINKS["8.15"]` maps all 5 NavERP.md feature bullets:
+- Contract Authoring & Redlining -> `sales:customer_contract_list`
+- Subscription Lifecycle -> `sales:customer_subscription_list`
+- Renewal Automation -> `sales:renewal_automation_dashboard`
+- Usage-Based Billing -> `sales:usage_meter_record_list`
+- Contract Compliance & Obligations -> `sales:contract_obligation_list`
+- Plus Executive Workspace -> `sales:contract_subscription_workspace`.
+
+### 8.15 Seeder (`apps/sales/management/commands/seed_sales.py`)
+`_seed_contract_subscription_management` is fully idempotent and seeds:
+- 4 Customer Contracts (Active MSA, Drafting SLA, Expiring in 20 days candidate, Terminated).
+- 4 Customer Subscriptions across per-seat, usage-metered, flat-fee, and paused states.
+- 4 Usage Meter Records tracking API calls and storage consumption with calculated overages.
+- 4 Contract Obligations tracking 99.9% uptime, 1-hour P1 support, and quarterly business reviews.
+
+### 8.15 Conventions & Gotchas
+- **Multi-Tenancy & IDOR**: All queries filter by `tenant=request.tenant`. All detail and edit lookups enforce tenant isolation. Unauthenticated access redirects to login; cross-tenant requests yield 404.
+- **Chained N+1 Prevention**: In `UsageMeterRecordForm` and `ContractObligationForm`, the `subscription` queryset applies `.select_related("account")` to avoid N+1 query storms during `<option>` rendering of `CustomerSubscription.__str__`.
+- **Compound Database Indexes**: Includes indexes on `(tenant, status, end_date)` for contract horizon scanning, `(tenant, contract)` for subscription relations, and `(tenant, subscription)` for obligation links.
+- **Lifecycle & Mutation Guards**: State actions enforce view-level guards (e.g. recalculation on invoiced usage records is blocked; auto-renewal is restricted to active contracts within the renewal window; activate is blocked on terminated/expired contracts).
+- **Audit Logging**: All mutations use the authoritative `write_audit_log(user=request.user, obj=instance, action=action, tenant=tenant)` signature wrapped in `@transaction.atomic`.
