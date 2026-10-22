@@ -1353,9 +1353,9 @@ def _benchmark_rows(tenant, scorecards):
                 )
             )
 
-    for record in FunnelConversionRecord.objects.filter(tenant=tenant):
-        if record.benchmark_pct is None:
-            continue
+    for record in FunnelConversionRecord.objects.filter(
+        tenant=tenant, benchmark_pct__isnull=False
+    ):
         rows.append(
             _benchmark_row(
                 "FunnelConversionRecord",
@@ -1370,11 +1370,9 @@ def _benchmark_rows(tenant, scorecards):
             )
         )
 
-    for analysis in StageVelocityAnalysis.objects.filter(tenant=tenant).select_related(
-        "pipeline_stage"
-    ):
-        if analysis.benchmark_days is None:
-            continue
+    for analysis in StageVelocityAnalysis.objects.filter(
+        tenant=tenant, benchmark_days__isnull=False
+    ).select_related("pipeline_stage"):
         rows.append(
             _benchmark_row(
                 "StageVelocityAnalysis",
