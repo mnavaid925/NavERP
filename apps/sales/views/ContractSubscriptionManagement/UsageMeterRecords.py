@@ -75,12 +75,10 @@ def usage_meter_record_create(request):
             meter.calculate_charges()
             meter.save()
             write_audit_log(
-                tenant=tenant,
                 user=request.user,
+                obj=meter,
                 action="create",
-                model_name="UsageMeterRecord",
-                object_id=str(meter.pk),
-                object_repr=str(meter),
+                tenant=tenant,
             )
             messages.success(request, f"Usage record {meter.number} created successfully.")
             return redirect("sales:usage_meter_record_detail", pk=meter.pk)
@@ -132,12 +130,10 @@ def usage_meter_record_edit(request, pk):
             meter.calculate_charges()
             meter.save()
             write_audit_log(
-                tenant=tenant,
                 user=request.user,
+                obj=meter,
                 action="update",
-                model_name="UsageMeterRecord",
-                object_id=str(meter.pk),
-                object_repr=str(meter),
+                tenant=tenant,
             )
             messages.success(request, f"Usage record {meter.number} updated successfully.")
             return redirect("sales:usage_meter_record_detail", pk=meter.pk)
@@ -159,15 +155,13 @@ def usage_meter_record_delete(request, pk):
     tenant = request.tenant
     meter = get_object_or_404(UsageMeterRecord.objects.filter(tenant=tenant), pk=pk)
     number = meter.number
-    meter.delete()
     write_audit_log(
-        tenant=tenant,
         user=request.user,
+        obj=meter,
         action="delete",
-        model_name="UsageMeterRecord",
-        object_id=str(pk),
-        object_repr=number,
+        tenant=tenant,
     )
+    meter.delete()
     messages.success(request, f"Usage record {number} deleted successfully.")
     return redirect("sales:usage_meter_record_list")
 
@@ -181,12 +175,10 @@ def usage_meter_record_calculate(request, pk):
     meter.status = "calculated"
     meter.save(update_fields=["billable_overage_units", "overage_total_charge", "status", "updated_at"])
     write_audit_log(
-        tenant=tenant,
         user=request.user,
+        obj=meter,
         action="update",
-        model_name="UsageMeterRecord",
-        object_id=str(meter.pk),
-        object_repr=f"Calculated overage charge ${meter.overage_total_charge} for {meter.number}",
+        tenant=tenant,
     )
     messages.success(request, f"Calculated overage charge ${meter.overage_total_charge} for {meter.number}.")
     return redirect("sales:usage_meter_record_detail", pk=meter.pk)
@@ -201,12 +193,10 @@ def usage_meter_record_invoice(request, pk):
     meter.invoiced_at = timezone.now()
     meter.save(update_fields=["status", "invoiced_at", "updated_at"])
     write_audit_log(
-        tenant=tenant,
         user=request.user,
+        obj=meter,
         action="update",
-        model_name="UsageMeterRecord",
-        object_id=str(meter.pk),
-        object_repr=f"Marked {meter.number} invoiced",
+        tenant=tenant,
     )
     messages.success(request, f"Usage record {meter.number} marked invoiced.")
     return redirect("sales:usage_meter_record_detail", pk=meter.pk)
