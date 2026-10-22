@@ -183,6 +183,6 @@
   `apps/sales/management/commands/seed_sales.py:3368`.
   *Fix:* Set benchmark on one record higher than its conversion rate to exercise the below-benchmark filter. Fixed — `8c0954de0` sets `benchmark_pct=Decimal("35.00")` above the first record's rate (31.67%) to exercise the below-benchmark filter.
 
-- [ ] **M15 — `TenantScopedFKAdmin` docstring scope.**
+- [x] **M15 — `TenantScopedFKAdmin` docstring scope.**
   `apps/sales/admin.py:853`. Documented as 8.13 base class but 8.12 uses it.
-  *Fix:* Broaden docstring to indicate reuse across sales sub-modules.
+  *Fix:* Broaden docstring to indicate reuse across sales sub-modules. Fixed — `aafb79c0` `docs(sales): broaden TenantScopedFKAdmin docstring scope in sales admin`.
