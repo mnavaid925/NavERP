@@ -143,9 +143,9 @@
   `winlossdebrief/detail.html:236`, `stagevelocityanalysis/detail.html:225`, `funnelconversionrecord/detail.html:217`, `repperformancescorecard/detail.html:358`.
   *Fix:* Use `{{ obj.number|escapejs }}`. Fixed — `e971f693`, `f2d912a0`, `c00d9675`, `b2f377b0` `fix(sales): escapejs model number in confirm dialogs across detail templates`.
 
-- [ ] **M5 — Missing nested `select_related` in `stage_velocity_analysis_delete`.**
+- [x] **M5 — Missing nested `select_related` in `stage_velocity_analysis_delete`.**
   `apps/sales/views/SalesAnalytics/StageVelocityAnalyses.py:175`. Calls `str(obj.pipeline_stage)` which evaluates `stage.pipeline`.
-  *Fix:* Change to `.select_related("pipeline", "pipeline_stage__pipeline")`.
+  *Fix:* Change to `.select_related("pipeline", "pipeline_stage__pipeline")`. Fixed — `c26573ba` `fix(sales): select_related pipeline_stage__pipeline in StageVelocityAnalysis views`.
 
 - [ ] **M6 — Filter querysets lack `.only()` in list views.**
   `apps/sales/views/SalesAnalytics/WinLossDebriefs.py:86`. Opportunities dropdown fetches full models.
