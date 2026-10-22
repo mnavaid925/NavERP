@@ -117,6 +117,9 @@ class ContractObligation(TenantNumbered):
         if self.subscription_id and self.tenant_id and self.subscription.tenant_id != self.tenant_id:
             raise ValidationError({"subscription": "Subscription must belong to this workspace."})
 
+        if self.subscription_id and self.subscription.contract_id and self.subscription.contract_id != self.contract_id:
+            raise ValidationError({"subscription": "Associated subscription must belong to the selected contract."})
+
         if self.assigned_to_id and self.tenant_id and getattr(self.assigned_to, "tenant_id", None) != self.tenant_id:
             raise ValidationError({"assigned_to": "Assignee must belong to this workspace."})
 
