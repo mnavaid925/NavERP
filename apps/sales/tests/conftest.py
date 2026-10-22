@@ -5103,7 +5103,6 @@ def _salesanalytics_pipeline(tenant, name="Direct Sales Pipeline", **overrides):
     defaults = {
         "tenant": tenant,
         "name": name,
-        "code": f"PIPE-{tenant.pk}-{timezone.now().microsecond}",
         "is_active": True,
     }
     defaults.update(overrides)
@@ -5116,8 +5115,12 @@ def _salesanalytics_stage(tenant, pipeline, name="Proposal", sequence=10, **over
         "tenant": tenant,
         "pipeline": pipeline,
         "name": name,
+        "code": f"stg_{sequence}",
         "sequence": sequence,
         "stage_kind": "open",
+        "crm_stage_key": "proposal",
+        "probability": 20,
+        "forecast_category": "pipeline",
         "target_days": 14,
         "is_active": True,
     }
