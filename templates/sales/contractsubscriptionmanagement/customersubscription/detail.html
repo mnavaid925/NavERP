@@ -1,0 +1,417 @@
+{% extends "base.html" %}
+{% block title %}{{ subscription.number }} — {{ subscription.subscription_name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_subscription_list' %}">Subscriptions</a>
+            <span>/</span>
+            <span>{{ subscription.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ subscription.subscription_name }}</h1>
+            {% if subscription.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+            {% elif subscription.status == 'trialing' %}
+            <span class="badge badge-info">Trialing</span>
+            {% elif subscription.status == 'paused' %}
+            <span class="badge badge-amber">Paused</span>
+            {% elif subscription.status == 'past_due' %}
+            <span class="badge badge-amber">Past Due</span>
+            {% elif subscription.status == 'cancelled' %}
+            <span class="badge badge-red">Cancelled</span>
+            {% elif subscription.status == 'expired' %}
+            <span class="badge badge-muted">Expired</span>
+            {% else %}
+            <span class="badge badge-slate">{{ subscription.status }}</span>
+            {% endif %}
+            <span class="text-xs text-slate-500 font-mono">{{ subscription.number }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_subscription_edit' subscription.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+
+        {% if subscription.status == 'active' %}
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('pause-modal').classList.toggle('hidden');">
+            <i data-lucide="pause-circle"></i>
+            <span>Pause</span>
+        </button>
+
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('upgrade-modal').classList.toggle('hidden');">
+            <i data-lucide="trending-up"></i>
+            <span>Scale / Upgrade</span>
+        </button>
+
+        <button type="button" class="btn btn-danger" onclick="document.getElementById('cancel-modal').classList.toggle('hidden');">
+            <i data-lucide="x-circle"></i>
+            <span>Cancel</span>
+        </button>
+        {% elif subscription.status == 'paused' %}
+        <form method="post" action="{% url 'sales:customer_subscription_resume' subscription.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" onclick="return confirm('Resume this subscription to active service?');">
+                <i data-lucide="play-circle"></i>
+                <span>Resume Service</span>
+            </button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'sales:customer_subscription_delete' subscription.pk %}" class="inline" onsubmit="return confirm('Delete subscription {{ subscription.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Pause Modal -->
+<div id="pause-modal" class="hidden fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-bold text-slate-800 mb-2">Pause Subscription</h3>
+        <p class="text-sm text-slate-500 mb-4">Temporarily suspend recurring service delivery. The subscription can be resumed at any time.</p>
+        <form method="post" action="{% url 'sales:customer_subscription_pause' subscription.pk %}">
+            {% csrf_token %}
+            <div class="form-group mb-4">
+                <label class="form-label">Operational Notes</label>
+                {{ pause_form.notes }}
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" class="btn btn-outline text-sm" onclick="document.getElementById('pause-modal').classList.add('hidden');">Cancel</button>
+                <button type="submit" class="btn btn-primary text-sm">Confirm Pause</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Cancel Modal -->
+<div id="cancel-modal" class="hidden fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-bold text-red-700 mb-2">Cancel Subscription</h3>
+        <p class="text-sm text-slate-500 mb-4">Terminates recurring billing. Please specify the reason for churn.</p>
+        <form method="post" action="{% url 'sales:customer_subscription_cancel' subscription.pk %}">
+            {% csrf_token %}
+            <div class="form-group mb-4">
+                <label class="form-label">Exit Reason / Churn Rationale *</label>
+                {{ cancel_form.cancellation_reason }}
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" class="btn btn-outline text-sm" onclick="document.getElementById('cancel-modal').classList.add('hidden');">Dismiss</button>
+                <button type="submit" class="btn btn-danger text-sm">Execute Cancellation</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Upgrade / Scale Modal -->
+<div id="upgrade-modal" class="hidden fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-bold text-slate-800 mb-2">Scale / Upgrade Subscription</h3>
+        <p class="text-sm text-slate-500 mb-4">Adjust licensed seats or plan rate. MRR will be recalculated automatically.</p>
+        <form method="post" action="{% url 'sales:customer_subscription_upgrade' subscription.pk %}">
+            {% csrf_token %}
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <div class="form-group mb-0">
+                    <label class="form-label">Licensed Quantity</label>
+                    {{ upgrade_form.quantity }}
+                </div>
+                <div class="form-group mb-0">
+                    <label class="form-label">Unit Price ($)</label>
+                    {{ upgrade_form.unit_price }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" class="btn btn-outline text-sm" onclick="document.getElementById('upgrade-modal').classList.add('hidden');">Dismiss</button>
+                <button type="submit" class="btn btn-primary text-sm">Save Upgrade</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Subscription Summary Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-800">Recurring Subscription Details</h3>
+                <span class="text-xs font-mono text-slate-500">{{ subscription.plan_code }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                        <div class="text-xs text-slate-500">Customer Account</div>
+                        <div class="font-medium text-slate-800 mt-1">
+                            {% if subscription.account %}
+                            {{ subscription.account.name }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Normalized MRR</div>
+                        <div class="font-bold text-slate-800 mt-1 text-base text-green-700">
+                            ${{ subscription.mrr|floatformat:2 }} / mo
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Pricing Model</div>
+                        <div class="font-medium text-slate-800 mt-1">
+                            {{ subscription.get_pricing_model_display }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Quantity & Rate</div>
+                        <div class="font-medium text-slate-800 mt-1">
+                            {{ subscription.quantity }} units @ ${{ subscription.unit_price|floatformat:2 }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Billing Cadence</div>
+                        <div class="font-medium text-slate-800 mt-1">
+                            {{ subscription.get_billing_cadence_display }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Currency</div>
+                        <div class="font-medium text-slate-800 mt-1">{{ subscription.currency.code }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Current Term Start</div>
+                        <div class="font-medium text-slate-800 mt-1">{{ subscription.current_term_start|date:"M d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Current Term End</div>
+                        <div class="font-medium text-slate-800 mt-1">{{ subscription.current_term_end|date:"M d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Renewal Policy</div>
+                        <div class="font-medium text-slate-800 mt-1">
+                            {% if subscription.auto_renew %}
+                            <span class="text-green-600">Auto-Renewing</span>
+                            {% else %}
+                            <span class="text-slate-500">Manual Renewal</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if subscription.cancellation_reason %}
+                <div class="mt-6 pt-4 border-t">
+                    <h4 class="text-xs font-semibold text-red-700 uppercase tracking-wider mb-2">Cancellation Rationale</h4>
+                    <div class="p-3 bg-red-50 rounded text-xs text-red-800 whitespace-pre-wrap">{{ subscription.cancellation_reason }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Metered Usage Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-800">Metered Consumption Records ({{ usage_records.count }})</h3>
+                <a href="{% url 'sales:usage_meter_record_create' %}?subscription={{ subscription.pk }}" class="btn btn-outline text-xs">
+                    <i data-lucide="plus"></i>
+                    <span>Log Meter Record</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Meter Metric</th>
+                            <th>Cycle End</th>
+                            <th>Allowance</th>
+                            <th>Reported</th>
+                            <th>Overage Charge</th>
+                            <th>Status</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in usage_records %}
+                        <tr>
+                            <td class="font-medium">
+                                <a href="{% url 'sales:usage_meter_record_detail' u.pk %}" class="text-blue-600 hover:underline">
+                                    {{ u.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-800">{{ u.meter_name }}</div>
+                                <div class="text-xs text-slate-500">{{ u.unit_of_measure }}</div>
+                            </td>
+                            <td class="text-xs text-slate-600">{{ u.billing_period_end|date:"M d, Y" }}</td>
+                            <td class="text-xs text-slate-600">{{ u.included_allowance|floatformat:0 }}</td>
+                            <td class="text-xs text-slate-800 font-medium">{{ u.reported_usage|floatformat:0 }}</td>
+                            <td class="font-semibold text-slate-800">${{ u.overage_total_charge|floatformat:2 }}</td>
+                            <td>
+                                {% if u.status == 'invoiced' %}
+                                <span class="badge badge-green">Invoiced</span>
+                                {% elif u.status == 'calculated' %}
+                                <span class="badge badge-info">Calculated</span>
+                                {% elif u.status == 'disputed' %}
+                                <span class="badge badge-red">Disputed</span>
+                                {% else %}
+                                <span class="badge badge-slate">Metering</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right">
+                                <a href="{% url 'sales:usage_meter_record_detail' u.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-xs text-slate-500">
+                                No metered usage cycles recorded for this subscription.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Service SLA Obligations Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-800">Assigned Service Obligations ({{ obligations.count }})</h3>
+                {% if subscription.contract %}
+                <a href="{% url 'sales:contract_obligation_create' %}?contract={{ subscription.contract.pk }}&subscription={{ subscription.pk }}" class="btn btn-outline text-xs">
+                    <i data-lucide="plus"></i>
+                    <span>Add SLA</span>
+                </a>
+                {% endif %}
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Obligation</th>
+                            <th>Benchmark</th>
+                            <th>Status</th>
+                            <th>Penalty Status</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for o in obligations %}
+                        <tr>
+                            <td class="font-medium">
+                                <a href="{% url 'sales:contract_obligation_detail' o.pk %}" class="text-blue-600 hover:underline">
+                                    {{ o.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-800">{{ o.title }}</div>
+                                <div class="text-xs text-slate-500">{{ o.get_obligation_type_display }}</div>
+                            </td>
+                            <td class="text-xs font-mono text-slate-700">{{ o.target_metric }}</td>
+                            <td>
+                                {% if o.status == 'fulfilled' %}
+                                <span class="badge badge-green">Fulfilled</span>
+                                {% elif o.status == 'at_risk' %}
+                                <span class="badge badge-amber">At Risk</span>
+                                {% elif o.status == 'breached' %}
+                                <span class="badge badge-red">Breached</span>
+                                {% else %}
+                                <span class="badge badge-slate">{{ o.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-xs text-slate-600">
+                                {% if o.penalty_status == 'assessed' %}
+                                <span class="badge badge-amber">${{ o.penalty_amount }} Assessed</span>
+                                {% elif o.penalty_status == 'credited' %}
+                                <span class="badge badge-green">Credited</span>
+                                {% else %}
+                                <span class="text-slate-400">None</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right">
+                                <a href="{% url 'sales:contract_obligation_detail' o.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-xs text-slate-500">
+                                No specific SLA commitments tied to this subscription item.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Column -->
+    <div class="space-y-6">
+        <!-- Master Agreement Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Master Legal Agreement</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-slate-500">Parent Customer Contract</div>
+                    <div class="mt-1 font-medium">
+                        {% if subscription.contract %}
+                        <a href="{% url 'sales:customer_contract_detail' subscription.contract.pk %}" class="text-blue-600 hover:underline">
+                            {{ subscription.contract.number }} — {{ subscription.contract.title }}
+                        </a>
+                        {% else %}
+                        <span class="text-slate-500">Standalone (No master contract linked)</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Assigned Account CSM</div>
+                    <div class="font-medium text-slate-800 mt-1">
+                        {% if subscription.owner %}
+                        {{ subscription.owner.get_full_name|default:subscription.owner.username }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Renewal Quotes Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Renewal Linkage</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-slate-500">Notice Period Window</div>
+                    <div class="font-medium text-slate-800 mt-1">{{ subscription.renewal_notice_days }} Days</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Linked Renewal Quote</div>
+                    <div class="mt-1 font-medium">
+                        {% if subscription.renewal_quote %}
+                        <a href="{% url 'sales:cpq_quote_detail' subscription.renewal_quote.pk %}" class="text-blue-600 hover:underline">
+                            {{ subscription.renewal_quote.number }}
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400">None generated yet</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
