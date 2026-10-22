@@ -99,6 +99,13 @@ class RepPerformanceScorecardForm(TenantUniqueMixin, TenantModelForm):
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "quota_plan" in self.fields:
+            self.fields["quota_plan"].queryset = self.fields["quota_plan"].queryset.select_related("quota_ref")
+        if "coaching_scorecard" in self.fields:
+            self.fields["coaching_scorecard"].queryset = self.fields["coaching_scorecard"].queryset.select_related("coachee")
+
     def clean(self):
         cleaned_data = super().clean()
         # `currency` is deliberately NOT in this list: `accounting.Currency` is a
