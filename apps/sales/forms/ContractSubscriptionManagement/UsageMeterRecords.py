@@ -41,7 +41,7 @@ class UsageMeterRecordForm(TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
-            self.fields["subscription"].queryset = CustomerSubscription.objects.filter(tenant=self.tenant)
+            self.fields["subscription"].queryset = CustomerSubscription.objects.filter(tenant=self.tenant).select_related("account")
 
     def clean(self):
         cleaned = super().clean()
@@ -66,4 +66,4 @@ class UsageMeterRecordFilterForm(forms.Form):
     def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, **kwargs)
         if tenant is not None:
-            self.fields["subscription"].queryset = CustomerSubscription.objects.filter(tenant=tenant)
+            self.fields["subscription"].queryset = CustomerSubscription.objects.filter(tenant=tenant).select_related("account")
