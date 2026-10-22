@@ -17320,22 +17320,22 @@ Pure query projection (0 new tables). Computes:
 ## Backend (`apps/sales/{models,forms,views,urls}/MobileSales/`)
 
 ### Models (`apps/sales/models/MobileSales/`)
-- [ ] `apps/sales/models/MobileSales/__init__.py` — re-export all 4 models and choices constants
-- [ ] `apps/sales/models/MobileSales/FieldSalesRoutes.py` — `FieldSalesRoute`, `STATUS_CHOICES`, `OPTIMIZATION_CHOICES`
-- [ ] `apps/sales/models/MobileSales/FieldCheckIns.py` — `FieldCheckIn`, `VERIFICATION_CHOICES`, `PURPOSE_CHOICES`, `OUTCOME_CHOICES`
-- [ ] `apps/sales/models/MobileSales/MobileDeviceSessions.py` — `MobileDeviceSession`, `PLATFORM_CHOICES`, `SYNC_STATUS_CHOICES`
-- [ ] `apps/sales/models/MobileSales/MobileDealAlerts.py` — `MobileDealAlert`, `ALERT_TYPE_CHOICES`, `URGENCY_CHOICES`, `PUSH_STATUS_CHOICES`
+- [x] `apps/sales/models/MobileSales/__init__.py` — re-export all 4 models and choices constants
+- [x] `apps/sales/models/MobileSales/FieldSalesRoutes.py` — `FieldSalesRoute`, `STATUS_CHOICES`, `OPTIMIZATION_CHOICES`
+- [x] `apps/sales/models/MobileSales/FieldCheckIns.py` — `FieldCheckIn`, `VERIFICATION_CHOICES`, `PURPOSE_CHOICES`, `OUTCOME_CHOICES`
+- [x] `apps/sales/models/MobileSales/MobileDeviceSessions.py` — `MobileDeviceSession`, `PLATFORM_CHOICES`, `SYNC_STATUS_CHOICES`
+- [x] `apps/sales/models/MobileSales/MobileDealAlerts.py` — `MobileDealAlert`, `ALERT_TYPE_CHOICES`, `URGENCY_CHOICES`, `PUSH_STATUS_CHOICES`
 
 ### Forms (`apps/sales/forms/MobileSales/`)
-- [ ] `apps/sales/forms/MobileSales/__init__.py` — re-export all forms
-- [ ] `apps/sales/forms/MobileSales/FieldSalesRoutes.py` — `FieldSalesRouteForm`, `FieldSalesRouteFilterForm`
-- [ ] `apps/sales/forms/MobileSales/FieldCheckIns.py` — `FieldCheckInForm`, `FieldCheckInFilterForm`, `FieldCheckOutForm`, `GeofenceVerifyForm`
-- [ ] `apps/sales/forms/MobileSales/MobileDeviceSessions.py` — `MobileDeviceSessionForm`, `MobileDeviceSessionFilterForm`, `DeviceSyncForm`
-- [ ] `apps/sales/forms/MobileSales/MobileDealAlerts.py` — `MobileDealAlertForm`, `MobileDealAlertFilterForm`
+- [x] `apps/sales/forms/MobileSales/__init__.py` — re-export all forms
+- [x] `apps/sales/forms/MobileSales/FieldSalesRoutes.py` — `FieldSalesRouteForm`, `FieldSalesRouteFilterForm`
+- [x] `apps/sales/forms/MobileSales/FieldCheckIns.py` — `FieldCheckInForm`, `FieldCheckInFilterForm`, `FieldCheckOutForm`, `GeofenceVerifyForm`
+- [x] `apps/sales/forms/MobileSales/MobileDeviceSessions.py` — `MobileDeviceSessionForm`, `MobileDeviceSessionFilterForm`, `DeviceSyncForm`
+- [x] `apps/sales/forms/MobileSales/MobileDealAlerts.py` — `MobileDealAlertForm`, `MobileDealAlertFilterForm`
 
 ### Views (`apps/sales/views/MobileSales/`)
-- [ ] `apps/sales/views/MobileSales/__init__.py` — re-export all views
-- [ ] `apps/sales/views/MobileSales/FieldSalesRoutes.py`:
+- [x] `apps/sales/views/MobileSales/__init__.py` — re-export all views
+- [x] `apps/sales/views/MobileSales/FieldSalesRoutes.py`:
   - `field_sales_route_list` (search, filters by status, rep, date; stats cards, pagination)
   - `field_sales_route_create` (validates tenant, assigns sales rep)
   - `field_sales_route_detail` (route summary, progress bar, stops sequence, check-ins list, navigation links)
@@ -17343,7 +17343,7 @@ Pure query projection (0 new tables). Computes:
   - `field_sales_route_delete` (POST with confirmation)
   - `field_sales_route_optimize` (action: optimizes stop ordering, updates distance/duration, status `optimized`)
   - `field_sales_route_complete` (action: marks status `completed`, updates actuals)
-- [ ] `apps/sales/views/MobileSales/FieldCheckIns.py`:
+- [x] `apps/sales/views/MobileSales/FieldCheckIns.py`:
   - `field_check_in_list` (search, filters by route, party, rep, outcome, verification; stats cards, pagination)
   - `field_check_in_create` (captures GPS coordinates, auto-calculates Haversine distance & geofence verification)
   - `field_check_in_detail` (visit breakdown, GPS coordinates map card, photo attachment, resulting quote link)
@@ -17351,14 +17351,14 @@ Pure query projection (0 new tables). Computes:
   - `field_check_in_delete` (POST with confirmation)
   - `field_check_in_verify` (action: runs Haversine formula against target, updates verification status)
   - `field_check_in_checkout` (action: records departure timestamp, duration minutes, outcome, next step, force checkout flag)
-- [ ] `apps/sales/views/MobileSales/MobileDeviceSessions.py`:
+- [x] `apps/sales/views/MobileSales/MobileDeviceSessions.py`:
   - `mobile_device_session_list` (search, filters by platform, status, user; stats cards, pagination)
   - `mobile_device_session_create` (registers device, assigns UUID)
   - `mobile_device_session_detail` (device metadata, sync history, cached records counter, push token status)
   - `mobile_device_session_edit`
   - `mobile_device_session_delete` (POST with confirmation)
   - `mobile_device_session_sync` (action: triggers sync manifest update, updates cached counts, sets status `success`)
-- [ ] `apps/sales/views/MobileSales/MobileDealAlerts.py`:
+- [x] `apps/sales/views/MobileSales/MobileDealAlerts.py`:
   - `mobile_deal_alert_list` (search, filters by urgency, type, recipient, read status; stats cards, pagination)
   - `mobile_deal_alert_create`
   - `mobile_deal_alert_detail` (alert contents, urgency banner, linked opportunity/quote/route shortcuts)
@@ -17366,31 +17366,31 @@ Pure query projection (0 new tables). Computes:
   - `mobile_deal_alert_delete` (POST with confirmation)
   - `mobile_deal_alert_mark_read` (action: sets `is_read=True`, timestamps `read_at`)
   - `mobile_deal_alert_dispatch` (action: triggers push dispatch simulation, sets status `sent`, timestamps `push_sent_at`)
-- [ ] `apps/sales/views/MobileSales/MobileSalesDashboards.py`:
+- [x] `apps/sales/views/MobileSales/MobileSalesDashboards.py`:
   - `mobile_sales_dashboard` (mobile execution cockpit: today's route progress, active check-ins, urgent deal alerts, rapid actions)
 
 ### URLs (`apps/sales/urls/MobileSales/`)
-- [ ] `apps/sales/urls/MobileSales/__init__.py` — combines all 5 url modules (dashboard literal routes first)
-- [ ] `apps/sales/urls/MobileSales/FieldSalesRoutes.py`
-- [ ] `apps/sales/urls/MobileSales/FieldCheckIns.py`
-- [ ] `apps/sales/urls/MobileSales/MobileDeviceSessions.py`
-- [ ] `apps/sales/urls/MobileSales/MobileDealAlerts.py`
-- [ ] `apps/sales/urls/MobileSales/MobileSalesDashboards.py`
+- [x] `apps/sales/urls/MobileSales/__init__.py` — combines all 5 url modules (dashboard literal routes first)
+- [x] `apps/sales/urls/MobileSales/FieldSalesRoutes.py`
+- [x] `apps/sales/urls/MobileSales/FieldCheckIns.py`
+- [x] `apps/sales/urls/MobileSales/MobileDeviceSessions.py`
+- [x] `apps/sales/urls/MobileSales/MobileDealAlerts.py`
+- [x] `apps/sales/urls/MobileSales/MobileSalesDashboards.py`
 
 ### Package Re-exports & Admin & Seeder
-- [ ] `apps/sales/models/__init__.py` — add Sub-module 8.16 re-export block (models + choices)
-- [ ] `apps/sales/forms/__init__.py` — add Sub-module 8.16 re-export block
-- [ ] `apps/sales/views/__init__.py` — add Sub-module 8.16 re-export block
-- [ ] `apps/sales/urls/__init__.py` — wire `_mobile_sales` into `urlpatterns` (literal dashboard routes first)
-- [ ] `apps/sales/admin.py` — register `FieldSalesRoute`, `FieldCheckIn`, `MobileDeviceSession`, and `MobileDealAlert` with `TenantScopedAdmin` / FK narrowing
-- [ ] `apps/sales/migrations/0029_*.py` — `makemigrations sales`
-- [ ] `apps/sales/management/commands/seed_sales.py` — extend with `_seed_mobile_sales(self, tenant, user)` (idempotent, per-tenant guard, reusing existing Acme Corp and Globex `Party` rows)
+- [x] `apps/sales/models/__init__.py` — add Sub-module 8.16 re-export block (models + choices)
+- [x] `apps/sales/forms/__init__.py` — add Sub-module 8.16 re-export block
+- [x] `apps/sales/views/__init__.py` — add Sub-module 8.16 re-export block
+- [x] `apps/sales/urls/__init__.py` — wire `_mobile_sales` into `urlpatterns` (literal dashboard routes first)
+- [x] `apps/sales/admin.py` — register `FieldSalesRoute`, `FieldCheckIn`, `MobileDeviceSession`, and `MobileDealAlert` with `TenantScopedAdmin` / FK narrowing
+- [x] `apps/sales/migrations/0029_*.py` — `makemigrations sales`
+- [x] `apps/sales/management/commands/seed_sales.py` — extend with `_seed_mobile_sales(self, tenant, user)` (idempotent, per-tenant guard, reusing existing Acme Corp and Globex `Party` rows)
 
 ---
 
 ## Wire-up
 
-- [ ] `apps/core/navigation.py`: add `LIVE_LINKS["8.16"]` mapping all five NavERP.md feature bullets + extra leaves:
+- [x] `apps/core/navigation.py`: add `LIVE_LINKS["8.16"]` mapping all five NavERP.md feature bullets + extra leaves:
   ```python
   "8.16": {
       # OWNERSHIP RULING (L36/L37)
@@ -17422,12 +17422,12 @@ Pure query projection (0 new tables). Computes:
 
 ## Templates (`templates/sales/mobilesales/`)
 
-13 templates: 4 entities × 3 pages (`list`, `detail`, `form`) + 1 mobile sales dashboard template:
-- [ ] `templates/sales/mobilesales/fieldsalesroute/{list,detail,form}.html`
-- [ ] `templates/sales/mobilesales/fieldcheckin/{list,detail,form}.html`
-- [ ] `templates/sales/mobilesales/mobiledevicesession/{list,detail,form}.html`
-- [ ] `templates/sales/mobilesales/mobiledealalert/{list,detail,form}.html`
-- [ ] `templates/sales/mobilesales/dashboard/mobile_sales_dashboard.html`
+14 templates: 4 entities × 3 pages (`list`, `detail`, `form`) + 1 checkout modal + 1 mobile sales dashboard template:
+- [x] `templates/sales/mobilesales/fieldsalesroute/{list,detail,form}.html`
+- [x] `templates/sales/mobilesales/fieldcheckin/{list,detail,form,checkout}.html`
+- [x] `templates/sales/mobilesales/mobiledevicesession/{list,detail,form}.html`
+- [x] `templates/sales/mobilesales/mobiledealalert/{list,detail,form}.html`
+- [x] `templates/sales/mobilesales/dashboard/mobile_sales_dashboard.html`
 
 ### UI/UX & Theme Invariants:
 - All pages extend `base.html` and include standard breadcrumbs.
@@ -17452,13 +17452,13 @@ Pure query projection (0 new tables). Computes:
 
 ## Verify
 
-- [ ] `venv\Scripts\python.exe manage.py makemigrations sales` → `0029_*.py` (re-verify number first)
-- [ ] `venv\Scripts\python.exe manage.py migrate`
-- [ ] `venv\Scripts\python.exe manage.py seed_sales` — run **twice**; second run produces identical counts (idempotent)
-- [ ] `venv\Scripts\python.exe manage.py check` → `System check identified no issues (0 silenced)`
-- [ ] `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` → `No changes detected`
-- [ ] All 25+ new url names reverse cleanly without `NoReverseMatch`
-- [ ] **temp/ smoke sweep as `admin_acme` / `password`** — assert content, not just status codes:
+- [x] `venv\Scripts\python.exe manage.py makemigrations sales` → `0029_*.py` (re-verify number first)
+- [x] `venv\Scripts\python.exe manage.py migrate`
+- [x] `venv\Scripts\python.exe manage.py seed_sales` — run **twice**; second run produces identical counts (idempotent)
+- [x] `venv\Scripts\python.exe manage.py check` → `System check identified no issues (0 silenced)`
+- [x] `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` → `No changes detected`
+- [x] All 25+ new url names reverse cleanly without `NoReverseMatch`
+- [x] **temp/ smoke sweep as `admin_acme` / `password`** — assert content, not just status codes:
   - 4 list pages → 200, each containing seeded records (`FSR-`, `CHK-`, `MDS-`, `MDA-`)
   - 4 detail + 4 create + 4 edit pages → 200
   - 1 console/dashboard page (`mobile_sales_dashboard`) → 200 with populated route progress and KPI metrics
@@ -17468,27 +17468,41 @@ Pure query projection (0 new tables). Computes:
   - **Cross-tenant IDOR** → a `admin_globex` pk returns 404 on detail/edit routes for `admin_acme`
   - Grep rendered HTML for `{#` and `{% comment` → zero hits (L2)
   - Grep rendered HTML for `badge-success|badge-danger|badge-warning|badge-purple` → zero hits (L33)
-- [ ] **Sidebar check**: `LIVE_LINKS["8.16"]` present; sidebar displays 8.16 with 5 Live bullets resolving to distinct hrefs (L30)
-- [ ] `.agents/tasks/gaps-sales-8.16.md` created in integrate step and linked in review/close-out block
+- [x] **Sidebar check**: `LIVE_LINKS["8.16"]` present; sidebar displays 8.16 with 5 Live bullets resolving to distinct hrefs (L30)
+- [x] `.agents/tasks/gaps-sales-8.16.md` created in integrate step and linked in review/close-out block
 
 ---
 
 ## Close-out
 
-- [ ] **Phase 4 — six reviewers, ONE AFTER ANOTHER**:
-  `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`, each reading `BASE...HEAD`, appending findings to `.claude/tasks/review-sales-8.16.md` (dedupe, sort Critical → Important → Minor, assign `C1` / `I3` / `M7` IDs, commit).
-- [ ] **Phase 5 — `code-fixer`**: fixes every finding in ID order, one commit per file, marking each `[x] fixed` / `[~] skipped — reason`.
-- [ ] **Phase 6 — Tests (serial)**:
-  - Write test contract and shared helpers
+- [x] **Phase 4 — six reviewers, ONE AFTER ANOTHER**:
+  `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`, each reading `BASE...HEAD`, appending findings to `.claude/tasks/review-sales-8.16.md` (dedupe, sort Critical → Important → Minor, assign `C1` / `I3` / `M7` IDs, commit: `2580aaa3`). 28 total findings recorded (`1C`, `15I`, `12M`).
+- [x] **Phase 5 — `code-fixer`**: fixes every finding in ID order, one commit per file, marking each `[x] fixed` / `[~] skipped — reason` (commit: `a534b962`). 100% resolved (28/28 fixed, 0 skipped, 0 open).
+- [x] **Phase 6 — Tests (serial)**:
+  - Write test contract and shared helpers in `apps/sales/tests/conftest.py` (commits: `58d6b71a`, `33e7a5e2`)
   - Four test modules one after another:
-    - `apps/sales/tests/test_mobilesales_models.py`
-    - `apps/sales/tests/test_mobilesales_forms.py`
-    - `apps/sales/tests/test_mobilesales_views.py`
-    - `apps/sales/tests/test_mobilesales_security.py`
-  - Full suite passes green
-- [ ] **Phase 7 — Skill + README**:
-  - Update `.claude/skills/sales/SKILL.md` with 8.16 models, routes, templates, and seeder info
-  - Update `README.md` marking Sub-module 8.16 complete
+    - `apps/sales/tests/test_mobilesales_models.py` (26 passed, commit: `8f505848`)
+    - `apps/sales/tests/test_mobilesales_forms.py` (65 passed, commit: `bca524c8`)
+    - `apps/sales/tests/test_mobilesales_views.py` (46 passed, commit: `b9f3039e`)
+    - `apps/sales/tests/test_mobilesales_security.py` (17 passed, commit: `5ae2e4fc`)
+  - Full suite passes green: 154 new 8.16 tests passed, 1853 passed across full unfiltered sales suite (0 failures, 1 skipped)
+- [x] **Phase 7 — Skill + README**:
+  - Update `.claude/skills/sales/SKILL.md` with 8.16 models, routes, templates, and seeder info (commit: `26b32c3e`)
+  - Update `README.md` marking Sub-module 8.16 complete (commit: `6b438ad1`)
+
+## Review notes
+- **Completed**: 2026-10-22
+- **Sub-module**: 8.16 Mobile Sales (Module 8: Sales Management System)
+- **Scope**: 4 models (`FieldSalesRoute` [FSR-], `FieldCheckIn` [CHK-], `MobileDeviceSession` [MDS-], `MobileDealAlert` [MDA-]), 1 operational console (`mobile_sales_dashboard`), 14 templates, 25 routes.
+- **Core Spine Reuse**: Reused `core.Party` (with `PartyRole(role="customer")`), `core.Address`, `core.Document` (DOC-), `accounts.User`, `crm.Opportunity` (OPP-), `crm.CommunicationLog` (COM-), `sales.CPQQuote` (CPQ-), and `scm.SalesOrder` (SO-). Proximity dynamically calculated via mathematical Haversine formula (`FieldCheckIn.calculate_distance()`). Zero duplicate masters declared.
+- **Code Fixer & Reviews**: Closed all 28 review findings across Critical (1/1), Important (15/15), and Minor (12/12) tiers.
+- **Tests**: 154 passed out of 154 tests across 4 test lanes:
+  - `test_mobilesales_models.py`: 26 tests passed
+  - `test_mobilesales_forms.py`: 65 tests passed
+  - `test_mobilesales_views.py`: 46 tests passed
+  - `test_mobilesales_security.py`: 17 tests passed
+  - Full sales test suite: 1,853 passed, 1 skipped, 0 failures.
+- **Gaps**: Recorded 5 items in [.agents/tasks/gaps-sales-8.16.md](../../.agents/tasks/gaps-sales-8.16.md).
 
 ---
 
