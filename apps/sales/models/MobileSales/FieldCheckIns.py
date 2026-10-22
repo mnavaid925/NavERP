@@ -203,10 +203,13 @@ class FieldCheckIn(TenantNumbered):
         if self.tenant_id:
             for fk_field, rel_name in [
                 ("party", "Party"),
+                ("contact", "Contact"),
+                ("opportunity", "Opportunity"),
                 ("sales_rep", "Sales Rep"),
                 ("route", "Field Route"),
                 ("photo_document", "Document"),
                 ("resulting_quote", "CPQ Quote"),
+                ("communication_log", "Communication Log"),
             ]:
                 obj = getattr(self, fk_field, None)
                 if obj and getattr(obj, "tenant_id", None) and obj.tenant_id != self.tenant_id:
