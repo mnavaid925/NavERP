@@ -100,7 +100,7 @@ def stage_velocity_analysis_detail(request, pk):
     obj = get_object_or_404(
         StageVelocityAnalysis.objects.filter(tenant=request.tenant).select_related(
             "pipeline",
-            "pipeline_stage",
+            "pipeline_stage__pipeline",
         ),
         pk=pk,
     )
@@ -141,7 +141,7 @@ def stage_velocity_analysis_edit(request, pk):
     obj = get_object_or_404(
         StageVelocityAnalysis.objects.filter(tenant=request.tenant).select_related(
             "pipeline",
-            "pipeline_stage",
+            "pipeline_stage__pipeline",
         ),
         pk=pk,
     )
@@ -174,7 +174,7 @@ def stage_velocity_analysis_delete(request, pk):
     obj = get_object_or_404(
         StageVelocityAnalysis.objects.filter(tenant=request.tenant).select_related(
             "pipeline",
-            "pipeline_stage",
+            "pipeline_stage__pipeline",
         ),
         pk=pk,
     )
