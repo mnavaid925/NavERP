@@ -5,6 +5,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -223,13 +224,28 @@ def customer_contract_generate_renewal_quote(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def customer_contract_execute_auto_renew(request, pk):
     tenant = request.tenant
     contract = get_object_or_404(CustomerContract.objects.filter(tenant=tenant), pk=pk)
-    
+
+    if contract.status != "active":
+        messages.error(request, f"Contract {contract.number} cannot be auto-renewed because it is not active.")
+        return redirect("sales:customer_contract_detail", pk=contract.pk)
+
+    if not contract.auto_renew:
+        messages.error(request, f"Contract {contract.number} does not have auto-renewal enabled.")
+        return redirect("sales:customer_contract_detail", pk=contract.pk)
+
+    today = timezone.localdate()
+    notice_days = contract.notice_period_days or 30
+    if contract.end_date and contract.end_date > today + timedelta(days=notice_days):
+        messages.error(request, f"Contract {contract.number} is not within its renewal notice window ({notice_days} days).")
+        return redirect("sales:customer_contract_detail", pk=contract.pk)
+
     months = contract.renewal_term_months or 12
     days = months * 30
-    current_end = contract.end_date or timezone.localdate()
+    current_end = contract.end_date or today
     contract.end_date = current_end + timedelta(days=days)
     
     # Apply uplift if specified
