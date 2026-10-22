@@ -49,10 +49,6 @@ def contract_subscription_workspace(request):
         status="active",
         end_date__gte=today,
         end_date__lte=in_60_days,
-    ).select_related("account", "owner").order_date() if hasattr(contracts_qs, "order_date") else contracts_qs.filter(
-        status="active",
-        end_date__gte=today,
-        end_date__lte=in_60_days,
     ).select_related("account", "owner").order_by("end_date")[:5]
 
     urgent_subscriptions = subs_qs.filter(
