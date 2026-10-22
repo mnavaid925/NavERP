@@ -147,7 +147,7 @@
         <!-- Child Subscriptions Card -->
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h3 class="font-semibold text-slate-800">Linked Subscriptions ({{ subscriptions.count }})</h3>
+                <h3 class="font-semibold text-slate-800">Linked Subscriptions ({{ subscriptions|length }})</h3>
                 <a href="{% url 'sales:customer_subscription_create' %}?contract={{ contract.pk }}" class="btn btn-outline text-xs">
                     <i data-lucide="plus"></i>
                     <span>Add Subscription</span>
@@ -213,7 +213,7 @@
         <!-- Child Obligations Card -->
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h3 class="font-semibold text-slate-800">Contractual Obligations & SLAs ({{ obligations.count }})</h3>
+                <h3 class="font-semibold text-slate-800">Contractual Obligations & SLAs ({{ obligations|length }})</h3>
                 <a href="{% url 'sales:contract_obligation_create' %}?contract={{ contract.pk }}" class="btn btn-outline text-xs">
                     <i data-lucide="plus"></i>
                     <span>Add Obligation</span>
