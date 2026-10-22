@@ -55,7 +55,7 @@ class WinLossDebriefForm(TenantUniqueMixin, TenantModelForm):
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
 
-    def clean_decision_drivers(self, value):
+    def clean_decision_drivers(self):
         """Validate the *shape* of the decision-driver list.
 
         Django's auto-generated ``forms.JSONField`` has already rejected a
@@ -64,6 +64,7 @@ class WinLossDebriefForm(TenantUniqueMixin, TenantModelForm):
         ``driver`` name, a ``sentiment`` of positive/negative, a ``weight``
         between 1 and 5 (defaulting to 1) and an optional ``quote``.
         """
+        value = self.cleaned_data.get("decision_drivers")
         if value is None:
             # Blank textarea -> no drivers. The column is NOT NULL, so an empty
             # list (not None) is what must reach the model.
