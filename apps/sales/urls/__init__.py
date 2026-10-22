@@ -50,6 +50,8 @@ from .SalesAnalytics import urlpatterns as _sales_analytics
 from .PartnerChannel import urlpatterns as _partner_channel
 # 8.15 Contract & Subscription Management.
 from .ContractSubscriptionManagement import urlpatterns as _contract_subscription
+# 8.16 Mobile Sales
+from .MobileSales import urlpatterns as _mobile_sales
 
 app_name = "sales"
 
@@ -92,6 +94,8 @@ urlpatterns = [
     *_partner_channel,
     # 8.15 Contract & Subscription Management.
     *_contract_subscription,
+    # 8.16 Mobile Sales.
+    *_mobile_sales,
     *_pipelines,
     *_teams,
     *_competitors,
