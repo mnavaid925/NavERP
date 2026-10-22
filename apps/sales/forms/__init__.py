@@ -107,6 +107,23 @@ from .PartnerChannel import (
     PartnerProfileForm,
 )
 
+# 8.15 Contract & Subscription Management
+from .ContractSubscriptionManagement import (
+    ContractObligationFilterForm,
+    ContractObligationForm,
+    CustomerContractFilterForm,
+    CustomerContractForm,
+    CustomerSubscriptionFilterForm,
+    CustomerSubscriptionForm,
+    ObligationBreachForm,
+    ObligationFulfillForm,
+    SubscriptionCancelForm,
+    SubscriptionPauseForm,
+    SubscriptionUpgradeForm,
+    UsageMeterRecordFilterForm,
+    UsageMeterRecordForm,
+)
+
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
     "LeadQualificationForm", "LeadRoutingPreviewForm", "LeadRoutingRuleForm", "LeadRoutingRunForm",
@@ -152,6 +169,13 @@ __all__ = [
     # 8.14 Partner & Channel Management
     "PartnerProfileForm", "DealRegistrationForm",
     "JointAccountPlanForm", "ChannelConflictForm",
+    # 8.15 Contract & Subscription Management
+    "CustomerContractForm", "CustomerContractFilterForm",
+    "CustomerSubscriptionForm", "CustomerSubscriptionFilterForm",
+    "SubscriptionPauseForm", "SubscriptionCancelForm", "SubscriptionUpgradeForm",
+    "UsageMeterRecordForm", "UsageMeterRecordFilterForm",
+    "ContractObligationForm", "ContractObligationFilterForm",
+    "ObligationFulfillForm", "ObligationBreachForm",
 ]
 
 
