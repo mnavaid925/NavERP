@@ -164,6 +164,10 @@ def mobile_deal_alert_edit(request, pk):
 def mobile_deal_alert_delete(request, pk):
     tenant = request.tenant
     alert = get_object_or_404(MobileDealAlert.objects.filter(tenant=tenant), pk=pk)
+    is_admin = bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))
+    if alert.recipient != request.user and not is_admin:
+        messages.error(request, "Only the recipient or a tenant administrator may delete this alert.")
+        return redirect("sales:mobile_deal_alert_list")
     title = alert.title
     write_audit_log(
         request.user,
@@ -182,6 +186,10 @@ def mobile_deal_alert_delete(request, pk):
 def mobile_deal_alert_mark_read(request, pk):
     tenant = request.tenant
     alert = get_object_or_404(MobileDealAlert.objects.filter(tenant=tenant), pk=pk)
+    is_admin = bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))
+    if alert.recipient != request.user and not is_admin:
+        messages.error(request, "Only the recipient or a tenant administrator may update this alert.")
+        return redirect("sales:mobile_deal_alert_detail", pk=alert.pk)
     alert.mark_as_read()
     messages.success(request, f"Alert '{alert.title}' marked as read.")
     return redirect("sales:mobile_deal_alert_detail", pk=alert.pk)
