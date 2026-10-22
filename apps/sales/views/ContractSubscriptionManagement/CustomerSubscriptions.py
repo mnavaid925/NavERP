@@ -203,6 +203,9 @@ def customer_subscription_delete(request, pk):
 def customer_subscription_pause(request, pk):
     tenant = request.tenant
     subscription = get_object_or_404(CustomerSubscription.objects.filter(tenant=tenant), pk=pk)
+    if subscription.status not in ("active", "trialing"):
+        messages.error(request, f"Subscription {subscription.number} cannot be paused from status '{subscription.get_status_display()}'.")
+        return redirect("sales:customer_subscription_detail", pk=subscription.pk)
     subscription.status = "paused"
     subscription.paused_at = timezone.now()
     subscription.save(update_fields=["status", "paused_at", "updated_at"])
@@ -222,6 +225,9 @@ def customer_subscription_pause(request, pk):
 def customer_subscription_resume(request, pk):
     tenant = request.tenant
     subscription = get_object_or_404(CustomerSubscription.objects.filter(tenant=tenant), pk=pk)
+    if subscription.status != "paused":
+        messages.error(request, f"Subscription {subscription.number} cannot be resumed because it is not paused.")
+        return redirect("sales:customer_subscription_detail", pk=subscription.pk)
     subscription.status = "active"
     subscription.resumed_at = timezone.now()
     subscription.save(update_fields=["status", "resumed_at", "updated_at"])
