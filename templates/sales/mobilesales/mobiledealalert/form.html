@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Alert — {{ alert.title }}{% else %}Dispatch Mobile Alert{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="page-header flex items-center justify-between">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'sales:dashboard' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:mobile_deal_alert_list' %}" class="hover:text-primary">Mobile Deal Alerts</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{% if is_edit %}Edit {{ alert.number }}{% else %}Dispatch Alert{% endif %}</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">
+                {% if is_edit %}Edit Mobile Notification — {{ alert.title }}{% else %}Dispatch Mobile Deal Alert{% endif %}
+            </h1>
+            <p class="text-sm text-slate-500 mt-1">Send a high-priority push notification or quote approval prompt directly to an outside sales rep's device.</p>
+        </div>
+        <div class="page-actions">
+            {% if is_edit %}
+            <a href="{% url 'sales:mobile_deal_alert_detail' alert.pk %}" class="btn btn-outline">Cancel</a>
+            {% else %}
+            <a href="{% url 'sales:mobile_deal_alert_list' %}" class="btn btn-outline">Cancel</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Form Card -->
+    <div class="card p-6">
+        <form method="post" class="space-y-6" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Recipient & Target Device -->
+            <div>
+                <h2 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="user-check" class="w-4 h-4 text-primary"></i>
+                    <span>Target Recipient & Device</span>
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div class="form-group">
+                        <label class="form-label">Recipient User <span class="text-red-500">*</span></label>
+                        {{ form.recipient }}
+                        {% if form.recipient.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.recipient.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Target Mobile Device (Optional)</label>
+                        {{ form.device }}
+                        <span class="text-xs text-slate-400 mt-0.5 block">Leave empty to broadcast to all rep's devices</span>
+                        {% if form.device.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.device.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Alert Scope & Priority -->
+            <div>
+                <h2 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="bell" class="w-4 h-4 text-primary"></i>
+                    <span>Notification Classification</span>
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div class="form-group">
+                        <label class="form-label">Alert Type</label>
+                        {{ form.alert_type }}
+                        {% if form.alert_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.alert_type.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Urgency Level</label>
+                        {{ form.urgency }}
+                        {% if form.urgency.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.urgency.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label">Notification Title / Headline <span class="text-red-500">*</span></label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label">Message Content Body <span class="text-red-500">*</span></label>
+                        {{ form.message }}
+                        {% if form.message.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.message.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Linked Sales Records -->
+            <div>
+                <h2 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="link" class="w-4 h-4 text-primary"></i>
+                    <span>Contextual ERP References</span>
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    <div class="form-group">
+                        <label class="form-label">Associated Opportunity</label>
+                        {{ form.related_opportunity }}
+                        {% if form.related_opportunity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.related_opportunity.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Associated CPQ Quote</label>
+                        {{ form.related_quote }}
+                        {% if form.related_quote.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.related_quote.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Associated Sales Route</label>
+                        {{ form.related_route }}
+                        {% if form.related_route.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.related_route.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                {% if is_edit %}
+                <a href="{% url 'sales:mobile_deal_alert_detail' alert.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'sales:mobile_deal_alert_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary flex items-center gap-2">
+                    <i data-lucide="send" class="w-4 h-4"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Dispatch Push Alert{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
