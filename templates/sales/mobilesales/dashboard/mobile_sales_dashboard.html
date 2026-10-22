@@ -146,8 +146,14 @@
                         <div class="flex items-center gap-2">
                             {% if route.status == 'in_progress' %}
                                 <span class="badge badge-info text-xs">In Progress</span>
+                            {% elif route.status == 'completed' %}
+                                <span class="badge badge-green text-xs">Completed</span>
+                            {% elif route.status == 'cancelled' %}
+                                <span class="badge badge-muted text-xs">Cancelled</span>
+                            {% elif route.status == 'draft' %}
+                                <span class="badge badge-info text-xs">Draft</span>
                             {% else %}
-                                <span class="badge badge-amber text-xs">Scheduled</span>
+                                <span class="badge badge-amber text-xs">{{ route.get_status_display|default:"Scheduled" }}</span>
                             {% endif %}
                             <a href="{% url 'sales:field_sales_route_detail' route.pk %}" class="btn btn-icon btn-outline btn-sm">
                                 <i data-lucide="chevron-right" class="w-4 h-4"></i>
