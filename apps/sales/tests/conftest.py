@@ -4621,8 +4621,7 @@ MARKETINGALIGNMENT_MODEL_FIELDS = {
     "AttributionTouchpoint": (
         "tenant", "created_at", "updated_at", "number", "campaign", "lead", "opportunity",
         "channel", "touch_type", "touch_position", "touch_date", "cost", "engagement_value",
-        "currency", "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
-        "landing_page_url", "referrer_url", "device_type", "notes",
+        "currency", "source_reference", "notes",
     ),
     "CampaignAttribution": (
         "tenant", "created_at", "updated_at", "number", "touchpoint", "attribution_model",
@@ -4792,7 +4791,7 @@ def _marketingalignment_opportunity(tenant, lead=None, name="Enterprise CRM Expa
 
 def _marketingalignment_customer(tenant, name="Apex Enterprise Client", **overrides):
     from apps.core.models import Party, PartyRole
-    party = Party.objects.create(tenant=tenant, name=name, party_type="organization")
+    party = Party.objects.create(tenant=tenant, name=name, kind="organization")
     PartyRole.objects.get_or_create(tenant=tenant, party=party, role="customer")
     return party
 
