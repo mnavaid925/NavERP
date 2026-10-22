@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Mobile Deal Alerts — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'sales:dashboard' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Mobile Deal Alerts</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Mobile Deal Alerts & Push Notifications</h1>
+            <p class="text-sm text-slate-500 mt-1">Real-time urgent notifications, quote discount approval requests, and field dispatch notices.</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:mobile_sales_dashboard' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                <span>Mobile Dashboard</span>
+            </a>
+            <a href="{% url 'sales:mobile_deal_alert_create' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="send" class="w-4 h-4"></i>
+                <span>Dispatch Alert</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Alerts</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ total_alerts_count }}</div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <i data-lucide="bell" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Unread Alerts</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">
+                        {% if unread_alerts_count > 0 %}
+                            <span class="text-amber-600">{{ unread_alerts_count }}</span>
+                        {% else %}
+                            <span class="text-green-600">0</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                    <i data-lucide="mail" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Approval Queue</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">
+                        <a href="{% url 'sales:quote_approval_queue' %}" class="text-primary hover:underline text-lg font-semibold flex items-center gap-1">
+                            <span>CPQ Queue</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                    <i data-lucide="check-square" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Mobile Fleet</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">
+                        <a href="{% url 'sales:mobile_device_session_list' %}" class="text-primary hover:underline text-lg font-semibold flex items-center gap-1">
+                            <span>Devices</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
+                    <i data-lucide="smartphone" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters Card -->
+    <div class="card p-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label text-xs">Search</label>
+                {{ filter_form.q }}
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs">Alert Type</label>
+                {{ filter_form.alert_type }}
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs">Urgency</label>
+                {{ filter_form.urgency }}
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs">Read Status</label>
+                {{ filter_form.is_read }}
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'sales:mobile_deal_alert_list' %}" class="btn btn-outline" title="Reset">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Table Card -->
+    <div class="card">
+        {% if alerts %}
+        <div class="table-wrap overflow-x-auto">
+            <table class="table w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b text-slate-500 bg-slate-50">
+                        <th class="p-3">Alert #</th>
+                        <th class="p-3">Title & Message</th>
+                        <th class="p-3">Recipient</th>
+                        <th class="p-3">Type</th>
+                        <th class="p-3">Urgency</th>
+                        <th class="p-3">Read Status</th>
+                        <th class="p-3">Sent Time</th>
+                        <th class="p-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for alert in alerts %}
+                    <tr class="hover:bg-slate-50 transition {% if not alert.is_read %}bg-blue-50/30{% endif %}">
+                        <td class="p-3 font-mono font-medium text-slate-900">
+                            <a href="{% url 'sales:mobile_deal_alert_detail' alert.pk %}" class="text-primary hover:underline">
+                                {{ alert.number }}
+                            </a>
+                        </td>
+                        <td class="p-3">
+                            <div class="font-medium text-slate-900">{{ alert.title }}</div>
+                            <div class="text-xs text-slate-500 truncate max-w-xs">{{ alert.message }}</div>
+                        </td>
+                        <td class="p-3 text-slate-700">
+                            {% if alert.recipient %}
+                                {{ alert.recipient.get_full_name|default:alert.recipient.username }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-xs text-slate-600">
+                            {{ alert.get_alert_type_display }}
+                        </td>
+                        <td class="p-3">
+                            {% if alert.urgency == 'urgent' %}
+                                <span class="badge badge-red">Urgent</span>
+                            {% elif alert.urgency == 'high' %}
+                                <span class="badge badge-amber">High</span>
+                            {% elif alert.urgency == 'normal' %}
+                                <span class="badge badge-slate">Normal</span>
+                            {% else %}
+                                <span class="badge badge-muted">Low</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3">
+                            {% if alert.is_read %}
+                                <span class="badge badge-green">Read</span>
+                            {% else %}
+                                <span class="badge badge-info">Unread</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-xs text-slate-600 font-mono">
+                            {{ alert.created_at|date:"Y-m-d H:i" }}
+                        </td>
+                        <td class="p-3 text-right">
+                            <div class="table-actions inline-flex items-center gap-1">
+                                <a href="{% url 'sales:mobile_deal_alert_detail' alert.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'sales:mobile_deal_alert_edit' alert.pk %}" class="btn btn-icon btn-outline" title="Edit Alert">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'sales:mobile_deal_alert_delete' alert.pk %}" class="inline" onsubmit="return confirm('Delete this deal alert?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete Alert">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} alerts
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.alert_type %}&alert_type={{ request.GET.alert_type }}{% endif %}" class="btn btn-outline btn-sm">
+                    Previous
+                </a>
+                {% endif %}
+                <span class="px-3 py-1 text-sm text-slate-700 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.alert_type %}&alert_type={{ request.GET.alert_type }}{% endif %}" class="btn btn-outline btn-sm">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state p-12 text-center">
+            <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3">
+                <i data-lucide="bell" class="w-6 h-6"></i>
+            </div>
+            <h3 class="text-base font-semibold text-slate-900">No mobile deal alerts found</h3>
+            <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Dispatch real-time push alerts to outside reps for deal stage advances and urgent discount sign-offs.</p>
+            <div class="mt-4">
+                <a href="{% url 'sales:mobile_deal_alert_create' %}" class="btn btn-primary">Dispatch Alert</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
