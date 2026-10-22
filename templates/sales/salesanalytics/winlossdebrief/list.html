@@ -193,7 +193,7 @@
                     </td>
                     <td class="text-slate-600 text-sm">{{ debrief.debriefed_on|date:"M d, Y" }}</td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'sales:win_loss_debrief_detail' debrief.pk %}" class="btn btn-icon btn-outline" title="View debrief">
+                        <a href="{% url 'sales:win_loss_debrief_detail' debrief.pk %}" class="btn btn-icon btn-outline" title="View debrief" aria-label="View debrief">
                             <i data-lucide="eye"></i>
                         </a>
                         {% comment %}
@@ -202,13 +202,13 @@
                           shared, actioned) keeps both actions available.
                         {% endcomment %}
                         {% if debrief.status != "closed" %}
-                        <a href="{% url 'sales:win_loss_debrief_edit' debrief.pk %}" class="btn btn-icon btn-outline" title="Edit debrief">
+                        <a href="{% url 'sales:win_loss_debrief_edit' debrief.pk %}" class="btn btn-icon btn-outline" title="Edit debrief" aria-label="Edit debrief">
                             <i data-lucide="pencil"></i>
                         </a>
                         {% if request.user.is_superuser or request.user.is_tenant_admin %}
                         <form method="post" action="{% url 'sales:win_loss_debrief_delete' debrief.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete debrief {{ debrief.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-danger" title="Delete debrief">
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete debrief" aria-label="Delete debrief">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
