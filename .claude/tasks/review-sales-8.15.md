@@ -84,5 +84,20 @@ The Sub-module 8.15 ORM implementation is well-structured with proper pagination
 - **[MINOR]** `apps/sales/views/ContractSubscriptionManagement/UsageMeterRecords.py:127`: Add `select_related("subscription")` in `usage_meter_record_edit` to prevent extra query on `str(meter)`.
 - **[MINOR]** `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py:118`: Add `account` to `contract.subscriptions.all().select_related("currency", "account")`.
 
+---
+
+## 5. QA Smoke Tester Findings
+
+### Verdict
+Sub-module 8.15 exhibits flawless multi-tenant IDOR protection (100% 404 enforcement across all foreign tenant record requests) and 100% operational read/GET views across all dashboards, list views, detail views, and edit/create pages; however, runtime execution revealed two critical defects: an invalid keyword crash when instantiating `CPQQuote` in renewal quote generation (`TypeError: CPQQuote() got unexpected keyword arguments: 'title', 'grand_total'`), and a universal crash on every mutating POST action due to incompatible arguments passed to `write_audit_log` (`TypeError: write_audit_log() got an unexpected keyword argument 'model_name'`).
+
+### Findings
+- **[CRITICAL]** `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py:84,138,167,188,222,254`, `CustomerSubscriptions.py:93,161,190,210,230,256,279`, `UsageMeterRecords.py:77,134,163,183,203`, `ContractObligations.py:92,156,185,208,233`: All 21 `write_audit_log` call sites pass invalid keyword arguments `(tenant=..., user=..., action=..., model_name=..., object_id=..., object_repr=...)`. In `apps/core/utils.py`, the authoritative signature is `write_audit_log(user, obj, action, changes=None, tenant=None)`. Calling any mutating action causes an immediate `TypeError: write_audit_log() got an unexpected keyword argument 'model_name'`. Fix: Refactor all call sites across all 4 view files to standard signature `write_audit_log(user=request.user, obj=instance, action=action, tenant=tenant)`.
+- **[CRITICAL]** `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py:210`: View `customer_contract_generate_renewal_quote` crashes with `TypeError: CPQQuote() got unexpected keyword arguments: 'title', 'grand_total'`. Fix: Change `title=...` to `name=...` and `grand_total=...` to `total=...`.
+- **[IMPORTANT]** `apps/sales/forms/ContractSubscriptionManagement/CustomerSubscriptions.py:27`: `renewal_notice_days` has no default fallback if omitted from client post data, causing form validation failure on bare POST requests. Fix: Ensure `renewal_notice_days` has initial default of `30` in form `__init__`.
+- **[MINOR]** `templates/sales/contractsubscriptionmanagement/boards/renewal_automation_dashboard.html:76,144`: Section table headers render "Upcoming Renewal Candidates (60 Days)" and "Auto-Renew Executable Contracts (30 Days)" instead of exact spec labels.
+- **[MINOR]** `templates/sales/contractsubscriptionmanagement/boards/contract_subscription_workspace.html:46`: KPI stat card label reads "Active Contract TCV" rather than "Total Contract Value".
+
+
 
 
