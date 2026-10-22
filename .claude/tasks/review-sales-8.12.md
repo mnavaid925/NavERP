@@ -167,9 +167,9 @@
   `WinLossDebriefs.py:152`, `StageVelocityAnalyses.py:131`, `FunnelConversionRecords.py:127`, `RepPerformanceScorecards.py:273`.
   *Fix:* Maintainability only; consistent with house convention. Note in code. Fixed — documented in docstrings across all four model modules per house convention.
 
-- [ ] **M11 — The contract's stated premise about `Model.clean()` for Django 5.1.**
+- [x] **M11 — The contract's stated premise about `Model.clean()` for Django 5.1.**
   `.claude/tasks/contract-sales-8.12.md:410-411`. `ModelForm._post_clean` calls `full_clean()`, which calls `Model.clean()`.
-  *Fix:* Correct the contract text.
+  *Fix:* Correct the contract text. Fixed — `6cf5346b` `docs(sales): correct Model.clean contract note and add clamping documentation`.
 
 - [ ] **M12 — `from_stage` / `to_stage` populated on non-stage funnel rows in seeder.**
   `apps/sales/management/commands/seed_sales.py:3357-3358`.
