@@ -86,6 +86,13 @@ def mobile_deal_alert_detail(request, pk):
     # Auto-mark as read if current user is the recipient and it's unread
     if not alert.is_read and alert.recipient == request.user:
         alert.mark_as_read()
+        write_audit_log(
+            request.user,
+            alert,
+            "update",
+            changes={"action": "auto_mark_read"},
+            tenant=tenant,
+        )
 
     context = {
         "alert": alert,
@@ -191,5 +198,12 @@ def mobile_deal_alert_mark_read(request, pk):
         messages.error(request, "Only the recipient or a tenant administrator may update this alert.")
         return redirect("sales:mobile_deal_alert_detail", pk=alert.pk)
     alert.mark_as_read()
+    write_audit_log(
+        request.user,
+        alert,
+        "update",
+        changes={"action": "mark_read"},
+        tenant=tenant,
+    )
     messages.success(request, f"Alert '{alert.title}' marked as read.")
     return redirect("sales:mobile_deal_alert_detail", pk=alert.pk)
