@@ -49,7 +49,7 @@
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Attributed Revenue</div>
             <div class="text-2xl font-bold text-slate-900 mt-1">
-                ${{ stats.total_attributed_revenue|default:"0.00"|floatformat:2 }}
+                {% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ stats.total_attributed_revenue|default:"0.00"|floatformat:2 }}
             </div>
         </div>
     </div>
@@ -60,7 +60,7 @@
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Attributed Cost</div>
             <div class="text-2xl font-bold text-slate-900 mt-1">
-                ${{ stats.total_attributed_cost|default:"0.00"|floatformat:2 }}
+                {% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ stats.total_attributed_cost|default:"0.00"|floatformat:2 }}
             </div>
         </div>
     </div>
@@ -163,10 +163,10 @@
                         <div class="font-semibold text-slate-900">{{ attribution.credit_pct|floatformat:2 }}%</div>
                     </td>
                     <td>
-                        <span class="font-semibold text-slate-900">${{ attribution.attributed_revenue|floatformat:2 }}</span>
+                        <span class="font-semibold text-slate-900">{{ attribution.touchpoint.currency.symbol|default:"$" }}{{ attribution.attributed_revenue|floatformat:2 }}</span>
                     </td>
                     <td>
-                        <span class="text-slate-700">${{ attribution.attributed_cost|floatformat:2 }}</span>
+                        <span class="text-slate-700">{{ attribution.touchpoint.currency.symbol|default:"$" }}{{ attribution.attributed_cost|floatformat:2 }}</span>
                     </td>
                     <td>
                         {% if attribution.status == "approved" %}
@@ -223,7 +223,7 @@
         </div>
         <div class="pagination-actions">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.attribution_model %}&attribution_model={{ active_filters.attribution_model }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q|urlencode }}{% endif %}{% if active_filters.attribution_model %}&attribution_model={{ active_filters.attribution_model }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
                 Previous
             </a>
             {% else %}
@@ -233,7 +233,7 @@
             <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.attribution_model %}&attribution_model={{ active_filters.attribution_model }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q|urlencode }}{% endif %}{% if active_filters.attribution_model %}&attribution_model={{ active_filters.attribution_model }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
                 Next
             </a>
             {% else %}
