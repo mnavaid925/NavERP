@@ -185,6 +185,10 @@ class StageVelocityAnalysis(TenantNumbered):
         return "badge-red" if self.is_bottleneck else "badge-muted"
 
     @property
+    def bottleneck_display(self):
+        return "Bottleneck" if self.is_bottleneck else "Normal"
+
+    @property
     def days_over_target(self):
         """Median days in stage minus the stage's target — ``None`` when unknown.
 
