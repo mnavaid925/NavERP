@@ -149,7 +149,7 @@ def contract_obligation_detail(request, pk):
 @transaction.atomic
 def contract_obligation_edit(request, pk):
     tenant = request.tenant
-    obligation = get_object_or_404(ContractObligation.objects.filter(tenant=tenant), pk=pk)
+    obligation = get_object_or_404(ContractObligation.objects.filter(tenant=tenant).select_related("contract"), pk=pk)
     if request.method == "POST":
         form = ContractObligationForm(request.POST, instance=obligation, tenant=tenant)
         if form.is_valid():
