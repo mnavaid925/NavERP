@@ -56,7 +56,7 @@
 <!-- Filters -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
             <div class="form-group mb-0">
                 <input type="text" name="q" value="{{ request.GET.q|default:'' }}" placeholder="Search title or benchmark..." class="form-input text-sm">
             </div>
@@ -81,6 +81,14 @@
                     <option value="">All Contracts</option>
                     {% for c in filter_form.fields.contract.queryset %}
                     <option value="{{ c.pk }}" {% if request.GET.contract == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} ({{ c.title|truncatechars:20 }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="assigned_to" class="form-select text-sm">
+                    <option value="">All Assignees</option>
+                    {% for u in filter_form.fields.assigned_to.queryset %}
+                    <option value="{{ u.pk }}" {% if request.GET.assigned_to == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
                     {% endfor %}
                 </select>
             </div>
