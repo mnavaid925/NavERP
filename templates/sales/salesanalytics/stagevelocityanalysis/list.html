@@ -178,10 +178,10 @@
                     </td>
                     <td>
                         {% if analysis.is_bottleneck %}
-                        <span class="badge {{ analysis.bottleneck_badge_class }}">Bottleneck</span>
+                        <span class="badge {{ analysis.bottleneck_badge_class }}">{{ analysis.bottleneck_display }}</span>
                         {% if analysis.bottleneck_rank %}<span class="text-xs text-slate-500">#{{ analysis.bottleneck_rank }}</span>{% endif %}
                         {% else %}
-                        <span class="badge {{ analysis.bottleneck_badge_class }}">{{ analysis.get_is_bottleneck_display }}</span>
+                        <span class="badge {{ analysis.bottleneck_badge_class }}">{{ analysis.bottleneck_display }}</span>
                         {% endif %}
                     </td>
                     <td class="table-actions text-right">
