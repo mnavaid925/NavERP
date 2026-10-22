@@ -109,12 +109,10 @@ def mobile_deal_alert_create(request):
             alert.push_sent_at = timezone.now()
             alert.save()
             write_audit_log(
+                request.user,
+                alert,
+                "create",
                 tenant=tenant,
-                user=request.user,
-                action="create",
-                model_name="MobileDealAlert",
-                object_id=alert.pk,
-                object_repr=str(alert),
             )
             messages.success(request, f"Mobile Alert '{alert.title}' dispatched successfully.")
             return redirect("sales:mobile_deal_alert_detail", pk=alert.pk)
@@ -139,12 +137,10 @@ def mobile_deal_alert_edit(request, pk):
         if form.is_valid():
             alert = form.save()
             write_audit_log(
+                request.user,
+                alert,
+                "update",
                 tenant=tenant,
-                user=request.user,
-                action="update",
-                model_name="MobileDealAlert",
-                object_id=alert.pk,
-                object_repr=str(alert),
             )
             messages.success(request, f"Mobile Alert '{alert.title}' updated successfully.")
             return redirect("sales:mobile_deal_alert_detail", pk=alert.pk)
@@ -165,16 +161,13 @@ def mobile_deal_alert_delete(request, pk):
     tenant = request.tenant
     alert = get_object_or_404(MobileDealAlert.objects.filter(tenant=tenant), pk=pk)
     title = alert.title
-    alt_pk = alert.pk
-    alert.delete()
     write_audit_log(
+        request.user,
+        alert,
+        "delete",
         tenant=tenant,
-        user=request.user,
-        action="delete",
-        model_name="MobileDealAlert",
-        object_id=alt_pk,
-        object_repr=title,
     )
+    alert.delete()
     messages.success(request, f"Mobile Alert '{title}' deleted successfully.")
     return redirect("sales:mobile_deal_alert_list")
 
