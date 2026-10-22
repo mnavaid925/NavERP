@@ -18,6 +18,7 @@ from apps.sales.models.MobileSales.MobileDealAlerts import (
     URGENCY_CHOICES,
     MobileDealAlert,
 )
+from apps.sales.models.MobileSales.MobileDeviceSessions import MobileDeviceSession
 
 
 @login_required
@@ -107,7 +108,9 @@ def mobile_deal_alert_create(request):
     initial = {"recipient": request.user}
     device_id = request.GET.get("device")
     if device_id and device_id.isdigit():
-        initial["device"] = device_id
+        device = MobileDeviceSession.objects.filter(tenant=tenant, pk=int(device_id)).first()
+        if device:
+            initial["device"] = device
 
     if request.method == "POST":
         form = MobileDealAlertForm(request.POST, tenant=tenant)
