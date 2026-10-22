@@ -5468,3 +5468,172 @@ def cs_obligation_a(tenant_a, cs_contract_a, cs_subscription_a, admin_user):
 @pytest.fixture
 def cs_obligation_b(tenant_b, cs_contract_b, cs_subscription_b, admin_b):
     return _contractsubscription_obligation(tenant_b, contract=cs_contract_b, subscription=cs_subscription_b, assigned_to=admin_b)
+
+
+# ==============================================================================
+# SUB-MODULE 8.16: MOBILE SALES FIXTURES & HELPERS
+# ==============================================================================
+
+from apps.sales.models.MobileSales.FieldSalesRoutes import (
+    FieldSalesRoute,
+    ROUTE_STATUS_CHOICES,
+    OPTIMIZATION_STATUS_CHOICES,
+)
+from apps.sales.models.MobileSales.FieldCheckIns import (
+    FieldCheckIn,
+    VERIFICATION_STATUS_CHOICES,
+    VISIT_PURPOSE_CHOICES,
+    VISIT_OUTCOME_CHOICES,
+)
+from apps.sales.models.MobileSales.MobileDeviceSessions import (
+    MobileDeviceSession,
+    PLATFORM_CHOICES,
+    SYNC_STATUS_CHOICES,
+)
+from apps.sales.models.MobileSales.MobileDealAlerts import (
+    MobileDealAlert,
+    ALERT_TYPE_CHOICES,
+    URGENCY_CHOICES,
+)
+from apps.core.models import Party
+
+
+def _mobilesales_party(tenant, name="Apex Retail Group"):
+    return Party.objects.create(
+        tenant=tenant,
+        name=name,
+        party_type="organization",
+    )
+
+
+def _mobilesales_route(tenant, sales_rep=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": "North Metro Field Sweep",
+        "route_date": timezone.localdate(),
+        "status": "scheduled",
+        "optimization_status": "optimized",
+        "total_stops": 3,
+        "completed_stops": 0,
+        "planned_distance_km": Decimal("45.5"),
+        "actual_distance_km": Decimal("0.0"),
+        "estimated_duration_minutes": 180,
+        "actual_duration_minutes": 0,
+        "start_location": "37.7749,-122.4194",
+        "end_location": "37.7749,-122.4194",
+        "sales_rep": sales_rep,
+    }
+    defaults.update(overrides)
+    return FieldSalesRoute.objects.create(**defaults)
+
+
+def _mobilesales_check_in(tenant, party=None, sales_rep=None, route=None, **overrides):
+    if party is None:
+        party = _mobilesales_party(tenant)
+    defaults = {
+        "tenant": tenant,
+        "party": party,
+        "sales_rep": sales_rep,
+        "route": route,
+        "check_in_at": timezone.now(),
+        "check_in_lat": Decimal("37.774900"),
+        "check_in_lng": Decimal("-122.419400"),
+        "target_lat": Decimal("37.775000"),
+        "target_lng": Decimal("-122.419500"),
+        "geofence_radius_m": 150,
+        "distance_from_target_m": Decimal("15.5"),
+        "is_geofence_verified": True,
+        "verification_status": "verified",
+        "visit_purpose": "routine_visit",
+        "outcome": "order_placed",
+        "meeting_notes": "Discussed expansion plans and renewed quarterly contract.",
+        "duration_minutes": 45,
+    }
+    defaults.update(overrides)
+    return FieldCheckIn.objects.create(**defaults)
+
+
+def _mobilesales_device(tenant, user=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "user": user,
+        "device_name": "Sales Rep iPad Pro",
+        "device_identifier": "DEV-IPAD-001",
+        "platform": "ios",
+        "app_version": "2.4.0",
+        "os_version": "iOS 17.5",
+        "is_active": True,
+        "is_trusted": True,
+        "push_token": "apns-sample-device-token-12345",
+        "last_sync_status": "success",
+        "cached_records_count": 120,
+        "pending_uploads_count": 0,
+    }
+    defaults.update(overrides)
+    return MobileDeviceSession.objects.create(**defaults)
+
+
+def _mobilesales_alert(tenant, recipient=None, device=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "recipient": recipient,
+        "device": device,
+        "alert_type": "discount_approval",
+        "urgency": "urgent",
+        "title": "Urgent: 25% Discount Approval Request",
+        "message": "Enterprise tier deal requires VP sign-off before end of month.",
+        "is_read": False,
+        "push_sent": True,
+    }
+    defaults.update(overrides)
+    return MobileDealAlert.objects.create(**defaults)
+
+
+@pytest.fixture
+def ms_party_a(tenant_a):
+    return _mobilesales_party(tenant_a, name="Acme Field Client")
+
+
+@pytest.fixture
+def ms_party_b(tenant_b):
+    return _mobilesales_party(tenant_b, name="Globex Field Client")
+
+
+@pytest.fixture
+def ms_route_a(tenant_a, admin_user):
+    return _mobilesales_route(tenant_a, sales_rep=admin_user)
+
+
+@pytest.fixture
+def ms_route_b(tenant_b, admin_b):
+    return _mobilesales_route(tenant_b, sales_rep=admin_b)
+
+
+@pytest.fixture
+def ms_check_in_a(tenant_a, ms_party_a, admin_user, ms_route_a):
+    return _mobilesales_check_in(tenant_a, party=ms_party_a, sales_rep=admin_user, route=ms_route_a)
+
+
+@pytest.fixture
+def ms_check_in_b(tenant_b, ms_party_b, admin_b, ms_route_b):
+    return _mobilesales_check_in(tenant_b, party=ms_party_b, sales_rep=admin_b, route=ms_route_b)
+
+
+@pytest.fixture
+def ms_device_a(tenant_a, admin_user):
+    return _mobilesales_device(tenant_a, user=admin_user, device_identifier="ACME-IPAD-01")
+
+
+@pytest.fixture
+def ms_device_b(tenant_b, admin_b):
+    return _mobilesales_device(tenant_b, user=admin_b, device_identifier="GLOBEX-IPAD-01")
+
+
+@pytest.fixture
+def ms_alert_a(tenant_a, admin_user, ms_device_a):
+    return _mobilesales_alert(tenant_a, recipient=admin_user, device=ms_device_a)
+
+
+@pytest.fixture
+def ms_alert_b(tenant_b, admin_b, ms_device_b):
+    return _mobilesales_alert(tenant_b, recipient=admin_b, device=ms_device_b)
