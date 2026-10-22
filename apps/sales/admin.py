@@ -81,6 +81,11 @@ from .models import (
     CustomerSubscription,
     UsageMeterRecord,
     ContractObligation,
+    # 8.16 Mobile Sales
+    FieldSalesRoute,
+    FieldCheckIn,
+    MobileDeviceSession,
+    MobileDealAlert,
 )
 
 
@@ -1104,6 +1109,52 @@ class ContractObligationAdmin(TenantScopedFKAdmin):
     raw_id_fields = ("contract", "subscription", "assigned_to")
     tenant_fk_fields = ("contract", "subscription")
     tenant_user_fk_fields = ("assigned_to",)
+
+
+# ---------------------------------------------------------------- 8.16 Mobile Sales
+@admin.register(FieldSalesRoute)
+class FieldSalesRouteAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "name", "sales_rep", "route_date", "status", "total_stops", "completed_stops", "optimization_status", "tenant")
+    list_filter = ("status", "optimization_status", "route_date", "tenant")
+    search_fields = ("number", "name", "start_location", "end_location", "sales_rep__username")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("sales_rep", "tenant")
+    tenant_user_fk_fields = ("sales_rep",)
+
+
+@admin.register(FieldCheckIn)
+class FieldCheckInAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "party", "sales_rep", "check_in_at", "is_geofence_verified", "verification_status", "visit_purpose", "outcome", "duration_minutes", "tenant")
+    list_filter = ("is_geofence_verified", "verification_status", "visit_purpose", "outcome", "tenant")
+    search_fields = ("number", "party__name", "notes", "next_step")
+    readonly_fields = ("tenant", "number", "is_geofence_verified", "distance_from_target_m", "duration_minutes", "created_at", "updated_at")
+    list_select_related = ("party", "sales_rep", "route", "tenant")
+    raw_id_fields = ("party", "contact", "opportunity", "sales_rep", "route", "photo_document", "resulting_quote", "communication_log")
+    tenant_fk_fields = ("party", "contact", "opportunity", "route", "photo_document", "resulting_quote", "communication_log")
+    tenant_user_fk_fields = ("sales_rep",)
+
+
+@admin.register(MobileDeviceSession)
+class MobileDeviceSessionAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "device_name", "user", "platform", "app_version", "is_active", "is_trusted", "last_sync_status", "last_sync_at", "tenant")
+    list_filter = ("platform", "is_active", "is_trusted", "last_sync_status", "tenant")
+    search_fields = ("number", "device_name", "device_uuid", "user__username")
+    readonly_fields = ("tenant", "number", "last_sync_at", "offline_records_cached", "pending_uploads_count", "created_at", "updated_at")
+    list_select_related = ("user", "tenant")
+    tenant_user_fk_fields = ("user",)
+
+
+@admin.register(MobileDealAlert)
+class MobileDealAlertAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "title", "recipient", "alert_type", "urgency", "is_read", "push_status", "created_at", "tenant")
+    list_filter = ("alert_type", "urgency", "is_read", "push_status", "tenant")
+    search_fields = ("number", "title", "message", "recipient__username")
+    readonly_fields = ("tenant", "number", "read_at", "push_sent_at", "created_at", "updated_at")
+    list_select_related = ("recipient", "device", "related_opportunity", "related_quote", "related_route", "tenant")
+    raw_id_fields = ("recipient", "device", "related_opportunity", "related_quote", "related_route")
+    tenant_fk_fields = ("device", "related_opportunity", "related_quote", "related_route")
+    tenant_user_fk_fields = ("recipient",)
+
 
 
 
