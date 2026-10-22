@@ -64,7 +64,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import render
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
@@ -1152,10 +1152,12 @@ def _activity_totals(tenant, scorecards):
             totals["other"] = totals["other"] + count
             continue
         totals[bucket] = totals[bucket] + count
-    totals["auto_captured"] = in_period.filter(is_auto_captured=True).count()
-    totals["planned_minutes"] = sum(
-        (value or 0) for value in in_period.values_list("planned_minutes", flat=True)
+    extra_agg = in_period.aggregate(
+        auto_captured=Count("id", filter=Q(is_auto_captured=True)),
+        planned_minutes=Sum("planned_minutes"),
     )
+    totals["auto_captured"] = extra_agg["auto_captured"] or 0
+    totals["planned_minutes"] = extra_agg["planned_minutes"] or 0
     return totals
 
 
