@@ -84,24 +84,9 @@ def win_loss_debrief_list(request):
     page_obj = paginator.get_page(request.GET.get("page"))
 
     opportunities = Opportunity.objects.filter(tenant=request.tenant).order_by("name")
-    outcomes = (
-        OpportunityOutcome.objects.filter(tenant=request.tenant)
-        .select_related("opportunity")
-        .order_by("-closed_at")
-    )
     reasons = WinLossReason.objects.filter(tenant=request.tenant, is_active=True).order_by(
         "sequence", "name"
     )
-    accounts = (
-        Party.objects.filter(
-            tenant=request.tenant,
-            roles__role="customer",
-            roles__status="active",
-        )
-        .distinct()
-        .order_by("name")
-    )
-    users = User.objects.filter(tenant=request.tenant, is_active=True).order_by("username")
 
     context = {
         "debriefs": page_obj.object_list,
@@ -111,11 +96,7 @@ def win_loss_debrief_list(request):
         "interview_channel_choices": INTERVIEW_CHANNEL_CHOICES,
         "feedback_team_choices": FEEDBACK_TEAM_CHOICES,
         "opportunities": opportunities,
-        "outcomes": outcomes,
         "reasons": reasons,
-        "accounts": accounts,
-        "interviewers": users,
-        "action_owners": users,
         "stats": stats,
         "active_filters": {
             "q": q,
