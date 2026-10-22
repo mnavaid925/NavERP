@@ -69,6 +69,14 @@ SCORECARD_STATUS_CHOICES = [
     ("approved", "Approved"),
 ]
 
+#: The largest value each DERIVED column can hold. The derived fields are ``editable=False``,
+#: so Django's ModelForm EXCLUDES them from model validation -- a ratio that overflows its
+#: column would otherwise never be validated and would be silently clamped by the driver on
+#: this project's non-strict MariaDB (``apps/core/utils.py``) or raise a ``DataError`` -> 500
+#: on a strict-mode host. ``save()`` clamps to these instead.
+_MAX_AVERAGE_DEAL_SIZE = Decimal("999999999999.99")  # DECIMAL(14,2)
+_MAX_QUOTA_ATTAINMENT_PCT = Decimal("9999.99")  # DECIMAL(6,2)
+
 
 class RepPerformanceScorecard(TenantNumbered):
     """One rep's performance scorecard for one period.
@@ -314,12 +322,18 @@ class RepPerformanceScorecard(TenantNumbered):
             else Decimal("0.00")
         )
         self.average_deal_size = (
-            (revenue / Decimal(won)).quantize(Decimal("0.01"), ROUND_HALF_UP)
+            min(
+                (revenue / Decimal(won)).quantize(Decimal("0.01"), ROUND_HALF_UP),
+                _MAX_AVERAGE_DEAL_SIZE,
+            )
             if won
             else Decimal("0.00")
         )
         self.quota_attainment_pct = (
-            (revenue / quota * Decimal(100)).quantize(Decimal("0.01"), ROUND_HALF_UP)
+            min(
+                (revenue / quota * Decimal(100)).quantize(Decimal("0.01"), ROUND_HALF_UP),
+                _MAX_QUOTA_ATTAINMENT_PCT,
+            )
             if quota > 0
             else Decimal("0.00")
         )
