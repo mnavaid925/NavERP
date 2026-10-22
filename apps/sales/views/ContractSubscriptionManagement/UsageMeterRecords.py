@@ -126,7 +126,7 @@ def usage_meter_record_detail(request, pk):
 @transaction.atomic
 def usage_meter_record_edit(request, pk):
     tenant = request.tenant
-    meter = get_object_or_404(UsageMeterRecord.objects.filter(tenant=tenant), pk=pk)
+    meter = get_object_or_404(UsageMeterRecord.objects.filter(tenant=tenant).select_related("subscription"), pk=pk)
     if request.method == "POST":
         form = UsageMeterRecordForm(request.POST, instance=meter, tenant=tenant)
         if form.is_valid():
