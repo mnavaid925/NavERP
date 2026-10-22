@@ -3396,8 +3396,12 @@ class Command(BaseCommand):
             from_stage = to_stage = None
             if scope == "stage_to_stage":
                 for pipeline_stages in _group_by_pipeline(open_stages):
-                    if len(pipeline_stages) >= 2:
-                        from_stage, to_stage = pipeline_stages[0], pipeline_stages[1]
+                    sorted_stages = sorted(pipeline_stages, key=lambda s: s.sequence)
+                    for i in range(len(sorted_stages) - 1):
+                        if sorted_stages[i + 1].sequence > sorted_stages[i].sequence:
+                            from_stage, to_stage = sorted_stages[i], sorted_stages[i + 1]
+                            break
+                    if from_stage and to_stage:
                         break
             FunnelConversionRecord.objects.create(
                 tenant=tenant,
