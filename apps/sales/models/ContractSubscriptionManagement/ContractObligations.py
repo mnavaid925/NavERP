@@ -104,6 +104,7 @@ class ContractObligation(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="sales_obl_ten_status_idx"),
             models.Index(fields=["tenant", "obligation_type"], name="sales_obl_ten_type_idx"),
             models.Index(fields=["tenant", "contract"], name="sales_obl_ten_contract_idx"),
+            models.Index(fields=["tenant", "subscription"], name="sales_obl_ten_sub_idx"),
         ]
 
     def __str__(self):
