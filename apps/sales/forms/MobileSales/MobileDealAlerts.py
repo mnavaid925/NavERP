@@ -45,7 +45,7 @@ class MobileDealAlertForm(TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             self.fields["recipient"].queryset = tenant_users(self.tenant)
-            self.fields["device"].queryset = MobileDeviceSession.objects.filter(tenant=self.tenant)
+            self.fields["device"].queryset = MobileDeviceSession.objects.filter(tenant=self.tenant).select_related("user")
             self.fields["related_opportunity"].queryset = Opportunity.objects.filter(tenant=self.tenant)
             self.fields["related_quote"].queryset = CPQQuote.objects.filter(tenant=self.tenant)
             self.fields["related_route"].queryset = FieldSalesRoute.objects.filter(tenant=self.tenant)
