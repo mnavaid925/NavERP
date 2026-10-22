@@ -155,9 +155,9 @@
   `boards/analytics_console.html:112`, `boards/velocity_console.html:64`, `boards/funnel_console.html:98`, `boards/benchmark_console.html:98` use `alert-triangle`; `repperformancescorecard/list.html:234` uses `user-square-2`.
   *Fix:* Update to canonical names `triangle-alert`, `square-user`, `trending-down`. Fixed — `14a010e2`, `fb9215f1`, `d971138c`, `ee92eeec`, `7e9d9e79` `fix(sales): replace deprecated Lucide icon names with canonical identifiers`.
 
-- [ ] **M8 — Dark mode contrast on raw slate callout containers in detail templates.**
+- [x] **M8 — Dark mode contrast on raw slate callout containers in detail templates.**
   `winlossdebrief/detail.html:177, 186, 195, 204`, `stagevelocityanalysis/detail.html:184, 193`, `repperformancescorecard/detail.html:261, 270, 279, 288`.
-  *Fix:* Add `dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-200`.
+  *Fix:* Add `dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-200`. Fixed — `c4cc614b`, `c06f3817`, `5850c3b4` `fix(sales): add dark mode classes to callout boxes across detail templates`.
 
 - [ ] **M9 — Screen-reader `aria-label` missing on icon-only table action buttons.**
   `winlossdebrief/list.html:196, 205, 211`, `stagevelocityanalysis/list.html:188, 197, 203`, `funnelconversionrecord/list.html:217, 220, 226`, `repperformancescorecard/list.html:207, 216, 222`.
