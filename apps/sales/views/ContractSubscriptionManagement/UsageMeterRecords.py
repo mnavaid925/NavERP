@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -65,6 +66,7 @@ def usage_meter_record_list(request):
 
 
 @login_required
+@transaction.atomic
 def usage_meter_record_create(request):
     tenant = request.tenant
     if request.method == "POST":
@@ -120,6 +122,7 @@ def usage_meter_record_detail(request, pk):
 
 
 @login_required
+@transaction.atomic
 def usage_meter_record_edit(request, pk):
     tenant = request.tenant
     meter = get_object_or_404(UsageMeterRecord.objects.filter(tenant=tenant), pk=pk)
@@ -151,6 +154,7 @@ def usage_meter_record_edit(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def usage_meter_record_delete(request, pk):
     tenant = request.tenant
     meter = get_object_or_404(UsageMeterRecord.objects.filter(tenant=tenant), pk=pk)
@@ -168,6 +172,7 @@ def usage_meter_record_delete(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def usage_meter_record_calculate(request, pk):
     tenant = request.tenant
     meter = get_object_or_404(UsageMeterRecord.objects.filter(tenant=tenant), pk=pk)
@@ -189,6 +194,7 @@ def usage_meter_record_calculate(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def usage_meter_record_invoice(request, pk):
     tenant = request.tenant
     meter = get_object_or_404(UsageMeterRecord.objects.filter(tenant=tenant), pk=pk)
