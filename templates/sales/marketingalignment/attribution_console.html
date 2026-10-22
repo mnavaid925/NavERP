@@ -63,7 +63,7 @@
 </div>
 
 <!-- Headline stats -->
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
     <div class="stat-card">
         <div class="stat-icon blue">
             <i data-lucide="route"></i>
@@ -79,7 +79,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Campaign Spend</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_spend|default:"0.00"|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ stats.total_spend|default:"0.00"|floatformat:2 }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -88,7 +88,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Attributed Revenue</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ stats.total_attributed_revenue|default:"0.00"|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ stats.total_attributed_revenue|default:"0.00"|floatformat:2 }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -99,6 +99,17 @@
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Blended ROI</div>
             <div class="text-2xl font-bold text-slate-900 mt-1">
                 {% if stats.blended_roi_pct is not None %}{{ stats.blended_roi_pct|floatformat:1 }}%{% else %}—{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="target"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Avg Cost / Lead</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {% if stats.avg_cost_per_lead is not None %}{% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ stats.avg_cost_per_lead|floatformat:2 }}{% else %}—{% endif %}
             </div>
         </div>
     </div>
@@ -131,10 +142,10 @@
                             <div class="text-xs text-slate-500 font-mono">{{ row.campaign.number }} · {{ row.touchpoint_count }} touches</div>
                         </td>
                         <td>
-                            <span class="text-slate-700">${{ row.spend|floatformat:2 }}</span>
+                            <span class="text-slate-700">{% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ row.spend|floatformat:2 }}</span>
                         </td>
                         <td>
-                            <span class="font-semibold text-slate-900">${{ row.attributed_revenue|floatformat:2 }}</span>
+                            <span class="font-semibold text-slate-900">{% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ row.attributed_revenue|floatformat:2 }}</span>
                         </td>
                         <td>
                             {% if row.roi_pct is not None %}
@@ -147,13 +158,13 @@
                         </td>
                         <td>
                             {% if row.cost_per_lead is not None %}
-                            <span class="text-slate-700">${{ row.cost_per_lead|floatformat:2 }}</span>
+                            <span class="text-slate-700">{% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ row.cost_per_lead|floatformat:2 }}</span>
                             {% else %}
                             <span class="text-slate-400 text-sm">—</span>
                             {% endif %}
                         </td>
                         <td>
-                            <span class="text-slate-700">${{ row.pipeline_value|floatformat:2 }}</span>
+                            <span class="text-slate-700">{% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ row.pipeline_value|floatformat:2 }}</span>
                         </td>
                         <td>
                             <span class="text-slate-700">{{ row.lead_count }}</span>
@@ -198,13 +209,13 @@
                     <tr>
                         <td>
                             <div class="font-medium text-slate-900">{{ row.label }}</div>
-                            <div class="text-xs text-slate-500">${{ row.cost|floatformat:2 }} cost</div>
+                            <div class="text-xs text-slate-500">{% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ row.cost|floatformat:2 }} cost</div>
                         </td>
                         <td>
                             <span class="text-slate-700">{{ row.touchpoints }}</span>
                         </td>
                         <td>
-                            <span class="font-semibold text-slate-900">${{ row.attributed_revenue|floatformat:2 }}</span>
+                            <span class="font-semibold text-slate-900">{% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ row.attributed_revenue|floatformat:2 }}</span>
                         </td>
                         <td>
                             {% if row.roi_pct is not None %}
@@ -313,7 +324,7 @@
                             <span class="text-slate-700">{{ row.avg_score }}</span>
                         </td>
                         <td>
-                            <span class="font-semibold text-slate-900">${{ row.revenue_attributed|floatformat:2 }}</span>
+                            <span class="font-semibold text-slate-900">{% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ row.revenue_attributed|floatformat:2 }}</span>
                         </td>
                     </tr>
                     {% empty %}
@@ -369,7 +380,7 @@
                         </td>
                         <td>
                             {% if row.revenue_per_registrant is not None %}
-                            <span class="text-slate-700">${{ row.revenue_per_registrant|floatformat:2 }}</span>
+                            <span class="text-slate-700">{% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ row.revenue_per_registrant|floatformat:2 }}</span>
                             {% else %}
                             <span class="text-slate-400 text-sm">—</span>
                             {% endif %}
