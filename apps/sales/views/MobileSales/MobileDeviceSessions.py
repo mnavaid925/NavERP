@@ -116,6 +116,10 @@ def mobile_device_session_create(request):
 def mobile_device_session_edit(request, pk):
     tenant = request.tenant
     device = get_object_or_404(MobileDeviceSession.objects.filter(tenant=tenant), pk=pk)
+    is_admin = bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))
+    if device.user != request.user and not is_admin:
+        messages.error(request, "Only the device owner or a tenant administrator may edit this mobile device.")
+        return redirect("sales:mobile_device_session_detail", pk=device.pk)
 
     if request.method == "POST":
         form = MobileDeviceSessionForm(request.POST, instance=device, tenant=tenant)
@@ -146,6 +150,10 @@ def mobile_device_session_edit(request, pk):
 def mobile_device_session_delete(request, pk):
     tenant = request.tenant
     device = get_object_or_404(MobileDeviceSession.objects.filter(tenant=tenant), pk=pk)
+    is_admin = bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))
+    if device.user != request.user and not is_admin:
+        messages.error(request, "Only the device owner or a tenant administrator may delete this mobile device.")
+        return redirect("sales:mobile_device_session_list")
     name = device.device_name
     write_audit_log(
         request.user,
