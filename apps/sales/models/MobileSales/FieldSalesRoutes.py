@@ -87,6 +87,18 @@ class FieldSalesRoute(TenantNumbered):
         if self.completed_stops > self.total_stops:
             raise ValidationError({"completed_stops": "Completed stops cannot exceed total stops."})
 
+        if self.planned_distance_km is not None and self.planned_distance_km < 0:
+            raise ValidationError({"planned_distance_km": "Planned distance cannot be negative."})
+
+        if self.actual_distance_km is not None and self.actual_distance_km < 0:
+            raise ValidationError({"actual_distance_km": "Actual distance cannot be negative."})
+
+        if self.estimated_duration_minutes is not None and self.estimated_duration_minutes < 0:
+            raise ValidationError({"estimated_duration_minutes": "Estimated duration cannot be negative."})
+
+        if self.actual_duration_minutes is not None and self.actual_duration_minutes < 0:
+            raise ValidationError({"actual_duration_minutes": "Actual duration cannot be negative."})
+
         if self.sales_rep_id and self.tenant_id:
             rep_tenant_id = getattr(self.sales_rep, "tenant_id", None)
             if rep_tenant_id and rep_tenant_id != self.tenant_id:
