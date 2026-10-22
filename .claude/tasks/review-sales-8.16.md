@@ -65,3 +65,17 @@
 - [ ] **M8** (`apps/sales/views/MobileSales/MobileSalesDashboards.py:20-25`): Multiple database round-trips for daily route aggregates. Combine into a single `.aggregate()` call.
 - [ ] **M9** (`apps/sales/views/MobileSales/MobileSalesDashboards.py:27-29`): `check_in_at__date=today` lookup prevents index seek. Use datetime range bounds `check_in_at__gte` and `check_in_at__lt`.
 - [ ] **M10** (`templates/sales/mobilesales/fieldsalesroute/detail.html:173`, `mobiledevicesession/detail.html:166`): Redundant `.count()` query before iterating stops/alerts; use `|length`.
+
+---
+
+## Pass 5: qa-smoke-tester
+
+### Critical
+*(None)*
+
+### Important
+- [ ] **I10** (`apps/sales/forms/MobileSales/FieldSalesRoutes.py:14-31` & `apps/sales/models/MobileSales/FieldSalesRoutes.py:53-60`): Execution metrics (`actual_distance_km`, `actual_duration_minutes`, `planned_distance_km`, `estimated_duration_minutes`) default to 0 on model but lack `blank=True` or `required=False` on create form. Make them `required=False` in `FieldSalesRouteForm`.
+- [ ] **I11** (`apps/sales/forms/MobileSales/*.py`): Defaulted technical fields (`geofence_radius_m`, `verification_status` in `FieldCheckInForm`; `last_sync_status` in `MobileDeviceSessionForm`; `urgency` in `MobileDealAlertForm`) lack `required=False` in forms, rejecting quick creation payloads when omitted.
+
+### Minor
+- [ ] **M11** (`templates/sales/mobilesales/dashboard/mobile_sales_dashboard.html:16-17`): Console header title is "Field Sales & Mobile Execution" while navigation is "Mobile Sales". Align terminology to "Mobile Sales Console".
