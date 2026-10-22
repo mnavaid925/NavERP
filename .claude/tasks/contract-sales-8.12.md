@@ -407,8 +407,13 @@ FUNNEL_SCOPE_CHOICES = [
   "benchmark_pct", "benchmark_source", "benchmark_as_of", "segment", "notes"]`
 - `Meta.exclude` = `["conversion_rate_pct", "dropoff_count"]` (belt-and-braces; they are `editable=False`).
 - `clean()`: `_reject_foreign(self, cleaned_data, ["from_stage", "to_stage", "territory", "owner"])`.
-- `clean()` also re-checks `converted_count <= entered_count` with a friendly message (the model's
-  `clean()` is not called by a ModelForm, so the form must enforce it).
+- `clean()` also re-checks `converted_count <= entered_count` with a friendly message. ⚠ **Correction
+  (reviewer 1, M3):** the original wording here claimed "the model's `clean()` is not called by a
+  ModelForm, so the form must enforce it" — that premise is **wrong** for Django 5.1. `ModelForm._post_clean`
+  calls `self.instance.full_clean(exclude=exclude, validate_unique=False)` (`django/forms/models.py:498`)
+  and `Model.full_clean` calls `self.clean()` (`django/db/models/base.py:1626`), so the model's `clean()`
+  **is** invoked. The form-level re-check is therefore **defence in depth**, not the only enforcement —
+  the model rule must stay, and the form message is there to surface it on the field the user edited.
 
 ### 3.3 Views — `apps/sales/views/SalesAnalytics/FunnelConversionRecords.py`
 | View function | URL name |
@@ -534,6 +539,14 @@ SCORECARD_STATUS_CHOICES = [
   self.goal_gap_value = (quota - revenue).quantize(Decimal("0.01"), ROUND_HALF_UP)
   ```
   `goal_gap_value` is **negative when the target is exceeded** — that is the intended sign (gap = target − actual).
+  ⚠ **Clamping (reviewer 1, I1):** `average_deal_size` is `DECIMAL(14,2)` (max 999999999999.99) and
+  `quota_attainment_pct` is `DECIMAL(6,2)` (max 9999.99), but both are **ratios of two user-editable
+  fields** — `quota_target` may legally be `0.01`, which yields an attainment of 1,000,000%. Because
+  these derived fields are `editable=False`, Django's ModelForm **excludes** them from model validation,
+  so the `DecimalValidator` never runs and the value would reach the database unclamped — silently
+  truncated by this project's **non-strict** MariaDB, or a `DataError` → 500 on a strict-mode host.
+  `save()` therefore **clamps** both with `min(computed, _MAX_…)` against the module-level
+  `_MAX_AVERAGE_DEAL_SIZE` / `_MAX_QUOTA_ATTAINMENT_PCT` constants.
 - `clean()`: tenant checks for `rep`, `territory`, `manager`, `forecast_period`, `quota_plan`, `coaching_scorecard`;
   `period_end >= period_start`; `opportunities_won + opportunities_lost` need not be bounded.
 - `Meta.ordering = ["-period_end", "-period_start", "rep"]`
