@@ -72,6 +72,18 @@ class FieldCheckInForm(TenantModelForm):
             self.fields["sales_rep"].queryset = tenant_users(self.tenant)
             self.fields["photo_document"].queryset = Document.objects.filter(tenant=self.tenant)
             self.fields["resulting_quote"].queryset = CPQQuote.objects.filter(tenant=self.tenant)
+        if "geofence_radius_m" in self.fields:
+            self.fields["geofence_radius_m"].required = False
+        if "verification_status" in self.fields:
+            self.fields["verification_status"].required = False
+
+    def clean_geofence_radius_m(self):
+        val = self.cleaned_data.get("geofence_radius_m")
+        return val if val is not None else 150
+
+    def clean_verification_status(self):
+        val = self.cleaned_data.get("verification_status")
+        return val if val else "verified"
 
 
 class FieldCheckOutForm(forms.ModelForm):
