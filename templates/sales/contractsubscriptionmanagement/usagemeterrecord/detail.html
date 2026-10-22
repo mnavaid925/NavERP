@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}{{ usage_record.number }} — {{ usage_record.meter_name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:usage_meter_record_list' %}">Usage Meters</a>
+            <span>/</span>
+            <span>{{ usage_record.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ usage_record.meter_name }}</h1>
+            {% if usage_record.status == 'invoiced' %}
+            <span class="badge badge-green">Invoiced</span>
+            {% elif usage_record.status == 'calculated' %}
+            <span class="badge badge-info">Calculated</span>
+            {% elif usage_record.status == 'disputed' %}
+            <span class="badge badge-red">Disputed</span>
+            {% else %}
+            <span class="badge badge-slate">Metering</span>
+            {% endif %}
+            <span class="text-xs text-slate-500 font-mono">{{ usage_record.number }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:usage_meter_record_edit' usage_record.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+
+        {% if usage_record.status != 'invoiced' %}
+        <form method="post" action="{% url 'sales:usage_meter_record_calculate' usage_record.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="calculator"></i>
+                <span>Re-Calculate Overages</span>
+            </button>
+        </form>
+
+        <form method="post" action="{% url 'sales:usage_meter_record_invoice' usage_record.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" onclick="return confirm('Post this overage charge to billing invoice?');">
+                <i data-lucide="check-circle"></i>
+                <span>Mark Invoiced</span>
+            </button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'sales:usage_meter_record_delete' usage_record.pk %}" class="inline" onsubmit="return confirm('Delete usage record {{ usage_record.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Consumption Breakdown Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Consumption & Allowance Breakdown</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                        <div class="text-xs text-slate-500">Metric Name</div>
+                        <div class="font-medium text-slate-800 mt-1">{{ usage_record.meter_name }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Unit of Measure</div>
+                        <div class="font-medium text-slate-800 mt-1">{{ usage_record.unit_of_measure }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Billing Period</div>
+                        <div class="font-medium text-slate-800 mt-1">
+                            {{ usage_record.billing_period_start|date:"M d" }} — {{ usage_record.billing_period_end|date:"M d, Y" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Included Allowance</div>
+                        <div class="font-bold text-slate-800 mt-1 text-base">
+                            {{ usage_record.included_allowance|floatformat:2 }} {{ usage_record.unit_of_measure }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Reported Consumption</div>
+                        <div class="font-bold text-blue-700 mt-1 text-base">
+                            {{ usage_record.reported_usage|floatformat:2 }} {{ usage_record.unit_of_measure }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Billable Overage Units</div>
+                        <div class="font-bold text-red-600 mt-1 text-base">
+                            {{ usage_record.billable_overage_units|floatformat:2 }} {{ usage_record.unit_of_measure }}
+                        </div>
+                    </div>
+                </div>
+
+                {% if usage_record.notes %}
+                <div class="mt-6 pt-4 border-t">
+                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Operational Notes</h4>
+                    <div class="p-3 bg-slate-50 rounded text-xs text-slate-700 whitespace-pre-wrap">{{ usage_record.notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Financial Calculation Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Financial Overage Assessment</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                        <div class="text-xs text-slate-500">Overage Unit Rate</div>
+                        <div class="font-medium text-slate-800 mt-1">
+                            ${{ usage_record.overage_unit_price|floatformat:4 }} / {{ usage_record.unit_of_measure }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Total Calculated Charge</div>
+                        <div class="font-bold text-slate-900 mt-1 text-xl text-green-700">
+                            ${{ usage_record.overage_total_charge|floatformat:2 }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Invoiced Timestamp</div>
+                        <div class="font-medium text-slate-800 mt-1">
+                            {% if usage_record.invoiced_at %}
+                            {{ usage_record.invoiced_at|date:"M d, Y H:i" }}
+                            {% else %}
+                            <span class="text-slate-400">Not Invoiced</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Column -->
+    <div class="space-y-6">
+        <!-- Linked Subscription Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Subscription Anchor</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-slate-500">Customer Subscription</div>
+                    <div class="mt-1 font-medium">
+                        {% if usage_record.subscription %}
+                        <a href="{% url 'sales:customer_subscription_detail' usage_record.subscription.pk %}" class="text-blue-600 hover:underline">
+                            {{ usage_record.subscription.number }} — {{ usage_record.subscription.subscription_name }}
+                        </a>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Customer Account</div>
+                    <div class="font-medium text-slate-800 mt-1">
+                        {% if usage_record.subscription.account %}
+                        {{ usage_record.subscription.account.name }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Plan Code</div>
+                    <div class="font-mono text-slate-800 mt-1">{{ usage_record.subscription.plan_code }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
