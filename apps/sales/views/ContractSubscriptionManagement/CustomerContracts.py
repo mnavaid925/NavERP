@@ -210,12 +210,12 @@ def customer_contract_generate_renewal_quote(request, pk):
     quote = CPQQuote.objects.create(
         tenant=tenant,
         account=contract.account,
-        title=f"Renewal Quote for {contract.title}",
+        name=f"Renewal Quote for {contract.title}",
         status="draft",
         owner=contract.owner or request.user,
         currency=contract.currency,
         subtotal=renewal_amount,
-        grand_total=renewal_amount,
+        total=renewal_amount,
         valid_until=timezone.localdate() + timedelta(days=contract.notice_period_days or 30),
         terms_and_conditions=f"Automated renewal quote with {contract.price_uplift_pct}% contractual uplift.",
     )
