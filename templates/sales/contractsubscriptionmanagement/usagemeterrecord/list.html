@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Usage Meter Records — Sales — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:contract_subscription_workspace' %}">Contracts & Subscriptions</a>
+            <span>/</span>
+            <span>Usage Meters</span>
+        </div>
+        <h1 class="page-title">Usage Meter Records</h1>
+        <p class="text-sm text-slate-500 mt-1">Track consumption cycles, included base allowances, and calculated overages.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:usage_meter_record_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Log Meter Record</span>
+        </a>
+    </div>
+</div>
+
+<!-- KPI Stats -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Unbilled / Active Cycles</div>
+            <div class="text-2xl font-bold text-slate-800">{{ unbilled_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Calculated Overage Total</div>
+            <div class="text-2xl font-bold text-slate-800">${{ total_overage_charge|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="layers"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total In Registry</div>
+            <div class="text-2xl font-bold text-slate-800">{{ page_obj.paginator.count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div class="form-group mb-0">
+                <input type="text" name="q" value="{{ request.GET.q|default:'' }}" placeholder="Search metric name or number..." class="form-input text-sm">
+            </div>
+            <div class="form-group mb-0">
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="subscription" class="form-select text-sm">
+                    <option value="">All Subscriptions</option>
+                    {% for sub in filter_form.fields.subscription.queryset %}
+                    <option value="{{ sub.pk }}" {% if request.GET.subscription == sub.pk|stringformat:"d" %}selected{% endif %}>{{ sub.subscription_name }} ({{ sub.number }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary text-sm flex-1">Filter</button>
+                <a href="{% url 'sales:usage_meter_record_list' %}" class="btn btn-outline text-sm">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Usage Records Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Metric & Subscription</th>
+                    <th>Billing Period</th>
+                    <th>Allowance</th>
+                    <th>Reported</th>
+                    <th>Billable Overage</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in usage_records %}
+                <tr>
+                    <td class="font-semibold text-slate-800">
+                        <a href="{% url 'sales:usage_meter_record_detail' u.pk %}" class="text-blue-600 hover:underline">
+                            {{ u.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ u.meter_name }}</div>
+                        <div class="text-xs text-slate-500">
+                            {% if u.subscription %}
+                            {{ u.subscription.subscription_name }}
+                            {% if u.subscription.account %}· {{ u.subscription.account.name }}{% endif %}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ u.billing_period_start|date:"M d" }} — {{ u.billing_period_end|date:"M d, Y" }}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ u.included_allowance|floatformat:2 }} {{ u.unit_of_measure }}
+                    </td>
+                    <td class="text-xs text-slate-800 font-medium">
+                        {{ u.reported_usage|floatformat:2 }} {{ u.unit_of_measure }}
+                    </td>
+                    <td>
+                        <div class="font-semibold text-slate-800">${{ u.overage_total_charge|floatformat:2 }}</div>
+                        <div class="text-xs text-slate-500">{{ u.billable_overage_units|floatformat:2 }} overage units</div>
+                    </td>
+                    <td>
+                        {% if u.status == 'invoiced' %}
+                        <span class="badge badge-green">Invoiced</span>
+                        {% elif u.status == 'calculated' %}
+                        <span class="badge badge-info">Calculated</span>
+                        {% elif u.status == 'disputed' %}
+                        <span class="badge badge-red">Disputed</span>
+                        {% else %}
+                        <span class="badge badge-slate">Metering</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'sales:usage_meter_record_detail' u.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:usage_meter_record_edit' u.pk %}" class="btn btn-icon" title="Edit Record">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'sales:usage_meter_record_delete' u.pk %}" class="inline" onsubmit="return confirm('Delete usage record {{ u.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="activity" class="mx-auto h-10 w-10 text-slate-300 mb-2"></i>
+                            <h3 class="text-base font-medium text-slate-700">No usage records found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Log metered consumption to calculate overage billings.</p>
+                            <a href="{% url 'sales:usage_meter_record_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Log Meter Record</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer flex justify-between items-center text-sm text-slate-500 px-4 py-3 border-t">
+        <div>
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} records
+        </div>
+        <div class="pagination flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
+            {% else %}
+            <span class="btn btn-outline text-xs px-2 py-1 opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-2 py-1 text-xs text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
+            {% else %}
+            <span class="btn btn-outline text-xs px-2 py-1 opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
