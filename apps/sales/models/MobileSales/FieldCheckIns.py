@@ -179,6 +179,11 @@ class FieldCheckIn(TenantNumbered):
         if self.check_in_lng is not None and not (-180 <= float(self.check_in_lng) <= 180):
             raise ValidationError({"check_in_lng": "Longitude must be between -180 and 180 degrees."})
 
+        if self.check_out_lat is not None and not (-90 <= float(self.check_out_lat) <= 90):
+            raise ValidationError({"check_out_lat": "Departure latitude must be between -90 and 90 degrees."})
+        if self.check_out_lng is not None and not (-180 <= float(self.check_out_lng) <= 180):
+            raise ValidationError({"check_out_lng": "Departure longitude must be between -180 and 180 degrees."})
+
         if self.check_out_at and self.check_in_at and self.check_out_at < self.check_in_at:
             raise ValidationError({"check_out_at": "Check-out time cannot precede check-in time."})
 
