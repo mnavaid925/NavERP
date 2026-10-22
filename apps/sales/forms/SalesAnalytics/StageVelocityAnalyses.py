@@ -53,6 +53,11 @@ class StageVelocityAnalysisForm(TenantUniqueMixin, TenantModelForm):
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "pipeline_stage" in self.fields:
+            self.fields["pipeline_stage"].queryset = self.fields["pipeline_stage"].queryset.select_related("pipeline")
+
     def clean_pipeline_stage(self, value):
         """The stage must belong to the chosen pipeline.
 
