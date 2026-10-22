@@ -91,9 +91,9 @@
   `apps/sales/management/commands/seed_sales.py:3313-3333`. `idx == 0` (median 4 days) is flagged as bottleneck while `idx == 2` (median 16 days) is not.
   *Fix:* Flag the slowest stage (`idx == 2` or `idx == len - 1`) as bottleneck. Fixed — `8c0954de0` by setting `median_days = Decimal(16 - idx * 6)` so the first stage (`idx == 0`) is the slowest (16 days) and matches `is_bottleneck=True`.
 
-- [ ] **I5 — Missing `@tenant_admin_required` on mutating views (`create` and `edit`).**
+- [x] **I5 — Missing `@tenant_admin_required` on mutating views (`create` and `edit`).**
   `WinLossDebriefs.py:154, 179`, `StageVelocityAnalyses.py:115, 140`, `FunnelConversionRecords.py:143, 168`, `RepPerformanceScorecards.py:157, 182`. All 4 `create` and `edit` views use `@login_required` instead of `@tenant_admin_required`.
-  *Fix:* Apply `@tenant_admin_required` decorator to all 8 create and edit views.
+  *Fix:* Apply `@tenant_admin_required` decorator to all 8 create and edit views. Fixed — `113219b7`, `6d785c18`, `aff71c66`, `15635035` `fix(sales): require tenant_admin_required on create and edit views across SalesAnalytics`.
 
 - [ ] **I6 — Empty badge pill rendered via non-existent `get_is_bottleneck_display` on `BooleanField` in templates.**
   `templates/sales/salesanalytics/stagevelocityanalysis/list.html:184`, `detail.html:23, 146, 252`. `is_bottleneck` is `models.BooleanField(default=False)` without choices. `{{ analysis.get_is_bottleneck_display }}` evaluates to `""`, rendering an empty badge `<span class="badge badge-muted"></span>`.
