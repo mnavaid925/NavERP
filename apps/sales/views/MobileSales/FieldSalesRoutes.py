@@ -2,6 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -78,6 +79,7 @@ def field_sales_route_detail(request, pk):
 
 
 @login_required
+@transaction.atomic
 def field_sales_route_create(request):
     tenant = request.tenant
     if request.method == "POST":
@@ -106,6 +108,7 @@ def field_sales_route_create(request):
 
 
 @login_required
+@transaction.atomic
 def field_sales_route_edit(request, pk):
     tenant = request.tenant
     route = get_object_or_404(FieldSalesRoute.objects.filter(tenant=tenant), pk=pk)
@@ -135,6 +138,7 @@ def field_sales_route_edit(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def field_sales_route_delete(request, pk):
     tenant = request.tenant
     route = get_object_or_404(FieldSalesRoute.objects.filter(tenant=tenant), pk=pk)
@@ -152,6 +156,7 @@ def field_sales_route_delete(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def field_sales_route_optimize(request, pk):
     tenant = request.tenant
     route = get_object_or_404(FieldSalesRoute.objects.filter(tenant=tenant), pk=pk)
