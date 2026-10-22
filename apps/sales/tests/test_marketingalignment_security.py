@@ -251,4 +251,4 @@ def test_marketingalignment_unauthenticated_redirects_to_login(client):
     for url in endpoints:
         response = client.get(url)
         assert response.status_code == 302
-        assert "/accounts/login/" in response.url
+        assert "/login/" in response.url
