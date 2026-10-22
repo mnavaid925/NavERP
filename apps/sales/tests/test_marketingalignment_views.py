@@ -1,7 +1,7 @@
 """Sales 8.13 Marketing Alignment & Attribution — View tests.
 
-Verifies all 6 entity controllers, CRUD flows, actions, filtering, search,
-pagination, and attribution console analytics calculations.
+Verifies all 6 entity controllers, CRUD flows, status transitions, filtering,
+search, pagination, and attribution console analytics calculations.
 """
 from decimal import Decimal
 import pytest
@@ -35,11 +35,11 @@ def test_marketingalignment_console_view_get_default(
     url = reverse("sales:marketing_attribution_console")
     response = client_a.get(url)
     assert response.status_code == 200
-    assert "selected_model" in response.context
-    assert response.context["selected_model"] == "all"
-    assert "total_touchpoints" in response.context
-    assert "total_attributed_revenue" in response.context
-    assert "overall_roas" in response.context
+    assert "active_model" in response.context
+    assert response.context["active_model"] == "first_touch"
+    assert "stats" in response.context
+    assert "total_touchpoints" in response.context["stats"]
+    assert "total_attributed_revenue" in response.context["stats"]
 
 
 @pytest.mark.django_db
@@ -47,10 +47,10 @@ def test_marketingalignment_console_view_filter_model(
     client_a, ma_touchpoint_a, ma_attribution_a
 ):
     url = reverse("sales:marketing_attribution_console")
-    response = client_a.get(url, {"model": "first_touch"})
+    response = client_a.get(url, {"model": "linear"})
     assert response.status_code == 200
-    assert response.context["selected_model"] == "first_touch"
-    assert response.context["model_display"] == "First Touch (100% first)"
+    assert response.context["active_model"] == "linear"
+    assert response.context["active_model_label"] == "Linear (Equal credit)"
 
 
 # ==============================================================================
@@ -82,7 +82,7 @@ def test_marketingalignment_touchpoint_detail_view(client_a, ma_touchpoint_a):
     url = reverse("sales:attribution_touchpoint_detail", kwargs={"pk": ma_touchpoint_a.pk})
     response = client_a.get(url)
     assert response.status_code == 200
-    assert response.context["touchpoint"].pk == ma_touchpoint_a.pk
+    assert response.context["obj"].pk == ma_touchpoint_a.pk
 
 
 @pytest.mark.django_db
@@ -139,9 +139,9 @@ def test_marketingalignment_touchpoint_edit_view_get_and_post(client_a, ma_touch
 @pytest.mark.django_db
 def test_marketingalignment_touchpoint_delete_view(client_a, ma_touchpoint_a):
     url = reverse("sales:attribution_touchpoint_delete", kwargs={"pk": ma_touchpoint_a.pk})
-    # GET redirects to detail without deleting
+    # GET rejected by require_POST (405)
     resp_get = client_a.get(url)
-    assert resp_get.status_code == 302
+    assert resp_get.status_code == 405
     assert AttributionTouchpoint.objects.filter(pk=ma_touchpoint_a.pk).exists()
 
     # POST deletes
@@ -173,7 +173,7 @@ def test_marketingalignment_campaign_attribution_detail_view(client_a, ma_attrib
     url = reverse("sales:campaign_attribution_detail", kwargs={"pk": ma_attribution_a.pk})
     response = client_a.get(url)
     assert response.status_code == 200
-    assert response.context["attribution"].pk == ma_attribution_a.pk
+    assert response.context["obj"].pk == ma_attribution_a.pk
 
 
 @pytest.mark.django_db
@@ -245,7 +245,7 @@ def test_marketingalignment_mql_handoff_detail_view(client_a, ma_handoff_a):
     url = reverse("sales:mql_handoff_detail", kwargs={"pk": ma_handoff_a.pk})
     response = client_a.get(url)
     assert response.status_code == 200
-    assert response.context["handoff"].pk == ma_handoff_a.pk
+    assert response.context["obj"].pk == ma_handoff_a.pk
 
 
 @pytest.mark.django_db
@@ -259,7 +259,7 @@ def test_marketingalignment_mql_handoff_create_and_edit_view(
         "account": ma_customer_a.pk,
         "owner": admin_user.pk,
         "assigned_to": admin_user.pk,
-        "source_kind": "demo_request",
+        "source_kind": "inbound",
         "handoff_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         "sla_due_at": (now + timezone.timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S"),
         "lead_score": 92,
@@ -269,7 +269,7 @@ def test_marketingalignment_mql_handoff_create_and_edit_view(
     resp_create = client_a.post(create_url, post_data)
     assert resp_create.status_code == 302
     created = MqlHandoff.objects.latest("created_at")
-    assert created.source_kind == "demo_request"
+    assert created.source_kind == "inbound"
     assert created.status == "pending"
 
     edit_url = reverse("sales:mql_handoff_edit", kwargs={"pk": created.pk})
@@ -279,7 +279,7 @@ def test_marketingalignment_mql_handoff_create_and_edit_view(
         "owner": admin_user.pk,
         "assigned_to": admin_user.pk,
         "status": "pending",
-        "source_kind": "demo_request",
+        "source_kind": "inbound",
         "handoff_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         "sla_due_at": (now + timezone.timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S"),
         "lead_score": 95,
@@ -302,23 +302,54 @@ def test_marketingalignment_mql_handoff_delete_view(client_a, ma_handoff_a):
 
 
 @pytest.mark.django_db
-def test_marketingalignment_mql_handoff_accept_and_reject_actions(client_a, ma_handoff_a):
-    # Accept action
-    accept_url = reverse("sales:mql_handoff_accept", kwargs={"pk": ma_handoff_a.pk})
-    resp_acc = client_a.post(accept_url, {"acceptance_reason": "High quality demo lead"})
+def test_marketingalignment_mql_handoff_accept_and_reject_transitions(
+    client_a, ma_handoff_a, ma_lead_a, ma_customer_a, admin_user, ma_currency
+):
+    now = timezone.now()
+    edit_url = reverse("sales:mql_handoff_edit", kwargs={"pk": ma_handoff_a.pk})
+
+    # Transition to accepted
+    post_accept = {
+        "lead": ma_lead_a.pk,
+        "account": ma_customer_a.pk,
+        "owner": admin_user.pk,
+        "assigned_to": admin_user.pk,
+        "status": "accepted",
+        "source_kind": ma_handoff_a.source_kind,
+        "handoff_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "sla_due_at": (now + timezone.timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S"),
+        "lead_score": ma_handoff_a.lead_score,
+        "estimated_value": str(ma_handoff_a.estimated_value),
+        "currency": ma_currency.pk,
+        "acceptance_reason": "High quality enterprise lead",
+    }
+    resp_acc = client_a.post(edit_url, post_accept)
     assert resp_acc.status_code == 302
     ma_handoff_a.refresh_from_db()
     assert ma_handoff_a.status == "accepted"
-    assert ma_handoff_a.acceptance_reason == "High quality demo lead"
+    assert ma_handoff_a.acceptance_reason == "High quality enterprise lead"
     assert ma_handoff_a.responded_at is not None
 
-    # Reject action
-    reject_url = reverse("sales:mql_handoff_reject", kwargs={"pk": ma_handoff_a.pk})
-    resp_rej = client_a.post(reject_url, {"rejection_reason": "No budget in current fiscal"})
+    # Transition to rejected with reason
+    post_reject = {
+        "lead": ma_lead_a.pk,
+        "account": ma_customer_a.pk,
+        "owner": admin_user.pk,
+        "assigned_to": admin_user.pk,
+        "status": "rejected",
+        "source_kind": ma_handoff_a.source_kind,
+        "handoff_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "sla_due_at": (now + timezone.timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S"),
+        "lead_score": ma_handoff_a.lead_score,
+        "estimated_value": str(ma_handoff_a.estimated_value),
+        "currency": ma_currency.pk,
+        "rejection_reason": "Budget already fully committed",
+    }
+    resp_rej = client_a.post(edit_url, post_reject)
     assert resp_rej.status_code == 302
     ma_handoff_a.refresh_from_db()
     assert ma_handoff_a.status == "rejected"
-    assert ma_handoff_a.rejection_reason == "No budget in current fiscal"
+    assert ma_handoff_a.rejection_reason == "Budget already fully committed"
 
 
 # ==============================================================================
@@ -331,7 +362,7 @@ def test_marketingalignment_content_engagement_list_view(client_a, ma_engagement
     response = client_a.get(url)
     assert response.status_code == 200
     assert "engagements" in response.context
-    assert "type_choices" in response.context
+    assert "engagement_type_choices" in response.context
     assert "channel_choices" in response.context
 
 
@@ -340,7 +371,7 @@ def test_marketingalignment_content_engagement_detail_view(client_a, ma_engageme
     url = reverse("sales:content_engagement_detail", kwargs={"pk": ma_engagement_a.pk})
     response = client_a.get(url)
     assert response.status_code == 200
-    assert response.context["engagement"].pk == ma_engagement_a.pk
+    assert response.context["obj"].pk == ma_engagement_a.pk
 
 
 @pytest.mark.django_db
@@ -406,7 +437,7 @@ def test_marketingalignment_marketing_event_detail_view(client_a, ma_event_a):
     url = reverse("sales:marketing_event_detail", kwargs={"pk": ma_event_a.pk})
     response = client_a.get(url)
     assert response.status_code == 200
-    assert response.context["event"].pk == ma_event_a.pk
+    assert response.context["obj"].pk == ma_event_a.pk
     assert "registrations_count" in response.context
 
 
@@ -487,9 +518,11 @@ def test_marketingalignment_marketing_event_registrations_and_attendee_crud(
     reg = EventRegistration.objects.get(registrant_name="Helena Ravenclaw")
 
     # Edit attendee (mark attended)
-    edit_url = reverse("sales:marketing_event_registration_edit", kwargs={"pk": reg.pk})
+    edit_url = reverse(
+        "sales:marketing_event_registration_edit",
+        kwargs={"pk": ma_event_a.pk, "registration_pk": reg.pk},
+    )
     post_reg_edit = {
-        "event": ma_event_a.pk,
         "lead": ma_lead_a.pk,
         "registrant_name": "Helena Ravenclaw",
         "registrant_email": "helena@ravenclaw.example",
@@ -507,7 +540,10 @@ def test_marketingalignment_marketing_event_registrations_and_attendee_crud(
     assert reg.attended_at is not None
 
     # Delete attendee
-    del_url = reverse("sales:marketing_event_registration_delete", kwargs={"pk": reg.pk})
+    del_url = reverse(
+        "sales:marketing_event_registration_delete",
+        kwargs={"pk": ma_event_a.pk, "registration_pk": reg.pk},
+    )
     resp_reg_del = client_a.post(del_url)
     assert resp_reg_del.status_code == 302
     assert not EventRegistration.objects.filter(pk=reg.pk).exists()
