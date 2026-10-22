@@ -146,8 +146,8 @@
                     <div class="pt-2 border-t border-slate-100">
                         <span class="text-xs text-slate-400 uppercase tracking-wider block">Push Notification Token</span>
                         {% if device.push_token %}
-                            <span class="font-mono text-slate-600 text-xs break-all block mt-1 bg-slate-50 p-2 rounded border border-slate-100">
-                                {{ device.push_token|truncatechars:60 }}
+                            <span class="font-mono text-slate-600 text-xs break-all block mt-1 bg-slate-50 p-2 rounded border border-slate-100" title="Masked for security">
+                                {{ device.push_token|slice:":8" }}••••••••••••{{ device.push_token|slice:"-6:" }}
                             </span>
                         {% else %}
                             <span class="text-slate-400 text-xs">— No push token registered —</span>
