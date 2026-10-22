@@ -163,9 +163,9 @@
   `winlossdebrief/list.html:196, 205, 211`, `stagevelocityanalysis/list.html:188, 197, 203`, `funnelconversionrecord/list.html:217, 220, 226`, `repperformancescorecard/list.html:207, 216, 222`.
   *Fix:* Add `aria-label` matching `title`. Fixed — `a5f7b354`, `0d372e01`, `b5c30141`, `b8827cb3` `fix(sales): add aria-label matching title to icon action buttons across list templates`.
 
-- [ ] **M10 — `_relation_belongs_to_tenant` duplicated across model modules.**
+- [x] **M10 — `_relation_belongs_to_tenant` duplicated across model modules.**
   `WinLossDebriefs.py:152`, `StageVelocityAnalyses.py:131`, `FunnelConversionRecords.py:127`, `RepPerformanceScorecards.py:273`.
-  *Fix:* Maintainability only; consistent with house convention. Note in code.
+  *Fix:* Maintainability only; consistent with house convention. Note in code. Fixed — documented in docstrings across all four model modules per house convention.
 
 - [ ] **M11 — The contract's stated premise about `Model.clean()` for Django 5.1.**
   `.claude/tasks/contract-sales-8.12.md:410-411`. `ModelForm._post_clean` calls `full_clean()`, which calls `Model.clean()`.
