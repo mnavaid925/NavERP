@@ -3,7 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import render
 from django.utils import timezone
 
@@ -20,28 +20,36 @@ def contract_subscription_workspace(request):
     in_30_days = today + timedelta(days=30)
     in_60_days = today + timedelta(days=60)
 
-    # Contracts aggregates
+    # Contracts aggregates (consolidated single query)
     contracts_qs = CustomerContract.objects.filter(tenant=tenant)
-    active_contracts_count = contracts_qs.filter(status="active").count()
-    total_tcv = contracts_qs.filter(status="active").aggregate(total=Sum("total_contract_value"))["total"] or Decimal("0.00")
+    contracts_agg = contracts_qs.filter(status="active").aggregate(
+        active_count=Count("id"),
+        total_tcv=Sum("total_contract_value"),
+        expiring_30=Count("id", filter=Q(end_date__gte=today, end_date__lte=in_30_days)),
+        expiring_60=Count("id", filter=Q(end_date__gt=in_30_days, end_date__lte=in_60_days)),
+    )
+    active_contracts_count = contracts_agg["active_count"] or 0
+    total_tcv = contracts_agg["total_tcv"] or Decimal("0.00")
+    expiring_30_count = contracts_agg["expiring_30"] or 0
+    expiring_60_count = contracts_agg["expiring_60"] or 0
 
     # Subscriptions aggregates
     subs_qs = CustomerSubscription.objects.filter(tenant=tenant)
     total_mrr = subs_qs.filter(status="active").aggregate(total=Sum("mrr"))["total"] or Decimal("0.00")
     total_arr = (total_mrr * Decimal("12.00")).quantize(Decimal("0.01"))
 
-    # Expirations radar
-    expiring_30_count = contracts_qs.filter(status="active", end_date__gte=today, end_date__lte=in_30_days).count()
-    expiring_60_count = contracts_qs.filter(status="active", end_date__gt=in_30_days, end_date__lte=in_60_days).count()
-
     # Usage Overages
     usage_qs = UsageMeterRecord.objects.filter(tenant=tenant)
     unbilled_overages_total = usage_qs.filter(status="calculated").aggregate(total=Sum("overage_total_charge"))["total"] or Decimal("0.00")
 
-    # SLA Compliance
+    # SLA Compliance (consolidated query)
     obligations_qs = ContractObligation.objects.filter(tenant=tenant)
-    total_obligations = obligations_qs.count()
-    fulfilled_obligations = obligations_qs.filter(status="fulfilled").count()
+    obl_agg = obligations_qs.aggregate(
+        total=Count("id"),
+        fulfilled=Count("id", filter=Q(status="fulfilled")),
+    )
+    total_obligations = obl_agg["total"] or 0
+    fulfilled_obligations = obl_agg["fulfilled"] or 0
     sla_compliance_rate = round((fulfilled_obligations / total_obligations * 100), 1) if total_obligations > 0 else 100.0
 
     # Urgent tables
