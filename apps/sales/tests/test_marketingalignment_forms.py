@@ -217,7 +217,7 @@ def test_marketingalignment_content_engagement_form_valid(
         "account": ma_customer_a.pk,
         "lead": ma_lead_a.pk,
         "engagement_type": "download",
-        "engagement_channel": "website",
+        "engagement_channel": "web",
         "engagement_score": 90,
         "revenue_attributed": "5000.00",
         "currency": ma_currency.pk,
@@ -241,7 +241,7 @@ def test_marketingalignment_content_engagement_form_cross_tenant_rejection(
         "account": ma_customer_a.pk,
         "lead": ma_lead_a.pk,
         "engagement_type": "view",
-        "engagement_channel": "website",
+        "engagement_channel": "web",
         "engagement_score": 60,
         "engaged_at": now.strftime("%Y-%m-%d %H:%M:%S"),
     }
