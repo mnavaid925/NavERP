@@ -2570,6 +2570,29 @@ LIVE_LINKS = {
         "Joint Account Plans": "sales:joint_account_plan_list",
         "Channel Conflicts": "sales:channel_conflict_list",
     },
+    "8.15": {
+        # OWNERSHIP RULING (L36/L37)
+        # Reuses core.Party for customer/client account and counterparty;
+        # reuses core.Document (DOC-) for executed agreement PDFs and redline attachments;
+        # reuses accounting.Currency for multi-currency contract values, MRR, and overage rates;
+        # reuses accounts.User for contract owners, CSMs, and obligation assignees;
+        # reuses sales.CPQQuote (CPQ-) for originating proposals and automated renewal quotes;
+        # reuses scm.SalesOrder (SO-) for originating customer sales orders;
+        # reuses crm.DocTemplate (TPL-) for standard contract authoring templates.
+        # Zero duplicate customer/company, quote, order, user, currency, document, or platform subscription tables declared.
+        "Contract Authoring & Redlining": "sales:customer_contract_list",
+        "Subscription Lifecycle": "sales:customer_subscription_list",
+        "Renewal Automation": "sales:renewal_automation_dashboard",
+        "Usage-Based Billing": "sales:usage_meter_record_list",
+        "Contract Compliance & Obligations": "sales:contract_obligation_list",
+        # Extra live leaves
+        "Customer Contracts": "sales:customer_contract_list",
+        "Customer Subscriptions": "sales:customer_subscription_list",
+        "Renewal Automation Dashboard": "sales:renewal_automation_dashboard",
+        "Usage Meter Records": "sales:usage_meter_record_list",
+        "Contract Obligations": "sales:contract_obligation_list",
+        "Contract & Subscription Workspace": "sales:contract_subscription_workspace",
+    },
 
 
 
