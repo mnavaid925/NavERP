@@ -268,6 +268,7 @@ class RepPerformanceScorecard(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="sales_rps_tenant_status_idx"),
             models.Index(fields=["tenant", "rating"], name="sales_rps_tenant_rating_idx"),
             models.Index(fields=["tenant", "rep"], name="sales_rps_tenant_rep_idx"),
+            models.Index(fields=["tenant", "-period_end"], name="sales_rps_ten_pend_idx"),
         ]
 
     def __str__(self):
