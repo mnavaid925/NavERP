@@ -605,7 +605,6 @@ def win_loss_console(request):
         reason_name = raw.get("reason_name") or raw.get("category_label") or "Unclassified"
         result_label = raw.get("result_label") or raw.get("result") or ""
         count = int(raw.get("count") or 0)
-        amount = raw.get("amount") or ZERO
         win_loss_rows.append(
             _row(
                 label=reason_name,
