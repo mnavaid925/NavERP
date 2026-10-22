@@ -116,12 +116,10 @@ def field_check_in_create(request):
             check_in.tenant = tenant
             check_in.save()
             write_audit_log(
+                request.user,
+                check_in,
+                "create",
                 tenant=tenant,
-                user=request.user,
-                action="create",
-                model_name="FieldCheckIn",
-                object_id=check_in.pk,
-                object_repr=str(check_in),
             )
             messages.success(request, f"Check-In '{check_in.number}' at {check_in.party.name} recorded successfully.")
             return redirect("sales:field_check_in_detail", pk=check_in.pk)
@@ -146,12 +144,10 @@ def field_check_in_edit(request, pk):
         if form.is_valid():
             check_in = form.save()
             write_audit_log(
+                request.user,
+                check_in,
+                "update",
                 tenant=tenant,
-                user=request.user,
-                action="update",
-                model_name="FieldCheckIn",
-                object_id=check_in.pk,
-                object_repr=str(check_in),
             )
             messages.success(request, f"Check-In '{check_in.number}' updated successfully.")
             return redirect("sales:field_check_in_detail", pk=check_in.pk)
@@ -176,19 +172,16 @@ def field_check_in_delete(request, pk):
     check_in_pk = check_in.pk
     route = check_in.route
 
+    write_audit_log(
+        request.user,
+        check_in,
+        "delete",
+        tenant=tenant,
+    )
     check_in.delete()
     if route and route.completed_stops > 0:
         route.completed_stops = max(0, route.completed_stops - 1)
         route.save(update_fields=["completed_stops"])
-
-    write_audit_log(
-        tenant=tenant,
-        user=request.user,
-        action="delete",
-        model_name="FieldCheckIn",
-        object_id=check_in_pk,
-        object_repr=f"{num} - {party_name}",
-    )
     messages.success(request, f"Check-In '{num}' deleted successfully.")
     return redirect("sales:field_check_in_list")
 
@@ -213,12 +206,11 @@ def field_check_in_checkout(request, pk):
                 check_in.route.save(update_fields=["completed_stops"])
 
             write_audit_log(
+                request.user,
+                check_in,
+                "update",
+                changes={"action": "checkout"},
                 tenant=tenant,
-                user=request.user,
-                action="update",
-                model_name="FieldCheckIn",
-                object_id=check_in.pk,
-                object_repr=f"Check-out for {check_in.number}",
             )
             messages.success(request, f"Departure check-out recorded for {check_in.party.name} ({check_in.duration_minutes} min).")
             return redirect("sales:field_check_in_detail", pk=check_in.pk)
