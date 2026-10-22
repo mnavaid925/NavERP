@@ -1659,3 +1659,33 @@ overage charges, and SLA contractual commitment monitoring with penalty tracking
 `apps/sales/migrations/0028_customercontract_customersubscription_and_more.py` and `0030_contractobligation_sales_obl_ten_sub_idx_and_more.py` provide the 8.15 schema with compound indexes on `(tenant, status, end_date)`, `(tenant, contract)`, and `(tenant, subscription)`. `seed_sales` idempotently seeds 4 contracts, 4 subscriptions, 4 usage records, and 4 obligations across various lifecycle states. The test suite for 8.15 is **complete and green** with 36 passing tests across 4 modules (`test_contractsubscription_models.py`, `_forms.py`, `_views.py`, and `_security.py`) covering all 4 entities, MRR normalization, charge calculations, renewal quote generation, auto-renewal uplift execution, and cross-tenant IDOR isolation. See `.agents/tasks/gaps-sales-8.15.md` for the gap register, `.claude/tasks/research-sales-8.15.md` for domain research, `.claude/tasks/contract-sales-8.15.md` for the contract, and `.claude/skills/sales/SKILL.md` for the as-built module guide.
 
 ---
+
+### Module 8 8.16 — Mobile Sales (built)
+
+8.16 delivers field sales route optimization, GPS arrival/departure check-in logging with pure Python
+Haversine geofence verification, mobile hardware device and push token registration, and real-time deal alerts
+with discount approval sign-offs and route dispatches.
+
+- **Ownership boundaries (L28/L29/L36/L37)**:
+  - Reuses `core.Party` as client accounts and visited contacts. **Zero duplicate account/contact tables.**
+  - Reuses `core.Document` (`DOC-`) for storing proof-of-visit photo attachments and inspection sign-offs.
+  - Reuses `accounts.User` for outside field reps, dispatch managers, device owners, and alert recipients.
+  - Reuses `crm.Opportunity` (`OPP-`) for deals advanced directly during on-site field visits.
+  - Reuses `sales.CPQQuote` (`CPQ-`) for on-the-spot quotes and high-urgency discount approval requests.
+  - Reuses `crm.CommunicationLog` (`COM-`) for linking click-to-dial call recordings and follow-up notes.
+
+**What shipped**
+
+| Model | Prefix | Carries |
+|---|---|---|
+| `FieldSalesRoute` | `FSR-` | Daily territory route planner — sales rep, route date, status (scheduled, in_progress, completed, cancelled), optimization status (pending, optimized, failed, manual), waypoint coordinates, total/completed stops, planned/actual distance and duration metrics, and Google Maps navigation routing |
+| `FieldCheckIn` | `CHK-` | GPS-stamped visit verification — client account, contact, opportunity, route, arrival/departure timestamps, duration minutes, GPS lat/lng coordinates, target coordinates, Haversine distance, geofence radius (default 150m), verification status (verified, out_of_range, manual_override), visit purpose, outcome, photo proof link, and quote link |
+| `MobileDeviceSession` | `MDS-` | Mobile hardware & offline sync session — user, device name, identifier, platform (iOS, Android, iPad, Android Tablet), app/OS versions, push token, active/trusted flags, delta synchronization status, and cached records count |
+| `MobileDealAlert` | `MDA-` | Real-time push & deal notifications — recipient, device, alert type (urgent deal, quote approval, discount approval, contract signed, route dispatch, system notice), urgency (normal, high, urgent), read receipt tracking, and push delivery status |
+
+**Executive Console**:
+- **Field Sales Execution Console** (`sales:mobile_sales_dashboard`, `/sales/mobile-sales-dashboard/`): Real-time field execution radar displaying today's scheduled routes, total stops, active check-in visits, geofence compliance rate percentage, urgent deal notifications, active mobile hardware roster, and today's route itinerary feed.
+
+`apps/sales/migrations/0029_fieldsalesroute_fieldcheckin_mobiledevicesession_and_more.py` provides the 8.16 schema with compound indexes on `(tenant, sales_rep, route_date)`, `(tenant, check_in_at)`, `(tenant, platform)`, and `(tenant, urgency, is_read)`. `seed_sales` idempotently seeds 3 routes, 4 GPS check-ins, 3 mobile hardware devices, and 3 high-urgency deal alerts. The test suite for 8.16 is **complete and green** with 154 passing tests across 4 modules (`test_mobilesales_models.py`, `_forms.py`, `_views.py`, and `_security.py`) covering all 4 entities, Haversine mathematical distance calculation, geofence radius boundaries, CRUD workflows, method guards, atomic transactions, and cross-tenant IDOR isolation. See `.agents/tasks/gaps-sales-8.16.md` for the gap register, `.claude/tasks/research-sales-8.16.md` for domain research, `.claude/tasks/contract-sales-8.16.md` for the contract, and `.claude/skills/sales/SKILL.md` for the as-built module guide.
+
+---
