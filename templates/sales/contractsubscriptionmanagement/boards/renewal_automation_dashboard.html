@@ -29,7 +29,7 @@
 <!-- Renewal Expiration Horizon KPIs -->
 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
     <div class="stat-card">
-        <div class="stat-icon red">
+        <div class="stat-icon orange">
             <i data-lucide="alert-circle"></i>
         </div>
         <div>
@@ -73,7 +73,7 @@
 <!-- Auto-Renewal Execution Candidates -->
 <div class="card mb-6">
     <div class="card-header flex justify-between items-center">
-        <h3 class="font-semibold text-slate-800">Auto-Renewal Candidates ({{ auto_renew_candidates.count }})</h3>
+        <h3 class="font-semibold text-slate-800">Auto-Renewal Candidates ({{ auto_renew_candidates|length }})</h3>
         <span class="text-xs text-slate-500">Agreements designated for automated execution</span>
     </div>
     <div class="table-wrap">
@@ -141,7 +141,7 @@
 <!-- All 90-Day Upcoming Renewals Radar -->
 <div class="card">
     <div class="card-header flex justify-between items-center">
-        <h3 class="font-semibold text-slate-800">90-Day Renewal Expiration Pipeline ({{ upcoming_renewals.count }})</h3>
+        <h3 class="font-semibold text-slate-800">90-Day Renewal Expiration Pipeline ({{ upcoming_renewals|length }})</h3>
         <span class="text-xs text-slate-500">Complete expiration radar</span>
     </div>
     <div class="table-wrap">
