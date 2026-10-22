@@ -107,4 +107,4 @@ class FieldSalesRoute(TenantNumbered):
             dest = self.end_location or self.start_location
             query = urllib.parse.quote(f"{self.start_location} to {dest}")
             return f"https://www.google.com/maps/dir/?api=1&origin={urllib.parse.quote(self.start_location)}&destination={urllib.parse.quote(dest)}"
-        return "https://maps.google.com"
+        return None
