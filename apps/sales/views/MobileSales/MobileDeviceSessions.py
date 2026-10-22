@@ -91,12 +91,10 @@ def mobile_device_session_create(request):
             device.tenant = tenant
             device.save()
             write_audit_log(
+                request.user,
+                device,
+                "create",
                 tenant=tenant,
-                user=request.user,
-                action="create",
-                model_name="MobileDeviceSession",
-                object_id=device.pk,
-                object_repr=str(device),
             )
             messages.success(request, f"Mobile Device '{device.device_name}' registered successfully.")
             return redirect("sales:mobile_device_session_detail", pk=device.pk)
@@ -121,12 +119,10 @@ def mobile_device_session_edit(request, pk):
         if form.is_valid():
             device = form.save()
             write_audit_log(
+                request.user,
+                device,
+                "update",
                 tenant=tenant,
-                user=request.user,
-                action="update",
-                model_name="MobileDeviceSession",
-                object_id=device.pk,
-                object_repr=str(device),
             )
             messages.success(request, f"Mobile Device '{device.device_name}' updated successfully.")
             return redirect("sales:mobile_device_session_detail", pk=device.pk)
@@ -147,16 +143,13 @@ def mobile_device_session_delete(request, pk):
     tenant = request.tenant
     device = get_object_or_404(MobileDeviceSession.objects.filter(tenant=tenant), pk=pk)
     name = device.device_name
-    dev_pk = device.pk
-    device.delete()
     write_audit_log(
+        request.user,
+        device,
+        "delete",
         tenant=tenant,
-        user=request.user,
-        action="delete",
-        model_name="MobileDeviceSession",
-        object_id=dev_pk,
-        object_repr=name,
     )
+    device.delete()
     messages.success(request, f"Mobile Device '{name}' removed successfully.")
     return redirect("sales:mobile_device_session_list")
 
@@ -168,12 +161,11 @@ def mobile_device_session_sync(request, pk):
     device = get_object_or_404(MobileDeviceSession.objects.filter(tenant=tenant), pk=pk)
     device.record_sync_event(status="success", cached_count=120, pending_count=0, ip=request.META.get("REMOTE_ADDR"))
     write_audit_log(
+        request.user,
+        device,
+        "update",
+        changes={"action": "sync"},
         tenant=tenant,
-        user=request.user,
-        action="update",
-        model_name="MobileDeviceSession",
-        object_id=device.pk,
-        object_repr=f"Offline cache sync for {device.number}",
     )
     messages.success(request, f"Delta synchronization completed for '{device.device_name}' (120 records cached).")
     return redirect("sales:mobile_device_session_detail", pk=device.pk)
