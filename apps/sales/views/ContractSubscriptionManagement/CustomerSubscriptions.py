@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -81,6 +82,7 @@ def customer_subscription_list(request):
 
 
 @login_required
+@transaction.atomic
 def customer_subscription_create(request):
     tenant = request.tenant
     if request.method == "POST":
@@ -147,6 +149,7 @@ def customer_subscription_detail(request, pk):
 
 
 @login_required
+@transaction.atomic
 def customer_subscription_edit(request, pk):
     tenant = request.tenant
     subscription = get_object_or_404(CustomerSubscription.objects.filter(tenant=tenant), pk=pk)
@@ -178,6 +181,7 @@ def customer_subscription_edit(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def customer_subscription_delete(request, pk):
     tenant = request.tenant
     subscription = get_object_or_404(CustomerSubscription.objects.filter(tenant=tenant), pk=pk)
@@ -195,6 +199,7 @@ def customer_subscription_delete(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def customer_subscription_pause(request, pk):
     tenant = request.tenant
     subscription = get_object_or_404(CustomerSubscription.objects.filter(tenant=tenant), pk=pk)
@@ -213,6 +218,7 @@ def customer_subscription_pause(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def customer_subscription_resume(request, pk):
     tenant = request.tenant
     subscription = get_object_or_404(CustomerSubscription.objects.filter(tenant=tenant), pk=pk)
@@ -231,6 +237,7 @@ def customer_subscription_resume(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def customer_subscription_cancel(request, pk):
     tenant = request.tenant
     subscription = get_object_or_404(CustomerSubscription.objects.filter(tenant=tenant), pk=pk)
@@ -255,6 +262,7 @@ def customer_subscription_cancel(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def customer_subscription_upgrade(request, pk):
     tenant = request.tenant
     subscription = get_object_or_404(CustomerSubscription.objects.filter(tenant=tenant), pk=pk)
