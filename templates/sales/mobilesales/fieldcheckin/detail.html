@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ check_in.number }} — {{ check_in.party.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'sales:dashboard' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:field_check_in_list' %}" class="hover:text-primary">Field Check-Ins</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ check_in.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">{{ check_in.party.name }}</h1>
+                {% if check_in.is_geofence_verified %}
+                    <span class="badge badge-green">Verified On-Site</span>
+                {% elif check_in.verification_status == 'out_of_range' %}
+                    <span class="badge badge-red">Out of Range</span>
+                {% elif check_in.verification_status == 'manual_override' %}
+                    <span class="badge badge-amber">Manual Override</span>
+                {% else %}
+                    <span class="badge badge-slate">GPS Unavailable</span>
+                {% endif %}
+                <span class="text-xs text-slate-400 font-mono">({{ check_in.number }})</span>
+            </div>
+            <p class="text-sm text-slate-500 mt-1">Arrival: {{ check_in.check_in_at|date:"F d, Y H:i" }} · Sales Rep: {{ check_in.sales_rep.get_full_name|default:check_in.sales_rep.username }}</p>
+        </div>
+        <div class="page-actions flex flex-wrap items-center gap-2">
+            {% if not check_in.check_out_at %}
+            <a href="{% url 'sales:field_check_in_checkout' check_in.pk %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+                <span>Complete Check-Out</span>
+            </a>
+            {% endif %}
+            <a href="https://www.google.com/maps/search/?api=1&query={{ check_in.check_in_lat }},{{ check_in.check_in_lng }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline flex items-center gap-2 text-blue-600 border-blue-200 hover:bg-blue-50">
+                <i data-lucide="map" class="w-4 h-4"></i>
+                <span>View on Map</span>
+            </a>
+            <a href="{% url 'sales:field_check_in_edit' check_in.pk %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+                <span>Edit</span>
+            </a>
+            <form method="post" action="{% url 'sales:field_check_in_delete' check_in.pk %}" class="inline" onsubmit="return confirm('Delete this visit check-in record?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-icon" title="Delete">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Quick Status Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Geofence Compliance</div>
+            <div class="text-lg font-bold text-slate-900 mt-1 flex items-center gap-2">
+                {% if check_in.is_geofence_verified %}
+                    <i data-lucide="check-circle" class="w-5 h-5 text-green-600"></i>
+                    <span>Compliant ({{ check_in.distance_from_target_m|default:"0" }}m)</span>
+                {% else %}
+                    <i data-lucide="alert-triangle" class="w-5 h-5 text-red-600"></i>
+                    <span>{{ check_in.get_verification_status_display }}</span>
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 mt-2">Tolerance: {{ check_in.geofence_radius_m }} metres</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Visit Duration</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1 font-mono">
+                {% if check_in.duration_minutes %}
+                    {{ check_in.duration_minutes }} <span class="text-sm font-normal text-slate-500">min</span>
+                {% elif check_in.check_out_at %}
+                    Completed
+                {% else %}
+                    <span class="text-amber-600 text-lg font-sans">Active On-Site</span>
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 mt-2">
+                {% if check_in.check_out_at %}
+                    Departure: {{ check_in.check_out_at|date:"H:i" }}
+                {% else %}
+                    Awaiting check-out
+                {% endif %}
+            </div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Visit Purpose</div>
+            <div class="text-base font-semibold text-slate-900 mt-1">
+                {{ check_in.get_visit_purpose_display }}
+            </div>
+            <div class="text-xs text-slate-500 mt-2">Commercial meeting scope</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Visit Outcome</div>
+            <div class="mt-1">
+                {% if check_in.outcome == 'successful' %}
+                    <span class="badge badge-green">{{ check_in.get_outcome_display }}</span>
+                {% elif check_in.outcome == 'quote_requested' or check_in.outcome == 'order_placed' %}
+                    <span class="badge badge-info">{{ check_in.get_outcome_display }}</span>
+                {% elif check_in.outcome == 'follow_up_needed' %}
+                    <span class="badge badge-amber">Follow-Up Required</span>
+                {% else %}
+                    <span class="badge badge-slate">{{ check_in.get_outcome_display }}</span>
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 mt-2">Recorded visit result</div>
+        </div>
+    </div>
+
+    <!-- Details Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Geofence Audit & GPS Details -->
+        <div class="space-y-6 lg:col-span-1">
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="navigation" class="w-4 h-4 text-primary"></i>
+                        <span>GPS Geofence Audit</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 space-y-3 text-sm">
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Arrival Coordinates</span>
+                        <span class="font-mono text-slate-800">{{ check_in.check_in_lat }}, {{ check_in.check_in_lng }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Target Coordinates</span>
+                        {% if check_in.target_lat and check_in.target_lng %}
+                            <span class="font-mono text-slate-800">{{ check_in.target_lat }}, {{ check_in.target_lng }}</span>
+                        {% else %}
+                            <span class="text-slate-400">— Not specified —</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Calculated Distance</span>
+                        <span class="font-mono font-medium text-slate-800">{{ check_in.distance_from_target_m|default:"0" }} metres</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Geofence Radius</span>
+                        <span class="font-mono text-slate-800">{{ check_in.geofence_radius_m }} metres</span>
+                    </div>
+                    {% if check_in.check_out_lat and check_in.check_out_lng %}
+                    <div class="pt-2 border-t border-slate-100">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Departure Coordinates</span>
+                        <span class="font-mono text-slate-800">{{ check_in.check_out_lat }}, {{ check_in.check_out_lng }}</span>
+                    </div>
+                    {% endif %}
+                    {% if check_in.is_force_checkout %}
+                    <div class="p-2 bg-amber-50 rounded text-amber-800 text-xs border border-amber-200">
+                        <i data-lucide="alert-circle" class="w-3.5 h-3.5 inline mr-1"></i>
+                        Closed via administrative force check-out override.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Linked Context / Spine Entities -->
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="link" class="w-4 h-4 text-primary"></i>
+                        <span>Linked ERP Records</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 space-y-3 text-sm">
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Scheduled Route</span>
+                        {% if check_in.route %}
+                            <a href="{% url 'sales:field_sales_route_detail' check_in.route.pk %}" class="text-primary hover:underline font-medium">
+                                {{ check_in.route.name }} (Stop #{{ check_in.stop_number }})
+                            </a>
+                        {% else %}
+                            <span class="text-slate-500">Ad-hoc drop-in visit (no route)</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Contact Person</span>
+                        {% if check_in.contact %}
+                            <span class="font-medium text-slate-800">{{ check_in.contact.name }}</span>
+                        {% else %}
+                            <span class="text-slate-400">— None specified —</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Opportunity / Deal</span>
+                        {% if check_in.opportunity %}
+                            <a href="{% url 'sales:opportunity_detail' check_in.opportunity.pk %}" class="text-primary hover:underline font-medium">
+                                {{ check_in.opportunity.name }}
+                            </a>
+                        {% else %}
+                            <span class="text-slate-400">— None linked —</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Resulting CPQ Quote</span>
+                        {% if check_in.resulting_quote %}
+                            <a href="{% url 'sales:cpq_quote_detail' check_in.resulting_quote.pk %}" class="text-primary hover:underline font-mono font-medium">
+                                {{ check_in.resulting_quote.number }} ({{ check_in.resulting_quote.name }})
+                            </a>
+                        {% else %}
+                            <span class="text-slate-400">— No quote created on-site —</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Photo Document</span>
+                        {% if check_in.photo_document %}
+                            <span class="font-medium text-slate-800 flex items-center gap-1">
+                                <i data-lucide="image" class="w-4 h-4 text-blue-500"></i>
+                                <span>{{ check_in.photo_document.title|default:"Proof of visit photo" }}</span>
+                            </span>
+                        {% else %}
+                            <span class="text-slate-400">— No photo attached —</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Visit Discussion Notes & Follow-Up -->
+        <div class="space-y-6 lg:col-span-2">
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="file-text" class="w-4 h-4 text-primary"></i>
+                        <span>Meeting Notes & Discussion Summary</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 space-y-4">
+                    <div>
+                        <h3 class="text-xs text-slate-400 uppercase tracking-wider mb-2">Visit Notes</h3>
+                        {% if check_in.notes %}
+                            <div class="p-4 bg-slate-50 rounded-lg text-sm text-slate-800 whitespace-pre-line border border-slate-100">
+                                {{ check_in.notes }}
+                            </div>
+                        {% else %}
+                            <p class="text-sm text-slate-400 italic">No detailed discussion notes recorded.</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-100">
+                        <h3 class="text-xs text-slate-400 uppercase tracking-wider mb-2">Actionable Next Step</h3>
+                        {% if check_in.next_step %}
+                            <div class="flex items-start gap-3 p-3 bg-blue-50 text-blue-900 rounded-lg border border-blue-100">
+                                <i data-lucide="calendar" class="w-5 h-5 text-blue-600 mt-0.5"></i>
+                                <div>
+                                    <div class="text-sm font-semibold">{{ check_in.next_step }}</div>
+                                    {% if check_in.next_step_due %}
+                                    <div class="text-xs text-blue-700 mt-0.5">Deadline: {{ check_in.next_step_due|date:"F d, Y" }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% else %}
+                            <p class="text-sm text-slate-400 italic">No next step specified.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
