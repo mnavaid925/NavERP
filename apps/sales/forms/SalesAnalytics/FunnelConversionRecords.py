@@ -55,6 +55,13 @@ class FunnelConversionRecordForm(TenantUniqueMixin, TenantModelForm):
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "from_stage" in self.fields:
+            self.fields["from_stage"].queryset = self.fields["from_stage"].queryset.select_related("pipeline")
+        if "to_stage" in self.fields:
+            self.fields["to_stage"].queryset = self.fields["to_stage"].queryset.select_related("pipeline")
+
     def clean(self):
         cleaned_data = super().clean()
         _reject_foreign(
