@@ -63,7 +63,7 @@
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Revenue Attributed</div>
             <div class="text-2xl font-bold text-slate-900 mt-1">
-                ${{ stats.total_revenue_attributed|default:"0.00"|floatformat:2 }}
+                {% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ stats.total_revenue_attributed|default:"0.00"|floatformat:2 }}
             </div>
         </div>
     </div>
@@ -170,11 +170,13 @@
                     </td>
                     <td>
                         {% if engagement.account %}
-                        <div class="text-sm text-slate-900">{{ engagement.account.name }}</div>
+                        <div class="text-sm font-medium text-slate-900">{{ engagement.account.name }}</div>
                         {% endif %}
                         {% if engagement.lead %}
-                        <div class="text-xs text-slate-500 font-mono">{{ engagement.lead.number }}</div>
-                        {% else %}
+                        <div class="text-xs text-slate-600">
+                            {{ engagement.lead.name }} <span class="text-slate-400 font-mono">({{ engagement.lead.number }})</span>
+                        </div>
+                        {% elif not engagement.account %}
                         <div class="text-xs text-slate-400">—</div>
                         {% endif %}
                     </td>
@@ -191,7 +193,7 @@
                         </span>
                     </td>
                     <td>
-                        <span class="font-semibold text-slate-900">${{ engagement.revenue_attributed|floatformat:2 }}</span>
+                        <span class="font-semibold text-slate-900">{{ engagement.currency.symbol|default:"$" }}{{ engagement.revenue_attributed|floatformat:2 }}</span>
                     </td>
                     <td>
                         <div class="text-sm text-slate-900">{{ engagement.engaged_at|date:"M d, Y" }}</div>
@@ -240,7 +242,7 @@
         </div>
         <div class="pagination-actions">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.engagement_type %}&engagement_type={{ active_filters.engagement_type }}{% endif %}{% if active_filters.engagement_channel %}&engagement_channel={{ active_filters.engagement_channel }}{% endif %}{% if active_filters.content %}&content={{ active_filters.content }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q|urlencode }}{% endif %}{% if active_filters.engagement_type %}&engagement_type={{ active_filters.engagement_type }}{% endif %}{% if active_filters.engagement_channel %}&engagement_channel={{ active_filters.engagement_channel }}{% endif %}{% if active_filters.content %}&content={{ active_filters.content }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
                 Previous
             </a>
             {% else %}
@@ -250,7 +252,7 @@
             <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.engagement_type %}&engagement_type={{ active_filters.engagement_type }}{% endif %}{% if active_filters.engagement_channel %}&engagement_channel={{ active_filters.engagement_channel }}{% endif %}{% if active_filters.content %}&content={{ active_filters.content }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q|urlencode }}{% endif %}{% if active_filters.engagement_type %}&engagement_type={{ active_filters.engagement_type }}{% endif %}{% if active_filters.engagement_channel %}&engagement_channel={{ active_filters.engagement_channel }}{% endif %}{% if active_filters.content %}&content={{ active_filters.content }}{% endif %}{% if active_filters.account %}&account={{ active_filters.account }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
                 Next
             </a>
             {% else %}
