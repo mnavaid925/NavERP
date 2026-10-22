@@ -159,9 +159,9 @@
   `winlossdebrief/detail.html:177, 186, 195, 204`, `stagevelocityanalysis/detail.html:184, 193`, `repperformancescorecard/detail.html:261, 270, 279, 288`.
   *Fix:* Add `dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-200`. Fixed — `c4cc614b`, `c06f3817`, `5850c3b4` `fix(sales): add dark mode classes to callout boxes across detail templates`.
 
-- [ ] **M9 — Screen-reader `aria-label` missing on icon-only table action buttons.**
+- [x] **M9 — Screen-reader `aria-label` missing on icon-only table action buttons.**
   `winlossdebrief/list.html:196, 205, 211`, `stagevelocityanalysis/list.html:188, 197, 203`, `funnelconversionrecord/list.html:217, 220, 226`, `repperformancescorecard/list.html:207, 216, 222`.
-  *Fix:* Add `aria-label` matching `title`.
+  *Fix:* Add `aria-label` matching `title`. Fixed — `a5f7b354`, `0d372e01`, `b5c30141`, `b8827cb3` `fix(sales): add aria-label matching title to icon action buttons across list templates`.
 
 - [ ] **M10 — `_relation_belongs_to_tenant` duplicated across model modules.**
   `WinLossDebriefs.py:152`, `StageVelocityAnalyses.py:131`, `FunnelConversionRecords.py:127`, `RepPerformanceScorecards.py:273`.
