@@ -111,9 +111,9 @@
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:1353, 1370`. Fetches un-benchmarked rows over the wire only to discard them in Python.
   *Fix:* Filter in SQL: `benchmark_pct__isnull=False` and `benchmark_days__isnull=False`. Fixed — `b469dce9` `fix(sales): filter un-benchmarked rows in SQL in _benchmark_rows`.
 
-- [ ] **I10 — Unbounded querysets rendered on console boards.**
+- [x] **I10 — Unbounded querysets rendered on console boards.**
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:641-654, 916-923, 1001-1020`. `open_actions`, `funnel_rows`, and `scorecard_rows` render unbounded rows.
-  *Fix:* Cap display lists with `[:ROW_LIMIT]` (25).
+  *Fix:* Cap display lists with `[:ROW_LIMIT]` (25). Fixed — `0769f43d` `fix(sales): cap open_actions, funnel_rows, and scorecard_rows with ROW_LIMIT`.
 
 - [ ] **I11 — Dead queries executed in `win_loss_debrief_list` and `rep_performance_scorecard_list`.**
   `WinLossDebriefs.py:87-104` queries `outcomes`, `accounts`, `users`; `RepPerformanceScorecards.py:105-107` queries `currencies`, `quota_plans`, `managers`. These are never rendered in template filters.
