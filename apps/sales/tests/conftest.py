@@ -5502,7 +5502,7 @@ def _mobilesales_party(tenant, name="Apex Retail Group"):
     return Party.objects.create(
         tenant=tenant,
         name=name,
-        party_type="organization",
+        kind="organization",
     )
 
 
@@ -5544,29 +5544,34 @@ def _mobilesales_check_in(tenant, party=None, sales_rep=None, route=None, **over
         "distance_from_target_m": Decimal("15.5"),
         "is_geofence_verified": True,
         "verification_status": "verified",
-        "visit_purpose": "routine_visit",
+        "visit_purpose": "relationship",
         "outcome": "order_placed",
-        "meeting_notes": "Discussed expansion plans and renewed quarterly contract.",
+        "notes": "Discussed expansion plans and renewed quarterly contract.",
         "duration_minutes": 45,
     }
+    if "meeting_notes" in overrides:
+        overrides.setdefault("notes", overrides.pop("meeting_notes"))
     defaults.update(overrides)
     return FieldCheckIn.objects.create(**defaults)
 
 
 def _mobilesales_device(tenant, user=None, **overrides):
+    device_uuid = overrides.pop("device_identifier", "DEV-IPAD-001")
+    overrides.pop("os_version", None)
+    if "cached_records_count" in overrides:
+        overrides.setdefault("offline_records_cached", overrides.pop("cached_records_count"))
     defaults = {
         "tenant": tenant,
         "user": user,
         "device_name": "Sales Rep iPad Pro",
-        "device_identifier": "DEV-IPAD-001",
+        "device_uuid": device_uuid,
         "platform": "ios",
         "app_version": "2.4.0",
-        "os_version": "iOS 17.5",
         "is_active": True,
         "is_trusted": True,
         "push_token": "apns-sample-device-token-12345",
         "last_sync_status": "success",
-        "cached_records_count": 120,
+        "offline_records_cached": 120,
         "pending_uploads_count": 0,
     }
     defaults.update(overrides)
@@ -5574,16 +5579,17 @@ def _mobilesales_device(tenant, user=None, **overrides):
 
 
 def _mobilesales_alert(tenant, recipient=None, device=None, **overrides):
+    overrides.pop("push_sent", None)
     defaults = {
         "tenant": tenant,
         "recipient": recipient,
         "device": device,
-        "alert_type": "discount_approval",
+        "alert_type": "quote_approval_required",
         "urgency": "urgent",
         "title": "Urgent: 25% Discount Approval Request",
         "message": "Enterprise tier deal requires VP sign-off before end of month.",
         "is_read": False,
-        "push_sent": True,
+        "push_status": "sent",
     }
     defaults.update(overrides)
     return MobileDealAlert.objects.create(**defaults)
