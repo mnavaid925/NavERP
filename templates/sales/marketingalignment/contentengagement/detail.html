@@ -60,7 +60,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Revenue Attributed</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.revenue_attributed|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.currency.symbol|default:"$" }}{{ obj.revenue_attributed|floatformat:2 }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -115,7 +115,6 @@
                 <div class="py-2.5 flex justify-between">
                     <dt class="text-slate-500 font-medium">Engagement Type</dt>
                     <dd class="text-slate-900">
-                        {% if obj.is_download %}<span class="badge badge-green">Download</span>{% endif %}
                         {{ obj.get_engagement_type_display }}
                     </dd>
                 </div>
@@ -171,7 +170,7 @@
                 </div>
                 <div class="py-2.5 flex justify-between">
                     <dt class="text-slate-500 font-medium">Revenue Attributed</dt>
-                    <dd class="text-slate-900 font-semibold">${{ obj.revenue_attributed|floatformat:2 }}</dd>
+                    <dd class="text-slate-900 font-semibold">{{ obj.currency.symbol|default:"$" }}{{ obj.revenue_attributed|floatformat:2 }}</dd>
                 </div>
                 <div class="py-2.5 flex justify-between">
                     <dt class="text-slate-500 font-medium">Currency</dt>
