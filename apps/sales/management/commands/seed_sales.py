@@ -91,6 +91,11 @@ from apps.sales.models import (
     DealRegistration,
     JointAccountPlan,
     ChannelConflict,
+    # 8.15 Contract & Subscription Management
+    CustomerContract,
+    CustomerSubscription,
+    UsageMeterRecord,
+    ContractObligation,
 )
 
 from apps.sales.cpq_services import cpq_recalc_quote_totals, cpq_render_proposal_html, cpq_convert_to_sales_order
@@ -190,6 +195,7 @@ class Command(BaseCommand):
         self._seed_marketing_alignment(tenant, owner)
         self._seed_sales_analytics(tenant, owner)
         self._seed_partner_channel(tenant, owner)
+        self._seed_contract_subscription_management(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -3639,5 +3645,244 @@ class Command(BaseCommand):
             f"{JointAccountPlan.objects.filter(tenant=tenant).count()} joint plans, "
             f"{ChannelConflict.objects.filter(tenant=tenant).count()} channel conflicts)."
         )
+
+    def _seed_contract_subscription_management(self, tenant, owner):
+        if CustomerContract.objects.filter(tenant=tenant).exists():
+            return
+
+        today = timezone.localdate()
+        currency, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "symbol": "$"})
+        client_party = Party.objects.filter(tenant=tenant).order_by("pk").first()
+        quote = CPQQuote.objects.filter(tenant=tenant).order_by("pk").first()
+
+        if not client_party:
+            return
+
+        with transaction.atomic():
+            # 1. Customer Contracts
+            c1 = CustomerContract.objects.create(
+                tenant=tenant,
+                account=client_party,
+                title="Enterprise Cloud Agreement",
+                contract_type="subscription_agreement",
+                status="active",
+                owner=owner,
+                currency=currency,
+                total_contract_value=Decimal("120000.00"),
+                annual_contract_value=Decimal("120000.00"),
+                start_date=today - timedelta(days=90),
+                end_date=today + timedelta(days=275),
+                auto_renew=True,
+                renewal_term_months=12,
+                notice_period_days=30,
+                price_uplift_pct=Decimal("5.00"),
+                originating_quote=quote,
+                signed_at=timezone.now() - timedelta(days=90),
+                signoff_contact="Jane Doe, VP Technology",
+                special_terms="Includes 24/7 mission-critical SLA and dedicated CSM response within 1 hour.",
+                governing_law="State of Delaware",
+            )
+
+            c2 = CustomerContract.objects.create(
+                tenant=tenant,
+                account=client_party,
+                title="Master Services Agreement (MSA)",
+                contract_type="msa",
+                status="active",
+                owner=owner,
+                currency=currency,
+                total_contract_value=Decimal("250000.00"),
+                annual_contract_value=Decimal("100000.00"),
+                start_date=today - timedelta(days=180),
+                end_date=None,  # Evergreen
+                auto_renew=False,
+                signed_at=timezone.now() - timedelta(days=180),
+                signoff_contact="John Smith, General Counsel",
+                governing_law="State of New York",
+            )
+
+            c3 = CustomerContract.objects.create(
+                tenant=tenant,
+                account=client_party,
+                title="Pilot Evaluation Agreement",
+                contract_type="custom",
+                status="negotiating",
+                owner=owner,
+                currency=currency,
+                total_contract_value=Decimal("15000.00"),
+                annual_contract_value=Decimal("15000.00"),
+                start_date=today,
+                end_date=today + timedelta(days=60),
+                auto_renew=False,
+                redline_notes="Section 4 liability cap and Section 7 audit terms under redline negotiation.",
+            )
+
+            # 2. Customer Subscriptions
+            sub1 = CustomerSubscription.objects.create(
+                tenant=tenant,
+                contract=c1,
+                account=client_party,
+                subscription_name="Enterprise Cloud Platform (50 Seats)",
+                plan_code="ENT-CLOUD-50",
+                status="active",
+                pricing_model="per_seat",
+                billing_cadence="annual",
+                currency=currency,
+                quantity=50,
+                unit_price=Decimal("200.00"),
+                mrr=Decimal("10000.00"),
+                start_date=today - timedelta(days=90),
+                current_term_start=today - timedelta(days=90),
+                current_term_end=today + timedelta(days=275),
+                auto_renew=True,
+                owner=owner,
+            )
+
+            sub2 = CustomerSubscription.objects.create(
+                tenant=tenant,
+                contract=c1,
+                account=client_party,
+                subscription_name="24/7 Mission-Critical Support SLA",
+                plan_code="SLA-247-PREM",
+                status="active",
+                pricing_model="flat_fee",
+                billing_cadence="monthly",
+                currency=currency,
+                quantity=1,
+                unit_price=Decimal("2000.00"),
+                mrr=Decimal("2000.00"),
+                start_date=today - timedelta(days=90),
+                current_term_start=today - timedelta(days=15),
+                current_term_end=today + timedelta(days=15),
+                auto_renew=True,
+                owner=owner,
+            )
+
+            sub3 = CustomerSubscription.objects.create(
+                tenant=tenant,
+                contract=c1,
+                account=client_party,
+                subscription_name="Developer API Platform Metered",
+                plan_code="API-METERED-BASE",
+                status="active",
+                pricing_model="usage_metered",
+                billing_cadence="monthly",
+                currency=currency,
+                quantity=1,
+                unit_price=Decimal("500.00"),
+                mrr=Decimal("500.00"),
+                start_date=today - timedelta(days=60),
+                current_term_start=today - timedelta(days=15),
+                current_term_end=today + timedelta(days=15),
+                auto_renew=True,
+                owner=owner,
+            )
+
+            # 3. Usage Meter Records
+            UsageMeterRecord.objects.create(
+                tenant=tenant,
+                subscription=sub3,
+                meter_name="API Gateway Calls",
+                unit_of_measure="api_calls",
+                billing_period_start=today - timedelta(days=30),
+                billing_period_end=today,
+                included_allowance=Decimal("100000.00"),
+                reported_usage=Decimal("145000.00"),
+                billable_overage_units=Decimal("45000.00"),
+                overage_unit_price=Decimal("0.0050"),
+                overage_total_charge=Decimal("225.00"),
+                status="calculated",
+                notes="Incurred overage during peak end-of-quarter data synchronization.",
+            )
+
+            UsageMeterRecord.objects.create(
+                tenant=tenant,
+                subscription=sub3,
+                meter_name="High-Compute Processing Hours",
+                unit_of_measure="hours",
+                billing_period_start=today - timedelta(days=15),
+                billing_period_end=today + timedelta(days=15),
+                included_allowance=Decimal("500.00"),
+                reported_usage=Decimal("320.00"),
+                billable_overage_units=Decimal("0.00"),
+                overage_unit_price=Decimal("2.5000"),
+                overage_total_charge=Decimal("0.00"),
+                status="metering",
+                notes="Mid-cycle consumption within included base allowance.",
+            )
+
+            UsageMeterRecord.objects.create(
+                tenant=tenant,
+                subscription=sub3,
+                meter_name="Encrypted Backup Storage",
+                unit_of_measure="gigabytes",
+                billing_period_start=today - timedelta(days=60),
+                billing_period_end=today - timedelta(days=30),
+                included_allowance=Decimal("1000.00"),
+                reported_usage=Decimal("1500.00"),
+                billable_overage_units=Decimal("500.00"),
+                overage_unit_price=Decimal("0.2000"),
+                overage_total_charge=Decimal("100.00"),
+                status="invoiced",
+                invoiced_at=timezone.now() - timedelta(days=25),
+                notes="Billed and paid on previous cycle invoice.",
+            )
+
+            # 4. Contract Obligations
+            ContractObligation.objects.create(
+                tenant=tenant,
+                contract=c1,
+                subscription=sub1,
+                title="Core Production 99.9% Uptime Guarantee",
+                obligation_type="sla_uptime",
+                target_metric=">= 99.9% Monthly Uptime",
+                due_date=today - timedelta(days=5),
+                status="fulfilled",
+                fulfilled_at=timezone.now() - timedelta(days=5),
+                fulfillment_evidence="Datadog SLA audit report verified 99.96% availability across all web and DB nodes.",
+                penalty_terms="10% service credit for monthly availability below 99.9%.",
+                penalty_amount=Decimal("0.00"),
+                penalty_status="none",
+                assigned_to=owner,
+            )
+
+            ContractObligation.objects.create(
+                tenant=tenant,
+                contract=c1,
+                subscription=sub2,
+                title="Priority-1 Incident 1-Hour Response SLA",
+                obligation_type="sla_response",
+                target_metric="< 1 Hour P1 Ticket Response",
+                due_date=today + timedelta(days=30),
+                status="pending",
+                penalty_terms="5% service credit for response delays exceeding 1 hour.",
+                penalty_amount=Decimal("0.00"),
+                penalty_status="none",
+                assigned_to=owner,
+            )
+
+            ContractObligation.objects.create(
+                tenant=tenant,
+                contract=c1,
+                subscription=None,
+                title="Annual Third-Party SOC2 Type II Audit Report",
+                obligation_type="reporting_compliance",
+                target_metric="Deliver SOC2 Type II report by Q3",
+                due_date=today + timedelta(days=45),
+                status="pending",
+                penalty_terms="Contract default clause if certification not delivered within 30 days of deadline.",
+                penalty_amount=Decimal("0.00"),
+                penalty_status="none",
+                assigned_to=owner,
+            )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.15 contract & subscription demo rows ensured "
+            f"({CustomerContract.objects.filter(tenant=tenant).count()} contracts, "
+            f"{CustomerSubscription.objects.filter(tenant=tenant).count()} subscriptions, "
+            f"{UsageMeterRecord.objects.filter(tenant=tenant).count()} usage meters, "
+            f"{ContractObligation.objects.filter(tenant=tenant).count()} obligations)."
+        )
+
 
 
