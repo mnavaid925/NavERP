@@ -739,3 +739,37 @@ after that commit. Nothing was lost; the commit boundary simply does not match t
 
 ---
 
+
+
+### Phase 5 Round 2 — Frontend, Performance, QA and Security Fixes (2026-10-22)
+
+**Status: ALL review findings across all 6 review agents are now FIXED and verified.**
+
+| ID | Sev | Status | Fix | Commit(s) |
+|---|---|---|---|---|
+| `PERF-C1` | Critical | **[x] fixed** | Added `.order_by()` before `.values()` in `AttributionConsole.py` for `tp_by_campaign`, `attr_by_campaign`, `tp_by_channel`, and `attr_by_channel` to prevent `Meta.ordering` injection into GROUP BY. | `1153ee96` |
+| `PERF-C2` | Critical | **[x] fixed** | Added `.order_by()` to `registered` and `attended` scalar subqueries in `_event_annotations` to prevent multiple row return exceptions. | `858e24eb` |
+| `PERF-I1` | Important | **[x] fixed** | Added `.order_by().distinct()[:2]` in `single_currency` in `_common.py` to eliminate unbounded ID fetching and unnecessary sorting. | `e580d024` |
+| `PERF-I2` | Important | **[x] fixed** | Reused `single_currency(touchpoints)` in `AttributionConsole.py` instead of redundant unbounded full-table scan. | `1153ee96` |
+| `PERF-I3` | Important | **[x] fixed** | Supported annotated `revenue_total` in `MarketingEvent.revenue_per_registrant` to prevent synchronous DB queries when accessing property. | `030d8232` |
+| `PERF-I4` | Important | **[x] fixed** | Added check for `_prefetched_objects_cache` in `AttributionTouchpoint.attributed_revenue` and prefetched on detail view. | `fc0a4d05` · `ef7ed10c` |
+| `PERF-M1` | Minor | **[x] fixed** | Applied `.only(...)` to filter dropdown querysets across all 8.13 list views. | `409d5c7f` · `858e24eb` · `ef7ed10c` · `34703fa2` · `9f6f43de` |
+| `PERF-M2` | Minor | **[x] fixed** | Combined `total_touchpoints` and `total_leads` in `AttributionConsole.py` into a single aggregate query. | `1153ee96` |
+| `SEC-01` | Important | **[x] fixed** | Replaced unescaped `registrant_name` interpolation in inline `onsubmit` confirmation in `registrations.html` with standardized static prompt. | `2b65f3f2` |
+| `SEC-02` | Important | **[x] fixed** | Added `("lead", "Lead")` to `MqlHandoff.clean()` cross-tenant foreign key validation loop. | `b6c5f60d` |
+| `SEC-03` | Minor | **[x] fixed** | Defaulted `computed_by` to `request.user` on `campaign_attribution_create` if omitted. | `409d5c7f` |
+| `SEC-04` | Minor | **[x] fixed** | Locked `status` to `pending` on initial `MqlHandoffForm` creation to prevent workflow bypass. | `444f6939` |
+| `SEC-05` | Minor | **[x] fixed** | Excluded `status="rejected"` attributions from executive console revenue and ROI rollups. | `1153ee96` |
+| `F-C1` | Critical | **[x] fixed** | Dynamic currency symbols applied across templates (`{{ currency.symbol|default:"$" }}` and `{{ obj.currency.symbol|default:"$" }}`). | `c8f4a33b` · `baa15465` · `d0e5521f` · `9df0fb0c` · `bdf34891` · `5e80ffbe` · `ddacda29` · `e0f1b38a` · `9d162484` |
+| `F-I1` | Important | **[x] fixed** | Added missing `ongoing` event status badge (`badge-info`) to `marketingevent/detail.html`. | `bdf34891` |
+| `F-I2` | Important | **[x] fixed** | Aligned follow-up status badges across event detail and registrations templates with semantic badge mapping. | `bdf34891` |
+| `F-I3` | Important | **[x] fixed** | Clarified "Open for Registration" stat card count on event list. | `280bb315` |
+| `F-M1` | Minor | **[x] fixed** | Rendered deal / opportunity name on touchpoint list lead column. | `e0f1b38a` |
+| `F-M2` | Minor | **[x] fixed** | Corrected account and lead name display in content engagement list table. | `9d162484` |
+| `F-M4` | Minor | **[x] fixed** | Added `|urlencode` filter to `active_filters.q` across all 8.13 pagination links. | `7a534dc4` · `e0f1b38a` · `9d162484` · `baa15465` · `280bb315` |
+| `F-M5` | Minor | **[x] fixed** | Added 5th headline stat card for Avg Cost / Lead to `attribution_console.html`. | `c8f4a33b` |
+| `F-M6` | Minor | **[x] fixed** | Removed duplicate engagement type display in `contentengagement/detail.html`. | `ddacda29` |
+| `QA-I1` | Important | **[x] fixed** | Aligned `mqlhandoff/form.html` edit mode header to "Edit MQL-to-SQL Handoff". | `f62c3626` |
+| `QA-M1` | Minor | **[x] fixed** | Replaced forbidden `stat-icon red` with `stat-icon orange` in `mqlhandoff/list.html` and `detail.html`. | `7a534dc4` · `5e80ffbe` |
+
+---
