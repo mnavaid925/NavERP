@@ -1,4 +1,5 @@
 """Sales 8.16 — FieldSalesRoute forms."""
+from decimal import Decimal
 from django import forms
 
 from apps.accounts.models import User
@@ -49,6 +50,30 @@ class FieldSalesRouteForm(TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             self.fields["sales_rep"].queryset = tenant_users(self.tenant)
+        for field_name in [
+            "planned_distance_km",
+            "actual_distance_km",
+            "estimated_duration_minutes",
+            "actual_duration_minutes",
+        ]:
+            if field_name in self.fields:
+                self.fields[field_name].required = False
+
+    def clean_planned_distance_km(self):
+        val = self.cleaned_data.get("planned_distance_km")
+        return val if val is not None else Decimal("0.00")
+
+    def clean_actual_distance_km(self):
+        val = self.cleaned_data.get("actual_distance_km")
+        return val if val is not None else Decimal("0.00")
+
+    def clean_estimated_duration_minutes(self):
+        val = self.cleaned_data.get("estimated_duration_minutes")
+        return val if val is not None else 0
+
+    def clean_actual_duration_minutes(self):
+        val = self.cleaned_data.get("actual_duration_minutes")
+        return val if val is not None else 0
 
 
 class FieldSalesRouteFilterForm(forms.Form):
