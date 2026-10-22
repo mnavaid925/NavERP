@@ -76,6 +76,11 @@ from .models import (
     DealRegistration,
     JointAccountPlan,
     ChannelConflict,
+    # 8.15 Contract & Subscription Management
+    CustomerContract,
+    CustomerSubscription,
+    UsageMeterRecord,
+    ContractObligation,
 )
 
 
@@ -1051,6 +1056,55 @@ class ChannelConflictAdmin(TenantScopedFKAdmin):
     raw_id_fields = ("claimant_partner", "competing_partner", "client_account", "direct_sales_rep", "territory", "deal_registration", "opportunity", "escalated_to", "resolved_by")
     tenant_fk_fields = ("claimant_partner", "competing_partner", "client_account", "territory", "deal_registration", "opportunity")
     tenant_user_fk_fields = ("direct_sales_rep", "escalated_to", "resolved_by")
+
+
+# ---------------------------------------------------------------- 8.15 Contract & Subscription Management
+@admin.register(CustomerContract)
+class CustomerContractAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "title", "account", "contract_type", "status", "total_contract_value", "start_date", "end_date", "auto_renew", "tenant")
+    list_filter = ("contract_type", "status", "auto_renew", "tenant")
+    search_fields = ("number", "title", "account__name", "special_terms")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("account", "owner", "currency", "tenant")
+    raw_id_fields = ("account", "owner", "originating_quote", "originating_order", "template", "document", "currency")
+    tenant_fk_fields = ("account", "originating_quote", "originating_order", "template", "document")
+    tenant_user_fk_fields = ("owner",)
+
+
+@admin.register(CustomerSubscription)
+class CustomerSubscriptionAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "subscription_name", "account", "status", "pricing_model", "billing_cadence", "mrr", "current_term_end", "tenant")
+    list_filter = ("status", "pricing_model", "billing_cadence", "auto_renew", "tenant")
+    search_fields = ("number", "subscription_name", "plan_code", "account__name")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("account", "contract", "owner", "currency", "tenant")
+    raw_id_fields = ("contract", "account", "owner", "renewal_quote", "currency")
+    tenant_fk_fields = ("contract", "account", "renewal_quote")
+    tenant_user_fk_fields = ("owner",)
+
+
+@admin.register(UsageMeterRecord)
+class UsageMeterRecordAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "meter_name", "subscription", "billing_period_start", "billing_period_end", "reported_usage", "overage_total_charge", "status", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "meter_name", "subscription__subscription_name")
+    readonly_fields = ("tenant", "number", "billable_overage_units", "overage_total_charge", "created_at", "updated_at")
+    list_select_related = ("subscription", "tenant")
+    raw_id_fields = ("subscription",)
+    tenant_fk_fields = ("subscription",)
+
+
+@admin.register(ContractObligation)
+class ContractObligationAdmin(TenantScopedFKAdmin):
+    list_display = ("number", "title", "contract", "obligation_type", "status", "target_metric", "due_date", "penalty_status", "penalty_amount", "tenant")
+    list_filter = ("obligation_type", "status", "penalty_status", "tenant")
+    search_fields = ("number", "title", "target_metric", "contract__number")
+    readonly_fields = ("tenant", "number", "created_at", "updated_at")
+    list_select_related = ("contract", "subscription", "assigned_to", "tenant")
+    raw_id_fields = ("contract", "subscription", "assigned_to")
+    tenant_fk_fields = ("contract", "subscription")
+    tenant_user_fk_fields = ("assigned_to",)
+
 
 
 
