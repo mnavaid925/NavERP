@@ -430,6 +430,34 @@ from .ContractSubscriptionManagement import (
     usage_meter_record_invoice,
     usage_meter_record_list,
 )
+# 8.16 Mobile Sales
+from .MobileSales import (
+    field_check_in_checkout,
+    field_check_in_create,
+    field_check_in_delete,
+    field_check_in_detail,
+    field_check_in_edit,
+    field_check_in_list,
+    field_sales_route_create,
+    field_sales_route_delete,
+    field_sales_route_detail,
+    field_sales_route_edit,
+    field_sales_route_list,
+    field_sales_route_optimize,
+    mobile_deal_alert_create,
+    mobile_deal_alert_delete,
+    mobile_deal_alert_detail,
+    mobile_deal_alert_edit,
+    mobile_deal_alert_list,
+    mobile_deal_alert_mark_read,
+    mobile_device_session_create,
+    mobile_device_session_delete,
+    mobile_device_session_detail,
+    mobile_device_session_edit,
+    mobile_device_session_list,
+    mobile_device_session_sync,
+    mobile_sales_dashboard,
+)
 
 # View functions exported for URLconf routing and external imports
 __all__ = [
@@ -473,6 +501,10 @@ __all__ = [
         # 8.15 Contract & Subscription Management
         "usage_meter_record_", "contract_obligation_",
         "contract_subscription_workspace", "renewal_automation_dashboard",
+        # 8.16 Mobile Sales
+        "field_sales_route_", "field_check_in_",
+        "mobile_device_session_", "mobile_deal_alert_",
+        "mobile_sales_dashboard",
     ))
 ]
 
