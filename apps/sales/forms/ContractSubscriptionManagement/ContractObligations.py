@@ -50,7 +50,7 @@ class ContractObligationForm(TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             self.fields["contract"].queryset = CustomerContract.objects.filter(tenant=self.tenant)
-            self.fields["subscription"].queryset = CustomerSubscription.objects.filter(tenant=self.tenant)
+            self.fields["subscription"].queryset = CustomerSubscription.objects.filter(tenant=self.tenant).select_related("account")
             self.fields["assigned_to"].queryset = tenant_users(self.tenant)
 
     def clean(self):
