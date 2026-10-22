@@ -49,6 +49,12 @@ class MobileDealAlertForm(TenantModelForm):
             self.fields["related_opportunity"].queryset = Opportunity.objects.filter(tenant=self.tenant)
             self.fields["related_quote"].queryset = CPQQuote.objects.filter(tenant=self.tenant)
             self.fields["related_route"].queryset = FieldSalesRoute.objects.filter(tenant=self.tenant)
+        if "urgency" in self.fields:
+            self.fields["urgency"].required = False
+
+    def clean_urgency(self):
+        val = self.cleaned_data.get("urgency")
+        return val if val else "normal"
 
 
 class MobileDealAlertFilterForm(forms.Form):
