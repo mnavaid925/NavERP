@@ -87,9 +87,9 @@
   `apps/sales/management/commands/seed_sales.py:3346, 3357-3358`. `objects.create()` does not call `clean()`. If `open_stages[0]` and `open_stages[1]` span different pipelines or share sequence, `to_stage.sequence > from_stage.sequence` is violated.
   *Fix:* Pick stages explicitly from the same pipeline with strictly increasing sequence. Fixed — `60a0c470` `fix(sales): pick stage_to_stage funnel stages from same pipeline with strictly increasing sequence`.
 
-- [ ] **I4 — The seeded "bottleneck" is the fastest stage — the demo board contradicts itself.**
+- [x] **I4 — The seeded "bottleneck" is the fastest stage — the demo board contradicts itself.**
   `apps/sales/management/commands/seed_sales.py:3313-3333`. `idx == 0` (median 4 days) is flagged as bottleneck while `idx == 2` (median 16 days) is not.
-  *Fix:* Flag the slowest stage (`idx == 2` or `idx == len - 1`) as bottleneck.
+  *Fix:* Flag the slowest stage (`idx == 2` or `idx == len - 1`) as bottleneck. Fixed — `8c0954de0` by setting `median_days = Decimal(16 - idx * 6)` so the first stage (`idx == 0`) is the slowest (16 days) and matches `is_bottleneck=True`.
 
 - [ ] **I5 — Missing `@tenant_admin_required` on mutating views (`create` and `edit`).**
   `WinLossDebriefs.py:154, 179`, `StageVelocityAnalyses.py:115, 140`, `FunnelConversionRecords.py:143, 168`, `RepPerformanceScorecards.py:157, 182`. All 4 `create` and `edit` views use `@login_required` instead of `@tenant_admin_required`.
