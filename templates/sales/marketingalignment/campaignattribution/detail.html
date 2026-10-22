@@ -66,7 +66,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Attributed Revenue</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.attributed_revenue|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.touchpoint.currency.symbol|default:"$" }}{{ obj.attributed_revenue|floatformat:2 }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -75,7 +75,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Attributed Cost</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.attributed_cost|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.touchpoint.currency.symbol|default:"$" }}{{ obj.attributed_cost|floatformat:2 }}</div>
         </div>
     </div>
     <div class="stat-card">
