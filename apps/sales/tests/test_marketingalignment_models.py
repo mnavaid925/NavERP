@@ -242,17 +242,17 @@ def test_marketingalignment_event_registration_auto_stamps_attended_at(tenant_a,
 
 
 @pytest.mark.django_db
-def test_marketingalignment_event_registration_unique_together(tenant_a, ma_event_a, ma_lead_a):
-    _marketingalignment_registration(tenant_a, ma_event_a, lead=ma_lead_a, registrant_email="alex@example.com")
-    dup = EventRegistration(
+def test_marketingalignment_event_registration_cross_tenant_validation(tenant_a, ma_event_a, ma_lead_b):
+    reg = EventRegistration(
         tenant=tenant_a,
         event=ma_event_a,
-        lead=ma_lead_a,
-        registrant_name="Duplicate Registrant",
-        registrant_email="alex@example.com",
+        lead=ma_lead_b,
+        registrant_name="Cross Tenant Registrant",
+        registrant_email="cross@example.com",
     )
-    with pytest.raises(IntegrityError):
-        dup.save()
+    with pytest.raises(ValidationError) as exc:
+        reg.clean()
+    assert "lead" in exc.value.message_dict
 
 
 @pytest.mark.django_db
