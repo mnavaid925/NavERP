@@ -46,7 +46,7 @@ def renewal_automation_dashboard(request):
     # Linked renewal quotes
     generated_quotes_count = CPQQuote.objects.filter(
         tenant=tenant,
-        title__istartswith="Renewal Quote",
+        name__icontains="Renewal",
     ).count()
 
     context = {
