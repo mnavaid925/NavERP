@@ -115,7 +115,7 @@ def customer_contract_detail(request, pk):
         ),
         pk=pk,
     )
-    subscriptions = contract.subscriptions.all().select_related("currency")
+    subscriptions = contract.subscriptions.all().select_related("currency", "account")
     obligations = contract.obligations.all().select_related("assigned_to")
 
     context = {
