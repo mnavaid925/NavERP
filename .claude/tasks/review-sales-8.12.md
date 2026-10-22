@@ -59,9 +59,9 @@
   `apps/sales/views/SalesAnalytics/FunnelConversionRecords.py:126-134`. Detail template displays `{{ obj.from_stage.pipeline.name }}` and `{{ obj.to_stage.pipeline.name }}`. `select_related` selects `from_stage` and `to_stage`, but omits `from_stage__pipeline` and `to_stage__pipeline`, triggering 2 extra queries per detail/edit page view.
   *Fix:* Add `"from_stage__pipeline"` and `"to_stage__pipeline"` to `select_related`. Fixed — `53daa779` `fix(sales): add from_stage__pipeline and to_stage__pipeline to select_related in FunnelConversionRecord detail and edit views`.
 
-- [ ] **C3 — N+1 query in `StageVelocityAnalysisForm` choice rendering (`PipelineStage.__str__` chained FK hop).**
+- [x] **C3 — N+1 query in `StageVelocityAnalysisForm` choice rendering (`PipelineStage.__str__` chained FK hop).**
   `apps/sales/forms/SalesAnalytics/StageVelocityAnalyses.py:10-54`. When `StageVelocityAnalysisForm` renders `pipeline_stage` choices, `PipelineStage.__str__` evaluates `self.pipeline`. Without `select_related("pipeline")`, every choice issues a query.
-  *Fix:* In `StageVelocityAnalysisForm.__init__`, set `self.fields["pipeline_stage"].queryset = self.fields["pipeline_stage"].queryset.select_related("pipeline")`.
+  *Fix:* In `StageVelocityAnalysisForm.__init__`, set `self.fields["pipeline_stage"].queryset = self.fields["pipeline_stage"].queryset.select_related("pipeline")`. Fixed — `6b75c678` `fix(sales): select_related pipeline on pipeline_stage queryset in StageVelocityAnalysisForm`.
 
 - [ ] **C4 — 2x N+1 queries in `FunnelConversionRecordForm` choice rendering (`PipelineStage.__str__` chained FK hop).**
   `apps/sales/forms/SalesAnalytics/FunnelConversionRecords.py:9-56`. Both `from_stage` and `to_stage` choices render `PipelineStage.__str__` evaluating `self.pipeline`, firing $2 \times N$ queries per form load.
