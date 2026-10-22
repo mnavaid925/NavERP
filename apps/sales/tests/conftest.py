@@ -4857,7 +4857,7 @@ def _marketingalignment_handoff(tenant, lead, campaign=None, account=None, owner
         "owner": owner,
         "assigned_to": owner,
         "status": "pending",
-        "source_kind": "scoring_threshold",
+        "source_kind": "inbound",
         "handoff_at": now - timezone.timedelta(hours=2),
         "sla_due_at": now + timezone.timedelta(hours=22),
         "lead_score": 88,
