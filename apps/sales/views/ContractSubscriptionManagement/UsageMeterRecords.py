@@ -171,6 +171,9 @@ def usage_meter_record_delete(request, pk):
 def usage_meter_record_calculate(request, pk):
     tenant = request.tenant
     meter = get_object_or_404(UsageMeterRecord.objects.filter(tenant=tenant), pk=pk)
+    if meter.status == "invoiced":
+        messages.error(request, "Cannot recalculate an already invoiced usage record.")
+        return redirect("sales:usage_meter_record_detail", pk=meter.pk)
     meter.calculate_charges()
     meter.status = "calculated"
     meter.save(update_fields=["billable_overage_units", "overage_total_charge", "status", "updated_at"])
