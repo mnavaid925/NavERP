@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Contract {{ contract.number }}{% else %}New Customer Contract{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_contract_list' %}">Contracts</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ contract.number }}{% else %}New Contract{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Contract: {{ contract.number }}{% else %}Create Customer Contract{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h3 class="font-semibold text-slate-800">Contract Authoring & Agreement Terms</h3>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="p-4 mb-6 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                <p class="font-bold">Please correct the following errors:</p>
+                <ul class="list-disc pl-5 mt-1 space-y-1">
+                    {% for field in form %}
+                        {% for error in field.errors %}
+                            <li>{{ field.label }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                    {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Contract Title *</label>
+                    {{ form.title }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.account.id_for_label }}">Customer Account *</label>
+                    {{ form.account }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.contract_type.id_for_label }}">Contract Agreement Type *</label>
+                    {{ form.contract_type }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Lifecycle Status *</label>
+                    {{ form.status }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Assigned Contract Manager</label>
+                    {{ form.owner }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Operating Currency *</label>
+                    {{ form.currency }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.total_contract_value.id_for_label }}">Total Contract Value (TCV) *</label>
+                    {{ form.total_contract_value }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.annual_contract_value.id_for_label }}">Annual Contract Value (ACV) *</label>
+                    {{ form.annual_contract_value }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.start_date.id_for_label }}">Start Date *</label>
+                    {{ form.start_date }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.end_date.id_for_label }}">End Date (Leave blank for evergreen)</label>
+                    {{ form.end_date }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.price_uplift_pct.id_for_label }}">Contractual Price Uplift %</label>
+                    {{ form.price_uplift_pct }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.renewal_term_months.id_for_label }}">Renewal Term Duration (Months)</label>
+                    {{ form.renewal_term_months }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.notice_period_days.id_for_label }}">Notice Window (Days)</label>
+                    {{ form.notice_period_days }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="flex items-center gap-2 cursor-pointer mt-2">
+                        {{ form.auto_renew }}
+                        <span class="text-sm font-medium text-slate-700">Automated Auto-Renewal Execution</span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.governing_law.id_for_label }}">Governing Law / Jurisdiction</label>
+                    {{ form.governing_law }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.signoff_contact.id_for_label }}">Authorized Counterparty Signer</label>
+                    {{ form.signoff_contact }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.originating_quote.id_for_label }}">Originating CPQ Quote</label>
+                    {{ form.originating_quote }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.originating_order.id_for_label }}">Originating Sales Order</label>
+                    {{ form.originating_order }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.template.id_for_label }}">Source Legal Template</label>
+                    {{ form.template }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.document.id_for_label }}">Executed Document Attachment</label>
+                    {{ form.document }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.special_terms.id_for_label }}">Special Negotiated Terms</label>
+                    {{ form.special_terms }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.redline_notes.id_for_label }}">Legal Redlining & Negotiation History</label>
+                    {{ form.redline_notes }}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 mt-6 pt-4 border-t">
+                {% if is_edit %}
+                <a href="{% url 'sales:customer_contract_detail' contract.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'sales:customer_contract_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Contract{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
