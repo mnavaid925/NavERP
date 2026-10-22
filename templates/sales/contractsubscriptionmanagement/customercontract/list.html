@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Customer Contracts — Sales — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:contract_subscription_workspace' %}">Contracts & Subscriptions</a>
+            <span>/</span>
+            <span>Contracts</span>
+        </div>
+        <h1 class="page-title">Customer Contracts</h1>
+        <p class="text-sm text-slate-500 mt-1">Manage master commercial agreements, legal redlining, and terms.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:contract_subscription_workspace' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Workspace</span>
+        </a>
+        <a href="{% url 'sales:customer_contract_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Contract</span>
+        </a>
+    </div>
+</div>
+
+<!-- KPI Stats -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-text"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Contracts</div>
+            <div class="text-2xl font-bold text-slate-800">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Contract TCV</div>
+            <div class="text-2xl font-bold text-slate-800">${{ total_tcv|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total in Registry</div>
+            <div class="text-2xl font-bold text-slate-800">{{ page_obj.paginator.count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group mb-0">
+                <input type="text" name="q" value="{{ request.GET.q|default:'' }}" placeholder="Search title or number..." class="form-input text-sm">
+            </div>
+            <div class="form-group mb-0">
+                <select name="contract_type" class="form-select text-sm">
+                    <option value="">All Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.contract_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="account" class="form-select text-sm">
+                    <option value="">All Accounts</option>
+                    {% for acc in filter_form.fields.account.queryset %}
+                    <option value="{{ acc.pk }}" {% if request.GET.account == acc.pk|stringformat:"d" %}selected{% endif %}>{{ acc.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary text-sm flex-1">Filter</button>
+                <a href="{% url 'sales:customer_contract_list' %}" class="btn btn-outline text-sm">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Contracts Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Title & Account</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>TCV</th>
+                    <th>Effective Period</th>
+                    <th>Renewal</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in contracts %}
+                <tr>
+                    <td class="font-semibold text-slate-800">
+                        <a href="{% url 'sales:customer_contract_detail' c.pk %}" class="text-blue-600 hover:underline">
+                            {{ c.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ c.title }}</div>
+                        <div class="text-xs text-slate-500">{% if c.account %}{{ c.account.name }}{% else %}—{% endif %}</div>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600">{{ c.get_contract_type_display }}</span>
+                    </td>
+                    <td>
+                        {% if c.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif c.status == 'internal_review' %}
+                        <span class="badge badge-info">Internal Review</span>
+                        {% elif c.status == 'negotiating' %}
+                        <span class="badge badge-amber">Negotiating</span>
+                        {% elif c.status == 'amended' %}
+                        <span class="badge badge-slate">Amended</span>
+                        {% elif c.status == 'terminated' %}
+                        <span class="badge badge-red">Terminated</span>
+                        {% elif c.status == 'expired' %}
+                        <span class="badge badge-muted">Expired</span>
+                        {% else %}
+                        <span class="badge badge-slate">Draft</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-medium text-slate-700">
+                        ${{ c.total_contract_value|floatformat:2 }}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ c.start_date|date:"M d, Y" }}
+                        {% if c.end_date %}
+                        — {{ c.end_date|date:"M d, Y" }}
+                        {% else %}
+                        (Evergreen)
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if c.auto_renew %}
+                        <span class="badge badge-green">Auto-Renew (+{{ c.price_uplift_pct }}%)</span>
+                        {% else %}
+                        <span class="badge badge-muted">Manual</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'sales:customer_contract_detail' c.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'sales:customer_contract_edit' c.pk %}" class="btn btn-icon" title="Edit Contract">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'sales:customer_contract_delete' c.pk %}" class="inline" onsubmit="return confirm('Delete contract {{ c.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="file-text" class="mx-auto h-10 w-10 text-slate-300 mb-2"></i>
+                            <h3 class="text-base font-medium text-slate-700">No contracts found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Create customer master agreements and subscription contracts.</p>
+                            <a href="{% url 'sales:customer_contract_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create Contract</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer flex justify-between items-center text-sm text-slate-500 px-4 py-3 border-t">
+        <div>
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} contracts
+        </div>
+        <div class="pagination flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
+            {% else %}
+            <span class="btn btn-outline text-xs px-2 py-1 opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-2 py-1 text-xs text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
+            {% else %}
+            <span class="btn btn-outline text-xs px-2 py-1 opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
