@@ -179,9 +179,9 @@
   `apps/sales/management/commands/seed_sales.py:3270`.
   *Fix:* Ensure reason result matches outcome result (`won`/`lost`). Fixed — `71451e3c` `fix(sales): match debrief primary reason to outcome result in seeder`.
 
-- [ ] **M14 — No seeded funnel record falls below its benchmark.**
+- [x] **M14 — No seeded funnel record falls below its benchmark.**
   `apps/sales/management/commands/seed_sales.py:3368`.
-  *Fix:* Set benchmark on one record higher than its conversion rate to exercise the below-benchmark filter.
+  *Fix:* Set benchmark on one record higher than its conversion rate to exercise the below-benchmark filter. Fixed — `8c0954de0` sets `benchmark_pct=Decimal("35.00")` above the first record's rate (31.67%) to exercise the below-benchmark filter.
 
 - [ ] **M15 — `TenantScopedFKAdmin` docstring scope.**
   `apps/sales/admin.py:853`. Documented as 8.13 base class but 8.12 uses it.
