@@ -45,8 +45,12 @@ def mobile_sales_dashboard(request):
         .select_related("party", "sales_rep", "resulting_quote", "route")
         .order_by("-check_in_at")[:8]
     )
+    urgent_alerts_qs = MobileDealAlert.objects.filter(
+        tenant=tenant, is_read=False, urgency__in=["urgent", "high"]
+    )
+    urgent_alerts_count = urgent_alerts_qs.count()
     urgent_alerts = (
-        MobileDealAlert.objects.filter(tenant=tenant, is_read=False, urgency__in=["urgent", "high"])
+        urgent_alerts_qs
         .select_related("recipient", "related_quote", "related_opportunity")
         .order_by("-created_at")[:6]
     )
@@ -64,6 +68,7 @@ def mobile_sales_dashboard(request):
         "active_routes": active_routes,
         "recent_checkins": recent_checkins,
         "urgent_alerts": urgent_alerts,
+        "urgent_alerts_count": urgent_alerts_count,
         "active_devices": active_devices,
     }
     return render(request, "sales/mobilesales/dashboard/mobile_sales_dashboard.html", context)
