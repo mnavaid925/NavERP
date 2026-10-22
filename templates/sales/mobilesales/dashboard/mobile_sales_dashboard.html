@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Field Sales Execution Console — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'sales:dashboard' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Field Sales Console</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Field Sales & Mobile Execution</h1>
+            <p class="text-sm text-slate-500 mt-1">Live territory itineraries, GPS geofence compliance monitoring, and urgent mobile approval radar.</p>
+        </div>
+        <div class="page-actions flex flex-wrap items-center gap-2">
+            <a href="{% url 'sales:field_sales_route_create' %}" class="btn btn-outline flex items-center gap-1.5">
+                <i data-lucide="map" class="w-4 h-4"></i>
+                <span>Plan Route</span>
+            </a>
+            <a href="{% url 'sales:field_check_in_create' %}" class="btn btn-outline flex items-center gap-1.5">
+                <i data-lucide="map-pin" class="w-4 h-4"></i>
+                <span>Check-In</span>
+            </a>
+            <a href="{% url 'sales:mobile_deal_alert_create' %}" class="btn btn-primary flex items-center gap-1.5">
+                <i data-lucide="bell" class="w-4 h-4"></i>
+                <span>Send Alert</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI Metrics Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Routes Today</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ total_routes_today }}</div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <i data-lucide="map" class="w-5 h-5"></i>
+                </div>
+            </div>
+            <div class="text-xs text-slate-500 mt-2 flex items-center justify-between">
+                <span>Active field plans</span>
+                <a href="{% url 'sales:field_sales_route_list' %}" class="text-primary hover:underline">View all</a>
+            </div>
+        </div>
+
+        <div class="card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Stops Completed / Pending</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">
+                        {{ completed_stops_today }} <span class="text-sm font-normal text-slate-400">/ {{ pending_stops_today }} left</span>
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
+                    <i data-lucide="check-circle" class="w-5 h-5"></i>
+                </div>
+            </div>
+            <div class="text-xs text-slate-500 mt-2 flex items-center justify-between">
+                <span>Today's visit progress</span>
+                <a href="{% url 'sales:field_check_in_list' %}" class="text-primary hover:underline">Visits list</a>
+            </div>
+        </div>
+
+        <div class="card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Geofence Compliance</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">
+                        {{ geofence_compliance_pct }}%
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                    <i data-lucide="target" class="w-5 h-5"></i>
+                </div>
+            </div>
+            <div class="text-xs text-slate-500 mt-2">
+                <span>GPS radius <= 150m verification</span>
+            </div>
+        </div>
+
+        <div class="card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Urgent Radar Alerts</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">
+                        {% if urgent_alerts.count > 0 %}
+                            <span class="text-red-600">{{ urgent_alerts.count }}</span>
+                        {% else %}
+                            <span class="text-green-600">0</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
+                    <i data-lucide="alert-octagon" class="w-5 h-5"></i>
+                </div>
+            </div>
+            <div class="text-xs text-slate-500 mt-2 flex items-center justify-between">
+                <span>Unread discount/deal prompts</span>
+                <a href="{% url 'sales:mobile_deal_alert_list' %}" class="text-primary hover:underline">Inbox</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Middle Section: Active Routes & Urgent Alerts Radar -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Active Routes Today -->
+        <div class="card">
+            <div class="card-header border-b p-4 flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="navigation" class="w-4 h-4 text-primary"></i>
+                    <span>Today's Active Field Itineraries</span>
+                </h2>
+                <a href="{% url 'sales:field_sales_route_list' %}" class="text-xs font-medium text-primary hover:underline">
+                    View all routes
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if active_routes %}
+                <div class="divide-y divide-slate-100">
+                    {% for route in active_routes %}
+                    <div class="p-4 hover:bg-slate-50 transition flex items-center justify-between gap-3">
+                        <div>
+                            <div class="font-medium text-slate-900">
+                                <a href="{% url 'sales:field_sales_route_detail' route.pk %}" class="text-primary hover:underline">
+                                    {{ route.name }}
+                                </a>
+                                <span class="text-xs text-slate-400 font-mono">({{ route.number }})</span>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-0.5">
+                                Assigned: {{ route.sales_rep.get_full_name|default:route.sales_rep.username }} · {{ route.start_location|default:"Hub" }}
+                            </div>
+                            <div class="flex items-center gap-2 mt-2">
+                                <div class="progress w-24 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                    <div class="progress-bar bg-primary h-full" style="width: {{ route.completion_rate_pct }}%;"></div>
+                                </div>
+                                <span class="text-xs text-slate-600 font-mono">{{ route.completed_stops }}/{{ route.total_stops }} Stops ({{ route.completion_rate_pct }}%)</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {% if route.status == 'in_progress' %}
+                                <span class="badge badge-info text-xs">In Progress</span>
+                            {% else %}
+                                <span class="badge badge-amber text-xs">Scheduled</span>
+                            {% endif %}
+                            <a href="{% url 'sales:field_sales_route_detail' route.pk %}" class="btn btn-icon btn-outline btn-sm">
+                                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                            </a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="p-8 text-center text-slate-500">
+                    <i data-lucide="calendar" class="w-8 h-8 mx-auto text-slate-300 mb-2"></i>
+                    <p class="text-sm font-medium text-slate-700">No active routes scheduled for today</p>
+                    <p class="text-xs text-slate-400 mt-1">Create a planned itinerary for field sales reps.</p>
+                    <div class="mt-3">
+                        <a href="{% url 'sales:field_sales_route_create' %}" class="btn btn-primary btn-sm">Plan Daily Route</a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Urgent Radar Alerts -->
+        <div class="card">
+            <div class="card-header border-b p-4 flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="alert-circle" class="w-4 h-4 text-red-500"></i>
+                    <span>High-Urgency Mobile Deal Radar</span>
+                </h2>
+                <a href="{% url 'sales:mobile_deal_alert_list' %}" class="text-xs font-medium text-primary hover:underline">
+                    View all alerts
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if urgent_alerts %}
+                <div class="divide-y divide-slate-100">
+                    {% for alert in urgent_alerts %}
+                    <div class="p-4 hover:bg-slate-50 transition flex items-start justify-between gap-3 bg-red-50/20">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="badge badge-red text-xs">Urgent</span>
+                                <a href="{% url 'sales:mobile_deal_alert_detail' alert.pk %}" class="font-medium text-slate-900 hover:text-primary">
+                                    {{ alert.title }}
+                                </a>
+                            </div>
+                            <p class="text-xs text-slate-600 mt-1 line-clamp-1">{{ alert.message }}</p>
+                            <div class="text-xs text-slate-400 mt-1 font-mono">
+                                Recipient: {{ alert.recipient.username }} · {{ alert.created_at|timesince }} ago
+                            </div>
+                        </div>
+                        <div>
+                            {% if alert.related_quote %}
+                                <a href="{% url 'sales:cpq_quote_detail' alert.related_quote.pk %}" class="btn btn-outline btn-sm text-xs py-1 px-2 border-purple-200 text-purple-700 hover:bg-purple-50">
+                                    Sign Off
+                                </a>
+                            {% else %}
+                                <a href="{% url 'sales:mobile_deal_alert_detail' alert.pk %}" class="btn btn-icon btn-outline btn-sm">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="p-8 text-center text-slate-500">
+                    <i data-lucide="shield-check" class="w-8 h-8 mx-auto text-green-400 mb-2"></i>
+                    <p class="text-sm font-medium text-slate-700">All clear — no urgent radar alerts</p>
+                    <p class="text-xs text-slate-400 mt-1">Discount approval requests and urgent dispatch alerts will surface here.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Section: Latest Field Check-Ins & Fleet Sync -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Latest Field Visits (2 cols) -->
+        <div class="card lg:col-span-2">
+            <div class="card-header border-b p-4 flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="map-pin" class="w-4 h-4 text-primary"></i>
+                    <span>Recent Customer Field Visits</span>
+                </h2>
+                <a href="{% url 'sales:field_check_in_list' %}" class="text-xs font-medium text-primary hover:underline">
+                    View all check-ins
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_checkins %}
+                <div class="table-wrap overflow-x-auto">
+                    <table class="table w-full text-left text-sm">
+                        <thead>
+                            <tr class="border-b text-slate-500 bg-slate-50">
+                                <th class="p-3">Visit</th>
+                                <th class="p-3">Account</th>
+                                <th class="p-3">Rep</th>
+                                <th class="p-3">Time</th>
+                                <th class="p-3">Geofence</th>
+                                <th class="p-3">Outcome</th>
+                                <th class="p-3 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for chk in recent_checkins %}
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="p-3 font-mono font-medium text-slate-900">
+                                    <a href="{% url 'sales:field_check_in_detail' chk.pk %}" class="text-primary hover:underline">
+                                        {{ chk.number }}
+                                    </a>
+                                </td>
+                                <td class="p-3 font-medium text-slate-900">{{ chk.party.name }}</td>
+                                <td class="p-3 text-xs text-slate-600">{{ chk.sales_rep.get_full_name|default:chk.sales_rep.username }}</td>
+                                <td class="p-3 text-xs text-slate-500 font-mono">{{ chk.check_in_at|date:"H:i" }}</td>
+                                <td class="p-3">
+                                    {% if chk.is_geofence_verified %}
+                                        <span class="badge badge-green text-xs">Verified</span>
+                                    {% else %}
+                                        <span class="badge badge-amber text-xs">Unverified</span>
+                                    {% endif %}
+                                </td>
+                                <td class="p-3 text-xs text-slate-600">
+                                    {{ chk.get_outcome_display }}
+                                </td>
+                                <td class="p-3 text-right">
+                                    <a href="{% url 'sales:field_check_in_detail' chk.pk %}" class="btn btn-icon btn-outline btn-sm">
+                                        <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-8 text-center text-slate-500">
+                    <i data-lucide="map-pin-off" class="w-8 h-8 mx-auto text-slate-300 mb-2"></i>
+                    <p class="text-sm font-medium text-slate-700">No check-ins recorded yet</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Mobile Device Fleet Sync (1 col) -->
+        <div class="card lg:col-span-1">
+            <div class="card-header border-b p-4 flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="smartphone" class="w-4 h-4 text-primary"></i>
+                    <span>Hardware Fleet Health</span>
+                </h2>
+                <a href="{% url 'sales:mobile_device_session_list' %}" class="text-xs font-medium text-primary hover:underline">
+                    All devices
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if active_devices %}
+                <div class="divide-y divide-slate-100">
+                    {% for dev in active_devices %}
+                    <div class="p-3.5 hover:bg-slate-50 transition flex items-center justify-between gap-2">
+                        <div>
+                            <div class="font-medium text-slate-900 text-sm">
+                                <a href="{% url 'sales:mobile_device_session_detail' dev.pk %}" class="hover:text-primary">
+                                    {{ dev.device_name }}
+                                </a>
+                            </div>
+                            <div class="text-xs text-slate-500">
+                                {{ dev.user.username }} · {{ dev.get_platform_display }}
+                            </div>
+                            <div class="text-xs text-slate-400 font-mono mt-0.5">
+                                Synced: {{ dev.last_sync_at|date:"H:i"|default:"Never" }} ({{ dev.offline_records_cached }} cached)
+                            </div>
+                        </div>
+                        <div>
+                            {% if dev.last_sync_status == 'success' %}
+                                <span class="badge badge-green text-xs">Sync OK</span>
+                            {% elif dev.last_sync_status == 'failed' %}
+                                <span class="badge badge-red text-xs">Failed</span>
+                            {% else %}
+                                <span class="badge badge-slate text-xs">Pending</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="p-8 text-center text-slate-500">
+                    <i data-lucide="smartphone" class="w-8 h-8 mx-auto text-slate-300 mb-2"></i>
+                    <p class="text-sm font-medium text-slate-700">No active mobile devices</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
