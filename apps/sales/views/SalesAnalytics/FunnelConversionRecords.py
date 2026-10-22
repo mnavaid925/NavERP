@@ -127,6 +127,8 @@ def funnel_conversion_record_detail(request, pk):
         FunnelConversionRecord.objects.filter(tenant=request.tenant).select_related(
             "from_stage",
             "to_stage",
+            "from_stage__pipeline",
+            "to_stage__pipeline",
             "territory",
             "owner",
         ),
@@ -170,6 +172,8 @@ def funnel_conversion_record_edit(request, pk):
         FunnelConversionRecord.objects.filter(tenant=request.tenant).select_related(
             "from_stage",
             "to_stage",
+            "from_stage__pipeline",
+            "to_stage__pipeline",
             "territory",
             "owner",
         ),
