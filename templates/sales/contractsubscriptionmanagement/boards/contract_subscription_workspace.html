@@ -214,4 +214,55 @@
         </div>
     </div>
 </div>
+
+<!-- Urgent Subscriptions Nearing Term End -->
+<div class="card mt-6">
+    <div class="card-header flex justify-between items-center">
+        <h3 class="font-semibold text-slate-800">Subscriptions Nearing Term End (60 Days)</h3>
+        <a href="{% url 'sales:customer_subscription_list' %}" class="text-xs text-blue-600 hover:underline">All Subscriptions</a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Subscription</th>
+                    <th>Account</th>
+                    <th>Plan</th>
+                    <th>MRR</th>
+                    <th>Term End</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in urgent_subscriptions %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'sales:customer_subscription_detail' s.pk %}" class="text-blue-600 hover:underline">
+                            {{ s.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ s.account.name }}</div>
+                        <div class="text-xs text-slate-500">{{ s.subscription_name|truncatechars:20 }}</div>
+                    </td>
+                    <td><span class="badge badge-info">{{ s.plan_code }}</span></td>
+                    <td class="font-medium text-slate-700">${{ s.mrr|floatformat:2 }}</td>
+                    <td class="text-xs text-amber-700 font-medium">{{ s.current_term_end|date:"M d, Y" }}</td>
+                    <td class="text-right">
+                        <a href="{% url 'sales:customer_subscription_detail' s.pk %}" class="btn btn-icon">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-xs text-slate-500">
+                        No subscriptions renewing within 60 days.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 {% endblock %}
