@@ -651,7 +651,7 @@ def win_loss_console(request):
             "action_owner",
             "outcome",
             "communication_log",
-        )
+        )[:ROW_LIMIT]
     ]
 
     won_count = sum(int(row.get("count") or 0) for row in win_loss if row.get("result") == "won")
@@ -920,7 +920,7 @@ def funnel_console(request):
         )
     )
     records.sort(key=lambda item: (item.period_start or timezone.localdate()), reverse=True)
-    funnel_rows = [_funnel_row(record) for record in records]
+    funnel_rows = [_funnel_row(record) for record in records[:ROW_LIMIT]]
 
     benchmark_rows = []
     for record in records:
@@ -1010,7 +1010,7 @@ def rep_scorecard_console(request):
             "coaching_scorecard",
         )
     )
-    scorecard_rows = [_scorecard_row(scorecard) for scorecard in scorecards]
+    scorecard_rows = [_scorecard_row(scorecard) for scorecard in scorecards[:ROW_LIMIT]]
 
     leaderboard = sorted(
         scorecard_rows,
