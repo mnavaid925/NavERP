@@ -1,6 +1,6 @@
 ---
 name: sales
-description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, 8.8 Sales Activity & Task Management, 8.9 Sales Enablement, 8.10 Incentive Compensation Management, and 8.11 Customer Success & Account Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
+description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, 8.8 Sales Activity & Task Management, 8.9 Sales Enablement, 8.10 Incentive Compensation Management, 8.11 Customer Success & Account Management, 8.12 Sales Analytics & Intelligence, and 8.14 Partner & Channel Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
 ---
 
 # Sales Management System (Module 8)
@@ -1193,3 +1193,91 @@ Mounted under `sales:` namespace (22 total endpoints):
 
 
 
+
+
+---
+
+## Sub-module 8.12: Sales Analytics & Intelligence (`apps/sales/models/SalesAnalytics/`)
+
+### 8.12 Overview
+Provides operational and executive intelligence across the entire sales cycle, including win/loss debriefs and decision driver telemetry, pipeline stage velocity analysis and bottleneck detection, stage-to-stage funnel conversion metrics, and comprehensive rep performance scorecards.
+
+### 8.12 Models
+- `WinLossDebrief` (`WLA-`): Structured intelligence debrief for closed opportunities. Fields: `opportunity` (FK `crm.Opportunity`), `outcome` (FK `crm.OpportunityOutcome`), `primary_reason` (FK `sales.WinLossReason`), `debriefed_on`, `interview_channel` (`interview`, `survey`, `win_loss_agency`, `call_recording`, `email`), `interviewer` (FK `settings.AUTH_USER_MODEL`), `decision_drivers` (JSON array: driver, sentiment, weight 1-5, quote), `feedback_team` (`product`, `marketing`, `sales`, `finance`, `operations`, `other`), `buyer_quote`, `counterfactual`, `action_items`, `actioned_on`, `status` (`draft`, `submitted`, `shared`, `actioned`, `closed`), `notes`.
+- `StageVelocityAnalysis` (`VCA-`): Aggregated stage duration and pipeline flow diagnostics. Fields: `pipeline` (FK `sales.OpportunityPipeline`), `pipeline_stage` (FK `sales.PipelineStage`), `period_start`, `period_end`, `opportunity_count`, `median_days_in_stage`, `p90_days_in_stage`, `max_days_in_stage`, `sales_cycle_days`, `velocity_value`, `is_bottleneck`, `bottleneck_rank`, `recommendation`, `benchmark_days`, `status` (`draft`, `reviewed`, `approved`, `archived`), `notes`.
+- `FunnelConversionRecord` (`FNL-`): Quantified funnel stage transition telemetry. Fields: `label`, `funnel_scope` (`stage_to_stage`, `lead_to_opportunity`, `opportunity_to_win`, `end_to_end`), `from_stage` (FK `sales.PipelineStage`), `to_stage` (FK `sales.PipelineStage`), `period_start`, `period_end`, `territory` (FK `crm.Territory`), `currency` (FK `accounting.Currency`), `entered_count`, `converted_count`, `skipped_count`, `conversion_rate_pct` (derived), `dropoff_count` (derived), `avg_cycle_days`, `benchmark_pct`, `notes`.
+- `RepPerformanceScorecard` (`RPS-`): Holistic sales representative capability and attainment scorecard. Fields: `rep` (FK `settings.AUTH_USER_MODEL`), `manager` (FK `settings.AUTH_USER_MODEL`), `territory` (FK `crm.Territory`), `currency` (FK `accounting.Currency`), `period_start`, `period_end`, `forecast_period` (FK `sales.ForecastPeriod`), `quota_plan` (FK `sales.QuotaPlan`), `coaching_scorecard` (FK `sales.CoachingScorecard`), `activities_logged`, `calls_logged`, `emails_logged`, `meetings_logged`, `meetings_booked`, `follow_ups_completed`, `activity_minutes`, `opportunities_created`, `opportunities_won`, `opportunities_lost`, `pipeline_value`, `weighted_pipeline_value`, `revenue_closed`, `quota_target`, `win_rate_pct` (derived), `average_deal_size` (derived), `quota_attainment_pct` (derived), `goal_gap_value` (derived), `overall_score`, `rating` (`outstanding`, `strong`, `on_track`, `needs_improvement`, `underperforming`), `strengths`, `areas_for_improvement`, `coaching_actions`, `status` (`draft`, `shared`, `acknowledged`, `approved`, `archived`), `notes`.
+
+### 8.12 Core Spine Reuse
+- Deals & Outcomes: `crm.Opportunity` (`OPP-`) and `crm.OpportunityOutcome` (`OUT-`).
+- Pipelines & Stages: `sales.OpportunityPipeline` and `sales.PipelineStage`.
+- Reasons & Competitors: `sales.WinLossReason` and `sales.Competitor`.
+- Quotas & Enablement: `sales.QuotaPlan` and `sales.CoachingScorecard`.
+- Territories & Periods: `crm.Territory` and `sales.ForecastPeriod`.
+- Currencies & Users: `accounting.Currency` and `accounts.User`.
+
+### 8.12 Routes & URLs (`apps/sales/urls/SalesAnalytics/`)
+Mounted under `sales:` namespace (26 total endpoints):
+- **Executive & Operational Consoles**:
+  - `sales:analytics_console` (`/sales/sales-analytics/`)
+  - `sales:win_loss_console` (`/sales/sales-analytics/win-loss/`)
+  - `sales:velocity_console` (`/sales/sales-analytics/velocity/`)
+  - `sales:funnel_console` (`/sales/sales-analytics/funnel/`)
+  - `sales:rep_scorecard_console` (`/sales/sales-analytics/rep-scorecards/`)
+  - `sales:benchmark_console` (`/sales/sales-analytics/benchmarks/`)
+- **Win/Loss Debriefs**:
+  - `sales:win_loss_debrief_list` (`/sales/sales-analytics/win-loss-debriefs/`)
+  - `sales:win_loss_debrief_create` (`/sales/sales-analytics/win-loss-debriefs/create/`)
+  - `sales:win_loss_debrief_detail` (`/sales/sales-analytics/win-loss-debriefs/<int:pk>/`)
+  - `sales:win_loss_debrief_edit` (`/sales/sales-analytics/win-loss-debriefs/<int:pk>/edit/`)
+  - `sales:win_loss_debrief_delete` (`/sales/sales-analytics/win-loss-debriefs/<int:pk>/delete/`)
+- **Stage Velocity Analyses**:
+  - `sales:stage_velocity_analysis_list` (`/sales/sales-analytics/stage-velocity/`)
+  - `sales:stage_velocity_analysis_create` (`/sales/sales-analytics/stage-velocity/create/`)
+  - `sales:stage_velocity_analysis_detail` (`/sales/sales-analytics/stage-velocity/<int:pk>/`)
+  - `sales:stage_velocity_analysis_edit` (`/sales/sales-analytics/stage-velocity/<int:pk>/edit/`)
+  - `sales:stage_velocity_analysis_delete` (`/sales/sales-analytics/stage-velocity/<int:pk>/delete/`)
+- **Funnel Conversion Records**:
+  - `sales:funnel_conversion_record_list` (`/sales/sales-analytics/funnel-records/`)
+  - `sales:funnel_conversion_record_create` (`/sales/sales-analytics/funnel-records/create/`)
+  - `sales:funnel_conversion_record_detail` (`/sales/sales-analytics/funnel-records/<int:pk>/`)
+  - `sales:funnel_conversion_record_edit` (`/sales/sales-analytics/funnel-records/<int:pk>/edit/`)
+  - `sales:funnel_conversion_record_delete` (`/sales/sales-analytics/funnel-records/<int:pk>/delete/`)
+- **Rep Performance Scorecards**:
+  - `sales:rep_performance_scorecard_list` (`/sales/sales-analytics/scorecards/`)
+  - `sales:rep_performance_scorecard_create` (`/sales/sales-analytics/scorecards/create/`)
+  - `sales:rep_performance_scorecard_detail` (`/sales/sales-analytics/scorecards/<int:pk>/`)
+  - `sales:rep_performance_scorecard_edit` (`/sales/sales-analytics/scorecards/<int:pk>/edit/`)
+  - `sales:rep_performance_scorecard_delete` (`/sales/sales-analytics/scorecards/<int:pk>/delete/`)
+
+### 8.12 Templates (`templates/sales/salesanalytics/`)
+- 6 Console Boards in `boards/`: `analytics_console.html`, `win_loss_console.html`, `velocity_console.html`, `funnel_console.html`, `rep_scorecard_console.html`, `benchmark_console.html`.
+- 12 Entity CRUD Templates:
+  - `winlossdebrief/{list,detail,form}.html`
+  - `stagevelocityanalysis/{list,detail,form}.html`
+  - `funnelconversionrecord/{list,detail,form}.html`
+  - `repperformancescorecard/{list,detail,form}.html`
+
+### 8.12 Navigation Wiring (`apps/core/navigation.py`)
+`LIVE_LINKS["8.12"]` maps all 6 NavERP.md feature bullets:
+- Win/Loss Analysis -> `sales:win_loss_console`
+- Sales Velocity Tracking -> `sales:velocity_console`
+- Conversion Funnel Analytics -> `sales:funnel_console`
+- Rep Performance Scorecards -> `sales:rep_scorecard_console`
+- Sales Performance Benchmarking -> `sales:benchmark_console`
+- Executive Sales Analytics Hub -> `sales:analytics_console`
+- Plus direct CRUD leaf links for Debriefs, Velocity Analyses, Funnel Records, and Scorecards.
+
+### 8.12 Seeder (`apps/sales/management/commands/seed_sales.py`)
+`_seed_sales_analytics` is fully idempotent and seeds:
+- 4 Win/Loss Debriefs across won and lost deals with full decision driver JSON trees.
+- 4 Stage Velocity Analyses covering pipeline stages with bottleneck identification.
+- 3 Funnel Conversion Records tracking multi-stage progression and drop-off rates.
+- 2 Rep Performance Scorecards with activity counts, closed revenue, and quota metrics.
+
+### 8.12 Conventions & Gotchas
+- **Numeric FK Filter Parsing**: Views use helper `_pk_filter(val)` to parse integer query parameters safely, preventing integer overflow and formatting exceptions from hostile query inputs.
+- **Foreign Key Selection Optimization**: Choice fields in forms and querysets in list/detail views apply `select_related()` to eliminate N+1 queries across related models (`pipeline`, `from_stage`, `to_stage`, `quota_plan`, `coaching_scorecard`).
+- **RBAC on Mutations**: All create, edit, and delete endpoints enforce `@tenant_admin_required`, while delete actions additionally require POST (`@require_POST`).
+- **Database Composite Indexes**: Composite indexes on `(tenant, debriefed_on)`, `(tenant, is_bottleneck)`, `(tenant, funnel_scope)`, and `(tenant, rating)` ensure sub-millisecond aggregation on console dashboards.
+- **Decision Drivers Schema Guard**: `WinLossDebriefForm` validates `decision_drivers` against a strict JSON schema (driver string, sentiment allowlist, weight 1-5, max 50 items).
