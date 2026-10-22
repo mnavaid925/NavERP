@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+{% block title %}{{ contract.number }} — {{ contract.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_contract_list' %}">Contracts</a>
+            <span>/</span>
+            <span>{{ contract.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ contract.title }}</h1>
+            {% if contract.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+            {% elif contract.status == 'internal_review' %}
+            <span class="badge badge-info">Internal Review</span>
+            {% elif contract.status == 'negotiating' %}
+            <span class="badge badge-amber">Negotiating</span>
+            {% elif contract.status == 'amended' %}
+            <span class="badge badge-slate">Amended</span>
+            {% elif contract.status == 'terminated' %}
+            <span class="badge badge-red">Terminated</span>
+            {% elif contract.status == 'expired' %}
+            <span class="badge badge-muted">Expired</span>
+            {% else %}
+            <span class="badge badge-slate">Draft</span>
+            {% endif %}
+            <span class="text-xs text-slate-500 font-mono">{{ contract.number }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:customer_contract_edit' contract.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+
+        {% if contract.status != 'active' and contract.status != 'terminated' %}
+        <form method="post" action="{% url 'sales:customer_contract_activate' contract.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" onclick="return confirm('Activate this contract? This marks the agreement executed.');">
+                <i data-lucide="check-circle"></i>
+                <span>Activate Agreement</span>
+            </button>
+        </form>
+        {% endif %}
+
+        {% if contract.status == 'active' %}
+        <form method="post" action="{% url 'sales:customer_contract_generate_renewal_quote' contract.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" onclick="return confirm('Generate a renewal CPQ quote with {{ contract.price_uplift_pct }}% contractual uplift?');">
+                <i data-lucide="file-plus"></i>
+                <span>Generate Renewal Quote</span>
+            </button>
+        </form>
+
+        <form method="post" action="{% url 'sales:customer_contract_execute_auto_renew' contract.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" onclick="return confirm('Execute auto-renewal? This extends the contract term by {{ contract.renewal_term_months }} months.');">
+                <i data-lucide="refresh-cw"></i>
+                <span>Execute Auto-Renew</span>
+            </button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'sales:customer_contract_delete' contract.pk %}" class="inline" onsubmit="return confirm('Delete contract {{ contract.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Details Column -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Overview Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-800">Commercial Agreement Details</h3>
+                <span class="text-xs text-slate-500">{{ contract.get_contract_type_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                        <div class="text-xs text-slate-500">Contracting Account</div>
+                        <div class="font-medium text-slate-800 mt-1">
+                            {% if contract.account %}
+                            {{ contract.account.name }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Total Contract Value (TCV)</div>
+                        <div class="font-bold text-slate-800 mt-1 text-base text-green-700">
+                            ${{ contract.total_contract_value|floatformat:2 }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Annual Contract Value (ACV)</div>
+                        <div class="font-medium text-slate-800 mt-1">
+                            ${{ contract.annual_contract_value|floatformat:2 }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Start Date</div>
+                        <div class="font-medium text-slate-800 mt-1">{{ contract.start_date|date:"F d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">End Date</div>
+                        <div class="font-medium text-slate-800 mt-1">
+                            {% if contract.end_date %}
+                            {{ contract.end_date|date:"F d, Y" }}
+                            {% else %}
+                            <span class="text-slate-500">Evergreen / Perpetual</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Operating Currency</div>
+                        <div class="font-medium text-slate-800 mt-1">{{ contract.currency.code }}</div>
+                    </div>
+                </div>
+
+                {% if contract.special_terms %}
+                <div class="mt-6 pt-4 border-t">
+                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Special Negotiated Terms</h4>
+                    <div class="p-3 bg-slate-50 rounded text-xs text-slate-700 font-mono whitespace-pre-wrap">{{ contract.special_terms }}</div>
+                </div>
+                {% endif %}
+
+                {% if contract.redline_notes %}
+                <div class="mt-4 pt-4 border-t">
+                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Legal Redline & Negotiation Notes</h4>
+                    <div class="p-3 bg-amber-50 rounded text-xs text-slate-700 whitespace-pre-wrap">{{ contract.redline_notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Child Subscriptions Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-800">Linked Subscriptions ({{ subscriptions.count }})</h3>
+                <a href="{% url 'sales:customer_subscription_create' %}?contract={{ contract.pk }}" class="btn btn-outline text-xs">
+                    <i data-lucide="plus"></i>
+                    <span>Add Subscription</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Plan / Service</th>
+                            <th>Status</th>
+                            <th>Model</th>
+                            <th>MRR</th>
+                            <th>Term End</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in subscriptions %}
+                        <tr>
+                            <td class="font-medium">
+                                <a href="{% url 'sales:customer_subscription_detail' s.pk %}" class="text-blue-600 hover:underline">
+                                    {{ s.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-800">{{ s.subscription_name }}</div>
+                                <div class="text-xs text-slate-500">{{ s.plan_code }}</div>
+                            </td>
+                            <td>
+                                {% if s.status == 'active' %}
+                                <span class="badge badge-green">Active</span>
+                                {% elif s.status == 'paused' %}
+                                <span class="badge badge-amber">Paused</span>
+                                {% elif s.status == 'cancelled' %}
+                                <span class="badge badge-red">Cancelled</span>
+                                {% else %}
+                                <span class="badge badge-slate">{{ s.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-xs text-slate-600">{{ s.get_pricing_model_display }}</td>
+                            <td class="font-medium text-slate-700">${{ s.mrr|floatformat:2 }}</td>
+                            <td class="text-xs text-slate-600">{{ s.current_term_end|date:"M d, Y" }}</td>
+                            <td class="text-right">
+                                <a href="{% url 'sales:customer_subscription_detail' s.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-xs text-slate-500">
+                                No recurring subscriptions registered under this contract.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Child Obligations Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-800">Contractual Obligations & SLAs ({{ obligations.count }})</h3>
+                <a href="{% url 'sales:contract_obligation_create' %}?contract={{ contract.pk }}" class="btn btn-outline text-xs">
+                    <i data-lucide="plus"></i>
+                    <span>Add Obligation</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Obligation</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Target Benchmark</th>
+                            <th>Due Date</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for o in obligations %}
+                        <tr>
+                            <td class="font-medium">
+                                <a href="{% url 'sales:contract_obligation_detail' o.pk %}" class="text-blue-600 hover:underline">
+                                    {{ o.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-800">{{ o.title }}</div>
+                            </td>
+                            <td class="text-xs text-slate-600">{{ o.get_obligation_type_display }}</td>
+                            <td>
+                                {% if o.status == 'fulfilled' %}
+                                <span class="badge badge-green">Fulfilled</span>
+                                {% elif o.status == 'at_risk' %}
+                                <span class="badge badge-amber">At Risk</span>
+                                {% elif o.status == 'breached' %}
+                                <span class="badge badge-red">Breached</span>
+                                {% elif o.status == 'waived' %}
+                                <span class="badge badge-muted">Waived</span>
+                                {% else %}
+                                <span class="badge badge-slate">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-xs font-mono text-slate-700">{{ o.target_metric }}</td>
+                            <td class="text-xs text-slate-600">
+                                {% if o.due_date %}{{ o.due_date|date:"M d, Y" }}{% else %}—{% endif %}
+                            </td>
+                            <td class="text-right">
+                                <a href="{% url 'sales:contract_obligation_detail' o.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-xs text-slate-500">
+                                No SLA or delivery obligations assigned to this agreement.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Info Column -->
+    <div class="space-y-6">
+        <!-- Renewal Terms Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Renewal Terms</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-slate-500">Renewal Automation</div>
+                    <div class="mt-1">
+                        {% if contract.auto_renew %}
+                        <span class="badge badge-green">Automated Auto-Renewal</span>
+                        {% else %}
+                        <span class="badge badge-slate">Manual Renewal Execution</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Renewal Term Duration</div>
+                    <div class="font-medium text-slate-800 mt-1">{{ contract.renewal_term_months }} Months</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Non-Renewal Notice Window</div>
+                    <div class="font-medium text-slate-800 mt-1">{{ contract.notice_period_days }} Days</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Contractual Price Uplift</div>
+                    <div class="font-medium text-slate-800 mt-1">+{{ contract.price_uplift_pct }}%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Execution & Legal Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Signatures & Execution</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-slate-500">Authorized Counterparty Signer</div>
+                    <div class="font-medium text-slate-800 mt-1">{{ contract.signoff_contact|default:"—" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Signed Timestamp</div>
+                    <div class="font-medium text-slate-800 mt-1">
+                        {% if contract.signed_at %}
+                        {{ contract.signed_at|date:"M d, Y H:i" }}
+                        {% else %}
+                        <span class="text-slate-400">Not Executed</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Governing Law Jurisdiction</div>
+                    <div class="font-medium text-slate-800 mt-1">{{ contract.governing_law|default:"—" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Assigned Contract Manager</div>
+                    <div class="font-medium text-slate-800 mt-1">
+                        {% if contract.owner %}
+                        {{ contract.owner.get_full_name|default:contract.owner.username }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Linked Documents Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Originating Links</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-slate-500">Originating Quote</div>
+                    <div class="mt-1 font-medium">
+                        {% if contract.originating_quote %}
+                        <a href="{% url 'sales:cpq_quote_detail' contract.originating_quote.pk %}" class="text-blue-600 hover:underline">
+                            {{ contract.originating_quote.number }}
+                        </a>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Originating Order</div>
+                    <div class="mt-1 font-medium">
+                        {% if contract.originating_order %}
+                        <span class="text-slate-800">{{ contract.originating_order.number }}</span>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Source Legal Template</div>
+                    <div class="mt-1 font-medium">
+                        {% if contract.template %}
+                        <span class="text-slate-800">{{ contract.template.name }}</span>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500">Executed File Attachment</div>
+                    <div class="mt-1 font-medium">
+                        {% if contract.document %}
+                        <span class="text-slate-800">{{ contract.document.title }}</span>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
