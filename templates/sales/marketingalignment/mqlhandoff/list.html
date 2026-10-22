@@ -56,7 +56,7 @@
         </div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon red">
+        <div class="stat-icon orange">
             <i data-lucide="alarm-clock"></i>
         </div>
         <div>
@@ -233,7 +233,7 @@
         </div>
         <div class="pagination-actions">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.source_kind %}&source_kind={{ active_filters.source_kind }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q|urlencode }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.source_kind %}&source_kind={{ active_filters.source_kind }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}" class="btn btn-outline btn-sm">
                 Previous
             </a>
             {% else %}
@@ -243,7 +243,7 @@
             <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.source_kind %}&source_kind={{ active_filters.source_kind }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q|urlencode }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.source_kind %}&source_kind={{ active_filters.source_kind }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}" class="btn btn-outline btn-sm">
                 Next
             </a>
             {% else %}
