@@ -60,6 +60,9 @@ class AttributionTouchpoint(TenantNumbered):
     """A single marketing interaction on the path to a conversion (8.13)."""
 
     NUMBER_PREFIX = "ATB"
+    CHANNEL_CHOICES = TOUCH_CHANNEL_CHOICES
+    TOUCH_TYPE_CHOICES = TOUCH_TYPE_CHOICES
+    TOUCH_POSITION_CHOICES = TOUCH_POSITION_CHOICES
 
     campaign = models.ForeignKey(
         "crm.Campaign",
