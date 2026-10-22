@@ -119,6 +119,7 @@ class StageVelocityAnalysis(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="sales_vca_tenant_status_idx"),
             models.Index(fields=["tenant", "is_bottleneck"], name="sales_vca_tenant_bneck_idx"),
             models.Index(fields=["tenant", "pipeline"], name="sales_vca_tenant_pipeline_idx"),
+            models.Index(fields=["tenant", "-period_end"], name="sales_vca_ten_pend_idx"),
         ]
 
     def __str__(self):
