@@ -28,7 +28,7 @@ def field_check_in_list(request):
     tenant = request.tenant
     qs = (
         FieldCheckIn.objects.filter(tenant=tenant)
-        .select_related("party", "sales_rep", "route", "resulting_quote", "opportunity")
+        .select_related("party", "contact", "sales_rep", "route", "resulting_quote", "opportunity")
         .order_by("-check_in_at")
     )
 
