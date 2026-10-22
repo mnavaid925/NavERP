@@ -90,12 +90,10 @@ def contract_obligation_create(request):
             obl.tenant = tenant
             obl.save()
             write_audit_log(
-                tenant=tenant,
                 user=request.user,
+                obj=obl,
                 action="create",
-                model_name="ContractObligation",
-                object_id=str(obl.pk),
-                object_repr=str(obl),
+                tenant=tenant,
             )
             messages.success(request, f"Obligation {obl.number} created successfully.")
             return redirect("sales:contract_obligation_detail", pk=obl.pk)
@@ -154,12 +152,10 @@ def contract_obligation_edit(request, pk):
         if form.is_valid():
             obl = form.save()
             write_audit_log(
-                tenant=tenant,
                 user=request.user,
+                obj=obl,
                 action="update",
-                model_name="ContractObligation",
-                object_id=str(obl.pk),
-                object_repr=str(obl),
+                tenant=tenant,
             )
             messages.success(request, f"Obligation {obl.number} updated successfully.")
             return redirect("sales:contract_obligation_detail", pk=obl.pk)
@@ -181,15 +177,13 @@ def contract_obligation_delete(request, pk):
     tenant = request.tenant
     obligation = get_object_or_404(ContractObligation.objects.filter(tenant=tenant), pk=pk)
     number = obligation.number
-    obligation.delete()
     write_audit_log(
-        tenant=tenant,
         user=request.user,
+        obj=obligation,
         action="delete",
-        model_name="ContractObligation",
-        object_id=str(pk),
-        object_repr=number,
+        tenant=tenant,
     )
+    obligation.delete()
     messages.success(request, f"Obligation {number} deleted successfully.")
     return redirect("sales:contract_obligation_list")
 
@@ -206,12 +200,10 @@ def contract_obligation_fulfill(request, pk):
         obligation.fulfillment_evidence = form.cleaned_data["fulfillment_evidence"]
         obligation.save(update_fields=["status", "fulfilled_at", "fulfillment_evidence", "updated_at"])
         write_audit_log(
-            tenant=tenant,
             user=request.user,
+            obj=obligation,
             action="update",
-            model_name="ContractObligation",
-            object_id=str(obligation.pk),
-            object_repr=f"Fulfilled obligation {obligation.number}",
+            tenant=tenant,
         )
         messages.success(request, f"Obligation {obligation.number} marked fulfilled.")
     else:
@@ -231,12 +223,10 @@ def contract_obligation_breach(request, pk):
         obligation.penalty_status = form.cleaned_data["penalty_status"]
         obligation.save(update_fields=["status", "penalty_amount", "penalty_status", "updated_at"])
         write_audit_log(
-            tenant=tenant,
             user=request.user,
+            obj=obligation,
             action="update",
-            model_name="ContractObligation",
-            object_id=str(obligation.pk),
-            object_repr=f"Breached obligation {obligation.number} - Penalty: ${obligation.penalty_amount} ({obligation.penalty_status})",
+            tenant=tenant,
         )
         messages.success(request, f"Obligation {obligation.number} marked breached with penalty assessment.")
     else:
