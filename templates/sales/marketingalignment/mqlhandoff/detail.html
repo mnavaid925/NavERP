@@ -70,7 +70,7 @@
         </div>
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Estimated Value</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">${{ obj.estimated_value|floatformat:2 }}</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ obj.currency.symbol|default:"$" }}{{ obj.estimated_value|floatformat:2 }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -85,7 +85,7 @@
         </div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon {% if obj.is_sla_breached %}red{% else %}green{% endif %}">
+        <div class="stat-icon {% if obj.is_sla_breached %}orange{% else %}green{% endif %}">
             <i data-lucide="alarm-clock"></i>
         </div>
         <div>
