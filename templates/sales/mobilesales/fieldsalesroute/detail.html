@@ -170,7 +170,7 @@
                 <div class="card-header border-b p-4 flex items-center justify-between">
                     <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
                         <i data-lucide="list-ordered" class="w-4 h-4 text-primary"></i>
-                        <span>Itinerary Stops & Recorded Visits ({{ stops.count }})</span>
+                        <span>Itinerary Stops & Recorded Visits ({{ stops|length }})</span>
                     </h2>
                     <a href="{% url 'sales:field_check_in_create' %}?route={{ route.pk }}" class="btn btn-outline btn-sm flex items-center gap-1">
                         <i data-lucide="plus" class="w-3.5 h-3.5"></i>
