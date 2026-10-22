@@ -131,9 +131,9 @@
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:608`. Assigned, never read.
   *Fix:* Delete the unused line. Fixed — `1af8653e` `fix(sales): delete unused amount variable in win_loss_console`.
 
-- [ ] **M2 — Missing overflow clamping in `FunnelConversionRecord.save()` for derived column.**
+- [x] **M2 — Missing overflow clamping in `FunnelConversionRecord.save()` for derived column.**
   `apps/sales/models/SalesAnalytics/FunnelConversionRecords.py:152-162`. If `FunnelConversionRecord.save()` is called programmatically with `converted_count > entered_count`, the rate exceeds `999.99` and overflows `DECIMAL(5,2)`.
-  *Fix:* Clamp `self.conversion_rate_pct = min(rate, Decimal("999.99"))`.
+  *Fix:* Clamp `self.conversion_rate_pct = min(rate, Decimal("999.99"))`. Fixed — `cbb9f34e` `fix(sales): clamp conversion_rate_pct to 999.99 on save in FunnelConversionRecord`.
 
 - [ ] **M3 — Uncapped array size in `clean_decision_drivers`.**
   `apps/sales/forms/SalesAnalytics/WinLossDebriefs.py:58-111`. Submitting an excessively large array increases row size and console processing time.
