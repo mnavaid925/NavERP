@@ -2593,6 +2593,27 @@ LIVE_LINKS = {
         "Contract Obligations": "sales:contract_obligation_list",
         "Contract & Subscription Workspace": "sales:contract_subscription_workspace",
     },
+    "8.16": {
+        # OWNERSHIP RULINGS (L36/L37):
+        # Reuses core.Party for visited customers and accounts;
+        # reuses core.Document (DOC-) for proof-of-visit photos and shelf audit attachments;
+        # reuses accounts.User for field sales reps, dispatchers, and notification recipients;
+        # reuses crm.Opportunity (OPP-) for pipeline deals advanced in the field;
+        # reuses crm.CommunicationLog (COM-) for click-to-dial and voicemail logs;
+        # reuses sales.CPQQuote (CPQ-) for on-the-spot field quoting and mobile discount sign-offs.
+        # Zero duplicate customer/account, rep, proposal, or geofence tables declared.
+        "Mobile CRM Access": "sales:mobile_device_session_list",
+        "Field Sales Tools": "sales:field_sales_route_list",
+        "Mobile Quoting & Approvals": "sales:field_check_in_list",
+        "Voice & Call Integration": "crm:communicationlog_list",
+        "Mobile Dashboards & Alerts": "sales:mobile_sales_dashboard",
+        # Extra live leaves
+        "Field Sales Routes": "sales:field_sales_route_list",
+        "Field Check-Ins": "sales:field_check_in_list",
+        "Mobile Device Sessions": "sales:mobile_device_session_list",
+        "Mobile Deal Alerts": "sales:mobile_deal_alert_list",
+        "Mobile Sales Dashboard": "sales:mobile_sales_dashboard",
+    },
 
 
 
