@@ -185,7 +185,7 @@
                         {% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'sales:stage_velocity_analysis_detail' analysis.pk %}" class="btn btn-icon btn-outline" title="View analysis">
+                        <a href="{% url 'sales:stage_velocity_analysis_detail' analysis.pk %}" class="btn btn-icon btn-outline" title="View analysis" aria-label="View analysis">
                             <i data-lucide="eye"></i>
                         </a>
                         {% comment %}
@@ -194,13 +194,13 @@
                           analyses keep both actions available.
                         {% endcomment %}
                         {% if analysis.status != "approved" %}
-                        <a href="{% url 'sales:stage_velocity_analysis_edit' analysis.pk %}" class="btn btn-icon btn-outline" title="Edit analysis">
+                        <a href="{% url 'sales:stage_velocity_analysis_edit' analysis.pk %}" class="btn btn-icon btn-outline" title="Edit analysis" aria-label="Edit analysis">
                             <i data-lucide="pencil"></i>
                         </a>
                         {% if request.user.is_superuser or request.user.is_tenant_admin %}
                         <form method="post" action="{% url 'sales:stage_velocity_analysis_delete' analysis.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete analysis {{ analysis.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-danger" title="Delete analysis">
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete analysis" aria-label="Delete analysis">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
