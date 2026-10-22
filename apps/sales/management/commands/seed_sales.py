@@ -3259,10 +3259,12 @@ class Command(BaseCommand):
         # the seeder would then add a fresh VCA/FNL/RPS set per tenant per day, unbounded,
         # inflating the console stat cards and the peer/percentile aggregates. A quarter
         # boundary is stable for ~90 days, so a daily run stays idempotent.
-        period_start = today.replace(
-            month=3 * ((today.month - 1) // 3) + 1, day=1
-        )
-        period_end = today
+        q_start_month = 3 * ((today.month - 1) // 3) + 1
+        period_start = today.replace(month=q_start_month, day=1)
+        if q_start_month == 10:
+            period_end = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            period_end = today.replace(month=q_start_month + 3, day=1) - timedelta(days=1)
 
         # ---- 1. WinLossDebrief (the qualitative win/loss record) ---------------------------
         # One debrief per opportunity. It EXTENDS the 8.2 outcome / reason spine by FK and
