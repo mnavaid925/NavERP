@@ -175,9 +175,9 @@
   `apps/sales/management/commands/seed_sales.py:3357-3358`.
   *Fix:* Set `from_stage=None, to_stage=None` on `lead_to_opportunity` and `opportunity_to_close`. Fixed — `8c0954de0` and `60a0c470` set `from_stage=None, to_stage=None` for non-stage scopes.
 
-- [ ] **M13 — `WinLossDebrief.primary_reason` assigned positionally in seeder.**
+- [x] **M13 — `WinLossDebrief.primary_reason` assigned positionally in seeder.**
   `apps/sales/management/commands/seed_sales.py:3270`.
-  *Fix:* Ensure reason result matches outcome result (`won`/`lost`).
+  *Fix:* Ensure reason result matches outcome result (`won`/`lost`). Fixed — `71451e3c` `fix(sales): match debrief primary reason to outcome result in seeder`.
 
 - [ ] **M14 — No seeded funnel record falls below its benchmark.**
   `apps/sales/management/commands/seed_sales.py:3368`.
