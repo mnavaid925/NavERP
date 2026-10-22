@@ -4638,8 +4638,7 @@ MARKETINGALIGNMENT_MODEL_FIELDS = {
     "ContentEngagement": (
         "tenant", "created_at", "updated_at", "number", "content", "account", "lead",
         "campaign", "engagement_type", "engagement_channel", "engagement_score",
-        "time_spent_seconds", "page_depth", "is_download", "revenue_attributed", "currency",
-        "engaged_at", "notes",
+        "revenue_attributed", "currency", "engaged_at", "notes",
     ),
     "MarketingEvent": (
         "tenant", "created_at", "updated_at", "number", "name", "event_type", "status",
@@ -4767,9 +4766,9 @@ def _marketingalignment_lead(tenant, name="Marketing Lead Rivera", **overrides):
     defaults = {
         "tenant": tenant,
         "name": name,
-        "company_name": "Rivera Industries",
+        "company": "Rivera Industries",
         "status": "qualified",
-        "lead_score": 85,
+        "score": 85,
         "email": "alex.rivera@example.com",
     }
     defaults.update(overrides)
@@ -4780,12 +4779,12 @@ def _marketingalignment_opportunity(tenant, lead=None, name="Enterprise CRM Expa
     from apps.crm.models import Opportunity
     defaults = {
         "tenant": tenant,
-        "lead": lead,
+        "source_lead": lead,
         "name": name,
         "stage": "proposal",
         "amount": Decimal("120000.00"),
         "probability": 75,
-        "expected_close_date": timezone.now().date() + timezone.timedelta(days=60),
+        "close_date": timezone.now().date() + timezone.timedelta(days=60),
     }
     defaults.update(overrides)
     return Opportunity.objects.create(**defaults)
@@ -4804,9 +4803,9 @@ def _marketingalignment_content(tenant, title="Cloud Transformation Whitepaper",
         "tenant": tenant,
         "title": title,
         "content_type": "whitepaper",
-        "stage": "awareness",
+        "pipeline_stage": "awareness",
         "is_active": True,
-        "is_external": True,
+        "is_client_facing": True,
     }
     defaults.update(overrides)
     return EnablementContent.objects.create(**defaults)
@@ -4825,9 +4824,7 @@ def _marketingalignment_touchpoint(tenant, campaign=None, lead=None, currency=No
         "cost": Decimal("25.00"),
         "engagement_value": Decimal("250.00"),
         "currency": currency,
-        "utm_source": "google",
-        "utm_medium": "cpc",
-        "utm_campaign": "growth-2026",
+        "source_reference": "utm_source=google&utm_medium=cpc&utm_campaign=growth-2026",
     }
     defaults.update(overrides)
     return AttributionTouchpoint.objects.create(**defaults)
@@ -4883,9 +4880,6 @@ def _marketingalignment_engagement(tenant, content, account=None, lead=None, cam
         "engagement_type": "download",
         "engagement_channel": "website",
         "engagement_score": 85,
-        "time_spent_seconds": 320,
-        "page_depth": 14,
-        "is_download": True,
         "revenue_attributed": Decimal("15000.00"),
         "currency": currency,
         "engaged_at": timezone.now(),
