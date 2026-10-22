@@ -4802,7 +4802,7 @@ def _marketingalignment_content(tenant, title="Cloud Transformation Whitepaper",
         "tenant": tenant,
         "title": title,
         "content_type": "whitepaper",
-        "pipeline_stage": "awareness",
+        "target_stage": "awareness",
         "is_active": True,
         "is_client_facing": True,
     }
