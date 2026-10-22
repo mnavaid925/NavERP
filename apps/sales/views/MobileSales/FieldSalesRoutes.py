@@ -87,12 +87,10 @@ def field_sales_route_create(request):
             route.tenant = tenant
             route.save()
             write_audit_log(
+                request.user,
+                route,
+                "create",
                 tenant=tenant,
-                user=request.user,
-                action="create",
-                model_name="FieldSalesRoute",
-                object_id=route.pk,
-                object_repr=str(route),
             )
             messages.success(request, f"Sales Route '{route.name}' created successfully.")
             return redirect("sales:field_sales_route_detail", pk=route.pk)
@@ -117,12 +115,10 @@ def field_sales_route_edit(request, pk):
         if form.is_valid():
             route = form.save()
             write_audit_log(
+                request.user,
+                route,
+                "update",
                 tenant=tenant,
-                user=request.user,
-                action="update",
-                model_name="FieldSalesRoute",
-                object_id=route.pk,
-                object_repr=str(route),
             )
             messages.success(request, f"Sales Route '{route.name}' updated successfully.")
             return redirect("sales:field_sales_route_detail", pk=route.pk)
@@ -143,16 +139,13 @@ def field_sales_route_delete(request, pk):
     tenant = request.tenant
     route = get_object_or_404(FieldSalesRoute.objects.filter(tenant=tenant), pk=pk)
     name = route.name
-    route_pk = route.pk
-    route.delete()
     write_audit_log(
+        request.user,
+        route,
+        "delete",
         tenant=tenant,
-        user=request.user,
-        action="delete",
-        model_name="FieldSalesRoute",
-        object_id=route_pk,
-        object_repr=name,
     )
+    route.delete()
     messages.success(request, f"Sales Route '{name}' deleted successfully.")
     return redirect("sales:field_sales_route_list")
 
@@ -165,12 +158,11 @@ def field_sales_route_optimize(request, pk):
     route.optimization_status = "optimized"
     route.save(update_fields=["optimization_status"])
     write_audit_log(
+        request.user,
+        route,
+        "update",
+        changes={"action": "optimize"},
         tenant=tenant,
-        user=request.user,
-        action="update",
-        model_name="FieldSalesRoute",
-        object_id=route.pk,
-        object_repr=f"Optimized route {route.number}",
     )
     messages.success(request, f"Route '{route.name}' sequence optimized successfully.")
     return redirect("sales:field_sales_route_detail", pk=route.pk)
