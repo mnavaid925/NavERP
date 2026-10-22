@@ -129,6 +129,7 @@ class CustomerContract(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="sales_cct_ten_status_idx"),
             models.Index(fields=["tenant", "account"], name="sales_cct_ten_acc_idx"),
             models.Index(fields=["tenant", "end_date"], name="sales_cct_ten_end_idx"),
+            models.Index(fields=["tenant", "status", "end_date"], name="sales_cct_ten_stat_end_idx"),
         ]
 
     def __str__(self):
