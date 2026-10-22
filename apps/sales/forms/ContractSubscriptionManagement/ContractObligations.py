@@ -100,7 +100,7 @@ class ObligationFulfillForm(forms.Form):
 
 class ObligationBreachForm(forms.Form):
     penalty_amount = forms.DecimalField(
-        min_value=0,
+        min_value=Decimal("0.01"),
         max_digits=12,
         decimal_places=2,
         required=True,
