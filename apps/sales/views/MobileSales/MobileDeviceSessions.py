@@ -87,7 +87,7 @@ def mobile_device_session_detail(request, pk):
 def mobile_device_session_create(request):
     tenant = request.tenant
     if request.method == "POST":
-        form = MobileDeviceSessionForm(request.POST, tenant=tenant)
+        form = MobileDeviceSessionForm(request.POST, tenant=tenant, user=request.user)
         if form.is_valid():
             device = form.save(commit=False)
             device.tenant = tenant
@@ -101,7 +101,7 @@ def mobile_device_session_create(request):
             messages.success(request, f"Mobile Device '{device.device_name}' registered successfully.")
             return redirect("sales:mobile_device_session_detail", pk=device.pk)
     else:
-        form = MobileDeviceSessionForm(tenant=tenant, initial={"user": request.user})
+        form = MobileDeviceSessionForm(tenant=tenant, user=request.user, initial={"user": request.user})
 
     context = {
         "form": form,
@@ -122,7 +122,7 @@ def mobile_device_session_edit(request, pk):
         return redirect("sales:mobile_device_session_detail", pk=device.pk)
 
     if request.method == "POST":
-        form = MobileDeviceSessionForm(request.POST, instance=device, tenant=tenant)
+        form = MobileDeviceSessionForm(request.POST, instance=device, tenant=tenant, user=request.user)
         if form.is_valid():
             device = form.save()
             write_audit_log(
@@ -134,7 +134,7 @@ def mobile_device_session_edit(request, pk):
             messages.success(request, f"Mobile Device '{device.device_name}' updated successfully.")
             return redirect("sales:mobile_device_session_detail", pk=device.pk)
     else:
-        form = MobileDeviceSessionForm(instance=device, tenant=tenant)
+        form = MobileDeviceSessionForm(instance=device, tenant=tenant, user=request.user)
 
     context = {
         "form": form,
