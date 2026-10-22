@@ -1,6 +1,6 @@
 ---
 name: sales
-description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, 8.8 Sales Activity & Task Management, 8.9 Sales Enablement, 8.10 Incentive Compensation Management, 8.11 Customer Success & Account Management, 8.12 Sales Analytics & Intelligence, and 8.14 Partner & Channel Management. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
+description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, 8.8 Sales Activity & Task Management, 8.9 Sales Enablement, 8.10 Incentive Compensation Management, 8.11 Customer Success & Account Management, 8.12 Sales Analytics & Intelligence, 8.13 Marketing Alignment & Attribution, 8.14 Partner & Channel Management, 8.15 Contract & Subscription Management, and 8.16 Mobile Sales. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
 ---
 
 # Sales Management System (Module 8)
@@ -1374,3 +1374,75 @@ Sub-module 8.15: Contract & Subscription Management covers commercial sell-side 
 - **Compound Database Indexes**: Includes indexes on `(tenant, status, end_date)` for contract horizon scanning, `(tenant, contract)` for subscription relations, and `(tenant, subscription)` for obligation links.
 - **Lifecycle & Mutation Guards**: State actions enforce view-level guards (e.g. recalculation on invoiced usage records is blocked; auto-renewal is restricted to active contracts within the renewal window; activate is blocked on terminated/expired contracts).
 - **Audit Logging**: All mutations use the authoritative `write_audit_log(user=request.user, obj=instance, action=action, tenant=tenant)` signature wrapped in `@transaction.atomic`.
+
+
+## 8.16 Mobile Sales & Field Execution
+
+App package: `apps/sales/*/MobileSales/`; templates: `templates/sales/mobilesales/`.
+
+### 8.16 Models (`apps/sales/models/MobileSales/`)
+- `FieldSalesRoute` (`FSR-`): Multi-stop daily route planner for outside reps. Fields: `name`, `sales_rep`, `route_date`, `status` (`scheduled`, `in_progress`, `completed`, `cancelled`), `optimization_status` (`pending`, `optimized`, `failed`, `manual`), `total_stops`, `completed_stops`, `planned_distance_km`, `actual_distance_km`, `estimated_duration_minutes`, `actual_duration_minutes`, `start_location`, `end_location`. Properties: `completion_rate_pct`, `progress_display`, `generate_navigation_url()`.
+- `FieldCheckIn` (`CHK-`): GPS arrival/departure verification record with geofencing. Fields: `party` (core.Party client), `contact` (core.Party contact), `opportunity` (crm.Opportunity), `sales_rep`, `route`, `check_in_at`, `check_out_at`, `duration_minutes`, `check_in_lat`, `check_in_lng`, `target_lat`, `target_lng`, `distance_from_target_m`, `geofence_radius_m` (default 150m), `is_geofence_verified`, `verification_status` (`verified`, `out_of_range`, `manual_override`), `visit_purpose` (`prospecting`, `presentation`, `negotiation`, `relationship`, `service_delivery`, `routine_visit`), `outcome` (`order_placed`, `quote_requested`, `follow_up_needed`, `gatekeeper_blocked`, `no_show`, `info_gathered`), `resulting_quote` (sales.CPQQuote), `photo_document` (core.Document), `meeting_notes`. Method: `calculate_distance()` using pure Python Haversine formula.
+- `MobileDeviceSession` (`MDS-`): Hardware registry and push notification session. Fields: `user`, `device_name`, `device_identifier`, `platform` (`ios`, `android`, `tablet_ipad`, `tablet_android`), `app_version`, `os_version`, `push_token`, `is_active`, `is_trusted` (gated to tenant admin), `last_sync_at`, `last_sync_status` (`success`, `partial`, `failed`, `pending`), `cached_records_count`, `pending_uploads_count`, `last_ip`. Methods: `record_sync_event()`, `is_outdated` property.
+- `MobileDealAlert` (`MDA-`): Urgent mobile notifications and push alerts. Fields: `recipient`, `device`, `alert_type` (`urgent_deal`, `quote_approval`, `discount_approval`, `contract_signed`, `route_dispatch`, `system_notice`), `urgency` (`normal`, `high`, `urgent`), `title`, `message`, `related_route`, `related_opportunity`, `related_quote`, `is_read`, `read_at`, `push_sent`, `push_sent_at`, `push_status` (`pending`, `sent`, `failed`, `skipped`). Method: `mark_as_read()`, `dispatch_alert()`.
+
+### 8.16 URLs & Routes (`apps/sales/urls/MobileSales/`)
+- **Executive Console**: `sales:mobile_sales_dashboard` (`/sales/mobile-sales-dashboard/`)
+- **Field Sales Routes**:
+  - `sales:field_sales_route_list` (`/sales/routes/`)
+  - `sales:field_sales_route_create` (`/sales/routes/create/`)
+  - `sales:field_sales_route_detail` (`/sales/routes/<int:pk>/`)
+  - `sales:field_sales_route_edit` (`/sales/routes/<int:pk>/edit/`)
+  - `sales:field_sales_route_delete` (`/sales/routes/<int:pk>/delete/`) [POST]
+  - `sales:field_sales_route_optimize` (`/sales/routes/<int:pk>/optimize/`) [POST]
+- **Field Check-Ins & Visits**:
+  - `sales:field_check_in_list` (`/sales/check-ins/`)
+  - `sales:field_check_in_create` (`/sales/check-ins/create/`)
+  - `sales:field_check_in_detail` (`/sales/check-ins/<int:pk>/`)
+  - `sales:field_check_in_edit` (`/sales/check-ins/<int:pk>/edit/`)
+  - `sales:field_check_in_delete` (`/sales/check-ins/<int:pk>/delete/`) [POST]
+  - `sales:field_check_in_checkout` (`/sales/check-ins/<int:pk>/checkout/`) [GET modal / POST]
+- **Mobile Devices & Sessions**:
+  - `sales:mobile_device_session_list` (`/sales/devices/`)
+  - `sales:mobile_device_session_create` (`/sales/devices/create/`)
+  - `sales:mobile_device_session_detail` (`/sales/devices/<int:pk>/`)
+  - `sales:mobile_device_session_edit` (`/sales/devices/<int:pk>/edit/`)
+  - `sales:mobile_device_session_delete` (`/sales/devices/<int:pk>/delete/`) [POST]
+  - `sales:mobile_device_session_sync` (`/sales/devices/<int:pk>/sync/`) [POST]
+- **Mobile Deal Alerts**:
+  - `sales:mobile_deal_alert_list` (`/sales/alerts/`)
+  - `sales:mobile_deal_alert_create` (`/sales/alerts/create/`)
+  - `sales:mobile_deal_alert_detail` (`/sales/alerts/<int:pk>/`)
+  - `sales:mobile_deal_alert_edit` (`/sales/alerts/<int:pk>/edit/`)
+  - `sales:mobile_deal_alert_delete` (`/sales/alerts/<int:pk>/delete/`) [POST]
+  - `sales:mobile_deal_alert_mark_read` (`/sales/alerts/<int:pk>/read/`) [POST]
+
+### 8.16 Templates (`templates/sales/mobilesales/`)
+- Console: `dashboard/mobile_sales_dashboard.html`
+- Route templates: `fieldsalesroute/{list,detail,form}.html`
+- Check-in templates: `fieldcheckin/{list,detail,form,checkout}.html`
+- Device session templates: `mobiledevicesession/{list,detail,form}.html`
+- Deal alert templates: `mobiledealalert/{list,detail,form}.html`
+
+### 8.16 Navigation Wiring (`apps/core/navigation.py`)
+`LIVE_LINKS["8.16"]` maps all 5 NavERP.md feature bullets:
+- Mobile CRM Access -> `sales:mobile_device_session_list`
+- Field Sales Tools -> `sales:field_sales_route_list`
+- Mobile Quoting & Approvals -> `sales:mobile_deal_alert_list`
+- Voice & Call Integration -> `sales:field_check_in_list`
+- Mobile Dashboards & Alerts -> `sales:mobile_sales_dashboard`
+- Plus secondary leaves for quick create and visit logs.
+
+### 8.16 Seeder (`apps/sales/management/commands/seed_sales.py`)
+`_seed_mobile_sales` is fully idempotent and seeds:
+- 3 Field Sales Routes (Scheduled North Metro, In-Progress Downtown, Completed Suburban).
+- 4 Field Check-Ins with GPS coordinates (Verified on-site, out-of-range, completed visit with departure timestamp, order placed).
+- 3 Mobile Device Sessions (iPad Pro, Android Field Tablet, iPhone Rep Handset).
+- 3 Mobile Deal Alerts (Urgent 25% discount CPQ approval request, VIP route arrival alert, lead handoff dispatch notice).
+
+### 8.16 Conventions & Gotchas
+- **Pure Python Haversine Geofencing**: Pure mathematical distance calculation in `FieldCheckIn.calculate_distance()` verifies GPS coordinates against client target location without external PostGIS/GDAL C-library dependencies.
+- **Atomic Mutations**: All state-mutating views are wrapped in `@transaction.atomic`.
+- **Horizontal Authorization**: Alerts restricted to recipient or tenant admin; device sessions restricted to owner or tenant admin; visit deletions restricted to assigned rep or tenant admin.
+- **Strict Color Badges**: 100% color-named badges (`badge-green`, `badge-amber`, `badge-red`, `badge-info`, `badge-muted`, `badge-slate`) with zero `-success`/`-danger` classes.
+- **N+1 Prevention**: Detail queries eagerly select up to 8 foreign keys; list queries select all rendered FKs including `contact`, `sales_rep`, and `party`.
