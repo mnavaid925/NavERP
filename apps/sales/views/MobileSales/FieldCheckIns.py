@@ -171,6 +171,10 @@ def field_check_in_edit(request, pk):
 def field_check_in_delete(request, pk):
     tenant = request.tenant
     check_in = get_object_or_404(FieldCheckIn.objects.filter(tenant=tenant), pk=pk)
+    is_admin = bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))
+    if check_in.sales_rep != request.user and not is_admin:
+        messages.error(request, "Only the assigned sales representative or a tenant administrator may delete this visit record.")
+        return redirect("sales:field_check_in_list")
     num = check_in.number
     party_name = check_in.party.name
     check_in_pk = check_in.pk
