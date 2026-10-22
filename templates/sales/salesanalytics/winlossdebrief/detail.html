@@ -233,7 +233,7 @@
 
                 {% if obj.status != "closed" %}
                 {% if request.user.is_superuser or request.user.is_tenant_admin %}
-                <form method="post" action="{% url 'sales:win_loss_debrief_delete' obj.pk %}" onsubmit="return confirm('Are you sure you want to delete debrief {{ obj.number }}?');">
+                <form method="post" action="{% url 'sales:win_loss_debrief_delete' obj.pk %}" onsubmit="return confirm('Are you sure you want to delete debrief {{ obj.number|escapejs }}?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-danger w-full">
                         <i data-lucide="trash-2"></i>
