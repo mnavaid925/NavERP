@@ -84,7 +84,7 @@ class FieldSalesRoute(TenantNumbered):
 
     def clean(self):
         super().clean()
-        if self.completed_stops > self.total_stops and self.total_stops > 0:
+        if self.completed_stops > self.total_stops:
             raise ValidationError({"completed_stops": "Completed stops cannot exceed total stops."})
 
         if self.sales_rep_id and self.tenant_id:
