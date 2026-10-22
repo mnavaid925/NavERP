@@ -67,9 +67,9 @@
   `apps/sales/forms/SalesAnalytics/FunnelConversionRecords.py:9-56`. Both `from_stage` and `to_stage` choices render `PipelineStage.__str__` evaluating `self.pipeline`, firing $2 \times N$ queries per form load.
   *Fix:* In `FunnelConversionRecordForm.__init__`, apply `.select_related("pipeline")` to `from_stage` and `to_stage` querysets. Fixed — `8948a6d8` `fix(sales): select_related pipeline on from_stage and to_stage in FunnelConversionRecordForm`.
 
-- [ ] **C5 — N+1 queries in `RepPerformanceScorecardForm` choice rendering (`QuotaPlan.__str__` and `CoachingScorecard.__str__` chained FK hops).**
+- [x] **C5 — N+1 queries in `RepPerformanceScorecardForm` choice rendering (`QuotaPlan.__str__` and `CoachingScorecard.__str__` chained FK hops).**
   `apps/sales/forms/SalesAnalytics/RepPerformanceScorecards.py:9-100`. `QuotaPlan.__str__` dereferences `self.quota_ref`, and `CoachingScorecard.__str__` dereferences `self.coachee`.
-  *Fix:* In `RepPerformanceScorecardForm.__init__`, apply `.select_related("quota_ref")` on `quota_plan` and `.select_related("coachee")` on `coaching_scorecard`.
+  *Fix:* In `RepPerformanceScorecardForm.__init__`, apply `.select_related("quota_ref")` on `quota_plan` and `.select_related("coachee")` on `coaching_scorecard`. Fixed — `08d60194` `fix(sales): select_related quota_ref and coachee in RepPerformanceScorecardForm`.
 
 ---
 
