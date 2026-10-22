@@ -57,6 +57,9 @@ class CustomerSubscriptionForm(TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "renewal_notice_days" in self.fields:
+            self.fields["renewal_notice_days"].initial = 30
+            self.fields["renewal_notice_days"].required = False
         if self.tenant is not None:
             self.fields["contract"].queryset = CustomerContract.objects.filter(tenant=self.tenant)
             self.fields["account"].queryset = Party.objects.filter(tenant=self.tenant)
@@ -115,6 +118,7 @@ class SubscriptionCancelForm(forms.Form):
 class SubscriptionUpgradeForm(forms.Form):
     quantity = forms.IntegerField(
         min_value=1,
+        max_value=1000000,
         widget=forms.NumberInput(attrs={"class": "form-input"}),
     )
     unit_price = forms.DecimalField(
