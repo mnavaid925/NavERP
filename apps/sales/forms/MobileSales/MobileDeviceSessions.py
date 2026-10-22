@@ -41,6 +41,12 @@ class MobileDeviceSessionForm(TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             self.fields["user"].queryset = tenant_users(self.tenant)
+        if "last_sync_status" in self.fields:
+            self.fields["last_sync_status"].required = False
+
+    def clean_last_sync_status(self):
+        val = self.cleaned_data.get("last_sync_status")
+        return val if val else "pending"
 
 
 class MobileDeviceSessionFilterForm(forms.Form):
