@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}Contract & Subscription Workspace — Sales — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <span>Contracts & Subscriptions</span>
+            <span>/</span>
+            <span>Executive Workspace</span>
+        </div>
+        <h1 class="page-title">Contract & Subscription Workspace</h1>
+        <p class="text-sm text-slate-500 mt-1">Holistic revenue dashboard monitoring recurring revenue, contract commitments, and SLA performance.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:renewal_automation_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="refresh-cw"></i>
+            <span>Renewal Radar</span>
+        </a>
+        <a href="{% url 'sales:customer_contract_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Contract</span>
+        </a>
+    </div>
+</div>
+
+<!-- Primary KPI Grid -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Annualized Run Rate (ARR)</div>
+            <div class="text-2xl font-bold text-slate-800">${{ total_arr|floatformat:2 }}</div>
+            <div class="text-xs text-green-600 mt-0.5">${{ total_mrr|floatformat:2 }} / month MRR</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Contract TCV</div>
+            <div class="text-2xl font-bold text-slate-800">${{ total_tcv|floatformat:2 }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">{{ active_contracts_count }} active agreements</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Expiring in 60 Days</div>
+            <div class="text-2xl font-bold text-slate-800">{{ expiring_60_count }}</div>
+            <div class="text-xs text-amber-600 mt-0.5">{{ expiring_30_count }} within 30 days</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">SLA Fulfillment Rate</div>
+            <div class="text-2xl font-bold text-slate-800">{{ sla_compliance_rate }}%</div>
+            <div class="text-xs text-slate-500 mt-0.5">${{ unbilled_overages_total|floatformat:2 }} unbilled overage</div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Navigation Links -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <a href="{% url 'sales:customer_contract_list' %}" class="card hover:shadow-md transition p-4 flex items-center justify-between group">
+        <div>
+            <div class="font-semibold text-slate-800 group-hover:text-blue-600">Contracts Registry</div>
+            <div class="text-xs text-slate-500">Legal master agreements & redlines</div>
+        </div>
+        <i data-lucide="chevron-right" class="text-slate-400 group-hover:text-blue-600"></i>
+    </a>
+    <a href="{% url 'sales:customer_subscription_list' %}" class="card hover:shadow-md transition p-4 flex items-center justify-between group">
+        <div>
+            <div class="font-semibold text-slate-800 group-hover:text-blue-600">Subscriptions Registry</div>
+            <div class="text-xs text-slate-500">Recurring plans, seats & cadences</div>
+        </div>
+        <i data-lucide="chevron-right" class="text-slate-400 group-hover:text-blue-600"></i>
+    </a>
+    <a href="{% url 'sales:usage_meter_record_list' %}" class="card hover:shadow-md transition p-4 flex items-center justify-between group">
+        <div>
+            <div class="font-semibold text-slate-800 group-hover:text-blue-600">Usage Metering</div>
+            <div class="text-xs text-slate-500">Consumption cycles & overages</div>
+        </div>
+        <i data-lucide="chevron-right" class="text-slate-400 group-hover:text-blue-600"></i>
+    </a>
+    <a href="{% url 'sales:contract_obligation_list' %}" class="card hover:shadow-md transition p-4 flex items-center justify-between group">
+        <div>
+            <div class="font-semibold text-slate-800 group-hover:text-blue-600">Obligations & SLAs</div>
+            <div class="text-xs text-slate-500">Uptime benchmarks & penalties</div>
+        </div>
+        <i data-lucide="chevron-right" class="text-slate-400 group-hover:text-blue-600"></i>
+    </a>
+</div>
+
+<!-- Tables Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Expiring Contracts -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="font-semibold text-slate-800">Contracts Requiring Renewal Attention</h3>
+            <a href="{% url 'sales:renewal_automation_dashboard' %}" class="text-xs text-blue-600 hover:underline">View Radar</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Contract</th>
+                        <th>Account</th>
+                        <th>TCV</th>
+                        <th>End Date</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in urgent_contracts %}
+                    <tr>
+                        <td class="font-medium">
+                            <a href="{% url 'sales:customer_contract_detail' c.pk %}" class="text-blue-600 hover:underline">
+                                {{ c.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-800">{{ c.account.name }}</div>
+                            <div class="text-xs text-slate-500">{{ c.title|truncatechars:20 }}</div>
+                        </td>
+                        <td class="font-medium text-slate-700">${{ c.total_contract_value|floatformat:2 }}</td>
+                        <td class="text-xs text-amber-700 font-medium">{{ c.end_date|date:"M d, Y" }}</td>
+                        <td class="text-right">
+                            <a href="{% url 'sales:customer_contract_detail' c.pk %}" class="btn btn-icon">
+                                <i data-lucide="eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-xs text-slate-500">
+                            No contracts expiring within 60 days.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- At-Risk SLA Obligations -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="font-semibold text-slate-800">At-Risk or Breached Obligations</h3>
+            <a href="{% url 'sales:contract_obligation_list' %}" class="text-xs text-blue-600 hover:underline">All Obligations</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Obligation</th>
+                        <th>Target Metric</th>
+                        <th>Status</th>
+                        <th>Penalty</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for o in at_risk_obligations %}
+                    <tr>
+                        <td class="font-medium">
+                            <a href="{% url 'sales:contract_obligation_detail' o.pk %}" class="text-blue-600 hover:underline">
+                                {{ o.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-800">{{ o.title }}</div>
+                            <div class="text-xs font-mono text-slate-500">{{ o.target_metric }}</div>
+                        </td>
+                        <td>
+                            {% if o.status == 'breached' %}
+                            <span class="badge badge-red">Breached</span>
+                            {% else %}
+                            <span class="badge badge-amber">At Risk</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-xs font-medium text-slate-700">
+                            {% if o.penalty_amount > 0 %}
+                            <span class="text-red-600">${{ o.penalty_amount|floatformat:2 }}</span>
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <a href="{% url 'sales:contract_obligation_detail' o.pk %}" class="btn btn-icon">
+                                <i data-lucide="eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-xs text-slate-500">
+                            All obligations are fulfilling SLA standards.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
