@@ -1,4 +1,6 @@
 """Sales 8.16 — MobileSalesDashboard executive view."""
+from datetime import datetime, time, timedelta
+
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Sum
 from django.shortcuts import render
@@ -28,7 +30,13 @@ def mobile_sales_dashboard(request):
     pending_stops_today = max(0, total_stops_today - completed_stops_today)
 
     # Check-ins & geofence compliance
-    checkins_today = FieldCheckIn.objects.filter(tenant=tenant, check_in_at__date=today)
+    today_start = timezone.make_aware(datetime.combine(today, time.min))
+    tomorrow_start = today_start + timedelta(days=1)
+    checkins_today = FieldCheckIn.objects.filter(
+        tenant=tenant,
+        check_in_at__gte=today_start,
+        check_in_at__lt=tomorrow_start,
+    )
     total_checkins_today = checkins_today.count()
     verified_checkins_today = checkins_today.filter(is_geofence_verified=True).count()
 
