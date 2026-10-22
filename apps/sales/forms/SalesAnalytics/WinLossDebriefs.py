@@ -70,6 +70,8 @@ class WinLossDebriefForm(TenantUniqueMixin, TenantModelForm):
             return []
         if not isinstance(value, list):
             raise ValidationError("Decision drivers must be a JSON list of driver objects.")
+        if len(value) > 50:
+            raise ValidationError("A debrief can record at most 50 decision drivers.")
 
         cleaned = []
         for index, item in enumerate(value, start=1):
