@@ -17099,3 +17099,402 @@ Pure query projection (0 new tables). Computes:
 - **A duplicate Currency master**: Monetary amounts reference `accounting.Currency`.
 - **A duplicate User master**: Contract owners, CSMs, and obligation assignees reference `accounts.User`.
 - **Separate tables for the Contract & Subscription Workspace and Renewal Dashboard**: Both are pure query projections / computed real-time aggregations over `CustomerContract`, `CustomerSubscription`, `UsageMeterRecord`, and `ContractObligation`. Zero drift-prone duplicate rollup tables.
+
+
+# Sub-module 8.16 — Mobile Sales (Module 8: Sales Management System, sales) — plan from research-sales-8.16.md (2026-10-22)
+
+**Input:** `.claude/tasks/research-sales-8.16.md` (288 lines; 9 leaders surveyed — Badger Maps, SPOTIO, Zoho CRM Mobile & RouteIQ, Salesforce Mobile App & Salesforce Maps, Repsly, Skynamo, HubSpot Mobile App, Close Mobile CRM, DealHub Mobile). **App `apps/sales` already exists → this is an EXTEND run.** No scaffold, no `apps.py`, **no `config/settings.py` INSTALLED_APPS change, no `config/urls.py` change.** The ONLY navigation change is one new `LIVE_LINKS["8.16"]` entry in `apps/core/navigation.py`.
+
+**Next migration: `0029`** — verified: `apps/sales/migrations/` ends at `0028_customercontract_customersubscription_and_more.py`. **Re-verify the number at generation time (L43)**.
+
+## The five non-negotiable rulings this plan is built on
+
+**(a) Zero duplicate masters (L36/L37).** 8.16 declares NO Customer/Account table, NO Contact table, NO Proposal/Quote table, NO Sales Order master, NO Currency master, NO Document/File table, NO Rep/User master, NO Communication/Activity log master, and NO Geofence catalog master. It **EXTENDS by FK**:
+- `core.Party` (`apps/core/models/Party.py`) for visited client accounts, retail locations, and contact persons;
+- `core.Address` (`apps/core/models/Address.py`) for destination physical addresses;
+- `core.Document` (`DOC-`, `apps/core/models/Document.py`) for proof-of-visit photos, retail shelf audits, and on-site attachments;
+- `accounting.Currency` for ISO currency on quotes and orders;
+- `crm.Opportunity` (`OPP-`, `apps/crm/models/SalesForceAutomation/Opportunities.py`) for deals discussed on-site or triggering mobile deal alerts;
+- `crm.CommunicationLog` (`COM-`, `apps/crm/models/ActivityManagement/CommunicationLogs.py`) for mobile call logs, click-to-dial records, and voicemail drops;
+- `sales.CPQQuote` (`CPQ-`, `apps/sales/models/QuoteProposalCPQ/CPQQuotes.py`) for on-the-spot mobile quotes and discount approval requests;
+- `scm.SalesOrder` (`SO-`, `apps/scm/models/OrderManagement/SalesOrders.py`) for orders placed from the road;
+- `accounts.User` (`settings.AUTH_USER_MODEL`) for field sales reps, dispatchers, and managers.
+
+**(b) Dynamic Geofencing via Haversine Formula instead of duplicate attendance geofence tables.** While `hrm.GeoFence` serves employee clock-in attendance boundaries, 8.16 captures physical check-in coordinates (`check_in_lat`, `check_in_lng`) alongside destination customer coordinates (`target_lat`, `target_lng`) and calculates proximity mathematically via the standard Haversine distance formula (`distance_to` in metres). Visits within authorized radius (default 150m) are marked `verified`; outliers are flagged `out_of_range`.
+
+**(c) 4 models, 1 derived console/dashboard, 0 console tables.** The five NavERP.md bullets map to distinct navigation destinations (L30). The four model list pages are operational registries, and `mobile_sales_dashboard` is a derived, real-time computed console (today's active route progress bar, completed stops, geofence compliance rate, device sync health, and urgent deal alerts).
+
+**(d) Multi-tenant isolation inherited, never redeclared.** `apps/sales/models/_base.py::TenantNumbered` already declares `tenant = FK("core.Tenant", on_delete=CASCADE, related_name="+", db_index=True)` plus `number` (`editable=False`), `created_at`, `updated_at`. All four models inherit from `TenantNumbered`.
+
+**(e) Prefix registry — `FSR`, `CHK`, `MDS`, `MDA`.** All four prefixes are verified collision-free across the entire NavERP repository:
+- `FSR` = `FieldSalesRoute`
+- `CHK` = `FieldCheckIn`
+- `MDS` = `MobileDeviceSession`
+- `MDA` = `MobileDealAlert`
+
+---
+
+## Models (from research — 1–4)
+
+All four live in a **new** package `apps/sales/models/MobileSales/`, extend `TenantNumbered`, and are re-exported from `apps/sales/models/__init__.py`.
+
+### 1. `FieldSalesRoute` [`FSR-`] — `apps/sales/models/MobileSales/FieldSalesRoutes.py` — **bullet 2 (Field Sales Tools — Route Optimization)**
+Drivers: Daily multi-stop itinerary and travel path planner · Stop sequencing and completion tracking · Planned vs actual travel distance and duration · Multi-stop route optimization status · Native turn-by-turn navigation deep links (Google Maps, Apple Maps, Waze).
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | Char(200) | Route title (e.g. "Downtown Retail Corridor - 2026-10-24") |
+| `sales_rep` | FK `settings.AUTH_USER_MODEL`, CASCADE, `related_name="field_routes"` | Assigned outside sales rep |
+| `route_date` | DateField, default `timezone.now` | Scheduled itinerary date |
+| `status` | Char(20), `STATUS_CHOICES`, default `scheduled` | draft / scheduled / in_progress / completed / cancelled |
+| `start_location` | Char(255), blank | Starting departure location / HQ depot address |
+| `end_location` | Char(255), blank | Final return destination address |
+| `total_stops` | PositiveIntegerField, default 0 | Total number of planned customer stops |
+| `completed_stops` | PositiveIntegerField, default 0 | Number of stops successfully checked in/out |
+| `planned_distance_km` | Decimal(8,2), default 0.00, `MinValueValidator(0)` | Planned travel mileage/distance |
+| `actual_distance_km` | Decimal(8,2), default 0.00, `MinValueValidator(0)` | Actual recorded odometer/travel distance |
+| `estimated_duration_minutes` | PositiveIntegerField, default 0 | Estimated driving and meeting time |
+| `actual_duration_minutes` | PositiveIntegerField, default 0 | Actual elapsed duration in minutes |
+| `optimization_status` | Char(20), `OPTIMIZATION_CHOICES`, default `unoptimized` | unoptimized / optimized / manual_order |
+| `notes` | TextField, blank | Dispatcher instructions, parking notes, route directives |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto), `completed_stops` (calculated from related check-ins).
+- **Validation in `clean()`:**
+  - `actual_distance_km >= 0`, `planned_distance_km >= 0`.
+  - Multi-tenant guard: `sales_rep` must belong to `self.tenant` (or be active tenant user).
+- **Key Methods:**
+  - `completion_rate_pct`: calculates percentage `(completed_stops / total_stops * 100)` when `total_stops > 0`, else 0.
+  - `progress_display`: returns formatted string `f"{completed_stops}/{total_stops} stops"`.
+  - `generate_navigation_url`: returns Google Maps multi-stop directions URL.
+- **Meta:**
+  - `ordering = ["-route_date", "-created_at"]`
+  - `constraints`: `UniqueConstraint(fields=["tenant", "number"], name="sales_fsr_ten_num_uniq")`
+  - `indexes`: `["tenant", "status"]` (`sales_fsr_ten_status_idx`), `["tenant", "sales_rep"]` (`sales_fsr_ten_rep_idx`), `["tenant", "route_date"]` (`sales_fsr_ten_date_idx`)
+
+---
+
+### 2. `FieldCheckIn` [`CHK-`] — `apps/sales/models/MobileSales/FieldCheckIns.py` — **bullets 2, 3 & 4 (Field Sales Tools, Mobile Quoting, Voice & Call)**
+Drivers: Physical customer visit check-in/out · Real-time GPS coordinate stamping · Haversine formula geofence compliance verification · Arrival, departure, and on-site duration tracking · Structured visit purpose and outcome forms · Proof-of-visit photo attachment (`core.Document`) · On-the-spot resulting quote (`sales.CPQQuote`) and communication log (`crm.CommunicationLog`) linkage · Administrative force check-out override.
+
+| Field | Type | Notes |
+|---|---|---|
+| `route` | FK `sales.FieldSalesRoute`, SET_NULL, null, blank, `related_name="check_ins"` | Scheduled daily route (null for ad-hoc drop-in visits) |
+| `stop_number` | PositiveIntegerField, default 1 | Stop sequence number in itinerary |
+| `party` | FK `core.Party`, CASCADE, `related_name="field_check_ins"` | Visited client account / retail store |
+| `contact` | FK `core.Party`, SET_NULL, null, blank, `related_name="contact_check_ins"` | Individual contact person met on-site |
+| `opportunity` | FK `crm.Opportunity`, SET_NULL, null, blank, `related_name="field_check_ins"` | Deal pipeline record advanced during visit |
+| `sales_rep` | FK `settings.AUTH_USER_MODEL`, CASCADE, `related_name="field_check_ins"` | Outside sales rep performing visit |
+| `check_in_at` | DateTimeField, default `timezone.now` | Arrival check-in timestamp |
+| `check_in_lat` | Decimal(9,6) | Device GPS latitude upon check-in |
+| `check_in_lng` | Decimal(9,6) | Device GPS longitude upon check-in |
+| `target_lat` | Decimal(9,6), null, blank | Customer target address latitude |
+| `target_lng` | Decimal(9,6), null, blank | Customer target address longitude |
+| `geofence_radius_m` | PositiveIntegerField, default 150 | Allowed geofence boundary in metres |
+| `distance_from_target_m` | Decimal(10,2), null, blank | Calculated distance to target via Haversine formula |
+| `is_geofence_verified` | BooleanField, default False | True if within `geofence_radius_m` |
+| `verification_status` | Char(20), `VERIFICATION_CHOICES`, default `verified` | verified / out_of_range / gps_unavailable / manual_override |
+| `check_out_at` | DateTimeField, null, blank | Departure check-out timestamp |
+| `check_out_lat` | Decimal(9,6), null, blank | Device GPS latitude upon check-out |
+| `check_out_lng` | Decimal(9,6), null, blank | Device GPS longitude upon check-out |
+| `duration_minutes` | PositiveIntegerField, null, blank | Total on-site visit duration in minutes |
+| `is_force_checkout` | BooleanField, default False | Flag indicating dispatcher or manual override check-out |
+| `visit_purpose` | Char(30), `PURPOSE_CHOICES`, default `presentation` | prospecting / presentation / quote_review / order_collection / relationship / audit / service_check |
+| `outcome` | Char(30), `OUTCOME_CHOICES`, default `successful` | successful / follow_up_needed / quote_requested / order_placed / decision_maker_unavailable / rescheduled / cancelled |
+| `notes` | TextField, blank | On-site meeting discussion, client feedback, store condition |
+| `next_step` | Char(255), blank | Agreed action item |
+| `next_step_due` | DateField, null, blank | Deadline for next action step |
+| `photo_document` | FK `core.Document`, SET_NULL, null, blank, `related_name="check_in_photos"` | Photo evidence (storefront, shelf audit, signed docket) |
+| `resulting_quote` | FK `sales.CPQQuote`, SET_NULL, null, blank, `related_name="originating_check_ins"` | On-the-spot mobile CPQ quote drafted during visit |
+| `communication_log` | FK `crm.CommunicationLog`, SET_NULL, null, blank, `related_name="field_check_ins"` | Linked CRM communication log |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto), `distance_from_target_m` (calculated), `is_geofence_verified` (calculated), `duration_minutes` (calculated on check-out), `is_force_checkout`.
+- **Validation in `clean()`:**
+  - Multi-tenant guard: `route`, `party`, `contact`, `opportunity`, `photo_document`, `resulting_quote`, and `communication_log` must belong to `self.tenant`.
+  - When `check_out_at` is set, ensure `check_out_at >= check_in_at`.
+- **Key Methods:**
+  - `calculate_distance(lat, lng)`: Haversine distance formula computing proximity to target coordinates in metres.
+  - `calculate_duration()`: computes difference between `check_out_at` and `check_in_at` in minutes.
+- **Meta:**
+  - `ordering = ["-check_in_at", "-created_at"]`
+  - `constraints`: `UniqueConstraint(fields=["tenant", "number"], name="sales_chk_ten_num_uniq")`
+  - `indexes`: `["tenant", "party"]` (`sales_chk_ten_party_idx`), `["tenant", "sales_rep"]` (`sales_chk_ten_rep_idx`), `["tenant", "check_in_at"]` (`sales_chk_ten_date_idx`), `["tenant", "verification_status"]` (`sales_chk_ten_verif_idx`), `["tenant", "route"]` (`sales_chk_ten_route_idx`)
+
+---
+
+### 3. `MobileDeviceSession` [`MDS-`] — `apps/sales/models/MobileSales/MobileDeviceSessions.py` — **bullet 1 (Mobile CRM Access & Offline Capability)**
+Drivers: Field sales mobile device registration · Platform tracking (iOS, Android, PWA) · Push notification token storage · Offline data priming & sync manifest health · Cached records counter and pending upload tracking · Device trust and active session status.
+
+| Field | Type | Notes |
+|---|---|---|
+| `user` | FK `settings.AUTH_USER_MODEL`, CASCADE, `related_name="mobile_devices"` | Sales rep owning registered device |
+| `device_uuid` | Char(64), db_index=True | Unique device hardware identifier / browser client UUID |
+| `device_name` | Char(120) | User-friendly device name (e.g. "iPhone 15 Pro", "Samsung S24") |
+| `platform` | Char(20), `PLATFORM_CHOICES`, default `web_pwa` | ios / android / web_pwa |
+| `app_version` | Char(32), blank | Client application build version |
+| `push_token` | Char(255), blank | APNs or FCM push notification registration token |
+| `is_active` | BooleanField, default True | Active authorization status |
+| `is_trusted` | BooleanField, default True | Security clearance / trusted device flag |
+| `last_sync_at` | DateTimeField, null, blank | Timestamp of last offline cache synchronization |
+| `last_sync_status` | Char(20), `SYNC_STATUS_CHOICES`, default `pending` | success / partial / failed / pending |
+| `offline_records_cached` | PositiveIntegerField, default 0 | Number of customer & product records primed locally |
+| `pending_uploads_count` | PositiveIntegerField, default 0 | Number of offline check-ins/notes awaiting upload |
+| `last_ip_address` | GenericIPAddressField, null, blank | IP address at last connection |
+| `last_known_lat` | Decimal(9,6), null, blank | Last recorded device latitude |
+| `last_known_lng` | Decimal(9,6), null, blank | Last recorded device longitude |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto), `last_sync_at`, `last_sync_status`, `offline_records_cached`, `pending_uploads_count`, `last_known_lat`, `last_known_lng`, `last_ip_address`.
+- **Validation in `clean()`:**
+  - Multi-tenant guard: `user` must belong to `self.tenant`.
+- **Key Methods:**
+  - `record_sync_event(status, cached_count, pending_count)`: updates sync status, counts, and `last_sync_at`.
+  - `is_outdated()`: returns True if `last_sync_at` is null or older than 24 hours.
+- **Meta:**
+  - `ordering = ["-last_sync_at", "-created_at"]`
+  - `constraints`: `UniqueConstraint(fields=["tenant", "number"], name="sales_mds_ten_num_uniq")`
+  - `indexes`: `["tenant", "user"]` (`sales_mds_ten_user_idx`), `["tenant", "platform"]` (`sales_mds_ten_plat_idx`), `["tenant", "is_active"]` (`sales_mds_ten_active_idx`), `["tenant", "last_sync_at"]` (`sales_mds_ten_sync_idx`)
+
+---
+
+### 4. `MobileDealAlert` [`MDA-`] — `apps/sales/models/MobileSales/MobileDealAlerts.py` — **bullet 5 (Mobile Dashboards & Alerts)**
+Drivers: Urgent real-time notifications dispatched to field reps · Deal milestone alerts & stage progressions · Discount approval requests requiring mobile sign-off · Route dispatch announcements and check-in reminders · Priority levels (`low`, `normal`, `high`, `urgent`) · Read status tracking and push dispatch delivery lifecycle (`pending`, `sent`, `delivered`, `failed`).
+
+| Field | Type | Notes |
+|---|---|---|
+| `recipient` | FK `settings.AUTH_USER_MODEL`, CASCADE, `related_name="mobile_deal_alerts"` | Targeted field rep or manager |
+| `device` | FK `sales.MobileDeviceSession`, SET_NULL, null, blank, `related_name="received_alerts"` | Registered device session targeted |
+| `alert_type` | Char(30), `ALERT_TYPE_CHOICES`, default `deal_stage_changed` | deal_stage_changed / quote_approval_required / route_dispatched / checkin_reminder / attainment_milestone / contract_expiring |
+| `title` | Char(200) | Short alert summary |
+| `message` | TextField | Full alert description or approval context |
+| `urgency` | Char(20), `URGENCY_CHOICES`, default `normal` | low / normal / high / urgent |
+| `related_opportunity` | FK `crm.Opportunity`, SET_NULL, null, blank, `related_name="mobile_alerts"` | Associated CRM opportunity |
+| `related_quote` | FK `sales.CPQQuote`, SET_NULL, null, blank, `related_name="mobile_alerts"` | Associated CPQ quote requiring approval |
+| `related_route` | FK `sales.FieldSalesRoute`, SET_NULL, null, blank, `related_name="mobile_alerts"` | Associated daily route |
+| `is_read` | BooleanField, default False | Flag indicating rep has viewed alert |
+| `read_at` | DateTimeField, null, blank | Timestamp when alert was opened/read |
+| `push_status` | Char(20), `PUSH_STATUS_CHOICES`, default `pending` | pending / sent / delivered / failed |
+| `push_sent_at` | DateTimeField, null, blank | Timestamp when push notification was dispatched |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto), `read_at`, `push_sent_at`, `push_status`.
+- **Validation in `clean()`:**
+  - Multi-tenant guard: `recipient`, `device`, `related_opportunity`, `related_quote`, and `related_route` must belong to `self.tenant`.
+- **Key Methods:**
+  - `mark_as_read()`: sets `is_read=True` and records `read_at=timezone.now()`.
+  - `dispatch_alert()`: sets `push_status="sent"` and records `push_sent_at=timezone.now()`.
+- **Meta:**
+  - `ordering = ["-created_at"]`
+  - `constraints`: `UniqueConstraint(fields=["tenant", "number"], name="sales_mda_ten_num_uniq")`
+  - `indexes`: `["tenant", "recipient"]` (`sales_mda_ten_rcpt_idx`), `["tenant", "is_read"]` (`sales_mda_ten_read_idx`), `["tenant", "urgency"]` (`sales_mda_ten_urg_idx`), `["tenant", "created_at"]` (`sales_mda_ten_date_idx`)
+
+---
+
+### Derived Console / Dashboard (0 new tables)
+
+#### `mobile_sales_dashboard` — **Mobile Sales Execution Dashboard**
+URL: `sales:mobile_sales_dashboard`  
+View: `apps/sales/views/MobileSales/MobileSalesDashboards.py::mobile_sales_dashboard`  
+Template: `templates/sales/mobilesales/dashboard/mobile_sales_dashboard.html`  
+Pure query projection (0 new tables). Computes:
+- **Today's Route Attainment**: Total planned vs completed stops, route completion % progress bar.
+- **Field Activity Metrics**: Daily check-ins count, verified on-site rate %, total on-site visit hours.
+- **Offline & Device Fleet**: Active registered mobile devices, pending offline uploads count, outdated sync count.
+- **Mobile Deal Radar**: High-urgency unread deal alerts, pending CPQ discount approval requests with one-tap action links.
+- **Quick-Action Itinerary Cards**: Today's stops ordered by stop number with turn-by-turn navigation deep links (`https://maps.google.com/?q=lat,lng`), click-to-dial `tel:` links, and single-tap Check-In buttons.
+- **Rapid Actions Modal / Bar**: Quick Drop-in Check-In, Start Call & Log Disposition, On-the-Spot Quote Draft.
+
+---
+
+## Backend (`apps/sales/{models,forms,views,urls}/MobileSales/`)
+
+### Models (`apps/sales/models/MobileSales/`)
+- [ ] `apps/sales/models/MobileSales/__init__.py` — re-export all 4 models and choices constants
+- [ ] `apps/sales/models/MobileSales/FieldSalesRoutes.py` — `FieldSalesRoute`, `STATUS_CHOICES`, `OPTIMIZATION_CHOICES`
+- [ ] `apps/sales/models/MobileSales/FieldCheckIns.py` — `FieldCheckIn`, `VERIFICATION_CHOICES`, `PURPOSE_CHOICES`, `OUTCOME_CHOICES`
+- [ ] `apps/sales/models/MobileSales/MobileDeviceSessions.py` — `MobileDeviceSession`, `PLATFORM_CHOICES`, `SYNC_STATUS_CHOICES`
+- [ ] `apps/sales/models/MobileSales/MobileDealAlerts.py` — `MobileDealAlert`, `ALERT_TYPE_CHOICES`, `URGENCY_CHOICES`, `PUSH_STATUS_CHOICES`
+
+### Forms (`apps/sales/forms/MobileSales/`)
+- [ ] `apps/sales/forms/MobileSales/__init__.py` — re-export all forms
+- [ ] `apps/sales/forms/MobileSales/FieldSalesRoutes.py` — `FieldSalesRouteForm`, `FieldSalesRouteFilterForm`
+- [ ] `apps/sales/forms/MobileSales/FieldCheckIns.py` — `FieldCheckInForm`, `FieldCheckInFilterForm`, `FieldCheckOutForm`, `GeofenceVerifyForm`
+- [ ] `apps/sales/forms/MobileSales/MobileDeviceSessions.py` — `MobileDeviceSessionForm`, `MobileDeviceSessionFilterForm`, `DeviceSyncForm`
+- [ ] `apps/sales/forms/MobileSales/MobileDealAlerts.py` — `MobileDealAlertForm`, `MobileDealAlertFilterForm`
+
+### Views (`apps/sales/views/MobileSales/`)
+- [ ] `apps/sales/views/MobileSales/__init__.py` — re-export all views
+- [ ] `apps/sales/views/MobileSales/FieldSalesRoutes.py`:
+  - `field_sales_route_list` (search, filters by status, rep, date; stats cards, pagination)
+  - `field_sales_route_create` (validates tenant, assigns sales rep)
+  - `field_sales_route_detail` (route summary, progress bar, stops sequence, check-ins list, navigation links)
+  - `field_sales_route_edit`
+  - `field_sales_route_delete` (POST with confirmation)
+  - `field_sales_route_optimize` (action: optimizes stop ordering, updates distance/duration, status `optimized`)
+  - `field_sales_route_complete` (action: marks status `completed`, updates actuals)
+- [ ] `apps/sales/views/MobileSales/FieldCheckIns.py`:
+  - `field_check_in_list` (search, filters by route, party, rep, outcome, verification; stats cards, pagination)
+  - `field_check_in_create` (captures GPS coordinates, auto-calculates Haversine distance & geofence verification)
+  - `field_check_in_detail` (visit breakdown, GPS coordinates map card, photo attachment, resulting quote link)
+  - `field_check_in_edit`
+  - `field_check_in_delete` (POST with confirmation)
+  - `field_check_in_verify` (action: runs Haversine formula against target, updates verification status)
+  - `field_check_in_checkout` (action: records departure timestamp, duration minutes, outcome, next step, force checkout flag)
+- [ ] `apps/sales/views/MobileSales/MobileDeviceSessions.py`:
+  - `mobile_device_session_list` (search, filters by platform, status, user; stats cards, pagination)
+  - `mobile_device_session_create` (registers device, assigns UUID)
+  - `mobile_device_session_detail` (device metadata, sync history, cached records counter, push token status)
+  - `mobile_device_session_edit`
+  - `mobile_device_session_delete` (POST with confirmation)
+  - `mobile_device_session_sync` (action: triggers sync manifest update, updates cached counts, sets status `success`)
+- [ ] `apps/sales/views/MobileSales/MobileDealAlerts.py`:
+  - `mobile_deal_alert_list` (search, filters by urgency, type, recipient, read status; stats cards, pagination)
+  - `mobile_deal_alert_create`
+  - `mobile_deal_alert_detail` (alert contents, urgency banner, linked opportunity/quote/route shortcuts)
+  - `mobile_deal_alert_edit`
+  - `mobile_deal_alert_delete` (POST with confirmation)
+  - `mobile_deal_alert_mark_read` (action: sets `is_read=True`, timestamps `read_at`)
+  - `mobile_deal_alert_dispatch` (action: triggers push dispatch simulation, sets status `sent`, timestamps `push_sent_at`)
+- [ ] `apps/sales/views/MobileSales/MobileSalesDashboards.py`:
+  - `mobile_sales_dashboard` (mobile execution cockpit: today's route progress, active check-ins, urgent deal alerts, rapid actions)
+
+### URLs (`apps/sales/urls/MobileSales/`)
+- [ ] `apps/sales/urls/MobileSales/__init__.py` — combines all 5 url modules (dashboard literal routes first)
+- [ ] `apps/sales/urls/MobileSales/FieldSalesRoutes.py`
+- [ ] `apps/sales/urls/MobileSales/FieldCheckIns.py`
+- [ ] `apps/sales/urls/MobileSales/MobileDeviceSessions.py`
+- [ ] `apps/sales/urls/MobileSales/MobileDealAlerts.py`
+- [ ] `apps/sales/urls/MobileSales/MobileSalesDashboards.py`
+
+### Package Re-exports & Admin & Seeder
+- [ ] `apps/sales/models/__init__.py` — add Sub-module 8.16 re-export block (models + choices)
+- [ ] `apps/sales/forms/__init__.py` — add Sub-module 8.16 re-export block
+- [ ] `apps/sales/views/__init__.py` — add Sub-module 8.16 re-export block
+- [ ] `apps/sales/urls/__init__.py` — wire `_mobile_sales` into `urlpatterns` (literal dashboard routes first)
+- [ ] `apps/sales/admin.py` — register `FieldSalesRoute`, `FieldCheckIn`, `MobileDeviceSession`, and `MobileDealAlert` with `TenantScopedAdmin` / FK narrowing
+- [ ] `apps/sales/migrations/0029_*.py` — `makemigrations sales`
+- [ ] `apps/sales/management/commands/seed_sales.py` — extend with `_seed_mobile_sales(self, tenant, user)` (idempotent, per-tenant guard, reusing existing Acme Corp and Globex `Party` rows)
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py`: add `LIVE_LINKS["8.16"]` mapping all five NavERP.md feature bullets + extra leaves:
+  ```python
+  "8.16": {
+      # OWNERSHIP RULING (L36/L37)
+      # Reuses core.Party for visited customer accounts, retail stores, and contact persons;
+      # reuses core.Address for destination geo-locations and street addresses;
+      # reuses core.Document (DOC-) for proof-of-visit photos and shelf audit attachments;
+      # reuses accounting.Currency for multi-currency quoting on the road;
+      # reuses accounts.User for field sales reps, dispatchers, and sales managers;
+      # reuses crm.Opportunity (OPP-) for pipeline deals advanced during field visits;
+      # reuses crm.CommunicationLog (COM-) for click-to-dial calls and voicemail drops;
+      # reuses sales.CPQQuote (CPQ-) for on-the-spot field quotes and discount approvals;
+      # reuses scm.SalesOrder (SO-) for customer orders entered from mobile.
+      # Zero duplicate customer/company, contact, quote, order, user, currency, document, or attendance geofence tables declared.
+      "Mobile CRM Access": "sales:mobile_device_session_list",
+      "Field Sales Tools": "sales:field_sales_route_list",
+      "Mobile Quoting & Approvals": "sales:field_check_in_list",
+      "Voice & Call Integration": "crm:communicationlog_list",
+      "Mobile Dashboards & Alerts": "sales:mobile_sales_dashboard",
+      # Extra live leaves
+      "Field Sales Routes": "sales:field_sales_route_list",
+      "Field Check-Ins": "sales:field_check_in_list",
+      "Mobile Device Sessions": "sales:mobile_device_session_list",
+      "Mobile Deal Alerts": "sales:mobile_deal_alert_list",
+      "Mobile Sales Dashboard": "sales:mobile_sales_dashboard",
+  },
+  ```
+
+---
+
+## Templates (`templates/sales/mobilesales/`)
+
+13 templates: 4 entities × 3 pages (`list`, `detail`, `form`) + 1 mobile sales dashboard template:
+- [ ] `templates/sales/mobilesales/fieldsalesroute/{list,detail,form}.html`
+- [ ] `templates/sales/mobilesales/fieldcheckin/{list,detail,form}.html`
+- [ ] `templates/sales/mobilesales/mobiledevicesession/{list,detail,form}.html`
+- [ ] `templates/sales/mobilesales/mobiledealalert/{list,detail,form}.html`
+- [ ] `templates/sales/mobilesales/dashboard/mobile_sales_dashboard.html`
+
+### UI/UX & Theme Invariants:
+- All pages extend `base.html` and include standard breadcrumbs.
+- Touch-friendly design with high-contrast action buttons suitable for mobile & desktop viewports.
+- Each **list** page:
+  - `.page-header` + `.stat-grid` of `.stat-card` / `.stat-icon`
+  - `.card > .card-body > <form method="get" class="filter-bar">` reflecting `request.GET` + Apply + Reset
+  - FK select controls compare via `|stringformat:"d"`
+  - Data table with dedicated **Actions column** (view / edit / delete-POST with CSRF and confirm dialog)
+  - `{% empty %}` empty state
+  - `{% include "partials/pagination.html" %}` with `has_previous`/`has_next` guards (L9)
+- Badges use color-named theme classes (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`). Never semantic `-success`/`-danger` (L33).
+- Each **detail** page:
+  - Header with title, auto-number badge, status badge
+  - Actions bar: Edit (conditional on status), Action modals/buttons (Optimize Route / Complete Route / Verify Geofence / Check-Out / Force Check-Out / Sync Device / Mark Alert Read / Dispatch Push), Delete (POST with confirm), Back to List
+  - Structured cards for GPS coordinates, Haversine verification audit, proof photo preview, linked CPQ quote / CRM communication log, and audit metadata
+- Each **form** page:
+  - `{% csrf_token %}`, styled input fields, clear error placement, Save / Cancel buttons
+  - Excluded fields (`tenant`, `number`, `created_at`, `updated_at`, derived values) are never rendered as inputs
+
+---
+
+## Verify
+
+- [ ] `venv\Scripts\python.exe manage.py makemigrations sales` → `0029_*.py` (re-verify number first)
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_sales` — run **twice**; second run produces identical counts (idempotent)
+- [ ] `venv\Scripts\python.exe manage.py check` → `System check identified no issues (0 silenced)`
+- [ ] `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` → `No changes detected`
+- [ ] All 25+ new url names reverse cleanly without `NoReverseMatch`
+- [ ] **temp/ smoke sweep as `admin_acme` / `password`** — assert content, not just status codes:
+  - 4 list pages → 200, each containing seeded records (`FSR-`, `CHK-`, `MDS-`, `MDA-`)
+  - 4 detail + 4 create + 4 edit pages → 200
+  - 1 console/dashboard page (`mobile_sales_dashboard`) → 200 with populated route progress and KPI metrics
+  - Filter GET parameters on every list page and console → no 500, clean filter matching
+  - Hostile junk params (`?page=999`, `?status=invalid`, `?party=999999999999`) → 200, no 500, fallback to unfiltered view
+  - Page 2 on pagination → 200
+  - **Cross-tenant IDOR** → a `admin_globex` pk returns 404 on detail/edit routes for `admin_acme`
+  - Grep rendered HTML for `{#` and `{% comment` → zero hits (L2)
+  - Grep rendered HTML for `badge-success|badge-danger|badge-warning|badge-purple` → zero hits (L33)
+- [ ] **Sidebar check**: `LIVE_LINKS["8.16"]` present; sidebar displays 8.16 with 5 Live bullets resolving to distinct hrefs (L30)
+- [ ] `.agents/tasks/gaps-sales-8.16.md` created in integrate step and linked in review/close-out block
+
+---
+
+## Close-out
+
+- [ ] **Phase 4 — six reviewers, ONE AFTER ANOTHER**:
+  `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`, each reading `BASE...HEAD`, appending findings to `.claude/tasks/review-sales-8.16.md` (dedupe, sort Critical → Important → Minor, assign `C1` / `I3` / `M7` IDs, commit).
+- [ ] **Phase 5 — `code-fixer`**: fixes every finding in ID order, one commit per file, marking each `[x] fixed` / `[~] skipped — reason`.
+- [ ] **Phase 6 — Tests (serial)**:
+  - Write test contract and shared helpers
+  - Four test modules one after another:
+    - `apps/sales/tests/test_mobilesales_models.py`
+    - `apps/sales/tests/test_mobilesales_forms.py`
+    - `apps/sales/tests/test_mobilesales_views.py`
+    - `apps/sales/tests/test_mobilesales_security.py`
+  - Full suite passes green
+- [ ] **Phase 7 — Skill + README**:
+  - Update `.claude/skills/sales/SKILL.md` with 8.16 models, routes, templates, and seeder info
+  - Update `README.md` marking Sub-module 8.16 complete
+
+---
+
+## Later passes / deferred (Gap Register items for `.agents/tasks/gaps-sales-8.16.md`)
+
+- **GAP-sales-8.16-01: Native iOS (Swift) & Android (Kotlin) Compiled Mobile App Binaries** — Compiling native store binaries via Xcode/Android Studio. Responsive mobile web app and PWA manifest ship in this pass; native wrappers deferred.
+- **GAP-sales-8.16-02: Live WebRTC Two-Way Telephony & Audio Streaming Engine** — Real-time WebRTC media streams and SIP trunking (deferred to Sub-module 8.18 Integration Hub). In 8.16, click-to-dial launches via native `tel:` protocol and logs to `crm.CommunicationLog`.
+- **GAP-sales-8.16-03: Direct Push Notification Transport (APNs / FCM) Gateway Webhooks** — Direct TCP socket handshakes to Apple/Google push servers requiring cloud service account keys. In 8.16, push tokens and alert records are stored; gateway relays wire up in Sub-module 8.18.
+- **GAP-sales-8.16-04: Continuous High-Frequency Background GPS Fleet Tracking & Geofence Triggers** — Continuous battery-draining GPS location streams deferred to logistics/fleet management. 8.16 implements point-of-interest check-in and check-out coordinate stamping.
+- **GAP-sales-8.16-05: Telecom Ringless Voicemail Server Direct Carrier Injection** — Automatic carrier injection of pre-recorded audio files without ringing recipient requires specialized telecom gateways. 8.16 provides voicemail drop scripts and call disposition tracking.
+
+---
+
+## Declined, with reasons (so it is not re-litigated)
+
+- **A duplicate Customer or Account master**: Customer accounts are `core.Party` instances. 8.16 FKs `core.Party` directly.
+- **A duplicate Contact person master**: Contact persons are `core.Party` instances (person Party lens). 8.16 FKs `core.Party` directly.
+- **A duplicate User or Sales Rep master**: Reps, managers, and dispatchers are `settings.AUTH_USER_MODEL` (`accounts.User`).
+- **A duplicate Quote or Sales Order master**: On-the-spot quotes link `sales.CPQQuote` (`CPQ-`); mobile sales orders link `scm.SalesOrder` (`SO-`).
+- **A duplicate Activity or Communication log table**: General call interactions belong to `crm.CommunicationLog` (`COM-`); sales attribution belongs to `sales.ActivityLog` (`SAL-`). 8.16 creates specialized `FieldCheckIn` (`CHK-`) records.
+- **A duplicate Geofence table**: Proximity is calculated dynamically via the mathematical Haversine formula against destination party coordinates on `FieldCheckIn`, avoiding redundant geofence catalog maintenance.
+- **A duplicate Document or Photo storage master**: Photos, receipts, and shelf audit attachments use `core.Document` (`DOC-`).
+- **A separate table for Mobile Sales Dashboard**: The dashboard is a pure query projection / computed aggregation over `FieldSalesRoute`, `FieldCheckIn`, `MobileDeviceSession`, and `MobileDealAlert`. Zero drift-prone rollup tables.
