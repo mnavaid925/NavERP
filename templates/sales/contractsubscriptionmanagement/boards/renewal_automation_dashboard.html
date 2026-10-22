@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Renewal Automation Radar — Sales — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:contract_subscription_workspace' %}">Contracts & Subscriptions</a>
+            <span>/</span>
+            <span>Renewal Radar</span>
+        </div>
+        <h1 class="page-title">Renewal Automation Radar</h1>
+        <p class="text-sm text-slate-500 mt-1">Automated renewal execution, price escalation tracking, and advance notice management.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'sales:contract_subscription_workspace' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Workspace</span>
+        </a>
+        <a href="{% url 'sales:customer_contract_list' %}" class="btn btn-primary">
+            <i data-lucide="file-text"></i>
+            <span>All Contracts</span>
+        </a>
+    </div>
+</div>
+
+<!-- Renewal Expiration Horizon KPIs -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-circle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Expiring in &le; 30 Days</div>
+            <div class="text-2xl font-bold text-slate-800">{{ expiring_30_days }}</div>
+            <div class="text-xs text-red-600 mt-0.5">Critical renewal window</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Expiring in 31–60 Days</div>
+            <div class="text-2xl font-bold text-slate-800">{{ expiring_60_days }}</div>
+            <div class="text-xs text-amber-600 mt-0.5">Notice preparation phase</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Expiring in 61–90 Days</div>
+            <div class="text-2xl font-bold text-slate-800">{{ expiring_90_days }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">Early outreach pipeline</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Projected Uplift Gain</div>
+            <div class="text-2xl font-bold text-slate-800">+${{ projected_uplift_value|floatformat:2 }}</div>
+            <div class="text-xs text-green-600 mt-0.5">{{ generated_quotes_count }} renewal quotes created</div>
+        </div>
+    </div>
+</div>
+
+<!-- Auto-Renewal Execution Candidates -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h3 class="font-semibold text-slate-800">Auto-Renewal Candidates ({{ auto_renew_candidates.count }})</h3>
+        <span class="text-xs text-slate-500">Agreements designated for automated execution</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Contract</th>
+                    <th>Account</th>
+                    <th>Current Term End</th>
+                    <th>Term Duration</th>
+                    <th>Notice Days</th>
+                    <th>Price Uplift</th>
+                    <th>TCV</th>
+                    <th class="text-right">Execution Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in auto_renew_candidates %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'sales:customer_contract_detail' c.pk %}" class="text-blue-600 hover:underline">
+                            {{ c.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ c.account.name }}</div>
+                        <div class="text-xs text-slate-500">{{ c.title|truncatechars:25 }}</div>
+                    </td>
+                    <td class="text-xs text-amber-700 font-medium">{{ c.end_date|date:"M d, Y" }}</td>
+                    <td class="text-xs text-slate-600">{{ c.renewal_term_months }} Months</td>
+                    <td class="text-xs text-slate-600">{{ c.notice_period_days }} Days</td>
+                    <td>
+                        <span class="badge badge-green">+{{ c.price_uplift_pct }}% Uplift</span>
+                    </td>
+                    <td class="font-medium text-slate-800">${{ c.total_contract_value|floatformat:2 }}</td>
+                    <td class="text-right table-actions">
+                        <form method="post" action="{% url 'sales:customer_contract_execute_auto_renew' c.pk %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline text-xs px-2 py-1" onclick="return confirm('Execute auto-renewal for {{ c.number }}?');">
+                                <i data-lucide="refresh-cw"></i>
+                                <span>Execute</span>
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'sales:customer_contract_generate_renewal_quote' c.pk %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline text-xs px-2 py-1" title="Generate CPQ Quote">
+                                <i data-lucide="file-plus"></i>
+                                <span>Quote</span>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-4 text-xs text-slate-500">
+                        No active contracts currently queued for automated renewal.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- All 90-Day Upcoming Renewals Radar -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h3 class="font-semibold text-slate-800">90-Day Renewal Expiration Pipeline ({{ upcoming_renewals.count }})</h3>
+        <span class="text-xs text-slate-500">Complete expiration radar</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Account & Title</th>
+                    <th>Contract Type</th>
+                    <th>Expiration Date</th>
+                    <th>Renewal Policy</th>
+                    <th>Annual Value</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in upcoming_renewals %}
+                <tr>
+                    <td class="font-semibold">
+                        <a href="{% url 'sales:customer_contract_detail' c.pk %}" class="text-blue-600 hover:underline">
+                            {{ c.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ c.account.name }}</div>
+                        <div class="text-xs text-slate-500">{{ c.title }}</div>
+                    </td>
+                    <td class="text-xs text-slate-600">{{ c.get_contract_type_display }}</td>
+                    <td class="text-xs font-medium text-slate-800">
+                        {{ c.end_date|date:"M d, Y" }}
+                    </td>
+                    <td>
+                        {% if c.auto_renew %}
+                        <span class="badge badge-green">Auto-Renew</span>
+                        {% else %}
+                        <span class="badge badge-slate">Manual</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-medium text-slate-700">${{ c.annual_contract_value|floatformat:2 }}</td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'sales:customer_contract_detail' c.pk %}" class="btn btn-icon">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <form method="post" action="{% url 'sales:customer_contract_generate_renewal_quote' c.pk %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-blue-600" title="Draft Renewal CPQ Quote">
+                                <i data-lucide="file-plus"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-4 text-xs text-slate-500">
+                        No contracts expiring in the next 90 days.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
