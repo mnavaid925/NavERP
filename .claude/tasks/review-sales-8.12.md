@@ -107,9 +107,9 @@
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:1154-1157`. Pulls `planned_minutes` flat into Python to sum, and fires a separate count query.
   *Fix:* Combine into single aggregate: `in_period.aggregate(auto_captured=Count("id", filter=Q(is_auto_captured=True)), planned_minutes=Sum("planned_minutes"))`. Fixed — `d4c56f8e` `fix(sales): combine activity totals count and sum into single aggregate`.
 
-- [ ] **I9 — Full table scan with Python filtering in `_benchmark_rows`.**
+- [x] **I9 — Full table scan with Python filtering in `_benchmark_rows`.**
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:1353, 1370`. Fetches un-benchmarked rows over the wire only to discard them in Python.
-  *Fix:* Filter in SQL: `benchmark_pct__isnull=False` and `benchmark_days__isnull=False`.
+  *Fix:* Filter in SQL: `benchmark_pct__isnull=False` and `benchmark_days__isnull=False`. Fixed — `b469dce9` `fix(sales): filter un-benchmarked rows in SQL in _benchmark_rows`.
 
 - [ ] **I10 — Unbounded querysets rendered on console boards.**
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:641-654, 916-923, 1001-1020`. `open_actions`, `funnel_rows`, and `scorecard_rows` render unbounded rows.
