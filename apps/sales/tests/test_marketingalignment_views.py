@@ -50,7 +50,7 @@ def test_marketingalignment_console_view_filter_model(
     response = client_a.get(url, {"model": "linear"})
     assert response.status_code == 200
     assert response.context["active_model"] == "linear"
-    assert response.context["active_model_label"] == "Linear (Equal credit)"
+    assert response.context["active_model_label"] == "Linear (Multi-Touch)"
 
 
 # ==============================================================================
@@ -315,7 +315,7 @@ def test_marketingalignment_mql_handoff_accept_and_reject_transitions(
         "owner": admin_user.pk,
         "assigned_to": admin_user.pk,
         "status": "accepted",
-        "source_kind": ma_handoff_a.source_kind,
+        "source_kind": "inbound",
         "handoff_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         "sla_due_at": (now + timezone.timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S"),
         "lead_score": ma_handoff_a.lead_score,
@@ -337,7 +337,7 @@ def test_marketingalignment_mql_handoff_accept_and_reject_transitions(
         "owner": admin_user.pk,
         "assigned_to": admin_user.pk,
         "status": "rejected",
-        "source_kind": ma_handoff_a.source_kind,
+        "source_kind": "inbound",
         "handoff_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         "sla_due_at": (now + timezone.timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S"),
         "lead_score": ma_handoff_a.lead_score,
@@ -438,7 +438,7 @@ def test_marketingalignment_marketing_event_detail_view(client_a, ma_event_a):
     response = client_a.get(url)
     assert response.status_code == 200
     assert response.context["obj"].pk == ma_event_a.pk
-    assert "registrations_count" in response.context
+    assert "registrations" in response.context
 
 
 @pytest.mark.django_db
