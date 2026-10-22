@@ -139,9 +139,9 @@
   `apps/sales/forms/SalesAnalytics/WinLossDebriefs.py:58-111`. Submitting an excessively large array increases row size and console processing time.
   *Fix:* Enforce `if len(value) > 50: raise ValidationError(...)`. Fixed — `d98b0654` `fix(sales): enforce maximum 50 decision drivers in WinLossDebriefForm`.
 
-- [ ] **M4 — Unescaped model number in JavaScript `confirm()` dialogs.**
+- [x] **M4 — Unescaped model number in JavaScript `confirm()` dialogs.**
   `winlossdebrief/detail.html:236`, `stagevelocityanalysis/detail.html:225`, `funnelconversionrecord/detail.html:217`, `repperformancescorecard/detail.html:358`.
-  *Fix:* Use `{{ obj.number|escapejs }}`.
+  *Fix:* Use `{{ obj.number|escapejs }}`. Fixed — `e971f693`, `f2d912a0`, `c00d9675`, `b2f377b0` `fix(sales): escapejs model number in confirm dialogs across detail templates`.
 
 - [ ] **M5 — Missing nested `select_related` in `stage_velocity_analysis_delete`.**
   `apps/sales/views/SalesAnalytics/StageVelocityAnalyses.py:175`. Calls `str(obj.pipeline_stage)` which evaluates `stage.pipeline`.
