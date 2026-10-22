@@ -34,3 +34,17 @@
 - [ ] **M3** (`apps/sales/models/MobileSales/FieldSalesRoutes.py:105-110`): `generate_navigation_url()` returns `"https://maps.google.com"` fallback when no waypoints are set, causing the "Open Navigation" button to always render. Return `None` when locations are empty.
 - [ ] **M4** (`apps/sales/models/MobileSales/FieldCheckIns.py:177-180`): Departure GPS coordinates (`check_out_lat`, `check_out_lng`) lack range validation (-90 to 90, -180 to 180) in `clean()`, unlike arrival coordinates.
 - [ ] **M5** (`apps/sales/views/MobileSales/MobileDealAlerts.py:85-88, 177-183`): Audit logging omission when marking alerts as read in `mobile_deal_alert_mark_read` and auto-read in detail view.
+
+---
+
+## Pass 3: frontend-reviewer
+
+### Critical
+*(None)*
+
+### Important
+- [ ] **I6** (`templates/sales/mobilesales/dashboard/mobile_sales_dashboard.html:147-151`): Incomplete Route Status Badge mapping on dashboard. Lumps all statuses other than `in_progress` into "Scheduled" rather than mapping `completed` (green), `cancelled` (muted), and `draft` (info).
+
+### Minor
+- [ ] **M6** (`templates/sales/mobilesales/**/*.html`): Missing `aria-label` attributes on icon-only buttons across dashboard and list/detail action columns.
+- [ ] **M7** (`templates/sales/mobilesales/**/*.html`): Stat cards use inline Tailwind background/color utilities instead of `.stat-icon.blue`, `.stat-icon.green`, `.stat-icon.orange`, `.stat-icon.purple` theme classes.
