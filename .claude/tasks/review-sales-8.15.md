@@ -38,13 +38,13 @@ The architecture demonstrates flawless multi-tenancy (`TenantNumbered`, strict s
 - [x] **I12** — `apps/sales/forms/ContractSubscriptionManagement/CustomerSubscriptions.py:27`: `renewal_notice_days` has no default fallback if omitted from client post data, causing form validation failure on bare POST requests. Fix: Set initial default of 30 in form `__init__`. fixed — 096beebd
 
 ### Minor
-- [ ] **M1** — `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py:13`: Unused import of `tenant_admin_required`. Fix: Apply to `customer_contract_delete`.
-- [ ] **M2** — `apps/sales/forms/ContractSubscriptionManagement/CustomerContracts.py:65`: Narrow `account` queryset in form to customer roles: `Party.objects.filter(tenant=self.tenant, roles__role="customer").distinct()`.
-- [ ] **M3** — `templates/sales/contractsubscriptionmanagement/contractobligation/list.html:28` & `boards/renewal_automation_dashboard.html:32`: Non-standard `stat-icon red`. Fix: Use `stat-icon orange`.
-- [ ] **M4** — `templates/sales/contractsubscriptionmanagement/usagemeterrecord/detail.html:180`: None-safe display convention: add `|default:"—"` to `plan_code`.
-- [ ] **M5** — `apps/sales/views/ContractSubscriptionManagement/ContractObligations.py:151`: Add `select_related("contract")` in `contract_obligation_edit` to prevent query on `str(obl)`.
-- [ ] **M6** — `apps/sales/views/ContractSubscriptionManagement/UsageMeterRecords.py:127`: Add `select_related("subscription")` in `usage_meter_record_edit` to prevent query on `str(meter)`.
-- [ ] **M7** — `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py:118`: Add `account` to `contract.subscriptions.all().select_related("currency", "account")`.
+- [x] **M1** — `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py:13`: Unused import of `tenant_admin_required`. Fix: Apply to `customer_contract_delete`. fixed — 9ae3a5a8
+- [x] **M2** — `apps/sales/forms/ContractSubscriptionManagement/CustomerContracts.py:65`: Narrow `account` queryset in form to customer roles: `Party.objects.filter(tenant=self.tenant, roles__role="customer").distinct()`. fixed — 584683b6
+- [x] **M3** — `templates/sales/contractsubscriptionmanagement/contractobligation/list.html:28` & `boards/renewal_automation_dashboard.html:32`: Non-standard `stat-icon red`. Fix: Use `stat-icon orange`. fixed — 8b7ddd35, 9ef6cd88
+- [x] **M4** — `templates/sales/contractsubscriptionmanagement/usagemeterrecord/detail.html:180`: None-safe display convention: add `|default:"—"` to `plan_code`. fixed — 530d73d5
+- [x] **M5** — `apps/sales/views/ContractSubscriptionManagement/ContractObligations.py:151`: Add `select_related("contract")` in `contract_obligation_edit` to prevent query on `str(obl)`. fixed — 787b95aa
+- [x] **M6** — `apps/sales/views/ContractSubscriptionManagement/UsageMeterRecords.py:127`: Add `select_related("subscription")` in `usage_meter_record_edit` to prevent query on `str(meter)`. fixed — 64b2a561
+- [x] **M7** — `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py:118`: Add `account` to `contract.subscriptions.all().select_related("currency", "account")`. fixed — 01ebc56a
 - [x] **M8** — `apps/sales/forms/ContractSubscriptionManagement/CustomerSubscriptions.py:116`: Constrain `quantity` in `SubscriptionUpgradeForm` with `max_value=1000000` to prevent Decimal overflow on MRR. fixed — 096beebd
-- [ ] **M9** — `apps/sales/forms/ContractSubscriptionManagement/ContractObligations.py:102`: Require `min_value=Decimal("0.01")` on `ObligationBreachForm.penalty_amount`.
-- [ ] **M10** — `templates/sales/contractsubscriptionmanagement/boards/contract_subscription_workspace.html:46`: KPI stat card label reads "Active Contract TCV". Update to "Total Contract Value (TCV)".
+- [x] **M9** — `apps/sales/forms/ContractSubscriptionManagement/ContractObligations.py:102`: Require `min_value=Decimal("0.01")` on `ObligationBreachForm.penalty_amount`. fixed — f3c18dd5
+- [x] **M10** — `templates/sales/contractsubscriptionmanagement/boards/contract_subscription_workspace.html:46`: KPI stat card label reads "Active Contract TCV". Update to "Total Contract Value (TCV)". fixed — fabd191c
