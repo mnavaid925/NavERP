@@ -16683,3 +16683,415 @@ Pure query projection (0 new tables). Computes:
   - `test_partnerchannel_security.py`: 7 tests passed
 - **Gaps Register**: `.agents/tasks/gaps-sales-8.14.md` (5 deferred roadmap items; 0 gaps on as-built contract).
 - **Documentation**: `.claude/skills/sales/SKILL.md` updated with 8.14 specifications; `README.md` marked Sub-module 8.14 complete.
+
+
+# Sub-module 8.15 — Contract & Subscription Management (Module 8: Sales Management System, sales) — plan from research-sales-8.15.md  (2026-10-22)
+
+**Input:** `.claude/tasks/research-sales-8.15.md` (239 lines; 9 leaders surveyed — Salesforce Revenue Cloud / CPQ & Billing, Zuora Billing & Orders, Chargebee, Stripe Billing, Ironclad CLM, Conga Contracts & Revenue, Maxio SaaSOptics/Chargify, Icertis Contract Intelligence, DealHub CPQ & Subscription Management). **App `apps/sales` already exists → this is an EXTEND run.** No scaffold, no `apps.py`, **no `config/settings.py` INSTALLED_APPS change, no `config/urls.py` change.** The ONLY navigation change is one new `LIVE_LINKS["8.15"]` entry in `apps/core/navigation.py`.
+
+**Next migration: `0028`** — verified now: `apps/sales/migrations/` ends at `0027_repperformancescorecard_sales_rps_ten_pend_idx_and_more.py`. **Re-verify the number at generation time (L43)**.
+
+## The five non-negotiable rulings this plan is built on
+
+**(a) Zero duplicate masters (L36/L37).** 8.15 declares NO Customer/Company table, NO Proposal/Quote table, NO Sales Order master, NO Currency master, NO Document/File table, NO Rep/User master, NO Platform SaaS Subscription table, and NO secondary financial ledger. It **EXTENDS by FK**:
+- `core.Party` (`apps/core/models/Party.py`) for customer client accounts and contracting parties;
+- `sales.CPQQuote` (`CPQ-`, `apps/sales/models/QuoteProposalCPQ/CPQQuotes.py`) for originating commercial proposals and automated renewal quotes;
+- `scm.SalesOrder` (`SO-`, `apps/scm/models/OrderManagement/SalesOrders.py`) for originating customer sales orders;
+- `accounting.Currency` for ISO multi-currency contract amounts, recurring fees, and overage rates;
+- `core.Document` (`DOC-`, `apps/core/models/Document.py`) for executed signed contract attachments and redline markups;
+- `crm.DocTemplate` (`TPL-`, `apps/crm/models/DocumentContract/DocTemplates.py`) for reusable contract authoring clause and agreement templates;
+- `accounts.User` (`settings.AUTH_USER_MODEL`) for contract owners, CSM managers, and obligation assignees.
+
+**(b) Clean distinction between Platform SaaS Subscriptions and Commercial Customer Subscriptions (L36/L37).** `apps/tenants/models/Subscription.py` owns the tenant's own subscription to the NavERP platform (`Tenant.PLAN_CHOICES`, `stripe_subscription_id`, platform seats). Sell-side customer subscription models in 8.15 represent commercial recurring services sold to customer parties and **must be named `CustomerSubscription` (`CSB-`)** and customer master agreements named `CustomerContract` (`CCT-`) to prevent severe class name and mental model collisions.
+
+**(c) 4 models, 2 derived console/dashboards, 0 console tables.** The five NavERP.md bullets map to distinct navigation destinations (L30). The four model list pages are operational registries, and `contract_subscription_workspace` and `renewal_automation_dashboard` are derived, real-time computed consoles (ARR/MRR rollups, 30/60/90-day renewal expiration radars, unbilled overage totals, and SLA compliance/penalty exposure).
+
+**(d) Multi-tenant isolation inherited, never redeclared.** `apps/sales/models/_base.py::TenantNumbered` already declares `tenant = FK("core.Tenant", on_delete=CASCADE, related_name="+", db_index=True)` plus `number` (`editable=False`), `created_at`, `updated_at`. All four models inherit from `TenantNumbered`.
+
+**(e) Prefix registry — `CCT`, `CSB`, `UMR`, `OBL`.** All four prefixes are verified collision-free across the entire NavERP repository:
+- `CCT` = `CustomerContract`
+- `CSB` = `CustomerSubscription`
+- `UMR` = `UsageMeterRecord`
+- `OBL` = `ContractObligation`
+
+---
+
+## Models (from research — 1–4)
+
+All four live in a **new** package `apps/sales/models/ContractSubscriptionManagement/`, extend `TenantNumbered`, and are re-exported from `apps/sales/models/__init__.py`.
+
+### 1. `CustomerContract` [`CCT-`] — `apps/sales/models/ContractSubscriptionManagement/CustomerContracts.py` — **bullets 1 & 3 (Contract Authoring & Redlining, Renewal Automation)**
+Drivers: Master legal agreement container (A1) · Standard contract types (MSA, Software Subscription Agreement, SOW, SLA, NDA) (A2) · Lifecycle state machine (`draft` → `internal_review` → `negotiating` → `active` → `amended` → `terminated` → `expired`) (A3) · Template merge library link (`crm.DocTemplate`) and executed signed document link (`core.Document`) (A4) · Custom clause & special terms tracking (A5) · Collaborative redlining notes & external sign-off metadata (A6) · Originating quote (`sales.CPQQuote`) and order (`scm.SalesOrder`) linkage (A7) · Auto-renewal rules, expiration notice windows, and contractual price uplift percentage (R1, R2, R3).
+
+| Field | Type | Notes |
+|---|---|---|
+| `account` | FK `core.Party`, CASCADE, `related_name="customer_contracts"` | Customer client account (`core.Party`) |
+| `title` | Char(255) | Descriptive contract title |
+| `contract_type` | Char(40), `CONTRACT_TYPE_CHOICES`, default `subscription_agreement` | msa / subscription_agreement / sow / sla / nda / custom |
+| `status` | Char(30), `CONTRACT_STATUS_CHOICES`, default `draft` | draft / internal_review / negotiating / active / amended / terminated / expired |
+| `owner` | FK `settings.AUTH_USER_MODEL`, SET_NULL, null, blank, `related_name="owned_customer_contracts"` | Assigned Contract Manager / Account Executive |
+| `currency` | FK `accounting.Currency`, PROTECT, `related_name="+"` | Operating ISO currency for contract valuation |
+| `total_contract_value` | Decimal(14,2), default 0.00, `MinValueValidator(0)` | Total Contract Value (TCV) across full term |
+| `annual_contract_value` | Decimal(14,2), default 0.00, `MinValueValidator(0)` | Annual Contract Value (ACV) |
+| `start_date` | DateField | Contract effective start date |
+| `end_date` | DateField, null, blank | Contract expiration date (null = perpetual / evergreen) |
+| `auto_renew` | BooleanField, default False | Flag indicating automated renewal on expiration |
+| `renewal_term_months` | PositiveIntegerField, default 12 | Renewal period duration in months |
+| `notice_period_days` | PositiveIntegerField, default 30 | Advance notice required for non-renewal or amendments |
+| `price_uplift_pct` | Decimal(5,2), default 0.00, `MinValueValidator(0)`, `MaxValueValidator(100)` | Contractual renewal price escalation / inflation uplift % |
+| `governing_law` | Char(120), blank | Jurisdiction / governing legal venue |
+| `originating_quote` | FK `sales.CPQQuote`, SET_NULL, null, blank, `related_name="originated_contracts"` | Originating commercial quote |
+| `originating_order` | FK `scm.SalesOrder`, SET_NULL, null, blank, `related_name="originated_contracts"` | Originating customer sales order |
+| `template` | FK `crm.DocTemplate`, SET_NULL, null, blank, `related_name="customer_contracts"` | Source agreement template from CRM 1.9 library |
+| `document` | FK `core.Document`, SET_NULL, null, blank, `related_name="customer_contracts"` | Executed signed PDF or redline file attachment |
+| `special_terms` | TextField, blank | Negotiated non-standard clauses, liability terms, IP terms |
+| `redline_notes` | TextField, blank | Collaborative redlining history, legal counsel review notes |
+| `signed_at` | DateTimeField, null, blank | Signature execution timestamp |
+| `signoff_contact` | Char(150), blank | Name & title of counterparty authorized signer |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto), `signed_at` (set via activate workflow action).
+- **Validation in `clean()`:**
+  - `end_date >= start_date` when `end_date` is provided.
+  - Multi-tenant guard: `account`, `owner`, `originating_quote`, `originating_order`, `template`, and `document` must belong to `self.tenant`.
+- **Meta:**
+  - `ordering = ["-start_date", "-created_at"]`
+  - `constraints`: `UniqueConstraint(fields=["tenant", "number"], name="sales_cct_ten_num_uniq")`
+  - `indexes`: `["tenant", "status"]` (`sales_cct_ten_status_idx`), `["tenant", "account"]` (`sales_cct_ten_acc_idx`), `["tenant", "end_date"]` (`sales_cct_ten_end_idx`), `["tenant", "owner"]` (`sales_cct_ten_owner_idx`)
+
+---
+
+### 2. `CustomerSubscription` [`CSB-`] — `apps/sales/models/ContractSubscriptionManagement/CustomerSubscriptions.py` — **bullets 2 & 3 (Subscription Lifecycle, Renewal Automation)**
+Drivers: Sell-side recurring subscription instance (S1) · Monetization models (flat recurring fee, per-seat/license, metered, hybrid base + overage) (S2) · Standard billing intervals (monthly, quarterly, semi-annual, annual) (S3) · Governed lifecycle states (`trialing` → `active` → `paused` → `past_due` → `cancelled` → `expired`) (S4) · MRR/ARR normalization (S5) · Mid-term upgrades & quantity scaling (S6) · Structured pause/resume workflow with pause start and resume timestamps (S7) · Structured cancellation workflow with churn exit reasons (S8) · Automated renewal quote linkage (`sales.CPQQuote`) and expiration watch (R1, R4).
+
+| Field | Type | Notes |
+|---|---|---|
+| `contract` | FK `sales.CustomerContract`, SET_NULL, null, blank, `related_name="subscriptions"` | Umbrella master legal agreement |
+| `account` | FK `core.Party`, CASCADE, `related_name="customer_subscriptions"` | Subscribing customer client account (`core.Party`) |
+| `subscription_name` | Char(255) | Name of subscribed service / product plan |
+| `plan_code` | Char(60) | SKU or plan code (e.g. `ENT-CLOUD-ANNUAL`) |
+| `status` | Char(30), `SUBSCRIPTION_STATUS_CHOICES`, default `active` | trialing / active / paused / past_due / cancelled / expired |
+| `pricing_model` | Char(30), `PRICING_MODEL_CHOICES`, default `per_seat` | flat_fee / per_seat / usage_metered / hybrid |
+| `billing_cadence` | Char(20), `BILLING_CADENCE_CHOICES`, default `monthly` | monthly / quarterly / semi_annual / annual |
+| `currency` | FK `accounting.Currency`, PROTECT, `related_name="+"` | ISO currency for recurring billing amounts |
+| `quantity` | PositiveIntegerField, default 1, `MinValueValidator(1)` | Number of licensed seats, users, or plan units |
+| `unit_price` | Decimal(12,2), default 0.00, `MinValueValidator(0)` | Recurring price per unit per cadence |
+| `mrr` | Decimal(14,2), default 0.00, `MinValueValidator(0)` | Normalized Monthly Recurring Revenue (calculated/stored) |
+| `start_date` | DateField | Initial subscription activation date |
+| `current_term_start` | DateField | Start date of active billing term |
+| `current_term_end` | DateField | End date of active billing term |
+| `trial_ends_at` | DateField, null, blank | Expiration date of trial period (if trialing) |
+| `paused_at` | DateTimeField, null, blank | Timestamp when subscription service was paused |
+| `resumed_at` | DateTimeField, null, blank | Timestamp when subscription was resumed from pause |
+| `cancelled_at` | DateTimeField, null, blank | Timestamp when cancellation was executed |
+| `cancellation_reason` | TextField, blank | Structured exit rationale and churn feedback |
+| `auto_renew` | BooleanField, default True | Flag indicating auto-renewal at term end |
+| `renewal_notice_days` | PositiveIntegerField, default 30 | Notice window in days before term expiration |
+| `renewal_quote` | FK `sales.CPQQuote`, SET_NULL, null, blank, `related_name="renewal_subscriptions"` | Linked renewal quote drafted for upcoming term |
+| `owner` | FK `settings.AUTH_USER_MODEL`, SET_NULL, null, blank, `related_name="managed_customer_subscriptions"` | Assigned Account Executive / Customer Success Manager |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto), `mrr` (calculated from quantity * unit_price normalized by cadence), `paused_at`, `resumed_at`, `cancelled_at`, `renewal_quote` (linked via renewal action).
+- **Validation in `clean()`:**
+  - `current_term_end >= current_term_start`.
+  - When `status == "cancelled"`, require non-empty `cancellation_reason`.
+  - Multi-tenant guard: `contract`, `account`, `owner`, and `renewal_quote` must belong to `self.tenant`.
+- **MRR Calculation helper in model:**
+  - Cadence multipliers: `monthly` = 1.0, `quarterly` = 1/3, `semi_annual` = 1/6, `annual` = 1/12.
+- **Meta:**
+  - `ordering = ["-current_term_end", "-created_at"]`
+  - `constraints`: `UniqueConstraint(fields=["tenant", "number"], name="sales_csb_ten_num_uniq")`
+  - `indexes`: `["tenant", "status"]` (`sales_csb_ten_status_idx`), `["tenant", "account"]` (`sales_csb_ten_acc_idx`), `["tenant", "current_term_end"]` (`sales_csb_ten_end_idx`), `["tenant", "plan_code"]` (`sales_csb_ten_plan_idx`)
+
+---
+
+### 3. `UsageMeterRecord` [`UMR-`] — `apps/sales/models/ContractSubscriptionManagement/UsageMeterRecords.py` — **bullet 4 (Usage-Based Billing)**
+Drivers: Metered consumption tracking register (U1) · Included free allowance / base quota per period (U2) · Automated billable overage units & monetary charge calculation (U3) · Period billing isolation in arrears (U4) · Usage record lifecycle state (`metering` → `calculated` → `invoiced` → `disputed`) (U5).
+
+| Field | Type | Notes |
+|---|---|---|
+| `subscription` | FK `sales.CustomerSubscription`, CASCADE, `related_name="usage_records"` | Parent metered or hybrid subscription |
+| `meter_name` | Char(120) | Metric identifier (e.g. `API Requests`, `Storage GB`, `Compute Hours`) |
+| `unit_of_measure` | Char(40), default `units` | Measurement unit (e.g. `api_calls`, `gigabytes`, `hours`, `seats`) |
+| `billing_period_start` | DateField | Start date of usage tracking cycle |
+| `billing_period_end` | DateField | End date of usage tracking cycle |
+| `included_allowance` | Decimal(14,2), default 0.00, `MinValueValidator(0)` | Free quota included in base subscription fee |
+| `reported_usage` | Decimal(14,2), default 0.00, `MinValueValidator(0)` | Actual raw recorded usage units in cycle |
+| `billable_overage_units` | Decimal(14,2), default 0.00, `MinValueValidator(0)` | `max(0, reported_usage - included_allowance)` (calculated) |
+| `overage_unit_price` | Decimal(10,4), default 0.00, `MinValueValidator(0)` | Unit rate applied to consumption exceeding allowance |
+| `overage_total_charge` | Decimal(14,2), default 0.00, `MinValueValidator(0)` | `billable_overage_units * overage_unit_price` (calculated) |
+| `status` | Char(20), `USAGE_STATUS_CHOICES`, default `metering` | metering / calculated / invoiced / disputed |
+| `invoiced_at` | DateTimeField, null, blank | Timestamp when overage charge was posted to billing invoice |
+| `notes` | TextField, blank | Operational notes, meter source references |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto), `billable_overage_units` (auto-calculated), `overage_total_charge` (auto-calculated), `invoiced_at` (set via invoice workflow action).
+- **Validation in `clean()`:**
+  - `billing_period_end >= billing_period_start`.
+  - Multi-tenant guard: `subscription.tenant == self.tenant`.
+  - Auto-computes `billable_overage_units = max(Decimal(0), reported_usage - included_allowance)` and `overage_total_charge = billable_overage_units * overage_unit_price`.
+- **Meta:**
+  - `ordering = ["-billing_period_end", "-created_at"]`
+  - `constraints`: `UniqueConstraint(fields=["tenant", "number"], name="sales_umr_ten_num_uniq")`
+  - `indexes`: `["tenant", "status"]` (`sales_umr_ten_status_idx`), `["tenant", "subscription"]` (`sales_umr_ten_sub_idx`), `["tenant", "billing_period_end"]` (`sales_umr_ten_period_idx`)
+
+---
+
+### 4. `ContractObligation` [`OBL-`] — `apps/sales/models/ContractSubscriptionManagement/ContractObligations.py` — **bullet 5 (Contract Compliance & Obligations)**
+Drivers: Post-signature contractual commitment master (O1) · Obligation typology (`sla_uptime`, `sla_response`, `delivery_milestone`, `reporting_compliance`, `warranty_support`, `security_review`) (O2) · Measurable target SLA benchmarks (O3) · Fulfillment status lifecycle (`pending` → `fulfilled` → `at_risk` → `breached` → `waived`) (O4) · Audit fulfillment evidence verification (O5) · Penalty & liquidated damages exposure calculation and status (`none`, `assessed`, `credited`, `waived`) (O6).
+
+| Field | Type | Notes |
+|---|---|---|
+| `contract` | FK `sales.CustomerContract`, CASCADE, `related_name="obligations"` | Parent customer legal contract |
+| `subscription` | FK `sales.CustomerSubscription`, SET_NULL, null, blank, `related_name="obligations"` | Specific subscription asset (if SLA tied to service) |
+| `title` | Char(255) | Name / summary of contractual commitment |
+| `obligation_type` | Char(40), `OBLIGATION_TYPE_CHOICES`, default `sla_uptime` | sla_uptime / sla_response / delivery_milestone / reporting_compliance / warranty_support / security_review |
+| `target_metric` | Char(150) | Benchmark string (e.g. `>= 99.9% Uptime`, `< 1hr P1 Response`) |
+| `due_date` | DateField, null, blank | Milestone or compliance review deadline |
+| `status` | Char(20), `OBLIGATION_STATUS_CHOICES`, default `pending` | pending / fulfilled / at_risk / breached / waived |
+| `fulfilled_at` | DateTimeField, null, blank | Timestamp when obligation was satisfied |
+| `fulfillment_evidence` | TextField, blank | Documented proof of fulfillment, ticket references, audit report links |
+| `penalty_terms` | TextField, blank | Contractual breach terms (e.g. `10% credit for downtime below 99.9%`) |
+| `penalty_amount` | Decimal(12,2), default 0.00, `MinValueValidator(0)` | Calculated penalty liability or credit amount |
+| `penalty_status` | Char(20), `PENALTY_STATUS_CHOICES`, default `none` | none / assessed / credited / waived |
+| `assigned_to` | FK `settings.AUTH_USER_MODEL`, SET_NULL, null, blank, `related_name="assigned_contract_obligations"` | Responsible employee / delivery owner |
+
+- **Form excludes:** `tenant` (inherited), `number` (auto, `editable=False`), `created_at` / `updated_at` (auto), `fulfilled_at` (set via mark fulfilled action).
+- **Validation in `clean()`:**
+  - Multi-tenant guard: `contract`, `subscription`, and `assigned_to` must belong to `self.tenant`.
+  - When `subscription` is set, ensure `subscription.contract == self.contract` (if contract is set).
+  - When `status == "fulfilled"`, require non-empty `fulfillment_evidence`.
+  - When `penalty_status in ("assessed", "credited")`, require `penalty_amount > 0`.
+- **Meta:**
+  - `ordering = ["due_date", "-created_at"]`
+  - `constraints`: `UniqueConstraint(fields=["tenant", "number"], name="sales_obl_ten_num_uniq")`
+  - `indexes`: `["tenant", "status"]` (`sales_obl_ten_status_idx`), `["tenant", "obligation_type"]` (`sales_obl_ten_type_idx`), `["tenant", "contract"]` (`sales_obl_ten_contract_idx`), `["tenant", "due_date"]` (`sales_obl_ten_due_idx`)
+
+---
+
+### Derived Consoles & Workbenches (0 new tables)
+
+#### 1. `contract_subscription_workspace` — **Executive Contract & Subscription Workspace**
+URL: `sales:contract_subscription_workspace`  
+View: `apps/sales/views/ContractSubscriptionManagement/ContractSubscriptionWorkspaces.py::contract_subscription_workspace`  
+Template: `templates/sales/contractsubscriptionmanagement/boards/contract_subscription_workspace.html`  
+Pure query projection (0 new tables). Computes:
+- Total Active Contracts count & Total Contract Value (TCV)
+- Total Subscriptions count, ARR and MRR totals
+- Upcoming Expirations Breakdown (<30 days, 30–60 days, 60–90 days)
+- Unbilled Usage Overages (count of calculated records & total accrued monetary overage charges)
+- SLA Compliance Rate % and Total Breach Penalty Exposure ($)
+- Quick tables for urgent renewals, pending redlines, and at-risk obligations
+
+#### 2. `renewal_automation_dashboard` — **Renewal Automation Dashboard & Workbench**
+URL: `sales:renewal_automation_dashboard`  
+View: `apps/sales/views/ContractSubscriptionManagement/RenewalAutomations.py::renewal_automation_dashboard`  
+Template: `templates/sales/contractsubscriptionmanagement/boards/renewal_automation_dashboard.html`  
+Pure query projection (0 new tables). Computes:
+- Contracts and subscriptions expiring in 30, 60, and 90-day notice windows
+- Auto-renewal candidates (`auto_renew=True`) ready for execution
+- Uplifted Renewal Value projections (`price_uplift_pct`)
+- Generated renewal CPQ Quotes (`sales.CPQQuote`) status tracking
+- Action trigger to execute auto-renewal or generate draft renewal quote
+
+---
+
+## Backend (`apps/sales/{models,forms,views,urls}/ContractSubscriptionManagement/`)
+
+### Models (`apps/sales/models/ContractSubscriptionManagement/`)
+- [ ] `apps/sales/models/ContractSubscriptionManagement/__init__.py` — re-export all 4 models and choices constants
+- [ ] `apps/sales/models/ContractSubscriptionManagement/CustomerContracts.py` — `CustomerContract`
+- [ ] `apps/sales/models/ContractSubscriptionManagement/CustomerSubscriptions.py` — `CustomerSubscription`
+- [ ] `apps/sales/models/ContractSubscriptionManagement/UsageMeterRecords.py` — `UsageMeterRecord`
+- [ ] `apps/sales/models/ContractSubscriptionManagement/ContractObligations.py` — `ContractObligation`
+
+### Forms (`apps/sales/forms/ContractSubscriptionManagement/`)
+- [ ] `apps/sales/forms/ContractSubscriptionManagement/__init__.py` — re-export all forms
+- [ ] `apps/sales/forms/ContractSubscriptionManagement/CustomerContracts.py` — `CustomerContractForm`, `CustomerContractFilterForm`
+- [ ] `apps/sales/forms/ContractSubscriptionManagement/CustomerSubscriptions.py` — `CustomerSubscriptionForm`, `CustomerSubscriptionFilterForm`, `SubscriptionPauseForm`, `SubscriptionCancelForm`, `SubscriptionUpgradeForm`
+- [ ] `apps/sales/forms/ContractSubscriptionManagement/UsageMeterRecords.py` — `UsageMeterRecordForm`, `UsageMeterRecordFilterForm`
+- [ ] `apps/sales/forms/ContractSubscriptionManagement/ContractObligations.py` — `ContractObligationForm`, `ContractObligationFilterForm`, `ObligationFulfillForm`, `ObligationBreachForm`
+
+### Views (`apps/sales/views/ContractSubscriptionManagement/`)
+- [ ] `apps/sales/views/ContractSubscriptionManagement/__init__.py` — re-export all views
+- [ ] `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py`:
+  - `customer_contract_list` (search, filters by type, status, owner, account; stats cards, pagination)
+  - `customer_contract_create` (validates tenant, assigns owner)
+  - `customer_contract_detail` (full contract details, subscriptions tab, obligations tab, redline history)
+  - `customer_contract_edit`
+  - `customer_contract_delete` (POST with confirmation)
+  - `customer_contract_activate` (advances status to `active`, timestamps `signed_at`)
+  - `customer_contract_generate_renewal_quote` (creates renewal `sales.CPQQuote` carrying forward uplift %)
+  - `customer_contract_execute_auto_renew` (extends end date by `renewal_term_months`, updates value with `price_uplift_pct`)
+- [ ] `apps/sales/views/ContractSubscriptionManagement/CustomerSubscriptions.py`:
+  - `customer_subscription_list` (search, filters by status, pricing model, cadence; stats cards, pagination)
+  - `customer_subscription_create`
+  - `customer_subscription_detail` (subscription metrics, usage meters tab, obligations tab)
+  - `customer_subscription_edit`
+  - `customer_subscription_delete` (POST with confirmation)
+  - `customer_subscription_pause` (sets status `paused`, timestamps `paused_at`)
+  - `customer_subscription_resume` (sets status `active`, timestamps `resumed_at`)
+  - `customer_subscription_cancel` (sets status `cancelled`, timestamps `cancelled_at`, captures reason)
+  - `customer_subscription_upgrade` (adjusts seat quantity / unit price, recalculates MRR)
+- [ ] `apps/sales/views/ContractSubscriptionManagement/UsageMeterRecords.py`:
+  - `usage_meter_record_list` (search, filters by subscription, status, meter name; stats cards, pagination)
+  - `usage_meter_record_create`
+  - `usage_meter_record_detail` (allowance, recorded consumption, calculated overages)
+  - `usage_meter_record_edit`
+  - `usage_meter_record_delete` (POST with confirmation)
+  - `usage_meter_record_calculate` (recomputes billable overage units & total charge, status `calculated`)
+  - `usage_meter_record_invoice` (marks status `invoiced`, timestamps `invoiced_at`)
+- [ ] `apps/sales/views/ContractSubscriptionManagement/ContractObligations.py`:
+  - `contract_obligation_list` (search, filters by type, status, contract, assignee; stats cards, pagination)
+  - `contract_obligation_create`
+  - `contract_obligation_detail` (SLA target metric, fulfillment evidence, penalty terms)
+  - `contract_obligation_edit`
+  - `contract_obligation_delete` (POST with confirmation)
+  - `contract_obligation_fulfill` (marks status `fulfilled`, captures `fulfillment_evidence`, timestamps `fulfilled_at`)
+  - `contract_obligation_breach` (marks status `breached`, assesses `penalty_amount` and `penalty_status`)
+- [ ] `apps/sales/views/ContractSubscriptionManagement/ContractSubscriptionWorkspaces.py`:
+  - `contract_subscription_workspace` (executive dashboard, ARR/MRR rollup, renewal radar, SLA compliance)
+- [ ] `apps/sales/views/ContractSubscriptionManagement/RenewalAutomations.py`:
+  - `renewal_automation_dashboard` (consolidated renewal radar, auto-renewal candidates, quote generation)
+
+### URLs (`apps/sales/urls/ContractSubscriptionManagement/`)
+- [ ] `apps/sales/urls/ContractSubscriptionManagement/__init__.py` — combines all 6 url modules
+- [ ] `apps/sales/urls/ContractSubscriptionManagement/CustomerContracts.py`
+- [ ] `apps/sales/urls/ContractSubscriptionManagement/CustomerSubscriptions.py`
+- [ ] `apps/sales/urls/ContractSubscriptionManagement/UsageMeterRecords.py`
+- [ ] `apps/sales/urls/ContractSubscriptionManagement/ContractObligations.py`
+- [ ] `apps/sales/urls/ContractSubscriptionManagement/ContractSubscriptionWorkspaces.py`
+- [ ] `apps/sales/urls/ContractSubscriptionManagement/RenewalAutomations.py`
+
+### Package Re-exports & Admin & Seeder
+- [ ] `apps/sales/models/__init__.py` — add Sub-module 8.15 re-export block (models + choices)
+- [ ] `apps/sales/forms/__init__.py` — add Sub-module 8.15 re-export block
+- [ ] `apps/sales/views/__init__.py` — add Sub-module 8.15 re-export block
+- [ ] `apps/sales/urls/__init__.py` — wire `*_contract_subscription` into `urlpatterns` (literal board paths first)
+- [ ] `apps/sales/admin.py` — register `CustomerContract`, `CustomerSubscription`, `UsageMeterRecord`, and `ContractObligation` with `TenantScopedAdmin` / FK narrowing
+- [ ] `apps/sales/migrations/0028_*.py` — `makemigrations sales`
+- [ ] `apps/sales/management/commands/seed_sales.py` — extend with `_seed_contract_subscription_management(self, tenant, user)` (idempotent, per-tenant guard, reusing existing Acme Corp and Globex `Party` rows)
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py`: add `LIVE_LINKS["8.15"]` mapping the exact five NavERP.md feature bullets + extra leaves:
+  ```python
+  "8.15": {
+      # OWNERSHIP RULING (L36/L37)
+      # Reuses core.Party for customer/client account and counterparty;
+      # reuses core.Document (DOC-) for executed agreement PDFs and redline attachments;
+      # reuses accounting.Currency for multi-currency contract values, MRR, and overage rates;
+      # reuses accounts.User for contract owners, CSMs, and obligation assignees;
+      # reuses sales.CPQQuote (CPQ-) for originating proposals and automated renewal quotes;
+      # reuses scm.SalesOrder (SO-) for originating customer sales orders;
+      # reuses crm.DocTemplate (TPL-) for standard contract authoring templates.
+      # Zero duplicate customer/company, quote, order, user, currency, document, or platform subscription tables declared.
+      "Contract Authoring & Redlining": "sales:customer_contract_list",
+      "Subscription Lifecycle": "sales:customer_subscription_list",
+      "Renewal Automation": "sales:renewal_automation_dashboard",
+      "Usage-Based Billing": "sales:usage_meter_record_list",
+      "Contract Compliance & Obligations": "sales:contract_obligation_list",
+      # Extra live leaves
+      "Customer Contracts": "sales:customer_contract_list",
+      "Customer Subscriptions": "sales:customer_subscription_list",
+      "Renewal Automation Dashboard": "sales:renewal_automation_dashboard",
+      "Usage Meter Records": "sales:usage_meter_record_list",
+      "Contract Obligations": "sales:contract_obligation_list",
+      "Contract & Subscription Workspace": "sales:contract_subscription_workspace",
+  },
+  ```
+
+---
+
+## Templates (`templates/sales/contractsubscriptionmanagement/`)
+
+14 templates: 4 entities × 3 pages (`list`, `detail`, `form`) + 2 dashboard/board templates:
+- [ ] `templates/sales/contractsubscriptionmanagement/customercontract/{list,detail,form}.html`
+- [ ] `templates/sales/contractsubscriptionmanagement/customersubscription/{list,detail,form}.html`
+- [ ] `templates/sales/contractsubscriptionmanagement/usagemeterrecord/{list,detail,form}.html`
+- [ ] `templates/sales/contractsubscriptionmanagement/contractobligation/{list,detail,form}.html`
+- [ ] `templates/sales/contractsubscriptionmanagement/boards/contract_subscription_workspace.html`
+- [ ] `templates/sales/contractsubscriptionmanagement/boards/renewal_automation_dashboard.html`
+
+### UI/UX & Theme Invariants:
+- All pages extend `base.html` and include standard breadcrumbs.
+- Each **list** page:
+  - `.page-header` + `.stat-grid` of `.stat-card` / `.stat-icon`
+  - `.card > .card-body > <form method="get" class="filter-bar">` reflecting `request.GET` + Apply + Reset
+  - FK select controls compare via `|stringformat:"d"`
+  - Data table with dedicated **Actions column** (view / edit / delete-POST with CSRF and confirm dialog)
+  - `{% empty %}` empty state
+  - `{% include "partials/pagination.html" %}` with `has_previous`/`has_next` guards (L9)
+- Badges use color-named theme classes (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`). Never semantic `-success`/`-danger` (L33).
+- Each **detail** page:
+  - Header with title, auto-number badge, status badge
+  - Actions bar: Edit (conditional on status), Action modals (Activate / Generate Renewal Quote / Execute Auto-Renew / Pause / Resume / Cancel / Upgrade / Calculate Overage / Invoice Overage / Fulfill Obligation / Breach Obligation), Delete (POST with confirm), Back to List
+  - Structured cards for commercial terms, ownership, linked records, tabs for related entities, and audit timeline
+- Each **form** page:
+  - `{% csrf_token %}`, styled input fields, clear error placement, Save / Cancel buttons
+  - Excluded fields (`tenant`, `number`, `created_at`, `updated_at`, etc.) are never rendered as inputs
+
+---
+
+## Verify
+
+- [ ] `venv\Scripts\python.exe manage.py makemigrations sales` → `0028_*.py` (re-verify number first)
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_sales` — run **twice**; second run produces identical counts (idempotent)
+- [ ] `venv\Scripts\python.exe manage.py check` → `System check identified no issues (0 silenced)`
+- [ ] `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` → `No changes detected`
+- [ ] All 30+ new url names reverse cleanly without `NoReverseMatch`
+- [ ] **temp/ smoke sweep as `admin_acme` / `password`** — assert content, not just status codes:
+  - 4 list pages → 200, each containing seeded records (`CCT-`, `CSB-`, `UMR-`, `OBL-`)
+  - 4 detail + 4 create + 4 edit pages → 200
+  - 2 console/board pages (`contract_subscription_workspace`, `renewal_automation_dashboard`) → 200 with populated KPI metrics and tables
+  - Filter GET parameters on every list page and console → no 500, clean filter matching
+  - Hostile junk params (`?page=999`, `?status=invalid`, `?account=999999999999`) → 200, no 500, fallback to unfiltered view
+  - Page 2 on pagination → 200
+  - **Cross-tenant IDOR** → a `admin_globex` pk returns 404 on detail/edit routes for `admin_acme`
+  - Grep rendered HTML for `{#` and `{% comment` → zero hits (L2)
+  - Grep rendered HTML for `badge-success|badge-danger|badge-warning|badge-purple` → zero hits (L33)
+- [ ] **Sidebar check**: `LIVE_LINKS["8.15"]` present; sidebar displays 8.15 with 5 Live bullets resolving to distinct hrefs (L30)
+- [ ] `.agents/tasks/gaps-sales-8.15.md` created in integrate step and linked in review/close-out block
+
+---
+
+## Close-out
+
+- [ ] **Phase 4 — six reviewers, ONE AFTER ANOTHER**:
+  `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`, each reading `BASE...HEAD`, appending findings to `.claude/tasks/review-sales-8.15.md` (dedupe, sort Critical → Important → Minor, assign `C1` / `I3` / `M7` IDs, commit).
+- [ ] **Phase 5 — `code-fixer`**: fixes every finding in ID order, one commit per file, marking each `[x] fixed` / `[~] skipped — reason`.
+- [ ] **Phase 6 — Tests (serial)**:
+  - Write test contract and shared helpers
+  - Four test modules one after another:
+    - `apps/sales/tests/test_contractsubscription_models.py`
+    - `apps/sales/tests/test_contractsubscription_forms.py`
+    - `apps/sales/tests/test_contractsubscription_views.py`
+    - `apps/sales/tests/test_contractsubscription_security.py`
+  - Full suite passes green
+- [ ] **Phase 7 — Skill + README**:
+  - Update `.claude/skills/sales/SKILL.md` with 8.15 models, routes, templates, and seeder info
+  - Update `README.md` marking Sub-module 8.15 complete
+
+---
+
+## Later passes / deferred (Gap Register items for `.agents/tasks/gaps-sales-8.15.md`)
+
+- **GAP-sales-8.15-01: Third-Party Electronic Signature Webhook Integration (DocuSign / Adobe Sign / HelloSign API)** — Automated token exchange and multi-signer webhook callbacks for legally binding digital signatures.
+- **GAP-sales-8.15-02: High-Throughput Streaming Event Ingestion Engine** — High-velocity real-time event streaming pipeline (Kafka/Kinesis) for ingesting sub-second metered consumption.
+- **GAP-sales-8.15-03: Automated Payment Gateway Credit Card Processing** — Automatic recurring credit card / ACH charge execution against customer saved tokens via Stripe Payments or Adyen.
+- **GAP-sales-8.15-04: AI-Assisted Contract Parser & Third-Party Redline OCR** — Automated LLM extraction of obligations, liability clauses, and redline diffs from unstructured PDF uploads.
+- **GAP-sales-8.15-05: Automated Cloud Infrastructure Telemetry Ingestion for SLAs** — Automated polling of AWS CloudWatch, Datadog, or Pingdom API to automatically assert uptime percentages and trigger SLA breach credits.
+
+---
+
+## Declined, with reasons (so it is not re-litigated)
+
+- **A duplicate SaaS platform Subscription table (L36/L37)**: `apps/tenants/models/Subscription.py` owns the tenant's own subscription to the NavERP platform (`Tenant.PLAN_CHOICES`, `stripe_subscription_id`, platform seats). Sell-side customer subscription models in 8.15 represent commercial recurring services sold to customer parties and are named `CustomerSubscription` (`CSB-`) to prevent severe class name and mental model collisions.
+- **A duplicate buy-side Contract master (L36/L37)**: `scm.SupplierContract` (`apps/scm/models/SupplierRelationshipManagement/SupplierContracts.py`) and `procurement.ContractClause` own procurement supplier agreements. Sell-side commercial customer contracts in 8.15 are named `CustomerContract` (`CCT-`).
+- **A duplicate Revenue Recognition / ASC 606 ledger (L29/L36)**: Module 8.6 owns `RevenueSchedule` (`RVS-`) and `PerformanceObligation` linked to `scm.SalesOrder`. 8.15 tracks commercial delivery commitments, SLAs, and customer contract compliance obligations (`ContractObligation`, `OBL-`), not accounting revenue recognition schedules.
+- **A duplicate Customer or Account master**: Customer accounts are `core.Party` instances. 8.15 FKs `core.Party` directly.
+- **A duplicate Quote or Order master**: Initial and renewal proposals reference `sales.CPQQuote` (`CPQ-`); executed orders reference `scm.SalesOrder` (`SO-`).
+- **A duplicate Document or File master**: Executed contracts and PDF redlines attach via `core.Document` (`DOC-`). Reusable legal templates link `crm.DocTemplate` (`TPL-`).
+- **A duplicate Currency master**: Monetary amounts reference `accounting.Currency`.
+- **A duplicate User master**: Contract owners, CSMs, and obligation assignees reference `accounts.User`.
+- **Separate tables for the Contract & Subscription Workspace and Renewal Dashboard**: Both are pure query projections / computed real-time aggregations over `CustomerContract`, `CustomerSubscription`, `UsageMeterRecord`, and `ContractObligation`. Zero drift-prone duplicate rollup tables.
