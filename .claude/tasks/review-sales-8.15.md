@@ -30,3 +30,19 @@ Strict multi-tenancy and Core spine adherence — zero duplicate customer, quote
 - `test_customer_subscription_mrr_normalization`
 - `test_usage_meter_record_charge_calculation`
 - `test_workspace_and_renewal_radar_render_cleanly`
+
+---
+
+## 2. Explorer Findings
+
+### Verdict
+Sub-module 8.15 demonstrates clean architectural integration with the core spine and 100% route/export completeness, but contains a runtime TypeError when generating renewal quotes and a missing cross-model contract validation check on obligations.
+
+### Findings
+- **[CRITICAL]** `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py:210`: `CPQQuote.objects.create()` is passed `title=...` and `grand_total=...`, but `CPQQuote` defines `name` (not `title`) and `total` (not `grand_total`). Invoking the `customer_contract_generate_renewal_quote` view crashes with `TypeError: CPQQuote() got an unexpected keyword argument 'title'`. Fix: Pass `name=f"Renewal Quote for {contract.title}"`, `total=renewal_amount`, and remove `grand_total`.
+- **[IMPORTANT]** `apps/sales/models/ContractSubscriptionManagement/ContractObligations.py:113`: `ContractObligation.clean()` validates tenant isolation but omits cross-model contract check when `subscription` is set: `"When subscription is provided and has contract, assert subscription.contract_id == self.contract_id"`. Fix: Add `if self.subscription_id and self.subscription.contract_id and self.subscription.contract_id != self.contract_id: raise ValidationError({"subscription": "Associated subscription must belong to the selected contract."})`.
+- **[IMPORTANT]** `apps/sales/views/ContractSubscriptionManagement/ContractSubscriptionWorkspaces.py:52`: `urgent_contracts` uses an invalid fallback ternary `...order_date() if hasattr(contracts_qs, "order_date") else ...order_by("end_date")[:5]`. Fix: Simplify to direct `contracts_qs.filter(status="active", end_date__gte=today, end_date__lte=in_60_days).select_related("account", "owner").order_by("end_date")[:5]`.
+- **[MINOR]** `templates/sales/contractsubscriptionmanagement/customersubscription/list.html:63`: The list filter grid omits the `account` select dropdown even though `CustomerSubscriptionFilterForm` defines `account` and `customer_subscription_list` processes it. Fix: Add the `account` select element to the filter form grid.
+- **[MINOR]** `templates/sales/contractsubscriptionmanagement/customercontract/list.html:63`: The contract filter grid omits the `owner` dropdown defined in `CustomerContractFilterForm`. Fix: Add the `owner` dropdown to the contract list filter bar.
+- **[MINOR]** `templates/sales/contractsubscriptionmanagement/boards/contract_subscription_workspace.html:106`: The view calculates and passes `urgent_subscriptions` in context, but the template only renders tables for `urgent_contracts` and `at_risk_obligations`. Fix: Add an `urgent_subscriptions` table widget to the dashboard layout.
+
