@@ -16900,22 +16900,22 @@ Pure query projection (0 new tables). Computes:
 ## Backend (`apps/sales/{models,forms,views,urls}/ContractSubscriptionManagement/`)
 
 ### Models (`apps/sales/models/ContractSubscriptionManagement/`)
-- [ ] `apps/sales/models/ContractSubscriptionManagement/__init__.py` — re-export all 4 models and choices constants
-- [ ] `apps/sales/models/ContractSubscriptionManagement/CustomerContracts.py` — `CustomerContract`
-- [ ] `apps/sales/models/ContractSubscriptionManagement/CustomerSubscriptions.py` — `CustomerSubscription`
-- [ ] `apps/sales/models/ContractSubscriptionManagement/UsageMeterRecords.py` — `UsageMeterRecord`
-- [ ] `apps/sales/models/ContractSubscriptionManagement/ContractObligations.py` — `ContractObligation`
+- [x] `apps/sales/models/ContractSubscriptionManagement/__init__.py` — re-export all 4 models and choices constants
+- [x] `apps/sales/models/ContractSubscriptionManagement/CustomerContracts.py` — `CustomerContract`
+- [x] `apps/sales/models/ContractSubscriptionManagement/CustomerSubscriptions.py` — `CustomerSubscription`
+- [x] `apps/sales/models/ContractSubscriptionManagement/UsageMeterRecords.py` — `UsageMeterRecord`
+- [x] `apps/sales/models/ContractSubscriptionManagement/ContractObligations.py` — `ContractObligation`
 
 ### Forms (`apps/sales/forms/ContractSubscriptionManagement/`)
-- [ ] `apps/sales/forms/ContractSubscriptionManagement/__init__.py` — re-export all forms
-- [ ] `apps/sales/forms/ContractSubscriptionManagement/CustomerContracts.py` — `CustomerContractForm`, `CustomerContractFilterForm`
-- [ ] `apps/sales/forms/ContractSubscriptionManagement/CustomerSubscriptions.py` — `CustomerSubscriptionForm`, `CustomerSubscriptionFilterForm`, `SubscriptionPauseForm`, `SubscriptionCancelForm`, `SubscriptionUpgradeForm`
-- [ ] `apps/sales/forms/ContractSubscriptionManagement/UsageMeterRecords.py` — `UsageMeterRecordForm`, `UsageMeterRecordFilterForm`
-- [ ] `apps/sales/forms/ContractSubscriptionManagement/ContractObligations.py` — `ContractObligationForm`, `ContractObligationFilterForm`, `ObligationFulfillForm`, `ObligationBreachForm`
+- [x] `apps/sales/forms/ContractSubscriptionManagement/__init__.py` — re-export all forms
+- [x] `apps/sales/forms/ContractSubscriptionManagement/CustomerContracts.py` — `CustomerContractForm`, `CustomerContractFilterForm`
+- [x] `apps/sales/forms/ContractSubscriptionManagement/CustomerSubscriptions.py` — `CustomerSubscriptionForm`, `CustomerSubscriptionFilterForm`, `SubscriptionPauseForm`, `SubscriptionCancelForm`, `SubscriptionUpgradeForm`
+- [x] `apps/sales/forms/ContractSubscriptionManagement/UsageMeterRecords.py` — `UsageMeterRecordForm`, `UsageMeterRecordFilterForm`
+- [x] `apps/sales/forms/ContractSubscriptionManagement/ContractObligations.py` — `ContractObligationForm`, `ContractObligationFilterForm`, `ObligationFulfillForm`, `ObligationBreachForm`
 
 ### Views (`apps/sales/views/ContractSubscriptionManagement/`)
-- [ ] `apps/sales/views/ContractSubscriptionManagement/__init__.py` — re-export all views
-- [ ] `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py`:
+- [x] `apps/sales/views/ContractSubscriptionManagement/__init__.py` — re-export all views
+- [x] `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py`:
   - `customer_contract_list` (search, filters by type, status, owner, account; stats cards, pagination)
   - `customer_contract_create` (validates tenant, assigns owner)
   - `customer_contract_detail` (full contract details, subscriptions tab, obligations tab, redline history)
@@ -16924,7 +16924,7 @@ Pure query projection (0 new tables). Computes:
   - `customer_contract_activate` (advances status to `active`, timestamps `signed_at`)
   - `customer_contract_generate_renewal_quote` (creates renewal `sales.CPQQuote` carrying forward uplift %)
   - `customer_contract_execute_auto_renew` (extends end date by `renewal_term_months`, updates value with `price_uplift_pct`)
-- [ ] `apps/sales/views/ContractSubscriptionManagement/CustomerSubscriptions.py`:
+- [x] `apps/sales/views/ContractSubscriptionManagement/CustomerSubscriptions.py`:
   - `customer_subscription_list` (search, filters by status, pricing model, cadence; stats cards, pagination)
   - `customer_subscription_create`
   - `customer_subscription_detail` (subscription metrics, usage meters tab, obligations tab)
@@ -16934,7 +16934,7 @@ Pure query projection (0 new tables). Computes:
   - `customer_subscription_resume` (sets status `active`, timestamps `resumed_at`)
   - `customer_subscription_cancel` (sets status `cancelled`, timestamps `cancelled_at`, captures reason)
   - `customer_subscription_upgrade` (adjusts seat quantity / unit price, recalculates MRR)
-- [ ] `apps/sales/views/ContractSubscriptionManagement/UsageMeterRecords.py`:
+- [x] `apps/sales/views/ContractSubscriptionManagement/UsageMeterRecords.py`:
   - `usage_meter_record_list` (search, filters by subscription, status, meter name; stats cards, pagination)
   - `usage_meter_record_create`
   - `usage_meter_record_detail` (allowance, recorded consumption, calculated overages)
@@ -16942,7 +16942,7 @@ Pure query projection (0 new tables). Computes:
   - `usage_meter_record_delete` (POST with confirmation)
   - `usage_meter_record_calculate` (recomputes billable overage units & total charge, status `calculated`)
   - `usage_meter_record_invoice` (marks status `invoiced`, timestamps `invoiced_at`)
-- [ ] `apps/sales/views/ContractSubscriptionManagement/ContractObligations.py`:
+- [x] `apps/sales/views/ContractSubscriptionManagement/ContractObligations.py`:
   - `contract_obligation_list` (search, filters by type, status, contract, assignee; stats cards, pagination)
   - `contract_obligation_create`
   - `contract_obligation_detail` (SLA target metric, fulfillment evidence, penalty terms)
@@ -16950,34 +16950,34 @@ Pure query projection (0 new tables). Computes:
   - `contract_obligation_delete` (POST with confirmation)
   - `contract_obligation_fulfill` (marks status `fulfilled`, captures `fulfillment_evidence`, timestamps `fulfilled_at`)
   - `contract_obligation_breach` (marks status `breached`, assesses `penalty_amount` and `penalty_status`)
-- [ ] `apps/sales/views/ContractSubscriptionManagement/ContractSubscriptionWorkspaces.py`:
+- [x] `apps/sales/views/ContractSubscriptionManagement/ContractSubscriptionWorkspaces.py`:
   - `contract_subscription_workspace` (executive dashboard, ARR/MRR rollup, renewal radar, SLA compliance)
-- [ ] `apps/sales/views/ContractSubscriptionManagement/RenewalAutomations.py`:
+- [x] `apps/sales/views/ContractSubscriptionManagement/RenewalAutomations.py`:
   - `renewal_automation_dashboard` (consolidated renewal radar, auto-renewal candidates, quote generation)
 
 ### URLs (`apps/sales/urls/ContractSubscriptionManagement/`)
-- [ ] `apps/sales/urls/ContractSubscriptionManagement/__init__.py` — combines all 6 url modules
-- [ ] `apps/sales/urls/ContractSubscriptionManagement/CustomerContracts.py`
-- [ ] `apps/sales/urls/ContractSubscriptionManagement/CustomerSubscriptions.py`
-- [ ] `apps/sales/urls/ContractSubscriptionManagement/UsageMeterRecords.py`
-- [ ] `apps/sales/urls/ContractSubscriptionManagement/ContractObligations.py`
-- [ ] `apps/sales/urls/ContractSubscriptionManagement/ContractSubscriptionWorkspaces.py`
-- [ ] `apps/sales/urls/ContractSubscriptionManagement/RenewalAutomations.py`
+- [x] `apps/sales/urls/ContractSubscriptionManagement/__init__.py` — combines all 6 url modules
+- [x] `apps/sales/urls/ContractSubscriptionManagement/CustomerContracts.py`
+- [x] `apps/sales/urls/ContractSubscriptionManagement/CustomerSubscriptions.py`
+- [x] `apps/sales/urls/ContractSubscriptionManagement/UsageMeterRecords.py`
+- [x] `apps/sales/urls/ContractSubscriptionManagement/ContractObligations.py`
+- [x] `apps/sales/urls/ContractSubscriptionManagement/ContractSubscriptionWorkspaces.py`
+- [x] `apps/sales/urls/ContractSubscriptionManagement/RenewalAutomations.py`
 
 ### Package Re-exports & Admin & Seeder
-- [ ] `apps/sales/models/__init__.py` — add Sub-module 8.15 re-export block (models + choices)
-- [ ] `apps/sales/forms/__init__.py` — add Sub-module 8.15 re-export block
-- [ ] `apps/sales/views/__init__.py` — add Sub-module 8.15 re-export block
-- [ ] `apps/sales/urls/__init__.py` — wire `*_contract_subscription` into `urlpatterns` (literal board paths first)
-- [ ] `apps/sales/admin.py` — register `CustomerContract`, `CustomerSubscription`, `UsageMeterRecord`, and `ContractObligation` with `TenantScopedAdmin` / FK narrowing
-- [ ] `apps/sales/migrations/0028_*.py` — `makemigrations sales`
-- [ ] `apps/sales/management/commands/seed_sales.py` — extend with `_seed_contract_subscription_management(self, tenant, user)` (idempotent, per-tenant guard, reusing existing Acme Corp and Globex `Party` rows)
+- [x] `apps/sales/models/__init__.py` — add Sub-module 8.15 re-export block (models + choices)
+- [x] `apps/sales/forms/__init__.py` — add Sub-module 8.15 re-export block
+- [x] `apps/sales/views/__init__.py` — add Sub-module 8.15 re-export block
+- [x] `apps/sales/urls/__init__.py` — wire `*_contract_subscription` into `urlpatterns` (literal board paths first)
+- [x] `apps/sales/admin.py` — register `CustomerContract`, `CustomerSubscription`, `UsageMeterRecord`, and `ContractObligation` with `TenantScopedAdmin` / FK narrowing
+- [x] `apps/sales/migrations/0028_*.py` — `makemigrations sales`
+- [x] `apps/sales/management/commands/seed_sales.py` — extend with `_seed_contract_subscription_management(self, tenant, user)` (idempotent, per-tenant guard, reusing existing Acme Corp and Globex `Party` rows)
 
 ---
 
 ## Wire-up
 
-- [ ] `apps/core/navigation.py`: add `LIVE_LINKS["8.15"]` mapping the exact five NavERP.md feature bullets + extra leaves:
+- [x] `apps/core/navigation.py`: add `LIVE_LINKS["8.15"]` mapping the exact five NavERP.md feature bullets + extra leaves:
   ```python
   "8.15": {
       # OWNERSHIP RULING (L36/L37)
@@ -17009,12 +17009,12 @@ Pure query projection (0 new tables). Computes:
 ## Templates (`templates/sales/contractsubscriptionmanagement/`)
 
 14 templates: 4 entities × 3 pages (`list`, `detail`, `form`) + 2 dashboard/board templates:
-- [ ] `templates/sales/contractsubscriptionmanagement/customercontract/{list,detail,form}.html`
-- [ ] `templates/sales/contractsubscriptionmanagement/customersubscription/{list,detail,form}.html`
-- [ ] `templates/sales/contractsubscriptionmanagement/usagemeterrecord/{list,detail,form}.html`
-- [ ] `templates/sales/contractsubscriptionmanagement/contractobligation/{list,detail,form}.html`
-- [ ] `templates/sales/contractsubscriptionmanagement/boards/contract_subscription_workspace.html`
-- [ ] `templates/sales/contractsubscriptionmanagement/boards/renewal_automation_dashboard.html`
+- [x] `templates/sales/contractsubscriptionmanagement/customercontract/{list,detail,form}.html`
+- [x] `templates/sales/contractsubscriptionmanagement/customersubscription/{list,detail,form}.html`
+- [x] `templates/sales/contractsubscriptionmanagement/usagemeterrecord/{list,detail,form}.html`
+- [x] `templates/sales/contractsubscriptionmanagement/contractobligation/{list,detail,form}.html`
+- [x] `templates/sales/contractsubscriptionmanagement/boards/contract_subscription_workspace.html`
+- [x] `templates/sales/contractsubscriptionmanagement/boards/renewal_automation_dashboard.html`
 
 ### UI/UX & Theme Invariants:
 - All pages extend `base.html` and include standard breadcrumbs.
@@ -17038,13 +17038,13 @@ Pure query projection (0 new tables). Computes:
 
 ## Verify
 
-- [ ] `venv\Scripts\python.exe manage.py makemigrations sales` → `0028_*.py` (re-verify number first)
-- [ ] `venv\Scripts\python.exe manage.py migrate`
-- [ ] `venv\Scripts\python.exe manage.py seed_sales` — run **twice**; second run produces identical counts (idempotent)
-- [ ] `venv\Scripts\python.exe manage.py check` → `System check identified no issues (0 silenced)`
-- [ ] `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` → `No changes detected`
-- [ ] All 30+ new url names reverse cleanly without `NoReverseMatch`
-- [ ] **temp/ smoke sweep as `admin_acme` / `password`** — assert content, not just status codes:
+- [x] `venv\Scripts\python.exe manage.py makemigrations sales` → `0028_*.py` (re-verify number first)
+- [x] `venv\Scripts\python.exe manage.py migrate`
+- [x] `venv\Scripts\python.exe manage.py seed_sales` — run **twice**; second run produces identical counts (idempotent)
+- [x] `venv\Scripts\python.exe manage.py check` → `System check identified no issues (0 silenced)`
+- [x] `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` → `No changes detected`
+- [x] All 30+ new url names reverse cleanly without `NoReverseMatch`
+- [x] **temp/ smoke sweep as `admin_acme` / `password`** — assert content, not just status codes:
   - 4 list pages → 200, each containing seeded records (`CCT-`, `CSB-`, `UMR-`, `OBL-`)
   - 4 detail + 4 create + 4 edit pages → 200
   - 2 console/board pages (`contract_subscription_workspace`, `renewal_automation_dashboard`) → 200 with populated KPI metrics and tables
@@ -17054,27 +17054,41 @@ Pure query projection (0 new tables). Computes:
   - **Cross-tenant IDOR** → a `admin_globex` pk returns 404 on detail/edit routes for `admin_acme`
   - Grep rendered HTML for `{#` and `{% comment` → zero hits (L2)
   - Grep rendered HTML for `badge-success|badge-danger|badge-warning|badge-purple` → zero hits (L33)
-- [ ] **Sidebar check**: `LIVE_LINKS["8.15"]` present; sidebar displays 8.15 with 5 Live bullets resolving to distinct hrefs (L30)
-- [ ] `.agents/tasks/gaps-sales-8.15.md` created in integrate step and linked in review/close-out block
+- [x] **Sidebar check**: `LIVE_LINKS["8.15"]` present; sidebar displays 8.15 with 5 Live bullets resolving to distinct hrefs (L30)
+- [x] `.agents/tasks/gaps-sales-8.15.md` created in integrate step and linked in review/close-out block
 
 ---
 
 ## Close-out
 
-- [ ] **Phase 4 — six reviewers, ONE AFTER ANOTHER**:
-  `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`, each reading `BASE...HEAD`, appending findings to `.claude/tasks/review-sales-8.15.md` (dedupe, sort Critical → Important → Minor, assign `C1` / `I3` / `M7` IDs, commit).
-- [ ] **Phase 5 — `code-fixer`**: fixes every finding in ID order, one commit per file, marking each `[x] fixed` / `[~] skipped — reason`.
-- [ ] **Phase 6 — Tests (serial)**:
-  - Write test contract and shared helpers
+- [x] **Phase 4 — six reviewers, ONE AFTER ANOTHER**:
+  `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`, each reading `BASE...HEAD`, appending findings to `.claude/tasks/review-sales-8.15.md` (dedupe, sort Critical → Important → Minor, assign `C1` / `I3` / `M7` IDs, commit: `120ad9a1`). 27 total findings recorded (`5C`, `12I`, `10M`).
+- [x] **Phase 5 — `code-fixer`**: fixes every finding in ID order, one commit per file, marking each `[x] fixed` / `[~] skipped — reason` (commit: `54b2253b`). 100% resolved (27/27 fixed, 0 skipped, 0 open).
+- [x] **Phase 6 — Tests (serial)**:
+  - Write test contract and shared helpers in `apps/sales/tests/conftest.py` (commit: `da6d903f`)
   - Four test modules one after another:
-    - `apps/sales/tests/test_contractsubscription_models.py`
-    - `apps/sales/tests/test_contractsubscription_forms.py`
-    - `apps/sales/tests/test_contractsubscription_views.py`
-    - `apps/sales/tests/test_contractsubscription_security.py`
-  - Full suite passes green
-- [ ] **Phase 7 — Skill + README**:
-  - Update `.claude/skills/sales/SKILL.md` with 8.15 models, routes, templates, and seeder info
-  - Update `README.md` marking Sub-module 8.15 complete
+    - `apps/sales/tests/test_contractsubscription_models.py` (7 passed, commit: `bc1c0b7a`)
+    - `apps/sales/tests/test_contractsubscription_forms.py` (7 passed, commit: `8816b187`)
+    - `apps/sales/tests/test_contractsubscription_views.py` (11 passed, commit: `f52ec261`)
+    - `apps/sales/tests/test_contractsubscription_security.py` (11 passed, commit: `7ac9d27d`)
+  - Full suite passes green: 36 new 8.15 tests passed, 1699 passed across full unfiltered sales suite (0 failures, 1 skipped)
+- [x] **Phase 7 — Skill + README**:
+  - Update `.claude/skills/sales/SKILL.md` with 8.15 models, routes, templates, and seeder info (commit: `489842ec`)
+  - Update `README.md` marking Sub-module 8.15 complete (commit: `7fac88bc`)
+
+## Review notes
+- **Completed**: 2026-10-22
+- **Sub-module**: 8.15 Contract & Subscription Management (Module 8: Sales Management System)
+- **Scope**: 4 models (`CustomerContract` [CCT-], `CustomerSubscription` [CSB-], `UsageMeterRecord` [UMR-], `ContractObligation` [OBL-]), 2 operational consoles (`contract_subscription_workspace`, `renewal_automation_dashboard`), 14 templates, 29 routes.
+- **Core Spine Reuse**: Reused `core.Party` (with `PartyRole(role="customer")`), `sales.CPQQuote`, `scm.SalesOrder`, `accounting.Currency`, `crm.DocTemplate`, `core.Document`, and `accounts.User`. Strict boundary maintained with `tenants.Subscription`. Zero duplicate tables declared.
+- **Code Fixer & Reviews**: Closed all 27 review findings across Critical (5/5), Important (12/12), and Minor (10/10) tiers.
+- **Tests**: 36 passed out of 36 tests across 4 test lanes:
+  - `test_contractsubscription_models.py`: 7 tests passed
+  - `test_contractsubscription_forms.py`: 7 tests passed
+  - `test_contractsubscription_views.py`: 11 tests passed
+  - `test_contractsubscription_security.py`: 11 tests passed
+  - Full sales test suite: 1,699 passed, 1 skipped, 0 failures.
+- **Gaps**: Recorded 5 items in [.agents/tasks/gaps-sales-8.15.md](../../.agents/tasks/gaps-sales-8.15.md).
 
 ---
 
