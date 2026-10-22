@@ -140,6 +140,8 @@ class WinLossDebrief(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="sales_wla_tenant_status_idx"),
             models.Index(fields=["tenant", "feedback_team"], name="sales_wla_tenant_fb_idx"),
+            models.Index(fields=["tenant", "-debriefed_on"], name="sales_wla_ten_deb_idx"),
+            models.Index(fields=["tenant", "interview_channel"], name="sales_wla_ten_chan_idx"),
         ]
 
     def __str__(self):
