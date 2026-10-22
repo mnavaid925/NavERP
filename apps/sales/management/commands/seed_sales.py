@@ -96,6 +96,11 @@ from apps.sales.models import (
     CustomerSubscription,
     UsageMeterRecord,
     ContractObligation,
+    # 8.16 Mobile Sales
+    FieldSalesRoute,
+    FieldCheckIn,
+    MobileDeviceSession,
+    MobileDealAlert,
 )
 
 from apps.sales.cpq_services import cpq_recalc_quote_totals, cpq_render_proposal_html, cpq_convert_to_sales_order
@@ -196,6 +201,7 @@ class Command(BaseCommand):
         self._seed_sales_analytics(tenant, owner)
         self._seed_partner_channel(tenant, owner)
         self._seed_contract_subscription_management(tenant, owner)
+        self._seed_mobile_sales(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -3883,6 +3889,231 @@ class Command(BaseCommand):
             f"{UsageMeterRecord.objects.filter(tenant=tenant).count()} usage meters, "
             f"{ContractObligation.objects.filter(tenant=tenant).count()} obligations)."
         )
+
+    def _seed_mobile_sales(self, tenant, owner):
+        if FieldSalesRoute.objects.filter(tenant=tenant).exists():
+            return
+
+        today = timezone.localdate()
+        parties = list(Party.objects.filter(tenant=tenant).order_by("pk")[:4])
+        quote = CPQQuote.objects.filter(tenant=tenant).order_by("pk").first()
+        opp = Opportunity.objects.filter(tenant=tenant).order_by("pk").first()
+        doc = Document.objects.filter(tenant=tenant).order_by("pk").first()
+
+        if not parties:
+            return
+
+        with transaction.atomic():
+            # 1. Field Sales Routes
+            r1 = FieldSalesRoute.objects.create(
+                tenant=tenant,
+                name="Downtown Retail Corridor",
+                sales_rep=owner,
+                route_date=today,
+                status="in_progress",
+                start_location="Central Depot, 100 Main St",
+                end_location="Regional Hub, 500 Market St",
+                total_stops=3,
+                completed_stops=2,
+                planned_distance_km=Decimal("38.50"),
+                actual_distance_km=Decimal("41.20"),
+                estimated_duration_minutes=240,
+                actual_duration_minutes=210,
+                optimization_status="optimized",
+                notes="Annual retail customer check-in & restock reviews.",
+            )
+
+            r2 = FieldSalesRoute.objects.create(
+                tenant=tenant,
+                name="Metro Tech Park Corridor",
+                sales_rep=owner,
+                route_date=today + timedelta(days=1),
+                status="scheduled",
+                start_location="Central Depot, 100 Main St",
+                end_location="Central Depot, 100 Main St",
+                total_stops=2,
+                completed_stops=0,
+                planned_distance_km=Decimal("24.00"),
+                actual_distance_km=Decimal("0.00"),
+                estimated_duration_minutes=180,
+                actual_duration_minutes=0,
+                optimization_status="unoptimized",
+                notes="Prospecting demo stops.",
+            )
+
+            # 2. Field Check-Ins
+            p1 = parties[0]
+            p2 = parties[1] if len(parties) > 1 else p1
+            p3 = parties[2] if len(parties) > 2 else p1
+
+            chk1 = FieldCheckIn.objects.create(
+                tenant=tenant,
+                route=r1,
+                stop_number=1,
+                party=p1,
+                sales_rep=owner,
+                check_in_at=timezone.now() - timedelta(hours=3),
+                check_in_lat=Decimal("40.712800"),
+                check_in_lng=Decimal("-74.006000"),
+                target_lat=Decimal("40.712776"),
+                target_lng=Decimal("-74.005974"),
+                geofence_radius_m=150,
+                distance_from_target_m=Decimal("3.50"),
+                is_geofence_verified=True,
+                verification_status="verified",
+                check_out_at=timezone.now() - timedelta(hours=2, minutes=15),
+                check_out_lat=Decimal("40.712800"),
+                check_out_lng=Decimal("-74.006000"),
+                duration_minutes=45,
+                visit_purpose="presentation",
+                outcome="successful",
+                notes="Presented new enterprise pricing tiers. Customer requested updated proposal.",
+                next_step="Send revised CPQ quote",
+                next_step_due=today + timedelta(days=2),
+                resulting_quote=quote,
+                opportunity=opp,
+                photo_document=doc,
+            )
+
+            chk2 = FieldCheckIn.objects.create(
+                tenant=tenant,
+                route=r1,
+                stop_number=2,
+                party=p2,
+                sales_rep=owner,
+                check_in_at=timezone.now() - timedelta(hours=1, minutes=30),
+                check_in_lat=Decimal("40.720000"),
+                check_in_lng=Decimal("-74.010000"),
+                target_lat=Decimal("40.720050"),
+                target_lng=Decimal("-74.010050"),
+                geofence_radius_m=150,
+                distance_from_target_m=Decimal("7.20"),
+                is_geofence_verified=True,
+                verification_status="verified",
+                check_out_at=timezone.now() - timedelta(minutes=45),
+                check_out_lat=Decimal("40.720000"),
+                check_out_lng=Decimal("-74.010000"),
+                duration_minutes=45,
+                visit_purpose="order_collection",
+                outcome="order_placed",
+                notes="Confirmed monthly restock order. Shelf inventory in great condition.",
+                next_step="Process delivery invoice",
+                next_step_due=today + timedelta(days=3),
+            )
+
+            chk3 = FieldCheckIn.objects.create(
+                tenant=tenant,
+                route=None,
+                stop_number=1,
+                party=p3,
+                sales_rep=owner,
+                check_in_at=timezone.now() - timedelta(minutes=30),
+                check_in_lat=Decimal("40.750000"),
+                check_in_lng=Decimal("-73.990000"),
+                target_lat=Decimal("40.753000"),
+                target_lng=Decimal("-73.992000"),
+                geofence_radius_m=150,
+                distance_from_target_m=Decimal("375.00"),
+                is_geofence_verified=False,
+                verification_status="out_of_range",
+                visit_purpose="prospecting",
+                outcome="quote_requested",
+                notes="Cold visit to procurement director. Highly interested in Q4 pilot deployment.",
+                next_step="Schedule follow-up conference call",
+                next_step_due=today + timedelta(days=4),
+            )
+
+            # 3. Mobile Device Sessions
+            dev1 = MobileDeviceSession.objects.create(
+                tenant=tenant,
+                user=owner,
+                device_uuid="uuid-ios-iphone15pro-001",
+                device_name="iPhone 15 Pro (Primary)",
+                platform="ios",
+                app_version="3.2.1",
+                push_token="apns_tok_sample_9843a8b27c001",
+                is_active=True,
+                is_trusted=True,
+                last_sync_at=timezone.now() - timedelta(minutes=15),
+                last_sync_status="success",
+                offline_records_cached=142,
+                pending_uploads_count=0,
+                last_ip_address="192.168.1.45",
+                last_known_lat=Decimal("40.712800"),
+                last_known_lng=Decimal("-74.006000"),
+            )
+
+            dev2 = MobileDeviceSession.objects.create(
+                tenant=tenant,
+                user=owner,
+                device_uuid="uuid-android-pixel8-002",
+                device_name="Google Pixel 8 (Backup PWA)",
+                platform="android",
+                app_version="3.2.0",
+                push_token="fcm_tok_sample_12938fd89a002",
+                is_active=True,
+                is_trusted=True,
+                last_sync_at=timezone.now() - timedelta(hours=2),
+                last_sync_status="success",
+                offline_records_cached=98,
+                pending_uploads_count=0,
+                last_ip_address="192.168.1.72",
+                last_known_lat=Decimal("40.720000"),
+                last_known_lng=Decimal("-74.010000"),
+            )
+
+            # 4. Mobile Deal Alerts
+            MobileDealAlert.objects.create(
+                tenant=tenant,
+                recipient=owner,
+                device=dev1,
+                alert_type="quote_approval_required",
+                title="Urgent: 15% Quote Discount Sign-Off Needed",
+                message="Field rep submitted an on-the-spot 15% discount for enterprise quote. Sign-off requested.",
+                urgency="urgent",
+                related_quote=quote,
+                is_read=False,
+                push_status="sent",
+                push_sent_at=timezone.now() - timedelta(minutes=25),
+            )
+
+            MobileDealAlert.objects.create(
+                tenant=tenant,
+                recipient=owner,
+                device=dev1,
+                alert_type="route_dispatched",
+                title="Daily Itinerary Dispatched: Downtown Corridor",
+                message="Your multi-stop route for today has been optimized and dispatched. 3 stops scheduled.",
+                urgency="normal",
+                related_route=r1,
+                is_read=True,
+                read_at=timezone.now() - timedelta(hours=4),
+                push_status="delivered",
+                push_sent_at=timezone.now() - timedelta(hours=4),
+            )
+
+            MobileDealAlert.objects.create(
+                tenant=tenant,
+                recipient=owner,
+                device=dev1,
+                alert_type="deal_stage_changed",
+                title="Deal Advanced to Negotiation",
+                message="Opportunity has been advanced to Contract Negotiation following successful on-site demo.",
+                urgency="high",
+                related_opportunity=opp,
+                is_read=False,
+                push_status="sent",
+                push_sent_at=timezone.now() - timedelta(minutes=10),
+            )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.16 mobile sales demo rows ensured "
+            f"({FieldSalesRoute.objects.filter(tenant=tenant).count()} routes, "
+            f"{FieldCheckIn.objects.filter(tenant=tenant).count()} check-ins, "
+            f"{MobileDeviceSession.objects.filter(tenant=tenant).count()} devices, "
+            f"{MobileDealAlert.objects.filter(tenant=tenant).count()} alerts)."
+        )
+
 
 
 
