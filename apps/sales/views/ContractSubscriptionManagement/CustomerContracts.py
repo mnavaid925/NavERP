@@ -158,10 +158,14 @@ def customer_contract_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 @transaction.atomic
 def customer_contract_delete(request, pk):
     tenant = request.tenant
     contract = get_object_or_404(CustomerContract.objects.filter(tenant=tenant), pk=pk)
+    if contract.status == "active":
+        messages.error(request, f"Active contract {contract.number} cannot be deleted.")
+        return redirect("sales:customer_contract_detail", pk=contract.pk)
     number = contract.number
     write_audit_log(
         user=request.user,
