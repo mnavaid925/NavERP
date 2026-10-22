@@ -215,7 +215,7 @@
         <!-- Metered Usage Card -->
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h3 class="font-semibold text-slate-800">Metered Consumption Records ({{ usage_records.count }})</h3>
+                <h3 class="font-semibold text-slate-800">Metered Consumption Records ({{ usage_records|length }})</h3>
                 <a href="{% url 'sales:usage_meter_record_create' %}?subscription={{ subscription.pk }}" class="btn btn-outline text-xs">
                     <i data-lucide="plus"></i>
                     <span>Log Meter Record</span>
@@ -283,7 +283,7 @@
         <!-- Service SLA Obligations Card -->
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h3 class="font-semibold text-slate-800">Assigned Service Obligations ({{ obligations.count }})</h3>
+                <h3 class="font-semibold text-slate-800">Assigned Service Obligations ({{ obligations|length }})</h3>
                 {% if subscription.contract %}
                 <a href="{% url 'sales:contract_obligation_create' %}?contract={{ subscription.contract.pk }}&subscription={{ subscription.pk }}" class="btn btn-outline text-xs">
                     <i data-lucide="plus"></i>
