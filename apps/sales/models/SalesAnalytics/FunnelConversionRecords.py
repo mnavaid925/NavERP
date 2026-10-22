@@ -152,9 +152,12 @@ class FunnelConversionRecord(TenantNumbered):
         entered = int(self.entered_count or 0)
         converted = int(self.converted_count or 0)
         self.conversion_rate_pct = (
-            (Decimal(converted) / Decimal(entered) * Decimal(100)).quantize(
-                Decimal("0.01"),
-                rounding=ROUND_HALF_UP,
+            min(
+                (Decimal(converted) / Decimal(entered) * Decimal(100)).quantize(
+                    Decimal("0.01"),
+                    rounding=ROUND_HALF_UP,
+                ),
+                Decimal("999.99"),
             )
             if entered > 0
             else Decimal("0.00")
