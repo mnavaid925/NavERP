@@ -64,7 +64,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.shortcuts import render
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
@@ -1219,12 +1219,12 @@ def benchmark_console(request):
     benchmark_rows = _benchmark_rows(tenant, scorecards)
     goal_gap_rows = _goal_gap_rows(scorecards)
 
-    quota_plans = list(
-        QuotaPlan.objects.filter(tenant=tenant).select_related("quota_ref", "forecast_period")
+    quota_agg = QuotaPlan.objects.filter(tenant=tenant).aggregate(
+        count=Count("id"),
+        target_total=Sum("quota_ref__target_amount"),
     )
-    quota_target_total = sum(
-        (plan.quota_ref.target_amount or ZERO) for plan in quota_plans if plan.quota_ref_id
-    )
+    quota_plan_count = quota_agg["count"] or 0
+    quota_target_total = quota_agg["target_total"] or ZERO
 
     stats = {
         "total_scorecards": len(scorecards),
@@ -1240,7 +1240,7 @@ def benchmark_console(request):
         "goal_gap_count": len(goal_gap_rows),
         "total_goal_gap": sum((row.get("goal_gap_value") or ZERO) for row in goal_gap_rows),
         "worst_goal_gap": goal_gap_rows[0].get("goal_gap_value") if goal_gap_rows else None,
-        "quota_plan_count": len(quota_plans),
+        "quota_plan_count": quota_plan_count,
         "quota_target_total": quota_target_total,
         "avg_quota_attainment_pct": _percentile(
             [
