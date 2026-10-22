@@ -171,9 +171,9 @@
   `.claude/tasks/contract-sales-8.12.md:410-411`. `ModelForm._post_clean` calls `full_clean()`, which calls `Model.clean()`.
   *Fix:* Correct the contract text. Fixed — `6cf5346b` `docs(sales): correct Model.clean contract note and add clamping documentation`.
 
-- [ ] **M12 — `from_stage` / `to_stage` populated on non-stage funnel rows in seeder.**
+- [x] **M12 — `from_stage` / `to_stage` populated on non-stage funnel rows in seeder.**
   `apps/sales/management/commands/seed_sales.py:3357-3358`.
-  *Fix:* Set `from_stage=None, to_stage=None` on `lead_to_opportunity` and `opportunity_to_close`.
+  *Fix:* Set `from_stage=None, to_stage=None` on `lead_to_opportunity` and `opportunity_to_close`. Fixed — `8c0954de0` and `60a0c470` set `from_stage=None, to_stage=None` for non-stage scopes.
 
 - [ ] **M13 — `WinLossDebrief.primary_reason` assigned positionally in seeder.**
   `apps/sales/management/commands/seed_sales.py:3270`.
