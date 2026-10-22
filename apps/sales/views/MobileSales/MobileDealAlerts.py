@@ -2,6 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -93,6 +94,7 @@ def mobile_deal_alert_detail(request, pk):
 
 
 @login_required
+@transaction.atomic
 def mobile_deal_alert_create(request):
     tenant = request.tenant
     initial = {"recipient": request.user}
@@ -128,6 +130,7 @@ def mobile_deal_alert_create(request):
 
 
 @login_required
+@transaction.atomic
 def mobile_deal_alert_edit(request, pk):
     tenant = request.tenant
     alert = get_object_or_404(MobileDealAlert.objects.filter(tenant=tenant), pk=pk)
@@ -157,6 +160,7 @@ def mobile_deal_alert_edit(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def mobile_deal_alert_delete(request, pk):
     tenant = request.tenant
     alert = get_object_or_404(MobileDealAlert.objects.filter(tenant=tenant), pk=pk)
@@ -174,6 +178,7 @@ def mobile_deal_alert_delete(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def mobile_deal_alert_mark_read(request, pk):
     tenant = request.tenant
     alert = get_object_or_404(MobileDealAlert.objects.filter(tenant=tenant), pk=pk)
