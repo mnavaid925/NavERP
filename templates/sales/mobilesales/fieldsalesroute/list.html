@@ -197,13 +197,13 @@
             </div>
             <div class="flex items-center gap-1">
                 {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                <a href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn btn-outline btn-sm">
                     Previous
                 </a>
                 {% endif %}
                 <span class="px-3 py-1 text-sm text-slate-700 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
                 {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                <a href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn btn-outline btn-sm">
                     Next
                 </a>
                 {% endif %}
