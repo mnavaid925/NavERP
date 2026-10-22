@@ -60,9 +60,17 @@
 <!-- Filters -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
             <div class="form-group mb-0">
                 <input type="text" name="q" value="{{ request.GET.q|default:'' }}" placeholder="Search plan, name, or code..." class="form-input text-sm">
+            </div>
+            <div class="form-group mb-0">
+                <select name="account" class="form-select text-sm">
+                    <option value="">All Accounts</option>
+                    {% for acc in filter_form.fields.account.queryset %}
+                    <option value="{{ acc.pk }}" {% if request.GET.account == acc.pk|stringformat:"d" %}selected{% endif %}>{{ acc.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="form-group mb-0">
                 <select name="status" class="form-select text-sm">
