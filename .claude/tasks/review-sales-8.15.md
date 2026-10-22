@@ -60,4 +60,29 @@ All 14 templates for Sub-module 8.15 exhibit high quality and strong adherence t
 - **[MINOR]** `templates/sales/contractsubscriptionmanagement/contractobligation/list.html:28` & `templates/sales/contractsubscriptionmanagement/boards/renewal_automation_dashboard.html:32`: Non-standard stat-icon color `<div class="stat-icon red">` is used for alert cards. Fix: Use `stat-icon orange` for consistency with system guidelines.
 - **[MINOR]** `templates/sales/contractsubscriptionmanagement/usagemeterrecord/detail.html:180`: None-safe display convention: `{{ usage_record.subscription.plan_code }}` is rendered without a fallback default filter. Fix: Add `|default:"—"`.
 
+---
+
+## 4. Performance Reviewer Findings
+
+### Verdict
+The Sub-module 8.15 ORM implementation is well-structured with proper pagination ordering and baseline index coverage, but suffers from chained N+1 query storms in form rendering through `CustomerSubscription.__str__`, redundant sequential count queries across executive dashboards, template `.count` bypasses of evaluated queryset caches, and missed compound indexes for high-frequency horizon scans.
+
+### Findings
+- **[CRITICAL]** `apps/sales/forms/ContractSubscriptionManagement/UsageMeterRecords.py:44`: Chained N+1 query vulnerability through `CustomerSubscription.__str__` (L18). In `UsageMeterRecordForm.__init__`, `self.fields["subscription"].queryset` lacks `.select_related("account")`. Because `CustomerSubscription.__str__` accesses `self.account.name`, rendering `<select name="subscription">` triggers 1 + N queries against `core_party`. Fix: Add `.select_related("account")`.
+- **[CRITICAL]** `apps/sales/forms/ContractSubscriptionManagement/ContractObligations.py:53`: Chained N+1 query vulnerability through `CustomerSubscription.__str__` (L18). In `ContractObligationForm.__init__`, `self.fields["subscription"].queryset` lacks `.select_related("account")`. Fix: Add `.select_related("account")`.
+- **[IMPORTANT]** `apps/sales/views/ContractSubscriptionManagement/ContractSubscriptionWorkspaces.py:25`: Fragmented aggregation round-trips. Consolidate 4 `CustomerContract` queries (`active_count`, `total_tcv`, `expiring_30`, `expiring_60`) and 2 `ContractObligation` queries (`total`, `fulfilled`) into unified conditional aggregates.
+- **[IMPORTANT]** `apps/sales/views/ContractSubscriptionManagement/RenewalAutomations.py:24`: Combine 3 sequential count queries for renewal horizon buckets (`exp_30`, `exp_60`, `exp_90`) into a single `contracts_qs.aggregate(...)` call with conditional `Count("id", filter=Q(...))`.
+- **[IMPORTANT]** `apps/sales/views/ContractSubscriptionManagement/RenewalAutomations.py:40`: In-memory Python loop deriving financial KPI. Replace row iteration with ORM `Sum(...)` aggregation over `annual_contract_value` / `total_contract_value` and `price_uplift_pct`.
+- **[IMPORTANT]** `apps/sales/views/ContractSubscriptionManagement/RenewalAutomations.py:33`: Redundant table scan for `auto_renew_candidates`. Filter the already evaluated `upcoming_renewals` list in Python: `[c for c in upcoming_renewals if c.auto_renew]`.
+- **[IMPORTANT]** `apps/sales/views/ContractSubscriptionManagement/ContractSubscriptionWorkspaces.py:58`: Dead query execution. `urgent_subscriptions` executes against DB but is never rendered in template. Fix: Either render table in template or eliminate query.
+- **[IMPORTANT]** `templates/sales/contractsubscriptionmanagement/boards/renewal_automation_dashboard.html:76,144`: Template `.count` triggers redundant SQL queries on evaluated QuerySets. Replace `{{ auto_renew_candidates.count }}` and `{{ upcoming_renewals.count }}` with `|length`.
+- **[IMPORTANT]** `templates/sales/contractsubscriptionmanagement/customercontract/detail.html:150,216` & `templates/sales/contractsubscriptionmanagement/customersubscription/detail.html:218,286`: Replace related manager `.count` calls (`subscriptions.count`, `obligations.count`, `usage_records.count`) with `|length` to reuse Django's evaluated queryset cache.
+- **[IMPORTANT]** `apps/sales/models/ContractSubscriptionManagement/CustomerContracts.py:128` & `CustomerSubscriptions.py:122` & `ContractObligations.py:103`: Missing compound indexes on multi-column filter targets. Add `Index(fields=["tenant", "status", "end_date"], name="sales_cct_ten_stat_end_idx")` to CustomerContract, `Index(fields=["tenant", "contract"], name="sales_csb_ten_contract_idx")` to CustomerSubscription, and `Index(fields=["tenant", "subscription"], name="sales_obl_ten_sub_idx")` to ContractObligation.
+- **[MINOR]** `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py:56`: Combine `total_tcv` and `active_count` in `customer_contract_list` into a single aggregate query.
+- **[MINOR]** `apps/sales/views/ContractSubscriptionManagement/CustomerSubscriptions.py:63`: Combine `total_mrr` and `active_count` in `customer_subscription_list` into a single aggregate query.
+- **[MINOR]** `apps/sales/views/ContractSubscriptionManagement/ContractObligations.py:151`: Add `select_related("contract")` in `contract_obligation_edit` to prevent extra query on `str(obl)`.
+- **[MINOR]** `apps/sales/views/ContractSubscriptionManagement/UsageMeterRecords.py:127`: Add `select_related("subscription")` in `usage_meter_record_edit` to prevent extra query on `str(meter)`.
+- **[MINOR]** `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py:118`: Add `account` to `contract.subscriptions.all().select_related("currency", "account")`.
+
+
 
