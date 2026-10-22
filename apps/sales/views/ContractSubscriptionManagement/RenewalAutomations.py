@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q, Sum
 from django.shortcuts import render
 from django.utils import timezone
 
@@ -21,20 +22,23 @@ def renewal_automation_dashboard(request):
 
     contracts_qs = CustomerContract.objects.filter(tenant=tenant, status="active")
 
-    expiring_30_days = contracts_qs.filter(end_date__gte=today, end_date__lte=in_30).count()
-    expiring_60_days = contracts_qs.filter(end_date__gt=in_30, end_date__lte=in_60).count()
-    expiring_90_days = contracts_qs.filter(end_date__gt=in_60, end_date__lte=in_90).count()
+    # Consolidated horizon counts in a single query
+    horizon_agg = contracts_qs.aggregate(
+        exp_30=Count("id", filter=Q(end_date__gte=today, end_date__lte=in_30)),
+        exp_60=Count("id", filter=Q(end_date__gt=in_30, end_date__lte=in_60)),
+        exp_90=Count("id", filter=Q(end_date__gt=in_60, end_date__lte=in_90)),
+    )
+    expiring_30_days = horizon_agg["exp_30"] or 0
+    expiring_60_days = horizon_agg["exp_60"] or 0
+    expiring_90_days = horizon_agg["exp_90"] or 0
 
-    upcoming_renewals = contracts_qs.filter(
+    upcoming_renewals = list(contracts_qs.filter(
         end_date__gte=today,
         end_date__lte=in_90,
-    ).select_related("account", "owner", "currency").order_by("end_date")
+    ).select_related("account", "owner", "currency").order_by("end_date"))
 
-    auto_renew_candidates = contracts_qs.filter(
-        auto_renew=True,
-        end_date__gte=today,
-        end_date__lte=in_90,
-    ).select_related("account", "owner").order_by("end_date")
+    # Reuse evaluated upcoming renewals for auto-renew candidates without secondary DB query
+    auto_renew_candidates = [c for c in upcoming_renewals if c.auto_renew]
 
     # Projected uplift value
     projected_uplift_value = Decimal("0.00")
