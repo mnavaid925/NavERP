@@ -5290,3 +5290,181 @@ def sa_scorecard_a(tenant_a, admin_user):
 def sa_scorecard_b(tenant_b, admin_b):
     return _salesanalytics_scorecard(tenant_b, rep=admin_b)
 
+
+
+# ==============================================================================
+# Sub-module 8.15: Contract & Subscription Management Test Fixtures & Helpers
+# ==============================================================================
+
+def _contractsubscription_currency():
+    from apps.accounting.models import Currency
+    curr, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "symbol": "$"})
+    return curr
+
+
+def _contractsubscription_account(tenant, name="Acme Customer Corp"):
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant, kind="organization", name=name)
+    PartyRole.objects.create(tenant=tenant, party=party, role="customer", status="active")
+    return party
+
+
+def _contractsubscription_contract(tenant, account=None, owner=None, currency=None, **overrides):
+    from apps.sales.models import CustomerContract
+    if account is None:
+        account = _contractsubscription_account(tenant, name=f"Contract Client {tenant.slug}")
+    if currency is None:
+        currency = _contractsubscription_currency()
+    defaults = {
+        "tenant": tenant,
+        "account": account,
+        "title": "Master Services Agreement",
+        "contract_type": "master_services_agreement",
+        "status": "active",
+        "currency": currency,
+        "total_contract_value": Decimal("120000.00"),
+        "annual_contract_value": Decimal("120000.00"),
+        "start_date": timezone.localdate(),
+        "end_date": timezone.localdate() + timezone.timedelta(days=365),
+        "auto_renew": True,
+        "renewal_term_months": 12,
+        "notice_period_days": 30,
+        "price_uplift_pct": Decimal("5.00"),
+        "owner": owner,
+    }
+    defaults.update(overrides)
+    return CustomerContract.objects.create(**defaults)
+
+
+def _contractsubscription_subscription(tenant, contract=None, account=None, owner=None, currency=None, **overrides):
+    from apps.sales.models import CustomerSubscription
+    if contract is None:
+        contract = _contractsubscription_contract(tenant, account=account, owner=owner, currency=currency)
+        account = contract.account
+    elif account is None:
+        account = contract.account
+    if currency is None:
+        currency = _contractsubscription_currency()
+    defaults = {
+        "tenant": tenant,
+        "contract": contract,
+        "account": account,
+        "subscription_name": "Cloud Platform Enterprise",
+        "plan_code": "ENT-SEAT-01",
+        "status": "active",
+        "pricing_model": "per_seat",
+        "billing_cadence": "monthly",
+        "currency": currency,
+        "quantity": 100,
+        "unit_price": Decimal("50.00"),
+        "mrr": Decimal("5000.00"),
+        "start_date": timezone.localdate(),
+        "current_term_start": timezone.localdate(),
+        "current_term_end": timezone.localdate() + timezone.timedelta(days=30),
+        "auto_renew": True,
+        "renewal_notice_days": 30,
+        "owner": owner,
+    }
+    defaults.update(overrides)
+    return CustomerSubscription.objects.create(**defaults)
+
+
+def _contractsubscription_meter_record(tenant, subscription=None, **overrides):
+    from apps.sales.models import UsageMeterRecord
+    if subscription is None:
+        subscription = _contractsubscription_subscription(tenant)
+    defaults = {
+        "tenant": tenant,
+        "subscription": subscription,
+        "meter_name": "API Requests",
+        "unit_of_measure": "calls",
+        "billing_period_start": timezone.localdate() - timezone.timedelta(days=30),
+        "billing_period_end": timezone.localdate(),
+        "included_allowance": Decimal("100000.00"),
+        "reported_usage": Decimal("150000.00"),
+        "billable_overage_units": Decimal("50000.00"),
+        "overage_unit_price": Decimal("0.0020"),
+        "overage_total_charge": Decimal("100.00"),
+        "status": "calculated",
+    }
+    defaults.update(overrides)
+    return UsageMeterRecord.objects.create(**defaults)
+
+
+def _contractsubscription_obligation(tenant, contract=None, subscription=None, assigned_to=None, **overrides):
+    from apps.sales.models import ContractObligation
+    if contract is None:
+        if subscription is not None and subscription.contract is not None:
+            contract = subscription.contract
+        else:
+            contract = _contractsubscription_contract(tenant)
+    defaults = {
+        "tenant": tenant,
+        "contract": contract,
+        "subscription": subscription,
+        "title": "99.9% Uptime Guarantee",
+        "obligation_type": "sla_uptime",
+        "target_metric": ">= 99.9% Monthly Availability",
+        "due_date": timezone.localdate() + timezone.timedelta(days=90),
+        "status": "pending",
+        "penalty_amount": Decimal("0.00"),
+        "penalty_status": "none",
+        "assigned_to": assigned_to,
+    }
+    defaults.update(overrides)
+    return ContractObligation.objects.create(**defaults)
+
+
+@pytest.fixture
+def cs_currency():
+    return _contractsubscription_currency()
+
+
+@pytest.fixture
+def cs_account_a(tenant_a):
+    return _contractsubscription_account(tenant_a, name="Acme Premier Client")
+
+
+@pytest.fixture
+def cs_account_b(tenant_b):
+    return _contractsubscription_account(tenant_b, name="Globex Strategic Client")
+
+
+@pytest.fixture
+def cs_contract_a(tenant_a, cs_account_a, cs_currency, admin_user):
+    return _contractsubscription_contract(tenant_a, account=cs_account_a, owner=admin_user, currency=cs_currency)
+
+
+@pytest.fixture
+def cs_contract_b(tenant_b, cs_account_b, cs_currency, admin_b):
+    return _contractsubscription_contract(tenant_b, account=cs_account_b, owner=admin_b, currency=cs_currency)
+
+
+@pytest.fixture
+def cs_subscription_a(tenant_a, cs_contract_a, cs_account_a, cs_currency, admin_user):
+    return _contractsubscription_subscription(tenant_a, contract=cs_contract_a, account=cs_account_a, owner=admin_user, currency=cs_currency)
+
+
+@pytest.fixture
+def cs_subscription_b(tenant_b, cs_contract_b, cs_account_b, cs_currency, admin_b):
+    return _contractsubscription_subscription(tenant_b, contract=cs_contract_b, account=cs_account_b, owner=admin_b, currency=cs_currency)
+
+
+@pytest.fixture
+def cs_meter_record_a(tenant_a, cs_subscription_a):
+    return _contractsubscription_meter_record(tenant_a, subscription=cs_subscription_a)
+
+
+@pytest.fixture
+def cs_meter_record_b(tenant_b, cs_subscription_b):
+    return _contractsubscription_meter_record(tenant_b, subscription=cs_subscription_b)
+
+
+@pytest.fixture
+def cs_obligation_a(tenant_a, cs_contract_a, cs_subscription_a, admin_user):
+    return _contractsubscription_obligation(tenant_a, contract=cs_contract_a, subscription=cs_subscription_a, assigned_to=admin_user)
+
+
+@pytest.fixture
+def cs_obligation_b(tenant_b, cs_contract_b, cs_subscription_b, admin_b):
+    return _contractsubscription_obligation(tenant_b, contract=cs_contract_b, subscription=cs_subscription_b, assigned_to=admin_b)
