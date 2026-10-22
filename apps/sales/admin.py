@@ -856,7 +856,7 @@ class AttributionTouchpointAdmin(admin.ModelAdmin):
 
 
 class TenantScopedFKAdmin(admin.ModelAdmin):
-    """Base admin for the 8.13 and 8.12 entities: narrows EVERY tenant-scoped FK to the tenant.
+    """Base admin reused across sales sub-modules (including 8.12 and 8.13 entities): narrows EVERY tenant-scoped FK to the tenant.
 
     ``accounts.User.tenant`` is nullable -- the platform superuser has no tenant -- so a user FK
     is filtered on ``tenant=request.tenant, is_active=True``, which also excludes that
