@@ -153,7 +153,7 @@ def rep_performance_scorecard_detail(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 def rep_performance_scorecard_create(request):
     if request.method == "POST":
         form = RepPerformanceScorecardForm(request.POST, tenant=request.tenant)
@@ -178,7 +178,7 @@ def rep_performance_scorecard_create(request):
     )
 
 
-@login_required
+@tenant_admin_required
 def rep_performance_scorecard_edit(request, pk):
     obj = get_object_or_404(
         RepPerformanceScorecard.objects.filter(tenant=request.tenant).select_related(
