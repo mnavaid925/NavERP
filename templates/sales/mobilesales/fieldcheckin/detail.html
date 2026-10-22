@@ -191,7 +191,7 @@
                     <div>
                         <span class="text-xs text-slate-400 uppercase tracking-wider block">Opportunity / Deal</span>
                         {% if check_in.opportunity %}
-                            <a href="{% url 'sales:opportunity_detail' check_in.opportunity.pk %}" class="text-primary hover:underline font-medium">
+                            <a href="{% url 'crm:opportunity_detail' check_in.opportunity.pk %}" class="text-primary hover:underline font-medium">
                                 {{ check_in.opportunity.name }}
                             </a>
                         {% else %}
