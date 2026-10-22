@@ -1618,11 +1618,12 @@ compliance are all derived, because storing a rollup next to its sources is a fi
 three MQL handoffs (one accepted, one rejected, one deliberately left overdue to exercise the
 SLA-breach path), the content engagements and two events with their registrations — reusing the
 existing campaign, lead, opportunity, account and collateral rows, and creating none of them. It
-was run twice end-to-end to prove idempotency. The test suite for 8.13 was **not** written — the
-`test-writer` agent was skipped at the user's instruction; the test contract is pinned in
-`.claude/tasks/contract-sales-8.13.md`. See `.agents/tasks/gaps-sales-8.13.md` for the gap
-register, `.claude/tasks/research-sales-8.13.md` for the feature catalog, and
-`.claude/skills/sales/SKILL.md` for the as-built guide.
+was run twice end-to-end to prove idempotency. The test suite for 8.13 is **complete and green**
+with 85 passing tests across 4 modules (`test_marketingalignment_models.py`, `_forms.py`,
+`_views.py`, and `_security.py`) covering all 6 entities, attribution analytics, SLA logic,
+and cross-tenant IDOR isolation. See `.agents/tasks/gaps-sales-8.13.md` for the closed gap
+register (`GAP-sales-8.13-09` closed), `.claude/tasks/research-sales-8.13.md` for the feature catalog,
+and `.claude/skills/sales/SKILL.md` for the as-built guide.
 
 ---
 
