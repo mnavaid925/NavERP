@@ -103,9 +103,9 @@
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:1221-1226`. Loads all `QuotaPlan` rows into memory and sums `quota_ref.target_amount` in Python.
   *Fix:* Use `QuotaPlan.objects.filter(tenant=tenant).aggregate(count=Count("id"), target_total=Sum("quota_ref__target_amount"))`. Fixed — `1e06099e` `fix(sales): use SQL aggregate for QuotaPlan target_total in benchmark_console`.
 
-- [ ] **I8 — Python loop `sum()` and redundant count query in `_activity_totals`.**
+- [x] **I8 — Python loop `sum()` and redundant count query in `_activity_totals`.**
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:1154-1157`. Pulls `planned_minutes` flat into Python to sum, and fires a separate count query.
-  *Fix:* Combine into single aggregate: `in_period.aggregate(auto_captured=Count("id", filter=Q(is_auto_captured=True)), planned_minutes=Sum("planned_minutes"))`.
+  *Fix:* Combine into single aggregate: `in_period.aggregate(auto_captured=Count("id", filter=Q(is_auto_captured=True)), planned_minutes=Sum("planned_minutes"))`. Fixed — `d4c56f8e` `fix(sales): combine activity totals count and sum into single aggregate`.
 
 - [ ] **I9 — Full table scan with Python filtering in `_benchmark_rows`.**
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:1353, 1370`. Fetches un-benchmarked rows over the wire only to discard them in Python.
