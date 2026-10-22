@@ -141,7 +141,7 @@ def funnel_conversion_record_detail(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 def funnel_conversion_record_create(request):
     if request.method == "POST":
         form = FunnelConversionRecordForm(request.POST, tenant=request.tenant)
@@ -166,7 +166,7 @@ def funnel_conversion_record_create(request):
     )
 
 
-@login_required
+@tenant_admin_required
 def funnel_conversion_record_edit(request, pk):
     obj = get_object_or_404(
         FunnelConversionRecord.objects.filter(tenant=request.tenant).select_related(
