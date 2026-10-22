@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Route — {{ route.name }}{% else %}Create Sales Route{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="page-header flex items-center justify-between">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'sales:dashboard' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:field_sales_route_list' %}" class="hover:text-primary">Field Sales Routes</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{% if is_edit %}Edit {{ route.number }}{% else %}New Route{% endif %}</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">
+                {% if is_edit %}Edit Sales Route — {{ route.name }}{% else %}Create Field Sales Route{% endif %}
+            </h1>
+            <p class="text-sm text-slate-500 mt-1">Configure itinerary parameters, assigned outside rep, and planned travel metrics.</p>
+        </div>
+        <div class="page-actions">
+            {% if is_edit %}
+            <a href="{% url 'sales:field_sales_route_detail' route.pk %}" class="btn btn-outline">Cancel</a>
+            {% else %}
+            <a href="{% url 'sales:field_sales_route_list' %}" class="btn btn-outline">Cancel</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Form Card -->
+    <div class="card p-6">
+        <form method="post" class="space-y-6" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Itinerary Overview -->
+            <div>
+                <h2 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="map" class="w-4 h-4 text-primary"></i>
+                    <span>Itinerary Basics</span>
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label">Route Name <span class="text-red-500">*</span></label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Assigned Sales Rep <span class="text-red-500">*</span></label>
+                        {{ form.sales_rep }}
+                        {% if form.sales_rep.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sales_rep.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Route Date <span class="text-red-500">*</span></label>
+                        {{ form.route_date }}
+                        {% if form.route_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.route_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Route Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Optimization State</label>
+                        {{ form.optimization_status }}
+                        {% if form.optimization_status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.optimization_status.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Waypoints & Stops -->
+            <div>
+                <h2 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="navigation" class="w-4 h-4 text-primary"></i>
+                    <span>Waypoints & Stops</span>
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div class="form-group">
+                        <label class="form-label">Start Location / Depot</label>
+                        {{ form.start_location }}
+                        <span class="text-xs text-slate-400 mt-0.5 block">Starting address for GPS route planning</span>
+                        {% if form.start_location.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.start_location.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">End Location / Return</label>
+                        {{ form.end_location }}
+                        <span class="text-xs text-slate-400 mt-0.5 block">Final destination or return warehouse</span>
+                        {% if form.end_location.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.end_location.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Total Planned Stops</label>
+                        {{ form.total_stops }}
+                        {% if form.total_stops.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.total_stops.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Mileage & Duration -->
+            <div>
+                <h2 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="gauge" class="w-4 h-4 text-primary"></i>
+                    <span>Distance & Duration Tracking</span>
+                </h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                    <div class="form-group">
+                        <label class="form-label">Planned Distance (km)</label>
+                        {{ form.planned_distance_km }}
+                        {% if form.planned_distance_km.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.planned_distance_km.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Actual Distance (km)</label>
+                        {{ form.actual_distance_km }}
+                        {% if form.actual_distance_km.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.actual_distance_km.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Est. Duration (min)</label>
+                        {{ form.estimated_duration_minutes }}
+                        {% if form.estimated_duration_minutes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.estimated_duration_minutes.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Actual Duration (min)</label>
+                        {{ form.actual_duration_minutes }}
+                        {% if form.actual_duration_minutes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.actual_duration_minutes.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Dispatcher Notes -->
+            <div>
+                <h2 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-4 h-4 text-primary"></i>
+                    <span>Dispatcher Notes</span>
+                </h2>
+                <div class="form-group mt-4">
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                {% if is_edit %}
+                <a href="{% url 'sales:field_sales_route_detail' route.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'sales:field_sales_route_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary flex items-center gap-2">
+                    <i data-lucide="save" class="w-4 h-4"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Route{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
