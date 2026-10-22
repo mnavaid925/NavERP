@@ -82,12 +82,10 @@ def customer_contract_create(request):
             contract.tenant = tenant
             contract.save()
             write_audit_log(
-                tenant=tenant,
                 user=request.user,
+                obj=contract,
                 action="create",
-                model_name="CustomerContract",
-                object_id=str(contract.pk),
-                object_repr=str(contract),
+                tenant=tenant,
             )
             messages.success(request, f"Contract {contract.number} created successfully.")
             return redirect("sales:customer_contract_detail", pk=contract.pk)
@@ -136,12 +134,10 @@ def customer_contract_edit(request, pk):
         if form.is_valid():
             contract = form.save()
             write_audit_log(
-                tenant=tenant,
                 user=request.user,
+                obj=contract,
                 action="update",
-                model_name="CustomerContract",
-                object_id=str(contract.pk),
-                object_repr=str(contract),
+                tenant=tenant,
             )
             messages.success(request, f"Contract {contract.number} updated successfully.")
             return redirect("sales:customer_contract_detail", pk=contract.pk)
@@ -163,15 +159,13 @@ def customer_contract_delete(request, pk):
     tenant = request.tenant
     contract = get_object_or_404(CustomerContract.objects.filter(tenant=tenant), pk=pk)
     number = contract.number
-    contract.delete()
     write_audit_log(
-        tenant=tenant,
         user=request.user,
+        obj=contract,
         action="delete",
-        model_name="CustomerContract",
-        object_id=str(pk),
-        object_repr=number,
+        tenant=tenant,
     )
+    contract.delete()
     messages.success(request, f"Contract {number} deleted successfully.")
     return redirect("sales:customer_contract_list")
 
@@ -186,12 +180,10 @@ def customer_contract_activate(request, pk):
         contract.signed_at = timezone.now()
     contract.save(update_fields=["status", "signed_at", "updated_at"])
     write_audit_log(
-        tenant=tenant,
         user=request.user,
+        obj=contract,
         action="update",
-        model_name="CustomerContract",
-        object_id=str(contract.pk),
-        object_repr=f"Activated {contract.number}",
+        tenant=tenant,
     )
     messages.success(request, f"Contract {contract.number} is now active.")
     return redirect("sales:customer_contract_detail", pk=contract.pk)
@@ -220,12 +212,10 @@ def customer_contract_generate_renewal_quote(request, pk):
         terms_and_conditions=f"Automated renewal quote with {contract.price_uplift_pct}% contractual uplift.",
     )
     write_audit_log(
-        tenant=tenant,
         user=request.user,
+        obj=quote,
         action="create",
-        model_name="CPQQuote",
-        object_id=str(quote.pk),
-        object_repr=f"Generated renewal quote {quote.number} for {contract.number}",
+        tenant=tenant,
     )
     messages.success(request, f"Renewal quote {quote.number} generated for {contract.number}.")
     return redirect("sales:customer_contract_detail", pk=contract.pk)
@@ -252,12 +242,10 @@ def customer_contract_execute_auto_renew(request, pk):
     contract.save(update_fields=["end_date", "total_contract_value", "annual_contract_value", "status", "updated_at"])
     
     write_audit_log(
-        tenant=tenant,
         user=request.user,
+        obj=contract,
         action="update",
-        model_name="CustomerContract",
-        object_id=str(contract.pk),
-        object_repr=f"Auto-renewed {contract.number} through {contract.end_date}",
+        tenant=tenant,
     )
     messages.success(request, f"Contract {contract.number} auto-renewed through {contract.end_date}.")
     return redirect("sales:customer_contract_detail", pk=contract.pk)
