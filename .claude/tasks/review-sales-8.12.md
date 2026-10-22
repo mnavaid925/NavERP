@@ -135,9 +135,9 @@
   `apps/sales/models/SalesAnalytics/FunnelConversionRecords.py:152-162`. If `FunnelConversionRecord.save()` is called programmatically with `converted_count > entered_count`, the rate exceeds `999.99` and overflows `DECIMAL(5,2)`.
   *Fix:* Clamp `self.conversion_rate_pct = min(rate, Decimal("999.99"))`. Fixed — `cbb9f34e` `fix(sales): clamp conversion_rate_pct to 999.99 on save in FunnelConversionRecord`.
 
-- [ ] **M3 — Uncapped array size in `clean_decision_drivers`.**
+- [x] **M3 — Uncapped array size in `clean_decision_drivers`.**
   `apps/sales/forms/SalesAnalytics/WinLossDebriefs.py:58-111`. Submitting an excessively large array increases row size and console processing time.
-  *Fix:* Enforce `if len(value) > 50: raise ValidationError(...)`.
+  *Fix:* Enforce `if len(value) > 50: raise ValidationError(...)`. Fixed — `d98b0654` `fix(sales): enforce maximum 50 decision drivers in WinLossDebriefForm`.
 
 - [ ] **M4 — Unescaped model number in JavaScript `confirm()` dialogs.**
   `winlossdebrief/detail.html:236`, `stagevelocityanalysis/detail.html:225`, `funnelconversionrecord/detail.html:217`, `repperformancescorecard/detail.html:358`.
