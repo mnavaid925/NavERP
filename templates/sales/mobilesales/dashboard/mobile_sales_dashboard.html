@@ -90,8 +90,8 @@
                 <div>
                     <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Urgent Radar Alerts</div>
                     <div class="text-2xl font-bold text-slate-900 mt-1">
-                        {% if urgent_alerts.count > 0 %}
-                            <span class="text-red-600">{{ urgent_alerts.count }}</span>
+                        {% if urgent_alerts_count > 0 %}
+                            <span class="text-red-600">{{ urgent_alerts_count }}</span>
                         {% else %}
                             <span class="text-green-600">0</span>
                         {% endif %}
