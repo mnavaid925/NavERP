@@ -3300,7 +3300,14 @@ class Command(BaseCommand):
                 if candidate.opportunity_id == opportunity.pk:
                     outcome = candidate
                     break
-            reason = reasons[idx % len(reasons)] if reasons else None
+            reason = None
+            if outcome and outcome.reason_id:
+                reason = outcome.reason
+            elif outcome:
+                matching_reasons = [r for r in reasons if r.result in (outcome.result, "both")]
+                reason = matching_reasons[idx % len(matching_reasons)] if matching_reasons else None
+            elif reasons:
+                reason = reasons[idx % len(reasons)]
             account = accounts[idx % len(accounts)] if accounts else None
             WinLossDebrief.objects.create(
                 tenant=tenant,
