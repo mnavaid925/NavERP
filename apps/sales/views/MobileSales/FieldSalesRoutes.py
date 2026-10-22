@@ -160,6 +160,9 @@ def field_sales_route_delete(request, pk):
 def field_sales_route_optimize(request, pk):
     tenant = request.tenant
     route = get_object_or_404(FieldSalesRoute.objects.filter(tenant=tenant), pk=pk)
+    if route.status in ["completed", "cancelled"]:
+        messages.error(request, f"Cannot optimize route '{route.name}' because it is {route.get_status_display().lower()}.")
+        return redirect("sales:field_sales_route_detail", pk=route.pk)
     route.optimization_status = "optimized"
     route.save(update_fields=["optimization_status"])
     write_audit_log(
