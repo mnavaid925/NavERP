@@ -40,7 +40,7 @@
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Touch Cost</div>
             <div class="text-2xl font-bold text-slate-900 mt-1">
-                ${{ stats.total_cost|default:"0.00"|floatformat:2 }}
+                {% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ stats.total_cost|default:"0.00"|floatformat:2 }}
             </div>
         </div>
     </div>
@@ -51,7 +51,7 @@
         <div>
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Engagement Value</div>
             <div class="text-2xl font-bold text-slate-900 mt-1">
-                ${{ stats.total_engagement_value|default:"0.00"|floatformat:2 }}
+                {% if currency %}{{ currency.symbol }}{% else %}${% endif %}{{ stats.total_engagement_value|default:"0.00"|floatformat:2 }}
             </div>
         </div>
     </div>
@@ -178,17 +178,22 @@
                     </td>
                     <td>
                         {% if touchpoint.lead %}
-                        <div class="text-sm text-slate-900">{{ touchpoint.lead.name }}</div>
+                        <div class="text-sm font-medium text-slate-900">{{ touchpoint.lead.name }}</div>
                         <div class="text-xs text-slate-500 font-mono">{{ touchpoint.lead.number }}</div>
-                        {% else %}
+                        {% endif %}
+                        {% if touchpoint.opportunity %}
+                        <div class="text-xs text-slate-600 mt-0.5">
+                            <span class="text-slate-400">Deal:</span> {{ touchpoint.opportunity.name }}
+                        </div>
+                        {% elif not touchpoint.lead %}
                         <span class="text-slate-400 text-sm">—</span>
                         {% endif %}
                     </td>
                     <td>
-                        <span class="font-semibold text-slate-900">${{ touchpoint.cost|floatformat:2 }}</span>
+                        <span class="font-semibold text-slate-900">{{ touchpoint.currency.symbol|default:"$" }}{{ touchpoint.cost|floatformat:2 }}</span>
                     </td>
                     <td>
-                        <span class="font-semibold text-slate-900">${{ touchpoint.engagement_value|floatformat:2 }}</span>
+                        <span class="font-semibold text-slate-900">{{ touchpoint.currency.symbol|default:"$" }}{{ touchpoint.engagement_value|floatformat:2 }}</span>
                     </td>
                     <td>
                         <div class="text-sm text-slate-900">{{ touchpoint.touch_date|date:"M d, Y" }}</div>
@@ -237,7 +242,7 @@
         </div>
         <div class="pagination-actions">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.channel %}&channel={{ active_filters.channel }}{% endif %}{% if active_filters.touch_type %}&touch_type={{ active_filters.touch_type }}{% endif %}{% if active_filters.position %}&position={{ active_filters.position }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}{% if active_filters.lead %}&lead={{ active_filters.lead }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q|urlencode }}{% endif %}{% if active_filters.channel %}&channel={{ active_filters.channel }}{% endif %}{% if active_filters.touch_type %}&touch_type={{ active_filters.touch_type }}{% endif %}{% if active_filters.position %}&position={{ active_filters.position }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}{% if active_filters.lead %}&lead={{ active_filters.lead }}{% endif %}" class="btn btn-outline btn-sm">
                 Previous
             </a>
             {% else %}
@@ -247,7 +252,7 @@
             <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.channel %}&channel={{ active_filters.channel }}{% endif %}{% if active_filters.touch_type %}&touch_type={{ active_filters.touch_type }}{% endif %}{% if active_filters.position %}&position={{ active_filters.position }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}{% if active_filters.lead %}&lead={{ active_filters.lead }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q|urlencode }}{% endif %}{% if active_filters.channel %}&channel={{ active_filters.channel }}{% endif %}{% if active_filters.touch_type %}&touch_type={{ active_filters.touch_type }}{% endif %}{% if active_filters.position %}&position={{ active_filters.position }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}{% if active_filters.lead %}&lead={{ active_filters.lead }}{% endif %}" class="btn btn-outline btn-sm">
                 Next
             </a>
             {% else %}
