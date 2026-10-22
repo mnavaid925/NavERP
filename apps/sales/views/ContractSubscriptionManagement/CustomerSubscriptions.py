@@ -91,12 +91,10 @@ def customer_subscription_create(request):
             sub.mrr = sub.calculate_mrr()
             sub.save()
             write_audit_log(
-                tenant=tenant,
                 user=request.user,
+                obj=sub,
                 action="create",
-                model_name="CustomerSubscription",
-                object_id=str(sub.pk),
-                object_repr=str(sub),
+                tenant=tenant,
             )
             messages.success(request, f"Subscription {sub.number} created successfully.")
             return redirect("sales:customer_subscription_detail", pk=sub.pk)
@@ -159,12 +157,10 @@ def customer_subscription_edit(request, pk):
             sub.mrr = sub.calculate_mrr()
             sub.save()
             write_audit_log(
-                tenant=tenant,
                 user=request.user,
+                obj=sub,
                 action="update",
-                model_name="CustomerSubscription",
-                object_id=str(sub.pk),
-                object_repr=str(sub),
+                tenant=tenant,
             )
             messages.success(request, f"Subscription {sub.number} updated successfully.")
             return redirect("sales:customer_subscription_detail", pk=sub.pk)
@@ -186,15 +182,13 @@ def customer_subscription_delete(request, pk):
     tenant = request.tenant
     subscription = get_object_or_404(CustomerSubscription.objects.filter(tenant=tenant), pk=pk)
     number = subscription.number
-    subscription.delete()
     write_audit_log(
-        tenant=tenant,
         user=request.user,
+        obj=subscription,
         action="delete",
-        model_name="CustomerSubscription",
-        object_id=str(pk),
-        object_repr=number,
+        tenant=tenant,
     )
+    subscription.delete()
     messages.success(request, f"Subscription {number} deleted successfully.")
     return redirect("sales:customer_subscription_list")
 
@@ -208,12 +202,10 @@ def customer_subscription_pause(request, pk):
     subscription.paused_at = timezone.now()
     subscription.save(update_fields=["status", "paused_at", "updated_at"])
     write_audit_log(
-        tenant=tenant,
         user=request.user,
+        obj=subscription,
         action="update",
-        model_name="CustomerSubscription",
-        object_id=str(subscription.pk),
-        object_repr=f"Paused subscription {subscription.number}",
+        tenant=tenant,
     )
     messages.success(request, f"Subscription {subscription.number} paused.")
     return redirect("sales:customer_subscription_detail", pk=subscription.pk)
@@ -228,12 +220,10 @@ def customer_subscription_resume(request, pk):
     subscription.resumed_at = timezone.now()
     subscription.save(update_fields=["status", "resumed_at", "updated_at"])
     write_audit_log(
-        tenant=tenant,
         user=request.user,
+        obj=subscription,
         action="update",
-        model_name="CustomerSubscription",
-        object_id=str(subscription.pk),
-        object_repr=f"Resumed subscription {subscription.number}",
+        tenant=tenant,
     )
     messages.success(request, f"Subscription {subscription.number} resumed to active status.")
     return redirect("sales:customer_subscription_detail", pk=subscription.pk)
@@ -254,12 +244,10 @@ def customer_subscription_cancel(request, pk):
     subscription.cancellation_reason = reason
     subscription.save(update_fields=["status", "cancelled_at", "cancellation_reason", "updated_at"])
     write_audit_log(
-        tenant=tenant,
         user=request.user,
+        obj=subscription,
         action="update",
-        model_name="CustomerSubscription",
-        object_id=str(subscription.pk),
-        object_repr=f"Cancelled subscription {subscription.number}: {reason}",
+        tenant=tenant,
     )
     messages.success(request, f"Subscription {subscription.number} cancelled.")
     return redirect("sales:customer_subscription_detail", pk=subscription.pk)
@@ -277,12 +265,10 @@ def customer_subscription_upgrade(request, pk):
         subscription.mrr = subscription.calculate_mrr()
         subscription.save(update_fields=["quantity", "unit_price", "mrr", "updated_at"])
         write_audit_log(
-            tenant=tenant,
             user=request.user,
+            obj=subscription,
             action="update",
-            model_name="CustomerSubscription",
-            object_id=str(subscription.pk),
-            object_repr=f"Upgraded {subscription.number} to {subscription.quantity} units @ {subscription.unit_price} (MRR: {subscription.mrr})",
+            tenant=tenant,
         )
         messages.success(request, f"Subscription {subscription.number} upgraded successfully.")
     else:
