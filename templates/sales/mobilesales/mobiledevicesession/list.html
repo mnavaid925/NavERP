@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Mobile Devices & Sessions — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'sales:dashboard' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Mobile Devices</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Mobile Devices & Sessions</h1>
+            <p class="text-sm text-slate-500 mt-1">Field sales mobile hardware registration, push tokens, and offline delta synchronization health.</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:mobile_sales_dashboard' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                <span>Mobile Dashboard</span>
+            </a>
+            <a href="{% url 'sales:mobile_device_session_create' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>Register Device</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Devices</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ total_devices_count }}</div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <i data-lucide="smartphone" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Active Devices</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ active_devices_count }}</div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
+                    <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Mobile Deal Alerts</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">
+                        <a href="{% url 'sales:mobile_deal_alert_list' %}" class="text-primary hover:underline text-lg font-semibold flex items-center gap-1">
+                            <span>Push Alerts</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                    <i data-lucide="bell" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Field Visits</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">
+                        <a href="{% url 'sales:field_check_in_list' %}" class="text-primary hover:underline text-lg font-semibold flex items-center gap-1">
+                            <span>Check-Ins</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
+                    <i data-lucide="map-pin" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters Card -->
+    <div class="card p-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label text-xs">Search</label>
+                {{ filter_form.q }}
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs">Platform</label>
+                {{ filter_form.platform }}
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs">Sync Status</label>
+                {{ filter_form.last_sync_status }}
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'sales:mobile_device_session_list' %}" class="btn btn-outline" title="Reset">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Table Card -->
+    <div class="card">
+        {% if devices %}
+        <div class="table-wrap overflow-x-auto">
+            <table class="table w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b text-slate-500 bg-slate-50">
+                        <th class="p-3">Device #</th>
+                        <th class="p-3">Device Name</th>
+                        <th class="p-3">User</th>
+                        <th class="p-3">Platform</th>
+                        <th class="p-3">Version</th>
+                        <th class="p-3">Sync Health</th>
+                        <th class="p-3">Cached Rows</th>
+                        <th class="p-3">Last Sync</th>
+                        <th class="p-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for device in devices %}
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="p-3 font-mono font-medium text-slate-900">
+                            <a href="{% url 'sales:mobile_device_session_detail' device.pk %}" class="text-primary hover:underline">
+                                {{ device.number }}
+                            </a>
+                        </td>
+                        <td class="p-3 font-medium text-slate-900">
+                            {{ device.device_name }}
+                            {% if not device.is_trusted %}
+                                <span class="badge badge-amber text-xs ml-1">Untrusted</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-slate-700">
+                            {% if device.user %}
+                                {{ device.user.get_full_name|default:device.user.username }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="p-3">
+                            {% if device.platform == 'ios' %}
+                                <span class="badge badge-slate flex items-center gap-1 w-fit">
+                                    <i data-lucide="apple" class="w-3.5 h-3.5"></i>
+                                    <span>iOS</span>
+                                </span>
+                            {% elif device.platform == 'android' %}
+                                <span class="badge badge-green flex items-center gap-1 w-fit">
+                                    <i data-lucide="smartphone" class="w-3.5 h-3.5"></i>
+                                    <span>Android</span>
+                                </span>
+                            {% else %}
+                                <span class="badge badge-info flex items-center gap-1 w-fit">
+                                    <i data-lucide="globe" class="w-3.5 h-3.5"></i>
+                                    <span>PWA Web</span>
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-xs text-slate-600 font-mono">{{ device.app_version|default:"v1.0" }}</td>
+                        <td class="p-3">
+                            {% if device.last_sync_status == 'success' %}
+                                <span class="badge badge-green">Synchronized</span>
+                            {% elif device.last_sync_status == 'partial' %}
+                                <span class="badge badge-amber">Partial</span>
+                            {% elif device.last_sync_status == 'failed' %}
+                                <span class="badge badge-red">Failed</span>
+                            {% else %}
+                                <span class="badge badge-slate">Pending</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 font-mono text-xs text-slate-700">{{ device.offline_records_cached }}</td>
+                        <td class="p-3 text-xs text-slate-600 font-mono">
+                            {% if device.last_sync_at %}
+                                {{ device.last_sync_at|date:"Y-m-d H:i" }}
+                            {% else %}
+                                Never
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-right">
+                            <div class="table-actions inline-flex items-center gap-1">
+                                <a href="{% url 'sales:mobile_device_session_detail' device.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'sales:mobile_device_session_edit' device.pk %}" class="btn btn-icon btn-outline" title="Edit Device">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'sales:mobile_device_session_delete' device.pk %}" class="inline" onsubmit="return confirm('Remove this mobile device?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Remove Device">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} devices
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.platform %}&platform={{ request.GET.platform }}{% endif %}" class="btn btn-outline btn-sm">
+                    Previous
+                </a>
+                {% endif %}
+                <span class="px-3 py-1 text-sm text-slate-700 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.platform %}&platform={{ request.GET.platform }}{% endif %}" class="btn btn-outline btn-sm">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state p-12 text-center">
+            <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3">
+                <i data-lucide="smartphone" class="w-6 h-6"></i>
+            </div>
+            <h3 class="text-base font-semibold text-slate-900">No mobile devices registered</h3>
+            <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Register field rep smartphones or tablets to manage push notifications and offline cache manifests.</p>
+            <div class="mt-4">
+                <a href="{% url 'sales:mobile_device_session_create' %}" class="btn btn-primary">Register Device</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
