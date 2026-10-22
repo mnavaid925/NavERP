@@ -46,3 +46,18 @@ Sub-module 8.15 demonstrates clean architectural integration with the core spine
 - **[MINOR]** `templates/sales/contractsubscriptionmanagement/customercontract/list.html:63`: The contract filter grid omits the `owner` dropdown defined in `CustomerContractFilterForm`. Fix: Add the `owner` dropdown to the contract list filter bar.
 - **[MINOR]** `templates/sales/contractsubscriptionmanagement/boards/contract_subscription_workspace.html:106`: The view calculates and passes `urgent_subscriptions` in context, but the template only renders tables for `urgent_contracts` and `at_risk_obligations`. Fix: Add an `urgent_subscriptions` table widget to the dashboard layout.
 
+---
+
+## 3. Frontend Reviewer Findings
+
+### Verdict
+All 14 templates for Sub-module 8.15 exhibit high quality and strong adherence to NavERP design standards, with clean layout structure, complete CRUD actions, zero comment leaks, and correct color-named badges, with only minor filter omissions and KPI label adjustments required.
+
+### Findings
+- **[IMPORTANT]** `templates/sales/contractsubscriptionmanagement/customersubscription/list.html:63`: Filter completeness omission: `CustomerSubscriptionFilterForm` and `customer_subscription_list` view define and process an `account` filter, but the template omits the `account` select dropdown from the filter bar. Fix: Add an `account` `<select>` dropdown populated from `filter_form.fields.account.queryset` with `{% if request.GET.account == acc.pk|stringformat:"d" %}selected{% endif %}`.
+- **[IMPORTANT]** `templates/sales/contractsubscriptionmanagement/contractobligation/list.html:59`: Filter completeness omission: `ContractObligationFilterForm` and `contract_obligation_list` view define and process an `assigned_to` filter, but the template omits the `assigned_to` select dropdown from the filter bar. Fix: Add an `assigned_to` `<select>` dropdown populated from `filter_form.fields.assigned_to.queryset` with `{% if request.GET.assigned_to == u.pk|stringformat:"d" %}selected{% endif %}`.
+- **[IMPORTANT]** `templates/sales/contractsubscriptionmanagement/customersubscription/list.html:54`: Misleading KPI stat card metric: The stat card header displays "Total Annualized ARR", but the value rendered is `${{ total_mrr|floatformat:2|default:"0" }} / mo`. Fix: Pass `total_arr = (total_mrr * Decimal("12.00")).quantize(Decimal("0.01"))` in the view context and render `${{ total_arr|floatformat:2 }}`, or update the card label to reflect Monthly Recurring Revenue.
+- **[MINOR]** `templates/sales/contractsubscriptionmanagement/contractobligation/list.html:28` & `templates/sales/contractsubscriptionmanagement/boards/renewal_automation_dashboard.html:32`: Non-standard stat-icon color `<div class="stat-icon red">` is used for alert cards. Fix: Use `stat-icon orange` for consistency with system guidelines.
+- **[MINOR]** `templates/sales/contractsubscriptionmanagement/usagemeterrecord/detail.html:180`: None-safe display convention: `{{ usage_record.subscription.plan_code }}` is rendered without a fallback default filter. Fix: Add `|default:"—"`.
+
+
