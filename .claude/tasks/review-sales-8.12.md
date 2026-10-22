@@ -119,9 +119,9 @@
   `WinLossDebriefs.py:87-104` queries `outcomes`, `accounts`, `users`; `RepPerformanceScorecards.py:105-107` queries `currencies`, `quota_plans`, `managers`. These are never rendered in template filters.
   *Fix:* Remove unused querysets. Fixed — `fc9e15e7`, `cb6a7801` `fix(sales): remove unused queries from win_loss_debrief_list and rep_performance_scorecard_list`.
 
-- [ ] **I12 — Missing composite indexes on hot sort/filter columns.**
+- [x] **I12 — Missing composite indexes on hot sort/filter columns.**
   `WinLossDebrief`: `(tenant, -debriefed_on)`, `(tenant, interview_channel)`. `StageVelocityAnalysis`: `(tenant, -period_end)`. `RepPerformanceScorecard`: `(tenant, -period_end)`.
-  *Fix:* Add `models.Index` in `Meta.indexes` and generate incremental migration `0027`.
+  *Fix:* Add `models.Index` in `Meta.indexes` and generate incremental migration `0027`. Fixed — `066f3255`, `a675533a`, `c98b320d`, `65c79ec3` `feat(sales): add composite indexes and migration 0027 for SalesAnalytics models`.
 
 ---
 
