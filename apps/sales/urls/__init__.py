@@ -48,6 +48,8 @@ from .MarketingAlignment import urlpatterns as _marketing_alignment
 from .SalesAnalytics import urlpatterns as _sales_analytics
 # 8.14 Partner & Channel Management.
 from .PartnerChannel import urlpatterns as _partner_channel
+# 8.15 Contract & Subscription Management.
+from .ContractSubscriptionManagement import urlpatterns as _contract_subscription
 
 app_name = "sales"
 
@@ -88,6 +90,8 @@ urlpatterns = [
     *_sales_analytics,
     # 8.14 Partner & Channel Management.
     *_partner_channel,
+    # 8.15 Contract & Subscription Management.
+    *_contract_subscription,
     *_pipelines,
     *_teams,
     *_competitors,
