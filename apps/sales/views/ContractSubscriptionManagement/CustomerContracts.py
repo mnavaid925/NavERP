@@ -180,6 +180,9 @@ def customer_contract_delete(request, pk):
 def customer_contract_activate(request, pk):
     tenant = request.tenant
     contract = get_object_or_404(CustomerContract.objects.filter(tenant=tenant), pk=pk)
+    if contract.status in ("active", "terminated", "expired"):
+        messages.error(request, f"Contract {contract.number} cannot be activated from status '{contract.get_status_display()}'.")
+        return redirect("sales:customer_contract_detail", pk=contract.pk)
     contract.status = "active"
     if not contract.signed_at:
         contract.signed_at = timezone.now()
