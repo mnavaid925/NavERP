@@ -83,9 +83,9 @@
   `apps/sales/management/commands/seed_sales.py:3232-3234`. `period_start = today - timedelta(days=90)` and `period_end = today`; three guards key on `(entity, period_start)`, which drifts daily.
   *Fix:* Anchor `period_start` and `period_end` to fixed calendar boundaries (e.g. current quarter start/end or stable fixed dates). Fixed — `c2a12eba` `fix(sales): anchor seeder period_start and period_end to stable calendar quarter boundaries`.
 
-- [ ] **I3 — The seeded `stage_to_stage` funnel record can violate the model's own `clean()` sequence rule.**
+- [x] **I3 — The seeded `stage_to_stage` funnel record can violate the model's own `clean()` sequence rule.**
   `apps/sales/management/commands/seed_sales.py:3346, 3357-3358`. `objects.create()` does not call `clean()`. If `open_stages[0]` and `open_stages[1]` span different pipelines or share sequence, `to_stage.sequence > from_stage.sequence` is violated.
-  *Fix:* Pick stages explicitly from the same pipeline with strictly increasing sequence.
+  *Fix:* Pick stages explicitly from the same pipeline with strictly increasing sequence. Fixed — `60a0c470` `fix(sales): pick stage_to_stage funnel stages from same pipeline with strictly increasing sequence`.
 
 - [ ] **I4 — The seeded "bottleneck" is the fastest stage — the demo board contradicts itself.**
   `apps/sales/management/commands/seed_sales.py:3313-3333`. `idx == 0` (median 4 days) is flagged as bottleneck while `idx == 2` (median 16 days) is not.
