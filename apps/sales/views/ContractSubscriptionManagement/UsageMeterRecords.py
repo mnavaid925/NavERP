@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.sales.forms.ContractSubscriptionManagement.UsageMeterRecords import (
     UsageMeterRecordFilterForm,
@@ -154,10 +155,14 @@ def usage_meter_record_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 @transaction.atomic
 def usage_meter_record_delete(request, pk):
     tenant = request.tenant
     meter = get_object_or_404(UsageMeterRecord.objects.filter(tenant=tenant), pk=pk)
+    if meter.status == "invoiced":
+        messages.error(request, f"Invoiced usage record {meter.number} cannot be deleted.")
+        return redirect("sales:usage_meter_record_detail", pk=meter.pk)
     number = meter.number
     write_audit_log(
         user=request.user,
