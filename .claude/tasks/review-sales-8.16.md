@@ -19,3 +19,18 @@
 ### Minor
 - [ ] **M1** (`apps/sales/models/MobileSales/FieldCheckIns.py:204-213`): `FieldCheckIn.clean()` omits `contact`, `opportunity`, and `communication_log` from the tenant isolation validation loop.
 - [ ] **M2** (`apps/sales/views/MobileSales/FieldSalesRoutes.py:58`): Benign unused context key `status_choices` passed to template context where `filter_form.status` is rendered.
+
+---
+
+## Pass 2: explorer
+
+### Critical
+*(None)*
+
+### Important
+- [ ] **I5** (`apps/sales/models/MobileSales/FieldCheckIns.py:204-213`): Cross-tenant foreign key isolation gap in `FieldCheckIn.clean()`. The validation loop checks `party`, `sales_rep`, `route`, `photo_document`, and `resulting_quote`, but omits `contact`, `opportunity`, and `communication_log`. All three are tenant-scoped models and must be validated against `self.tenant_id`.
+
+### Minor
+- [ ] **M3** (`apps/sales/models/MobileSales/FieldSalesRoutes.py:105-110`): `generate_navigation_url()` returns `"https://maps.google.com"` fallback when no waypoints are set, causing the "Open Navigation" button to always render. Return `None` when locations are empty.
+- [ ] **M4** (`apps/sales/models/MobileSales/FieldCheckIns.py:177-180`): Departure GPS coordinates (`check_out_lat`, `check_out_lng`) lack range validation (-90 to 90, -180 to 180) in `clean()`, unlike arrival coordinates.
+- [ ] **M5** (`apps/sales/views/MobileSales/MobileDealAlerts.py:85-88, 177-183`): Audit logging omission when marking alerts as read in `mobile_deal_alert_mark_read` and auto-read in detail view.
