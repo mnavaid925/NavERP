@@ -41,7 +41,7 @@
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Open for Registration</div>
             <div class="text-2xl font-bold text-slate-900 mt-1">
                 {{ stats.published_count|default:"0" }}
-                <span class="text-sm font-medium text-slate-500">/ {{ stats.upcoming_count|default:"0" }} upcoming</span>
+                <span class="text-sm font-medium text-slate-500">published</span>
             </div>
         </div>
     </div>
@@ -233,7 +233,7 @@
         </div>
         <div class="pagination-actions">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.event_type %}&event_type={{ active_filters.event_type }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if active_filters.q %}&q={{ active_filters.q|urlencode }}{% endif %}{% if active_filters.event_type %}&event_type={{ active_filters.event_type }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
                 Previous
             </a>
             {% else %}
@@ -243,7 +243,7 @@
             <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q }}{% endif %}{% if active_filters.event_type %}&event_type={{ active_filters.event_type }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if active_filters.q %}&q={{ active_filters.q|urlencode }}{% endif %}{% if active_filters.event_type %}&event_type={{ active_filters.event_type }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}{% if active_filters.owner %}&owner={{ active_filters.owner }}{% endif %}{% if active_filters.campaign %}&campaign={{ active_filters.campaign }}{% endif %}" class="btn btn-outline btn-sm">
                 Next
             </a>
             {% else %}
