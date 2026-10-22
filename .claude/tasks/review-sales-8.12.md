@@ -99,9 +99,9 @@
   `templates/sales/salesanalytics/stagevelocityanalysis/list.html:184`, `detail.html:23, 146, 252`. `is_bottleneck` is `models.BooleanField(default=False)` without choices. `{{ analysis.get_is_bottleneck_display }}` evaluates to `""`, rendering an empty badge `<span class="badge badge-muted"></span>`.
   *Fix:* Add `@property def bottleneck_display(self): return "Bottleneck" if self.is_bottleneck else "Normal"` to `StageVelocityAnalysis` and update templates. Fixed — `2d6949e9`, `d6c8ff32`, `188d5732` `feat/fix(sales): add bottleneck_display property and update stage velocity analysis templates`.
 
-- [ ] **I7 — Python loop aggregation over entire model table in `benchmark_console`.**
+- [x] **I7 — Python loop aggregation over entire model table in `benchmark_console`.**
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:1221-1226`. Loads all `QuotaPlan` rows into memory and sums `quota_ref.target_amount` in Python.
-  *Fix:* Use `QuotaPlan.objects.filter(tenant=tenant).aggregate(count=Count("id"), target_total=Sum("quota_ref__target_amount"))`.
+  *Fix:* Use `QuotaPlan.objects.filter(tenant=tenant).aggregate(count=Count("id"), target_total=Sum("quota_ref__target_amount"))`. Fixed — `1e06099e` `fix(sales): use SQL aggregate for QuotaPlan target_total in benchmark_console`.
 
 - [ ] **I8 — Python loop `sum()` and redundant count query in `_activity_totals`.**
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:1154-1157`. Pulls `planned_minutes` flat into Python to sum, and fires a separate count query.
