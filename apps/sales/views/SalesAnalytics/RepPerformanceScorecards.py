@@ -18,7 +18,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from apps.accounts.models import User
-from apps.accounting.models import Currency
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.crm.models import Territory
@@ -29,7 +28,6 @@ from apps.sales.models.SalesAnalytics.RepPerformanceScorecards import (
     RepPerformanceScorecard,
 )
 from apps.sales.models.SalesForecasting.ForecastPeriods import ForecastPeriod
-from apps.sales.models.TerritoryQuotaManagement.QuotaPlans import QuotaPlan
 from apps.sales.views.SalesAnalytics._helpers import _pk_filter
 
 
@@ -101,10 +99,6 @@ def rep_performance_scorecard_list(request):
 
     users = User.objects.filter(tenant=request.tenant, is_active=True).order_by("username")
     territories = Territory.objects.filter(tenant=request.tenant).order_by("name")
-    # Currency is GLOBAL — no tenant FK (L29) — so it is NOT tenant-filtered.
-    currencies = Currency.objects.all().order_by("code")
-    # QuotaPlan has no `name` field; ordering by it would raise FieldError.
-    quota_plans = QuotaPlan.objects.filter(tenant=request.tenant).order_by("-created_at")
     forecast_periods = ForecastPeriod.objects.filter(tenant=request.tenant).order_by("-start_date")
 
     context = {
@@ -115,9 +109,6 @@ def rep_performance_scorecard_list(request):
         "rating_choices": SCORECARD_RATING_CHOICES,
         "reps": users,
         "territories": territories,
-        "managers": users,
-        "currencies": currencies,
-        "quota_plans": quota_plans,
         "forecast_periods": forecast_periods,
         "stats": stats,
         "active_filters": {
