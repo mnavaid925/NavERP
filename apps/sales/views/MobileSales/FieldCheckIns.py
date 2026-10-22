@@ -183,8 +183,8 @@ def field_check_in_delete(request, pk):
         tenant=tenant,
     )
     check_in.delete()
-    if route and route.completed_stops > 0:
-        route.completed_stops = max(0, route.completed_stops - 1)
+    if route:
+        route.completed_stops = route.check_ins.filter(check_out_at__isnull=False).count()
         route.save(update_fields=["completed_stops"])
     messages.success(request, f"Check-In '{num}' deleted successfully.")
     return redirect("sales:field_check_in_list")
