@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ route.number }} — {{ route.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'sales:dashboard' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:field_sales_route_list' %}" class="hover:text-primary">Field Sales Routes</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ route.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">{{ route.name }}</h1>
+                {% if route.status == 'completed' %}
+                    <span class="badge badge-green">Completed</span>
+                {% elif route.status == 'in_progress' %}
+                    <span class="badge badge-info">In Progress</span>
+                {% elif route.status == 'scheduled' %}
+                    <span class="badge badge-amber">Scheduled</span>
+                {% elif route.status == 'cancelled' %}
+                    <span class="badge badge-red">Cancelled</span>
+                {% else %}
+                    <span class="badge badge-slate">Draft</span>
+                {% endif %}
+                <span class="text-xs text-slate-400 font-mono">({{ route.number }})</span>
+            </div>
+            <p class="text-sm text-slate-500 mt-1">Scheduled for {{ route.route_date|date:"F d, Y" }} · Assigned to {{ route.sales_rep.get_full_name|default:route.sales_rep.username }}</p>
+        </div>
+        <div class="page-actions flex flex-wrap items-center gap-2">
+            {% if route.generate_navigation_url %}
+            <a href="{{ route.generate_navigation_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline flex items-center gap-2 text-blue-600 border-blue-200 hover:bg-blue-50">
+                <i data-lucide="navigation" class="w-4 h-4"></i>
+                <span>Open Navigation</span>
+            </a>
+            {% endif %}
+            {% if route.optimization_status != 'optimized' %}
+            <form method="post" action="{% url 'sales:field_sales_route_optimize' route.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline flex items-center gap-2 text-purple-600 border-purple-200 hover:bg-purple-50">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i>
+                    <span>Optimize Order</span>
+                </button>
+            </form>
+            {% endif %}
+            <a href="{% url 'sales:field_check_in_create' %}?route={{ route.pk }}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="map-pin" class="w-4 h-4"></i>
+                <span>Record Check-In</span>
+            </a>
+            <a href="{% url 'sales:field_sales_route_edit' route.pk %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+                <span>Edit</span>
+            </a>
+            <form method="post" action="{% url 'sales:field_sales_route_delete' route.pk %}" class="inline" onsubmit="return confirm('Delete this route and unlink its visits?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-icon" title="Delete">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Metrics Row -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Progress</div>
+            <div class="flex items-center justify-between mt-1">
+                <span class="text-2xl font-bold text-slate-900">{{ route.progress_display }}</span>
+                <span class="text-sm font-semibold text-primary font-mono">{{ completion_rate }}%</span>
+            </div>
+            <div class="progress w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-3">
+                <div class="progress-bar bg-primary h-full" style="width: {{ completion_rate }}%;"></div>
+            </div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Distance (Planned / Actual)</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ route.planned_distance_km }} <span class="text-sm font-normal text-slate-500">km</span> /
+                <span class="text-slate-600">{{ route.actual_distance_km }}</span> <span class="text-sm font-normal text-slate-500">km</span>
+            </div>
+            <div class="text-xs text-slate-500 mt-2 flex items-center gap-1">
+                <i data-lucide="gauge" class="w-3.5 h-3.5"></i>
+                <span>Odometer tracking</span>
+            </div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Duration (Est / Actual)</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">
+                {{ route.estimated_duration_minutes }} <span class="text-sm font-normal text-slate-500">min</span> /
+                <span class="text-slate-600">{{ route.actual_duration_minutes }}</span> <span class="text-sm font-normal text-slate-500">min</span>
+            </div>
+            <div class="text-xs text-slate-500 mt-2 flex items-center gap-1">
+                <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+                <span>Travel + visit duration</span>
+            </div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Optimization Status</div>
+            <div class="mt-2">
+                {% if route.optimization_status == 'optimized' %}
+                    <span class="badge badge-green flex items-center gap-1 w-fit">
+                        <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                        <span>Route Optimized</span>
+                    </span>
+                {% elif route.optimization_status == 'manual_order' %}
+                    <span class="badge badge-info flex items-center gap-1 w-fit">
+                        <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+                        <span>Manual Custom Order</span>
+                    </span>
+                {% else %}
+                    <span class="badge badge-slate flex items-center gap-1 w-fit">
+                        <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
+                        <span>Unoptimized Sequence</span>
+                    </span>
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 mt-2">Sequential waypoint order</div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Route Info & Waypoints -->
+        <div class="space-y-6 lg:col-span-1">
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="info" class="w-4 h-4 text-primary"></i>
+                        <span>Route Details</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 space-y-3 text-sm">
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Start Waypoint</span>
+                        <span class="font-medium text-slate-800">{{ route.start_location|default:"— Not specified —" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">End Waypoint</span>
+                        <span class="font-medium text-slate-800">{{ route.end_location|default:"— Not specified —" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Field Sales Rep</span>
+                        <span class="font-medium text-slate-800">{{ route.sales_rep.get_full_name|default:route.sales_rep.username }}</span>
+                        <span class="text-xs text-slate-500 block">{{ route.sales_rep.email }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Created / Updated</span>
+                        <span class="text-xs text-slate-600">{{ route.created_at|date:"Y-m-d H:i" }} · {{ route.updated_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                    {% if route.notes %}
+                    <div class="pt-2 border-t border-slate-100">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block mb-1">Dispatcher Briefing / Notes</span>
+                        <p class="text-slate-700 whitespace-pre-line text-xs bg-slate-50 p-2.5 rounded border border-slate-100">{{ route.notes }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Scheduled Stops & Visits -->
+        <div class="space-y-6 lg:col-span-2">
+            <div class="card">
+                <div class="card-header border-b p-4 flex items-center justify-between">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="list-ordered" class="w-4 h-4 text-primary"></i>
+                        <span>Itinerary Stops & Recorded Visits ({{ stops.count }})</span>
+                    </h2>
+                    <a href="{% url 'sales:field_check_in_create' %}?route={{ route.pk }}" class="btn btn-outline btn-sm flex items-center gap-1">
+                        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                        <span>Add Stop Visit</span>
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    {% if stops %}
+                    <div class="table-wrap overflow-x-auto">
+                        <table class="table w-full text-left text-sm">
+                            <thead>
+                                <tr class="border-b text-slate-500 bg-slate-50">
+                                    <th class="p-3">#</th>
+                                    <th class="p-3">Customer / Site</th>
+                                    <th class="p-3">Arrival</th>
+                                    <th class="p-3">Geofence</th>
+                                    <th class="p-3">Purpose / Outcome</th>
+                                    <th class="p-3">Duration</th>
+                                    <th class="p-3 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                {% for stop in stops %}
+                                <tr class="hover:bg-slate-50 transition">
+                                    <td class="p-3 font-mono font-bold text-slate-900">{{ stop.stop_number }}</td>
+                                    <td class="p-3 font-medium text-slate-900">
+                                        <a href="{% url 'sales:field_check_in_detail' stop.pk %}" class="text-primary hover:underline">
+                                            {{ stop.party.name }}
+                                        </a>
+                                        {% if stop.contact %}
+                                            <div class="text-xs text-slate-500">{{ stop.contact.name }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-3 text-xs text-slate-600 font-mono">{{ stop.check_in_at|date:"H:i" }}</td>
+                                    <td class="p-3">
+                                        {% if stop.is_geofence_verified %}
+                                            <span class="badge badge-green text-xs">Verified ({{ stop.distance_from_target_m|default:"0" }}m)</span>
+                                        {% else %}
+                                            <span class="badge badge-amber text-xs">{{ stop.get_verification_status_display }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-3">
+                                        <div class="text-xs font-medium text-slate-800">{{ stop.get_visit_purpose_display }}</div>
+                                        <div class="text-xs text-slate-500">{{ stop.get_outcome_display }}</div>
+                                    </td>
+                                    <td class="p-3 font-mono text-xs text-slate-600">
+                                        {% if stop.duration_minutes %}
+                                            {{ stop.duration_minutes }} min
+                                        {% elif stop.check_out_at %}
+                                            Completed
+                                        {% else %}
+                                            <span class="text-amber-600 font-semibold">On-Site</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-3 text-right">
+                                        <a href="{% url 'sales:field_check_in_detail' stop.pk %}" class="btn btn-icon btn-outline" title="View Stop">
+                                            <i data-lucide="eye" class="w-4 h-4"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-8 text-center text-slate-500">
+                        <i data-lucide="map-pin-off" class="w-8 h-8 mx-auto text-slate-300 mb-2"></i>
+                        <p class="text-sm font-medium text-slate-700">No visits recorded for this route yet</p>
+                        <p class="text-xs text-slate-400 mt-1">Field check-ins and stop arrivals recorded for this route will appear here in sequence.</p>
+                        <div class="mt-4">
+                            <a href="{% url 'sales:field_check_in_create' %}?route={{ route.pk }}" class="btn btn-primary btn-sm">Record Arrival Check-In</a>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
