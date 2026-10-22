@@ -394,6 +394,43 @@ from .PartnerChannel import (
     partner_profile_list,
 )
 
+# 8.15 Contract & Subscription Management
+from .ContractSubscriptionManagement import (
+    contract_obligation_breach,
+    contract_obligation_create,
+    contract_obligation_delete,
+    contract_obligation_detail,
+    contract_obligation_edit,
+    contract_obligation_fulfill,
+    contract_obligation_list,
+    contract_subscription_workspace,
+    customer_contract_activate,
+    customer_contract_create,
+    customer_contract_delete,
+    customer_contract_detail,
+    customer_contract_edit,
+    customer_contract_execute_auto_renew,
+    customer_contract_generate_renewal_quote,
+    customer_contract_list,
+    customer_subscription_cancel,
+    customer_subscription_create,
+    customer_subscription_delete,
+    customer_subscription_detail,
+    customer_subscription_edit,
+    customer_subscription_list,
+    customer_subscription_pause,
+    customer_subscription_resume,
+    customer_subscription_upgrade,
+    renewal_automation_dashboard,
+    usage_meter_record_calculate,
+    usage_meter_record_create,
+    usage_meter_record_delete,
+    usage_meter_record_detail,
+    usage_meter_record_edit,
+    usage_meter_record_invoice,
+    usage_meter_record_list,
+)
+
 # View functions exported for URLconf routing and external imports
 __all__ = [
     name for name in globals()
@@ -433,6 +470,9 @@ __all__ = [
         # 8.14 Partner & Channel Management
         "partner_profile_", "partner_performance_console",
         "deal_registration_", "joint_account_plan_", "channel_conflict_",
+        # 8.15 Contract & Subscription Management
+        "usage_meter_record_", "contract_obligation_",
+        "contract_subscription_workspace", "renewal_automation_dashboard",
     ))
 ]
 
