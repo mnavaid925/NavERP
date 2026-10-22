@@ -142,6 +142,24 @@ from .ContractSubscriptionManagement import (
     CustomerSubscription,
     UsageMeterRecord,
 )
+# 8.16 Mobile Sales. Reuses core.Party, core.Address, core.Document, accounts.User,
+# crm.Opportunity, crm.CommunicationLog, sales.CPQQuote, sales.FieldSalesRoute.
+from .MobileSales import (
+    ALERT_TYPE_CHOICES,
+    OPTIMIZATION_STATUS_CHOICES,
+    PLATFORM_CHOICES,
+    PUSH_STATUS_CHOICES,
+    ROUTE_STATUS_CHOICES,
+    SYNC_STATUS_CHOICES,
+    URGENCY_CHOICES,
+    VERIFICATION_STATUS_CHOICES,
+    VISIT_OUTCOME_CHOICES,
+    VISIT_PURPOSE_CHOICES,
+    FieldCheckIn,
+    FieldSalesRoute,
+    MobileDealAlert,
+    MobileDeviceSession,
+)
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
@@ -197,6 +215,12 @@ __all__ = [
     "SUBSCRIPTION_STATUS_CHOICES", "PRICING_MODEL_CHOICES", "BILLING_CADENCE_CHOICES",
     "USAGE_STATUS_CHOICES", "OBLIGATION_TYPE_CHOICES", "OBLIGATION_STATUS_CHOICES",
     "PENALTY_STATUS_CHOICES",
+    # 8.16 Mobile Sales
+    "FieldSalesRoute", "FieldCheckIn", "MobileDeviceSession", "MobileDealAlert",
+    "ROUTE_STATUS_CHOICES", "OPTIMIZATION_STATUS_CHOICES",
+    "VERIFICATION_STATUS_CHOICES", "VISIT_PURPOSE_CHOICES", "VISIT_OUTCOME_CHOICES",
+    "PLATFORM_CHOICES", "SYNC_STATUS_CHOICES",
+    "ALERT_TYPE_CHOICES", "URGENCY_CHOICES", "PUSH_STATUS_CHOICES",
 ]
 
 
