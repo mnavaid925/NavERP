@@ -62,7 +62,7 @@ class CustomerContractForm(TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
-            self.fields["account"].queryset = Party.objects.filter(tenant=self.tenant)
+            self.fields["account"].queryset = Party.objects.filter(tenant=self.tenant, roles__role="customer").distinct()
             self.fields["owner"].queryset = tenant_users(self.tenant)
             self.fields["originating_quote"].queryset = CPQQuote.objects.filter(tenant=self.tenant)
             self.fields["originating_order"].queryset = SalesOrder.objects.filter(tenant=self.tenant)
@@ -108,4 +108,4 @@ class CustomerContractFilterForm(forms.Form):
         super().__init__(*args, **kwargs)
         if tenant is not None:
             self.fields["owner"].queryset = tenant_users(tenant)
-            self.fields["account"].queryset = Party.objects.filter(tenant=tenant)
+            self.fields["account"].queryset = Party.objects.filter(tenant=tenant, roles__role="customer").distinct()
