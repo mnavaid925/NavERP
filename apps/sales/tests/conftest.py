@@ -5034,3 +5034,256 @@ def ma_registration_a(tenant_a, ma_event_a, ma_lead_a, ma_customer_a):
 @pytest.fixture
 def ma_registration_b(tenant_b, ma_event_b, ma_lead_b, ma_customer_b):
     return _marketingalignment_registration(tenant_b, ma_event_b, ma_lead_b, ma_customer_b)
+
+
+# ===== 8.12 Sales Analytics & Intelligence (appended by the 8.12 test-contract step) =====
+from apps.sales.models.SalesAnalytics.WinLossDebriefs import WinLossDebrief  # noqa: E402
+from apps.sales.models.SalesAnalytics.StageVelocityAnalyses import StageVelocityAnalysis  # noqa: E402
+from apps.sales.models.SalesAnalytics.FunnelConversionRecords import FunnelConversionRecord  # noqa: E402
+from apps.sales.models.SalesAnalytics.RepPerformanceScorecards import RepPerformanceScorecard  # noqa: E402
+
+
+def _salesanalytics_currency(code="USD", name="US Dollar", symbol="$"):
+    from apps.accounting.models import Currency
+    curr, _ = Currency.objects.get_or_create(
+        code=code, defaults={"name": name, "symbol": symbol, "is_active": True}
+    )
+    return curr
+
+
+def _salesanalytics_opportunity(tenant, owner=None, name="Enterprise SaaS Deal", **overrides):
+    from apps.crm.models import Opportunity
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "owner": owner,
+        "stage": "proposal",
+        "amount": Decimal("100000.00"),
+        "probability": 75,
+        "close_date": timezone.localdate() + timedelta(days=30),
+    }
+    defaults.update(overrides)
+    return Opportunity.objects.create(**defaults)
+
+
+def _salesanalytics_outcome(tenant, opportunity, result="won", **overrides):
+    from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import OpportunityOutcome
+    defaults = {
+        "tenant": tenant,
+        "opportunity": opportunity,
+        "result": result,
+        "closed_at": timezone.now(),
+    }
+    defaults.update(overrides)
+    return OpportunityOutcome.objects.create(**defaults)
+
+
+def _salesanalytics_reason(tenant, name="Price Competitiveness", result="both", category="price", **overrides):
+    from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import WinLossReason
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "result": result,
+        "category": category,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return WinLossReason.objects.create(**defaults)
+
+
+def _salesanalytics_customer(tenant, name="Analytics Test Client", **overrides):
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant, name=name, kind="organization")
+    PartyRole.objects.get_or_create(tenant=tenant, party=party, role="customer")
+    return party
+
+
+def _salesanalytics_pipeline(tenant, name="Direct Sales Pipeline", **overrides):
+    from apps.sales.models import Pipeline
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "code": f"PIPE-{tenant.pk}-{timezone.now().microsecond}",
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return Pipeline.objects.create(**defaults)
+
+
+def _salesanalytics_stage(tenant, pipeline, name="Proposal", sequence=10, **overrides):
+    from apps.sales.models import PipelineStage
+    defaults = {
+        "tenant": tenant,
+        "pipeline": pipeline,
+        "name": name,
+        "sequence": sequence,
+        "stage_kind": "open",
+        "target_days": 14,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return PipelineStage.objects.create(**defaults)
+
+
+def _salesanalytics_debrief(tenant, opportunity, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "opportunity": opportunity,
+        "debriefed_on": timezone.localdate(),
+        "interview_channel": "interview",
+        "buyer_quote": "Great product fit, reasonable price.",
+        "counterfactual": "Earlier security review would have accelerated closing.",
+        "feedback_team": "sales",
+        "action_items": "Update security documentation pack.",
+        "status": "submitted",
+        "decision_drivers": [{"driver": "Product Fit", "sentiment": "positive", "weight": 5, "quote": "Best UX"}],
+    }
+    defaults.update(overrides)
+    return WinLossDebrief.objects.create(**defaults)
+
+
+def _salesanalytics_velocity(tenant, pipeline, pipeline_stage, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "pipeline": pipeline,
+        "pipeline_stage": pipeline_stage,
+        "period_start": timezone.localdate() - timedelta(days=90),
+        "period_end": timezone.localdate(),
+        "opportunity_count": 12,
+        "median_days_in_stage": Decimal("14.00"),
+        "p90_days_in_stage": Decimal("25.00"),
+        "max_days_in_stage": 40,
+        "sales_cycle_days": Decimal("65.00"),
+        "velocity_value": Decimal("180000.00"),
+        "is_bottleneck": True,
+        "bottleneck_rank": 1,
+        "recommendation": "Streamline legal redline phase.",
+        "benchmark_days": Decimal("12.00"),
+        "status": "reviewed",
+    }
+    defaults.update(overrides)
+    return StageVelocityAnalysis.objects.create(**defaults)
+
+
+def _salesanalytics_funnel(tenant, from_stage=None, to_stage=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "label": "Q4 Enterprise Conversion Funnel",
+        "funnel_scope": "lead_to_opportunity",
+        "from_stage": from_stage,
+        "to_stage": to_stage,
+        "period_start": timezone.localdate() - timedelta(days=90),
+        "period_end": timezone.localdate(),
+        "entered_count": 100,
+        "converted_count": 40,
+        "skipped_count": 5,
+        "avg_cycle_days": Decimal("20.00"),
+        "benchmark_pct": Decimal("35.00"),
+    }
+    defaults.update(overrides)
+    return FunnelConversionRecord.objects.create(**defaults)
+
+
+def _salesanalytics_scorecard(tenant, rep, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "rep": rep,
+        "period_start": timezone.localdate() - timedelta(days=90),
+        "period_end": timezone.localdate(),
+        "activities_logged": 150,
+        "calls_logged": 80,
+        "emails_logged": 50,
+        "meetings_logged": 20,
+        "opportunities_created": 15,
+        "opportunities_won": 5,
+        "opportunities_lost": 3,
+        "pipeline_value": Decimal("400000.00"),
+        "revenue_closed": Decimal("200000.00"),
+        "quota_target": Decimal("200000.00"),
+        "overall_score": Decimal("90.00"),
+        "rating": "strong",
+        "status": "approved",
+    }
+    defaults.update(overrides)
+    return RepPerformanceScorecard.objects.create(**defaults)
+
+
+@pytest.fixture
+def sa_opportunity_a(tenant_a, admin_user):
+    return _salesanalytics_opportunity(tenant_a, owner=admin_user, name="Acme Q4 Cloud Deal")
+
+
+@pytest.fixture
+def sa_opportunity_b(tenant_b, admin_b):
+    return _salesanalytics_opportunity(tenant_b, owner=admin_b, name="Globex Q4 AI Deal")
+
+
+@pytest.fixture
+def sa_pipeline_a(tenant_a):
+    return _salesanalytics_pipeline(tenant_a, name="Acme Sales Pipeline")
+
+
+@pytest.fixture
+def sa_pipeline_b(tenant_b):
+    return _salesanalytics_pipeline(tenant_b, name="Globex Sales Pipeline")
+
+
+@pytest.fixture
+def sa_stage_a1(tenant_a, sa_pipeline_a):
+    return _salesanalytics_stage(tenant_a, sa_pipeline_a, name="Discovery", sequence=10)
+
+
+@pytest.fixture
+def sa_stage_a2(tenant_a, sa_pipeline_a):
+    return _salesanalytics_stage(tenant_a, sa_pipeline_a, name="Proposal", sequence=20)
+
+
+@pytest.fixture
+def sa_stage_b1(tenant_b, sa_pipeline_b):
+    return _salesanalytics_stage(tenant_b, sa_pipeline_b, name="Discovery", sequence=10)
+
+
+@pytest.fixture
+def sa_stage_b2(tenant_b, sa_pipeline_b):
+    return _salesanalytics_stage(tenant_b, sa_pipeline_b, name="Proposal", sequence=20)
+
+
+@pytest.fixture
+def sa_debrief_a(tenant_a, sa_opportunity_a):
+    return _salesanalytics_debrief(tenant_a, sa_opportunity_a)
+
+
+@pytest.fixture
+def sa_debrief_b(tenant_b, sa_opportunity_b):
+    return _salesanalytics_debrief(tenant_b, sa_opportunity_b)
+
+
+@pytest.fixture
+def sa_velocity_a(tenant_a, sa_pipeline_a, sa_stage_a1):
+    return _salesanalytics_velocity(tenant_a, sa_pipeline_a, sa_stage_a1)
+
+
+@pytest.fixture
+def sa_velocity_b(tenant_b, sa_pipeline_b, sa_stage_b1):
+    return _salesanalytics_velocity(tenant_b, sa_pipeline_b, sa_stage_b1)
+
+
+@pytest.fixture
+def sa_funnel_a(tenant_a, sa_stage_a1, sa_stage_a2):
+    return _salesanalytics_funnel(tenant_a, from_stage=sa_stage_a1, to_stage=sa_stage_a2)
+
+
+@pytest.fixture
+def sa_funnel_b(tenant_b, sa_stage_b1, sa_stage_b2):
+    return _salesanalytics_funnel(tenant_b, from_stage=sa_stage_b1, to_stage=sa_stage_b2)
+
+
+@pytest.fixture
+def sa_scorecard_a(tenant_a, admin_user):
+    return _salesanalytics_scorecard(tenant_a, rep=admin_user)
+
+
+@pytest.fixture
+def sa_scorecard_b(tenant_b, admin_b):
+    return _salesanalytics_scorecard(tenant_b, rep=admin_b)
+
