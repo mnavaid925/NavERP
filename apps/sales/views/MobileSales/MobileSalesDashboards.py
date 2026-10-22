@@ -1,6 +1,6 @@
 """Sales 8.16 — MobileSalesDashboard executive view."""
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from django.shortcuts import render
 from django.utils import timezone
 
@@ -17,10 +17,14 @@ def mobile_sales_dashboard(request):
 
     # Routes today
     routes_today = FieldSalesRoute.objects.filter(tenant=tenant, route_date=today).select_related("sales_rep")
-    total_routes_today = routes_today.count()
-
-    total_stops_today = routes_today.aggregate(total=Sum("total_stops"))["total"] or 0
-    completed_stops_today = routes_today.aggregate(completed=Sum("completed_stops"))["completed"] or 0
+    routes_agg = routes_today.aggregate(
+        total_routes=Count("id"),
+        total_stops=Sum("total_stops"),
+        completed_stops=Sum("completed_stops"),
+    )
+    total_routes_today = routes_agg["total_routes"] or 0
+    total_stops_today = routes_agg["total_stops"] or 0
+    completed_stops_today = routes_agg["completed_stops"] or 0
     pending_stops_today = max(0, total_stops_today - completed_stops_today)
 
     # Check-ins & geofence compliance
