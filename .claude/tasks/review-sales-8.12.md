@@ -55,9 +55,9 @@
   `apps/sales/views/SalesAnalytics/_helpers.py:23-25`. The guard `if not value or not value.isdigit(): return None` followed by `int(value)` fails because `str.isdigit()` accepts characters like `'²'` (U+00B2) and `'①'` (U+2460) that `int()` refuses.
   *Fix:* Delegate to house helper `from apps.core.crud import as_db_int` (which uses `.isdecimal()` and handles overflow). Fixed — `9ff8a760` `fix(sales): delegate _pk_filter to as_db_int to handle unicode digits and overflow`.
 
-- [ ] **C2 — N+1 chained FK hops in `funnel_conversion_record_detail` and edit views.**
+- [x] **C2 — N+1 chained FK hops in `funnel_conversion_record_detail` and edit views.**
   `apps/sales/views/SalesAnalytics/FunnelConversionRecords.py:126-134`. Detail template displays `{{ obj.from_stage.pipeline.name }}` and `{{ obj.to_stage.pipeline.name }}`. `select_related` selects `from_stage` and `to_stage`, but omits `from_stage__pipeline` and `to_stage__pipeline`, triggering 2 extra queries per detail/edit page view.
-  *Fix:* Add `"from_stage__pipeline"` and `"to_stage__pipeline"` to `select_related`.
+  *Fix:* Add `"from_stage__pipeline"` and `"to_stage__pipeline"` to `select_related`. Fixed — `53daa779` `fix(sales): add from_stage__pipeline and to_stage__pipeline to select_related in FunnelConversionRecord detail and edit views`.
 
 - [ ] **C3 — N+1 query in `StageVelocityAnalysisForm` choice rendering (`PipelineStage.__str__` chained FK hop).**
   `apps/sales/forms/SalesAnalytics/StageVelocityAnalyses.py:10-54`. When `StageVelocityAnalysisForm` renders `pipeline_stage` choices, `PipelineStage.__str__` evaluates `self.pipeline`. Without `select_related("pipeline")`, every choice issues a query.
