@@ -123,6 +123,7 @@ class CustomerSubscription(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="sales_csb_ten_status_idx"),
             models.Index(fields=["tenant", "account"], name="sales_csb_ten_acc_idx"),
             models.Index(fields=["tenant", "current_term_end"], name="sales_csb_ten_end_idx"),
+            models.Index(fields=["tenant", "contract"], name="sales_csb_ten_contract_idx"),
         ]
 
     def __str__(self):
