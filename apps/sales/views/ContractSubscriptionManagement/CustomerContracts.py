@@ -74,6 +74,7 @@ def customer_contract_list(request):
 
 
 @login_required
+@transaction.atomic
 def customer_contract_create(request):
     tenant = request.tenant
     if request.method == "POST":
@@ -127,6 +128,7 @@ def customer_contract_detail(request, pk):
 
 
 @login_required
+@transaction.atomic
 def customer_contract_edit(request, pk):
     tenant = request.tenant
     contract = get_object_or_404(CustomerContract.objects.filter(tenant=tenant), pk=pk)
@@ -156,6 +158,7 @@ def customer_contract_edit(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def customer_contract_delete(request, pk):
     tenant = request.tenant
     contract = get_object_or_404(CustomerContract.objects.filter(tenant=tenant), pk=pk)
@@ -173,6 +176,7 @@ def customer_contract_delete(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def customer_contract_activate(request, pk):
     tenant = request.tenant
     contract = get_object_or_404(CustomerContract.objects.filter(tenant=tenant), pk=pk)
@@ -192,6 +196,7 @@ def customer_contract_activate(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def customer_contract_generate_renewal_quote(request, pk):
     tenant = request.tenant
     contract = get_object_or_404(CustomerContract.objects.filter(tenant=tenant), pk=pk)
