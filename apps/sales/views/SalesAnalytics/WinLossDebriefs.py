@@ -83,7 +83,9 @@ def win_loss_debrief_list(request):
     paginator = Paginator(qs, 15)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    opportunities = Opportunity.objects.filter(tenant=request.tenant).order_by("name")
+    opportunities = (
+        Opportunity.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
+    )
     reasons = WinLossReason.objects.filter(tenant=request.tenant, is_active=True).order_by(
         "sequence", "name"
     )
