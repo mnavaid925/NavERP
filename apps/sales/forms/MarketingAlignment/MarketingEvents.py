@@ -82,7 +82,7 @@ class MarketingEventForm(TenantUniqueMixin, TenantModelForm):
         return cleaned_data
 
 
-class EventRegistrationForm(TenantModelForm):
+class EventRegistrationForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = EventRegistration
         fields = [
