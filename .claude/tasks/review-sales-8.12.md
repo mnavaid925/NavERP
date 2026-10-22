@@ -147,9 +147,9 @@
   `apps/sales/views/SalesAnalytics/StageVelocityAnalyses.py:175`. Calls `str(obj.pipeline_stage)` which evaluates `stage.pipeline`.
   *Fix:* Change to `.select_related("pipeline", "pipeline_stage__pipeline")`. Fixed — `c26573ba` `fix(sales): select_related pipeline_stage__pipeline in StageVelocityAnalysis views`.
 
-- [ ] **M6 — Filter querysets lack `.only()` in list views.**
+- [x] **M6 — Filter querysets lack `.only()` in list views.**
   `apps/sales/views/SalesAnalytics/WinLossDebriefs.py:86`. Opportunities dropdown fetches full models.
-  *Fix:* Use `.only("id", "name")`.
+  *Fix:* Use `.only("id", "name")`. Fixed — `31b6a636` `fix(sales): add only('id', 'name') to opportunities query in win_loss_debrief_list`.
 
 - [ ] **M7 — Inconsistent / deprecated Lucide icon identifiers in console boards and list templates.**
   `boards/analytics_console.html:112`, `boards/velocity_console.html:64`, `boards/funnel_console.html:98`, `boards/benchmark_console.html:98` use `alert-triangle`; `repperformancescorecard/list.html:234` uses `user-square-2`.
