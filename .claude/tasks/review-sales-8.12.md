@@ -115,9 +115,9 @@
   `apps/sales/views/SalesAnalytics/AnalyticsConsoles.py:641-654, 916-923, 1001-1020`. `open_actions`, `funnel_rows`, and `scorecard_rows` render unbounded rows.
   *Fix:* Cap display lists with `[:ROW_LIMIT]` (25). Fixed — `0769f43d` `fix(sales): cap open_actions, funnel_rows, and scorecard_rows with ROW_LIMIT`.
 
-- [ ] **I11 — Dead queries executed in `win_loss_debrief_list` and `rep_performance_scorecard_list`.**
+- [x] **I11 — Dead queries executed in `win_loss_debrief_list` and `rep_performance_scorecard_list`.**
   `WinLossDebriefs.py:87-104` queries `outcomes`, `accounts`, `users`; `RepPerformanceScorecards.py:105-107` queries `currencies`, `quota_plans`, `managers`. These are never rendered in template filters.
-  *Fix:* Remove unused querysets.
+  *Fix:* Remove unused querysets. Fixed — `fc9e15e7`, `cb6a7801` `fix(sales): remove unused queries from win_loss_debrief_list and rep_performance_scorecard_list`.
 
 - [ ] **I12 — Missing composite indexes on hot sort/filter columns.**
   `WinLossDebrief`: `(tenant, -debriefed_on)`, `(tenant, interview_channel)`. `StageVelocityAnalysis`: `(tenant, -period_end)`. `RepPerformanceScorecard`: `(tenant, -period_end)`.
