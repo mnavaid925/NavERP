@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Subscription {{ subscription.number }}{% else %}New Customer Subscription{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'sales:sales_overview' %}">Sales</a>
+            <span>/</span>
+            <a href="{% url 'sales:customer_subscription_list' %}">Subscriptions</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ subscription.number }}{% else %}New Subscription{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Subscription: {{ subscription.number }}{% else %}Create Customer Subscription{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h3 class="font-semibold text-slate-800">Recurring Service & Billing Terms</h3>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="p-4 mb-6 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                <p class="font-bold">Please correct the following errors:</p>
+                <ul class="list-disc pl-5 mt-1 space-y-1">
+                    {% for field in form %}
+                        {% for error in field.errors %}
+                            <li>{{ field.label }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                    {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.subscription_name.id_for_label }}">Subscription Name *</label>
+                    {{ form.subscription_name }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.plan_code.id_for_label }}">Plan SKU / Code *</label>
+                    {{ form.plan_code }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.account.id_for_label }}">Customer Account *</label>
+                    {{ form.account }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.contract.id_for_label }}">Parent Customer Contract</label>
+                    {{ form.contract }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Subscription Status *</label>
+                    {{ form.status }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.pricing_model.id_for_label }}">Pricing Model *</label>
+                    {{ form.pricing_model }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.billing_cadence.id_for_label }}">Billing Cadence *</label>
+                    {{ form.billing_cadence }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Operating Currency *</label>
+                    {{ form.currency }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.quantity.id_for_label }}">Quantity (Seats / Units) *</label>
+                    {{ form.quantity }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.unit_price.id_for_label }}">Unit Price ($ per cadence) *</label>
+                    {{ form.unit_price }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.start_date.id_for_label }}">Initial Start Date *</label>
+                    {{ form.start_date }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.current_term_start.id_for_label }}">Current Term Start Date *</label>
+                    {{ form.current_term_start }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.current_term_end.id_for_label }}">Current Term End Date *</label>
+                    {{ form.current_term_end }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.trial_ends_at.id_for_label }}">Trial Expiration Date</label>
+                    {{ form.trial_ends_at }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Assigned Account CSM</label>
+                    {{ form.owner }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.renewal_notice_days.id_for_label }}">Renewal Notice Days</label>
+                    {{ form.renewal_notice_days }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="flex items-center gap-2 cursor-pointer mt-2">
+                        {{ form.auto_renew }}
+                        <span class="text-sm font-medium text-slate-700">Auto-Renewing Subscription at Term Expiration</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 mt-6 pt-4 border-t">
+                {% if is_edit %}
+                <a href="{% url 'sales:customer_subscription_detail' subscription.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'sales:customer_subscription_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Subscription{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
