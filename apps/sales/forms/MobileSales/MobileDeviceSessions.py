@@ -38,11 +38,21 @@ class MobileDeviceSessionForm(TenantModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             self.fields["user"].queryset = tenant_users(self.tenant)
         if "last_sync_status" in self.fields:
             self.fields["last_sync_status"].required = False
+        if self.user is not None and not (getattr(self.user, "is_superuser", False) or getattr(self.user, "is_tenant_admin", False)):
+            if "is_trusted" in self.fields:
+                self.fields["is_trusted"].disabled = True
+
+    def clean_is_trusted(self):
+        val = self.cleaned_data.get("is_trusted", False)
+        if self.user is not None and not (getattr(self.user, "is_superuser", False) or getattr(self.user, "is_tenant_admin", False)):
+            return self.instance.is_trusted if self.instance and self.instance.pk else False
+        return val
 
     def clean_last_sync_status(self):
         val = self.cleaned_data.get("last_sync_status")
