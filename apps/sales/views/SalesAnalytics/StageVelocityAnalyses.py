@@ -111,7 +111,7 @@ def stage_velocity_analysis_detail(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 def stage_velocity_analysis_create(request):
     if request.method == "POST":
         form = StageVelocityAnalysisForm(request.POST, tenant=request.tenant)
@@ -136,7 +136,7 @@ def stage_velocity_analysis_create(request):
     )
 
 
-@login_required
+@tenant_admin_required
 def stage_velocity_analysis_edit(request, pk):
     obj = get_object_or_404(
         StageVelocityAnalysis.objects.filter(tenant=request.tenant).select_related(
