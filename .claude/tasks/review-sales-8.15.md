@@ -35,7 +35,7 @@ The architecture demonstrates flawless multi-tenancy (`TenantNumbered`, strict s
 - [x] **I9** — `apps/sales/views/ContractSubscriptionManagement/{ContractSubscriptionWorkspaces,RenewalAutomations}.py`: Fragmented sequential queries for metrics. Consolidate into unified conditional aggregates with `Count("id", filter=Q(...))` and eliminate dead query `urgent_subscriptions`. fixed — 9ef45ce6, 9bffd8b1, 6e6d4212
 - [x] **I10** — `templates/sales/contractsubscriptionmanagement/{boards/renewal_automation_dashboard.html,customercontract/detail.html,customersubscription/detail.html}`: Template `.count` triggers redundant SQL queries on evaluated QuerySets. Fix: Replace `.count` with `|length` on evaluated lists. fixed — 8b7ddd35, 592811a4, 01e698a4
 - [x] **I11** — `apps/sales/models/ContractSubscriptionManagement/{CustomerContracts,CustomerSubscriptions,ContractObligations}.py`: Missing compound indexes for high-frequency horizon scans. Add `(tenant, status, end_date)` to CustomerContract, `(tenant, contract)` to CustomerSubscription, and `(tenant, subscription)` to ContractObligation. fixed — 700b868a, 21cd4e9b, 457a2942, 5bfa6c51
-- [ ] **I12** — `apps/sales/forms/ContractSubscriptionManagement/CustomerSubscriptions.py:27`: `renewal_notice_days` has no default fallback if omitted from client post data, causing form validation failure on bare POST requests. Fix: Set initial default of 30 in form `__init__`.
+- [x] **I12** — `apps/sales/forms/ContractSubscriptionManagement/CustomerSubscriptions.py:27`: `renewal_notice_days` has no default fallback if omitted from client post data, causing form validation failure on bare POST requests. Fix: Set initial default of 30 in form `__init__`. fixed — 096beebd
 
 ### Minor
 - [ ] **M1** — `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py:13`: Unused import of `tenant_admin_required`. Fix: Apply to `customer_contract_delete`.
@@ -45,6 +45,6 @@ The architecture demonstrates flawless multi-tenancy (`TenantNumbered`, strict s
 - [ ] **M5** — `apps/sales/views/ContractSubscriptionManagement/ContractObligations.py:151`: Add `select_related("contract")` in `contract_obligation_edit` to prevent query on `str(obl)`.
 - [ ] **M6** — `apps/sales/views/ContractSubscriptionManagement/UsageMeterRecords.py:127`: Add `select_related("subscription")` in `usage_meter_record_edit` to prevent query on `str(meter)`.
 - [ ] **M7** — `apps/sales/views/ContractSubscriptionManagement/CustomerContracts.py:118`: Add `account` to `contract.subscriptions.all().select_related("currency", "account")`.
-- [ ] **M8** — `apps/sales/forms/ContractSubscriptionManagement/CustomerSubscriptions.py:116`: Constrain `quantity` in `SubscriptionUpgradeForm` with `max_value=1000000` to prevent Decimal overflow on MRR.
+- [x] **M8** — `apps/sales/forms/ContractSubscriptionManagement/CustomerSubscriptions.py:116`: Constrain `quantity` in `SubscriptionUpgradeForm` with `max_value=1000000` to prevent Decimal overflow on MRR. fixed — 096beebd
 - [ ] **M9** — `apps/sales/forms/ContractSubscriptionManagement/ContractObligations.py:102`: Require `min_value=Decimal("0.01")` on `ObligationBreachForm.penalty_amount`.
 - [ ] **M10** — `templates/sales/contractsubscriptionmanagement/boards/contract_subscription_workspace.html:46`: KPI stat card label reads "Active Contract TCV". Update to "Total Contract Value (TCV)".
