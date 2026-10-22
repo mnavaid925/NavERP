@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Field Check-Ins & Visits — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'sales:dashboard' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Field Check-Ins</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Field Check-Ins & Visits</h1>
+            <p class="text-sm text-slate-500 mt-1">Real-time GPS-stamped customer visits, geofence compliance verification, and visit outcomes.</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:field_sales_route_list' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="map" class="w-4 h-4"></i>
+                <span>Daily Routes</span>
+            </a>
+            <a href="{% url 'sales:field_check_in_create' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="map-pin" class="w-4 h-4"></i>
+                <span>Record Check-In</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Check-Ins</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ total_checkins_count }}</div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <i data-lucide="map-pin" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Geofence Verified</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ verified_checkins_count }}</div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
+                    <i data-lucide="shield-check" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Compliance Rate</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">
+                        {% if total_checkins_count > 0 %}
+                            {% widthratio verified_checkins_count total_checkins_count 100 %}%
+                        {% else %}
+                            0%
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                    <i data-lucide="target" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Mobile Devices</div>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">
+                        <a href="{% url 'sales:mobile_device_session_list' %}" class="text-primary hover:underline text-lg font-semibold flex items-center gap-1">
+                            <span>Fleet Sync</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
+                    <i data-lucide="smartphone" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters Card -->
+    <div class="card p-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label text-xs">Search</label>
+                {{ filter_form.q }}
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs">Geofence Status</label>
+                {{ filter_form.verification_status }}
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs">Purpose</label>
+                {{ filter_form.visit_purpose }}
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs">Outcome</label>
+                {{ filter_form.outcome }}
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'sales:field_check_in_list' %}" class="btn btn-outline" title="Reset">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Table Card -->
+    <div class="card">
+        {% if check_ins %}
+        <div class="table-wrap overflow-x-auto">
+            <table class="table w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b text-slate-500 bg-slate-50">
+                        <th class="p-3">Visit #</th>
+                        <th class="p-3">Customer / Account</th>
+                        <th class="p-3">Sales Rep</th>
+                        <th class="p-3">Arrival Time</th>
+                        <th class="p-3">Geofence Audit</th>
+                        <th class="p-3">Purpose</th>
+                        <th class="p-3">Outcome</th>
+                        <th class="p-3">Duration</th>
+                        <th class="p-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for check_in in check_ins %}
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="p-3 font-mono font-medium text-slate-900">
+                            <a href="{% url 'sales:field_check_in_detail' check_in.pk %}" class="text-primary hover:underline">
+                                {{ check_in.number }}
+                            </a>
+                            {% if check_in.route %}
+                                <div class="text-xs text-slate-400">Stop #{{ check_in.stop_number }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 font-medium text-slate-900">
+                            {{ check_in.party.name }}
+                            {% if check_in.contact %}
+                                <div class="text-xs text-slate-500">{{ check_in.contact.name }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-slate-700">
+                            {% if check_in.sales_rep %}
+                                {{ check_in.sales_rep.get_full_name|default:check_in.sales_rep.username }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-xs text-slate-600 font-mono">
+                            {{ check_in.check_in_at|date:"Y-m-d H:i" }}
+                        </td>
+                        <td class="p-3">
+                            {% if check_in.is_geofence_verified %}
+                                <span class="badge badge-green">Verified ({{ check_in.distance_from_target_m|default:"0" }}m)</span>
+                            {% elif check_in.verification_status == 'out_of_range' %}
+                                <span class="badge badge-red">Out of Range ({{ check_in.distance_from_target_m|default:">150" }}m)</span>
+                            {% elif check_in.verification_status == 'manual_override' %}
+                                <span class="badge badge-amber">Manual Override</span>
+                            {% else %}
+                                <span class="badge badge-slate">GPS Unavailable</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-xs text-slate-700">
+                            {{ check_in.get_visit_purpose_display }}
+                        </td>
+                        <td class="p-3">
+                            {% if check_in.outcome == 'successful' %}
+                                <span class="badge badge-green">Successful</span>
+                            {% elif check_in.outcome == 'quote_requested' or check_in.outcome == 'order_placed' %}
+                                <span class="badge badge-info">{{ check_in.get_outcome_display }}</span>
+                            {% elif check_in.outcome == 'follow_up_needed' %}
+                                <span class="badge badge-amber">Follow-Up Needed</span>
+                            {% elif check_in.outcome == 'cancelled' or check_in.outcome == 'decision_maker_unavailable' %}
+                                <span class="badge badge-muted">{{ check_in.get_outcome_display }}</span>
+                            {% else %}
+                                <span class="badge badge-slate">{{ check_in.get_outcome_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 font-mono text-xs text-slate-700">
+                            {% if check_in.duration_minutes %}
+                                {{ check_in.duration_minutes }} min
+                            {% elif check_in.check_out_at %}
+                                Completed
+                            {% else %}
+                                <a href="{% url 'sales:field_check_in_checkout' check_in.pk %}" class="btn btn-outline btn-sm text-xs py-0.5 px-2 text-amber-600 border-amber-300 hover:bg-amber-50">
+                                    Check Out
+                                </a>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-right">
+                            <div class="table-actions inline-flex items-center gap-1">
+                                <a href="{% url 'sales:field_check_in_detail' check_in.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'sales:field_check_in_edit' check_in.pk %}" class="btn btn-icon btn-outline" title="Edit Check-In">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'sales:field_check_in_delete' check_in.pk %}" class="inline" onsubmit="return confirm('Delete this visit check-in?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} visits
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.verification_status %}&verification_status={{ request.GET.verification_status }}{% endif %}" class="btn btn-outline btn-sm">
+                    Previous
+                </a>
+                {% endif %}
+                <span class="px-3 py-1 text-sm text-slate-700 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.verification_status %}&verification_status={{ request.GET.verification_status }}{% endif %}" class="btn btn-outline btn-sm">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state p-12 text-center">
+            <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3">
+                <i data-lucide="map-pin" class="w-6 h-6"></i>
+            </div>
+            <h3 class="text-base font-semibold text-slate-900">No field check-ins recorded</h3>
+            <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Field sales reps record arrival check-ins at client sites with GPS location, geofence auditing, and meeting outcomes.</p>
+            <div class="mt-4">
+                <a href="{% url 'sales:field_check_in_create' %}" class="btn btn-primary">Record First Check-In</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
