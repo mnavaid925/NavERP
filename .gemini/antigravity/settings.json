@@ -1,0 +1,21 @@
+{
+    "permissions": {
+        "allow": [
+            "command(git)",
+            "command(regex:npm run (build|lint|test))",
+            "unsandboxed(git push)",
+            "read_file(/var/log/app)",
+            "write_file(src/)",
+            "read_url(google.com)",
+            "mcp(linter/*)"
+        ],
+        "deny": [
+            "command(rm -rf)",
+            "command(regex:curl .*)",
+            "command(sudo)",
+            "write_file(.git/)",
+            "write_file(/home/user/.ssh)"
+        ],
+        "ask": ["command(*)", "execute_url(aws.amazon.com)", "mcp(sql/execute_mutation)"]
+    }
+}
