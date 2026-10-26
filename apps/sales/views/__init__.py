@@ -458,6 +458,32 @@ from .MobileSales import (
     mobile_device_session_sync,
     mobile_sales_dashboard,
 )
+# 8.17 Workflow & Process Automation
+from .WorkflowProcessAutomation import (
+    sales_alert_trigger_create,
+    sales_alert_trigger_delete,
+    sales_alert_trigger_detail,
+    sales_alert_trigger_edit,
+    sales_alert_trigger_list,
+    sales_approval_decision_approve,
+    sales_approval_decision_create,
+    sales_approval_decision_delete,
+    sales_approval_decision_detail,
+    sales_approval_decision_edit,
+    sales_approval_decision_list,
+    sales_approval_decision_reject,
+    sales_assignment_rule_create,
+    sales_assignment_rule_delete,
+    sales_assignment_rule_detail,
+    sales_assignment_rule_edit,
+    sales_assignment_rule_list,
+    sales_process_definition_create,
+    sales_process_definition_delete,
+    sales_process_definition_detail,
+    sales_process_definition_edit,
+    sales_process_definition_list,
+    sales_process_definition_run,
+)
 
 # View functions exported for URLconf routing and external imports
 __all__ = [
@@ -505,6 +531,9 @@ __all__ = [
         "field_sales_route_", "field_check_in_",
         "mobile_device_session_", "mobile_deal_alert_",
         "mobile_sales_dashboard",
+        # 8.17 Workflow & Process Automation
+        "sales_process_definition_", "sales_assignment_rule_",
+        "sales_approval_decision_", "sales_alert_trigger_",
     ))
 ]
 
