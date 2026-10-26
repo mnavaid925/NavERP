@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Process Definition{% else %}New Process Definition{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+    {# Header #}
+    <div class="page-header flex items-center justify-between">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_process_definition_list' %}" class="hover:text-primary">Process Definitions</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{% if is_edit %}Edit {{ process_definition.number }}{% else %}New{% endif %}</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">
+                {% if is_edit %}Edit Process Definition{% else %}New Process Definition{% endif %}
+            </h1>
+            <p class="text-sm text-slate-500 mt-1">Define the trigger, enrollment conditions and ordered automation nodes for a sales process. Conditions and nodes are JSON lists.</p>
+        </div>
+        <div class="page-actions">
+            {% if is_edit %}
+            <a href="{% url 'sales:sales_process_definition_detail' pk=process_definition.pk %}" class="btn btn-outline">Cancel</a>
+            {% else %}
+            <a href="{% url 'sales:sales_process_definition_list' %}" class="btn btn-outline">Cancel</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Form card #}
+    <div class="card p-6">
+        <form method="post" class="space-y-4" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            {% for field in form.visible_fields %}
+            <div class="form-group">
+                {{ field.label_tag }}
+                {{ field }}
+                {% if field.help_text %}<span class="text-xs text-slate-400 mt-0.5 block">{{ field.help_text }}</span>{% endif %}
+                {% if field.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ field.errors }}</div>{% endif %}
+            </div>
+            {% endfor %}
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                {% if is_edit %}
+                <a href="{% url 'sales:sales_process_definition_detail' pk=process_definition.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'sales:sales_process_definition_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary flex items-center gap-2">
+                    <i data-lucide="save" class="w-4 h-4"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Process Definition{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
