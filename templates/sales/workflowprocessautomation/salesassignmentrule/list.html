@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Assignment Rules — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Header #}
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Assignment Rules</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Sales Assignment Rules</h1>
+            <p class="text-sm text-slate-500 mt-1">Auto-assignment rule register — fixed-owner, round-robin, load-balanced, territory-manager and escalation rules for leads, opportunities and cases.</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:sales_assignment_rule_create' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>New Assignment Rule</span>
+            </a>
+        </div>
+    </div>
+
+    {# Filters #}
+    <div class="card p-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <input type="text" name="q" id="filter-q" class="form-input" placeholder="Name or number…" value="{{ request.GET.q|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-target">Target Entity</label>
+                <select name="target_entity" id="filter-target" class="form-select">
+                    <option value="">All Targets</option>
+                    {% for value, label in target_entity_choices %}
+                        <option value="{{ value }}" {% if request.GET.target_entity == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-mode">Assignment Mode</label>
+                <select name="assignment_mode" id="filter-mode" class="form-select">
+                    <option value="">All Modes</option>
+                    {% for value, label in assignment_mode_choices %}
+                        <option value="{{ value }}" {% if request.GET.assignment_mode == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-active">Status</label>
+                <select name="is_active" id="filter-active" class="form-select">
+                    <option value="">All</option>
+                    <option value="active" {% if request.GET.is_active == 'active' %}selected{% endif %}>Active</option>
+                    <option value="inactive" {% if request.GET.is_active == 'inactive' %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-territory">Territory</label>
+                <select name="territory" id="filter-territory" class="form-select">
+                    <option value="">All Territories</option>
+                    {% for territory in territories %}
+                        <option value="{{ territory.pk }}" {% if request.GET.territory == territory.pk|stringformat:"d" %}selected{% endif %}>{{ territory.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'sales:sales_assignment_rule_list' %}" class="btn btn-outline" title="Reset">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    {# Table #}
+    <div class="card">
+        <div class="table-wrap overflow-x-auto">
+            <table class="table w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b text-slate-500 bg-slate-50">
+                        <th class="p-3">Number</th>
+                        <th class="p-3">Name</th>
+                        <th class="p-3">Target</th>
+                        <th class="p-3">Mode</th>
+                        <th class="p-3">Priority</th>
+                        <th class="p-3">Last Assigned</th>
+                        <th class="p-3">Active</th>
+                        <th class="p-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for assignment_rule in assignment_rules %}
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="p-3 font-mono font-medium text-slate-900">
+                            <a href="{% url 'sales:sales_assignment_rule_detail' pk=assignment_rule.pk %}" class="text-primary hover:underline">{{ assignment_rule.number }}</a>
+                        </td>
+                        <td class="p-3 font-medium text-slate-900">{{ assignment_rule.name }}</td>
+                        <td class="p-3 text-xs text-slate-600">{{ assignment_rule.get_target_entity_display }}</td>
+                        <td class="p-3">
+                            <span class="badge badge-info">{{ assignment_rule.get_assignment_mode_display }}</span>
+                        </td>
+                        <td class="p-3 text-slate-700">{{ assignment_rule.priority }}</td>
+                        <td class="p-3 text-xs text-slate-600">
+                            {% if assignment_rule.last_assigned_owner %}
+                                {{ assignment_rule.last_assigned_owner.get_full_name }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="p-3">
+                            {% if assignment_rule.is_active %}
+                                <span class="badge badge-green">Active</span>
+                            {% else %}
+                                <span class="badge badge-muted">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-right">
+                            <div class="table-actions inline-flex items-center gap-1">
+                                <a href="{% url 'sales:sales_assignment_rule_detail' pk=assignment_rule.pk %}" class="btn btn-icon btn-outline" title="View">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'sales:sales_assignment_rule_edit' pk=assignment_rule.pk %}" class="btn btn-icon btn-outline" title="Edit">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'sales:sales_assignment_rule_delete' pk=assignment_rule.pk %}" class="inline" onsubmit="return confirm('Delete this assignment rule?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="p-12 text-center text-sm text-slate-500">No assignment rules yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% include "partials/pagination.html" %}
+    </div>
+</div>
+{% endblock %}
