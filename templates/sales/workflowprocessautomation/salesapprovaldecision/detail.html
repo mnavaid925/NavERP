@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ approval_decision.number }} — Approval Chain — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Header #}
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_approval_decision_list' %}" class="hover:text-primary">Approval Decisions</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ approval_decision.number }}</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">Approval Decision</h1>
+                {% if approval_decision.decision == 'approved' %}
+                    <span class="badge badge-green">{{ approval_decision.get_decision_display }}</span>
+                {% elif approval_decision.decision == 'rejected' %}
+                    <span class="badge badge-red">{{ approval_decision.get_decision_display }}</span>
+                {% else %}
+                    <span class="badge badge-muted">{{ approval_decision.get_decision_display }}</span>
+                {% endif %}
+                <span class="badge badge-slate">Tier {{ approval_decision.tier }}/{{ approval_decision.tier_count }}</span>
+                {% if approval_decision.is_final_tier %}<span class="badge badge-info">Final Tier</span>{% endif %}
+                <span class="text-xs text-slate-400 font-mono">({{ approval_decision.number }})</span>
+            </div>
+            <p class="text-sm text-slate-500 mt-1">{{ approval_decision.get_approval_kind_display }} approval · target {{ approval_decision.target_key }}</p>
+        </div>
+    </div>
+
+    {% if action_form.non_field_errors %}
+    <div class="p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+        {{ action_form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {# Main body #}
+        <div class="space-y-6 lg:col-span-2">
+            {# The chain — one row per tier sign-off, oldest tier first #}
+            <div class="card">
+                <div class="card-header border-b p-4 flex items-center justify-between">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="git-branch" class="w-4 h-4 text-primary"></i>
+                        <span>Approval Chain</span>
+                    </h2>
+                    <span class="text-xs text-slate-500">{{ chain|length }} signature(s) · length {{ tier_count }}</span>
+                </div>
+                <div class="table-wrap overflow-x-auto">
+                    <table class="table w-full text-left text-sm">
+                        <thead>
+                            <tr class="border-b text-slate-500 bg-slate-50">
+                                <th class="p-3">Tier</th>
+                                <th class="p-3">Decision</th>
+                                <th class="p-3">Approver</th>
+                                <th class="p-3">Comment</th>
+                                <th class="p-3">Decided At</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for chain_row in chain %}
+                            <tr class="hover:bg-slate-50 transition {% if chain_row.pk == approval_decision.pk %}bg-blue-50{% endif %}">
+                                <td class="p-3 font-mono text-xs text-slate-900">
+                                    {{ chain_row.tier }}/{{ chain_row.tier_count }}
+                                    {% if chain_row.is_final_tier %}<span class="badge badge-info">Final</span>{% endif %}
+                                </td>
+                                <td class="p-3">
+                                    {% if chain_row.decision == 'approved' %}
+                                        <span class="badge badge-green">{{ chain_row.get_decision_display }}</span>
+                                    {% elif chain_row.decision == 'rejected' %}
+                                        <span class="badge badge-red">{{ chain_row.get_decision_display }}</span>
+                                    {% else %}
+                                        <span class="badge badge-muted">{{ chain_row.get_decision_display }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="p-3 text-xs text-slate-600">
+                                    {% if chain_row.approver %}
+                                        {{ chain_row.approver.get_full_name|default:chain_row.approver.username }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                    {% if chain_row.approver_role %}
+                                        <span class="block text-slate-400">{{ chain_row.approver_role.name }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="p-3 text-xs text-slate-600">
+                                    {% if chain_row.comment %}{{ chain_row.comment|truncatechars:160 }}{% else %}—{% endif %}
+                                </td>
+                                <td class="p-3 text-xs text-slate-600">{{ chain_row.decided_at|date:"Y-m-d H:i" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="p-6 text-center text-sm text-slate-500">No signatures recorded on this chain yet.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {# Target record #}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="file-text" class="w-4 h-4 text-primary"></i>
+                        <span>Target Record</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm space-y-2">
+                    {% if target_object %}
+                        <div class="flex gap-2">
+                            <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Number</span>
+                            <span class="text-slate-800 font-mono">{{ target_object.number }}</span>
+                        </div>
+                        {% if target_object.name %}
+                        <div class="flex gap-2">
+                            <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Name</span>
+                            <span class="text-slate-800">{{ target_object.name }}</span>
+                        </div>
+                        {% endif %}
+                        {% if target_object.approval_status %}
+                        <div class="flex gap-2">
+                            <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Approval Status</span>
+                            <span class="text-slate-800">
+                                {% if target_object.approval_status == 'approved' %}
+                                    <span class="badge badge-green">{{ target_object.get_approval_status_display }}</span>
+                                {% elif target_object.approval_status == 'rejected' %}
+                                    <span class="badge badge-red">{{ target_object.get_approval_status_display }}</span>
+                                {% elif target_object.approval_status == 'pending' %}
+                                    <span class="badge badge-amber">{{ target_object.get_approval_status_display }}</span>
+                                {% else %}
+                                    <span class="badge badge-muted">{{ target_object.get_approval_status_display }}</span>
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-sm text-slate-500">Target record not available.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% comment %}
+              Pending sign-off — the two decision actions. Pending-ness is DERIVED in the view
+              from the chain (the absence of a row at pending_tier), never read off a status
+              field. This note spans several lines, so it uses a comment BLOCK (L2), not the
+              single-line brace-hash form, which would leak as visible page text.
+            {% endcomment %}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="pen-tool" class="w-4 h-4 text-primary"></i>
+                        <span>Sign This Tier</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4">
+                    {% if pending_tier %}
+                        <p class="text-sm text-slate-600 mb-4">
+                            <span class="badge badge-amber">Pending — Tier {{ pending_tier }} of {{ tier_count }}</span>
+                            <span class="text-xs text-slate-500 ml-2">A rejection closes the whole chain at any tier.</span>
+                        </p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <form method="post" action="{% url 'sales:sales_approval_decision_approve' %}" class="space-y-3 p-4 border border-slate-200 rounded-lg">
+                                {% csrf_token %}
+                                {# Hidden-ish: the deciding view re-reads these and re-fetches the target tenant-scoped under select_for_update(), so a tampered value 404s rather than crossing tenants (IDOR-safe). #}
+                                <div class="hidden">
+                                    {{ action_form.target_kind }}
+                                    {{ action_form.target_id }}
+                                    {{ action_form.approval_kind }}
+                                    {{ action_form.tier_count }}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label text-xs">Comment</label>
+                                    {{ action_form.comment }}
+                                    {% if action_form.comment.help_text %}<span class="text-xs text-slate-400 mt-0.5 block">{{ action_form.comment.help_text }}</span>{% endif %}
+                                    {% if action_form.comment.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ action_form.comment.errors }}</div>{% endif %}
+                                </div>
+                                <button type="submit" class="btn btn-primary w-full flex items-center justify-center gap-2">
+                                    <i data-lucide="check" class="w-4 h-4"></i>
+                                    <span>Approve Tier {{ pending_tier }}</span>
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'sales:sales_approval_decision_reject' %}" class="space-y-3 p-4 border border-slate-200 rounded-lg" onsubmit="return confirm('Reject this approval chain?');">
+                                {% csrf_token %}
+                                <div class="hidden">
+                                    {{ action_form.target_kind }}
+                                    {{ action_form.target_id }}
+                                    {{ action_form.approval_kind }}
+                                    {{ action_form.tier_count }}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label text-xs">Comment</label>
+                                    {{ action_form.comment }}
+                                    {% if action_form.comment.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ action_form.comment.errors }}</div>{% endif %}
+                                </div>
+                                <button type="submit" class="btn btn-danger w-full flex items-center justify-center gap-2">
+                                    <i data-lucide="x" class="w-4 h-4"></i>
+                                    <span>Reject Chain</span>
+                                </button>
+                            </form>
+                        </div>
+                    {% else %}
+                        <p class="text-sm text-slate-500">This chain is closed.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# Sidebar #}
+        <div class="space-y-6 lg:col-span-1">
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="settings" class="w-4 h-4 text-primary"></i>
+                        <span>Actions</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 space-y-2">
+                    <a href="{% url 'sales:sales_approval_decision_edit' pk=approval_decision.pk %}" class="btn btn-outline w-full flex items-center justify-center gap-2">
+                        <i data-lucide="pencil" class="w-4 h-4"></i>
+                        <span>Edit</span>
+                    </a>
+                    <form method="post" action="{% url 'sales:sales_approval_decision_delete' pk=approval_decision.pk %}" onsubmit="return confirm('Delete this approval decision?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger w-full flex items-center justify-center gap-2">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            <span>Delete</span>
+                        </button>
+                    </form>
+                    <a href="{% url 'sales:sales_approval_decision_list' %}" class="btn btn-outline w-full flex items-center justify-center gap-2">
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                        <span>Back to List</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="info" class="w-4 h-4 text-primary"></i>
+                        <span>Details</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm space-y-3">
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Number</span>
+                        <span class="font-mono text-slate-800">{{ approval_decision.number }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Approval Kind</span>
+                        <span class="text-slate-800">{{ approval_decision.get_approval_kind_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Target</span>
+                        <span class="font-mono text-slate-800">{{ approval_decision.target_key }}</span>
+                        {% if approval_decision.record_label %}
+                            <span class="block text-xs text-slate-500">{{ approval_decision.record_label }}</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Tier</span>
+                        <span class="text-slate-800 font-mono">{{ approval_decision.tier }} of {{ approval_decision.tier_count }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Approval Rule</span>
+                        <span class="text-slate-800">
+                            {% if approval_decision.approval_rule %}{{ approval_decision.approval_rule.name }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Approver Role</span>
+                        <span class="text-slate-800">
+                            {% if approval_decision.approver_role %}{{ approval_decision.approver_role.name }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Approver</span>
+                        <span class="text-slate-800">
+                            {% if approval_decision.approver %}{{ approval_decision.approver.get_full_name|default:approval_decision.approver.username }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Requested By</span>
+                        <span class="text-slate-800">
+                            {% if approval_decision.requested_by %}{{ approval_decision.requested_by.get_full_name|default:approval_decision.requested_by.username }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Requested At</span>
+                        <span class="text-slate-800">
+                            {% if approval_decision.requested_at %}{{ approval_decision.requested_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Due At</span>
+                        <span class="text-slate-800">
+                            {% if approval_decision.due_at %}{{ approval_decision.due_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Decided At</span>
+                        <span class="text-slate-800">{{ approval_decision.decided_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Comment</span>
+                        <span class="text-slate-800">
+                            {% if approval_decision.comment %}{{ approval_decision.comment|linebreaksbr }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
