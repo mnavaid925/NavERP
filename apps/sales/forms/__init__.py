@@ -137,6 +137,16 @@ from .MobileSales import (
     MobileDeviceSessionForm,
 )
 
+# 8.17 Workflow & Process Automation
+from .WorkflowProcessAutomation import (
+    SalesAlertTriggerForm,
+    SalesApprovalDecisionActionForm,
+    SalesApprovalDecisionEditForm,
+    SalesApprovalDecisionForm,
+    SalesAssignmentRuleForm,
+    SalesProcessDefinitionForm,
+)
+
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
     "LeadQualificationForm", "LeadRoutingPreviewForm", "LeadRoutingRuleForm", "LeadRoutingRunForm",
@@ -194,6 +204,10 @@ __all__ = [
     "FieldCheckInForm", "FieldCheckOutForm", "FieldCheckInFilterForm",
     "MobileDeviceSessionForm", "MobileDeviceSessionFilterForm",
     "MobileDealAlertForm", "MobileDealAlertFilterForm",
+    # 8.17 Workflow & Process Automation
+    "SalesProcessDefinitionForm", "SalesAssignmentRuleForm",
+    "SalesApprovalDecisionForm", "SalesApprovalDecisionEditForm",
+    "SalesApprovalDecisionActionForm", "SalesAlertTriggerForm",
 ]
 
 
