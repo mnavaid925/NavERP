@@ -2614,6 +2614,20 @@ LIVE_LINKS = {
         "Mobile Deal Alerts": "sales:mobile_deal_alert_list",
         "Mobile Sales Dashboard": "sales:mobile_sales_dashboard",
     },
+    "8.17": {
+        # OWNERSHIP RULING (L36/L37/L55)
+        # Reuses crm.Lead/crm.Opportunity/crm.Case as assignment + trigger targets (CRM owns them);
+        # reuses sales.CPQQuote/OrderHold/CustomerContract as approval targets; sales.QuoteApprovalRule (8.5) as the gate;
+        # reuses sales.LeadRoutingRule (8.1) + crm.Territory/8.7 TerritoryRule for owner resolution (no second decision);
+        # reuses core.NotificationRule/Template/Channel (0.11) for delivery routing and sales.MobileDealAlert (8.16) as the record-side alert row;
+        # reuses core.JobDefinition for time-based trigger registration; registers into core.WorkflowDefinition (0.11 registry).
+        # Zero duplicate workflow-registry, notification-channel, approval-gate, or enrichment tables declared.
+        "Visual Process Designer": "sales:sales_process_definition_list",
+        "Auto-Assignment Rules": "sales:sales_assignment_rule_list",
+        "Approval Workflows": "sales:sales_approval_decision_list",
+        "Notification & Alert Engine": "sales:sales_alert_trigger_list",
+        "Data Enrichment & Cleansing": "sales:party_enrichment_list",  # no new model — bullet 5's auto-update half IS 8.3's PartyEnrichmentEvent (verified live route); duplicate-cluster/merge half deferred to gaps-sales-8.17.md
+    },
 
 
 
