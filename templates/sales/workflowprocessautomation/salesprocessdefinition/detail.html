@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ process_definition.number }} — {{ process_definition.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Header #}
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_process_definition_list' %}" class="hover:text-primary">Process Definitions</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ process_definition.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">{{ process_definition.name }}</h1>
+                {% if process_definition.status == 'draft' %}
+                    <span class="badge badge-slate">Draft</span>
+                {% elif process_definition.status == 'active' %}
+                    <span class="badge badge-green">Active</span>
+                {% elif process_definition.status == 'paused' %}
+                    <span class="badge badge-amber">Paused</span>
+                {% elif process_definition.status == 'archived' %}
+                    <span class="badge badge-muted">Archived</span>
+                {% else %}
+                    <span class="badge badge-muted">{{ process_definition.get_status_display }}</span>
+                {% endif %}
+                {% if process_definition.is_active %}
+                    <span class="badge badge-green">Active</span>
+                {% else %}
+                    <span class="badge badge-muted">Inactive</span>
+                {% endif %}
+                <span class="text-xs text-slate-400 font-mono">({{ process_definition.number }})</span>
+            </div>
+            <p class="text-sm text-slate-500 mt-1">Target: {{ process_definition.get_target_entity_display }} · Trigger: {{ process_definition.get_trigger_event_display }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {# Main body #}
+        <div class="space-y-6 lg:col-span-2">
+            {% if process_definition.description %}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="align-left" class="w-4 h-4 text-primary"></i>
+                        <span>Description</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm text-slate-700 whitespace-pre-line">{{ process_definition.description }}</div>
+            </div>
+            {% endif %}
+
+            {# Trigger configuration #}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="zap" class="w-4 h-4 text-primary"></i>
+                        <span>Trigger</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm space-y-2">
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-40 shrink-0 pt-0.5">Event</span>
+                        <span class="text-slate-800">{{ process_definition.get_trigger_event_display }}</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-40 shrink-0 pt-0.5">Field</span>
+                        <span class="text-slate-800">
+                            {% if process_definition.trigger_field %}{{ process_definition.trigger_field }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-40 shrink-0 pt-0.5">Value</span>
+                        <span class="text-slate-800">
+                            {% if process_definition.trigger_value %}{{ process_definition.trigger_value }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {# Conditions table #}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="filter" class="w-4 h-4 text-primary"></i>
+                        <span>Enrollment Conditions</span>
+                    </h2>
+                </div>
+                <div class="table-wrap overflow-x-auto">
+                    <table class="table w-full text-left text-sm">
+                        <thead>
+                            <tr class="border-b text-slate-500 bg-slate-50">
+                                <th class="p-3">Field</th>
+                                <th class="p-3">Operator</th>
+                                <th class="p-3">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for condition in process_definition.conditions %}
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="p-3 font-mono text-xs text-slate-900">{{ condition.field }}</td>
+                                <td class="p-3 text-xs text-slate-600">{{ condition.operator }}</td>
+                                <td class="p-3 text-xs text-slate-700">
+                                    {% if condition.operator == 'in' or condition.operator == 'not_in' %}
+                                        {{ condition.value|join:", " }}
+                                    {% elif condition.value == None %}
+                                        —
+                                    {% else %}
+                                        {{ condition.value }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="p-6 text-center text-sm text-slate-500">No conditions — every record on the trigger event enrolls (catch-all).</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {# Nodes table #}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="git-branch" class="w-4 h-4 text-primary"></i>
+                        <span>Process Nodes</span>
+                    </h2>
+                </div>
+                <div class="table-wrap overflow-x-auto">
+                    <table class="table w-full text-left text-sm">
+                        <thead>
+                            <tr class="border-b text-slate-500 bg-slate-50">
+                                <th class="p-3">Seq</th>
+                                <th class="p-3">Type</th>
+                                <th class="p-3">Params</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for node in process_definition.nodes %}
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="p-3 font-mono text-xs text-slate-900">{{ node.seq }}</td>
+                                <td class="p-3">
+                                    <span class="badge badge-info">{{ node.type }}</span>
+                                </td>
+                                <td class="p-3 text-xs text-slate-700">
+                                    {% if node.params.required_fields %}
+                                        <div><span class="font-medium">required_fields:</span> {{ node.params.required_fields|join:", " }}</div>
+                                    {% endif %}
+                                    {% for key, value in node.params.items %}
+                                        {% if key != 'required_fields' %}
+                                            <div><span class="font-medium">{{ key }}:</span> {% if value == None %}—{% else %}{{ value }}{% endif %}</div>
+                                        {% endif %}
+                                    {% endfor %}
+                                    {% if not node.params %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="p-6 text-center text-sm text-slate-500">No process nodes defined yet.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {# Sidebar #}
+        <div class="space-y-6 lg:col-span-1">
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="settings" class="w-4 h-4 text-primary"></i>
+                        <span>Actions</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 space-y-2">
+                    <a href="{% url 'sales:sales_process_definition_edit' pk=process_definition.pk %}" class="btn btn-outline w-full flex items-center justify-center gap-2">
+                        <i data-lucide="pencil" class="w-4 h-4"></i>
+                        <span>Edit</span>
+                    </a>
+                    <form method="post" action="{% url 'sales:sales_process_definition_run' pk=process_definition.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-primary w-full flex items-center justify-center gap-2">
+                            <i data-lucide="play" class="w-4 h-4"></i>
+                            <span>Run now</span>
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'sales:sales_process_definition_delete' pk=process_definition.pk %}" onsubmit="return confirm('Delete this process definition?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger w-full flex items-center justify-center gap-2">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            <span>Delete</span>
+                        </button>
+                    </form>
+                    <a href="{% url 'sales:sales_process_definition_list' %}" class="btn btn-outline w-full flex items-center justify-center gap-2">
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                        <span>Back to List</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="info" class="w-4 h-4 text-primary"></i>
+                        <span>Details</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm space-y-3">
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Number</span>
+                        <span class="font-mono text-slate-800">{{ process_definition.number }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Version</span>
+                        <span class="text-slate-800">v{{ process_definition.version }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Priority</span>
+                        <span class="text-slate-800">{{ process_definition.priority }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Max Enrollments</span>
+                        <span class="text-slate-800">{{ process_definition.max_enrollments }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Owner</span>
+                        {% if process_definition.owner %}
+                            <span class="text-slate-800">{{ process_definition.owner.get_full_name }}</span>
+                        {% else %}
+                            <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Scheduler Job</span>
+                        {% if process_definition.job_definition %}
+                            <span class="text-slate-800">{{ process_definition.job_definition.name }}</span>
+                        {% else %}
+                            <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Created</span>
+                        <span class="text-slate-800">{{ process_definition.created_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Updated</span>
+                        <span class="text-slate-800">{{ process_definition.updated_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
