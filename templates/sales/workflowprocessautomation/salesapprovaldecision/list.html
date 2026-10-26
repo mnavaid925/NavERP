@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Approval Decisions — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Header #}
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Approval Decisions</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Sales Approval Decisions</h1>
+            <p class="text-sm text-slate-500 mt-1">Immutable multi-tier approval chain — one row per tier sign-off on a quote, order hold or contract. Pending is the absence of a row, never a stored status.</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:sales_approval_decision_create' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>Record Decision</span>
+            </a>
+        </div>
+    </div>
+
+    {# Filters #}
+    <div class="card p-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <input type="text" name="q" id="filter-q" class="form-input" placeholder="Number, label or comment…" value="{{ request.GET.q|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-kind">Approval Kind</label>
+                <select name="approval_kind" id="filter-kind" class="form-select">
+                    <option value="">All Kinds</option>
+                    {% for value, label in approval_kind_choices %}
+                        <option value="{{ value }}" {% if request.GET.approval_kind == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-decision">Decision</label>
+                <select name="decision" id="filter-decision" class="form-select">
+                    <option value="">All Decisions</option>
+                    {% for value, label in decision_choices %}
+                        <option value="{{ value }}" {% if request.GET.decision == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-target">Target Kind</label>
+                <select name="target_kind" id="filter-target" class="form-select">
+                    <option value="">All Targets</option>
+                    {% for value, label in target_kind_choices %}
+                        <option value="{{ value }}" {% if request.GET.target_kind == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'sales:sales_approval_decision_list' %}" class="btn btn-outline" title="Reset">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    {# Table #}
+    <div class="card">
+        <div class="table-wrap overflow-x-auto">
+            <table class="table w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b text-slate-500 bg-slate-50">
+                        <th class="p-3">Number</th>
+                        <th class="p-3">Target</th>
+                        <th class="p-3">Kind</th>
+                        <th class="p-3">Tier</th>
+                        <th class="p-3">Decision</th>
+                        <th class="p-3">Approver</th>
+                        <th class="p-3">Decided At</th>
+                        <th class="p-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {# `approval_decision` is RESERVED for the detail page — loop as `decision_row` #}
+                    {% for decision_row in approval_decisions %}
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="p-3 font-mono font-medium text-slate-900">
+                            <a href="{% url 'sales:sales_approval_decision_detail' pk=decision_row.pk %}" class="text-primary hover:underline">{{ decision_row.number }}</a>
+                        </td>
+                        <td class="p-3 text-xs text-slate-600">
+                            <span class="font-mono">{{ decision_row.target_key }}</span>
+                            {% if decision_row.record_label %}
+                                <span class="block text-slate-500">{{ decision_row.record_label }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3">
+                            <span class="badge badge-info">{{ decision_row.get_approval_kind_display }}</span>
+                        </td>
+                        <td class="p-3 text-slate-700 font-mono text-xs">{{ decision_row.tier }}/{{ decision_row.tier_count }}</td>
+                        <td class="p-3">
+                            {% if decision_row.decision == 'approved' %}
+                                <span class="badge badge-green">{{ decision_row.get_decision_display }}</span>
+                            {% elif decision_row.decision == 'rejected' %}
+                                <span class="badge badge-red">{{ decision_row.get_decision_display }}</span>
+                            {% else %}
+                                <span class="badge badge-muted">{{ decision_row.get_decision_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-xs text-slate-600">
+                            {% if decision_row.approver %}
+                                {{ decision_row.approver.get_full_name|default:decision_row.approver.username }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-xs text-slate-600">{{ decision_row.decided_at|date:"Y-m-d H:i" }}</td>
+                        <td class="p-3 text-right">
+                            <div class="table-actions inline-flex items-center gap-1">
+                                <a href="{% url 'sales:sales_approval_decision_detail' pk=decision_row.pk %}" class="btn btn-icon btn-outline" title="View">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'sales:sales_approval_decision_edit' pk=decision_row.pk %}" class="btn btn-icon btn-outline" title="Edit">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'sales:sales_approval_decision_delete' pk=decision_row.pk %}" class="inline" onsubmit="return confirm('Delete this approval decision?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="p-12 text-center text-sm text-slate-500">No approval decisions yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% include "partials/pagination.html" %}
+    </div>
+</div>
+{% endblock %}
