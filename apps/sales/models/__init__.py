@@ -160,6 +160,21 @@ from .MobileSales import (
     MobileDealAlert,
     MobileDeviceSession,
 )
+# 8.17 Workflow & Process Automation. Reuses crm.Lead/Opportunity/Case/Territory,
+# sales.CPQQuote/OrderHold/CustomerContract/QuoteApprovalRule/MobileDealAlert, scm.SalesOrder,
+# accounts.User/Role, core.JobDefinition/NotificationRule/WorkflowDefinition.
+from .WorkflowProcessAutomation import (
+    PROCESS_NODE_TYPES,
+    SAT_TO_MDA_ALERT_TYPE,
+    TARGET_ENTITY_CHOICES,
+    TARGET_KIND_CHOICES,
+    SalesAlertTrigger,
+    SalesApprovalDecision,
+    SalesAssignmentRule,
+    SalesProcessDefinition,
+    validate_process_conditions,
+    validate_process_nodes,
+)
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
@@ -221,6 +236,10 @@ __all__ = [
     "VERIFICATION_STATUS_CHOICES", "VISIT_PURPOSE_CHOICES", "VISIT_OUTCOME_CHOICES",
     "PLATFORM_CHOICES", "SYNC_STATUS_CHOICES",
     "ALERT_TYPE_CHOICES", "URGENCY_CHOICES", "PUSH_STATUS_CHOICES",
+    # 8.17 Workflow & Process Automation
+    "SalesProcessDefinition", "SalesAssignmentRule", "SalesApprovalDecision", "SalesAlertTrigger",
+    "validate_process_conditions", "validate_process_nodes",
+    "TARGET_ENTITY_CHOICES", "TARGET_KIND_CHOICES", "PROCESS_NODE_TYPES", "SAT_TO_MDA_ALERT_TYPE",
 ]
 
 
