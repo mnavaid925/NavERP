@@ -56,9 +56,32 @@ class SalesApprovalDecisionForm(TenantModelForm):
         if targets != 1:
             raise ValidationError("Set exactly one approval target (quote, order hold, or contract).")
         tier = cleaned.get("tier")
+        # PositiveSmallIntegerField's form min is 0; a tier-0 row breaks the chain's
+        # lowest-unrecorded-tier derivation (M3).
+        if tier is not None and tier < 1:
+            self.add_error("tier", "A tier must be 1 or higher.")
         tier_count = cleaned.get("tier_count")
         if tier_count and tier and tier > tier_count:
             self.add_error("tier", "A tier cannot exceed the chain length.")
+        # Mirror the (tenant, target_key, tier) UniqueConstraint on the form path (I3 /
+        # GAP-sales-8.17-09): target_key is editable=False and still "" when
+        # _post_clean() runs, so validate_unique() cannot see the collision, and leaving
+        # it to save() raises an IntegrityError that TenantNumbered's retry loop masks
+        # as an SAD-number allocation failure (a 500 with a lying message).
+        if self.tenant is not None and tier is not None:
+            for kind in ("quote", "order_hold", "contract"):
+                target = cleaned.get(kind)
+                if target is not None:
+                    duplicates = SalesApprovalDecision.objects.filter(
+                        tenant=self.tenant, target_key=f"{kind}:{target.pk}", tier=tier
+                    )
+                    if self.instance.pk:
+                        duplicates = duplicates.exclude(pk=self.instance.pk)
+                    if duplicates.exists():
+                        self.add_error(
+                            "tier", "This target already has a recorded decision at that tier."
+                        )
+                    break
         return cleaned
 
 
