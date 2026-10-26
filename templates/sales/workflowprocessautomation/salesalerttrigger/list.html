@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Alert Triggers — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Header #}
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Alert Triggers</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Sales Alert Triggers</h1>
+            <p class="text-sm text-slate-500 mt-1">Notification &amp; alert engine — cooldown-gated triggers that fire in-app deal alerts to a role, named users, the record owner or the whole workspace.</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:sales_alert_trigger_create' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>New Alert Trigger</span>
+            </a>
+        </div>
+    </div>
+
+    {# Filters #}
+    <div class="card p-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <input type="text" name="q" id="filter-q" class="form-input" placeholder="Name or number…" value="{{ request.GET.q|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-type">Alert Type</label>
+                <select name="alert_type" id="filter-type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for value, label in alert_type_choices %}
+                        <option value="{{ value }}" {% if request.GET.alert_type == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-severity">Severity</label>
+                <select name="severity" id="filter-severity" class="form-select">
+                    <option value="">All Severities</option>
+                    {% for value, label in severity_choices %}
+                        <option value="{{ value }}" {% if request.GET.severity == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-audience">Audience</label>
+                <select name="audience_kind" id="filter-audience" class="form-select">
+                    <option value="">All Audiences</option>
+                    {% for value, label in audience_kind_choices %}
+                        <option value="{{ value }}" {% if request.GET.audience_kind == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-active">Status</label>
+                <select name="is_active" id="filter-active" class="form-select">
+                    <option value="">All</option>
+                    <option value="active" {% if request.GET.is_active == 'active' %}selected{% endif %}>Active</option>
+                    <option value="inactive" {% if request.GET.is_active == 'inactive' %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'sales:sales_alert_trigger_list' %}" class="btn btn-outline" title="Reset">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    {# Table #}
+    <div class="card">
+        <div class="table-wrap overflow-x-auto">
+            <table class="table w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b text-slate-500 bg-slate-50">
+                        <th class="p-3">Number</th>
+                        <th class="p-3">Name</th>
+                        <th class="p-3">Type</th>
+                        <th class="p-3">Target</th>
+                        <th class="p-3">Severity</th>
+                        <th class="p-3">Audience</th>
+                        <th class="p-3">Cooldown</th>
+                        <th class="p-3">Fires</th>
+                        <th class="p-3">Active</th>
+                        <th class="p-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for alert_trigger in alert_triggers %}
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="p-3 font-mono font-medium text-slate-900">
+                            <a href="{% url 'sales:sales_alert_trigger_detail' pk=alert_trigger.pk %}" class="text-primary hover:underline">{{ alert_trigger.number }}</a>
+                        </td>
+                        <td class="p-3 font-medium text-slate-900">{{ alert_trigger.name }}</td>
+                        <td class="p-3">
+                            <span class="badge badge-info">{{ alert_trigger.get_alert_type_display }}</span>
+                        </td>
+                        <td class="p-3 text-xs text-slate-600">{{ alert_trigger.get_target_entity_display }}</td>
+                        <td class="p-3">
+                            {% if alert_trigger.severity == 'low' %}
+                                <span class="badge badge-muted">{{ alert_trigger.get_severity_display }}</span>
+                            {% elif alert_trigger.severity == 'normal' %}
+                                <span class="badge badge-info">{{ alert_trigger.get_severity_display }}</span>
+                            {% elif alert_trigger.severity == 'high' %}
+                                <span class="badge badge-amber">{{ alert_trigger.get_severity_display }}</span>
+                            {% elif alert_trigger.severity == 'urgent' %}
+                                <span class="badge badge-red">{{ alert_trigger.get_severity_display }}</span>
+                            {% else %}
+                                <span class="badge badge-muted">{{ alert_trigger.get_severity_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-xs text-slate-600">{{ alert_trigger.get_audience_kind_display }}</td>
+                        <td class="p-3 text-slate-700">{{ alert_trigger.cooldown_hours }}h</td>
+                        <td class="p-3 text-slate-700 font-mono">{{ alert_trigger.fire_count }}</td>
+                        <td class="p-3">
+                            {% if alert_trigger.is_active %}
+                                <span class="badge badge-green">Active</span>
+                            {% else %}
+                                <span class="badge badge-muted">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-right">
+                            <div class="table-actions inline-flex items-center gap-1">
+                                <a href="{% url 'sales:sales_alert_trigger_detail' pk=alert_trigger.pk %}" class="btn btn-icon btn-outline" title="View">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'sales:sales_alert_trigger_edit' pk=alert_trigger.pk %}" class="btn btn-icon btn-outline" title="Edit">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'sales:sales_alert_trigger_delete' pk=alert_trigger.pk %}" class="inline" onsubmit="return confirm('Delete this alert trigger?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="p-12 text-center text-sm text-slate-500">No alert triggers yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% include "partials/pagination.html" %}
+    </div>
+</div>
+{% endblock %}
