@@ -86,6 +86,11 @@ from .models import (
     FieldCheckIn,
     MobileDeviceSession,
     MobileDealAlert,
+    # 8.17 Workflow & Process Automation
+    SalesProcessDefinition,
+    SalesAssignmentRule,
+    SalesApprovalDecision,
+    SalesAlertTrigger,
 )
 
 
@@ -1154,6 +1159,83 @@ class MobileDealAlertAdmin(TenantScopedFKAdmin):
     raw_id_fields = ("recipient", "device", "related_opportunity", "related_quote", "related_route")
     tenant_fk_fields = ("device", "related_opportunity", "related_quote", "related_route")
     tenant_user_fk_fields = ("recipient",)
+
+
+# ---------------------------------------------------------------- 8.17 Workflow & Process Automation
+@admin.register(SalesProcessDefinition)
+class SalesProcessDefinitionAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "target_entity", "trigger_event", "status", "version", "priority", "is_active", "tenant")
+    list_filter = ("status", "target_entity", "trigger_event", "is_active", "tenant")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("tenant", "number", "version", "created_at", "updated_at")
+    list_select_related = ("owner", "job_definition")
+
+
+@admin.register(SalesAssignmentRule)
+class SalesAssignmentRuleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "target_entity", "assignment_mode", "priority", "is_active", "last_assigned_owner", "tenant")
+    list_filter = ("assignment_mode", "target_entity", "match_mode", "is_active", "tenant")
+    search_fields = ("number", "name")
+    readonly_fields = ("tenant", "number", "cursor", "last_assigned_owner", "last_assigned_at", "created_at", "updated_at")
+    list_select_related = ("default_owner", "territory", "fallback_owner", "last_assigned_owner", "escalate_to")
+    filter_horizontal = ("eligible_owners",)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None)
+        if db_field.name in {"default_owner", "fallback_owner", "escalate_to"} and tenant is not None:
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant, is_active=True)
+        if db_field.name == "territory" and tenant is not None:
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant, is_active=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None)
+        if db_field.name == "eligible_owners" and tenant is not None:
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant, is_active=True)
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+
+@admin.register(SalesApprovalDecision)
+class SalesApprovalDecisionAdmin(admin.ModelAdmin):
+    """Read-only decision register (PartyEnrichmentEventAdmin precedent — the register IS the history)."""
+    list_display = ("number", "target_key", "approval_kind", "tier", "tier_count", "decision", "approver", "decided_at", "tenant")
+    list_filter = ("approval_kind", "decision", "tenant")
+    search_fields = ("number", "target_key", "record_label", "comment")
+    readonly_fields = ("tenant", "number", "approval_kind", "quote", "order_hold", "contract", "target_key", "record_label", "approval_rule", "tier", "tier_count", "approver_role", "approver", "decision", "comment", "requested_by", "requested_at", "due_at", "decided_at", "created_at", "updated_at")
+    list_select_related = ("quote", "order_hold", "contract", "approval_rule", "approver_role", "approver", "requested_by")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(SalesAlertTrigger)
+class SalesAlertTriggerAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "alert_type", "target_entity", "severity", "audience_kind", "cooldown_hours", "fire_count", "is_active", "tenant")
+    list_filter = ("alert_type", "severity", "audience_kind", "is_active", "tenant")
+    search_fields = ("number", "name")
+    readonly_fields = ("tenant", "number", "last_evaluated_at", "last_fired_at", "fire_count", "created_at", "updated_at")
+    list_select_related = ("audience_role", "notification_rule")
+    filter_horizontal = ("audience_users",)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None)
+        if db_field.name == "audience_role" and tenant is not None:
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant)  # Role has NO is_active
+        if db_field.name == "notification_rule" and tenant is not None:
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None)
+        if db_field.name == "audience_users" and tenant is not None:
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant, is_active=True)
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
 
 
