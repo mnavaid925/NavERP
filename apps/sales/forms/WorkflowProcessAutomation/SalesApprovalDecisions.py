@@ -80,10 +80,10 @@ class SalesApprovalDecisionActionForm(TenantActionForm):
 
     Target existence and tenancy are enforced in the deciding view via a tenant-scoped
     ``get_object_or_404(...).select_for_update()`` (IDOR-safe 404), so there are no clean
-    methods here. ``tier_count`` is optional: sales has NO ``required_tiers`` field and
-    ``QuoteApprovalRule.approver_role`` is a CharField (a role NAME), not a Role FK, so
-    the chain length comes from this field or falls back to ``Max("tier_count")`` over
-    the target's existing chain, else 1 (contract §10 deviation 8).
+    methods here. There is deliberately NO ``tier_count`` field: the chain length is a
+    security decision and must never be read from the request — the deciding view uses
+    the recorded ``Max(tier_count)`` snapshot on the existing chain, else 1 for a brand
+    -new chain (I1/S1; contract §10 deviation 8).
     """
 
     target_kind = forms.ChoiceField(choices=TARGET_KIND_CHOICES,
@@ -93,8 +93,5 @@ class SalesApprovalDecisionActionForm(TenantActionForm):
     approval_kind = forms.ChoiceField(required=False,
         choices=[("", "Auto (from target)")] + list(SalesApprovalDecision.APPROVAL_KIND_CHOICES),
         widget=forms.Select(attrs={"class": "form-select"}))
-    tier_count = forms.IntegerField(required=False, min_value=1, max_value=9,
-        widget=forms.NumberInput(attrs={"class": "form-input"}),
-        help_text="Chain length; defaults to the longest existing chain for this target.")
     comment = forms.CharField(required=False, max_length=2000,
         widget=forms.Textarea(attrs={"class": "form-textarea", "rows": 2}))
