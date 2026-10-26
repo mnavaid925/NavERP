@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ alert_trigger.number }} — {{ alert_trigger.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Header #}
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_alert_trigger_list' %}" class="hover:text-primary">Alert Triggers</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ alert_trigger.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">{{ alert_trigger.name }}</h1>
+                {% if alert_trigger.severity == 'low' %}
+                    <span class="badge badge-muted">{{ alert_trigger.get_severity_display }}</span>
+                {% elif alert_trigger.severity == 'normal' %}
+                    <span class="badge badge-info">{{ alert_trigger.get_severity_display }}</span>
+                {% elif alert_trigger.severity == 'high' %}
+                    <span class="badge badge-amber">{{ alert_trigger.get_severity_display }}</span>
+                {% elif alert_trigger.severity == 'urgent' %}
+                    <span class="badge badge-red">{{ alert_trigger.get_severity_display }}</span>
+                {% else %}
+                    <span class="badge badge-muted">{{ alert_trigger.get_severity_display }}</span>
+                {% endif %}
+                {% if alert_trigger.is_active %}
+                    <span class="badge badge-green">Active</span>
+                {% else %}
+                    <span class="badge badge-muted">Inactive</span>
+                {% endif %}
+                <span class="text-xs text-slate-400 font-mono">({{ alert_trigger.number }})</span>
+            </div>
+            <p class="text-sm text-slate-500 mt-1">Type: {{ alert_trigger.get_alert_type_display }} · Target: {{ alert_trigger.get_target_entity_display }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {# Main body #}
+        <div class="space-y-6 lg:col-span-2">
+            {# Conditions table #}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="filter" class="w-4 h-4 text-primary"></i>
+                        <span>Match Conditions</span>
+                    </h2>
+                </div>
+                <div class="table-wrap overflow-x-auto">
+                    <table class="table w-full text-left text-sm">
+                        <thead>
+                            <tr class="border-b text-slate-500 bg-slate-50">
+                                <th class="p-3">Field</th>
+                                <th class="p-3">Operator</th>
+                                <th class="p-3">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for condition in alert_trigger.conditions %}
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="p-3 font-mono text-xs text-slate-900">{{ condition.field }}</td>
+                                <td class="p-3 text-xs text-slate-600">{{ condition.operator }}</td>
+                                <td class="p-3 text-xs text-slate-700">
+                                    {% if condition.operator == 'in' or condition.operator == 'not_in' %}
+                                        {{ condition.value|join:", " }}
+                                    {% elif condition.value == None %}
+                                        —
+                                    {% else %}
+                                        {{ condition.value }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="p-6 text-center text-sm text-slate-500">Catch-all — every record of the target entity matches.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {# Audience #}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="users" class="w-4 h-4 text-primary"></i>
+                        <span>Audience</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm space-y-2">
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Audience Kind</span>
+                        <span class="text-slate-800">{{ alert_trigger.get_audience_kind_display }}</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Audience Role</span>
+                        <span class="text-slate-800">
+                            {% if alert_trigger.audience_role %}{{ alert_trigger.audience_role.name }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Named Recipients</span>
+                        <span class="text-slate-800">
+                            {% if audience_users %}
+                                <ul class="space-y-1">
+                                    {% for recipient in audience_users %}
+                                        <li class="flex items-center gap-2">
+                                            <i data-lucide="user" class="w-3.5 h-3.5 text-slate-400"></i>
+                                            <span>{{ recipient.get_full_name }}</span>
+                                            <span class="text-xs text-slate-400 font-mono">({{ recipient.username }})</span>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {# Delivery route #}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="send" class="w-4 h-4 text-primary"></i>
+                        <span>Delivery Route</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm space-y-2">
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Notification Rule</span>
+                        <span class="text-slate-800">
+                            {% if alert_trigger.notification_rule %}{{ alert_trigger.notification_rule.name }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-500">Firing writes sales.MobileDealAlert rows for user-targeted audiences; email/SMS/push transport is deferred (GAP-sales-8.17-05).</p>
+                </div>
+            </div>
+
+            {# Firing state (read-only, system-managed) #}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="refresh-cw" class="w-4 h-4 text-primary"></i>
+                        <span>Firing State (read-only)</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm space-y-2">
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Cooldown</span>
+                        <span class="text-slate-800">{{ alert_trigger.cooldown_hours }}h</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Fire Count</span>
+                        <span class="text-slate-800 font-mono">{{ alert_trigger.fire_count }}</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Last Fired At</span>
+                        <span class="text-slate-800">
+                            {% if alert_trigger.last_fired_at %}{{ alert_trigger.last_fired_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Last Evaluated At</span>
+                        <span class="text-slate-800">
+                            {% if alert_trigger.last_evaluated_at %}{{ alert_trigger.last_evaluated_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Sidebar #}
+        <div class="space-y-6 lg:col-span-1">
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="settings" class="w-4 h-4 text-primary"></i>
+                        <span>Actions</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 space-y-2">
+                    <a href="{% url 'sales:sales_alert_trigger_edit' pk=alert_trigger.pk %}" class="btn btn-outline w-full flex items-center justify-center gap-2">
+                        <i data-lucide="pencil" class="w-4 h-4"></i>
+                        <span>Edit</span>
+                    </a>
+                    <form method="post" action="{% url 'sales:sales_alert_trigger_delete' pk=alert_trigger.pk %}" onsubmit="return confirm('Delete this alert trigger?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger w-full flex items-center justify-center gap-2">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            <span>Delete</span>
+                        </button>
+                    </form>
+                    <a href="{% url 'sales:sales_alert_trigger_list' %}" class="btn btn-outline w-full flex items-center justify-center gap-2">
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                        <span>Back to List</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="info" class="w-4 h-4 text-primary"></i>
+                        <span>Details</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm space-y-3">
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Number</span>
+                        <span class="font-mono text-slate-800">{{ alert_trigger.number }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Alert Type</span>
+                        <span class="text-slate-800">{{ alert_trigger.get_alert_type_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Target Entity</span>
+                        <span class="text-slate-800">{{ alert_trigger.get_target_entity_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Inactivity Window (days)</span>
+                        <span class="text-slate-800">
+                            {% if alert_trigger.inactivity_days %}{{ alert_trigger.inactivity_days }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Priority</span>
+                        <span class="text-slate-800">{{ alert_trigger.priority }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Created</span>
+                        <span class="text-slate-800">{{ alert_trigger.created_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Updated</span>
+                        <span class="text-slate-800">{{ alert_trigger.updated_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
