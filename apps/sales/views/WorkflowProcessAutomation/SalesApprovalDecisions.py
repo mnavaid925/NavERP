@@ -2,7 +2,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Max, Q
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -88,12 +88,16 @@ def sales_approval_decision_detail(request, pk):
         .order_by(*_CHAIN_ORDER)
     )
     rejected_exists = any(row.decision == "rejected" for row in chain)
-    approved_count = sum(1 for row in chain if row.decision == "approved")
     tier_count = max((row.tier_count for row in chain), default=1)
-    # Pending = the ABSENCE of a row at the current tier. A rejection closes the chain
-    # at any tier, and a fully-approved chain has no next tier either.
-    pending_tier = (
-        None if rejected_exists or approved_count >= tier_count else approved_count + 1
+    # Pending = the ABSENCE of a row at the current tier: the LOWEST positive tier with no
+    # recorded row (I4). The old approved-count derivation showed "Pending — Tier 3" on a
+    # gapped {1, 3} chain where tier 3 already exists — signing it would 500 on the
+    # (tenant, target_key, tier) UniqueConstraint. A rejection closes the chain at any
+    # tier, and a fully-signed chain has no next tier either.
+    signed_tiers = {row.tier for row in chain}
+    pending_tier = None if rejected_exists else next(
+        (candidate for candidate in range(1, tier_count + 1) if candidate not in signed_tiers),
+        None,
     )
 
     kind, _, pk_str = approval_decision.target_key.partition(":")
@@ -108,7 +112,6 @@ def sales_approval_decision_detail(request, pk):
         action_form = SalesApprovalDecisionActionForm(tenant=tenant, initial={
             "target_kind": kind,
             "target_id": target_pk,
-            "tier_count": tier_count,
             "approval_kind": TARGET_KIND_TO_APPROVAL_KIND.get(kind, ""),
         })
 
@@ -219,7 +222,11 @@ def _sales_approval_decide(request, decision):
         tenant=tenant, target_key=target_key
     ).order_by(*_CHAIN_ORDER)
 
-    if chain.filter(decision="rejected").exists():
+    # One pass over the chain (I1/I4/M11): a single values_list read of the ≤9-row chain
+    # replaces the three separate exists()/aggregate()/count() queries AND yields the
+    # signed-tier set the gapped-chain fix needs.
+    rows = list(chain.values_list("tier", "decision", "tier_count"))
+    if any(row_decision == "rejected" for _, row_decision, _ in rows):
         messages.error(request, "This approval chain is closed — a rejection already ended it.")
         return redirect("sales:sales_approval_decision_list")
 
@@ -233,18 +240,24 @@ def _sales_approval_decide(request, decision):
             messages.error(request, "You cannot sign an approval on a quote you own.")
             return redirect("sales:sales_approval_decision_list")
 
-    # Chain length: the optional form value, else the longest snapshot already recorded
-    # for this target, else a single-tier chain. Sales has NO `required_tiers` field and
-    # QuoteApprovalRule.approver_role is a CharField (a role NAME), so neither can
-    # resolve a tier count (contract §10 deviation 8). `tier` is the deterministic count
-    # of approved rows + 1 — never an unordered `.first()` (L61).
-    tier_count = (
-        form.cleaned_data.get("tier_count")
-        or chain.aggregate(Max("tier_count"))["tier_count__max"]
-        or 1
+    # Chain length: the RECORDED snapshot always wins (I1/S1). A POSTed tier_count must
+    # never shorten a live chain (flipping the quote to approved one tier early) or extend
+    # it mid-flight — the action form no longer carries the field at all. Sales has NO
+    # `required_tiers` field and QuoteApprovalRule.approver_role is a CharField (a role
+    # NAME), so the recorded snapshot is the only trusted source; a brand-new chain starts
+    # as a single-tier chain (contract §10 deviation 8).
+    tier_count = max((snapshot for _, _, snapshot in rows), default=1)
+    # Next tier = the LOWEST tier with no recorded row — never approved-count + 1, which
+    # collides with an existing row on a gapped chain (tiers 1 and 3 of 3 recorded
+    # manually) → UniqueConstraint IntegrityError → masked 500 (I4). This mirrors the
+    # detail view's pending_tier derivation, so the page never offers a tier the POST
+    # will refuse (L32).
+    signed_tiers = {row_tier for row_tier, _, _ in rows}
+    tier = next(
+        (candidate for candidate in range(1, tier_count + 1) if candidate not in signed_tiers),
+        None,
     )
-    tier = chain.filter(decision="approved").count() + 1
-    if tier > tier_count:
+    if tier is None:
         messages.error(request, "Every tier in this chain is already signed.")
         return redirect("sales:sales_approval_decision_list")
 
