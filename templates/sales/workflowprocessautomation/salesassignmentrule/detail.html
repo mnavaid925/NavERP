@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ assignment_rule.number }} — {{ assignment_rule.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Header #}
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_assignment_rule_list' %}" class="hover:text-primary">Assignment Rules</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ assignment_rule.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">{{ assignment_rule.name }}</h1>
+                <span class="badge badge-info">{{ assignment_rule.get_assignment_mode_display }}</span>
+                {% if assignment_rule.is_active %}
+                    <span class="badge badge-green">Active</span>
+                {% else %}
+                    <span class="badge badge-muted">Inactive</span>
+                {% endif %}
+                <span class="text-xs text-slate-400 font-mono">({{ assignment_rule.number }})</span>
+            </div>
+            <p class="text-sm text-slate-500 mt-1">Target: {{ assignment_rule.get_target_entity_display }} · Match: {{ assignment_rule.get_match_mode_display }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {# Main body #}
+        <div class="space-y-6 lg:col-span-2">
+            {# Mode-specific configuration #}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="user-cog" class="w-4 h-4 text-primary"></i>
+                        <span>Assignment Configuration</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm space-y-2">
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Mode</span>
+                        <span class="text-slate-800">{{ assignment_rule.get_assignment_mode_display }}</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Default Owner</span>
+                        <span class="text-slate-800">
+                            {% if assignment_rule.default_owner %}{{ assignment_rule.default_owner.get_full_name }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Fallback Owner</span>
+                        <span class="text-slate-800">
+                            {% if assignment_rule.fallback_owner %}{{ assignment_rule.fallback_owner.get_full_name }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Territory</span>
+                        <span class="text-slate-800">
+                            {% if assignment_rule.territory %}
+                                {{ assignment_rule.territory.name }}
+                                {% if assignment_rule.territory.manager %}
+                                    <span class="text-xs text-slate-500">· Manager: {{ assignment_rule.territory.manager.get_full_name }}</span>
+                                {% else %}
+                                    <span class="text-xs text-slate-400">· No manager</span>
+                                {% endif %}
+                            {% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Max Open Records</span>
+                        <span class="text-slate-800">
+                            {% if assignment_rule.max_open_records %}{{ assignment_rule.max_open_records }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Escalate After (hours)</span>
+                        <span class="text-slate-800">
+                            {% if assignment_rule.escalate_after_hours %}{{ assignment_rule.escalate_after_hours }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Escalate To</span>
+                        <span class="text-slate-800">
+                            {% if assignment_rule.escalate_to %}{{ assignment_rule.escalate_to.get_full_name }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {# Eligible owners #}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="users" class="w-4 h-4 text-primary"></i>
+                        <span>Eligible Owners</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm">
+                    {% if eligible_owners %}
+                        <ul class="space-y-1">
+                            {% for owner in eligible_owners %}
+                                <li class="flex items-center gap-2 text-slate-800">
+                                    <i data-lucide="user" class="w-3.5 h-3.5 text-slate-400"></i>
+                                    <span>{{ owner.get_full_name }}</span>
+                                    <span class="text-xs text-slate-400 font-mono">({{ owner.username }})</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-sm text-slate-500">No eligible owners — used by round-robin and load-balanced modes.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Conditions table #}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="filter" class="w-4 h-4 text-primary"></i>
+                        <span>Match Conditions</span>
+                    </h2>
+                </div>
+                <div class="table-wrap overflow-x-auto">
+                    <table class="table w-full text-left text-sm">
+                        <thead>
+                            <tr class="border-b text-slate-500 bg-slate-50">
+                                <th class="p-3">Field</th>
+                                <th class="p-3">Operator</th>
+                                <th class="p-3">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for condition in assignment_rule.conditions %}
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="p-3 font-mono text-xs text-slate-900">{{ condition.field }}</td>
+                                <td class="p-3 text-xs text-slate-600">{{ condition.operator }}</td>
+                                <td class="p-3 text-xs text-slate-700">
+                                    {% if condition.operator == 'in' or condition.operator == 'not_in' %}
+                                        {{ condition.value|join:", " }}
+                                    {% elif condition.value == None %}
+                                        —
+                                    {% else %}
+                                        {{ condition.value }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="p-6 text-center text-sm text-slate-500">
+                                    {% if assignment_rule.is_catch_all %}Catch-all — every record of the target entity matches.{% else %}No conditions defined.{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {# Round-robin / assignment state (read-only, system-managed) #}
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="refresh-cw" class="w-4 h-4 text-primary"></i>
+                        <span>Assignment State (read-only)</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm space-y-2">
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Round-Robin Cursor</span>
+                        <span class="text-slate-800 font-mono">{{ assignment_rule.cursor }}</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Last Assigned Owner</span>
+                        <span class="text-slate-800">
+                            {% if assignment_rule.last_assigned_owner %}{{ assignment_rule.last_assigned_owner.get_full_name }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider w-44 shrink-0 pt-0.5">Last Assigned At</span>
+                        <span class="text-slate-800">
+                            {% if assignment_rule.last_assigned_at %}{{ assignment_rule.last_assigned_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Sidebar #}
+        <div class="space-y-6 lg:col-span-1">
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="settings" class="w-4 h-4 text-primary"></i>
+                        <span>Actions</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 space-y-2">
+                    <a href="{% url 'sales:sales_assignment_rule_edit' pk=assignment_rule.pk %}" class="btn btn-outline w-full flex items-center justify-center gap-2">
+                        <i data-lucide="pencil" class="w-4 h-4"></i>
+                        <span>Edit</span>
+                    </a>
+                    <form method="post" action="{% url 'sales:sales_assignment_rule_delete' pk=assignment_rule.pk %}" onsubmit="return confirm('Delete this assignment rule?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger w-full flex items-center justify-center gap-2">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            <span>Delete</span>
+                        </button>
+                    </form>
+                    <a href="{% url 'sales:sales_assignment_rule_list' %}" class="btn btn-outline w-full flex items-center justify-center gap-2">
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                        <span>Back to List</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header border-b p-4">
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="info" class="w-4 h-4 text-primary"></i>
+                        <span>Details</span>
+                    </h2>
+                </div>
+                <div class="card-body p-4 text-sm space-y-3">
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Number</span>
+                        <span class="font-mono text-slate-800">{{ assignment_rule.number }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Target Entity</span>
+                        <span class="text-slate-800">{{ assignment_rule.get_target_entity_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Match Mode</span>
+                        <span class="text-slate-800">{{ assignment_rule.get_match_mode_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Priority</span>
+                        <span class="text-slate-800">{{ assignment_rule.priority }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Catch-All</span>
+                        <span class="text-slate-800">{{ assignment_rule.is_catch_all|yesno:"Yes,No" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Created</span>
+                        <span class="text-slate-800">{{ assignment_rule.created_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block">Updated</span>
+                        <span class="text-slate-800">{{ assignment_rule.updated_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
