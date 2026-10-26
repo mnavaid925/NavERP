@@ -52,6 +52,11 @@ from .PartnerChannel import urlpatterns as _partner_channel
 from .ContractSubscriptionManagement import urlpatterns as _contract_subscription
 # 8.16 Mobile Sales
 from .MobileSales import urlpatterns as _mobile_sales
+# 8.17 Workflow & Process Automation. Extends crm.Lead/Opportunity/Case/Territory,
+# sales.CPQQuote/OrderHold/CustomerContract/QuoteApprovalRule/MobileDealAlert, scm.SalesOrder,
+# accounts.User/Role, core.JobDefinition/NotificationRule by FK or as write targets; declares no
+# second workflow registry, notification channel or approval gate.
+from .WorkflowProcessAutomation import urlpatterns as _workflow_automation
 
 app_name = "sales"
 
@@ -96,6 +101,8 @@ urlpatterns = [
     *_contract_subscription,
     # 8.16 Mobile Sales.
     *_mobile_sales,
+    # 8.17 Workflow & Process Automation.
+    *_workflow_automation,
     *_pipelines,
     *_teams,
     *_competitors,
