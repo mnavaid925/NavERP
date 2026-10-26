@@ -106,6 +106,12 @@ from apps.sales.models import (
 from apps.sales.cpq_services import cpq_recalc_quote_totals, cpq_render_proposal_html, cpq_convert_to_sales_order
 from apps.sales.forecast_services import forecast_submission_snapshot
 from apps.sales.models.OrderManagement.OrderHolds import build_evaluation_snapshot
+# 8.17 Workflow & Process Automation. `Territory` and `CPQQuote` are already imported above.
+from apps.core.models.Workflow import WorkflowDefinition
+from apps.sales.models.WorkflowProcessAutomation.SalesAlertTriggers import SalesAlertTrigger
+from apps.sales.models.WorkflowProcessAutomation.SalesApprovalDecisions import SalesApprovalDecision
+from apps.sales.models.WorkflowProcessAutomation.SalesAssignmentRules import SalesAssignmentRule
+from apps.sales.models.WorkflowProcessAutomation.SalesProcessDefinitions import SalesProcessDefinition
 from apps.sales.views.SalesActivityTaskManagement.Boards import STALE_ACTIVITY_DAYS
 
 from apps.sales.opportunity_services import opportunity_pipeline_baseline_stages
@@ -161,7 +167,7 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, backfill=backfill)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12, 8.13, and 8.14 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12, 8.13, 8.14, 8.15, 8.16, and 8.17 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
@@ -202,6 +208,7 @@ class Command(BaseCommand):
         self._seed_partner_channel(tenant, owner)
         self._seed_contract_subscription_management(tenant, owner)
         self._seed_mobile_sales(tenant, owner)
+        self._seed_workflow_process_automation(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -4112,6 +4119,152 @@ class Command(BaseCommand):
             f"{FieldCheckIn.objects.filter(tenant=tenant).count()} check-ins, "
             f"{MobileDeviceSession.objects.filter(tenant=tenant).count()} devices, "
             f"{MobileDealAlert.objects.filter(tenant=tenant).count()} alerts)."
+        )
+
+    def _seed_workflow_process_automation(self, tenant, owner):
+        """Sales 8.17 Workflow & Process Automation demo rows (idempotent, additive).
+
+        Reuses the ALREADY-seeded CPQQuote / crm.Territory / accounts.User rows rather than
+        inventing duplicates. SAD rows go through ``SalesApprovalDecision.record()`` (never
+        ``bulk_create``) so ``save()`` recomputes ``target_key`` and the
+        ``(tenant, target_key, tier)`` UniqueConstraint stays meaningful.
+        """
+        if SalesProcessDefinition.objects.filter(tenant=tenant).exists():
+            return
+
+        quote = CPQQuote.objects.filter(tenant=tenant).order_by("pk").first()
+        territory = Territory.objects.filter(tenant=tenant).order_by("pk").first()
+        second_user = (
+            User.objects.filter(tenant=tenant, is_active=True)
+            .exclude(pk=owner.pk).order_by("pk").first()
+        )
+
+        with transaction.atomic():
+            # 1. Alert triggers FIRST — the SPD notify node below references sat2.pk.
+            sat1 = SalesAlertTrigger.objects.create(
+                tenant=tenant,
+                name="Deal Inactivity Watcher",
+                alert_type="deal_inactivity",
+                target_entity="opportunity",
+                severity="high",
+                audience_kind="all",
+                inactivity_days=7,
+                cooldown_hours=24,
+                priority=10,
+                conditions=[{"field": "status", "operator": "eq", "value": "open"}],
+            )
+            sat2 = SalesAlertTrigger.objects.create(
+                tenant=tenant,
+                name="Stage Change Notifier",
+                alert_type="stage_change",
+                target_entity="opportunity",
+                severity="normal",
+                audience_kind="user",
+                priority=20,
+            )
+            sat2.audience_users.add(owner)
+
+            # 2. Process definitions.
+            spd1 = SalesProcessDefinition.objects.create(
+                tenant=tenant,
+                name="Quote Discount Approval Flow",
+                description="Two-tier sign-off when a quote header discount reaches 20%.",
+                status="active",
+                target_entity="quote",
+                trigger_event="field_value",
+                trigger_field="header_discount_pct",
+                trigger_value="20",
+                owner=owner,
+                priority=10,
+                conditions=[{"field": "header_discount_pct", "operator": "gte", "value": 20}],
+                nodes=[
+                    {"seq": 1, "type": "approval",
+                     "params": {"approval_kind": "discount", "tier_count": 2}},
+                    {"seq": 2, "type": "notify", "params": {"alert_trigger_id": sat2.pk}},
+                    {"seq": 3, "type": "create_task",
+                     "params": {"title": "Follow up on discounted quote"}},
+                ],
+            )
+            SalesProcessDefinition.objects.create(
+                tenant=tenant,
+                name="Lead Welcome Onboarding",
+                status="draft",
+                target_entity="lead",
+                trigger_event="created",
+                owner=owner,
+                priority=20,
+                nodes=[{"seq": 1, "type": "assign", "params": {"mode": "round_robin"}}],
+            )
+
+            # 3. Assignment rules.
+            sar1 = SalesAssignmentRule.objects.create(
+                tenant=tenant,
+                name="Opportunity Round Robin Pool",
+                target_entity="opportunity",
+                match_mode="all",
+                assignment_mode="round_robin",
+                is_catch_all=True,
+                priority=10,
+            )
+            sar1.eligible_owners.add(owner)
+            if second_user is not None:
+                sar1.eligible_owners.add(second_user)
+
+            if territory is not None:
+                SalesAssignmentRule.objects.create(
+                    tenant=tenant,
+                    name="Case Territory Manager Route",
+                    target_entity="case",
+                    assignment_mode="territory_manager",
+                    territory=territory,
+                    priority=20,
+                )
+            else:
+                # Tenants without a seeded territory still get the row.
+                SalesAssignmentRule.objects.create(
+                    tenant=tenant,
+                    name="Case Territory Manager Route",
+                    target_entity="case",
+                    assignment_mode="round_robin",
+                    is_catch_all=True,
+                    priority=20,
+                )
+
+            # 4. A 2-tier decision chain on the first quote: tier 1 is APPROVED (a row),
+            #    tier 2 is PENDING and is represented by the ABSENCE of a row.
+            if quote is not None:
+                SalesApprovalDecision.record(
+                    tenant,
+                    quote=quote,
+                    approval_kind="discount",
+                    tier=1,
+                    tier_count=2,
+                    decision="approved",
+                    approver=owner,
+                    requested_by=owner,
+                    requested_at=timezone.now(),
+                    record_label=(quote.number or quote.name)[:200],
+                    comment="Seeded tier-1 sign-off.",
+                )
+
+            # 5. Register the engine in the per-tenant core.WorkflowDefinition registry.
+            WorkflowDefinition.objects.get_or_create(
+                tenant=tenant,
+                name="Sales Approval Workflow",
+                defaults={
+                    "module_slug": "sales",
+                    "engine_label": "sales.SalesApprovalDecision",
+                    "description": "Sales 8.17 multi-tier approval register (SalesApprovalDecision).",
+                    "target_hours": 48,
+                },
+            )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.17 workflow automation demo rows ensured "
+            f"({SalesProcessDefinition.objects.filter(tenant=tenant).count()} processes, "
+            f"{SalesAssignmentRule.objects.filter(tenant=tenant).count()} assignment rules, "
+            f"{SalesApprovalDecision.objects.filter(tenant=tenant).count()} decisions, "
+            f"{SalesAlertTrigger.objects.filter(tenant=tenant).count()} alert triggers)."
         )
 
 
