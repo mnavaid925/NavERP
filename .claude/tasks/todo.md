@@ -17526,3 +17526,291 @@ Pure query projection (0 new tables). Computes:
 - **A duplicate Geofence table**: Proximity is calculated dynamically via the mathematical Haversine formula against destination party coordinates on `FieldCheckIn`, avoiding redundant geofence catalog maintenance.
 - **A duplicate Document or Photo storage master**: Photos, receipts, and shelf audit attachments use `core.Document` (`DOC-`).
 - **A separate table for Mobile Sales Dashboard**: The dashboard is a pure query projection / computed aggregation over `FieldSalesRoute`, `FieldCheckIn`, `MobileDeviceSession`, and `MobileDealAlert`. Zero drift-prone rollup tables.
+
+---
+# Sub-module 8.17 — Workflow & Process Automation (Module 8: Sales Management System, sales) — plan from research-sales-8.17.md (2026-10-26)
+
+**Repo state at plan time:** BASE `15b30066`; HEAD `3b3b03ae` (research commit). Working tree otherwise clean — a dirty tree at build start is NOT yours (L45). `apps/sales/` exists and is fully packaged (19 PascalCase sub-module folders per layer) — this run **EXTENDS** it: **no scaffold, no `config/settings.py` / `config/urls.py` changes.** **Next migration: `0031`** — verified: `apps/sales/migrations/` ends at `0030_contractobligation_sales_obl_ten_sub_idx_and_more.py`. **Re-verify the number at generation time (L43/L51/L53).**
+
+## The pinned decisions this plan executes literally
+
+**(a) `<SubModule>` package folder = `WorkflowProcessAutomation`** in all four layers (`apps/sales/{models,forms,views,urls}/WorkflowProcessAutomation/`). Matches house style (drops `&`, PascalCase — siblings: `QuoteProposalCPQ`, `ContractSubscriptionManagement`, `TerritoryQuotaManagement`). Use this exact string in EVERY path.
+
+**(b) Template sub-module folder = `templates/sales/workflowprocessautomation/`** — verified house convention by reading real render() calls: `sales/mobilesales/…` for `MobileSales/`, `sales/contactaccountmanagement/…` for `ContactAccountManagement/`, `sales/salesactivitytaskmanagement/…` (the folder name lowercased verbatim; `quote_proposal_cpq` is the lone underscored outlier). This is a **multi-entity** sub-module → four entity folders, NO single-entity collapse:
+- `templates/sales/workflowprocessautomation/salesprocessdefinition/{list,detail,form}.html`
+- `templates/sales/workflowprocessautomation/salesassignmentrule/{list,detail,form}.html`
+- `templates/sales/workflowprocessautomation/salesapprovaldecision/{list,detail,form}.html`
+- `templates/sales/workflowprocessautomation/salesalerttrigger/{list,detail,form}.html`
+
+**(c) Entity filenames (layers line up one-to-one):** `SalesProcessDefinitions.py`, `SalesAssignmentRules.py`, `SalesApprovalDecisions.py`, `SalesAlertTriggers.py` in each of `models/`, `forms/`, `views/`, `urls/` under `WorkflowProcessAutomation/`.
+
+**(d) URL names** (house convention verified: snake_case of the model name, e.g. `mobile_deal_alert_list`, `party_enrichment_list`; custom action precedent `territory_rule_run` from 8.7):
+- `sales_process_definition_list` / `_detail` / `_create` / `_edit` / `_delete` + **`sales_process_definition_run`** (POST "Run now" — 8.7 precedent: ship the action, park the scheduler)
+- `sales_assignment_rule_list` / `_detail` / `_create` / `_edit` / `_delete`
+- `sales_approval_decision_list` / `_detail` / `_create` / `_edit` / `_delete` + **`sales_approval_decision_approve`** + **`sales_approval_decision_reject`** (POST)
+- `sales_alert_trigger_list` / `_detail` / `_create` / `_edit` / `_delete`
+- **First-match-wins:** literal routes (`…/run/`, `…/approve/`, `…/reject/`) BEFORE every `<int:pk>` route, in each entity url module AND in the concatenated `urls/__init__.py`.
+
+**(e) `SalesApprovalDecision` uniqueness — DECIDED (no open question for the build agent):** three nullable target FKs make `unique_together` awkward. Read of `apps/procurement/models/ApprovalWorkflowEngine/Approvals.py` confirms its `unique_together ("tenant", "requisition", "tier")` works only because it has a SINGLE target FK. Chosen mechanism: a computed **`target_key` CharField(max_length=40)** = `"<target_kind>:<pk>"` (`"quote:12"`, `"order_hold:7"`, `"contract:3"`), set in `save()` (and identically in the deciding view/form path — same transformation, same place, L49-addendum) from whichever FK is populated, plus **`models.UniqueConstraint(fields=["tenant", "target_key", "tier"], name="sales_sad_tnt_tgt_tier_uniq")`** (27 chars ≤ 30, L65). `clean()` enforces **exactly one** of `quote` / `order_hold` / `contract` is set (L39 — this guard is tenant-independent, so it DOES fire on the form path; tenant-membership checks on the targets are NOT reliable in `Model.clean()` — do them in the form's `clean()` with the form-held tenant and via view queryset narrowing, L49-addendum).
+
+**(f) Zero duplicate engines (L55 coexistence ruling).** 8.17 builds the **sales-scoped** engine and registers into `core.WorkflowDefinition` (0.11 registry, `engine_label="sales.SalesApprovalDecision"`); it does NOT replace `core.WorkflowDefinition`/`WorkflowStep`/`SlaRule`, does NOT re-invent `core.Notification*` channels, does NOT touch `crm.WorkflowRule`/`crm.ApprovalRequest` (1.10), and for **lead targets MUST delegate to 8.1's `LeadRoutingRule` resolver — never re-decide a lead owner** (8.1 research ruling).
+
+**(g) Prefix registry — `SPD`, `SAR`, `SAD`, `SAT`** — all verified collision-free across every app (`grep NUMBER_PREFIX`). All four models extend `apps/sales/models/_base.py::TenantNumbered` (race-safe `next_number`, raises `IntegrityError` after 5 collisions — L62 — do NOT hand-roll numbering). Multi-tenant `tenant` FK inherited, never redeclared.
+
+**(h) Audit via `write_audit_log(user, obj, action, changes=None, tenant=None)`** (`apps/core/utils.py:10`). **There is no `log_action`** — SKILL.md text is stale.
+
+---
+
+## Models (from research — 4)
+
+All four live in the NEW package `apps/sales/models/WorkflowProcessAutomation/`, extend `TenantNumbered`, and are re-exported from `apps/sales/models/__init__.py`.
+
+### 1. `SalesProcessDefinition` [`SPD-`] — `SalesProcessDefinitions.py` — **bullet 1 (Visual Process Designer)**
+Drivers: versioned trigger→ordered-steps definitions (Salesforce Flow versions, Zoho Blueprint lifecycle, Dynamics BPF, Creatio, Odoo); closed step-node catalog (Salesforce elements, HubSpot actions, Freshsales blocks); time-based triggers; re-enrollment cap (HubSpot); mandatory-data gating (Zoho/Dynamics).
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | Char(200) | Process title |
+| `description` | TextField, blank | What it automates |
+| `version` | PositiveIntegerField, default 1 | Monotonic; running records reference a frozen definition |
+| `status` | Char(10), `STATUS_CHOICES`, default `draft` | draft / active / paused / archived (longest value 8 ≤ 10, L65) |
+| `target_entity` | Char(16), `TARGET_ENTITY_CHOICES` | lead / opportunity / quote / order / case / contract / subscription (longest value `subscription` = 12) — resolved to `crm.Lead`, `crm.Opportunity`, `sales.CPQQuote`, `scm.SalesOrder`, `crm.Case`, `sales.CustomerContract`, `sales.CustomerSubscription` (all grep-verified) |
+| `trigger_event` | Char(16), `TRIGGER_EVENT_CHOICES` | created / updated / stage_changed / field_value / date_reached / inactivity (longest value 13) — mirrors `crm.WorkflowRule.EVENT_CHOICES` + `inactivity` |
+| `trigger_field` | Char(100), blank | For `field_value` triggers |
+| `trigger_value` | Char(200), blank | For `field_value` triggers |
+| `conditions` | JSONField, default list, blank-ok | Bounded validator **cloned from `LeadRoutingRule.validate_routing_conditions`**: ≤20 items / ≤16 KiB / scalar-only / reject non-finite |
+| `nodes` | JSONField, default list | Ordered `[{seq, type, params}]`; `type` ∈ approval / assign / notify / update_field / create_task / wait / branch; `create_task` params reference `sales.TaskTemplate`; `assign` delegates to `SalesAssignmentRule`/`LeadRoutingRule`; `notify` references `core.NotificationRule`. Same bound rules as `conditions`. Step params may carry `required_fields` (Blueprint gating) |
+| `max_enrollments` | PositiveSmallInteger, default 1 | HubSpot re-enrollment / loop cap |
+| `priority` | PositiveSmallInteger, default 100 | Lower fires first |
+| `is_active` | Boolean, default True | |
+| `owner` | FK `settings.AUTH_USER_MODEL`, SET_NULL, null | Author/owner |
+| `job_definition` | FK `core.JobDefinition`, SET_NULL, null, blank | Time-based trigger registration (verified exists); runner is platform work — deferred |
+
+- **Meta:** `ordering = ["priority", "name", "id"]`; index `("tenant", "status")` name ≤30 chars (e.g. `sales_spd_tnt_status_idx`).
+- **Form excludes:** `tenant`, `number` (auto, `editable=False`), `version` (system-managed — bumped by the view on status transitions, not hand-edited), `created_at`, `updated_at`, `owner` (view sets `request.user`), `job_definition` (Integrate/scheduler-owned).
+- **FKs:** `accounts.User`, `core.JobDefinition` — verified.
+
+### 2. `SalesAssignmentRule` [`SAR-`] — `SalesAssignmentRules.py` — **bullet 2 (Auto-Assignment Rules)**
+Drivers: Salesforce assignment rules; LeanData/Q-Assign closed mode set (fixed, round robin, capacity, territory, escalation, fallback); Freshsales territory auto-assignment; HubSpot owner rotation; 8.1 Q12/Q13 hand-off (capacity-aware load balancing).
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | Char(200) | Unique per tenant |
+| `target_entity` | Char(16), `TARGET_ENTITY_CHOICES` | lead / opportunity / case — targets are **`crm.Lead` / `crm.Opportunity` / `crm.Case`** (CRM owns them, verified §1.3). **For `lead`, the resolver MUST call 8.1's `LeadRoutingRule` decision path — SAR never re-decides a lead owner** |
+| `match_mode` | Char(8), `MATCH_MODE_CHOICES` | all / any |
+| `conditions` | JSONField, default list | Same bounded validator cloned from `LeadRoutingRule` |
+| `is_catch_all` | Boolean, default False | Matches when no higher-priority rule matches |
+| `assignment_mode` | Char(20), `ASSIGNMENT_MODE_CHOICES` | fixed_owner / round_robin / load_balanced / territory_manager / escalate_manager (longest value `territory_manager` = 17 ≤ 20, L65) |
+| `default_owner` | FK User, SET_NULL, null | `fixed_owner` target |
+| `eligible_owners` | M2M `settings.AUTH_USER_MODEL`, blank | Round-robin / load-balance pool |
+| `fallback_owner` | FK User, SET_NULL, null | When pool exhausted (LeanData fallback) |
+| `territory` | FK `crm.Territory`, SET_NULL, null | `territory_manager` mode → delegates to 8.7 `TerritoryRule` resolver |
+| `max_open_records` | PositiveSmallInteger, null | Capacity for `load_balanced` (count of open records per owner) |
+| `cursor` | PositiveIntegerField, default 0 | Race-safe round-robin state (8.1 pattern: `select_for_update` on the rule row) |
+| `last_assigned_owner` | FK User, SET_NULL, null | Derived state — never on a form |
+| `last_assigned_at` | DateTimeField, null | Derived state — never on a form |
+| `escalate_after_hours` | PositiveSmallInteger, null | Case/opportunity acceptance-breach window |
+| `escalate_to` | FK User, SET_NULL, null | Escalation target |
+| `priority` | PositiveSmallInteger, default 100 | |
+| `is_active` | Boolean, default True | |
+
+- **Meta:** `ordering = ["priority", "name", "id"]`; `unique_together = ("tenant", "name")`; index `("tenant", "target_entity", "is_active")` (name ≤30).
+- **Form excludes:** `tenant`, `number`, `created_at`, `updated_at`, `cursor`, `last_assigned_owner`, `last_assigned_at` (all derived/system state, L22).
+- **FKs:** `accounts.User`, `crm.Territory` — verified.
+
+### 3. `SalesApprovalDecision` [`SAD-`] — `SalesApprovalDecisions.py` — **bullet 3 (Approval Workflows)**
+Drivers: Salesforce multi-tier approval steps; Power Automate sequential chains; Zoho multi-level approvals; **house pattern `procurement.RequisitionApproval`** — one immutable decision row per tier sign-off, snapshotted `tier_count`, written only when a decision happens ("the register IS the history"), mirrored to `core.AuditLog` by the deciding view.
+
+| Field | Type | Notes |
+|---|---|---|
+| `approval_kind` | Char(10), `APPROVAL_KIND_CHOICES` | discount / credit / exception / contract (longest value 9 ≤ 10) |
+| `quote` | FK `sales.CPQQuote`, PROTECT, null, blank | Discount target (has `approval_status`/`approval_rule`) |
+| `order_hold` | FK `sales.OrderHold`, PROTECT, null, blank | Credit target |
+| `contract` | FK `sales.CustomerContract`, PROTECT, null, blank | Exception/contract target |
+| `target_key` | Char(40), `editable=False` | **Computed** `"<target_kind>:<pk>"` — decision (e) above |
+| `record_label` | Char(200), blank | Denormalized display (crm.ApprovalRequest pattern) |
+| `approval_rule` | FK `sales.QuoteApprovalRule`, SET_NULL, null, blank | The 8.5 gate that fired |
+| `tier` | PositiveSmallIntegerField | 1-based position in chain |
+| `tier_count` | PositiveSmallIntegerField | Snapshot of chain length at decision time (procurement pattern) |
+| `approver_role` | FK `accounts.Role`, SET_NULL, null, blank | Tier resolution reads `QuoteApprovalRule.approver_role` |
+| `approver` | FK User, SET_NULL, null, blank | Who signed (nullable → templates MUST guard `get_full_name` access with `{% if %}`, L10) |
+| `decision` | Char(8), `DECISION_CHOICES` | approved / rejected (both exactly ≤8) |
+| `comment` | TextField, blank | Truncate to 2000 in the record path (procurement pattern) |
+| `requested_by` | FK User, SET_NULL, null | Submitter |
+| `requested_at` | DateTimeField, null | |
+| `due_at` | DateTimeField, null, blank | SLA display; `core.SlaRule` records the intent — nothing auto-escalates this pass |
+| `decided_at` | DateTimeField, `auto_now_add=True`, `editable=False` | |
+
+- **Meta:** `ordering = ["target_key", "tier", "id"]` (deterministic — an UNORDERED `.first()` when resolving the current tier is a latent idempotency bug, L61); `UniqueConstraint(fields=["tenant", "target_key", "tier"], name="sales_sad_tnt_tgt_tier_uniq")`; index `("tenant", "decision")` name `sales_sad_tnt_decision_idx`.
+- **Pending state = absence of a decision row at the current tier.** Final-tier approve flips `CPQQuote.approval_status="approved"`; rejection returns the record to draft/hold — decided in the deciding view inside `transaction.atomic()` (procurement pattern) + `write_audit_log`.
+- **CRUD shape (mandatory-rule reconciliation):** full 5 routes ship; `_create` is manual ledger entry of a recorded sign-off (tenant-admin); `_edit` allows ONLY `comment`/`due_at` (form excludes `tier`, `tier_count`, `decision`, `target_key`, and all three target FKs once saved); `_delete` is tenant-admin-only mis-entry correction (POST + confirm + `write_audit_log`). The primary write path remains the approve/reject actions.
+- **Form excludes:** `tenant`, `number`, `created_at`, `updated_at`, `target_key` (computed), `decided_at` (auto, L22), and per above on edit.
+- **FKs:** `sales.CPQQuote`, `sales.OrderHold`, `sales.CustomerContract`, `sales.QuoteApprovalRule`, `accounts.User`, `accounts.Role` — all verified.
+- **Gotcha (L57):** never `annotate()` an alias equal to a `@property` name (e.g. `is_final_tier`).
+
+### 4. `SalesAlertTrigger` [`SAT-`] — `SalesAlertTriggers.py` — **bullet 4 (Notification & Alert Engine)**
+Drivers: HubSpot stage-change notifications; monday CRM conditional alerts; LeanData SLA alerts; Salesforce milestone alerts; 8.1 H8 hand-off (first-response SLA breach); 8.16 `MobileDealAlert` as the record-side delivery target.
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | Char(200) | |
+| `alert_type` | Char(24), `ALERT_TYPE_CHOICES` | deal_inactivity / stage_change / milestone / approval_requested / sla_breach / contract_expiry / quota_attainment (longest value `approval_requested` = 18 ≤ 24, L65) |
+| `target_entity` | Char(16), `TARGET_ENTITY_CHOICES` | Same set as SPD (reuse the constant) |
+| `conditions` | JSONField, default list | Same bounded validator |
+| `inactivity_days` | PositiveSmallIntegerField, null, blank | For `deal_inactivity`/`sla_breach`; recency read from `sales.ActivityLog` / `crm.CommunicationLog` |
+| `severity` | Char(10), `SEVERITY_CHOICES` | low / normal / high / urgent — mirror `MobileDealAlert.URGENCY_CHOICES` (verified at `MobileDealAlerts.py:18`) |
+| `audience_kind` | Char(10), `AUDIENCE_KIND_CHOICES` | role / user / owner / all — **NOT a verbatim mirror** of `core.NotificationRule.AUDIENCE_CHOICES` (verified at `Notification.py:95` = `role / user / party / all`). Sales-scoped variant: `owner` (the record's owning rep) **replaces** core's `party`, because a sales alert audience is the deal owner, not the customer party. Document this divergence in the model docstring so a reviewer does not read it as drift |
+| `audience_role` | FK `accounts.Role`, SET_NULL, null, blank | |
+| `audience_users` | M2M User, blank | |
+| `notification_rule` | FK `core.NotificationRule`, SET_NULL, null, blank | Platform delivery route — reuse, never re-invent channels |
+| `cooldown_hours` | PositiveSmallIntegerField, default 24 | Dedup/digest of repeated fires |
+| `last_evaluated_at` | DateTimeField, null, `editable=False` | Derived |
+| `last_fired_at` | DateTimeField, null, `editable=False` | Derived |
+| `fire_count` | PositiveIntegerField, default 0 | Derived |
+| `priority` | PositiveSmallIntegerField, default 100 | |
+| `is_active` | Boolean, default True | |
+
+- **Delivery this pass = record rows only:** firing writes `sales.MobileDealAlert` (8.16) for user-targeted alerts and/or references the `core.NotificationRule` event key. **No email/SMS/push socket code** (transport deferred, matches 8.16 §7.3 / 8.18 ownership).
+- **Meta:** `ordering = ["priority", "name", "id"]`; index `("tenant", "alert_type", "is_active")` (name ≤30).
+- **Form excludes:** `tenant`, `number`, `created_at`, `updated_at`, `last_evaluated_at`, `last_fired_at`, `fire_count` (all derived, L22).
+- **FKs:** `accounts.Role`, `accounts.User`, `core.NotificationRule` — verified. `MobileDealAlert` is a write target, not an FK.
+
+**Bullet 5 (Data Enrichment & Cleansing) gets NO new model this pass** — its auto-update half is already `sales.PartyEnrichmentEvent` (8.3, `sales:party_enrichment_list` verified live); its duplicate-cluster/merge half is deferred whole to the gap file (a merge is the most destructive write path in the module and the 4-model cap is spent on the four bullets with zero sales-scoped tables today).
+
+---
+
+## Backend (apps/sales/{models,forms,views,urls}/WorkflowProcessAutomation/)
+
+Build entity by entity — finish one entity's 4 backend files + 3 templates before starting the next; do NOT touch shared files until Integrate.
+
+### Models
+- [ ] `apps/sales/models/WorkflowProcessAutomation/SalesProcessDefinitions.py`
+- [ ] `apps/sales/models/WorkflowProcessAutomation/SalesAssignmentRules.py`
+- [ ] `apps/sales/models/WorkflowProcessAutomation/SalesApprovalDecisions.py` (incl. `target_key` computation + `clean()` exactly-one-FK + `is_final_tier` property + classmethod `record(...)` copying procurement's shape)
+- [ ] `apps/sales/models/WorkflowProcessAutomation/SalesAlertTriggers.py`
+- [ ] Absolute imports only inside the packages (`from apps.sales.models._base import *`); write each file in order, then `ast.parse` it (L64)
+
+### Forms
+- [ ] `apps/sales/forms/WorkflowProcessAutomation/SalesProcessDefinitions.py` — `SalesProcessDefinitionForm` (excludes per model 1; `conditions`/`nodes` JSON validated in form `clean_*` with the cloned bounded validator)
+- [ ] `apps/sales/forms/WorkflowProcessAutomation/SalesAssignmentRules.py` — `SalesAssignmentRuleForm` (excludes per model 2; mode-dependent required-field checks: `fixed_owner` needs `default_owner`, pool modes need `eligible_owners`, `territory_manager` needs `territory`, `escalate_manager` needs `escalate_to` + `escalate_after_hours`)
+- [ ] `apps/sales/forms/WorkflowProcessAutomation/SalesApprovalDecisions.py` — `SalesApprovalDecisionForm` (create = manual ledger entry; edit variant restricts to `comment`/`due_at`); tenant-membership check on the chosen target lives in the FORM's `clean()` with the form-held tenant (L49-addendum)
+- [ ] `apps/sales/forms/WorkflowProcessAutomation/SalesAlertTriggers.py` — `SalesAlertTriggerForm` (excludes per model 4; `inactivity_days` required when `alert_type='deal_inactivity'`)
+- [ ] All four forms inherit **`TenantModelForm` from `apps.core.forms`** — verified against the 8.16 sibling (`apps/sales/forms/MobileSales/MobileDealAlerts.py:18`), which imports `from apps.core.forms import TenantModelForm`. `apps/sales/forms/_common.py` does **not** define a ModelForm base; it provides the `TenantUniqueMixin`, `TenantActionForm`, and the `tenant_users(tenant)` queryset helper — import `tenant_users` from there to scope every user/role dropdown. Declare **explicit `fields = [...]` lists, not `exclude`** (sibling convention), so the excluded system/derived fields are structurally impossible to render (L22)
+
+### Views (function-based, `@login_required`; privileged writes `@tenant_admin_required`; every queryset filtered `tenant=request.tenant`; audit via `write_audit_log`)
+- [ ] `apps/sales/views/WorkflowProcessAutomation/SalesProcessDefinitions.py` — list (search `q` over name/description/number + filters `status`, `target_entity`, `trigger_event` + pagination), create, detail, edit, delete (POST+confirm→list), **`sales_process_definition_run` POST** (bounded on-access evaluation of the definition's triggers against matching tenant records; writes results via `write_audit_log`; redirects to detail with a messages summary — the scheduler itself is parked)
+- [ ] `apps/sales/views/WorkflowProcessAutomation/SalesAssignmentRules.py` — list (filters `q`, `target_entity`, `assignment_mode`, `is_active` mapping `'active'/'inactive'` → `is_active=True/False`, FK filter `territory` with integer-validation before `.filter(territory_id=…)`, L11), create, detail, edit, delete; **lead targets delegate to the 8.1 `LeadRoutingRule` resolver — no second owner decision**
+- [ ] `apps/sales/views/WorkflowProcessAutomation/SalesApprovalDecisions.py` — list (filters `q`, `approval_kind`, `decision`, `target_kind`), detail (chain history for the target), create/edit/delete per model 3's CRUD shape, **`sales_approval_decision_approve` + `sales_approval_decision_reject` POST actions**: take `target_kind` + `target_id` + `comment` in the form body, resolve the next tier from existing rows with a DETERMINISTIC ordered query (L61), write the decision row inside `transaction.atomic()` with snapshotted `tier_count`, flip `CPQQuote.approval_status` on final tier, mirror to `write_audit_log`
+- [ ] `apps/sales/views/WorkflowProcessAutomation/SalesAlertTriggers.py` — list (filters `q`, `alert_type`, `severity`, `audience_kind`, `is_active`), create, detail, edit, delete; firing helper writes `MobileDealAlert` rows honoring `cooldown_hours`
+- [ ] Context-var contract (PINNED — L7): list vars `process_definitions` / `assignment_rules` / `approval_decisions` / `alert_triggers`; detail vars `process_definition` / `assignment_rule` / `approval_decision` / `alert_trigger`; edit-mode object var = same singular name; `form` in both create and edit. Choices context: `status_choices`, `target_entity_choices`, `trigger_event_choices`, `assignment_mode_choices`, `match_mode_choices`, `approval_kind_choices`, `decision_choices`, `target_kind_choices`, `alert_type_choices`, `severity_choices`, `audience_kind_choices`; FK querysets `territories`, `eligible_owner_users`, `notification_rules`, `approver_roles`, `task_templates` as each filter bar needs. Every list view paginates with `page_obj`/`is_paginated` for the shared partial (L9)
+
+### URLs
+- [ ] `apps/sales/urls/WorkflowProcessAutomation/{SalesProcessDefinitions,SalesAssignmentRules,SalesApprovalDecisions,SalesAlertTriggers}.py` — literal routes (`…/run/`, `…/approve/`, `…/reject/`) BEFORE `<int:pk>` routes (first-match-wins)
+- [ ] `apps/sales/urls/__init__.py` — wire the four modules into `urlpatterns` (surgical Edit, never full-rewrite — L43/L59) and check any new greedy route against the whole concatenated list
+
+### Package re-exports, admin, migration, seeder (Integrate — single writer)
+- [ ] Verify every expected file landed BEFORE wiring anything (L21/L54)
+- [ ] `apps/sales/models/__init__.py` — add 8.17 re-export block (4 models + their CHOICES constants); missing re-export = ImportError at runtime
+- [ ] `apps/sales/forms/__init__.py` — add 8.17 re-export block (4 forms)
+- [ ] `apps/sales/views/__init__.py` — add 8.17 re-export block (all view functions)
+- [ ] `apps/sales/urls/__init__.py` — include the four url modules (already counted above; one commit)
+- [ ] `apps/sales/admin.py` — register all 4 models. **There is NO `TenantScopedAdmin` class in this repo** (grep = zero hits); the house pattern is a plain `admin.ModelAdmin` subclass — copy `LeadRoutingRuleAdmin` (`apps/sales/admin.py:138`) verbatim in shape: `list_display` / `list_filter` (incl. `tenant`) / `search_fields` / `readonly_fields` (tenant + all derived/system fields) / `list_select_related` (every FK shown) / `filter_horizontal` (the M2Ms: `eligible_owners`, `audience_users`) + `formfield_for_foreignkey` / `formfield_for_manytomany` narrowing querysets to `tenant=request.tenant, is_active=True`. Surgical Edit — append, never rewrite the file
+- [ ] Integrate step: create ONE idempotent `core.WorkflowDefinition` registry row (module_slug `sales`, `engine_label="sales.SalesApprovalDecision"`, get_or_create) so the 0.11 monitoring board sees the engine — single writer, at Integrate only
+- [ ] `venv\Scripts\python.exe manage.py makemigrations sales` → **`0031_*.py`** (re-verify number first, L43; run `checks.run_checks()` in-process BEFORE makemigrations — L65)
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `apps/sales/management/commands/seed_sales.py` — extend with `_seed_workflow_process_automation(self, tenant, user)` (surgical Edit): idempotent (existence guard + get_or_create for unique rows), reuses existing seeded Party/user/`CPQQuote` rows; seeds ~2 SPDs (one draft, one active with a 3-node chain), ~2 SARs (one round_robin with eligible owners, one territory_manager), a 2-tier SAD chain on a seeded quote (tier 1 approved row present, tier 2 pending = absent), ~2 SATs (deal_inactivity + stage_change). Run **twice** — identical counts
+- [ ] One file per commit, explicit paths, PowerShell `;` separators, never `git push`
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — add ONE `LIVE_LINKS["8.17"]` entry (surgical Edit), bullet text VERBATIM from NavERP.md lines 1427–1432:
+  ```python
+  "8.17": {
+      # OWNERSHIP RULING (L36/L37/L55)
+      # Reuses crm.Lead/crm.Opportunity/crm.Case as assignment + trigger targets (CRM owns them);
+      # reuses sales.CPQQuote/OrderHold/CustomerContract as approval targets; sales.QuoteApprovalRule (8.5) as the gate;
+      # reuses sales.LeadRoutingRule (8.1) + crm.Territory/8.7 TerritoryRule for owner resolution (no second decision);
+      # reuses core.NotificationRule/Template/Channel (0.11) for delivery routing and sales.MobileDealAlert (8.16) as the record-side alert row;
+      # reuses core.JobDefinition for time-based trigger registration; registers into core.WorkflowDefinition (0.11 registry).
+      # Zero duplicate workflow-registry, notification-channel, approval-gate, or enrichment tables declared.
+      "Visual Process Designer": "sales:sales_process_definition_list",
+      "Auto-Assignment Rules": "sales:sales_assignment_rule_list",
+      "Approval Workflows": "sales:sales_approval_decision_list",
+      "Notification & Alert Engine": "sales:sales_alert_trigger_list",
+      "Data Enrichment & Cleansing": "sales:party_enrichment_list",  # no new model — bullet 5's auto-update half IS 8.3's PartyEnrichmentEvent (verified live route); duplicate-cluster/merge half deferred to gaps-sales-8.17.md
+  },
+  ```
+  All five targets are STAFF-facing management pages (L32). No `config/settings.py` / `config/urls.py` changes (app already wired).
+
+---
+
+## Templates (templates/sales/workflowprocessautomation/)
+
+12 templates: 4 entities × 3 pages. All extend `base.html`; `{% extends %}`/`{% include %}` keep pointing at root-level `base.html` / `partials/…`.
+
+- [ ] `salesprocessdefinition/list.html` — filter bar (`q`, `status_choices`, `target_entity_choices`, `trigger_event_choices`) reflecting `request.GET` (FK/pk compares via `|stringformat:"d"`, never `|slugify`); Actions column (view / edit / delete-POST + `{% csrf_token %}` + `onclick="return confirm('…')"` with `\'`-escaped apostrophes, L42); `{% empty %}` state; `{% include "partials/pagination.html" %}` with `has_previous`/`has_next` guards (L9); status badges `draft→badge-slate, active→badge-green, paused→badge-amber, archived→badge-muted` (L33 — colour-named only; `badge-success/-danger` do NOT exist)
+- [ ] `salesprocessdefinition/detail.html` — header with `SPD-` number + status badge; Actions sidebar (Edit conditional on status, **Run now** POST button, Delete POST+confirm, Back to List); ordered node table (seq / type / params) with `required_fields` gating shown; version + `max_enrollments`; conditions rendered as a readable table, NOT raw JSON dumps
+- [ ] `salesprocessdefinition/form.html` — `{% csrf_token %}`; excluded fields (`tenant`, `number`, `version`, `created_at`, `updated_at`, `owner`, `job_definition`) never rendered as inputs (L22); conditions/nodes editors as bounded textarea/HTMX-sortable ordered list (true graphical canvas deferred); clear error placement; Save/Cancel
+- [ ] `salesassignmentrule/{list,detail,form}.html` — list filters `q`, `target_entity_choices`, `assignment_mode_choices`, active/inactive, `territories` FK dropdown; detail shows mode-specific config, round-robin cursor state + `last_assigned_owner`/`last_assigned_at` (read-only, guarded with `{% if %}` — nullable FK, L10), escalation config; badges `active→badge-green, inactive→badge-muted`, mode→`badge-info`
+- [ ] `salesapprovaldecision/{list,detail,form}.html` — list filters `q`, `approval_kind_choices`, `decision_choices`, `target_kind_choices`; badges `approved→badge-green, rejected→badge-red, pending (no row at tier)→badge-amber`; detail = the target's full chain (tier x/y, approver, comment, `decided_at`) + **Approve/Reject POST forms with comment field** when a tier is pending; form = manual ledger entry (`_create`) / comment+due_at only (`_edit`)
+- [ ] `salesalerttrigger/{list,detail,form}.html` — list filters `q`, `alert_type_choices`, `severity_choices`, `audience_kind_choices`, active/inactive; badges `low→badge-muted, normal→badge-info, high→badge-amber, urgent→badge-red`; detail shows delivery route (`notification_rule`, `MobileDealAlert` write-target note), cooldown + `fire_count`/`last_fired_at`/`last_evaluated_at` as read-only derived stats
+- [ ] Every template comment single-line `{# … #}` (L2); every list page's filter select preserves state via `request.GET` comparisons; smoke must grep rendered HTML for `{#`/`{% comment` leaks and for `badge-success|badge-danger|badge-warning|badge-purple` (zero hits)
+
+---
+
+## Verify
+
+- [ ] `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` → `No changes detected` (after migrate)
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_sales` — run **twice**; second run produces identical counts (idempotent)
+- [ ] `venv\Scripts\python.exe manage.py check` → 0 issues
+- [ ] All new url names reverse cleanly (24 standard + `sales_process_definition_run` + `sales_approval_decision_approve` + `sales_approval_decision_reject`) — no `NoReverseMatch`
+- [ ] **temp/ smoke sweep as `admin_acme` / `password`** (L34 — NOT `password123`; content assertions, not just status codes, L3/L8):
+  - 4 list pages → 200 with seeded records visible (`SPD-`, `SAR-`, `SAD-`, `SAT-`)
+  - 4 detail + 4 create + 4 edit → 200
+  - `sales_process_definition_run` POST → 302 + message; `sales_approval_decision_approve`/`reject` POST on the seeded pending tier → 302, new `SAD-` row exists, quote `approval_status` flips on final tier
+  - Filter GET params on every list + junk params (`?page=999`, `?status=invalid`, `?territory=999999999999`) → 200, no 500, fallback to unfiltered (L11); page 2 → 200
+  - **Cross-tenant IDOR** → `admin_globex` pks on detail/edit/delete → 404 for `admin_acme`
+  - Grep rendered HTML: zero `{#` / `{% comment` leaks; zero semantic badge names (L33)
+- [ ] Sidebar human pass (L30): `LIVE_LINKS["8.17"]` present; 5 Live bullets resolving to distinct staff-reachable hrefs
+- [ ] `.agents/tasks/gaps-sales-8.17.md` created at Integrate and linked from the review/close-out block below
+
+---
+
+## Close-out
+
+- [ ] Phase 4 — six reviewers ONE AFTER ANOTHER (`code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`), each reading `BASE...HEAD` (BASE = `15b30066`), findings appended to `.claude/tasks/review-sales-8.17.md`, deduped + sorted C→I→M with IDs, committed (L48/L50 — serial, never in main context prose)
+- [ ] Phase 5 — `code-fixer` burns the findings file in ID order, one commit per file, marks `[x] fixed` / `[~] skipped — reason`; main session applies nothing itself
+- [ ] Phase 6 — Tests: contract + shared `conftest.py` first (step-1 agent owns it), then `test_workflowautomation_models.py` → `test_workflowautomation_forms.py` → `test_workflowautomation_views.py` → `test_workflowautomation_security.py`, one at a time, every function `test_workflowautomation_*`, helpers `_workflowautomation_*`; finish with ONE **full unfiltered** sales-suite green run (never `-k`, L47; expect the ~fixed pytest cost, L49)
+- [ ] Phase 7 — update `.claude/skills/sales/SKILL.md` with 8.17 models/routes/templates/seeder rows (commit separately; while editing it, correct the stale `log_action` mention to `write_audit_log`); mark 8.17 complete in `README.md`; record every deferred item below in `.agents/tasks/gaps-sales-8.17.md` (ID / Owner / Waiting For / checkbox / Done When — never delete entries) and link it from this section
+- [ ] Review notes filled in below at the end; `git push` NEVER — stop at commit every time
+
+---
+
+## Later passes / deferred (Gap Register items for `.agents/tasks/gaps-sales-8.17.md`)
+
+- **GAP-sales-8.17-01: Process execution runtime / background scheduler runs** — timed unattended evaluation of SPD triggers and SAT scans on `core.JobScheduler`; this pass ships definitions, bounded on-access evaluation helpers, and the `sales_process_definition_run` POST action (8.7 precedent). → later pass / 8.18 wiring
+- **GAP-sales-8.17-02: Duplicate cluster + merge workflow tables (`SalesDuplicateCluster` / `SalesDuplicateMerge`)** — bullet 5's second half; destructive multi-table re-parenting deserves its own contract + pass. Detection stays loggable via `PartyEnrichmentEvent(kind='duplicate_check')`
+- **GAP-sales-8.17-03: Approval delegation (out-of-office grants) + parallel approval branches** — procurement `ApprovalDelegation` / `core.WorkflowStep.is_parallel` are the patterns; would be 5th/6th models this pass
+- **GAP-sales-8.17-04: Weighted / skill-based / availability-aware routing modes** — handed in by 8.1 Q12/Q13; needs eligible-owner weights + seller-capacity data; mode set stays closed this pass
+- **GAP-sales-8.17-05: Email/SMS/push transport for alerts** — no mailer/push gateway wired in repo; 8.16 parked APNs/FCM to 8.18. Alert rows + `core.Notification*` routing records ship now
+- **GAP-sales-8.17-06: AI-suggested automations / copilot flow generation** (Agentforce/Freddy/Creatio-AI class) — integration/later
+- **GAP-sales-8.17-07: True graphical drag-and-drop node canvas** — ordered-step HTMX sortable UI ships now; a node-graph editor is front-end-heavy with no data-model value
+- **GAP-sales-8.17-08: `SalesProcessRun` dedicated execution-log table** (4.6) — folded into `SalesApprovalDecision` + `core.AuditLog` this pass
+
+---
+
+## Declined, with reasons (so it is not re-litigated)
+
+- **A duplicate workflow registry / monitoring board**: platform registry is `core.WorkflowDefinition`/`WorkflowStep`/`SlaRule` (0.11) — 8.17 registers into it, never replaces it.
+- **A duplicate notification channel/template/rule engine**: `core.NotificationChannel`/`NotificationTemplate`/`NotificationRule` (0.11) is the delivery spine — SAT references it by FK.
+- **A duplicate generic automation engine**: `crm.WorkflowRule`/`crm.ApprovalRequest` (1.10) coexist by design (L55) — the sales engine adds what 1.10 lacks (multi-tier chains, assignment resolvers, versioned process definitions) and is documented as sales-scoped.
+- **A second lead-owner decision**: for lead targets, SAR delegates to 8.1's `LeadRoutingRule` resolver verbatim (8.1 research ruling).
+- **A duplicate approval gate/threshold table**: `sales.QuoteApprovalRule` (8.5) defines WHEN approval is required; SAD records the decisions.
+- **A duplicate alert-row table**: field-rep alert delivery rows are `sales.MobileDealAlert` (8.16).
+- **A 5th model for enrichment**: bullet 5's auto-update half is `sales.PartyEnrichmentEvent` (8.3); its merge half is GAP-sales-8.17-02, not a half-built table.
+
+## Review notes
+(filled in at the end)
