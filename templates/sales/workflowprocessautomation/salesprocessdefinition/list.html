@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Process Definitions — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Header #}
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Process Definitions</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Sales Process Definitions</h1>
+            <p class="text-sm text-slate-500 mt-1">Visual process designer — trigger-to-node automation blueprints for leads, opportunities, quotes, orders, cases, contracts and subscriptions.</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:sales_process_definition_create' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>New Process Definition</span>
+            </a>
+        </div>
+    </div>
+
+    {# Filters #}
+    <div class="card p-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <input type="text" name="q" id="filter-q" class="form-input" placeholder="Name, description, number…" value="{{ request.GET.q|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-status">Status</label>
+                <select name="status" id="filter-status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-target">Target Entity</label>
+                <select name="target_entity" id="filter-target" class="form-select">
+                    <option value="">All Targets</option>
+                    {% for value, label in target_entity_choices %}
+                        <option value="{{ value }}" {% if request.GET.target_entity == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-trigger">Trigger Event</label>
+                <select name="trigger_event" id="filter-trigger" class="form-select">
+                    <option value="">All Triggers</option>
+                    {% for value, label in trigger_event_choices %}
+                        <option value="{{ value }}" {% if request.GET.trigger_event == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'sales:sales_process_definition_list' %}" class="btn btn-outline" title="Reset">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    {# Table #}
+    <div class="card">
+        <div class="table-wrap overflow-x-auto">
+            <table class="table w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b text-slate-500 bg-slate-50">
+                        <th class="p-3">Number</th>
+                        <th class="p-3">Name</th>
+                        <th class="p-3">Target</th>
+                        <th class="p-3">Trigger</th>
+                        <th class="p-3">Version</th>
+                        <th class="p-3">Status</th>
+                        <th class="p-3">Active</th>
+                        <th class="p-3">Priority</th>
+                        <th class="p-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for process_definition in process_definitions %}
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="p-3 font-mono font-medium text-slate-900">
+                            <a href="{% url 'sales:sales_process_definition_detail' pk=process_definition.pk %}" class="text-primary hover:underline">{{ process_definition.number }}</a>
+                        </td>
+                        <td class="p-3 font-medium text-slate-900">{{ process_definition.name }}</td>
+                        <td class="p-3 text-xs text-slate-600">{{ process_definition.get_target_entity_display }}</td>
+                        <td class="p-3 text-xs text-slate-600">{{ process_definition.get_trigger_event_display }}</td>
+                        <td class="p-3 text-slate-700">v{{ process_definition.version }}</td>
+                        <td class="p-3">
+                            {% if process_definition.status == 'draft' %}
+                                <span class="badge badge-slate">Draft</span>
+                            {% elif process_definition.status == 'active' %}
+                                <span class="badge badge-green">Active</span>
+                            {% elif process_definition.status == 'paused' %}
+                                <span class="badge badge-amber">Paused</span>
+                            {% elif process_definition.status == 'archived' %}
+                                <span class="badge badge-muted">Archived</span>
+                            {% else %}
+                                <span class="badge badge-muted">{{ process_definition.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3">
+                            {% if process_definition.is_active %}
+                                <span class="badge badge-green">Active</span>
+                            {% else %}
+                                <span class="badge badge-muted">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 text-slate-700">{{ process_definition.priority }}</td>
+                        <td class="p-3 text-right">
+                            <div class="table-actions inline-flex items-center gap-1">
+                                <a href="{% url 'sales:sales_process_definition_detail' pk=process_definition.pk %}" class="btn btn-icon btn-outline" title="View">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'sales:sales_process_definition_edit' pk=process_definition.pk %}" class="btn btn-icon btn-outline" title="Edit">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'sales:sales_process_definition_delete' pk=process_definition.pk %}" class="inline" onsubmit="return confirm('Delete this process definition?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="p-12 text-center text-sm text-slate-500">No process definitions yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% include "partials/pagination.html" %}
+    </div>
+</div>
+{% endblock %}
