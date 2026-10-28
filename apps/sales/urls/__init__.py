@@ -57,6 +57,8 @@ from .MobileSales import urlpatterns as _mobile_sales
 # accounts.User/Role, core.JobDefinition/NotificationRule by FK or as write targets; declares no
 # second workflow registry, notification channel or approval gate.
 from .WorkflowProcessAutomation import urlpatterns as _workflow_automation
+# 8.18 Integration & API Hub (L55 Coexistence: 5th integration register across NavERP)
+from .IntegrationApiHub import urlpatterns as _integration_api_hub
 
 app_name = "sales"
 
@@ -103,6 +105,8 @@ urlpatterns = [
     *_mobile_sales,
     # 8.17 Workflow & Process Automation.
     *_workflow_automation,
+    # 8.18 Integration & API Hub.
+    *_integration_api_hub,
     *_pipelines,
     *_teams,
     *_competitors,
