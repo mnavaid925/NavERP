@@ -97,6 +97,7 @@ class SalesIntegrationConnector(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "category", "is_active"], name="sales_sic_cat_act_idx"),
             models.Index(fields=["tenant", "provider"], name="sales_sic_provider_idx"),
+            models.Index(fields=["tenant", "health_status"], name="sales_sic_ten_health_idx"),
         ]
 
     def __str__(self):
