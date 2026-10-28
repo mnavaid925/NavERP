@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Regional Setting {{ setting.number }}{% else %}New Regional Setting{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+    {# Page Header #}
+    <div class="page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:master_data_overview' %}" class="hover:text-primary">Master Data</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:srg_list' %}" class="hover:text-primary">Regional Settings</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{% if is_edit %}Edit {{ setting.number }}{% else %}New Setting{% endif %}</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">
+                {% if is_edit %}Edit Regional Setting {{ setting.number }}{% else %}Create Regional Setting Profile{% endif %}
+            </h1>
+            <p class="text-sm text-slate-500 mt-1">Configure localized pricing currencies, proposal tax display rules, and statutory legal disclaimers.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% if is_edit %}{% url 'sales:srg_detail' setting.pk %}{% else %}{% url 'sales:srg_list' %}{% endif %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                <span>Cancel</span>
+            </a>
+        </div>
+    </div>
+
+    {# Form Card #}
+    <div class="card p-6">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="space-y-4">
+                <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-200">Region & Currency Identity</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label text-sm font-medium" for="{{ form.name.id_for_label }}">
+                            Profile Name <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.name.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.region_code.id_for_label }}">
+                            Region Code <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.region_code }}
+                        {% if form.region_code.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.region_code.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.primary_currency.id_for_label }}">
+                            Primary Currency <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.primary_currency }}
+                        {% if form.primary_currency.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.primary_currency.errors.0 }}</p>
+                        {% endif %}
+                        <p class="text-xs text-slate-500 mt-1">ISO 4217 base currency (e.g. USD, EUR, GBP).</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.supported_currencies_raw.id_for_label }}">
+                            {{ form.supported_currencies_raw.label }}
+                        </label>
+                        {{ form.supported_currencies_raw }}
+                        {% if form.supported_currencies_raw.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.supported_currencies_raw.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4 pt-4 border-t border-slate-200">
+                <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-200">Formatting & Tax Display</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.date_format.id_for_label }}">
+                            Date Format
+                        </label>
+                        {{ form.date_format }}
+                        {% if form.date_format.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.date_format.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.number_format.id_for_label }}">
+                            Number Format
+                        </label>
+                        {{ form.number_format }}
+                        {% if form.number_format.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.number_format.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.tax_display_mode.id_for_label }}">
+                            Tax Display Mode
+                        </label>
+                        {{ form.tax_display_mode }}
+                        {% if form.tax_display_mode.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.tax_display_mode.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4 pt-4 border-t border-slate-200">
+                <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-200">Commercial Terms & Regulatory Compliance</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.compliance_framework.id_for_label }}">
+                            Compliance Framework
+                        </label>
+                        {{ form.compliance_framework }}
+                        {% if form.compliance_framework.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.compliance_framework.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.cooling_off_days.id_for_label }}">
+                            Cooling-Off Period (Days)
+                        </label>
+                        {{ form.cooling_off_days }}
+                        {% if form.cooling_off_days.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.cooling_off_days.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label text-sm font-medium" for="{{ form.default_quote_terms.id_for_label }}">
+                        Default Proposal Commercial Terms
+                    </label>
+                    {{ form.default_quote_terms }}
+                    {% if form.default_quote_terms.errors %}
+                    <p class="form-error text-xs text-red-600 mt-1">{{ form.default_quote_terms.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label text-sm font-medium" for="{{ form.statutory_disclaimer.id_for_label }}">
+                        Statutory Legal Disclaimer
+                    </label>
+                    {{ form.statutory_disclaimer }}
+                    {% if form.statutory_disclaimer.errors %}
+                    <p class="form-error text-xs text-red-600 mt-1">{{ form.statutory_disclaimer.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="flex items-center gap-6 pt-2">
+                    <div class="flex items-center gap-2">
+                        {{ form.is_default }}
+                        <label class="form-label text-sm font-medium cursor-pointer" for="{{ form.is_default.id_for_label }}">
+                            Default fallback profile for tenant
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{ form.is_active }}
+                        <label class="form-label text-sm font-medium cursor-pointer" for="{{ form.is_active.id_for_label }}">
+                            Active profile
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'sales:srg_detail' setting.pk %}{% else %}{% url 'sales:srg_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if is_edit %}Save Changes{% else %}Create Profile{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
