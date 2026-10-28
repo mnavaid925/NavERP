@@ -1,6 +1,6 @@
 ---
 name: sales
-description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, 8.8 Sales Activity & Task Management, 8.9 Sales Enablement, 8.10 Incentive Compensation Management, 8.11 Customer Success & Account Management, 8.12 Sales Analytics & Intelligence, 8.13 Marketing Alignment & Attribution, 8.14 Partner & Channel Management, 8.15 Contract & Subscription Management, and 8.16 Mobile Sales. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
+description: Work on the Sales Management System module (Module 8), including 8.1 Lead Management, 8.2 Opportunity & Pipeline Management, 8.3 Contact & Account Management, 8.4 Sales Forecasting, 8.5 Quote & Proposal Management (CPQ), 8.6 Sales Order Management, 8.7 Territory & Quota Management, 8.8 Sales Activity & Task Management, 8.9 Sales Enablement, 8.10 Incentive Compensation Management, 8.11 Customer Success & Account Management, 8.12 Sales Analytics & Intelligence, 8.13 Marketing Alignment & Attribution, 8.14 Partner & Channel Management, 8.15 Contract & Subscription Management, 8.16 Mobile Sales, and 8.18 Integration & API Hub. Use when the user asks to add/change/debug anything under apps/sales or templates/sales, extend seed_sales, touch Sales sidebar wiring (LIVE_LINKS 8.x), or invokes /sales.
 ---
 
 # Sales Management System (Module 8)
@@ -1446,3 +1446,99 @@ App package: `apps/sales/*/MobileSales/`; templates: `templates/sales/mobilesale
 - **Horizontal Authorization**: Alerts restricted to recipient or tenant admin; device sessions restricted to owner or tenant admin; visit deletions restricted to assigned rep or tenant admin.
 - **Strict Color Badges**: 100% color-named badges (`badge-green`, `badge-amber`, `badge-red`, `badge-info`, `badge-muted`, `badge-slate`) with zero `-success`/`-danger` classes.
 - **N+1 Prevention**: Detail queries eagerly select up to 8 foreign keys; list queries select all rendered FKs including `contact`, `sales_rep`, and `party`.
+
+---
+
+## 8.18 Integration & API Hub
+
+Central revenue operations integration hub, schema translation, bidirectional synchronization, and audit logging console for NavERP Sales (Module 8).
+
+### 8.18 Models (`apps/sales/models/IntegrationApiHub/`)
+- **`SalesIntegrationConnector` (`Connectors.py`)**:
+  - Numbered `SIC-#####` (`TenantNumbered`).
+  - Represents an external endpoint integration (ERP, Marketing, Communication, BI/Warehouse, E-Signature, Custom).
+  - Encrypted credentials at rest via Fernet (`apps.core.crypto.encrypt`). Sensitive secrets are never exposed in form markup or plain text.
+  - Health check status: `connected`, `degraded`, `error`, `offline`, `untested`.
+- **`SalesFieldMapping` (`FieldMappings.py`)**:
+  - Unnumbered child entity (`TenantOwned`).
+  - Maps local NavERP fields (`order`, `lead`, `account`, `quote`, `contract`) to remote endpoint fields.
+  - Direction: `bidirectional`, `outbound`, `inbound`.
+  - Transform rules: `none`, `uppercase`, `lowercase`, `boolean_to_int`, `json_extract`, `currency_round`, `value_map`.
+  - Composite unique constraint: `(tenant, connector, target_entity, local_field, remote_field)`.
+- **`SalesSyncJob` (`SyncJobs.py`)**:
+  - Numbered `SSJ-#####` (`TenantNumbered`).
+  - Scheduled or event-driven pipeline configuration for revenue sync (`order_to_cash`, `lead_lifecycle`, `deal_alerts`, `bi_warehouse_feed`, `contract_envelope_status`).
+  - Conflict policy: `last_updated_wins`, `local_wins`, `remote_wins`, `flag_manual`.
+  - Cadence: `realtime_event`, `hourly`, `daily`, `weekly`, `manual_only`.
+  - Enforces `MinValueValidator(1)` on `batch_size`.
+- **`SalesSyncRun` (`SyncRuns.py`)**:
+  - Numbered `SSR-#####` (`TenantNumbered`).
+  - Diagnostic execution and audit trail log.
+  - Run type: `manual`, `scheduled`, `webhook`, `test_ping`.
+  - Default status: `simulated` (honoring the Zero Outbound HTTP contract).
+  - Tracks records read, written, failed, skipped, and error logs.
+
+### 8.18 URLs & Routes (`apps/sales/urls/IntegrationApiHub/`)
+- **Integration Hub Dashboard**: `sales:integration_hub` (`/sales/hub/`)
+- **Category Lens Direct Links**:
+  - `sales:sic_erp_list` (`/sales/connectors/erp/` -> `?category=erp`)
+  - `sales:sic_marketing_list` (`/sales/connectors/marketing/` -> `?category=marketing`)
+  - `sales:sic_communication_list` (`/sales/connectors/communication/` -> `?category=communication`)
+  - `sales:sic_bi_list` (`/sales/connectors/bi/` -> `?category=bi_warehouse`)
+  - `sales:sic_esignature_list` (`/sales/connectors/esignature/` -> `?category=esignature`)
+- **Connectors CRUD & Action**:
+  - `sales:sic_list` (`/sales/connectors/`)
+  - `sales:sic_create` (`/sales/connectors/create/`)
+  - `sales:sic_detail` (`/sales/connectors/<int:pk>/`)
+  - `sales:sic_edit` (`/sales/connectors/<int:pk>/edit/`)
+  - `sales:sic_delete` (`/sales/connectors/<int:pk>/delete/`) [POST]
+  - `sales:sic_test` (`/sales/connectors/<int:pk>/test/`) [POST action]
+- **Field Mappings CRUD**:
+  - `sales:sfm_list` (`/sales/mappings/`)
+  - `sales:sfm_create` (`/sales/mappings/create/`)
+  - `sales:sfm_detail` (`/sales/mappings/<int:pk>/`)
+  - `sales:sfm_edit` (`/sales/mappings/<int:pk>/edit/`)
+  - `sales:sfm_delete` (`/sales/mappings/<int:pk>/delete/`) [POST]
+- **Sync Jobs CRUD & Action**:
+  - `sales:ssj_list` (`/sales/jobs/`)
+  - `sales:ssj_create` (`/sales/jobs/create/`)
+  - `sales:ssj_detail` (`/sales/jobs/<int:pk>/`)
+  - `sales:ssj_edit` (`/sales/jobs/<int:pk>/edit/`)
+  - `sales:ssj_delete` (`/sales/jobs/<int:pk>/delete/`) [POST]
+  - `sales:ssj_trigger` (`/sales/jobs/<int:pk>/trigger/`) [POST action]
+- **Sync Runs (Audit Logs)**:
+  - `sales:ssr_list` (`/sales/runs/`)
+  - `sales:ssr_detail` (`/sales/runs/<int:pk>/`)
+  - `sales:ssr_delete` (`/sales/runs/<int:pk>/delete/`) [POST]
+
+### 8.18 Templates (`templates/sales/integrationapihub/`)
+- Dashboard: `hub_dashboard.html`
+- Connectors: `connectors/{list,detail,form}.html`
+- Field Mappings: `fieldmappings/{list,detail,form}.html`
+- Sync Jobs: `syncjobs/{list,detail,form}.html`
+- Sync Runs: `syncruns/{list,detail}.html`
+
+### 8.18 Navigation Wiring (`apps/core/navigation.py`)
+`LIVE_LINKS["8.18"]` maps all 5 NavERP.md feature bullets:
+- Integration Hub -> `sales:integration_hub`
+- ERP Integration -> `sales:sic_list?category=erp`
+- Marketing Automation -> `sales:sic_list?category=marketing`
+- Communication Platforms -> `sales:sic_list?category=communication`
+- Business Intelligence -> `sales:sic_list?category=bi_warehouse`
+- E-Signature & Document -> `sales:sic_list?category=esignature`
+- Plus child links for Field Mappings, Sync Jobs, and Execution Logs.
+
+### 8.18 Seeder (`apps/sales/management/commands/seed_sales.py`)
+`_seed_integration_api_hub` is 100% idempotent and creates:
+- 5 Connectors across categories: SAP S/4HANA (ERP), HubSpot (Marketing), Slack (Comms), Snowflake (BI), DocuSign (E-Signature).
+- 5 Field Mappings across entities: Order, Account, Lead, Analytics, Contract.
+- 5 Sync Jobs across cadences: Hourly, Realtime, Daily, Weekly, Manual.
+- 5 Sync Runs with honest diagnostic `status="simulated"` and execution metrics.
+
+### 8.18 Conventions & Gotchas
+- **L55 Coexistence**: Coexists cleanly with other module integration registers (SCM 4.19 `CNX-`, Inventory 5.19 `INT-`, Accounting 2.15, Projects 7.18 `IXC-`). Does not merge or re-declare their models.
+- **Zero Outbound HTTP**: All test pings and sync runs are diagnostic and local, creating `SalesSyncRun` logs with `status="simulated"`.
+- **Secret Protection at Rest (L20, L25)**: Passwords/tokens use `credential_input` (PasswordInput, render_value=False), encrypted at rest with Fernet (`apps.core.crypto.encrypt`). Rendered strictly masked as `••••••••`.
+- **Safe Integer Filtering (L11)**: All GET integer parameters pass through `as_db_int(...)` to protect against Python integer overflow on large values.
+- **Color-Named Badges (L33)**: Strictly `.badge-green`, `.badge-amber`, `.badge-red`, `.badge-info`, `.badge-muted`, `.badge-slate`.
+
