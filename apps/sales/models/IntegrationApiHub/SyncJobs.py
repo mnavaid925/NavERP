@@ -68,6 +68,7 @@ class SalesSyncJob(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "connector", "status"], name="sales_ssj_conn_stat_idx"),
             models.Index(fields=["tenant", "entity_scope"], name="sales_ssj_scope_idx"),
+            models.Index(fields=["tenant", "status"], name="sales_ssj_ten_status_idx"),
         ]
 
     def __str__(self):
