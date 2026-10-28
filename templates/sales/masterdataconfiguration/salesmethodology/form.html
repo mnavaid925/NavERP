@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Methodology {{ methodology.number }}{% else %}New Sales Methodology{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+    {# Page Header #}
+    <div class="page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:master_data_overview' %}" class="hover:text-primary">Master Data</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:smd_list' %}" class="hover:text-primary">Sales Methodologies</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{% if is_edit %}Edit {{ methodology.number }}{% else %}New Methodology{% endif %}</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">
+                {% if is_edit %}Edit Methodology {{ methodology.number }}{% else %}Create Sales Methodology{% endif %}
+            </h1>
+            <p class="text-sm text-slate-500 mt-1">Configure qualification frameworks, stage gate thresholds, and deal coaching checklists.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% if is_edit %}{% url 'sales:smd_detail' methodology.pk %}{% else %}{% url 'sales:smd_list' %}{% endif %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                <span>Cancel</span>
+            </a>
+        </div>
+    </div>
+
+    {# Form Card #}
+    <div class="card p-6">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="space-y-4">
+                <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-200">Framework Identity</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.name.id_for_label }}">
+                            Methodology Label <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.name.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.framework.id_for_label }}">
+                            Framework Standard <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.framework }}
+                        {% if form.framework.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.framework.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.pipeline.id_for_label }}">
+                            Bound Opportunity Pipeline
+                        </label>
+                        {{ form.pipeline }}
+                        {% if form.pipeline.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.pipeline.errors.0 }}</p>
+                        {% endif %}
+                        <p class="text-xs text-slate-500 mt-1">Leave blank to apply framework across all sales pipelines.</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.gating_stage.id_for_label }}">
+                            Gating Pipeline Stage
+                        </label>
+                        {{ form.gating_stage }}
+                        {% if form.gating_stage.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.gating_stage.errors.0 }}</p>
+                        {% endif %}
+                        <p class="text-xs text-slate-500 mt-1">Stage requiring qualification score before deals advance.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4 pt-4 border-t border-slate-200">
+                <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-200">Scoring & Qualification Criteria</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.min_passing_score.id_for_label }}">
+                            Minimum Passing Score (%) <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.min_passing_score }}
+                        {% if form.min_passing_score.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.min_passing_score.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-2 pt-6">
+                        {{ form.is_mandatory_gate }}
+                        <label class="form-label text-sm font-medium cursor-pointer" for="{{ form.is_mandatory_gate.id_for_label }}">
+                            Enforce mandatory gate before stage promotion
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label text-sm font-medium" for="{{ form.qualification_criteria_raw.id_for_label }}">
+                        {{ form.qualification_criteria_raw.label }}
+                    </label>
+                    {{ form.qualification_criteria_raw }}
+                    {% if form.qualification_criteria_raw.errors %}
+                    <p class="form-error text-xs text-red-600 mt-1">{{ form.qualification_criteria_raw.errors.0 }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="space-y-4 pt-4 border-t border-slate-200">
+                <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-200">Coaching Guidelines & Status</h3>
+                <div class="form-group">
+                    <label class="form-label text-sm font-medium" for="{{ form.coaching_guidelines.id_for_label }}">
+                        Rep Coaching Prompts & Deal Discovery Questions
+                    </label>
+                    {{ form.coaching_guidelines }}
+                    {% if form.coaching_guidelines.errors %}
+                    <p class="form-error text-xs text-red-600 mt-1">{{ form.coaching_guidelines.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="flex items-center gap-2 pt-2">
+                    {{ form.is_active }}
+                    <label class="form-label text-sm font-medium cursor-pointer" for="{{ form.is_active.id_for_label }}">
+                        Active methodology template
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'sales:smd_detail' methodology.pk %}{% else %}{% url 'sales:smd_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if is_edit %}Save Changes{% else %}Create Methodology{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
