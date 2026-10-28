@@ -68,7 +68,12 @@ def storecategory_create(request):
             category = form.save(commit=False)
             category.tenant = request.tenant
             category.save()
-            write_audit_log(request, "create", category, f"Created store category {category.name}")
+            write_audit_log(
+                request.user,
+                category,
+                "create",
+                {"name": category.name},
+            )
             messages.success(request, f"Store category '{category.name}' created successfully.")
             return redirect("ecommerce:storecategory_detail", pk=category.pk)
     else:
@@ -91,7 +96,12 @@ def storecategory_edit(request, pk):
         form = StoreCategoryForm(request.POST, instance=category, tenant=request.tenant)
         if form.is_valid():
             category = form.save()
-            write_audit_log(request, "update", category, f"Updated store category {category.name}")
+            write_audit_log(
+                request.user,
+                category,
+                "update",
+                {"name": category.name},
+            )
             messages.success(request, f"Store category '{category.name}' updated successfully.")
             return redirect("ecommerce:storecategory_detail", pk=category.pk)
     else:
@@ -113,7 +123,12 @@ def storecategory_edit(request, pk):
 def storecategory_delete(request, pk):
     category = ecommerce_object(request, StoreCategory, pk=pk)
     name = category.name
-    write_audit_log(request, "delete", category, f"Deleted store category {name}")
+    write_audit_log(
+        request.user,
+        category,
+        "delete",
+        {"name": name},
+    )
     category.delete()
     messages.success(request, f"Store category '{name}' deleted successfully.")
     return redirect("ecommerce:storecategory_list")
