@@ -38,3 +38,22 @@ None.
 - `[ ]` **M5**: `templates/ecommerce/productcatalog/productvariant/list.html:30-62` — Filter UI dropdown omitted for `is_active`: The view supports filtering on `is_active` and passes `is_active_filter` in context, but the filter form only provides `q` and `product` inputs. Add an `is_active` filter select.
 - `[ ]` **M6**: `templates/ecommerce/productcatalog/storecategory/detail.html:138-190` — Context variable `products` unrendered in detail template: The view queries and passes `products` to context in accordance with the contract, but `storecategory/detail.html` does not render a products section or count badge. Add a products table section under the category detail page.
 
+---
+
+## Pass 3: Frontend Reviewer (`frontend-reviewer`)
+
+### Critical
+None.
+
+### Important
+- `[ ]` **I7**: `templates/ecommerce/productcatalog/catalogproduct/list.html:33-75` — Filter UI dropdowns omitted for `visibility` and `brand`: Expand grid to include `<select name="visibility">` and `<select name="brand">` matching the view context.
+- `[ ]` **I8**: `templates/ecommerce/productcatalog/catalogproduct/list.html:214,219` — Pagination links drop `visibility` and `brand` query parameters (Lesson L9). Append `&visibility={{ visibility_filter }}&brand={{ brand_filter }}`.
+- `[ ]` **I9**: `templates/ecommerce/productcatalog/productvariant/list.html:30-62` — Missing `is_active` filter dropdown in variant filter bar. Add `<select name="is_active">`.
+- `[ ]` **I10**: `templates/ecommerce/productcatalog/productvariant/list.html:165,170` — Pagination links drop `is_active` query parameter (Lesson L9). Append `&is_active={{ is_active_filter }}`.
+- `[ ]` **I11**: `templates/ecommerce/productcatalog/storecategory/detail.html:189` — Category detail page omits catalog products display. Add "Products in Category" card section below the Sub-Categories card.
+
+### Minor
+- `[ ]` **M7**: `templates/ecommerce/productcatalog/**/` — Add explicit `aria-label` attributes to all icon-only action buttons alongside `title`.
+- `[ ]` **M8**: `templates/ecommerce/productcatalog/bulk_import.html:82` & form templates — Replace `space-x-*` with `gap-*` for RTL safety.
+
+
