@@ -33,9 +33,9 @@ def ssj_list(request):
             | Q(connector__name__icontains=q)
         )
 
-    connector_id = request.GET.get("connector", "").strip()
-    if connector_id and connector_id.isdigit():
-        qs = qs.filter(connector_id=int(connector_id))
+    connector_id = as_db_int(request.GET.get("connector", "").strip())
+    if connector_id:
+        qs = qs.filter(connector_id=connector_id)
 
     entity_scope = request.GET.get("entity_scope", "").strip()
     if entity_scope:
@@ -54,7 +54,7 @@ def ssj_list(request):
         "page_obj": page_obj,
         "paginator": paginator,
         "q": q,
-        "connector_id": as_db_int(connector_id),
+        "connector_id": connector_id,
         "entity_scope": entity_scope,
         "status": status,
         "connectors": connectors,
@@ -84,9 +84,9 @@ def ssj_detail(request, pk):
 def ssj_create(request):
     tenant = request.tenant
     initial = {}
-    conn_param = request.GET.get("connector", "").strip()
-    if conn_param and conn_param.isdigit():
-        initial["connector"] = int(conn_param)
+    conn_param = as_db_int(request.GET.get("connector", "").strip())
+    if conn_param:
+        initial["connector"] = conn_param
 
     if request.method == "POST":
         form = SalesSyncJobForm(request.POST, tenant=tenant)
