@@ -196,6 +196,11 @@ from .IntegrationApiHub import (
     SalesSyncRun,
     TRANSFORM_CHOICES,
 )
+# 8.19 Master Data & Configuration
+from .MasterDataConfiguration.SalesPriceBookEntries import SalesPriceBookEntry
+from .MasterDataConfiguration.SalesCustomEntityDefinitions import SalesCustomEntityDefinition
+from .MasterDataConfiguration.SalesMethodologies import SalesMethodology
+from .MasterDataConfiguration.SalesRegionalSettings import SalesRegionalSetting
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
@@ -267,6 +272,8 @@ __all__ = [
     "FIELD_TARGET_ENTITY_CHOICES", "FIELD_DIRECTION_CHOICES", "TRANSFORM_CHOICES",
     "JOB_DIRECTION_CHOICES", "CONFLICT_POLICY_CHOICES", "CADENCE_CHOICES", "JOB_STATUS_CHOICES",
     "RUN_TYPE_CHOICES", "RUN_STATUS_CHOICES",
+    # 8.19 Master Data & Configuration
+    "SalesPriceBookEntry", "SalesCustomEntityDefinition", "SalesMethodology", "SalesRegionalSetting",
 ]
 
 
