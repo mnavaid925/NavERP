@@ -60,4 +60,5 @@ class SalesFieldMapping(TenantOwned):
         ]
 
     def __str__(self):
-        return f"{self.connector.name} | {self.get_target_entity_display()}: {self.local_field} → {self.remote_field}"
+        conn_name = getattr(self.connector, "name", f"Connector #{self.connector_id}") if self.connector_id else "None"
+        return f"{conn_name} | {self.get_target_entity_display()}: {self.local_field} → {self.remote_field}"
