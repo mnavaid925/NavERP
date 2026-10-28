@@ -98,7 +98,9 @@ def productrelationship_create(request):
     else:
         form = ProductRelationshipForm(initial=initial, tenant=request.tenant)
 
-    products_list = CatalogProduct.objects.filter(tenant=request.tenant).order_by("name")
+    products_list = (
+        CatalogProduct.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
+    )
 
     context = {
         "form": form,
@@ -132,7 +134,9 @@ def productrelationship_edit(request, pk):
     else:
         form = ProductRelationshipForm(instance=rel, tenant=request.tenant)
 
-    products_list = CatalogProduct.objects.filter(tenant=request.tenant).order_by("name")
+    products_list = (
+        CatalogProduct.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
+    )
 
     context = {
         "form": form,
