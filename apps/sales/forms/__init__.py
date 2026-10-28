@@ -147,6 +147,14 @@ from .WorkflowProcessAutomation import (
     SalesProcessDefinitionForm,
 )
 
+# 8.18 Integration & API Hub
+from .IntegrationApiHub import (
+    SalesFieldMappingForm,
+    SalesIntegrationConnectorForm,
+    SalesSyncJobForm,
+    SalesSyncRunForm,
+)
+
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
     "LeadQualificationForm", "LeadRoutingPreviewForm", "LeadRoutingRuleForm", "LeadRoutingRunForm",
@@ -208,6 +216,9 @@ __all__ = [
     "SalesProcessDefinitionForm", "SalesAssignmentRuleForm",
     "SalesApprovalDecisionForm", "SalesApprovalDecisionEditForm",
     "SalesApprovalDecisionActionForm", "SalesAlertTriggerForm",
+    # 8.18 Integration & API Hub
+    "SalesIntegrationConnectorForm", "SalesFieldMappingForm",
+    "SalesSyncJobForm", "SalesSyncRunForm",
 ]
 
 
