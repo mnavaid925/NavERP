@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category.name }} · Store Categories · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:storecategory_list' %}">Categories</a>
+            <span>/</span>
+            <span>{{ category.name }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ category.name }}</h1>
+            {% if category.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-slate">Inactive</span>
+            {% endif %}
+            {% if category.include_in_menu %}
+            <span class="badge badge-info">In Menu</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:storecategory_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Categories
+        </a>
+        <a href="{% url 'ecommerce:storecategory_edit' category.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Category
+        </a>
+        <form method="post" action="{% url 'ecommerce:storecategory_delete' category.pk %}" onsubmit="return confirm('Delete this category?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Category Overview Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold text-slate-800">Category Details</h2>
+            <span class="font-mono text-xs text-slate-500">{{ category.number }}</span>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Category Name</dt>
+                    <dd class="mt-1 text-sm font-semibold text-slate-900">{{ category.name }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">URL Slug</dt>
+                    <dd class="mt-1 text-sm font-mono text-slate-700">/{{ category.slug }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Parent Category</dt>
+                    <dd class="mt-1 text-sm text-slate-900">
+                        {% if category.parent %}
+                        <a href="{% url 'ecommerce:storecategory_detail' category.parent.pk %}" class="text-blue-600 hover:underline">
+                            {{ category.parent.name }}
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400 italic">None (Root Category)</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Hierarchy Path</dt>
+                    <dd class="mt-1 text-sm text-slate-700 font-medium">
+                        {{ category.full_path }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Display Order</dt>
+                    <dd class="mt-1 text-sm font-mono text-slate-900">{{ category.display_order }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Storefront Menu</dt>
+                    <dd class="mt-1 text-sm text-slate-900">
+                        {% if category.include_in_menu %}Visible in Navigation{% else %}Hidden from Navigation{% endif %}
+                    </dd>
+                </div>
+                <div class="sm:col-span-2">
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Description</dt>
+                    <dd class="mt-1 text-sm text-slate-700 whitespace-pre-line">
+                        {% if category.description %}{{ category.description }}{% else %}<span class="text-slate-400 italic">No description provided.</span>{% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- SEO & Metadata Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">SEO & Metadata</h2>
+        </div>
+        <div class="card-body">
+            <dl class="space-y-4">
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Meta Title</dt>
+                    <dd class="mt-1 text-sm text-slate-900">
+                        {% if category.meta_title %}{{ category.meta_title }}{% else %}<span class="text-slate-400 italic">Uses category name</span>{% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Meta Description</dt>
+                    <dd class="mt-1 text-sm text-slate-700">
+                        {% if category.meta_description %}{{ category.meta_description }}{% else %}<span class="text-slate-400 italic">Not set</span>{% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Image / Banner</dt>
+                    <dd class="mt-1">
+                        {% if category.image_url %}
+                        <a href="{{ category.image_url }}" target="_blank" rel="noopener noreferrer" class="text-xs text-blue-600 hover:underline break-all">
+                            {{ category.image_url }}
+                        </a>
+                        {% else %}
+                        <span class="text-xs text-slate-400 italic">No image URL configured</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="pt-4 border-t border-slate-100 text-xs text-slate-400">
+                    <div>Created: {{ category.created_at|date:"M d, Y H:i" }}</div>
+                    <div>Updated: {{ category.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+
+<!-- Child Sub-Categories -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-800">Sub-Categories ({{ children.count }})</h2>
+        <a href="{% url 'ecommerce:storecategory_create' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="plus"></i> Add Sub-Category
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Sub-Category</th>
+                    <th>Slug</th>
+                    <th class="text-center">Order</th>
+                    <th class="text-center">Status</th>
+                    <th class="table-actions text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for child in children %}
+                <tr>
+                    <td class="font-medium text-slate-900">
+                        <a href="{% url 'ecommerce:storecategory_detail' child.pk %}" class="hover:underline">
+                            {{ child.name }}
+                        </a>
+                    </td>
+                    <td class="font-mono text-xs text-slate-600">/{{ child.slug }}</td>
+                    <td class="text-center font-mono text-sm">{{ child.display_order }}</td>
+                    <td class="text-center">
+                        {% if child.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'ecommerce:storecategory_detail' child.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'ecommerce:storecategory_edit' child.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-6 text-sm text-slate-500">
+                        No direct sub-categories under this category.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
