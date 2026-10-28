@@ -115,7 +115,7 @@ def pbe_create(request):
 def pbe_edit(request, pk):
     """Edit an existing price book entry."""
     entry = get_object_or_404(
-        SalesPriceBookEntry.objects.filter(tenant=request.tenant),
+        SalesPriceBookEntry.objects.filter(tenant=request.tenant).select_related("price_book", "product"),
         pk=pk,
     )
     if request.method == "POST":
@@ -147,7 +147,7 @@ def pbe_edit(request, pk):
 def pbe_delete(request, pk):
     """Delete a price book entry."""
     entry = get_object_or_404(
-        SalesPriceBookEntry.objects.filter(tenant=request.tenant),
+        SalesPriceBookEntry.objects.filter(tenant=request.tenant).select_related("price_book", "product"),
         pk=pk,
     )
     num = entry.number
