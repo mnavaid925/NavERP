@@ -26,3 +26,25 @@
 - **CR-M3**: Confirm dialogs in templates (`connectors/detail.html`, `fieldmappings/detail.html`, `syncjobs/detail.html`) output object names in inline JS `confirm('...')` without `|escapejs`.
 - **CR-M4**: `apps/sales/models/IntegrationApiHub/SyncJobs.py` — `batch_size` uses `PositiveIntegerField(default=100)` allowing 0 at the model level. Add `MinValueValidator(1)`.
 - **CR-M5**: `templates/sales/integrationapihub/connectors/list.html:137`, `syncruns/list.html:144` — Status badges use hardcoded fallback labels in `{% else %}` branches instead of dynamic model display (`get_health_status_display` / `get_status_display`).
+
+---
+
+## Pass 2: Explorer (`explorer`)
+
+**Verdict:** Commit after fixing Important findings. 100% Contract & route compliance.
+
+### Critical
+*None.*
+
+### Important
+- **EX-I1**: `apps/sales/views/IntegrationApiHub/Dashboard.py:48-70` & `apps/core/navigation.py:2637-2641` — NavERP.md §8.18 category lens bullets map to `sales:sic_erp_list`, `sales:sic_marketing_list`, etc., which execute HTTP 302 redirects to `sales:sic_list?category=...`. Once redirected, `request.resolver_match.view_name` becomes `sales:sic_list`. In `resolve_nav()`, `_route_score("sales:sic_erp_list", "sales:sic_list")` returns `-1`. Consequently, clicking "ERP Integration" or other category bullets causes the sidebar to highlight "Connectors" instead of the active category bullet.
+  - **Fix:** In `apps/core/navigation.py`, deep-link via query parameter: `"ERP Integration": "sales:sic_list?category=erp"` (which `_match_score` natively recognizes and outscores bare routes by parameter count).
+- **EX-I2**: `apps/sales/views/IntegrationApiHub/FieldMappings.py:36-38`, `SyncJobs.py:36-38`, `SyncRuns.py:39-46` — Missing overflow protection on FK filters in list views (same as CR-I2).
+- **EX-I3**: `apps/sales/forms/IntegrationApiHub/FieldMappings.py:10` — Missing `TenantUniqueMixin` on `SalesFieldMappingForm` (same as CR-I1).
+
+### Minor
+- **EX-M1**: `apps/sales/views/IntegrationApiHub/Dashboard.py:25-29` & `templates/sales/integrationapihub/hub_dashboard.html:87,115,143,171,199` — In `hub_dashboard`, category querysets (`erp_connectors`, etc.) are passed to context, and the template calls `.count` on each (`{{ erp_connectors.count }}`), resulting in 5 extra database COUNT queries on dashboard load. Pre-compute category counts in view context or aggregate.
+- **EX-M2**: `apps/sales/views/IntegrationApiHub/FieldMappings.py:142` — Context/Referrer inconsistency on `sfm_delete` (same as CR-M1).
+- **EX-M3**: `apps/sales/models/IntegrationApiHub/SyncJobs.py:56` — `batch_size` field allows 0 (same as CR-M4).
+- **EX-M4**: `apps/sales/views/IntegrationApiHub/Connectors.py:168` & `SyncJobs.py:167` — Omission of `updated_at` in `update_fields` (same as CR-M2).
+
