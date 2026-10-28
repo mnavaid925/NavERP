@@ -210,10 +210,11 @@ def product_import_csv(request):
 
                 if not dry_run and not errors:
                     write_audit_log(
-                        request,
-                        "import",
+                        request.user,
                         None,
-                        f"Imported {created_products} products and {created_variants} variants from CSV",
+                        "create",
+                        {"message": f"Imported {created_products} products and {created_variants} variants from CSV"},
+                        tenant=request.tenant,
                     )
                     messages.success(
                         request,
