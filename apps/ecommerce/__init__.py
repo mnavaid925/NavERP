@@ -1,0 +1,1 @@
+"""eCommerce Management System module."""
