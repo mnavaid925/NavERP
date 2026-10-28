@@ -1,4 +1,6 @@
 """SalesCustomEntityDefinition model for 8.19 Master Data & Configuration — Custom Fields & Objects."""
+import re
+
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -122,6 +124,11 @@ class SalesCustomEntityDefinition(TenantNumbered):
             raise ValidationError({"lookup_target_model": "Lookup target model is required for relationship fields."})
         if self.field_type in ["picklist", "multi_picklist"] and not isinstance(self.picklist_options, list):
             raise ValidationError({"picklist_options": "Picklist options must be a JSON array of strings."})
+        if self.validation_rule and self.validation_rule.strip():
+            try:
+                re.compile(self.validation_rule.strip())
+            except re.error as exc:
+                raise ValidationError({"validation_rule": f"Invalid regular expression pattern: {exc}"})
 
     def __str__(self):
         return f"{self.number} · {self.get_target_model_display()} - {self.name} ({self.entity_code})"
