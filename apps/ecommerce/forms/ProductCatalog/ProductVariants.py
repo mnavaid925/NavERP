@@ -57,6 +57,8 @@ class ProductVariantForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "sort_order" in self.fields and not self.instance.pk:
+            self.fields["sort_order"].initial = 0
         if self.tenant:
             self.fields["product"].queryset = CatalogProduct.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["item"].queryset = Item.objects.filter(tenant=self.tenant).order_by("sku")
