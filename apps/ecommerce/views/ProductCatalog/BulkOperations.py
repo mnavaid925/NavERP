@@ -1,5 +1,5 @@
 import csv
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import io
 
 from django.contrib import messages
@@ -147,6 +147,46 @@ def product_import_csv(request):
                                     slug=slugify(cat_name),
                                 )
 
+                        var_name = ""
+                        price_val = Decimal("0.00")
+                        compare_val = None
+                        cost_val = Decimal("0.00")
+                        barcode = ""
+                        if sku:
+                            var_name = (row.get("Variant_Name") or row.get("variant_name") or prod_name).strip()
+                            raw_price = str(row.get("Price") if row.get("Price") is not None else 0).replace("$", "").strip() or "0"
+                            try:
+                                price_val = Decimal(raw_price)
+                                if not price_val.is_finite() or price_val < 0:
+                                    raise ValueError()
+                            except (InvalidOperation, TypeError, ValueError):
+                                errors.append(f"Row {row_num}: Invalid Price '{raw_price}'.")
+                                continue
+
+                            raw_compare = row.get("Compare_At_Price")
+                            if raw_compare:
+                                cleaned_compare = str(raw_compare).replace("$", "").strip()
+                                if cleaned_compare:
+                                    try:
+                                        parsed_compare = Decimal(cleaned_compare)
+                                        if not parsed_compare.is_finite() or parsed_compare < 0:
+                                            raise ValueError()
+                                        compare_val = parsed_compare
+                                    except (InvalidOperation, TypeError, ValueError):
+                                        errors.append(f"Row {row_num}: Invalid Compare_At_Price '{cleaned_compare}'.")
+                                        continue
+
+                            raw_cost = str(row.get("Cost_Price") if row.get("Cost_Price") is not None else 0).replace("$", "").strip() or "0"
+                            try:
+                                cost_val = Decimal(raw_cost)
+                                if not cost_val.is_finite() or cost_val < 0:
+                                    raise ValueError()
+                            except (InvalidOperation, TypeError, ValueError):
+                                errors.append(f"Row {row_num}: Invalid Cost_Price '{raw_cost}'.")
+                                continue
+
+                            barcode = (row.get("Barcode") or "").strip()
+
                         if not dry_run:
                             product, p_created = CatalogProduct.objects.get_or_create(
                                 tenant=request.tenant,
@@ -165,18 +205,6 @@ def product_import_csv(request):
                                 updated_products += 1
 
                             if sku:
-                                var_name = (row.get("Variant_Name") or row.get("variant_name") or prod_name).strip()
-                                price_val = Decimal(str(row.get("Price") or 0).replace("$", "").strip() or 0)
-                                compare_val = None
-                                if row.get("Compare_At_Price"):
-                                    try:
-                                        compare_val = Decimal(str(row.get("Compare_At_Price")).replace("$", "").strip())
-                                    except Exception:
-                                        compare_val = None
-
-                                cost_val = Decimal(str(row.get("Cost_Price") or 0).replace("$", "").strip() or 0)
-                                barcode = (row.get("Barcode") or "").strip()
-
                                 variant, v_created = ProductVariant.objects.get_or_create(
                                     tenant=request.tenant,
                                     sku=sku,
@@ -194,6 +222,8 @@ def product_import_csv(request):
                         else:
                             # Dry run count
                             created_products += 1
+                            if sku:
+                                created_variants += 1
 
                     if dry_run:
                         # Transaction rollback for dry run
