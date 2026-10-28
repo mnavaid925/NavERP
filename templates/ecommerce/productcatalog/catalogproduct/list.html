@@ -115,7 +115,7 @@
                 {% for prod in products %}
                 <tr>
                     <td>
-                        <div class="flex items-center space-x-3">
+                        <div class="flex items-center gap-3">
                             {% if prod.hero_image_url %}
                             <img src="{{ prod.hero_image_url }}" alt="{{ prod.name }}" class="w-10 h-10 object-cover rounded border border-slate-200">
                             {% else %}
@@ -229,7 +229,7 @@
         <div class="text-sm text-slate-500">
             Showing Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
         </div>
-        <div class="flex space-x-2">
+        <div class="flex gap-2">
             {% if page_obj.has_previous %}
             <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if visibility_filter %}&visibility={{ visibility_filter }}{% endif %}{% if brand_filter %}&brand={{ brand_filter }}{% endif %}" class="btn btn-outline btn-sm">
                 Previous
