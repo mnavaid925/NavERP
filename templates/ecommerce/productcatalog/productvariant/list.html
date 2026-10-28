@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Product Variants & SKUs · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:catalogproduct_list' %}">Product Catalog</a>
+            <span>/</span>
+            <span>Variants</span>
+        </div>
+        <h1 class="page-title">Product Variants & SKU Matrix</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:catalogproduct_list' %}" class="btn btn-outline">
+            <i data-lucide="package"></i> Products
+        </a>
+        <a href="{% url 'ecommerce:productvariant_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Variant
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'ecommerce:productvariant_list' %}" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div class="form-group mb-0 md:col-span-2">
+                <label for="q" class="form-label">Search Variants</label>
+                <div class="relative">
+                    <input type="text" name="q" id="q" value="{{ search_query }}" class="form-input pl-10" placeholder="Search by SKU, barcode, name, product...">
+                    <i data-lucide="search" class="absolute left-3 top-2.5 text-slate-400 w-4 h-4"></i>
+                </div>
+            </div>
+
+            <div class="form-group mb-0">
+                <label for="product" class="form-label">Product</label>
+                <select name="product" id="product" class="form-select">
+                    <option value="">All Products</option>
+                    {% for p in products_list %}
+                    <option value="{{ p.pk }}" {% if product_filter == p.pk|stringformat:"d" %}selected{% endif %}>
+                        {{ p.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if search_query or product_filter or is_active_filter %}
+                <a href="{% url 'ecommerce:productvariant_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Variants Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>SKU & Number</th>
+                    <th>Product & Variant</th>
+                    <th>Option Values</th>
+                    <th>Selling Price</th>
+                    <th>Compare-At</th>
+                    <th>Stock Link</th>
+                    <th class="text-center">Status</th>
+                    <th class="table-actions text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for var in variants %}
+                <tr>
+                    <td>
+                        <div class="font-mono text-xs font-semibold text-slate-900">
+                            <a href="{% url 'ecommerce:productvariant_detail' var.pk %}" class="hover:underline">
+                                {{ var.sku }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-400 font-mono">{{ var.number }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'ecommerce:catalogproduct_detail' var.product.pk %}" class="hover:underline">
+                                {{ var.product.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500">{{ var.name }}</div>
+                    </td>
+                    <td class="text-xs font-mono text-slate-700">
+                        {{ var.options_summary }}
+                    </td>
+                    <td class="font-mono font-medium text-slate-900">
+                        ${{ var.price|floatformat:2 }}
+                    </td>
+                    <td class="font-mono text-xs text-slate-500">
+                        {% if var.compare_at_price %}
+                        <span class="line-through">${{ var.compare_at_price|floatformat:2 }}</span>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td class="text-xs">
+                        {% if var.item %}
+                        <span class="badge badge-slate font-mono">{{ var.item.sku }}</span>
+                        {% else %}
+                        <span class="text-slate-400 italic">No warehouse SKU</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if var.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <div class="flex items-center justify-end space-x-1">
+                            <a href="{% url 'ecommerce:productvariant_detail' var.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:productvariant_edit' var.pk %}" class="btn btn-icon" title="Edit Variant">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'ecommerce:productvariant_delete' var.pk %}" onsubmit="return confirm('Delete variant {{ var.sku|escapejs }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Variant">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-12 text-center">
+                            <i data-lucide="boxes" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-900 mb-1">No variants found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Create SKU variants for your products.</p>
+                            <a href="{% url 'ecommerce:productvariant_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i> Create Variant
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-slate-500">
+            Showing Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </div>
+        <div class="flex space-x-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if product_filter %}&product={{ product_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if product_filter %}&product={{ product_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
