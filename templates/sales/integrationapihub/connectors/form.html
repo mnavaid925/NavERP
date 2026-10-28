@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ connector.name }}{% else %}New Integration Connector{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+    <div class="page-header">
+        <div class="breadcrumb text-sm text-slate-500 mb-1">
+            <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+            <span class="mx-1">/</span>
+            <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+            <span class="mx-1">/</span>
+            <a href="{% url 'sales:integration_hub' %}" class="hover:text-primary">Integration Hub</a>
+            <span class="mx-1">/</span>
+            <a href="{% url 'sales:sic_list' %}" class="hover:text-primary">Connectors</a>
+            <span class="mx-1">/</span>
+            <span class="text-slate-700 font-medium">{% if is_edit %}Edit {{ connector.number }}{% else %}New Connector{% endif %}</span>
+        </div>
+        <h1 class="page-title text-2xl font-bold text-slate-900">
+            {% if is_edit %}Edit Integration Connector{% else %}Create Integration Connector{% endif %}
+        </h1>
+        <p class="text-sm text-slate-500 mt-1">Configure external system connectivity, credentials, and authentication.</p>
+    </div>
+
+    <form method="post" class="card p-6 space-y-6">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+                {{ form.non_field_errors }}
+            </div>
+        {% endif %}
+
+        <div class="space-y-4">
+            <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100">Profile & Category</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Connector Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.category.id_for_label }}">Category *</label>
+                    {{ form.category }}
+                    {% if form.category.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.category.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.provider.id_for_label }}">Provider Platform *</label>
+                    {{ form.provider }}
+                    {% if form.provider.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.provider.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100">Endpoint & Authentication</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.environment.id_for_label }}">Environment *</label>
+                    {{ form.environment }}
+                    {% if form.environment.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.environment.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.auth_method.id_for_label }}">Authentication Method *</label>
+                    {{ form.auth_method }}
+                    {% if form.auth_method.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.auth_method.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.base_url.id_for_label }}">Base Endpoint URL</label>
+                    {{ form.base_url }}
+                    {% if form.base_url.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.base_url.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.credential_input.id_for_label }}">
+                        {{ form.credential_input.label }}
+                    </label>
+                    {{ form.credential_input }}
+                    <span class="text-xs text-slate-500 mt-1 block">{{ form.credential_input.help_text }}</span>
+                    {% if form.credential_input.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.credential_input.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.remote_scope_ref.id_for_label }}">Remote Scope / Client Ref</label>
+                    {{ form.remote_scope_ref }}
+                    <span class="text-xs text-slate-500 mt-1 block">{{ form.remote_scope_ref.help_text }}</span>
+                    {% if form.remote_scope_ref.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.remote_scope_ref.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100">Status & Operational Notes</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.health_status.id_for_label }}">Initial Health Status</label>
+                    {{ form.health_status }}
+                    {% if form.health_status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.health_status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group flex items-center pt-6">
+                    <label class="inline-flex items-center gap-2 cursor-pointer">
+                        {{ form.is_active }}
+                        <span class="text-sm font-medium text-slate-800">Connector is Active</span>
+                    </label>
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Operational Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            <a href="{% if is_edit %}{% url 'sales:sic_detail' connector.pk %}{% else %}{% url 'sales:sic_list' %}{% endif %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                {% if is_edit %}Save Changes{% else %}Create Connector{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
