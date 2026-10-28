@@ -175,6 +175,27 @@ from .WorkflowProcessAutomation import (
     validate_process_conditions,
     validate_process_nodes,
 )
+# 8.18 Integration & API Hub (L55 Coexistence: 5th integration register across NavERP)
+from .IntegrationApiHub import (
+    AUTH_METHOD_CHOICES,
+    CADENCE_CHOICES,
+    CATEGORY_CHOICES,
+    CONFLICT_POLICY_CHOICES,
+    ENVIRONMENT_CHOICES,
+    FIELD_DIRECTION_CHOICES,
+    FIELD_TARGET_ENTITY_CHOICES,
+    HEALTH_STATUS_CHOICES,
+    JOB_DIRECTION_CHOICES,
+    JOB_STATUS_CHOICES,
+    PROVIDER_CHOICES,
+    RUN_TYPE_CHOICES,
+    RUN_STATUS_CHOICES,
+    SalesFieldMapping,
+    SalesIntegrationConnector,
+    SalesSyncJob,
+    SalesSyncRun,
+    TRANSFORM_CHOICES,
+)
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
@@ -240,6 +261,12 @@ __all__ = [
     "SalesProcessDefinition", "SalesAssignmentRule", "SalesApprovalDecision", "SalesAlertTrigger",
     "validate_process_conditions", "validate_process_nodes",
     "TARGET_ENTITY_CHOICES", "TARGET_KIND_CHOICES", "PROCESS_NODE_TYPES", "SAT_TO_MDA_ALERT_TYPE",
+    # 8.18 Integration & API Hub
+    "SalesIntegrationConnector", "SalesFieldMapping", "SalesSyncJob", "SalesSyncRun",
+    "CATEGORY_CHOICES", "PROVIDER_CHOICES", "ENVIRONMENT_CHOICES", "AUTH_METHOD_CHOICES", "HEALTH_STATUS_CHOICES",
+    "FIELD_TARGET_ENTITY_CHOICES", "FIELD_DIRECTION_CHOICES", "TRANSFORM_CHOICES",
+    "JOB_DIRECTION_CHOICES", "CONFLICT_POLICY_CHOICES", "CADENCE_CHOICES", "JOB_STATUS_CHOICES",
+    "RUN_TYPE_CHOICES", "RUN_STATUS_CHOICES",
 ]
 
 
