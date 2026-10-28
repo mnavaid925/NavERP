@@ -32,9 +32,9 @@ class SalesFieldMappingForm(TenantUniqueMixin, TenantModelForm):
             "transform_rule": forms.Select(attrs={"class": "form-select"}),
             "value_map": forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 3, "placeholder": '{"draft": "D", "confirmed": "C"}'}),
             "default_value": forms.TextInput(attrs={"class": "form-input", "placeholder": "Fallback value if empty"}),
-            "is_key": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
-            "is_required": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
-            "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
+            "is_key": forms.CheckboxInput(attrs={"class": "form-check"}),
+            "is_required": forms.CheckboxInput(attrs={"class": "form-check"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check"}),
         }
 
     def __init__(self, *args, **kwargs):
