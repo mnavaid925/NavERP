@@ -130,16 +130,16 @@
                         {% if var.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <div class="flex items-center justify-end space-x-1">
-                            <a href="{% url 'ecommerce:productvariant_detail' var.pk %}" class="btn btn-icon" title="View Detail">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'ecommerce:productvariant_detail' var.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'ecommerce:productvariant_edit' var.pk %}" class="btn btn-icon" title="Edit Variant">
+                            <a href="{% url 'ecommerce:productvariant_edit' var.pk %}" class="btn btn-icon" title="Edit Variant" aria-label="Edit Variant">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'ecommerce:productvariant_delete' var.pk %}" onsubmit="return confirm('Delete variant {{ var.sku|escapejs }}?');" class="inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Variant">
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Variant" aria-label="Delete Variant">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
