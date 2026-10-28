@@ -5643,3 +5643,264 @@ def ms_alert_a(tenant_a, admin_user, ms_device_a):
 @pytest.fixture
 def ms_alert_b(tenant_b, admin_b, ms_device_b):
     return _mobilesales_alert(tenant_b, recipient=admin_b, device=ms_device_b)
+
+
+# ==============================================================================
+# 8.18 Integration & API Hub (integrationapihub) Contract & Fixtures
+# ==============================================================================
+
+INTEGRATIONAPIHUB_PAGE_SIZE = 15
+
+INTEGRATIONAPIHUB_MODEL_FIELDS = {
+    "SalesIntegrationConnector": (
+        "tenant", "created_at", "updated_at", "number", "name", "category",
+        "provider", "environment", "base_url", "auth_method", "credential_encrypted",
+        "remote_scope_ref", "health_status", "last_health_check_at",
+        "last_error_message", "is_active", "notes",
+    ),
+    "SalesFieldMapping": (
+        "tenant", "created_at", "updated_at", "connector", "target_entity",
+        "local_field", "remote_field", "direction", "transform_rule",
+        "value_map", "default_value", "is_key", "is_required", "is_active",
+    ),
+    "SalesSyncJob": (
+        "tenant", "created_at", "updated_at", "number", "name", "connector",
+        "entity_scope", "sync_direction", "conflict_policy", "cadence",
+        "filter_expression", "batch_size", "status", "last_run_at",
+        "next_run_at", "total_runs_count", "total_records_synced",
+    ),
+    "SalesSyncRun": (
+        "tenant", "created_at", "updated_at", "number", "connector", "job",
+        "run_type", "status", "started_at", "finished_at", "records_read",
+        "records_written", "records_failed", "records_skipped", "error_log",
+        "summary_payload", "triggered_by",
+    ),
+}
+
+INTEGRATIONAPIHUB_CHOICES = {
+    "SalesIntegrationConnector": {
+        "category": (
+            ("erp", "ERP & Financial"), ("marketing", "Marketing Automation"),
+            ("communication", "Communication & Telephony"), ("bi_warehouse", "BI & Data Warehouse"),
+            ("esignature", "E-Signature & CLM"), ("custom", "Custom / Other"),
+        ),
+        "provider": (
+            ("sap", "SAP ERP"), ("oracle", "Oracle Fusion/EBS"), ("netsuite", "Oracle NetSuite"),
+            ("dynamics_finance", "Microsoft Dynamics 365 Finance"), ("hubspot", "HubSpot CRM/Marketing"),
+            ("marketo", "Adobe Marketo Engage"),
+            ("pardot", "Salesforce Marketing Cloud Account Engagement (Pardot)"),
+            ("eloqua", "Oracle Eloqua"), ("slack", "Slack"), ("teams", "Microsoft Teams"),
+            ("zoom", "Zoom Phone"), ("telephony", "Telephony / PBX System"), ("tableau", "Tableau"),
+            ("powerbi", "Microsoft Power BI"), ("looker", "Looker (Google Cloud)"),
+            ("snowflake", "Snowflake Data Warehouse"), ("docusign", "DocuSign eSignature"),
+            ("adobesign", "Adobe Sign"), ("pandadoc", "PandaDoc"),
+            ("clm", "Contract Lifecycle Management (CLM)"),
+            ("custom", "Custom REST/GraphQL Endpoint"),
+        ),
+        "environment": (
+            ("production", "Production"), ("sandbox", "Sandbox / Staging"),
+            ("development", "Development / Test"),
+        ),
+        "auth_method": (
+            ("api_key", "API Key / Token"), ("oauth2", "OAuth 2.0 (Bearer Token)"),
+            ("basic_auth", "HTTP Basic Auth"), ("webhook_secret", "HMAC Webhook Secret"),
+            ("none", "None / Public"),
+        ),
+        "health_status": (
+            ("connected", "Connected & Healthy"), ("degraded", "Degraded Performance"),
+            ("error", "Connection Error"), ("offline", "Offline / Paused"),
+            ("untested", "Untested / Draft"),
+        ),
+    },
+    "SalesFieldMapping": {
+        "target_entity": (
+            ("lead", "Sales Lead"), ("account", "Account (core.Party)"),
+            ("opportunity", "Opportunity"), ("quote", "CPQ Quote"),
+            ("order", "Sales Order"), ("contract", "Customer Contract"),
+            ("analytics", "Analytics & Snapshot"),
+        ),
+        "direction": (
+            ("bidirectional", "Two-Way Bidirectional (⇄)"),
+            ("outbound", "Outbound NavERP → Remote (→)"),
+            ("inbound", "Inbound Remote → NavERP (←)"),
+        ),
+        "transform_rule": (
+            ("none", "Direct / None"), ("uppercase", "Upper Case"),
+            ("lowercase", "Lower Case"), ("boolean_to_int", "Boolean to Integer (0/1)"),
+            ("json_extract", "JSON Key Extract"), ("currency_round", "Round Currency (2 decimals)"),
+            ("value_map", "Value Map Picklist Translation"),
+        ),
+    },
+    "SalesSyncJob": {
+        "entity_scope": (
+            ("order_to_cash", "Order-to-Cash (ERP)"),
+            ("lead_lifecycle", "Lead & Contact Lifecycle (Marketing)"),
+            ("deal_alerts", "Deal & Milestone Alerts (Comms)"),
+            ("bi_warehouse_feed", "BI & Data Warehouse Export"),
+            ("contract_envelope_status", "E-Signature & Contract Envelopes"),
+        ),
+        "sync_direction": (
+            ("bidirectional", "Two-Way Bidirectional (⇄)"),
+            ("outbound", "Outbound NavERP → Remote (→)"),
+            ("inbound", "Inbound Remote → NavERP (←)"),
+        ),
+        "conflict_policy": (
+            ("last_updated_wins", "Last Updated Timestamp Wins"),
+            ("local_wins", "NavERP Record Wins"),
+            ("remote_wins", "Remote System Wins"),
+            ("flag_manual", "Flag Conflict for Manual Review"),
+        ),
+        "cadence": (
+            ("realtime_event", "Real-time Event-Driven"),
+            ("hourly", "Hourly Batch"),
+            ("daily", "Daily Scheduled"),
+            ("weekly", "Weekly Scheduled"),
+            ("manual_only", "Manual On-Demand Only"),
+        ),
+        "status": (
+            ("active", "Active / Scheduled"),
+            ("paused", "Paused / Inactive"),
+            ("error", "Execution Error"),
+        ),
+    },
+    "SalesSyncRun": {
+        "run_type": (
+            ("manual", "Manual On-Demand"),
+            ("scheduled", "Scheduled Batch"),
+            ("webhook", "Inbound Webhook"),
+            ("test_ping", "Health Ping / Test"),
+        ),
+        "status": (
+            ("simulated", "Simulated (Honest Diagnostic)"),
+            ("completed", "Completed Successfully"),
+            ("partial", "Completed with Warnings"),
+            ("failed", "Execution Failed"),
+        ),
+    },
+}
+
+from apps.sales.models import (
+    SalesIntegrationConnector,
+    SalesFieldMapping,
+    SalesSyncJob,
+    SalesSyncRun,
+)
+
+
+def _integrationapihub_connector(tenant, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": "Acme SAP ERP Bridge",
+        "category": "erp",
+        "provider": "sap",
+        "environment": "production",
+        "base_url": "https://erp.acme-corp.com/api/v2",
+        "auth_method": "api_key",
+        "health_status": "connected",
+        "is_active": True,
+        "notes": "Primary revenue operations connector.",
+    }
+    defaults.update(overrides)
+    return SalesIntegrationConnector.objects.create(**defaults)
+
+
+def _integrationapihub_field_mapping(tenant, connector=None, **overrides):
+    if connector is None:
+        connector = _integrationapihub_connector(tenant)
+    defaults = {
+        "tenant": tenant,
+        "connector": connector,
+        "target_entity": "order",
+        "local_field": "total_amount",
+        "remote_field": "NETWR",
+        "direction": "bidirectional",
+        "transform_rule": "currency_round",
+        "value_map": {},
+        "default_value": "0.00",
+        "is_key": False,
+        "is_required": True,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return SalesFieldMapping.objects.create(**defaults)
+
+
+def _integrationapihub_sync_job(tenant, connector=None, **overrides):
+    if connector is None:
+        connector = _integrationapihub_connector(tenant)
+    defaults = {
+        "tenant": tenant,
+        "connector": connector,
+        "name": "Order-to-Cash Sync Pipeline",
+        "entity_scope": "order_to_cash",
+        "sync_direction": "outbound",
+        "conflict_policy": "last_updated_wins",
+        "cadence": "hourly",
+        "filter_expression": "status='confirmed'",
+        "batch_size": 100,
+        "status": "active",
+    }
+    defaults.update(overrides)
+    return SalesSyncJob.objects.create(**defaults)
+
+
+def _integrationapihub_sync_run(tenant, connector=None, job=None, triggered_by=None, **overrides):
+    if connector is None:
+        connector = _integrationapihub_connector(tenant)
+    defaults = {
+        "tenant": tenant,
+        "connector": connector,
+        "job": job,
+        "run_type": "manual",
+        "status": "simulated",
+        "records_read": 50,
+        "records_written": 48,
+        "records_failed": 2,
+        "records_skipped": 0,
+        "error_log": "",
+        "summary_payload": {"batch_id": "SIM-001", "execution_mode": "dry_run"},
+        "triggered_by": triggered_by,
+    }
+    defaults.update(overrides)
+    return SalesSyncRun.objects.create(**defaults)
+
+
+@pytest.fixture
+def iah_connector_a(tenant_a):
+    return _integrationapihub_connector(tenant_a, name="Acme SAP Connector")
+
+
+@pytest.fixture
+def iah_connector_b(tenant_b):
+    return _integrationapihub_connector(tenant_b, name="Globex NetSuite Connector")
+
+
+@pytest.fixture
+def iah_field_mapping_a(tenant_a, iah_connector_a):
+    return _integrationapihub_field_mapping(tenant_a, connector=iah_connector_a)
+
+
+@pytest.fixture
+def iah_field_mapping_b(tenant_b, iah_connector_b):
+    return _integrationapihub_field_mapping(tenant_b, connector=iah_connector_b)
+
+
+@pytest.fixture
+def iah_sync_job_a(tenant_a, iah_connector_a):
+    return _integrationapihub_sync_job(tenant_a, connector=iah_connector_a)
+
+
+@pytest.fixture
+def iah_sync_job_b(tenant_b, iah_connector_b):
+    return _integrationapihub_sync_job(tenant_b, connector=iah_connector_b)
+
+
+@pytest.fixture
+def iah_sync_run_a(tenant_a, iah_connector_a, iah_sync_job_a, admin_user):
+    return _integrationapihub_sync_run(tenant_a, connector=iah_connector_a, job=iah_sync_job_a, triggered_by=admin_user)
+
+
+@pytest.fixture
+def iah_sync_run_b(tenant_b, iah_connector_b, iah_sync_job_b, admin_b):
+    return _integrationapihub_sync_run(tenant_b, connector=iah_connector_b, job=iah_sync_job_b, triggered_by=admin_b)
+
