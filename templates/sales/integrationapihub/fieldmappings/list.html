@@ -154,6 +154,7 @@
                                     </a>
                                     <form method="post" action="{% url 'sales:sfm_delete' map.pk %}" class="inline" onsubmit="return confirm('Delete field mapping {{ map.local_field|escapejs }} -&gt; {{ map.remote_field|escapejs }}?');">
                                         {% csrf_token %}
+                                        <input type="hidden" name="next" value="{% url 'sales:sfm_list' %}">
                                         <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
                                             <i data-lucide="trash-2" class="w-4 h-4"></i>
                                         </button>
