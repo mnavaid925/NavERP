@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ mapping.local_field }} → {{ mapping.remote_field }} — Field Mappings — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:integration_hub' %}" class="hover:text-primary">Integration Hub</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sfm_list' %}" class="hover:text-primary">Field Mappings</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ mapping.local_field }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900 font-mono">{{ mapping.local_field }} → {{ mapping.remote_field }}</h1>
+                {% if mapping.is_active %}
+                    <span class="badge badge-green">Active</span>
+                {% else %}
+                    <span class="badge badge-slate">Inactive</span>
+                {% endif %}
+            </div>
+            <p class="text-sm text-slate-500 mt-1">
+                Connector: <a href="{% url 'sales:sic_detail' mapping.connector.pk %}" class="font-medium text-primary hover:underline">{{ mapping.connector.name }}</a>
+                ({{ mapping.connector.number }})
+            </p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:sfm_edit' mapping.pk %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+                <span>Edit</span>
+            </a>
+            <form method="post" action="{% url 'sales:sfm_delete' mapping.pk %}" class="inline" onsubmit="return confirm('Delete this field mapping?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger flex items-center gap-2">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    <span>Delete</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card p-6 space-y-6">
+        <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100">Mapping Configuration</h3>
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+            <div>
+                <dt class="text-slate-500 font-medium">Connector</dt>
+                <dd class="text-slate-900 mt-1">
+                    <a href="{% url 'sales:sic_detail' mapping.connector.pk %}" class="font-medium text-primary hover:underline">
+                        {{ mapping.connector.name }}
+                    </a>
+                </dd>
+            </div>
+            <div>
+                <dt class="text-slate-500 font-medium">Target Entity Scope</dt>
+                <dd class="text-slate-900 mt-1 font-medium">{{ mapping.get_target_entity_display }}</dd>
+            </div>
+            <div>
+                <dt class="text-slate-500 font-medium">Local Field (NavERP Model)</dt>
+                <dd class="text-slate-900 mt-1 font-mono text-xs bg-slate-50 p-2 rounded border border-slate-100 inline-block">
+                    {{ mapping.local_field }}
+                </dd>
+            </div>
+            <div>
+                <dt class="text-slate-500 font-medium">Remote Field (External System)</dt>
+                <dd class="text-slate-900 mt-1 font-mono text-xs bg-slate-50 p-2 rounded border border-slate-100 inline-block">
+                    {{ mapping.remote_field }}
+                </dd>
+            </div>
+            <div>
+                <dt class="text-slate-500 font-medium">Synchronization Direction</dt>
+                <dd class="text-slate-900 mt-1">
+                    {% if mapping.direction == 'bidirectional' %}
+                        <span class="badge badge-info">⇄ Two-Way Bidirectional</span>
+                    {% elif mapping.direction == 'outbound' %}
+                        <span class="badge badge-green">→ Outbound Only (NavERP to Remote)</span>
+                    {% else %}
+                        <span class="badge badge-amber">← Inbound Only (Remote to NavERP)</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div>
+                <dt class="text-slate-500 font-medium">Transformation Rule</dt>
+                <dd class="text-slate-900 mt-1 font-medium">{{ mapping.get_transform_rule_display }}</dd>
+            </div>
+            <div>
+                <dt class="text-slate-500 font-medium">Default Fallback Value</dt>
+                <dd class="text-slate-900 mt-1 font-mono text-xs">{{ mapping.default_value|default:"(None / Null)" }}</dd>
+            </div>
+            <div>
+                <dt class="text-slate-500 font-medium">Deduplication Key</dt>
+                <dd class="text-slate-900 mt-1">
+                    {% if mapping.is_key %}
+                        <span class="badge badge-green">Yes — Match Key</span>
+                    {% else %}
+                        <span class="text-slate-500">No</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div>
+                <dt class="text-slate-500 font-medium">Field is Required</dt>
+                <dd class="text-slate-900 mt-1">
+                    {% if mapping.is_required %}
+                        <span class="badge badge-amber">Required</span>
+                    {% else %}
+                        <span class="text-slate-500">Optional</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div>
+                <dt class="text-slate-500 font-medium">Active Status</dt>
+                <dd class="text-slate-900 mt-1">{{ mapping.is_active|yesno:"Enabled,Disabled" }}</dd>
+            </div>
+        </dl>
+
+        {# Value Map Table / JSON #}
+        <div class="pt-4 border-t border-slate-100">
+            <h4 class="text-sm font-semibold text-slate-800 mb-2">Picklist Value Translation Map</h4>
+            {% if mapping.value_map %}
+                <div class="bg-slate-900 text-slate-100 p-4 rounded-md font-mono text-xs overflow-x-auto">
+                    <pre>{{ mapping.value_map }}</pre>
+                </div>
+            {% else %}
+                <p class="text-xs text-slate-400">No custom value translation map defined. Raw field values pass directly without translation.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
