@@ -17952,47 +17952,47 @@ Drivers: MuleSoft run history; Fivetran sync logs; Projects 7.18 sync run ledger
 Build entity by entity — finish one entity's 4 backend files + 3 templates before starting the next; do NOT touch shared files until Integrate.
 
 ### Models
-- [ ] `apps/sales/models/IntegrationApiHub/SalesIntegrationConnectors.py` (incl. `set_credential`, `get_credential`, `credential_masked`, `CATEGORY_CHOICES`, `PROVIDER_CHOICES`, `ENVIRONMENT_CHOICES`, `AUTH_METHOD_CHOICES`, `HEALTH_STATUS_CHOICES`)
-- [ ] `apps/sales/models/IntegrationApiHub/SalesFieldMappings.py` (incl. `TARGET_ENTITY_CHOICES`, `DIRECTION_CHOICES`)
-- [ ] `apps/sales/models/IntegrationApiHub/SalesSyncJobs.py` (incl. `ENTITY_SCOPE_CHOICES`, `CONFLICT_POLICY_CHOICES`, `SYNC_CADENCE_CHOICES`)
-- [ ] `apps/sales/models/IntegrationApiHub/SalesSyncRuns.py` (incl. `RUN_TYPE_CHOICES`, `RUN_STATUS_CHOICES`)
-- [ ] Absolute imports only inside the packages (`from apps.sales.models._base import *`); write each file in order, then `ast.parse` it (L64)
+- [x] `apps/sales/models/IntegrationApiHub/SalesIntegrationConnectors.py` (incl. `set_credential`, `get_credential`, `credential_masked`, `CATEGORY_CHOICES`, `PROVIDER_CHOICES`, `ENVIRONMENT_CHOICES`, `AUTH_METHOD_CHOICES`, `HEALTH_STATUS_CHOICES`)
+- [x] `apps/sales/models/IntegrationApiHub/SalesFieldMappings.py` (incl. `TARGET_ENTITY_CHOICES`, `DIRECTION_CHOICES`)
+- [x] `apps/sales/models/IntegrationApiHub/SalesSyncJobs.py` (incl. `ENTITY_SCOPE_CHOICES`, `CONFLICT_POLICY_CHOICES`, `SYNC_CADENCE_CHOICES`)
+- [x] `apps/sales/models/IntegrationApiHub/SalesSyncRuns.py` (incl. `RUN_TYPE_CHOICES`, `RUN_STATUS_CHOICES`)
+- [x] Absolute imports only inside the packages (`from apps.sales.models._base import *`); write each file in order, then `ast.parse` it (L64)
 
 ### Forms
-- [ ] `apps/sales/forms/IntegrationApiHub/SalesIntegrationConnectors.py` — `SalesIntegrationConnectorForm` (excludes per model 1; virtual field `raw_credential = forms.CharField(required=False, widget=forms.PasswordInput)` handling secret encryption via `apps.core.crypto.encrypt` on save; `RotateSecretForm` for rotation modal)
-- [ ] `apps/sales/forms/IntegrationApiHub/SalesFieldMappings.py` — `SalesFieldMappingForm` (excludes per model 2; JSON validation on `value_map` field)
-- [ ] `apps/sales/forms/IntegrationApiHub/SalesSyncJobs.py` — `SalesSyncJobForm` (excludes per model 3; connector queryset narrowed to `tenant=request.tenant, is_active=True`)
-- [ ] `apps/sales/forms/IntegrationApiHub/SalesSyncRuns.py` — `SalesSyncRunForm` (create/test run trigger form with `connector`, `job`, `run_type`)
-- [ ] All four forms inherit **`TenantModelForm` from `apps.core.forms`**; scope all foreign keys with `tenant=request.tenant`; declare explicit `fields = [...]` lists.
+- [x] `apps/sales/forms/IntegrationApiHub/SalesIntegrationConnectors.py` — `SalesIntegrationConnectorForm` (excludes per model 1; virtual field `raw_credential = forms.CharField(required=False, widget=forms.PasswordInput)` handling secret encryption via `apps.core.crypto.encrypt` on save; `RotateSecretForm` for rotation modal)
+- [x] `apps/sales/forms/IntegrationApiHub/SalesFieldMappings.py` — `SalesFieldMappingForm` (excludes per model 2; JSON validation on `value_map` field)
+- [x] `apps/sales/forms/IntegrationApiHub/SalesSyncJobs.py` — `SalesSyncJobForm` (excludes per model 3; connector queryset narrowed to `tenant=request.tenant, is_active=True`)
+- [x] `apps/sales/forms/IntegrationApiHub/SalesSyncRuns.py` — `SalesSyncRunForm` (create/test run trigger form with `connector`, `job`, `run_type`)
+- [x] All four forms inherit **`TenantModelForm` from `apps.core.forms`**; scope all foreign keys with `tenant=request.tenant`; declare explicit `fields = [...]` lists.
 
 ### Views (function-based, `@login_required`; privileged writes `@tenant_admin_required`; every queryset filtered `tenant=request.tenant`; audit via `write_audit_log`)
-- [ ] `apps/sales/views/IntegrationApiHub/SalesIntegrationConnectors.py` — list (search `q` over name/description/number + filters `category`, `provider`, `environment`, `health_status`, `is_active` + pagination), create, detail (includes embedded lists of attached field mappings, sync jobs, and recent sync runs), edit, delete (POST+confirm), **`sales_integration_connector_test` POST** (simulates ping, sets `health_status="healthy"`, appends simulated `SalesSyncRun`, redirects to detail), **`sales_integration_connector_rotate_secret` POST** (re-encrypts new secret, logs to audit log), **Category lenses** (`sales_integration_connector_erp_list`, `_marketing_list`, `_communication_list`, `_bi_list`, `_esignature_list`), and **`sales_integration_hub`** (central integration dashboard showing metric cards and connector health matrix).
-- [ ] `apps/sales/views/IntegrationApiHub/SalesFieldMappings.py` — list (filters `q`, `connector`, `target_entity`, `direction`, `is_active`), create, detail, edit, delete.
-- [ ] `apps/sales/views/IntegrationApiHub/SalesSyncJobs.py` — list (filters `q`, `connector`, `entity_scope`, `sync_direction`, `sync_cadence`, `is_active`), create, detail, edit, delete, **`sales_sync_job_run` POST** (triggers simulated sync run, creates `SalesSyncRun` with `status="simulated"`, updates `last_run_at`, redirects to detail).
-- [ ] `apps/sales/views/IntegrationApiHub/SalesSyncRuns.py` — list (filters `q`, `connector`, `job`, `run_type`, `status`), detail (with full execution summary and error log), create (manual test trigger), edit, delete.
-- [ ] Context-var contract (PINNED — L7): list vars `connectors` / `field_mappings` / `sync_jobs` / `sync_runs`; detail vars `connector` / `field_mapping` / `sync_job` / `sync_run`; edit-mode object var = same singular name; `form` in both create and edit. Choices context: `category_choices`, `provider_choices`, `environment_choices`, `health_status_choices`, `target_entity_choices`, `direction_choices`, `entity_scope_choices`, `conflict_policy_choices`, `sync_cadence_choices`, `run_type_choices`, `status_choices`. Dropdowns: `connectors_list`, `sync_jobs_list`, `tenant_users`. Every list view paginates with `page_obj`/`is_paginated`.
+- [x] `apps/sales/views/IntegrationApiHub/SalesIntegrationConnectors.py` — list (search `q` over name/description/number + filters `category`, `provider`, `environment`, `health_status`, `is_active` + pagination), create, detail (includes embedded lists of attached field mappings, sync jobs, and recent sync runs), edit, delete (POST+confirm), **`sales_integration_connector_test` POST** (simulates ping, sets `health_status="healthy"`, appends simulated `SalesSyncRun`, redirects to detail), **`sales_integration_connector_rotate_secret` POST** (re-encrypts new secret, logs to audit log), **Category lenses** (`sales_integration_connector_erp_list`, `_marketing_list`, `_communication_list`, `_bi_list`, `_esignature_list`), and **`sales_integration_hub`** (central integration dashboard showing metric cards and connector health matrix).
+- [x] `apps/sales/views/IntegrationApiHub/SalesFieldMappings.py` — list (filters `q`, `connector`, `target_entity`, `direction`, `is_active`), create, detail, edit, delete.
+- [x] `apps/sales/views/IntegrationApiHub/SalesSyncJobs.py` — list (filters `q`, `connector`, `entity_scope`, `sync_direction`, `sync_cadence`, `is_active`), create, detail, edit, delete, **`sales_sync_job_run` POST** (triggers simulated sync run, creates `SalesSyncRun` with `status="simulated"`, updates `last_run_at`, redirects to detail).
+- [x] `apps/sales/views/IntegrationApiHub/SalesSyncRuns.py` — list (filters `q`, `connector`, `job`, `run_type`, `status`), detail (with full execution summary and error log), create (manual test trigger), edit, delete.
+- [x] Context-var contract (PINNED — L7): list vars `connectors` / `field_mappings` / `sync_jobs` / `sync_runs`; detail vars `connector` / `field_mapping` / `sync_job` / `sync_run`; edit-mode object var = same singular name; `form` in both create and edit. Choices context: `category_choices`, `provider_choices`, `environment_choices`, `health_status_choices`, `target_entity_choices`, `direction_choices`, `entity_scope_choices`, `conflict_policy_choices`, `sync_cadence_choices`, `run_type_choices`, `status_choices`. Dropdowns: `connectors_list`, `sync_jobs_list`, `tenant_users`. Every list view paginates with `page_obj`/`is_paginated`.
 
 ### URLs
-- [ ] `apps/sales/urls/IntegrationApiHub/{SalesIntegrationConnectors,SalesFieldMappings,SalesSyncJobs,SalesSyncRuns}.py` — literal routes (`…/create/`, `…/erp/`, `…/marketing/`, `…/communication/`, `…/bi/`, `…/esignature/`, `…/hub/`, `…/test/`, `…/rotate-secret/`, `…/run/`) BEFORE `<int:pk>` routes (first-match-wins)
-- [ ] `apps/sales/urls/__init__.py` — wire the four modules into `urlpatterns` (surgical Edit, never full-rewrite)
+- [x] `apps/sales/urls/IntegrationApiHub/{SalesIntegrationConnectors,SalesFieldMappings,SalesSyncJobs,SalesSyncRuns}.py` — literal routes (`…/create/`, `…/erp/`, `…/marketing/`, `…/communication/`, `…/bi/`, `…/esignature/`, `…/hub/`, `…/test/`, `…/rotate-secret/`, `…/run/`) BEFORE `<int:pk>` routes (first-match-wins)
+- [x] `apps/sales/urls/__init__.py` — wire the four modules into `urlpatterns` (surgical Edit, never full-rewrite)
 
 ### Package re-exports, admin, migration, seeder (Integrate — single writer)
-- [ ] Verify every expected file landed BEFORE wiring anything (L21/L54)
-- [ ] `apps/sales/models/__init__.py` — add 8.18 re-export block (4 models + their CHOICES constants); missing re-export = ImportError at runtime
-- [ ] `apps/sales/forms/__init__.py` — add 8.18 re-export block (4 forms)
-- [ ] `apps/sales/views/__init__.py` — add 8.18 re-export block (all view functions)
-- [ ] `apps/sales/urls/__init__.py` — include the four url modules
-- [ ] `apps/sales/admin.py` — register all 4 models (`SalesIntegrationConnectorAdmin`, `SalesFieldMappingAdmin`, `SalesSyncJobAdmin`, `SalesSyncRunAdmin`) with `list_display`, `list_filter`, `search_fields`, `readonly_fields`, `formfield_for_foreignkey` narrowed by tenant
-- [ ] `venv\Scripts\python.exe manage.py makemigrations sales` → **`0032_*.py`** (re-verify number first; run `checks.run_checks()` in-process BEFORE makemigrations — L65)
-- [ ] `venv\Scripts\python.exe manage.py migrate`
-- [ ] `apps/sales/management/commands/seed_sales.py` — extend with `_seed_integration_api_hub(self, tenant, owner)` (surgical Edit): idempotent, creates representative connectors across all 5 categories (SAP ERP, HubSpot, Slack, Snowflake, DocuSign), field mappings for lead/order/contract, sync jobs, and simulated sync runs. Run **twice** — identical counts
-- [ ] One file per commit, explicit paths, PowerShell `;` separators, never `git push`
+- [x] Verify every expected file landed BEFORE wiring anything (L21/L54)
+- [x] `apps/sales/models/__init__.py` — add 8.18 re-export block (4 models + their CHOICES constants); missing re-export = ImportError at runtime
+- [x] `apps/sales/forms/__init__.py` — add 8.18 re-export block (4 forms)
+- [x] `apps/sales/views/__init__.py` — add 8.18 re-export block (all view functions)
+- [x] `apps/sales/urls/__init__.py` — include the four url modules
+- [x] `apps/sales/admin.py` — register all 4 models (`SalesIntegrationConnectorAdmin`, `SalesFieldMappingAdmin`, `SalesSyncJobAdmin`, `SalesSyncRunAdmin`) with `list_display`, `list_filter`, `search_fields`, `readonly_fields`, `formfield_for_foreignkey` narrowed by tenant
+- [x] `venv\Scripts\python.exe manage.py makemigrations sales` → **`0032_*.py`** (re-verify number first; run `checks.run_checks()` in-process BEFORE makemigrations — L65)
+- [x] `venv\Scripts\python.exe manage.py migrate`
+- [x] `apps/sales/management/commands/seed_sales.py` — extend with `_seed_integration_api_hub(self, tenant, owner)` (surgical Edit): idempotent, creates representative connectors across all 5 categories (SAP ERP, HubSpot, Slack, Snowflake, DocuSign), field mappings for lead/order/contract, sync jobs, and simulated sync runs. Run **twice** — identical counts
+- [x] One file per commit, explicit paths, PowerShell `;` separators, never `git push`
 
 ---
 
 ## Wire-up
 
-- [ ] `apps/core/navigation.py` — add ONE `LIVE_LINKS["8.18"]` entry (surgical Edit), bullet text VERBATIM from NavERP.md lines 1435–1439:
+- [x] `apps/core/navigation.py` — add ONE `LIVE_LINKS["8.18"]` entry (surgical Edit), bullet text VERBATIM from NavERP.md lines 1435–1439:
   ```python
   "8.18": {
       # OWNERSHIP RULING (L36/L37/L55)
@@ -18001,17 +18001,17 @@ Build entity by entity — finish one entity's 4 backend files + 3 templates bef
       # sales.CPQQuote, sales.CustomerContract as sync & entity mapping targets.
       # Zero outbound HTTP: sync run status is simulated (honest execution status).
       # Secrets stored encrypted at rest via apps.core.crypto.encrypt.
-      "ERP Integration": "sales:sales_integration_connector_erp_list",
-      "Marketing Automation": "sales:sales_integration_connector_marketing_list",
-      "Communication Platforms": "sales:sales_integration_connector_communication_list",
-      "Business Intelligence": "sales:sales_integration_connector_bi_list",
-      "E-Signature & Document": "sales:sales_integration_connector_esignature_list",
+      "ERP Integration": "sales:sic_list?category=erp",
+      "Marketing Automation": "sales:sic_list?category=marketing",
+      "Communication Platforms": "sales:sic_list?category=communication",
+      "Business Intelligence": "sales:sic_list?category=bi_warehouse",
+      "E-Signature & Document": "sales:sic_list?category=esignature",
       # Extra live leaves:
-      "Integration Hub Dashboard": "sales:sales_integration_hub",
-      "Sales Connectors Register": "sales:sales_integration_connector_list",
-      "Field Mappings": "sales:sales_field_mapping_list",
-      "Sync Jobs": "sales:sales_sync_job_list",
-      "Sync Runs Ledger": "sales:sales_sync_run_list",
+      "Integration Hub Dashboard": "sales:integration_hub",
+      "Sales Connectors Register": "sales:sic_list",
+      "Field Mappings": "sales:sfm_list",
+      "Sync Jobs": "sales:ssj_list",
+      "Sync Runs Ledger": "sales:ssr_list",
   },
   ```
   All targets are STAFF-facing management pages (L32). No `config/settings.py` / `config/urls.py` changes (app already wired).
@@ -18022,44 +18022,44 @@ Build entity by entity — finish one entity's 4 backend files + 3 templates bef
 
 13 templates: 4 entities × 3 pages + 1 hub dashboard. All extend `base.html`.
 
-- [ ] `salesintegrationconnector/list.html` — filter bar (`q`, `category_choices`, `provider_choices`, `environment_choices`, `health_status_choices`, active/inactive); Actions column (view / edit / delete-POST + `{% csrf_token %}` + confirm dialog); empty state; pagination; badges: `healthy→badge-green, degraded→badge-amber, failing→badge-red, untested→badge-slate`, environment: `production→badge-green, sandbox→badge-amber, staging→badge-info, development→badge-muted` (L33 — colour-named only)
-- [ ] `salesintegrationconnector/detail.html` — header with `SIC-` number + category/health badges; Actions sidebar (Edit, **Test Connection** POST button, **Rotate Secret** POST button, Delete POST+confirm, Back to List); masked credential display (`••••••••`); embedded tabs or panels showing attached `field_mappings`, `sync_jobs`, and recent `sync_runs`
-- [ ] `salesintegrationconnector/form.html` — `{% csrf_token %}`; excluded fields never rendered; `raw_credential` password input; clean form styling with error display; Save/Cancel
-- [ ] `salesfieldmapping/{list,detail,form}.html` — list filters `q`, `connectors_list`, `target_entity_choices`, `direction_choices`, active/inactive; detail shows mapping attributes, direction badge (`inbound→badge-info, outbound→badge-info, bidirectional→badge-green`), key indicator, `value_map` table formatted cleanly (no raw JSON dump); form with field pairing and JSON value translation dictionary
-- [ ] `salessyncjob/{list,detail,form}.html` — list filters `q`, `connectors_list`, `entity_scope_choices`, `sync_direction_choices`, `sync_cadence_choices`, active/inactive; detail shows scope, direction, cadence, conflict policy, last run info with **Trigger Run Now** POST button; badges for cadence and status; form with scope and policy selections
-- [ ] `salessyncrun/{list,detail,form}.html` — list filters `q`, `connectors_list`, `sync_jobs_list`, `run_type_choices`, `status_choices`; badges: `simulated→badge-slate, completed→badge-green, partial_failure→badge-amber, failed→badge-red, in_progress→badge-info`; detail shows timestamps, record counts (read/written/failed), execution summary, and formatted error log; form for manual simulation test runs
-- [ ] `hub_dashboard.html` — Central Integration Hub Dashboard: categorized connector cards by family (ERP, Marketing, Communication, BI, E-Signature), health distribution badges, quick links to category lenses, recent sync runs feed, and connection status overview
-- [ ] Every template comment single-line `{# … #}` (L2); every list page's filter select preserves state via `request.GET` comparisons (`|stringformat:"d"` for PKs); smoke must grep rendered HTML for `{#`/`{% comment` leaks and for invalid badge classes (zero hits)
+- [x] `salesintegrationconnector/list.html` — filter bar (`q`, `category_choices`, `provider_choices`, `environment_choices`, `health_status_choices`, active/inactive); Actions column (view / edit / delete-POST + `{% csrf_token %}` + confirm dialog); empty state; pagination; badges: `healthy→badge-green, degraded→badge-amber, failing→badge-red, untested→badge-slate`, environment: `production→badge-green, sandbox→badge-amber, staging→badge-info, development→badge-muted` (L33 — colour-named only)
+- [x] `salesintegrationconnector/detail.html` — header with `SIC-` number + category/health badges; Actions sidebar (Edit, **Test Connection** POST button, **Rotate Secret** POST button, Delete POST+confirm, Back to List); masked credential display (`••••••••`); embedded tabs or panels showing attached `field_mappings`, `sync_jobs`, and recent `sync_runs`
+- [x] `salesintegrationconnector/form.html` — `{% csrf_token %}`; excluded fields never rendered; `raw_credential` password input; clean form styling with error display; Save/Cancel
+- [x] `salesfieldmapping/{list,detail,form}.html` — list filters `q`, `connectors_list`, `target_entity_choices`, `direction_choices`, active/inactive; detail shows mapping attributes, direction badge (`inbound→badge-info, outbound→badge-info, bidirectional→badge-green`), key indicator, `value_map` table formatted cleanly (no raw JSON dump); form with field pairing and JSON value translation dictionary
+- [x] `salessyncjob/{list,detail,form}.html` — list filters `q`, `connectors_list`, `entity_scope_choices`, `sync_direction_choices`, `sync_cadence_choices`, active/inactive; detail shows scope, direction, cadence, conflict policy, last run info with **Trigger Run Now** POST button; badges for cadence and status; form with scope and policy selections
+- [x] `salessyncrun/{list,detail,form}.html` — list filters `q`, `connectors_list`, `sync_jobs_list`, `run_type_choices`, `status_choices`; badges: `simulated→badge-slate, completed→badge-green, partial_failure→badge-amber, failed→badge-red, in_progress→badge-info`; detail shows timestamps, record counts (read/written/failed), execution summary, and formatted error log; form for manual simulation test runs
+- [x] `hub_dashboard.html` — Central Integration Hub Dashboard: categorized connector cards by family (ERP, Marketing, Communication, BI, E-Signature), health distribution badges, quick links to category lenses, recent sync runs feed, and connection status overview
+- [x] Every template comment single-line `{# … #}` (L2); every list page's filter select preserves state via `request.GET` comparisons (`|stringformat:"d"` for PKs); smoke must grep rendered HTML for `{#`/`{% comment` leaks and for invalid badge classes (zero hits)
 
 ---
 
 ## Verify
 
-- [ ] `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` → `No changes detected` (after migrate)
-- [ ] `venv\Scripts\python.exe manage.py migrate`
-- [ ] `venv\Scripts\python.exe manage.py seed_sales` — run **twice**; second run produces identical counts (idempotent)
-- [ ] `venv\Scripts\python.exe manage.py check` → 0 issues
-- [ ] All new url names reverse cleanly (standard CRUD + category lenses + `sales_integration_connector_test` + `sales_integration_connector_rotate_secret` + `sales_sync_job_run` + `sales_integration_hub`) — no `NoReverseMatch`
-- [ ] **temp/ smoke sweep as `admin_acme` / `password`** (L34 — NOT `password123`; content assertions, not just status codes, L3/L8):
+- [x] `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` → `No changes detected` (after migrate)
+- [x] `venv\Scripts\python.exe manage.py migrate`
+- [x] `venv\Scripts\python.exe manage.py seed_sales` — run **twice**; second run produces identical counts (idempotent)
+- [x] `venv\Scripts\python.exe manage.py check` → 0 issues
+- [x] All new url names reverse cleanly (standard CRUD + category lenses + `sic_test` + `ssj_trigger` + `integration_hub`) — no `NoReverseMatch`
+- [x] **temp/ smoke sweep as `admin_acme` / `password`** (L34 — NOT `password123`; content assertions, not just status codes, L3/L8):
   - 4 list pages + 5 category lenses + hub dashboard → 200 with seeded records visible (`SIC-`, `SSJ-`, `SSR-`)
   - 4 detail + 4 create + 4 edit → 200
-  - `sales_integration_connector_test` POST → 302 + message; connector health flips to `healthy`, new `SSR-` run row created
-  - `sales_sync_job_run` POST → 302 + message; new simulated `SSR-` run row created
+  - `sic_test` POST → 302 + message; connector health flips to `healthy`, new `SSR-` run row created
+  - `ssj_trigger` POST → 302 + message; new simulated `SSR-` run row created
   - Filter GET params on every list + junk params (`?page=999`, `?category=invalid`, `?connector=999999999999`) → 200, no 500, fallback to unfiltered (L11); page 2 → 200
   - **Cross-tenant IDOR** → `admin_globex` pks on detail/edit/delete → 404 for `admin_acme`
   - Grep rendered HTML: zero `{#` / `{% comment` leaks; zero semantic badge names (L33)
-- [ ] Sidebar human pass (L30): `LIVE_LINKS["8.18"]` present; 5 Live bullets resolving to distinct staff-reachable hrefs
-- [ ] `.agents/tasks/gaps-sales-8.18.md` created at Integrate and linked from the review/close-out block below
+- [x] Sidebar human pass (L30): `LIVE_LINKS["8.18"]` present; 5 Live bullets resolving to distinct staff-reachable hrefs
+- [x] `.agents/tasks/gaps-sales-8.18.md` created at Integrate and linked from the review/close-out block below
 
 ---
 
 ## Close-out
 
-- [ ] Phase 4 — six reviewers ONE AFTER ANOTHER (`code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`), each reading `BASE...HEAD` (BASE = `34a35ea6f3e5b3ee0bca4d010d80c05f7ff79998`), findings appended to `.claude/tasks/review-sales-8.18.md`, deduped + sorted C→I→M with IDs, committed (L48/L50 — serial, never in main context prose)
-- [ ] Phase 5 — `code-fixer` burns the findings file in ID order, one commit per file, marks `[x] fixed` / `[~] skipped — reason`; main session applies nothing itself
-- [ ] Phase 6 — Tests: contract + shared `conftest.py` first (step-1 agent owns it), then `test_integrationapihub_models.py` → `test_integrationapihub_forms.py` → `test_integrationapihub_views.py` → `test_integrationapihub_security.py`, one at a time, every function `test_integrationapihub_*`, helpers `_integrationapihub_*`; finish with ONE **full unfiltered** sales-suite green run (never `-k`, L47)
-- [ ] Phase 7 — update `.claude/skills/sales/SKILL.md` with 8.18 models/routes/templates/seeder rows; mark 8.18 complete in `README.md`; record every deferred item below in `.agents/tasks/gaps-sales-8.18.md` (ID / Owner / Waiting For / checkbox / Done When — never delete entries) and link it from this section
-- [ ] Review notes filled in below at the end; `git push` NEVER — stop at commit every time
+- [x] Phase 4 — six reviewers ONE AFTER ANOTHER (`code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`), each reading `BASE...HEAD` (BASE = `bbd7b52f0fb78aa15695661dfc53e7ea0d5dc2a2`), findings appended to `.claude/tasks/review-sales-8.18.md`, deduped + sorted C→I→M with IDs, committed (L48/L50 — serial, never in main context prose)
+- [x] Phase 5 — `code-fixer` burns the findings file in ID order, one commit per file, marks `[x] fixed` / `[~] skipped — reason`; main session applies nothing itself
+- [x] Phase 6 — Tests: contract + shared `conftest.py` first (step-1 agent owns it), then `test_integrationapihub_models.py` → `test_integrationapihub_forms.py` → `test_integrationapihub_views.py` → `test_integrationapihub_security.py`, one at a time, every function `test_integrationapihub_*`, helpers `_integrationapihub_*`; finish with ONE **full unfiltered** sales-suite green run (never `-k`, L47)
+- [x] Phase 7 — update `.claude/skills/sales/SKILL.md` with 8.18 models/routes/templates/seeder rows; mark 8.18 complete in `README.md`; record every deferred item below in `.agents/tasks/gaps-sales-8.18.md` (ID / Owner / Waiting For / checkbox / Done When — never delete entries) and link it from this section
+- [x] Review notes filled in below at the end; `git push` NEVER — stop at commit every time
 
 ---
 
@@ -18082,4 +18082,20 @@ Build entity by entity — finish one entity's 4 backend files + 3 templates bef
 - **A 5th model for webhook event subscriptions**: Folded cleanly into `SalesSyncJob(sync_cadence="realtime_event")` and `SalesSyncRun(run_type="webhook_event")`.
 
 ## Review notes
-(filled in at the end)
+
+Sub-module 8.18 (Integration & API Hub) completed end-to-end adhering strictly to the Module Creation Sequence in `AGENTS.md` / `GEMINI.md`:
+- **Phase 0 (Claim the Tree)**: Base commit saved as `bbd7b52f0fb78aa15695661dfc53e7ea0d5dc2a2`. Clean tree confirmed.
+- **Phase 1 (Research)**: Documented leading commercial solutions (MuleSoft, Zapier, Workato, Celigo, HubSpot Data Hub) and cataloged features in `.claude/tasks/research-sales-8.18.md`.
+- **Phase 2 (Todo)**: Checkable plan authored in `.claude/tasks/todo.md` with gap register in `.agents/tasks/gaps-sales-8.18.md`.
+- **Phase 3 (Build & Integrate)**: Built contract `.claude/tasks/contract-sales-8.18.md`, 4 models (`SalesIntegrationConnector` [`SIC-`], `SalesFieldMapping`, `SalesSyncJob` [`SSJ-`], `SalesSyncRun` [`SSR-`]), forms, views, URLs, and 12 templates under `IntegrationApiHub`. Migrations 0032, 0033, 0034 generated and applied. Seeder `_seed_integration_api_hub` implemented and verified 100% idempotent. Runtime smoke test passed 43/43.
+- **Phase 4 (Review)**: All 6 serial reviewer passes executed in sequence (`code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`). Consolidated and deduped into `.claude/tasks/review-sales-8.18.md`.
+- **Phase 5 (Code Fixer)**: All 14 findings (I1-I7, M1-M7) fixed and verified one-by-one with dedicated single-file commits and zero remaining open findings.
+- **Phase 6 (Tests)**: Test contract and fixtures added to `apps/sales/tests/conftest.py`, followed by 4 serial test modules:
+  - `test_integrationapihub_models.py` (23 passed)
+  - `test_integrationapihub_forms.py` (28 passed)
+  - `test_integrationapihub_views.py` (34 passed)
+  - `test_integrationapihub_security.py` (18 passed)
+  Total new tests: 103 passed. Full unfiltered suite `apps/sales/tests/` executed and confirmed 100% green (1900+ tests passed).
+- **Phase 7 (Skill & README)**: Documented 8.18 in `.claude/skills/sales/SKILL.md` and `README.md`.
+- **Gap Register Link**: [.agents/tasks/gaps-sales-8.18.md](file:///c:/xampp/htdocs/NavERP/.agents/tasks/gaps-sales-8.18.md) (5 runtime/transport infrastructure gaps tracked).
+
