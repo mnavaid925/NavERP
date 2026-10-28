@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}Variant {{ variant.sku }} · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:catalogproduct_list' %}">Products</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:catalogproduct_detail' product.pk %}">{{ product.name }}</a>
+            <span>/</span>
+            <span>{{ variant.sku }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Variant: {{ variant.sku }}</h1>
+            {% if variant.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-slate">Inactive</span>
+            {% endif %}
+            {% if variant.is_on_sale %}
+            <span class="badge badge-amber">On Sale</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:catalogproduct_detail' product.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Parent Product
+        </a>
+        <a href="{% url 'ecommerce:productvariant_edit' variant.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Variant
+        </a>
+        <form method="post" action="{% url 'ecommerce:productvariant_delete' variant.pk %}" onsubmit="return confirm('Delete variant {{ variant.sku|escapejs }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Variant Specification -->
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold text-slate-800">SKU Configuration & Pricing</h2>
+            <span class="font-mono text-xs text-slate-500">{{ variant.number }}</span>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">SKU</dt>
+                    <dd class="mt-1 text-sm font-mono font-bold text-slate-900">{{ variant.sku }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Variant Label</dt>
+                    <dd class="mt-1 text-sm font-semibold text-slate-900">{{ variant.name }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Parent Product</dt>
+                    <dd class="mt-1 text-sm text-slate-900">
+                        <a href="{% url 'ecommerce:catalogproduct_detail' product.pk %}" class="text-blue-600 hover:underline">
+                            {{ product.name }}
+                        </a>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Barcode (UPC/EAN)</dt>
+                    <dd class="mt-1 text-sm font-mono text-slate-700">
+                        {% if variant.barcode %}{{ variant.barcode }}{% else %}<span class="text-slate-400 italic">None</span>{% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Selling Price</dt>
+                    <dd class="mt-1 text-lg font-bold font-mono text-slate-900">${{ variant.price|floatformat:2 }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">MSRP / Compare-At</dt>
+                    <dd class="mt-1 text-sm font-mono text-slate-600">
+                        {% if variant.compare_at_price %}
+                        <span class="line-through">${{ variant.compare_at_price|floatformat:2 }}</span>
+                        {% else %}
+                        <span class="text-slate-400 italic">No compare price</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Base Cost Price</dt>
+                    <dd class="mt-1 text-sm font-mono text-slate-700">${{ variant.cost_price|floatformat:2 }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Gross Margin</dt>
+                    <dd class="mt-1 text-sm font-mono font-medium {% if variant.margin_pct > 30 %}text-green-600{% else %}text-slate-700{% endif %}">
+                        {{ variant.margin_pct }}%
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Shipping Weight</dt>
+                    <dd class="mt-1 text-sm font-mono text-slate-700">{{ variant.weight_kg }} kg</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Sort Order</dt>
+                    <dd class="mt-1 text-sm font-mono text-slate-900">{{ variant.sort_order }}</dd>
+                </div>
+                <div class="sm:col-span-2">
+                    <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Structured Option Matrix</dt>
+                    <dd class="mt-1 bg-slate-50 p-3 rounded border border-slate-200">
+                        {% if variant.option_values %}
+                        <div class="flex flex-wrap gap-2">
+                            {% for key, val in variant.option_values.items %}
+                            <span class="badge badge-slate text-xs font-mono">
+                                <span class="text-slate-500">{{ key }}:</span> {{ val }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <span class="text-xs text-slate-400 italic">No structured option values.</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Fulfillment Anchor & Image -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">SCM Stock Fulfillment</h2>
+            </div>
+            <div class="card-body">
+                {% if variant.item %}
+                <div class="space-y-2">
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-medium">Warehouse Master SKU</div>
+                    <div class="font-mono text-sm font-bold text-slate-900">{{ variant.item.sku }}</div>
+                    <div class="text-sm text-slate-700">{{ variant.item.name }}</div>
+                    <div class="text-xs text-slate-500">Tracking: {{ variant.item.get_tracking_display }}</div>
+                    <div class="mt-3 pt-3 border-t border-slate-100">
+                        <span class="badge badge-green">Stock Tracked</span>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-6 text-slate-400">
+                    <i data-lucide="package-x" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>
+                    <p class="text-sm">Not linked to a physical SCM inventory SKU.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if variant.image_url %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Variant Image</h2>
+            </div>
+            <div class="card-body">
+                <img src="{{ variant.image_url }}" alt="{{ variant.name }}" class="w-full h-40 object-cover rounded border border-slate-200">
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
