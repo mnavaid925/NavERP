@@ -62,13 +62,15 @@ class SalesMethodologyForm(TenantModelForm):
         raw = self.cleaned_data.get("qualification_criteria_raw", "").strip()
         if not raw:
             return []
-        try:
-            parsed = json.loads(raw)
-            if not isinstance(parsed, list):
-                raise ValidationError("Criteria must be a JSON array of objects.")
-            return parsed
-        except json.JSONDecodeError as exc:
-            raise ValidationError(f"Invalid JSON format: {exc}")
+        if raw.startswith("["):
+            try:
+                parsed = json.loads(raw)
+                if not isinstance(parsed, list):
+                    raise ValidationError("Criteria must be a JSON array of objects.")
+                return parsed
+            except json.JSONDecodeError as exc:
+                raise ValidationError(f"Invalid JSON format: {exc}")
+        return [line.strip() for line in raw.splitlines() if line.strip()]
 
     def clean(self):
         cleaned_data = super().clean()
