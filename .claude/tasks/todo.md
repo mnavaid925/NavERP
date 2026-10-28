@@ -18419,3 +18419,258 @@ Build entity by entity — finish one entity's 4 backend files + 3 templates bef
   - README.md updated marking Module 8 (Sales Management System, 8.1–8.19) as 100% complete.
 - **Gaps Documented**: Dedicated gap register in .agents/tasks/gaps-sales-8.19.md tracks 5 architectural and live API deferrals (FX exchange rates, runtime DDL, AST sandbox evaluation, live tax engine, gettext translation pack workbench).
 - **Discipline**: Strictly serial execution, instant single-file commits, zero uncommitted files, never git pushed.
+
+
+---
+# Sub-module 9.1 — Product Catalog Management (Module 9: eCommerce Management System, ecommerce) — plan from research-ecommerce-9.1.md (2026-10-28)
+
+**Repo state at plan time:** BASE `fa0cae49c17d8e4c3b7b7fad2cf2d6687532117d`. Working tree clean. `apps/ecommerce/` is a **BRAND-NEW APP** — this run **SCAFFOLDS** the app, adds its four package layers (`models/`, `forms/`, `views/`, `urls/`), wires it into `config/settings.py` and `config/urls.py`, and seeds demo data via `seed_ecommerce.py`. Initial migration: **`0001_initial.py`**.
+
+## The pinned decisions this plan executes literally
+
+**(a) `<SubModule>` package folder = `ProductCatalog`** in all four layers (`apps/ecommerce/{models,forms,views,urls}/ProductCatalog/`). Matches house style (PascalCase — sibling convention across ERP apps). Use this exact string in EVERY path.
+
+**(b) Template sub-module folder = `templates/ecommerce/productcatalog/`** — verified house convention. Multi-entity sub-module with 4 entity folders plus bulk import and central catalog overview:
+- `templates/ecommerce/productcatalog/storecategory/{list,detail,form}.html`
+- `templates/ecommerce/productcatalog/catalogproduct/{list,detail,form}.html`
+- `templates/ecommerce/productcatalog/productvariant/{list,detail,form}.html`
+- `templates/ecommerce/productcatalog/productrelationship/{list,detail,form}.html`
+- `templates/ecommerce/productcatalog/bulk_import.html` (CSV catalog upload & validation report)
+- `templates/ecommerce/productcatalog/overview.html` (Catalog Merchandising & PIM Health Overview)
+
+**(c) Entity filenames (layers line up one-to-one):**
+- `StoreCategories.py`, `CatalogProducts.py`, `ProductVariants.py`, `ProductRelationships.py` across `models/`, `forms/`, `views/`, `urls/` under `ProductCatalog/`.
+- `BulkOperations.py` in `forms/`, `views/`, `urls/` under `ProductCatalog/` (CSV import/export workflows).
+- `Overview.py` in `views/` and `urls/` under `ProductCatalog/` (Merchandising dashboard).
+
+**(d) URL names** (house convention verified: concise snake_case with explicit semantic aliases):
+- Store Categories: `storecategory_list` / `storecategory_create` / `storecategory_detail` / `storecategory_edit` / `storecategory_delete`
+- Catalog Products: `catalogproduct_list` / `catalogproduct_create` / `catalogproduct_detail` / `catalogproduct_edit` / `catalogproduct_delete` + **`catalogproduct_publish`** (POST publish toggle)
+- Product Variants: `productvariant_list` / `productvariant_create` / `productvariant_detail` / `productvariant_edit` / `productvariant_delete`
+- Product Relationships: `productrelationship_list` / `productrelationship_create` / `productrelationship_detail` / `productrelationship_edit` / `productrelationship_delete`
+- Bulk Operations & Overview: `product_import_csv` / `product_export_csv` / `catalog_overview`
+- **First-match-wins:** literal routes (`./create/`, `./overview/`, `./import/`, `./export/`) BEFORE every `<int:pk>` route, in each entity url module AND in the concatenated `urls/__init__.py`.
+
+**(e) Spine Entity Reuse & Ownership Boundary:**
+- Reuses `core.Tenant` (multi-tenant root isolation boundary).
+- Reuses `scm.Item` (`apps/scm/models/InventoryManagement/Items.py:73`) as the **canonical physical inventory stock-keeping master**. `CatalogProduct.item` (optional primary item anchor) and `ProductVariant.item` (physical fulfillment SKU) FK directly to `scm.Item`. Sub-module 9.1 does NOT duplicate the inventory master.
+- Reuses `scm.ItemCategory` (`apps/scm/models/InventoryManagement/Items.py:34`) — distinguished from customer-facing storefront navigation (`StoreCategory`).
+- Reuses `scm.UOM` (`apps/scm/models/InventoryManagement/Items.py:51`) for packaging and shipping dimensions.
+- Reuses `core.AuditLog` (`apps/core/utils.py::write_audit_log`) for catalog changes, publishing events, and bulk imports.
+- Reuses `accounts.User` (`settings.AUTH_USER_MODEL`) for owner/created_by attribution.
+
+**(f) Number Prefix Collision Audit:**
+- `ECAT-` (`StoreCategory`): **FREE** (0 collisions across repo)
+- `EPRD-` (`CatalogProduct`): **FREE** (0 collisions across repo; replaces collided `PRD-`)
+- `PVR-` (`ProductVariant`): **FREE** (0 collisions across repo)
+- `PRL-` (`ProductRelationship`): **FREE** (0 collisions across repo)
+All four extend `apps/ecommerce/models/_base.py::TenantNumbered` (`number = models.CharField(max_length=20, editable=False)`).
+
+**(g) Brand-New App Scaffolding & Wire-Up:**
+- `apps/ecommerce/apps.py` (`name = "apps.ecommerce"`, `verbose_name = "eCommerce Management System"`).
+- `config/settings.py` -> add `"apps.ecommerce"` to `INSTALLED_APPS` (Integrate step).
+- `config/urls.py` -> add `path("ecommerce/", include("apps.ecommerce.urls"))` (Integrate step).
+- `apps/core/navigation.py` -> add `LIVE_LINKS["9.1"]` with exact NavERP.md bullet keys.
+
+---
+
+## Models (from research — 4)
+
+All four live in the NEW package `apps/ecommerce/models/ProductCatalog/`, extend `TenantNumbered`, and are re-exported from `apps/ecommerce/models/__init__.py`.
+
+- [ ] **`StoreCategory` [`ECAT-`]** — Hierarchical customer-facing storefront taxonomy with parent-child adjacency tree, display ordering, menu toggle, and SEO fields (drivers: Akeneo, BigCommerce, Medusa.js, Sylius category trees; NavERP.md Bullet 2).
+  - Fields: `name` (CharField 120), `slug` (SlugField 140), `parent` (ForeignKey `"self"`, null=True, blank=True, on_delete=SET_NULL, related_name="children"), `description` (TextField, blank=True), `image_url` (URLField, blank=True), `display_order` (PositiveIntegerField, default=0), `is_active` (BooleanField, default=True), `include_in_menu` (BooleanField, default=True), `meta_title` (CharField 160, blank=True), `meta_description` (CharField 255, blank=True).
+  - Properties/Methods: `get_breadcrumbs()` (returns list of ancestors), `full_path` property (e.g. `"Apparel > Mens > Jackets"`).
+  - Constraints: `models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_cat_tenant_num_uniq")`, `models.UniqueConstraint(fields=["tenant", "slug"], name="ecommerce_cat_tenant_slug_uniq")`.
+  - Form excludes: `tenant`, `number`, `created_at`, `updated_at`.
+
+- [ ] **`CatalogProduct` [`EPRD-`]** — Merchandised product presentation header with publishing lifecycle (`draft`, `active`, `archived`), visibility (`storefront`, `hidden`, `search_only`), brand attribution, rich copy, media URLs, PIM readiness score, and optional physical item anchor (drivers: Shopify, Akeneo PIM, Pimcore, Medusa.js; NavERP.md Bullet 1).
+  - Fields: `name` (CharField 255), `slug` (SlugField 255), `item` (ForeignKey `"scm.Item"`, null=True, blank=True, on_delete=SET_NULL, related_name="ecommerce_catalog_products", help_text="Canonical inventory master for single-SKU products or primary item anchor"), `primary_category` (ForeignKey `"ecommerce.StoreCategory"`, null=True, blank=True, on_delete=SET_NULL, related_name="primary_products"), `categories` (ManyToManyField `"ecommerce.StoreCategory"`, blank=True, related_name="products"), `status` (CharField 20, choices=[`draft`, `active`, `archived`], default=`draft`), `visibility` (CharField 20, choices=[`storefront`, `hidden`, `search_only`], default=`storefront`), `brand` (CharField 120, blank=True), `short_description` (CharField 500, blank=True), `description` (TextField, blank=True), `hero_image_url` (URLField, blank=True), `video_url` (URLField, blank=True), `is_featured` (BooleanField, default=False), `is_digital` (BooleanField, default=False), `pim_completeness` (PositiveIntegerField, default=0, help_text="Calculated readiness score 0-100%"), `meta_title` (CharField 160, blank=True), `meta_description` (CharField 255, blank=True), `published_at` (DateTimeField, null=True, blank=True).
+  - Properties/Methods: `calculate_pim_completeness()` (evaluates required data presence), `total_variants_count` (counts active variants), `price_range_display` (min-max variant price formatted).
+  - Constraints: `models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_prd_tenant_num_uniq")`, `models.UniqueConstraint(fields=["tenant", "slug"], name="ecommerce_prd_tenant_slug_uniq")`.
+  - Form excludes: `tenant`, `number`, `pim_completeness`, `published_at`, `created_at`, `updated_at`.
+
+- [ ] **`ProductVariant` [`PVR-`]** — Purchasable SKU configuration matrix with structured option values (e.g. Size=L, Color=Navy), independent storefront selling prices, compare-at MSRP, barcodes, shipping weight, and FK to `scm.Item` for physical warehouse fulfillment (drivers: Shopify, BigCommerce, Medusa.js, Saleor; NavERP.md Bullet 3).
+  - Fields: `product` (ForeignKey `"ecommerce.CatalogProduct"`, on_delete=CASCADE, related_name="variants"), `sku` (CharField 64), `name` (CharField 255, help_text="e.g. Navy / Large"), `option_values` (JSONField, default=dict, blank=True, help_text='{"Size": "L", "Color": "Navy"}'), `barcode` (CharField 64, blank=True, help_text="UPC, EAN, or ISBN"), `price` (DecimalField 14,4, default=0, validators=[MinValueValidator(0)], help_text="Storefront selling price"), `compare_at_price` (DecimalField 14,4, null=True, blank=True, help_text="MSRP / Strike-through price"), `cost_price` (DecimalField 14,4, default=0, help_text="Base cost for margin analysis"), `item` (ForeignKey `"scm.Item"`, null=True, blank=True, on_delete=SET_NULL, related_name="ecommerce_variants", help_text="Physical inventory SKU for real-time stock and fulfillment"), `weight_kg` (DecimalField 8,3, default=0, help_text="Weight for shipping calculations"), `image_url` (URLField, blank=True), `is_active` (BooleanField, default=True), `sort_order` (PositiveIntegerField, default=0).
+  - Properties/Methods: `is_on_sale` (boolean check `compare_at_price > price`), `margin_pct` (profit margin percentage), `options_summary` (readable string of option matrix).
+  - Constraints: `models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_pvr_tenant_num_uniq")`, `models.UniqueConstraint(fields=["tenant", "sku"], name="ecommerce_pvr_tenant_sku_uniq")`.
+  - Form excludes: `tenant`, `number`, `created_at`, `updated_at`.
+
+- [ ] **`ProductRelationship` [`PRL-`]** — Directed merchandising linkages between products governing cross-sells, up-sells, accessories, bundles/kits, and frequently-bought-together recommendations with display ordering and bundle discount percentages (drivers: Adobe Commerce/Magento 2, BigCommerce, Pimcore, Salsify; NavERP.md Bullet 5).
+  - Fields: `source_product` (ForeignKey `"ecommerce.CatalogProduct"`, on_delete=CASCADE, related_name="relationships_from"), `target_product` (ForeignKey `"ecommerce.CatalogProduct"`, on_delete=CASCADE, related_name="relationships_to"), `relationship_type` (CharField 20, choices=[`cross_sell`, `up_sell`, `accessory`, `bundle_kit`, `bought_together`], default=`cross_sell`), `discount_pct` (DecimalField 5,2, default=0, help_text="Discount percentage when purchased together"), `is_active` (BooleanField, default=True), `sort_order` (PositiveIntegerField, default=0), `notes` (CharField 255, blank=True).
+  - Constraints: `models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_prl_tenant_num_uniq")`, `models.UniqueConstraint(fields=["tenant", "source_product", "target_product", "relationship_type"], name="ecommerce_prl_src_tgt_type_uniq")`.
+  - Form excludes: `tenant`, `number`, `created_at`, `updated_at`.
+
+---
+
+## Backend (apps/ecommerce/{models,forms,views,urls}/ProductCatalog/)
+
+### Scaffolding (brand-new app)
+- [ ] Create `apps/ecommerce/__init__.py`
+- [ ] Create `apps/ecommerce/apps.py` (`name = "apps.ecommerce"`, `verbose_name = "eCommerce Management System"`)
+- [ ] Create `apps/ecommerce/models/_base.py` (`TenantOwned`, `TenantNumbered` with `next_number` generation and 5-retry atomic collision guard)
+- [ ] Create `apps/ecommerce/models/__init__.py` (re-export root)
+- [ ] Create `apps/ecommerce/forms/_common.py` (TenantUniqueMixin, tenant-filtered foreign keys)
+- [ ] Create `apps/ecommerce/forms/__init__.py` (re-export root)
+- [ ] Create `apps/ecommerce/views/_common.py` (ecommerce_scope, ecommerce_object, safe_parse_date, csv_safe, standard imports)
+- [ ] Create `apps/ecommerce/views/__init__.py` (re-export root)
+- [ ] Create `apps/ecommerce/urls/__init__.py` (`app_name = "ecommerce"`, routes concatenation)
+- [ ] Create `apps/ecommerce/admin.py`
+- [ ] Create `apps/ecommerce/management/__init__.py` and `apps/ecommerce/management/commands/__init__.py`
+- [ ] Create `apps/ecommerce/management/commands/seed_ecommerce.py`
+
+### Models
+- [ ] `apps/ecommerce/models/ProductCatalog/__init__.py` — re-exports all 4 models and their CHOICES constants
+- [ ] `apps/ecommerce/models/ProductCatalog/StoreCategories.py` — `StoreCategory` [`ECAT-`]
+- [ ] `apps/ecommerce/models/ProductCatalog/CatalogProducts.py` — `CatalogProduct` [`EPRD-`]
+- [ ] `apps/ecommerce/models/ProductCatalog/ProductVariants.py` — `ProductVariant` [`PVR-`]
+- [ ] `apps/ecommerce/models/ProductCatalog/ProductRelationships.py` — `ProductRelationship` [`PRL-`]
+
+### Forms
+- [ ] `apps/ecommerce/forms/ProductCatalog/__init__.py` — re-exports all forms
+- [ ] `apps/ecommerce/forms/ProductCatalog/StoreCategories.py` — `StoreCategoryForm` (tenant-scoped parent dropdown excluding self)
+- [ ] `apps/ecommerce/forms/ProductCatalog/CatalogProducts.py` — `CatalogProductForm` (tenant-scoped category and item dropdowns, slug auto-generation helper)
+- [ ] `apps/ecommerce/forms/ProductCatalog/ProductVariants.py` — `ProductVariantForm` (tenant-scoped product and item dropdowns, JSON option values parsing validation)
+- [ ] `apps/ecommerce/forms/ProductCatalog/ProductRelationships.py` — `ProductRelationshipForm` (tenant-scoped source and target products, prevents self-relation)
+- [ ] `apps/ecommerce/forms/ProductCatalog/BulkOperations.py` — `ProductImportForm` (CSV file upload validator, column mapper, category auto-create option)
+
+### Views
+- [ ] `apps/ecommerce/views/ProductCatalog/__init__.py` — re-exports all view functions
+- [ ] `apps/ecommerce/views/ProductCatalog/StoreCategories.py` — list (search `q` over name/slug/description + filter `is_active`, `include_in_menu` + parent-child tree hierarchy), create, detail, edit, delete (POST+confirm).
+- [ ] `apps/ecommerce/views/ProductCatalog/CatalogProducts.py` — list (search `q` over name/slug/brand/number + filters `status`, `visibility`, `category`, `brand`, `is_featured` + pagination), create, detail (shows variants matrix, merchandising relationships, PIM score breakdown), edit, delete (POST+confirm), **`catalogproduct_publish`** (POST publish/unpublish toggle + audit log).
+- [ ] `apps/ecommerce/views/ProductCatalog/ProductVariants.py` — list (search `q` over sku/name/barcode + filters `product`, `is_active`, `has_item` + pagination), create, detail, edit, delete (POST+confirm).
+- [ ] `apps/ecommerce/views/ProductCatalog/ProductRelationships.py` — list (search `q` over source/target product names + filter `relationship_type`, `is_active` + pagination), create, detail, edit, delete (POST+confirm).
+- [ ] `apps/ecommerce/views/ProductCatalog/BulkOperations.py` — **`product_export_csv`** (filtered streaming CSV export of products and variants with headers), **`product_import_csv`** (bulk CSV ingestion with row validation, duplicate check, error report, and audit logging; NavERP.md Bullet 4).
+- [ ] `apps/ecommerce/views/ProductCatalog/Overview.py` — **`catalog_overview`** central merchandising dashboard (total products, active products, draft products, categories count, variant count, zero-variant alerts, average PIM completeness score, and quick action links).
+- [ ] Context-var contract (PINNED — Lesson L7):
+  - List vars: `categories`, `products`, `variants`, `relationships`
+  - Detail vars: `category`, `product` (+ `variants`, `relationships`, `cross_sells`, `up_sells`, `bundles`), `variant`, `relationship`
+  - Edit-mode object var = same singular name; `form` in both create and edit
+  - Dropdown context querysets: `parent_categories`, `primary_categories`, `products_list`, `items_list`
+  - Choices context: `status_choices`, `visibility_choices`, `relationship_type_choices`
+  - Badges use color-named CSS classes: `badge-green` (active), `badge-amber` (draft, bundle), `badge-slate`/`badge-muted` (archived, hidden), `badge-info` (storefront, cross_sell, up_sell) — never semantic `-success`/`-danger` (Lesson L33).
+  - Every list view paginates with `page_obj`/`is_paginated`.
+
+### URLs
+- [ ] `apps/ecommerce/urls/ProductCatalog/StoreCategories.py` (`categories/`, `.../create/`, `.../<int:pk>/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/`)
+- [ ] `apps/ecommerce/urls/ProductCatalog/CatalogProducts.py` (`products/`, `.../create/`, `.../<int:pk>/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/`, `.../<int:pk>/publish/`)
+- [ ] `apps/ecommerce/urls/ProductCatalog/ProductVariants.py` (`variants/`, `.../create/`, `.../<int:pk>/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/`)
+- [ ] `apps/ecommerce/urls/ProductCatalog/ProductRelationships.py` (`relationships/`, `.../create/`, `.../<int:pk>/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/`)
+- [ ] `apps/ecommerce/urls/ProductCatalog/BulkOperations.py` (`products/import/`, `products/export/`)
+- [ ] `apps/ecommerce/urls/ProductCatalog/Overview.py` (`catalog/overview/` and root `''`)
+- [ ] `apps/ecommerce/urls/ProductCatalog/__init__.py` — combines all sub-module URLs
+- [ ] `apps/ecommerce/urls/__init__.py` — wire `ProductCatalog` into `urlpatterns` (literal routes before `<int:pk>` routes)
+
+### Package re-exports, admin, migration, seeder (Integrate — single writer)
+- [ ] Verify every expected file landed BEFORE wiring anything (Lesson L21/L54)
+- [ ] `apps/ecommerce/models/__init__.py` — add 9.1 re-export block (4 models + their CHOICES constants)
+- [ ] `apps/ecommerce/forms/__init__.py` — add 9.1 re-export block (forms)
+- [ ] `apps/ecommerce/views/__init__.py` — add 9.1 re-export block (view functions)
+- [ ] `apps/ecommerce/urls/__init__.py` — include the URL module with `app_name = "ecommerce"`
+- [ ] `apps/ecommerce/admin.py` — register all 4 models (`StoreCategoryAdmin`, `CatalogProductAdmin`, `ProductVariantAdmin`, `ProductRelationshipAdmin`) with tenant-scoped filtering and autocomplete
+- [ ] `config/settings.py` — add `"apps.ecommerce"` to `INSTALLED_APPS`
+- [ ] `config/urls.py` — add `path("ecommerce/", include("apps.ecommerce.urls"))`
+- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce` -> **`0001_initial.py`**
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `apps/ecommerce/management/commands/seed_ecommerce.py` — create comprehensive idempotent demo data (categories hierarchy, catalog products across apparel/electronics/consumables, multi-dimensional variants, merchandising cross-sells/up-sells/bundles, linked to `scm.Item`). Run **twice** — identical counts
+- [ ] `venv\Scripts\python.exe manage.py check`
+- [ ] One file per commit, explicit paths, PowerShell `;` separators, never `git push`
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — add ONE `LIVE_LINKS["9.1"]` entry (surgical Edit), bullet text VERBATIM from NavERP.md lines 1452–1456:
+  ```python
+  "9.1": {
+      "Product Information Management (PIM)": "ecommerce:catalogproduct_list",      # bullet
+      "Category & Navigation Hierarchy": "ecommerce:storecategory_list",            # bullet
+      "Product Variants & Configurations": "ecommerce:productvariant_list",         # bullet
+      "Bulk Import & Export": "ecommerce:product_import_csv",                       # bullet
+      "Product Relationships & Bundling": "ecommerce:productrelationship_list",    # bullet
+      # Extra live leaves:
+      "Catalog Overview": "ecommerce:catalog_overview",                             # extra
+  },
+  ```
+
+---
+
+## Templates (templates/ecommerce/productcatalog/)
+
+Nested folder structure per house convention. All templates extend `"base.html"`:
+
+- [ ] `templates/ecommerce/productcatalog/storecategory/list.html` — category tree & table view with search, active filters, display order, children count, breadcrumb preview, actions
+- [ ] `templates/ecommerce/productcatalog/storecategory/detail.html` — category card, banner image, SEO tags, parent breadcrumb, and table of assigned products
+- [ ] `templates/ecommerce/productcatalog/storecategory/form.html` — category create/edit form with slug helper, parent selector, menu inclusion toggle
+- [ ] `templates/ecommerce/productcatalog/catalogproduct/list.html` — filter bar (`q`, `status`, `visibility`, `category`, `brand`) reflecting `request.GET` with color-named badges (`badge-green`, `badge-amber`, `badge-slate`), PIM progress bar, variant count, bulk action links, actions column, pagination
+- [ ] `templates/ecommerce/productcatalog/catalogproduct/detail.html` — product hero header, status badge, PIM completeness scorecard, variants table with prices and stock links, merchandising relationships tabs (cross-sells, up-sells, bundles), publish toggle button
+- [ ] `templates/ecommerce/productcatalog/catalogproduct/form.html` — rich product form (basic details, primary category + multi-categories, brand, short/long description, hero/video URLs, SEO meta fields)
+- [ ] `templates/ecommerce/productcatalog/productvariant/list.html` — variant table with SKU, option values chips, selling price vs compare-at price, barcode, physical `scm.Item` link status, actions, pagination
+- [ ] `templates/ecommerce/productcatalog/productvariant/detail.html` — variant card with option matrix, pricing margin breakdown, barcode, shipping weight, and linked inventory status
+- [ ] `templates/ecommerce/productcatalog/productvariant/form.html` — variant form with product selector, SKU, JSON options inputs, price, compare-at price, cost, barcode, weight, item selector
+- [ ] `templates/ecommerce/productcatalog/productrelationship/list.html` — relationship register with filter bar (`relationship_type`, `is_active`), source product, target product, type badge, discount percentage, sort order, actions
+- [ ] `templates/ecommerce/productcatalog/productrelationship/detail.html` — relationship card showing visual pairing of source and target products, discount terms, notes
+- [ ] `templates/ecommerce/productcatalog/productrelationship/form.html` — relationship form with source/target product search, relationship type selector, discount percentage, sort order
+- [ ] `templates/ecommerce/productcatalog/bulk_import.html` — drag-and-drop CSV upload, column mapping guidance, sample template download link, validation results / error summary table
+- [ ] `templates/ecommerce/productcatalog/overview.html` — merchandising overview dashboard with KPI cards (total products, active, draft, categories, variants, avg PIM completeness), category breakdown chart/tree, zero-variant alert table, and quick action buttons
+
+---
+
+## Verify
+
+- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce` -> `0001_initial.py`
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run twice; verify idempotent counts)
+- [ ] `venv\Scripts\python.exe manage.py check` (0 errors)
+- [ ] Smoke sweep via `temp/smoke_ecommerce_9_1.py` as `admin_acme` / `password`:
+  - Verify all 16 new URL routes return 200 or 302
+  - Verify content assertions on rendered HTML (titles, buttons, seeded entities visible, no `{#` or `{% comment` leaks)
+  - Verify cross-tenant IDOR returns 404
+  - Verify CSV export returns valid streaming CSV response
+- [ ] Check sidebar navigation: Sub-module 9.1 is marked Live and all 5 bullet links resolve correctly
+
+---
+
+## Close-out
+
+- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer` -> append to `.claude/tasks/review-ecommerce-9.1.md`
+- [ ] Run Phase 5 `code-fixer` agent to burn down all review findings with atomic commits
+- [ ] Run Phase 6 test creation:
+  - Test contract & fixtures in `apps/ecommerce/tests/conftest.py`
+  - `apps/ecommerce/tests/test_productcatalog_models.py`
+  - `apps/ecommerce/tests/test_productcatalog_forms.py`
+  - `apps/ecommerce/tests/test_productcatalog_views.py`
+  - `apps/ecommerce/tests/test_productcatalog_security.py`
+  - Run full unfiltered test suite: `venv\Scripts\python.exe -m pytest apps/ecommerce/tests/` (100% green)
+- [ ] Run Phase 7 Skill & README:
+  - Author `.claude/skills/ecommerce/SKILL.md` (mandatory new module skill)
+  - Update `README.md` to reflect Module 9 eCommerce 9.1 status
+- [ ] Record gaps in `.agents/tasks/gaps-ecommerce-9.1.md` (or `.claude/tasks/gaps-ecommerce-9.1.md`)
+
+---
+
+## Later passes / deferred (from research)
+
+- **9.2 Inventory & Stock Management** — Multi-location stock pools, safety stock thresholds, low-stock notifications, and backorder/pre-order reservations.
+- **9.3 Pricing & Promotion Engine** — Dynamic promotional discount rules, coupon codes, volume pricing tiers, customer-segment pricing, and flash sales.
+- **9.4 Shopping Cart & Checkout** — Persistent guest/registered cart sessions, checkout flows, carrier API shipping rate calculation, and tax nexus compliance.
+- **9.5 Order Management System (OMS)** — Order capture, split fulfillment routing, post-purchase order modifications, and customer RMA return processing.
+- **9.7 Search & Product Discovery** — Elasticsearch cluster integration, typo-tolerant search, instant predictive autocomplete, and indexed faceted search filters.
+- **9.8 Personalization & Recommendation Engine** — Machine learning collaborative filtering and clickstream-based recommendation algorithms.
+- **9.17 B2B & Wholesale Commerce** — B2B company accounts, RFQ workflows, and EDI 832 catalog feeds.
+- **9.19 Integration & API Ecosystem** — External marketplace feed syndication (Google Merchant Center, Amazon Feed API) and headless GraphQL/REST APIs.
+- **GAP-ecommerce-9.1-01: Deep Multi-Locale Translation Tables** — Schema translation tables (`ProductTranslation`) deferred to centralized translation framework; Unicode text fields utilized in 9.1.
+- **GAP-ecommerce-9.1-02: Video Transcoding & HLS Streaming Engine** — URLs to external video providers (YouTube, Vimeo, Cloudflare) stored; raw transcoding deferred.
+- **GAP-ecommerce-9.1-03: Cloud Image Optimization & Background Removal Pipeline** — Handled via external CDN / client-side processing rather than blocking Django server threads.
+
+---
+
+## Declined, with reasons (so it is not re-litigated)
+
+- **Duplicating physical inventory master (`scm.Item`)**: `scm.Item` remains the canonical stock-keeping SKU with valuation costing and warehouse tracking. `CatalogProduct` and `ProductVariant` link to `scm.Item` rather than creating a duplicate parallel inventory master.
+- **Dynamic runtime EAV schema generation**: Storing arbitrary key-value pairs in generic runtime tables causes severe query degradation. `ProductVariant.option_values` uses structured `JSONField` for option matrices.
+- **Unbounded variant combinatorial explosion**: Automatically generating Cartesian products of 50 sizes x 50 colors causes database bloat. Variants are generated with explicit SKU definitions.
+- **Storing raw image binary blobs in the database**: Binary blobs in relational databases destroy performance and inflate backup sizes. Image URLs and file pointers (`image_url`, `hero_image_url`) are used.
+
+## Review notes
+(to be filled in at the end of the build)
