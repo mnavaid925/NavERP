@@ -117,6 +117,11 @@ from apps.sales.models.IntegrationApiHub.Connectors import SalesIntegrationConne
 from apps.sales.models.IntegrationApiHub.FieldMappings import SalesFieldMapping
 from apps.sales.models.IntegrationApiHub.SyncJobs import SalesSyncJob
 from apps.sales.models.IntegrationApiHub.SyncRuns import SalesSyncRun
+# 8.19 Master Data & Configuration
+from apps.sales.models.MasterDataConfiguration.SalesPriceBookEntries import SalesPriceBookEntry
+from apps.sales.models.MasterDataConfiguration.SalesCustomEntityDefinitions import SalesCustomEntityDefinition
+from apps.sales.models.MasterDataConfiguration.SalesMethodologies import SalesMethodology
+from apps.sales.models.MasterDataConfiguration.SalesRegionalSettings import SalesRegionalSetting
 from apps.sales.views.SalesActivityTaskManagement.Boards import STALE_ACTIVITY_DAYS
 
 from apps.sales.opportunity_services import opportunity_pipeline_baseline_stages
@@ -215,6 +220,7 @@ class Command(BaseCommand):
         self._seed_mobile_sales(tenant, owner)
         self._seed_workflow_process_automation(tenant, owner)
         self._seed_integration_api_hub(tenant, owner)
+        self._seed_master_data_configuration(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -4492,6 +4498,191 @@ class Command(BaseCommand):
             f"{SalesSyncRun.objects.filter(tenant=tenant).count()} runs)."
         )
 
+    def _seed_master_data_configuration(self, tenant, owner):
+        from apps.crm.models import PriceBook, Product
 
+        # 1. Price Book Entries
+        price_book = PriceBook.objects.filter(tenant=tenant).first()
+        if not price_book:
+            price_book, _ = PriceBook.objects.get_or_create(
+                tenant=tenant,
+                name="Standard Commercial Catalog",
+                defaults={"currency_code": "USD", "is_default": True, "is_active": True},
+            )
 
+        products = list(Product.objects.filter(tenant=tenant)[:3])
+        if products:
+            p1 = products[0]
+            SalesPriceBookEntry.objects.get_or_create(
+                tenant=tenant,
+                price_book=price_book,
+                product=p1,
+                currency_code="USD",
+                defaults={
+                    "sku_code": f"SKU-{p1.pk}-STD",
+                    "list_price": Decimal("1250.00"),
+                    "floor_price": Decimal("950.00"),
+                    "pricing_model": "tier_volume",
+                    "min_quantity": Decimal("1.00"),
+                    "volume_tier_breaks": [
+                        {"min_qty": 5, "discount_pct": 5.0, "unit_price": 1187.50},
+                        {"min_qty": 20, "discount_pct": 10.0, "unit_price": 1125.00},
+                    ],
+                    "is_active": True,
+                    "notes": "Standard commercial pricing with volume tier discount breaks.",
+                },
+            )
+            if len(products) > 1:
+                p2 = products[1]
+                SalesPriceBookEntry.objects.get_or_create(
+                    tenant=tenant,
+                    price_book=price_book,
+                    product=p2,
+                    currency_code="USD",
+                    defaults={
+                        "sku_code": f"SKU-{p2.pk}-PRO",
+                        "list_price": Decimal("2400.00"),
+                        "floor_price": Decimal("1900.00"),
+                        "pricing_model": "flat",
+                        "min_quantity": Decimal("1.00"),
+                        "volume_tier_breaks": [],
+                        "is_active": True,
+                        "notes": "Professional tier fixed pricing.",
+                    },
+                )
+
+        # 2. Custom Schema Definitions
+        SalesCustomEntityDefinition.objects.get_or_create(
+            tenant=tenant,
+            target_model="opportunity",
+            entity_code="deal_margin_pct_c",
+            defaults={
+                "name": "Deal Margin Percentage",
+                "field_type": "formula",
+                "is_required": False,
+                "formula_expression": "(amount - cost) / amount * 100",
+                "display_order": 10,
+                "is_active": True,
+                "description": "Calculates gross deal margin dynamically from opportunity valuation.",
+            },
+        )
+        SalesCustomEntityDefinition.objects.get_or_create(
+            tenant=tenant,
+            target_model="account",
+            entity_code="credit_risk_tier_c",
+            defaults={
+                "name": "Customer Credit Risk Tier",
+                "field_type": "picklist",
+                "is_required": False,
+                "picklist_options": ["Tier 1 - Preferred", "Tier 2 - Standard", "Tier 3 - Monitored"],
+                "display_order": 20,
+                "is_active": True,
+                "description": "Credit and commercial payment default risk category.",
+            },
+        )
+        SalesCustomEntityDefinition.objects.get_or_create(
+            tenant=tenant,
+            target_model="cpq_quote",
+            entity_code="partner_referral_code_c",
+            defaults={
+                "name": "Partner Referral Code",
+                "field_type": "text",
+                "is_required": False,
+                "validation_rule": "^[A-Z0-9_-]{4,16}$",
+                "display_order": 30,
+                "is_active": True,
+                "description": "Channel partner attribution code for co-sell commissions.",
+            },
+        )
+
+        # 3. Sales Methodologies
+        pipeline = Pipeline.objects.filter(tenant=tenant).first()
+        stage = pipeline.stages.first() if pipeline else None
+
+        SalesMethodology.objects.get_or_create(
+            tenant=tenant,
+            name="Enterprise MEDDPICC Stage Gate",
+            defaults={
+                "framework": "meddpicc",
+                "pipeline": pipeline,
+                "gating_stage": stage,
+                "min_passing_score": 75,
+                "is_mandatory_gate": True,
+                "qualification_criteria": [
+                    {"key": "metrics", "label": "Quantified Economic Impact", "weight": 15, "is_required": True},
+                    {"key": "economic_buyer", "label": "Economic Buyer Access Verified", "weight": 20, "is_required": True},
+                    {"key": "decision_criteria", "label": "Formal Decision Criteria Defined", "weight": 15, "is_required": True},
+                    {"key": "decision_process", "label": "Decision Process and Board Dates", "weight": 10, "is_required": False},
+                    {"key": "paper_process", "label": "Legal, Security and Procurement Steps", "weight": 10, "is_required": False},
+                    {"key": "identify_pain", "label": "Critical Business Pain Validated", "weight": 15, "is_required": True},
+                    {"key": "champion", "label": "Internal Champion Testing Passed", "weight": 15, "is_required": True},
+                ],
+                "coaching_guidelines": "Verify economic buyer sign-off and quantify measurable ROI before stage progression.",
+                "is_active": True,
+            },
+        )
+        SalesMethodology.objects.get_or_create(
+            tenant=tenant,
+            name="Mid-Market Velocity BANT",
+            defaults={
+                "framework": "bant",
+                "pipeline": pipeline,
+                "min_passing_score": 60,
+                "is_mandatory_gate": False,
+                "qualification_criteria": [
+                    {"key": "budget", "label": "Allocated Budget Confirmed", "weight": 25, "is_required": True},
+                    {"key": "authority", "label": "Signing Authority Identified", "weight": 25, "is_required": True},
+                    {"key": "need", "label": "Technical and Functional Need Defined", "weight": 25, "is_required": True},
+                    {"key": "timeline", "label": "Go-Live Target Quarter Established", "weight": 25, "is_required": True},
+                ],
+                "coaching_guidelines": "Confirm budget availability and project target timeline within 30 days.",
+                "is_active": True,
+            },
+        )
+
+        # 4. Regional Settings
+        SalesRegionalSetting.objects.get_or_create(
+            tenant=tenant,
+            region_code="NA",
+            defaults={
+                "name": "North America Commercial Profile",
+                "primary_currency": "USD",
+                "supported_currencies": ["USD", "CAD"],
+                "date_format": "YYYY-MM-DD",
+                "number_format": "1,234.56",
+                "tax_display_mode": "tax_exclusive",
+                "default_quote_terms": "Net 30 days. All quotes subject to standard commercial master service terms.",
+                "statutory_disclaimer": "Prices exclude state and local sales taxes. All purchase orders binding upon acceptance.",
+                "compliance_framework": "standard",
+                "cooling_off_days": 14,
+                "is_default": True,
+                "is_active": True,
+            },
+        )
+        SalesRegionalSetting.objects.get_or_create(
+            tenant=tenant,
+            region_code="EMEA",
+            defaults={
+                "name": "EMEA Enterprise Commercial Profile",
+                "primary_currency": "EUR",
+                "supported_currencies": ["EUR", "GBP", "CHF"],
+                "date_format": "DD/MM/YYYY",
+                "number_format": "1.234,56",
+                "tax_display_mode": "tax_inclusive",
+                "default_quote_terms": "Payment due within 30 days of electronic invoice. Governed under EU commercial code.",
+                "statutory_disclaimer": "Statutory 14-day cancellation cooling-off rights apply under EU consumer and enterprise regulations.",
+                "compliance_framework": "gdpr_commercial",
+                "cooling_off_days": 14,
+                "is_default": False,
+                "is_active": True,
+            },
+        )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.19 Master Data Configuration demo rows ensured "
+            f"({SalesPriceBookEntry.objects.filter(tenant=tenant).count()} price entries, "
+            f"{SalesCustomEntityDefinition.objects.filter(tenant=tenant).count()} custom definitions, "
+            f"{SalesMethodology.objects.filter(tenant=tenant).count()} methodologies, "
+            f"{SalesRegionalSetting.objects.filter(tenant=tenant).count()} regional settings)."
+        )
 
