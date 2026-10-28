@@ -91,6 +91,11 @@ from .models import (
     SalesAssignmentRule,
     SalesApprovalDecision,
     SalesAlertTrigger,
+    # 8.18 Integration & API Hub
+    SalesIntegrationConnector,
+    SalesFieldMapping,
+    SalesSyncJob,
+    SalesSyncRun,
 )
 
 
@@ -1236,6 +1241,44 @@ class SalesAlertTriggerAdmin(admin.ModelAdmin):
         if db_field.name == "audience_users" and tenant is not None:
             kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant, is_active=True)
         return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+
+@admin.register(SalesIntegrationConnector)
+class SalesIntegrationConnectorAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "category", "provider", "environment", "auth_method", "health_status", "is_active", "tenant")
+    list_filter = ("category", "provider", "environment", "auth_method", "health_status", "is_active", "tenant")
+    search_fields = ("number", "name", "remote_scope_ref", "notes")
+    readonly_fields = ("tenant", "number", "last_health_check_at", "last_error_message", "created_at", "updated_at")
+
+
+@admin.register(SalesFieldMapping)
+class SalesFieldMappingAdmin(admin.ModelAdmin):
+    list_display = ("connector", "target_entity", "local_field", "direction", "remote_field", "transform_rule", "is_key", "is_active", "tenant")
+    list_filter = ("target_entity", "direction", "transform_rule", "is_key", "is_required", "is_active", "tenant")
+    search_fields = ("local_field", "remote_field", "default_value", "connector__name")
+    list_select_related = ("connector",)
+
+
+@admin.register(SalesSyncJob)
+class SalesSyncJobAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "connector", "entity_scope", "sync_direction", "cadence", "status", "last_run_at", "tenant")
+    list_filter = ("entity_scope", "sync_direction", "conflict_policy", "cadence", "status", "tenant")
+    search_fields = ("number", "name", "filter_expression", "connector__name")
+    readonly_fields = ("tenant", "number", "last_run_at", "total_runs_count", "total_records_synced", "created_at", "updated_at")
+    list_select_related = ("connector",)
+
+
+@admin.register(SalesSyncRun)
+class SalesSyncRunAdmin(admin.ModelAdmin):
+    list_display = ("number", "connector", "job", "run_type", "status", "records_read", "records_written", "records_failed", "started_at", "tenant")
+    list_filter = ("run_type", "status", "tenant")
+    search_fields = ("number", "error_log", "connector__name", "job__name")
+    readonly_fields = ("tenant", "number", "started_at", "finished_at", "records_read", "records_written", "records_failed", "records_skipped", "summary_payload", "error_log", "triggered_by")
+    list_select_related = ("connector", "job", "triggered_by")
+
+    def has_add_permission(self, request):
+        return False
+
 
 
 
