@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Relationship{% else %}New Relationship{% endif %} · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:catalogproduct_list' %}">Product Catalog</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:productrelationship_list' %}">Relationships</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Relationship{% else %}New Relationship{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Merchandising Relationship{% else %}Create Merchandising Relationship{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'ecommerce:productrelationship_detail' relationship.pk %}{% else %}{% url 'ecommerce:productrelationship_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<div class="max-w-3xl">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Relationship Configuration</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" action="">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="mb-4 p-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="form-group">
+                        <label for="{{ form.source_product.id_for_label }}" class="form-label">Source Product (Anchor) <span class="text-red-500">*</span></label>
+                        {{ form.source_product }}
+                        {% if form.source_product.errors %}<div class="form-error">{{ form.source_product.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.target_product.id_for_label }}" class="form-label">Target Product (Recommended) <span class="text-red-500">*</span></label>
+                        {{ form.target_product }}
+                        {% if form.target_product.errors %}<div class="form-error">{{ form.target_product.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.relationship_type.id_for_label }}" class="form-label">Relationship Type <span class="text-red-500">*</span></label>
+                        {{ form.relationship_type }}
+                        {% if form.relationship_type.errors %}<div class="form-error">{{ form.relationship_type.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.discount_pct.id_for_label }}" class="form-label">Bundle Discount (%)</label>
+                        {{ form.discount_pct }}
+                        <span class="text-xs text-slate-500">Discount percentage applied when bought together</span>
+                        {% if form.discount_pct.errors %}<div class="form-error">{{ form.discount_pct.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.sort_order.id_for_label }}" class="form-label">Display Sort Order</label>
+                        {{ form.sort_order }}
+                        {% if form.sort_order.errors %}<div class="form-error">{{ form.sort_order.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group flex items-center pt-6">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.is_active }}
+                            <span class="text-sm font-medium text-slate-700">Active</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.notes.id_for_label }}" class="form-label">Merchandising Notes</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-slate-200">
+                    <a href="{% if is_edit %}{% url 'ecommerce:productrelationship_detail' relationship.pk %}{% else %}{% url 'ecommerce:productrelationship_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Relationship{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
