@@ -45,9 +45,12 @@ class SalesIntegrationConnectorForm(TenantModelForm):
 
     def save(self, commit=True):
         instance = super().save(commit=False)
-        raw_secret = self.cleaned_data.get("credential_input")
-        if raw_secret:
-            instance.set_credential(raw_secret)
+        if instance.auth_method == "none":
+            instance.credential_encrypted = ""
+        else:
+            raw_secret = self.cleaned_data.get("credential_input")
+            if raw_secret:
+                instance.set_credential(raw_secret)
         if commit:
             instance.save()
         return instance
