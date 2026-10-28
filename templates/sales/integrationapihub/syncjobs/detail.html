@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ job.name }} — Sync Jobs — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:integration_hub' %}" class="hover:text-primary">Integration Hub</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:ssj_list' %}" class="hover:text-primary">Sync Jobs</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ job.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">{{ job.name }}</h1>
+                {% if job.status == 'active' %}
+                    <span class="badge badge-green">Active</span>
+                {% elif job.status == 'paused' %}
+                    <span class="badge badge-slate">Paused</span>
+                {% else %}
+                    <span class="badge badge-red">Error</span>
+                {% endif %}
+                <span class="badge badge-info">{{ job.get_entity_scope_display }}</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1 font-mono">Job Reference: {{ job.number }}</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <form method="post" action="{% url 'sales:ssj_trigger' job.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary flex items-center gap-2" title="Trigger Synchronous Execution Run">
+                    <i data-lucide="play" class="w-4 h-4"></i>
+                    <span>Run Now (Simulated)</span>
+                </button>
+            </form>
+            <a href="{% url 'sales:ssj_edit' job.pk %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+                <span>Edit</span>
+            </a>
+            <form method="post" action="{% url 'sales:ssj_delete' job.pk %}" class="inline" onsubmit="return confirm('Delete sync job {{ job.name }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger flex items-center gap-2">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    <span>Delete</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {# KPI Summary Cards #}
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Executions</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ job.total_runs_count }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">Execution runs triggered</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Records Synchronized</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ job.total_records_synced }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">Total processed items</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Batch Size</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ job.batch_size }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">Records per execution cycle</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Scheduling Cadence</div>
+            <div class="text-lg font-bold text-slate-900 mt-1">{{ job.get_cadence_display }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">{{ job.get_sync_direction_display }}</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {# Configuration Specs #}
+        <div class="lg:col-span-1 space-y-6">
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-100">Job Parameters</h3>
+                <dl class="space-y-4 text-sm">
+                    <div>
+                        <dt class="text-slate-500 font-medium">Associated Connector</dt>
+                        <dd class="text-slate-900 mt-1">
+                            <a href="{% url 'sales:sic_detail' job.connector.pk %}" class="font-medium text-primary hover:underline">
+                                {{ job.connector.name }}
+                            </a>
+                            <div class="text-xs text-slate-500 font-mono mt-0.5">{{ job.connector.number }} ({{ job.connector.get_provider_display }})</div>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500 font-medium">Scope Category</dt>
+                        <dd class="text-slate-900 mt-1 font-medium">{{ job.get_entity_scope_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500 font-medium">Sync Direction</dt>
+                        <dd class="text-slate-900 mt-1">
+                            {% if job.sync_direction == 'bidirectional' %}
+                                <span class="badge badge-info">⇄ Bidirectional (Two-Way)</span>
+                            {% elif job.sync_direction == 'outbound' %}
+                                <span class="badge badge-green">→ Outbound Only (NavERP to Remote)</span>
+                            {% else %}
+                                <span class="badge badge-amber">← Inbound Only (Remote to NavERP)</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500 font-medium">Conflict Resolution Policy</dt>
+                        <dd class="text-slate-900 mt-1 font-medium">{{ job.get_conflict_policy_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500 font-medium">Filter Expression</dt>
+                        <dd class="text-slate-900 mt-1 font-mono text-xs bg-slate-50 p-2 rounded border border-slate-100 break-all">
+                            {{ job.filter_expression|default:"(No filter - sync all matching records)" }}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500 font-medium">Last Run Stamp</dt>
+                        <dd class="text-slate-900 mt-1">
+                            {% if job.last_run_at %}
+                                {{ job.last_run_at|date:"M d, Y H:i:s" }}
+                            {% else %}
+                                Never executed
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        {# Execution Runs Table #}
+        <div class="lg:col-span-2 space-y-6">
+            <div class="card p-6">
+                <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-900">Execution History</h3>
+                        <p class="text-xs text-slate-500">Append-only audit log of runs initiated by this job.</p>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="table w-full text-left text-xs">
+                        <thead>
+                            <tr>
+                                <th>Run Ref</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Read</th>
+                                <th>Written</th>
+                                <th>Failed</th>
+                                <th>Timestamp</th>
+                                <th class="text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200">
+                            {% for run in recent_runs %}
+                                <tr>
+                                    <td>
+                                        <a href="{% url 'sales:ssr_detail' run.pk %}" class="font-mono text-primary font-medium hover:underline">
+                                            {{ run.number }}
+                                        </a>
+                                    </td>
+                                    <td>{{ run.get_run_type_display }}</td>
+                                    <td>
+                                        {% if run.status == 'simulated' %}
+                                            <span class="badge badge-info">Simulated</span>
+                                        {% elif run.status == 'completed' %}
+                                            <span class="badge badge-green">Completed</span>
+                                        {% elif run.status == 'failed' %}
+                                            <span class="badge badge-red">Failed</span>
+                                        {% else %}
+                                            <span class="badge badge-amber">{{ run.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="font-medium text-slate-800">{{ run.records_read }}</td>
+                                    <td class="font-medium text-green-700">{{ run.records_written }}</td>
+                                    <td class="font-medium text-red-600">{{ run.records_failed }}</td>
+                                    <td class="text-slate-500">{{ run.started_at|date:"M d, H:i" }}</td>
+                                    <td class="text-right">
+                                        <a href="{% url 'sales:ssr_detail' run.pk %}" class="btn btn-icon" title="View details">
+                                            <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="8" class="text-center py-8 text-slate-400">
+                                        No execution runs recorded for this job yet. Click "Run Now" to initiate a simulated run.
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
