@@ -1,117 +1,66 @@
 # Review Findings — Sales 8.18: Integration & API Hub (`sales`)
 
 > Reviewing changeset `bbd7b52f0fb78aa15695661dfc53e7ea0d5dc2a2...be283a62c6440920e40118bbe06616d8265bf7a2`.
-> Six serial reviewer passes: `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`.
+> All 6 serial reviewer passes completed: `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`.
 
 ---
 
-## Pass 1: Code Reviewer (`code-reviewer`)
+## Verdict
+**Approved with Important findings.** No Critical vulnerabilities, active data leaks, or contract breakages. Solid Fernet secret encryption at rest, complete multi-tenant scoping (IDOR immunity), Zero Outbound HTTP simulated actions, and 100% route/contract compliance. Remediation of Important and Minor findings is assigned to the `code-fixer` agent in Phase 5.
 
-**Verdict:** Commit after fixing Important findings.
+---
+
+## Consolidated Findings Register
 
 ### Critical
 *None.*
 
+---
+
 ### Important
-- **CR-I1**: `apps/sales/forms/IntegrationApiHub/FieldMappings.py:10` — `SalesFieldMappingForm` does not inherit `TenantUniqueMixin`. Because `tenant` is excluded from form `fields`, Django's `ModelForm.validate_unique()` excludes `tenant` from unique validation. Submitting a duplicate `(tenant, connector, target_entity, local_field, remote_field)` bypasses form validation and causes an unhandled 500 `IntegrityError` on `obj.save()` instead of rendering a clean validation error.
+
+- [ ] **I1**: `apps/sales/forms/IntegrationApiHub/FieldMappings.py:10` — `SalesFieldMappingForm` does not inherit `TenantUniqueMixin`. Because `tenant` is excluded from form `fields`, Django's `ModelForm.validate_unique()` skips unique validation for tenant-scoped constraints. Submitting a duplicate `(tenant, connector, target_entity, local_field, remote_field)` bypasses form validation and causes an unhandled 500 `IntegrityError` on `obj.save()`.
   - **Fix:** Inherit `TenantUniqueMixin` from `apps.sales.forms._common` in `SalesFieldMappingForm`.
-- **CR-I2**: `apps/sales/views/IntegrationApiHub/FieldMappings.py:37`, `SyncJobs.py:38`, `SyncRuns.py:42,45` — GET parameter FK filters parse via `isdigit()` and directly `int(...)` into `.filter(...)` without overflow protection. Passing an over-range integer (e.g. `?connector=999999999999999999999999999999`) causes `OverflowError: Python int too large to convert to SQLite INTEGER` on test and production database drivers (L11).
-  - **Fix:** Use `as_db_int(request.GET.get("connector", ""))` and `as_db_int(request.GET.get("job", ""))` before applying `.filter(...)`.
-- **CR-I3**: `apps/sales/forms/IntegrationApiHub/FieldMappings.py:45` — `value_map` field on `SalesFieldMapping` needs validation in `clean_value_map` to default empty values to `{}` and reject non-dict JSON payloads to avoid null constraint violations or TypeError at runtime.
-  - **Fix:** Add `clean_value_map(self)` returning `{}` when falsy or verifying `isinstance(data, dict)`.
 
-### Minor
-- **CR-M1**: `apps/sales/views/IntegrationApiHub/FieldMappings.py:98` — `sfm_delete` redirects to `sales:sic_detail` of the parent connector, which may be unexpected when deleting from the full field mapping list view. Support redirecting back to `sales:sfm_list` if no connector or based on referrer.
-- **CR-M2**: `apps/sales/views/IntegrationApiHub/Connectors.py:126`, `SyncJobs.py:134` — `sic_test` and `ssj_trigger` update status/statistics using `update_fields=[...]` without including `"updated_at"`.
-- **CR-M3**: Confirm dialogs in templates (`connectors/detail.html`, `fieldmappings/detail.html`, `syncjobs/detail.html`) output object names in inline JS `confirm('...')` without `|escapejs`.
-- **CR-M4**: `apps/sales/models/IntegrationApiHub/SyncJobs.py` — `batch_size` uses `PositiveIntegerField(default=100)` allowing 0 at the model level. Add `MinValueValidator(1)`.
-- **CR-M5**: `templates/sales/integrationapihub/connectors/list.html:137`, `syncruns/list.html:144` — Status badges use hardcoded fallback labels in `{% else %}` branches instead of dynamic model display (`get_health_status_display` / `get_status_display`).
+- [ ] **I2**: `apps/sales/views/IntegrationApiHub/FieldMappings.py:35-37,83-85`, `SyncJobs.py:36-38,88-90`, `SyncRuns.py:39-46` — Integer query parameters (`connector`, `job`) in list filters and form initial dictionaries are checked with `.isdigit()` and cast with `int(...)` without overflow protection. Supplying an over-range integer causes `OverflowError: Python int too large to convert to SQLite INTEGER` on SQLite or `DataError: integer out of range` on PostgreSQL/MariaDB (L11).
+  - **Fix:** Pass query parameters through `as_db_int(...)` from `apps.core.crud` before filtering querysets or assigning form initials.
 
----
+- [ ] **I3**: `apps/sales/forms/IntegrationApiHub/FieldMappings.py:45` & `models/IntegrationApiHub/FieldMappings.py:44` — `value_map` field on `SalesFieldMappingForm` does not validate that the parsed JSON payload is a mapping (`dict`). Submitting non-dict JSON (e.g. list, integer, string) or falsy input causes null constraint violations or runtime `TypeError` / `AttributeError` when downstream code calls `.get()` or `.items()`.
+  - **Fix:** Add `clean_value_map(self)` to `SalesFieldMappingForm` defaulting empty/falsy values to `{}` and validating `isinstance(data, dict)`.
 
-## Pass 2: Explorer (`explorer`)
+- [ ] **I4**: `templates/sales/integrationapihub/connectors/list.html:157`, `connectors/detail.html:50`, `fieldmappings/list.html:155`, `syncjobs/list.html:164`, `syncjobs/detail.html:46`, `syncruns/list.html:157`, `syncruns/detail.html:41` — Inline JavaScript `confirm('... {{ var }} ...')` attributes interpolate user-controlled variables inside single quotes without the `|escapejs` filter. Single quotes in entity names (e.g. "Vendor's ERP", "Customer's API", "O'Reilly") break inline JavaScript with `Uncaught SyntaxError: Unexpected identifier`.
+  - **Fix:** Apply `|escapejs` to all variables embedded within JavaScript `confirm('...')` dialog strings.
 
-**Verdict:** Commit after fixing Important findings. 100% Contract & route compliance.
+- [ ] **I5**: `apps/core/navigation.py:2637-2641` — NavERP.md §8.18 category lens bullets map to `sales:sic_erp_list`, etc., which execute HTTP 302 redirects to `sales:sic_list?category=...`. Once redirected, `request.resolver_match.view_name` becomes `sales:sic_list`, causing `_route_score` to fail matching and losing the active sidebar sub-bullet highlight.
+  - **Fix:** In `apps/core/navigation.py`, deep-link via query parameter: `"ERP Integration": "sales:sic_list?category=erp"`, etc. (which `_match_score` natively recognizes and outscores bare routes by parameter count).
 
-### Critical
-*None.*
-
-### Important
-- **EX-I1**: `apps/sales/views/IntegrationApiHub/Dashboard.py:48-70` & `apps/core/navigation.py:2637-2641` — NavERP.md §8.18 category lens bullets map to `sales:sic_erp_list`, `sales:sic_marketing_list`, etc., which execute HTTP 302 redirects to `sales:sic_list?category=...`. Once redirected, `request.resolver_match.view_name` becomes `sales:sic_list`. In `resolve_nav()`, `_route_score("sales:sic_erp_list", "sales:sic_list")` returns `-1`. Consequently, clicking "ERP Integration" or other category bullets causes the sidebar to highlight "Connectors" instead of the active category bullet.
-  - **Fix:** In `apps/core/navigation.py`, deep-link via query parameter: `"ERP Integration": "sales:sic_list?category=erp"` (which `_match_score` natively recognizes and outscores bare routes by parameter count).
-- **EX-I2**: `apps/sales/views/IntegrationApiHub/FieldMappings.py:36-38`, `SyncJobs.py:36-38`, `SyncRuns.py:39-46` — Missing overflow protection on FK filters in list views (same as CR-I2).
-- **EX-I3**: `apps/sales/forms/IntegrationApiHub/FieldMappings.py:10` — Missing `TenantUniqueMixin` on `SalesFieldMappingForm` (same as CR-I1).
-
-### Minor
-- **EX-M1**: `apps/sales/views/IntegrationApiHub/Dashboard.py:25-29` & `templates/sales/integrationapihub/hub_dashboard.html:87,115,143,171,199` — In `hub_dashboard`, category querysets (`erp_connectors`, etc.) are passed to context, and the template calls `.count` on each (`{{ erp_connectors.count }}`), resulting in 5 extra database COUNT queries on dashboard load. Pre-compute category counts in view context or aggregate.
-- **EX-M2**: `apps/sales/views/IntegrationApiHub/FieldMappings.py:142` — Context/Referrer inconsistency on `sfm_delete` (same as CR-M1).
-- **EX-M3**: `apps/sales/models/IntegrationApiHub/SyncJobs.py:56` — `batch_size` field allows 0 (same as CR-M4).
-- **EX-M4**: `apps/sales/views/IntegrationApiHub/Connectors.py:168` & `SyncJobs.py:167` — Omission of `updated_at` in `update_fields` (same as CR-M2).
-
----
-
-## Pass 3: Frontend Reviewer (`frontend-reviewer`)
-
-**Verdict:** Commit after fixing Important findings. Strict design-system badge compliance, zero comment leaks, safe pagination guards.
-
-### Critical
-*None.*
-
-### Important
-- **FE-I1**: Missing `|escapejs` in JavaScript `confirm()` dialogs across list and detail templates:
-  - `templates/sales/integrationapihub/connectors/list.html:157` (`conn.name`)
-  - `templates/sales/integrationapihub/connectors/detail.html:50` (`connector.name`)
-  - `templates/sales/integrationapihub/fieldmappings/list.html:155` (`map.local_field`, `map.remote_field`)
-  - `templates/sales/integrationapihub/syncjobs/list.html:164` (`job.name`)
-  - `templates/sales/integrationapihub/syncjobs/detail.html:46` (`job.name`)
-  - `templates/sales/integrationapihub/syncruns/list.html:157` (`run.number`)
-  - `templates/sales/integrationapihub/syncruns/detail.html:41` (`run.number`)
-  - **Issue:** Entity names containing apostrophes/quotes (e.g. "Vendor's ERP", "Customer's API", "O'Reilly") break inline JavaScript with `Uncaught SyntaxError: Unexpected identifier`.
-  - **Fix:** Apply `|escapejs` to all variables embedded inside JavaScript dialog strings (same as CR-M3, promoted to Important).
-
-### Minor
-- **FE-M1**: `templates/sales/integrationapihub/hub_dashboard.html:87,115,143,171,199` — Badges declare `{{ erp_connectors.count }} Active`, etc., but the view querysets filter only by `category` without checking `is_active=True`. Change badge text to `{{ erp_connectors.count }} Configured` to match KPI terminology.
-- **FE-M2**: `templates/sales/integrationapihub/hub_dashboard.html:59` — Hardcoded `text-green-700` unconditionally applied to `{{ healthy_count }}/{{ connectors_count }}` even when 0 connectors or health is degraded. Use neutral `text-slate-900` or condition color.
-- **FE-M3**: `apps/sales/forms/IntegrationApiHub/Connectors.py:42`, `FieldMappings.py:35-37` — Form widgets use `class: "form-checkbox"` instead of theme.css `.form-check`.
-- **FE-M4**: `templates/sales/integrationapihub/{connectors,fieldmappings,syncjobs,syncruns}/list.html` — Disabled previous/next pagination links omit `aria-disabled="true"` and `tabindex="-1"`. Add accessibility attributes.
-
----
-
-## Pass 4: Performance Reviewer (`performance-reviewer`)
-
-**Verdict:** Commit after fixing Important findings. Good prefetching and pagination; needs aggregation for dashboard counts and index coverage on tenant-scoped query paths.
-
-### Critical
-*None.*
-
-### Important
-- **PRF-I1**: `apps/sales/views/IntegrationApiHub/Dashboard.py:25-29` & `templates/sales/integrationapihub/hub_dashboard.html:87,115,143,171,199` — In `hub_dashboard`, 5 separate category querysets are evaluated via `.count` in template, plus separate counts for total connectors, jobs, runs, healthy, active, generating 11 separate queries on every dashboard load.
+- [ ] **I6**: `apps/sales/views/IntegrationApiHub/Dashboard.py:25-29` & `templates/sales/integrationapihub/hub_dashboard.html:87,115,143,171,199` — In `hub_dashboard`, 5 separate category querysets are evaluated via `.count` in template, plus separate counts for total connectors, jobs, runs, healthy, active, generating 11 separate queries on every dashboard load.
   - **Fix:** Precompute category counts via `connectors_qs.values_list("category").annotate(total=models.Count("id"))` and use conditional aggregation for connector/job stats (`total`, `healthy`, `active`). Drops query count from 11 to 5.
-- **PRF-I2**: `apps/sales/models/IntegrationApiHub/SyncRuns.py:61-64` — Missing multi-tenant composite ordering index `(tenant, -started_at)` on `SalesSyncRun`. `SalesSyncRun.objects.filter(tenant=tenant).order_by("-started_at")` in list and dashboard causes full tenant scan + filesort on high-volume audit run log table.
-  - **Fix:** Add `models.Index(fields=["tenant", "-started_at"], name="sales_ssr_tenant_start_idx")` (27 chars <= 30) in `SalesSyncRun.Meta.indexes`.
-- **PRF-I3**: `apps/sales/models/IntegrationApiHub/Connectors.py:97-100` & `SyncJobs.py:68-71` — Missing index coverage on `(tenant, health_status)` for `SalesIntegrationConnector` and `(tenant, status)` for `SalesSyncJob` for dashboard/list filters.
-  - **Fix:** Add `sales_sic_ten_health_idx` (`["tenant", "health_status"]`, 26 chars) and `sales_ssj_ten_status_idx` (`["tenant", "status"]`, 24 chars).
 
-### Minor
-- **PRF-M1**: `apps/sales/views/IntegrationApiHub/Connectors.py:74-76` & `templates/sales/integrationapihub/connectors/detail.html:74,79` — In `sic_detail`, `{{ field_mappings.count }}` and `{{ sync_jobs.count }}` run 2 SQL queries before loops evaluate. Use `{{ field_mappings|length }}` and `{{ sync_jobs|length }}`.
-- **PRF-M2**: `apps/sales/models/IntegrationApiHub/FieldMappings.py:62-63` — `SalesFieldMapping.__str__` accesses foreign key `self.connector.name`. Safeguard `__str__` to avoid FK lookup if not cached.
-- **PRF-M3**: `apps/sales/views/IntegrationApiHub/SyncRuns.py:57-58` — Filter dropdown querysets load full model instances. Apply `.only("id", "name", "number")` to connector and sync job filter querysets.
+- [ ] **I7**: `apps/sales/models/IntegrationApiHub/SyncRuns.py:61-64`, `Connectors.py:97-100`, `SyncJobs.py:68-71` — Missing multi-tenant composite ordering index `(tenant, -started_at)` on `SalesSyncRun`, missing `(tenant, health_status)` on `SalesIntegrationConnector`, and missing `(tenant, status)` on `SalesSyncJob` for hot filter/order queries.
+  - **Fix:** Add `sales_ssr_tenant_start_idx` (`["tenant", "-started_at"]`, 27 chars), `sales_sic_ten_health_idx` (`["tenant", "health_status"]`, 26 chars), and `sales_ssj_ten_status_idx` (`["tenant", "status"]`, 24 chars). Generate and apply migration.
 
 ---
 
-## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
-
-**Verdict:** 53/53 tests PASS. Zero 500s, zero template leaks, 100% IDOR immunity, valid simulated actions.
-
-### Critical
-*None.*
-
-### Important
-- **QA-I1**: `apps/sales/views/IntegrationApiHub/FieldMappings.py:35-37`, `SyncJobs.py:36-38`, `SyncRuns.py:39-45` — In `sfm_list`, `ssj_list`, and `ssr_list`, incoming query parameters `connector` and `job` are filtered on the queryset using `int(connector_id)` and `int(job_id)` after checking `str.isdigit()`. On MariaDB/PostgreSQL passing an integer greater than 64-bit signed int raises `DataError: integer out of range`. Filter querysets directly using `as_db_int` (same as CR-I2 / EX-I2).
-
 ### Minor
-- **QA-M1**: Category lens routes test verified all 5 built routes (`sic_erp_list`, `sic_marketing_list`, `sic_communication_list`, `sic_bi_list`, `sic_esignature_list`) redirect correctly with HTTP 302.
 
+- [ ] **M1**: `apps/sales/views/IntegrationApiHub/FieldMappings.py:142` — `sfm_delete` unconditionally redirects to `sales:sic_detail` of the parent connector. When deleting from `sales:sfm_list`, navigating away to the connector detail disrupts the list management flow.
+  - **Fix:** Support redirecting back to `sales:sfm_list` if requested via `request.POST.get("next")` or referrer.
 
+- [ ] **M2**: `apps/sales/views/IntegrationApiHub/Connectors.py:168` & `SyncJobs.py:167` — `save(update_fields=[...])` in `sic_test` and `ssj_trigger` mutates status/metrics but omits `"updated_at"`, leaving the audit timestamp stale.
+  - **Fix:** Include `"updated_at"` in `update_fields`.
 
+- [ ] **M3**: `apps/sales/models/IntegrationApiHub/SyncJobs.py:56` — `batch_size = models.PositiveIntegerField(default=100)` accepts `0` at the model validation level.
+  - **Fix:** Add `validators=[MinValueValidator(1)]`.
 
+- [ ] **M4**: `templates/sales/integrationapihub/connectors/list.html:137`, `syncruns/list.html:144`, `hub_dashboard.html:59,87,115,143,171,199` — Status badges use hardcoded fallback labels in `{% else %}` branches instead of dynamic `get_FIELD_display`; category badges declare "Active" instead of "Configured"; KPI health ratio uses unconditional green color.
+  - **Fix:** Use dynamic model display helpers and align KPI label text.
+
+- [ ] **M5**: `apps/sales/forms/IntegrationApiHub/{Connectors,FieldMappings}.py`, `templates/sales/integrationapihub/{connectors,fieldmappings,syncjobs,syncruns}/list.html` — Checkbox widget class uses `form-checkbox` instead of theme.css `.form-check`; disabled pagination links omit `aria-disabled="true"` and `tabindex="-1"`.
+  - **Fix:** Update widget class and add accessibility attributes.
+
+- [ ] **M6**: `templates/sales/integrationapihub/connectors/detail.html:74,79`, `apps/sales/models/IntegrationApiHub/FieldMappings.py:62-63`, `apps/sales/views/IntegrationApiHub/SyncRuns.py:57-58` — In `sic_detail`, `{{ field_mappings.count }}` runs extra queries before loops; `SalesFieldMapping.__str__` accesses foreign key without caching; filter dropdown querysets pull unused fields.
+  - **Fix:** Use `|length` in template, safeguard `__str__`, and use `.only("id", "name", "number")` on filter dropdown querysets.
+
+- [ ] **M7**: `apps/sales/models/IntegrationApiHub/{FieldMappings,SyncJobs,SyncRuns}.py`, `apps/sales/forms/IntegrationApiHub/Connectors.py` — Models lack model-level `clean()` defense-in-depth asserting matching tenant on FKs; connector form has no way to revoke credentials if changing auth method to "none".
+  - **Fix:** Add model-level `clean()` assertions and auto-clear `credential_encrypted` when `auth_method == "none"`.
