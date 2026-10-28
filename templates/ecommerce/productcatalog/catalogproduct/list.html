@@ -30,11 +30,11 @@
 <!-- Filters Card -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" action="{% url 'ecommerce:catalogproduct_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-            <div class="form-group mb-0 md:col-span-2">
+        <form method="get" action="{% url 'ecommerce:catalogproduct_list' %}" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-end">
+            <div class="form-group mb-0">
                 <label for="q" class="form-label">Search Products</label>
                 <div class="relative">
-                    <input type="text" name="q" id="q" value="{{ search_query }}" class="form-input pl-10" placeholder="Search by name, SKU, number, brand...">
+                    <input type="text" name="q" id="q" value="{{ search_query }}" class="form-input pl-10" placeholder="Search by name, SKU...">
                     <i data-lucide="search" class="absolute left-3 top-2.5 text-slate-400 w-4 h-4"></i>
                 </div>
             </div>
@@ -61,12 +61,32 @@
                 </select>
             </div>
 
-            <div class="flex items-center space-x-2">
+            <div class="form-group mb-0">
+                <label for="visibility" class="form-label">Visibility</label>
+                <select name="visibility" id="visibility" class="form-select">
+                    <option value="">All Visibilities</option>
+                    {% for val, label in visibility_choices %}
+                    <option value="{{ val }}" {% if visibility_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group mb-0">
+                <label for="brand" class="form-label">Brand</label>
+                <select name="brand" id="brand" class="form-select">
+                    <option value="">All Brands</option>
+                    {% for b in brands_list %}
+                    <option value="{{ b }}" {% if brand_filter == b %}selected{% endif %}>{{ b }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex items-center gap-2">
                 <button type="submit" class="btn btn-primary flex-1">
                     <i data-lucide="filter"></i> Filter
                 </button>
                 {% if search_query or status_filter or visibility_filter or category_filter or brand_filter %}
-                <a href="{% url 'ecommerce:catalogproduct_list' %}" class="btn btn-outline" title="Clear Filters">
+                <a href="{% url 'ecommerce:catalogproduct_list' %}" class="btn btn-outline" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
