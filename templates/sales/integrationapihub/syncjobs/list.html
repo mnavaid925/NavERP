@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sync Jobs — Integration Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:integration_hub' %}" class="hover:text-primary">Integration Hub</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Sync Jobs</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Synchronization Jobs</h1>
+            <p class="text-sm text-slate-500 mt-1">Scheduled and on-demand synchronization tasks for order-to-cash, leads, and alerts.</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:integration_hub' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="network" class="w-4 h-4"></i>
+                <span>Integration Hub</span>
+            </a>
+            <a href="{% url 'sales:ssj_create' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>New Sync Job</span>
+            </a>
+        </div>
+    </div>
+
+    {# Filter Card #}
+    <div class="card p-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <input type="text" name="q" id="filter-q" class="form-input" placeholder="Job name, number…" value="{{ q|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-connector">Connector</label>
+                <select name="connector" id="filter-connector" class="form-select">
+                    <option value="">All Connectors</option>
+                    {% for conn in connectors %}
+                        <option value="{{ conn.pk }}" {% if request.GET.connector == conn.pk|stringformat:"d" %}selected{% endif %}>{{ conn.name }} ({{ conn.number }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-scope">Entity Scope</label>
+                <select name="entity_scope" id="filter-scope" class="form-select">
+                    <option value="">All Scopes</option>
+                    {% for value, label in scope_choices %}
+                        <option value="{{ value }}" {% if entity_scope == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-status">Status</label>
+                <select name="status" id="filter-status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1 flex items-center justify-center gap-1">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or request.GET.connector or entity_scope or status %}
+                    <a href="{% url 'sales:ssj_list' %}" class="btn btn-outline" title="Clear filters">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    {# Table Card #}
+    <div class="card overflow-hidden">
+        <div class="table-wrap">
+            <table class="table w-full text-left">
+                <thead>
+                    <tr>
+                        <th>Job Reference</th>
+                        <th>Connector</th>
+                        <th>Entity Scope</th>
+                        <th>Direction</th>
+                        <th>Cadence</th>
+                        <th>Conflict Policy</th>
+                        <th>Status</th>
+                        <th>Last Run</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+                    {% for job in jobs %}
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td>
+                                <a href="{% url 'sales:ssj_detail' job.pk %}" class="font-medium text-primary hover:underline">
+                                    {{ job.name }}
+                                </a>
+                                <div class="text-xs text-slate-400 font-mono">{{ job.number }}</div>
+                            </td>
+                            <td>
+                                <a href="{% url 'sales:sic_detail' job.connector.pk %}" class="text-slate-800 hover:text-primary font-medium text-xs">
+                                    {{ job.connector.name }}
+                                </a>
+                                <div class="text-[11px] text-slate-400">{{ job.connector.get_provider_display }}</div>
+                            </td>
+                            <td>
+                                <span class="badge badge-info">{{ job.get_entity_scope_display }}</span>
+                            </td>
+                            <td>
+                                {% if job.sync_direction == 'bidirectional' %}
+                                    <span class="badge badge-info">⇄ Two-Way</span>
+                                {% elif job.sync_direction == 'outbound' %}
+                                    <span class="badge badge-green">→ Outbound</span>
+                                {% else %}
+                                    <span class="badge badge-amber">← Inbound</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="text-xs text-slate-700 font-medium">{{ job.get_cadence_display }}</span>
+                            </td>
+                            <td>
+                                <span class="text-xs text-slate-600">{{ job.get_conflict_policy_display }}</span>
+                            </td>
+                            <td>
+                                {% if job.status == 'active' %}
+                                    <span class="badge badge-green">Active</span>
+                                {% elif job.status == 'paused' %}
+                                    <span class="badge badge-slate">Paused</span>
+                                {% else %}
+                                    <span class="badge badge-red">Error</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="text-xs text-slate-500">
+                                    {% if job.last_run_at %}
+                                        {{ job.last_run_at|date:"M d, H:i" }}
+                                    {% else %}
+                                        Never
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td class="text-right">
+                                <div class="table-actions flex items-center justify-end gap-1">
+                                    <form method="post" action="{% url 'sales:ssj_trigger' job.pk %}" class="inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-icon text-primary" title="Trigger Run Now">
+                                            <i data-lucide="play" class="w-4 h-4"></i>
+                                        </button>
+                                    </form>
+                                    <a href="{% url 'sales:ssj_detail' job.pk %}" class="btn btn-icon" title="View details">
+                                        <i data-lucide="eye" class="w-4 h-4"></i>
+                                    </a>
+                                    <a href="{% url 'sales:ssj_edit' job.pk %}" class="btn btn-icon" title="Edit">
+                                        <i data-lucide="pencil" class="w-4 h-4"></i>
+                                    </a>
+                                    <form method="post" action="{% url 'sales:ssj_delete' job.pk %}" class="inline" onsubmit="return confirm('Delete sync job {{ job.name }}?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="9" class="text-center py-12">
+                                <div class="empty-state">
+                                    <i data-lucide="repeat" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                                    <h3 class="text-base font-semibold text-slate-700">No sync jobs found</h3>
+                                    <p class="text-sm text-slate-500 mt-1">Configure automated synchronization tasks between NavERP and external systems.</p>
+                                    <div class="mt-4">
+                                        <a href="{% url 'sales:ssj_create' %}" class="btn btn-primary">
+                                            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Sync Job
+                                        </a>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# Pagination #}
+        {% if paginator.num_pages > 1 %}
+            <div class="pagination flex items-center justify-between px-6 py-3 border-t border-slate-200 text-sm">
+                <div class="text-slate-500">
+                    Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} jobs
+                </div>
+                <div class="flex items-center gap-1">
+                    <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if q %}&q={{ q }}{% endif %}{% if request.GET.connector %}&connector={{ request.GET.connector }}{% endif %}{% if entity_scope %}&entity_scope={{ entity_scope }}{% endif %}{% if status %}&status={{ status }}{% endif %}"
+                       class="btn btn-outline py-1 px-3 {% if not page_obj.has_previous %}opacity-50 pointer-events-none{% endif %}">
+                        Previous
+                    </a>
+                    <span class="px-2 text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                    <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}{% if q %}&q={{ q }}{% endif %}{% if request.GET.connector %}&connector={{ request.GET.connector }}{% endif %}{% if entity_scope %}&entity_scope={{ entity_scope }}{% endif %}{% if status %}&status={{ status }}{% endif %}"
+                       class="btn btn-outline py-1 px-3 {% if not page_obj.has_next %}opacity-50 pointer-events-none{% endif %}">
+                        Next
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
