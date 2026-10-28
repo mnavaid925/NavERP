@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Q
 from django.shortcuts import render
 
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
@@ -17,9 +17,17 @@ def catalog_overview(request):
     variants_qs = ProductVariant.objects.filter(tenant=tenant)
     relationships_qs = ProductRelationship.objects.filter(tenant=tenant)
 
-    total_products = products_qs.count()
-    active_products = products_qs.filter(status="active").count()
-    draft_products = products_qs.filter(status="draft").count()
+    product_stats = products_qs.aggregate(
+        total_products=Count("id"),
+        active_products=Count("id", filter=Q(status="active")),
+        draft_products=Count("id", filter=Q(status="draft")),
+        avg_score=Avg("pim_completeness"),
+    )
+    total_products = product_stats["total_products"]
+    active_products = product_stats["active_products"]
+    draft_products = product_stats["draft_products"]
+    avg_pim_completeness = round(product_stats["avg_score"] or 0, 1)
+
     total_categories = categories_qs.count()
     total_variants = variants_qs.count()
     total_relationships = relationships_qs.count()
@@ -28,10 +36,6 @@ def catalog_overview(request):
     zero_variant_products = (
         products_qs.annotate(var_count=Count("variants")).filter(var_count=0).count()
     )
-
-    # Average PIM readiness score
-    avg_score_res = products_qs.aggregate(avg_score=Avg("pim_completeness"))["avg_score"]
-    avg_pim_completeness = round(avg_score_res or 0, 1)
 
     recent_products = (
         products_qs.select_related("primary_category")
