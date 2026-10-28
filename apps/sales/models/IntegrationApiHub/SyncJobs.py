@@ -1,4 +1,5 @@
 """Sales 8.18 — SalesSyncJob model."""
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from apps.sales.models._base import TenantNumbered
@@ -53,7 +54,7 @@ class SalesSyncJob(TenantNumbered):
     conflict_policy = models.CharField(max_length=30, choices=CONFLICT_POLICY_CHOICES, default="last_updated_wins")
     cadence = models.CharField(max_length=30, choices=CADENCE_CHOICES, default="hourly")
     filter_expression = models.CharField(max_length=255, blank=True, default="", help_text="SQL or OData filter expression (e.g. status='confirmed')")
-    batch_size = models.PositiveIntegerField(default=100)
+    batch_size = models.PositiveIntegerField(default=100, validators=[MinValueValidator(1)])
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
     last_run_at = models.DateTimeField(null=True, blank=True)
     next_run_at = models.DateTimeField(null=True, blank=True)
