@@ -56,7 +56,7 @@
         </div>
         <div class="card p-4">
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Integration Health</div>
-            <div class="text-2xl font-bold text-green-700 mt-1">
+            <div class="text-2xl font-bold {% if connectors_count > 0 and healthy_count < connectors_count %}text-amber-600{% else %}text-green-700{% endif %} mt-1">
                 {% if connectors_count > 0 %}
                     {{ healthy_count }}/{{ connectors_count }}
                 {% else %}
@@ -84,7 +84,7 @@
                             <p class="text-xs text-slate-500">SAP, Oracle, NetSuite, Dynamics</p>
                         </div>
                     </div>
-                    <span class="badge badge-info">{{ erp_connectors.count }} Active</span>
+                    <span class="badge badge-info">{{ erp_count }} Configured</span>
                 </div>
                 <p class="text-xs text-slate-600 mt-3">
                     Order-to-cash synchronization, customer master replication, sales invoice handoff, and fulfillment status updates.
@@ -112,7 +112,7 @@
                             <p class="text-xs text-slate-500">HubSpot, Marketo, Pardot, Eloqua</p>
                         </div>
                     </div>
-                    <span class="badge badge-info">{{ marketing_connectors.count }} Active</span>
+                    <span class="badge badge-info">{{ marketing_count }} Configured</span>
                 </div>
                 <p class="text-xs text-slate-600 mt-3">
                     Bidirectional lead and contact lifecycle sync, campaign attribution, scoring signals, and engagement history ingestion.
@@ -140,7 +140,7 @@
                             <p class="text-xs text-slate-500">Slack, Microsoft Teams, Zoom</p>
                         </div>
                     </div>
-                    <span class="badge badge-info">{{ communication_connectors.count }} Active</span>
+                    <span class="badge badge-info">{{ communication_count }} Configured</span>
                 </div>
                 <p class="text-xs text-slate-600 mt-3">
                     Milestone and closed-won alerts, stage change broadcasts, deal room collaboration channels, and telephony call logging.
@@ -168,7 +168,7 @@
                             <p class="text-xs text-slate-500">Tableau, Power BI, Looker, Snowflake</p>
                         </div>
                     </div>
-                    <span class="badge badge-info">{{ bi_connectors.count }} Active</span>
+                    <span class="badge badge-info">{{ bi_count }} Configured</span>
                 </div>
                 <p class="text-xs text-slate-600 mt-3">
                     Enterprise sales data warehouse feeds, daily revenue aggregates, pipeline velocity extracts, and BI dashboard sync.
@@ -196,7 +196,7 @@
                             <p class="text-xs text-slate-500">DocuSign, Adobe Sign, PandaDoc</p>
                         </div>
                     </div>
-                    <span class="badge badge-info">{{ esignature_connectors.count }} Active</span>
+                    <span class="badge badge-info">{{ esignature_count }} Configured</span>
                 </div>
                 <p class="text-xs text-slate-600 mt-3">
                     Contract envelope dispatch, live signature milestone tracking, counter-signature callbacks, and executed document filing.
