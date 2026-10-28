@@ -48,7 +48,19 @@ Commit after fixing Critical+Important findings.
 
 ## Pass 3: Frontend & Design System Reviewer (`frontend-reviewer`)
 
-*(pending)*
+### Verdict
+Safe to commit as-is (clean bill of health with minor polish recommendations).
+
+### Critical
+None.
+
+### Important
+None.
+
+### Minor
+1. `templates/sales/masterdataconfiguration/regionalsetting/detail.html:30` — Inconsistent badge class `badge badge-info` used for the header "Default Profile" pill, while line 179 of the same template, `regionalsetting/list.html:124`, and `overview.html:330` all standardize on `badge badge-green text-xs`. Fix: Replace `<span class="badge badge-info">Default Profile</span>` with `<span class="badge badge-green">Default Profile</span>`.
+2. `templates/sales/masterdataconfiguration/pricebookentry/list.html:72,134,137,142`, `customentitydefinition/list.html:72,144,147,152`, `salesmethodology/list.html:72,141,144,149`, `regionalsetting/list.html:72,138,141,146`, and `overview.html:111,130,149,168` — Icon-only action links and buttons use `title="..."` attributes, but omit explicit `aria-label="..."`. Fix: Add matching `aria-label="..."` on all icon-only buttons/links for screen-reader accessibility.
+3. `templates/sales/masterdataconfiguration/customentitydefinition/form.html:118`, `salesmethodology/form.html:114`, and `regionalsetting/form.html:81` — The raw text/JSON fields (`picklist_options_raw`, `qualification_criteria_raw`, `supported_currencies_raw`) do not render the form field's `help_text` beneath the input. Fix: Add `{% if form.<field>.help_text %}<p class="text-xs text-slate-500 mt-1">{{ form.<field>.help_text }}</p>{% endif %}`.
 
 ---
 
