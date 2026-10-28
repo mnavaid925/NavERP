@@ -1542,3 +1542,72 @@ Central revenue operations integration hub, schema translation, bidirectional sy
 - **Safe Integer Filtering (L11)**: All GET integer parameters pass through `as_db_int(...)` to protect against Python integer overflow on large values.
 - **Color-Named Badges (L33)**: Strictly `.badge-green`, `.badge-amber`, `.badge-red`, `.badge-info`, `.badge-muted`, `.badge-slate`.
 
+---
+
+## 8.19 Master Data & Configuration (`apps/sales/models/MasterDataConfiguration/`)
+
+Sub-module 8.19 implements the enterprise master data and administrative configuration layer for the sales suite, providing unified price book catalog entries, custom entity schemas and field definitions, stage-gated sales methodologies, and regional compliance/localization settings.
+
+### 8.19 Models
+- **`SalesPriceBookEntry`** (`PBE-`): Price book catalog entry connecting `crm.PriceBook`, `crm.Product`, and optional `scm.Item`. Implements `pricing_model` (`flat`, `volume_tiered`, `margin_plus`, `bundle`), `list_price`, `floor_price`, `min_quantity`, validity windows, and JSON-backed volume discount brackets.
+- **`SalesCustomEntityDefinition`** (`SCO-`): Custom object and schema extension registry for sales entities (`opportunity`, `lead`, `account`, `quote`, `contract`). Defines dynamic fields (`text`, `number`, `currency`, `date`, `picklist`, `formula`, `lookup`, `master_detail`), JSON picklist options, and regex validation patterns.
+- **`SalesMethodology`** (`SMD-`): Qualification methodology registry (`meddpicc`, `bant`, `challenger`, `sandler`, `valueselling`, `spiced`). Connects to `sales.Pipeline` and `sales.PipelineStage` for mandatory stage gating with minimum passing score enforcement.
+- **`SalesRegionalSetting`** (`SRG-`): Regional localization and statutory compliance configuration. Defines primary/supported currencies, date/number formatting, tax display modes (`inclusive`, `exclusive`), cooling-off periods, and single active default profile scoping within the active tenant.
+
+### 8.19 URLs (`apps/sales/urls/MasterDataConfiguration/`)
+- **Central Overview Dashboard**:
+  - `sales:master_data_overview` (`/sales/master-data/`)
+- **Price Book Entries CRUD**:
+  - `sales:pbe_list` (`/sales/master-data/price-book-entries/`)
+  - `sales:pbe_create` (`/sales/master-data/price-book-entries/create/`)
+  - `sales:pbe_detail` (`/sales/master-data/price-book-entries/<int:pk>/`)
+  - `sales:pbe_edit` (`/sales/master-data/price-book-entries/<int:pk>/edit/`)
+  - `sales:pbe_delete` (`/sales/master-data/price-book-entries/<int:pk>/delete/`) [POST]
+- **Custom Entity Definitions CRUD**:
+  - `sales:sco_list` (`/sales/master-data/custom-entities/`)
+  - `sales:sco_create` (`/sales/master-data/custom-entities/create/`)
+  - `sales:sco_detail` (`/sales/master-data/custom-entities/<int:pk>/`)
+  - `sales:sco_edit` (`/sales/master-data/custom-entities/<int:pk>/edit/`)
+  - `sales:sco_delete` (`/sales/master-data/custom-entities/<int:pk>/delete/`) [POST]
+- **Sales Methodologies CRUD**:
+  - `sales:smd_list` (`/sales/master-data/methodologies/`)
+  - `sales:smd_create` (`/sales/master-data/methodologies/create/`)
+  - `sales:smd_detail` (`/sales/master-data/methodologies/<int:pk>/`)
+  - `sales:smd_edit` (`/sales/master-data/methodologies/<int:pk>/edit/`)
+  - `sales:smd_delete` (`/sales/master-data/methodologies/<int:pk>/delete/`) [POST]
+- **Regional Settings CRUD**:
+  - `sales:srg_list` (`/sales/master-data/regional-settings/`)
+  - `sales:srg_create` (`/sales/master-data/regional-settings/create/`)
+  - `sales:srg_detail` (`/sales/master-data/regional-settings/<int:pk>/`)
+  - `sales:srg_edit` (`/sales/master-data/regional-settings/<int:pk>/edit/`)
+  - `sales:srg_delete` (`/sales/master-data/regional-settings/<int:pk>/delete/`) [POST]
+
+### 8.19 Templates (`templates/sales/masterdataconfiguration/`)
+- Central Overview: `overview.html`
+- Price Book Entries: `pricebookentry/{list,detail,form}.html`
+- Custom Entity Definitions: `customentitydefinition/{list,detail,form}.html`
+- Sales Methodologies: `salesmethodology/{list,detail,form}.html`
+- Regional Settings: `regionalsetting/{list,detail,form}.html`
+
+### 8.19 Navigation Wiring (`apps/core/navigation.py`)
+`LIVE_LINKS["8.19"]` maps all 4 NavERP.md feature bullets:
+- Product Catalog & Pricing -> `sales:pbe_list`
+- Custom Fields & Objects -> `sales:sco_list`
+- Sales Methodology Config -> `sales:smd_list`
+- Localization & Multi-Language -> `sales:srg_list`
+- Plus overview hub and secondary links.
+
+### 8.19 Seeder (`apps/sales/management/commands/seed_sales.py`)
+`_seed_master_data_configuration` is 100% idempotent and creates:
+- 4 Price Book Entries across tiers and currencies.
+- 4 Custom Entity Definitions across models and field types.
+- 4 Sales Methodologies across frameworks (MEDDPICC, BANT, Challenger, SPICED).
+- 4 Regional Settings (US, EU, UK, APAC) with US marked as the active default profile.
+
+### 8.19 Conventions & Gotchas
+- **Administrative Privileges (`@tenant_admin_required`)**: Schema alterations, statutory policies, methodology stage gates, and baseline price floor edits are restricted to tenant administrators; standard users receive HTTP 403.
+- **Dual Context Variables**: List and detail views provide both shorthand and canonical model-named variables (`entries` and `price_book_entries`, `definitions` and `custom_entities`, `settings` and `regional_settings`, `kpis` and `overview_stats`).
+- **Single Active Default Scoping**: Setting `is_default=True` on `SalesRegionalSetting` resets other default records strictly within the active tenant, preserving isolation across multi-tenant environments.
+- **Zero Comment Leaks (L2) & Color-Named Badges (L33)**: All templates strictly use theme-compliant badges (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`) and single-line Django comments.
+
+
