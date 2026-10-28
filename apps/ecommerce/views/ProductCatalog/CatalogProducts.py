@@ -42,7 +42,7 @@ def catalogproduct_list(request):
         products_qs = products_qs.filter(visibility=visibility_filter)
 
     category_filter = request.GET.get("category", "").strip()
-    if category_filter:
+    if category_filter and category_filter.isdigit():
         products_qs = products_qs.filter(
             Q(primary_category_id=category_filter) | Q(categories__id=category_filter)
         ).distinct()
