@@ -55,6 +55,7 @@ def pbe_list(request):
     context = {
         "page_obj": page_obj,
         "entries": page_obj.object_list,
+        "price_book_entries": page_obj.object_list,
         "price_books": price_books,
         "products": products,
         "pricing_models": SalesPriceBookEntry.PRICING_MODEL_CHOICES,
@@ -78,7 +79,7 @@ def pbe_detail(request, pk):
     return render(
         request,
         "sales/masterdataconfiguration/pricebookentry/detail.html",
-        {"entry": entry},
+        {"entry": entry, "price_book_entry": entry},
     )
 
 
@@ -107,7 +108,7 @@ def pbe_create(request):
     return render(
         request,
         "sales/masterdataconfiguration/pricebookentry/form.html",
-        {"form": form, "entry": None, "is_edit": False},
+        {"form": form, "entry": None, "price_book_entry": None, "is_edit": False},
     )
 
 
@@ -138,7 +139,7 @@ def pbe_edit(request, pk):
     return render(
         request,
         "sales/masterdataconfiguration/pricebookentry/form.html",
-        {"form": form, "entry": entry, "is_edit": True},
+        {"form": form, "entry": entry, "price_book_entry": entry, "is_edit": True},
     )
 
 
