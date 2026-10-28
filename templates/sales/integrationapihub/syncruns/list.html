@@ -154,7 +154,7 @@
                                     <a href="{% url 'sales:ssr_detail' run.pk %}" class="btn btn-icon" title="View details">
                                         <i data-lucide="eye" class="w-4 h-4"></i>
                                     </a>
-                                    <form method="post" action="{% url 'sales:ssr_delete' run.pk %}" class="inline" onsubmit="return confirm('Delete sync run log {{ run.number }}?');">
+                                    <form method="post" action="{% url 'sales:ssr_delete' run.pk %}" class="inline" onsubmit="return confirm('Delete sync run log {{ run.number|escapejs }}?');">
                                         {% csrf_token %}
                                         <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
                                             <i data-lucide="trash-2" class="w-4 h-4"></i>
