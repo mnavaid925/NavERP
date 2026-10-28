@@ -61,5 +61,5 @@ class CatalogProductForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["primary_category", "item"])
+        reject_foreign(self, cleaned_data, ["primary_category", "item", "categories"])
         return cleaned_data
