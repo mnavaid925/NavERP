@@ -92,9 +92,10 @@ def pbe_create(request):
             entry.save()
             write_audit_log(
                 request.user,
-                "create",
                 entry,
-                f"Created price book entry {entry.number} for {entry.product.name}",
+                "create",
+                {"detail": f"Created price book entry {entry.number} for {entry.product.name}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Price book entry {entry.number} created successfully.")
             return redirect("sales:pbe_detail", pk=entry.pk)
@@ -121,9 +122,10 @@ def pbe_edit(request, pk):
             entry = form.save()
             write_audit_log(
                 request.user,
-                "update",
                 entry,
-                f"Updated price book entry {entry.number}",
+                "update",
+                {"detail": f"Updated price book entry {entry.number}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Price book entry {entry.number} updated successfully.")
             return redirect("sales:pbe_detail", pk=entry.pk)
@@ -148,9 +150,10 @@ def pbe_delete(request, pk):
     num = entry.number
     write_audit_log(
         request.user,
-        "delete",
         entry,
-        f"Deleted price book entry {num}",
+        "delete",
+        {"detail": f"Deleted price book entry {num}"},
+        tenant=request.tenant,
     )
     entry.delete()
     messages.success(request, f"Price book entry {num} deleted.")
