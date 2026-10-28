@@ -39,7 +39,7 @@ class SalesIntegrationConnectorForm(TenantModelForm):
             "auth_method": forms.Select(attrs={"class": "form-select"}),
             "remote_scope_ref": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. client_100 or workspace_prod"}),
             "health_status": forms.Select(attrs={"class": "form-select"}),
-            "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check"}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
 
