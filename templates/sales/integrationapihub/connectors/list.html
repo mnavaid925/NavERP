@@ -134,7 +134,7 @@
                                 {% elif conn.health_status == 'offline' %}
                                     <span class="badge badge-slate">Offline</span>
                                 {% else %}
-                                    <span class="badge badge-muted">Untested</span>
+                                    <span class="badge badge-muted">{{ conn.get_health_status_display }}</span>
                                 {% endif %}
                             </td>
                             <td>
