@@ -139,4 +139,10 @@ def sfm_delete(request, pk):
     write_audit_log(request.user, obj, "delete", tenant=tenant)
     obj.delete()
     messages.success(request, f"Field mapping '{label}' deleted.")
+    next_url = request.POST.get("next") or request.GET.get("next")
+    if next_url:
+        return redirect(next_url)
+    referrer = request.META.get("HTTP_REFERER", "")
+    if "mappings" in referrer:
+        return redirect("sales:sfm_list")
     return redirect("sales:sic_detail", pk=connector_id)
