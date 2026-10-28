@@ -66,7 +66,21 @@ None.
 
 ## Pass 4: Performance & Database Optimization Reviewer (`performance-reviewer`)
 
-*(pending)*
+### Verdict
+Commit after fixing Critical+Important findings.
+
+### Critical
+None.
+
+### Important
+1. `apps/sales/forms/MasterDataConfiguration/SalesMethodologies.py:54` — Chained N+1 query via `__str__` during form rendering (lesson L18). In `SalesMethodologyForm.__init__`, `self.fields["gating_stage"].queryset = PipelineStage.objects.filter(tenant=self.tenant, is_active=True)` loads stages without selecting the parent pipeline. When the form renders the `<select>` widget in `form.html`, Django iterates through the stages and calls `str(stage)`. Because `PipelineStage.__str__` (in `apps/sales/models/OpportunityPipeline/Pipelines.py:289`) evaluates `f"{self.pipeline} · {self.name}"`, it dereferences `self.pipeline`, firing 1 extra SQL SELECT query per stage for the active tenant (1 + N queries). Fix: Change line 54 to `self.fields["gating_stage"].queryset = PipelineStage.objects.filter(tenant=self.tenant, is_active=True).select_related("pipeline")`. Also update `apps/sales/admin.py:1313` to `list_select_related = ('pipeline', 'gating_stage', 'gating_stage__pipeline')`.
+2. `apps/sales/views/MasterDataConfiguration/Overview.py:21-30` — Unconsolidated multiple `COUNT(*)` queries on the same tables in the overview dashboard. `master_data_overview` executes 7 distinct SQL count queries plus 1 `LIMIT 1` query to populate the stat cards: `pbe_qs.count()`, `pbe_qs.filter(is_active=True).count()`, `sco_qs.count()`, `sco_qs.filter(is_active=True).count()`, `smd_qs.count()`, `smd_qs.filter(is_mandatory_gate=True).count()`, and `srg_qs.count()`. Rule 5 dictates that multiple KPIs over one table should share a single aggregate query. Fix: Consolidate pair counts using `aggregate(total=Count('id'), active=Count('id', filter=Q(...)))` across `pbe_qs`, `sco_qs`, and `smd_qs`, reducing dashboard query count from 12 queries to 9 queries.
+3. `apps/sales/views/MasterDataConfiguration/SalesPriceBookEntries.py:52` — Unused table scan query in list view. `products = Product.objects.filter(tenant=tenant)` is executed on every `pbe_list` request, loading all product records and columns into Python memory, but `products` is not rendered anywhere in `templates/sales/masterdataconfiguration/pricebookentry/list.html`. Fix: Remove the unused `products` query and context variable from `pbe_list` (saving memory and query latency on tenants with large product catalogs).
+
+### Minor
+1. `apps/sales/models/MasterDataConfiguration/SalesRegionalSettings.py:129` — Inefficient composite index column order for default regional profile lookups. The index `fields=["tenant", "is_active", "is_default"]` places `is_active` before `is_default`. However, `master_data_overview:29` (`srg_qs.filter(is_default=True).first()`) and `SalesRegionalSetting.save():144` (`filter(tenant_id=self.tenant_id, is_default=True)`) query `tenant` and `is_default=True` without filtering on `is_active`. Under standard B-tree indexing rules, placing `is_active` in the prefix prevents using the index on `is_default`. Fix: Reorder index fields to `fields=["tenant", "is_default", "is_active"]` (or add `(tenant, is_default)`).
+2. `apps/sales/models/MasterDataConfiguration/SalesPriceBookEntries.py:46, 119` — Redundant single-column index. `sku_code` specifies `db_index=True` in line 46 and composite `models.Index(fields=["tenant", "sku_code"], name="sales_pbe_sku_idx")` in line 119. In a multi-tenant system where every query filters by `tenant`, the single-column index on `sku_code` is redundant and adds write overhead during record inserts and updates. Fix: Remove `db_index=True` from line 46 and keep the composite `(tenant, sku_code)` index.
+3. `apps/sales/views/MasterDataConfiguration/SalesPriceBookEntries.py:114-117, 144-147` — Unselected foreign keys trigger lazy queries during audit logging on edit and delete. `pbe_edit` and `pbe_delete` fetch `entry` without `.select_related("price_book", "product")`. When `write_audit_log` is called, it executes `str(entry)[:255]`. Because `SalesPriceBookEntry.__str__` accesses `self.price_book.name` and `self.product.name`, this triggers two extra lazy SELECT queries on edit and delete requests. Fix: Add `.select_related("price_book", "product")` to `get_object_or_404` in `pbe_edit` and `pbe_delete`.
 
 ---
 
