@@ -75,4 +75,27 @@
 - **FE-M3**: `apps/sales/forms/IntegrationApiHub/Connectors.py:42`, `FieldMappings.py:35-37` — Form widgets use `class: "form-checkbox"` instead of theme.css `.form-check`.
 - **FE-M4**: `templates/sales/integrationapihub/{connectors,fieldmappings,syncjobs,syncruns}/list.html` — Disabled previous/next pagination links omit `aria-disabled="true"` and `tabindex="-1"`. Add accessibility attributes.
 
+---
+
+## Pass 4: Performance Reviewer (`performance-reviewer`)
+
+**Verdict:** Commit after fixing Important findings. Good prefetching and pagination; needs aggregation for dashboard counts and index coverage on tenant-scoped query paths.
+
+### Critical
+*None.*
+
+### Important
+- **PRF-I1**: `apps/sales/views/IntegrationApiHub/Dashboard.py:25-29` & `templates/sales/integrationapihub/hub_dashboard.html:87,115,143,171,199` — In `hub_dashboard`, 5 separate category querysets are evaluated via `.count` in template, plus separate counts for total connectors, jobs, runs, healthy, active, generating 11 separate queries on every dashboard load.
+  - **Fix:** Precompute category counts via `connectors_qs.values_list("category").annotate(total=models.Count("id"))` and use conditional aggregation for connector/job stats (`total`, `healthy`, `active`). Drops query count from 11 to 5.
+- **PRF-I2**: `apps/sales/models/IntegrationApiHub/SyncRuns.py:61-64` — Missing multi-tenant composite ordering index `(tenant, -started_at)` on `SalesSyncRun`. `SalesSyncRun.objects.filter(tenant=tenant).order_by("-started_at")` in list and dashboard causes full tenant scan + filesort on high-volume audit run log table.
+  - **Fix:** Add `models.Index(fields=["tenant", "-started_at"], name="sales_ssr_tenant_start_idx")` (27 chars <= 30) in `SalesSyncRun.Meta.indexes`.
+- **PRF-I3**: `apps/sales/models/IntegrationApiHub/Connectors.py:97-100` & `SyncJobs.py:68-71` — Missing index coverage on `(tenant, health_status)` for `SalesIntegrationConnector` and `(tenant, status)` for `SalesSyncJob` for dashboard/list filters.
+  - **Fix:** Add `sales_sic_ten_health_idx` (`["tenant", "health_status"]`, 26 chars) and `sales_ssj_ten_status_idx` (`["tenant", "status"]`, 24 chars).
+
+### Minor
+- **PRF-M1**: `apps/sales/views/IntegrationApiHub/Connectors.py:74-76` & `templates/sales/integrationapihub/connectors/detail.html:74,79` — In `sic_detail`, `{{ field_mappings.count }}` and `{{ sync_jobs.count }}` run 2 SQL queries before loops evaluate. Use `{{ field_mappings|length }}` and `{{ sync_jobs|length }}`.
+- **PRF-M2**: `apps/sales/models/IntegrationApiHub/FieldMappings.py:62-63` — `SalesFieldMapping.__str__` accesses foreign key `self.connector.name`. Safeguard `__str__` to avoid FK lookup if not cached.
+- **PRF-M3**: `apps/sales/views/IntegrationApiHub/SyncRuns.py:57-58` — Filter dropdown querysets load full model instances. Apply `.only("id", "name", "number")` to connector and sync job filter querysets.
+
+
 
