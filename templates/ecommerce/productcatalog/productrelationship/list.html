@@ -46,12 +46,12 @@
                 </select>
             </div>
 
-            <div class="flex items-center space-x-2">
+            <div class="flex items-center gap-2">
                 <button type="submit" class="btn btn-primary flex-1">
                     <i data-lucide="filter"></i> Filter
                 </button>
                 {% if search_query or type_filter %}
-                <a href="{% url 'ecommerce:productrelationship_list' %}" class="btn btn-outline" title="Clear Filters">
+                <a href="{% url 'ecommerce:productrelationship_list' %}" class="btn btn-outline" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -123,16 +123,16 @@
                         {% if rel.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <div class="flex items-center justify-end space-x-1">
-                            <a href="{% url 'ecommerce:productrelationship_detail' rel.pk %}" class="btn btn-icon" title="View Detail">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'ecommerce:productrelationship_detail' rel.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'ecommerce:productrelationship_edit' rel.pk %}" class="btn btn-icon" title="Edit">
+                            <a href="{% url 'ecommerce:productrelationship_edit' rel.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'ecommerce:productrelationship_delete' rel.pk %}" onsubmit="return confirm('Delete this relationship?');" class="inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete" aria-label="Delete">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
