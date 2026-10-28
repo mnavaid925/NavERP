@@ -118,6 +118,9 @@
                     {% if form.qualification_criteria_raw.errors %}
                     <p class="form-error text-xs text-red-600 mt-1">{{ form.qualification_criteria_raw.errors.0 }}</p>
                     {% endif %}
+                    {% if form.qualification_criteria_raw.help_text %}
+                    <p class="text-xs text-slate-500 mt-1">{{ form.qualification_criteria_raw.help_text }}</p>
+                    {% endif %}
                 </div>
             </div>
 
