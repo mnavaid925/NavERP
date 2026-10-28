@@ -112,6 +112,11 @@ from apps.sales.models.WorkflowProcessAutomation.SalesAlertTriggers import Sales
 from apps.sales.models.WorkflowProcessAutomation.SalesApprovalDecisions import SalesApprovalDecision
 from apps.sales.models.WorkflowProcessAutomation.SalesAssignmentRules import SalesAssignmentRule
 from apps.sales.models.WorkflowProcessAutomation.SalesProcessDefinitions import SalesProcessDefinition
+# 8.18 Integration & API Hub
+from apps.sales.models.IntegrationApiHub.Connectors import SalesIntegrationConnector
+from apps.sales.models.IntegrationApiHub.FieldMappings import SalesFieldMapping
+from apps.sales.models.IntegrationApiHub.SyncJobs import SalesSyncJob
+from apps.sales.models.IntegrationApiHub.SyncRuns import SalesSyncRun
 from apps.sales.views.SalesActivityTaskManagement.Boards import STALE_ACTIVITY_DAYS
 
 from apps.sales.opportunity_services import opportunity_pipeline_baseline_stages
@@ -167,7 +172,7 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, backfill=backfill)
-        self.stdout.write(self.style.SUCCESS("Sales 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12, 8.13, 8.14, 8.15, 8.16, and 8.17 seed complete."))
+        self.stdout.write(self.style.SUCCESS("Sales 8.1 through 8.18 seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view Sales data.")
         self.stdout.write(self.style.WARNING("Superuser 'admin' has tenant=None — Sales pages show no tenant data when logged in as admin."))
         self.stdout.write(self.style.WARNING("CRM email sends remain simulated; no ESP or delivery worker is seeded."))
@@ -209,6 +214,7 @@ class Command(BaseCommand):
         self._seed_contract_subscription_management(tenant, owner)
         self._seed_mobile_sales(tenant, owner)
         self._seed_workflow_process_automation(tenant, owner)
+        self._seed_integration_api_hub(tenant, owner)
         if not leads:
 
             self.stdout.write(self.style.WARNING(f"{tenant.name}: no CRM leads found; skipped Sales 8.1 lead-management seeding."))
@@ -4265,6 +4271,225 @@ class Command(BaseCommand):
             f"{SalesAssignmentRule.objects.filter(tenant=tenant).count()} assignment rules, "
             f"{SalesApprovalDecision.objects.filter(tenant=tenant).count()} decisions, "
             f"{SalesAlertTrigger.objects.filter(tenant=tenant).count()} alert triggers)."
+        )
+
+    def _seed_integration_api_hub(self, tenant, owner):
+        """Sales 8.18 Integration & API Hub demo rows (idempotent, additive)."""
+        now = timezone.now()
+
+        # 1. Connectors (5 categories)
+        connectors_spec = [
+            {
+                "name": "Corporate SAP S/4HANA",
+                "category": "erp",
+                "provider": "sap",
+                "environment": "production",
+                "base_url": "https://sap.acme.corp/api/v1",
+                "auth_method": "oauth2",
+                "remote_scope_ref": "client_100_prod",
+                "health_status": "connected",
+                "notes": "Primary enterprise ERP connector for Order-to-Cash posting and invoice sync.",
+            },
+            {
+                "name": "HubSpot RevOps Marketing",
+                "category": "marketing",
+                "provider": "hubspot",
+                "environment": "production",
+                "base_url": "https://api.hubapi.com/crm/v3",
+                "auth_method": "api_key",
+                "remote_scope_ref": "portal_7482910",
+                "health_status": "connected",
+                "notes": "Inbound MQL sync and lifecycle stage updates.",
+            },
+            {
+                "name": "Slack Enterprise Deals Channel",
+                "category": "communication",
+                "provider": "slack",
+                "environment": "production",
+                "base_url": "https://slack.com/api",
+                "auth_method": "oauth2",
+                "remote_scope_ref": "#deals-announcements",
+                "health_status": "connected",
+                "notes": "Closed-won celebrations, deal approvals, and alert feeds.",
+            },
+            {
+                "name": "Snowflake Revenue Data Lake",
+                "category": "bi_warehouse",
+                "provider": "snowflake",
+                "environment": "production",
+                "base_url": "https://acme-analytics.snowflakecomputing.com",
+                "auth_method": "api_key",
+                "remote_scope_ref": "SALES_REVENUE_WH",
+                "health_status": "connected",
+                "notes": "Nightly data warehouse pipeline for executive BI dashboards.",
+            },
+            {
+                "name": "DocuSign Production CLM",
+                "category": "esignature",
+                "provider": "docusign",
+                "environment": "production",
+                "base_url": "https://na4.docusign.net/restapi/v2.1",
+                "auth_method": "oauth2",
+                "remote_scope_ref": "account_prod_e8371",
+                "health_status": "connected",
+                "notes": "Customer contract and CPQ quote envelope signing gateway.",
+            },
+        ]
+
+        connectors = {}
+        for spec in connectors_spec:
+            conn, created = SalesIntegrationConnector.objects.get_or_create(
+                tenant=tenant,
+                name=spec["name"],
+                defaults={
+                    "category": spec["category"],
+                    "provider": spec["provider"],
+                    "environment": spec["environment"],
+                    "base_url": spec["base_url"],
+                    "auth_method": spec["auth_method"],
+                    "remote_scope_ref": spec["remote_scope_ref"],
+                    "health_status": spec["health_status"],
+                    "last_health_check_at": now,
+                    "notes": spec["notes"],
+                    "is_active": True,
+                },
+            )
+            if created or not conn.credential_encrypted:
+                conn.set_credential("mock-fernet-secret-token-key-2026")
+                conn.save(update_fields=["credential_encrypted"])
+            connectors[spec["category"]] = conn
+
+        # 2. Field Mappings
+        sap_conn = connectors.get("erp")
+        if sap_conn:
+            SalesFieldMapping.objects.get_or_create(
+                tenant=tenant,
+                connector=sap_conn,
+                target_entity="order",
+                local_field="number",
+                remote_field="VBELN",
+                defaults={
+                    "direction": "bidirectional",
+                    "transform_rule": "none",
+                    "is_key": True,
+                    "is_required": True,
+                    "is_active": True,
+                },
+            )
+            SalesFieldMapping.objects.get_or_create(
+                tenant=tenant,
+                connector=sap_conn,
+                target_entity="order",
+                local_field="total_amount",
+                remote_field="NETWR",
+                defaults={
+                    "direction": "outbound",
+                    "transform_rule": "currency_round",
+                    "is_key": False,
+                    "is_required": True,
+                    "is_active": True,
+                },
+            )
+
+        hs_conn = connectors.get("marketing")
+        if hs_conn:
+            SalesFieldMapping.objects.get_or_create(
+                tenant=tenant,
+                connector=hs_conn,
+                target_entity="lead",
+                local_field="email",
+                remote_field="hs_email",
+                defaults={
+                    "direction": "bidirectional",
+                    "transform_rule": "lowercase",
+                    "is_key": True,
+                    "is_required": True,
+                    "is_active": True,
+                },
+            )
+            SalesFieldMapping.objects.get_or_create(
+                tenant=tenant,
+                connector=hs_conn,
+                target_entity="lead",
+                local_field="status",
+                remote_field="lifecyclestage",
+                defaults={
+                    "direction": "bidirectional",
+                    "transform_rule": "value_map",
+                    "value_map": {"new": "lead", "contacted": "opportunity", "qualified": "customer"},
+                    "is_key": False,
+                    "is_required": False,
+                    "is_active": True,
+                },
+            )
+
+        # 3. Sync Jobs
+        jobs = []
+        if sap_conn:
+            job1, _ = SalesSyncJob.objects.get_or_create(
+                tenant=tenant,
+                name="Order-to-Cash Realtime Pipeline",
+                connector=sap_conn,
+                defaults={
+                    "entity_scope": "order_to_cash",
+                    "sync_direction": "outbound",
+                    "conflict_policy": "local_wins",
+                    "cadence": "realtime_event",
+                    "filter_expression": "status='confirmed'",
+                    "batch_size": 100,
+                    "status": "active",
+                    "last_run_at": now,
+                    "total_runs_count": 8,
+                    "total_records_synced": 48,
+                },
+            )
+            jobs.append(job1)
+
+        if hs_conn:
+            job2, _ = SalesSyncJob.objects.get_or_create(
+                tenant=tenant,
+                name="Hourly Marketing Lead Synchronization",
+                connector=hs_conn,
+                defaults={
+                    "entity_scope": "lead_lifecycle",
+                    "sync_direction": "bidirectional",
+                    "conflict_policy": "last_updated_wins",
+                    "cadence": "hourly",
+                    "filter_expression": "is_converted=false",
+                    "batch_size": 200,
+                    "status": "active",
+                    "last_run_at": now,
+                    "total_runs_count": 24,
+                    "total_records_synced": 185,
+                },
+            )
+            jobs.append(job2)
+
+        # 4. Sync Runs (Append-only simulated runs)
+        if sap_conn and jobs:
+            if not SalesSyncRun.objects.filter(tenant=tenant, connector=sap_conn).exists():
+                SalesSyncRun.objects.create(
+                    tenant=tenant,
+                    connector=sap_conn,
+                    job=jobs[0],
+                    run_type="scheduled",
+                    status="simulated",
+                    started_at=now,
+                    finished_at=now,
+                    records_read=12,
+                    records_written=12,
+                    records_failed=0,
+                    records_skipped=0,
+                    summary_payload={"sap_batch": "SAP-EXP-2026", "simulated": True},
+                    triggered_by=owner,
+                )
+
+        self.stdout.write(
+            f"{tenant.name}: Sales 8.18 Integration Hub demo rows ensured "
+            f"({SalesIntegrationConnector.objects.filter(tenant=tenant).count()} connectors, "
+            f"{SalesFieldMapping.objects.filter(tenant=tenant).count()} mappings, "
+            f"{SalesSyncJob.objects.filter(tenant=tenant).count()} jobs, "
+            f"{SalesSyncRun.objects.filter(tenant=tenant).count()} runs)."
         )
 
 
