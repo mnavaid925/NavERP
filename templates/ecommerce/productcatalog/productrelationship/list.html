@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Merchandising Relationships · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:catalogproduct_list' %}">Product Catalog</a>
+            <span>/</span>
+            <span>Relationships & Bundling</span>
+        </div>
+        <h1 class="page-title">Merchandising Relationships & Bundles</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:catalogproduct_list' %}" class="btn btn-outline">
+            <i data-lucide="package"></i> Products
+        </a>
+        <a href="{% url 'ecommerce:productrelationship_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Relationship
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'ecommerce:productrelationship_list' %}" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div class="form-group mb-0 md:col-span-2">
+                <label for="q" class="form-label">Search Relationships</label>
+                <div class="relative">
+                    <input type="text" name="q" id="q" value="{{ search_query }}" class="form-input pl-10" placeholder="Search source or target product, number, notes...">
+                    <i data-lucide="search" class="absolute left-3 top-2.5 text-slate-400 w-4 h-4"></i>
+                </div>
+            </div>
+
+            <div class="form-group mb-0">
+                <label for="type" class="form-label">Relationship Type</label>
+                <select name="type" id="type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in relationship_type_choices %}
+                    <option value="{{ val }}" {% if type_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if search_query or type_filter %}
+                <a href="{% url 'ecommerce:productrelationship_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Record</th>
+                    <th>Source Product</th>
+                    <th>Relationship Type</th>
+                    <th>Target Product</th>
+                    <th>Bundle Discount</th>
+                    <th class="text-center">Order</th>
+                    <th class="text-center">Status</th>
+                    <th class="table-actions text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rel in relationships %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-900">
+                        <a href="{% url 'ecommerce:productrelationship_detail' rel.pk %}" class="hover:underline">
+                            {{ rel.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'ecommerce:catalogproduct_detail' rel.source_product.pk %}" class="hover:underline">
+                                {{ rel.source_product.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-400 font-mono">{{ rel.source_product.number }}</div>
+                    </td>
+                    <td>
+                        {% if rel.relationship_type == 'cross_sell' %}
+                        <span class="badge badge-info">Cross-Sell</span>
+                        {% elif rel.relationship_type == 'up_sell' %}
+                        <span class="badge badge-info">Up-Sell</span>
+                        {% elif rel.relationship_type == 'bundle_kit' %}
+                        <span class="badge badge-amber">Bundle / Kit</span>
+                        {% elif rel.relationship_type == 'bought_together' %}
+                        <span class="badge badge-amber">Frequently Bought</span>
+                        {% else %}
+                        <span class="badge badge-slate">Accessory</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'ecommerce:catalogproduct_detail' rel.target_product.pk %}" class="hover:underline">
+                                {{ rel.target_product.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-400 font-mono">{{ rel.target_product.number }}</div>
+                    </td>
+                    <td class="font-mono text-sm text-slate-800">
+                        {% if rel.discount_pct > 0 %}{{ rel.discount_pct }}% off{% else %}-{% endif %}
+                    </td>
+                    <td class="text-center font-mono text-sm text-slate-700">
+                        {{ rel.sort_order }}
+                    </td>
+                    <td class="text-center">
+                        {% if rel.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <div class="flex items-center justify-end space-x-1">
+                            <a href="{% url 'ecommerce:productrelationship_detail' rel.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:productrelationship_edit' rel.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'ecommerce:productrelationship_delete' rel.pk %}" onsubmit="return confirm('Delete this relationship?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-12 text-center">
+                            <i data-lucide="git-merge" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-900 mb-1">No merchandising relationships</h3>
+                            <p class="text-sm text-slate-500 mb-4">Set up cross-sells, up-sells, accessories, or bundles between catalog products.</p>
+                            <a href="{% url 'ecommerce:productrelationship_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i> Create Relationship
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-slate-500">
+            Showing Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </div>
+        <div class="flex space-x-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
