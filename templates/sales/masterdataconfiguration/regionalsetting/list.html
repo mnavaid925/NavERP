@@ -69,7 +69,7 @@
                     <i data-lucide="search" class="w-4 h-4"></i>
                     <span>Filter</span>
                 </button>
-                <a href="{% url 'sales:srg_list' %}" class="btn btn-outline" title="Reset Filters">
+                <a href="{% url 'sales:srg_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
                     <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                 </a>
             </div>
@@ -135,15 +135,15 @@
                         </td>
                         <td class="text-right">
                             <div class="table-actions flex items-center justify-end gap-2">
-                                <a href="{% url 'sales:srg_detail' setting.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-primary" title="View details">
+                                <a href="{% url 'sales:srg_detail' setting.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-primary" title="View details" aria-label="View details">
                                     <i data-lucide="eye" class="w-4 h-4"></i>
                                 </a>
-                                <a href="{% url 'sales:srg_edit' setting.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit setting">
+                                <a href="{% url 'sales:srg_edit' setting.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit setting" aria-label="Edit setting">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </a>
                                 <form method="post" action="{% url 'sales:srg_delete' setting.pk %}" class="inline" onsubmit="return confirm('Delete regional setting {{ setting.number }}?');">
                                     {% csrf_token %}
-                                    <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete setting">
+                                    <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete setting" aria-label="Delete setting">
                                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                                     </button>
                                 </form>
