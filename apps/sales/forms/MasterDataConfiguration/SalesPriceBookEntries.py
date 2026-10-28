@@ -59,6 +59,8 @@ class SalesPriceBookEntryForm(TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "currency_code" in self.fields:
+            self.fields["currency_code"].required = False
         if self.tenant and not getattr(self.instance, "tenant_id", None):
             self.instance.tenant = self.tenant
         if self.tenant:
