@@ -53,7 +53,7 @@ class SalesMethodologyForm(TenantModelForm):
             self.instance.tenant = self.tenant
         if self.tenant:
             self.fields["pipeline"].queryset = Pipeline.objects.filter(tenant=self.tenant, is_active=True)
-            self.fields["gating_stage"].queryset = PipelineStage.objects.filter(tenant=self.tenant, is_active=True)
+            self.fields["gating_stage"].queryset = PipelineStage.objects.filter(tenant=self.tenant, is_active=True).select_related("pipeline")
 
         if self.instance and self.instance.pk and self.instance.qualification_criteria:
             self.fields["qualification_criteria_raw"].initial = json.dumps(self.instance.qualification_criteria, indent=2)
