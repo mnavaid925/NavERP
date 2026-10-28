@@ -112,6 +112,11 @@ def product_import_csv(request):
                 created_variants = 0
                 row_num = 1
 
+                category_cache = {
+                    c.name.lower(): c
+                    for c in StoreCategory.objects.filter(tenant=request.tenant)
+                }
+
                 with transaction.atomic():
                     for row in reader:
                         row_num += 1
@@ -137,15 +142,15 @@ def product_import_csv(request):
 
                         category = None
                         if cat_name:
-                            category = StoreCategory.objects.filter(
-                                tenant=request.tenant, name__iexact=cat_name
-                            ).first()
+                            cat_lower = cat_name.lower()
+                            category = category_cache.get(cat_lower)
                             if not category and auto_create_categories and not dry_run:
                                 category = StoreCategory.objects.create(
                                     tenant=request.tenant,
                                     name=cat_name,
                                     slug=slugify(cat_name),
                                 )
+                                category_cache[cat_lower] = category
 
                         var_name = ""
                         price_val = Decimal("0.00")
