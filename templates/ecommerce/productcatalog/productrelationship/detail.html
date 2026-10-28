@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Relationship {{ relationship.number }} · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:catalogproduct_list' %}">Product Catalog</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:productrelationship_list' %}">Relationships</a>
+            <span>/</span>
+            <span>{{ relationship.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ relationship.get_relationship_type_display }}</h1>
+            {% if relationship.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-slate">Inactive</span>
+            {% endif %}
+            {% if relationship.discount_pct > 0 %}
+            <span class="badge badge-amber">{{ relationship.discount_pct }}% Bundle Discount</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:productrelationship_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Relationships
+        </a>
+        <a href="{% url 'ecommerce:productrelationship_edit' relationship.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        <form method="post" action="{% url 'ecommerce:productrelationship_delete' relationship.pk %}" onsubmit="return confirm('Delete this relationship?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Source Product Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Source Product (Anchor)</h2>
+        </div>
+        <div class="card-body">
+            <div class="flex items-start gap-4">
+                {% if source_product.hero_image_url %}
+                <img src="{{ source_product.hero_image_url }}" alt="{{ source_product.name }}" class="w-16 h-16 object-cover rounded border border-slate-200">
+                {% else %}
+                <div class="w-16 h-16 bg-slate-100 rounded border border-slate-200 flex items-center justify-center text-slate-400">
+                    <i data-lucide="package" class="w-8 h-8"></i>
+                </div>
+                {% endif %}
+                <div class="flex-1">
+                    <h3 class="text-base font-medium text-slate-900">
+                        <a href="{% url 'ecommerce:catalogproduct_detail' source_product.pk %}" class="text-blue-600 hover:underline">
+                            {{ source_product.name }}
+                        </a>
+                    </h3>
+                    <div class="text-xs text-slate-500 font-mono mt-0.5">{{ source_product.number }} · /{{ source_product.slug }}</div>
+                    <div class="text-xs text-slate-600 mt-2">
+                        Category: {% if source_product.primary_category %}{{ source_product.primary_category.name }}{% else %}None{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Target Product Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Target Product (Recommended / Bundled)</h2>
+        </div>
+        <div class="card-body">
+            <div class="flex items-start gap-4">
+                {% if target_product.hero_image_url %}
+                <img src="{{ target_product.hero_image_url }}" alt="{{ target_product.name }}" class="w-16 h-16 object-cover rounded border border-slate-200">
+                {% else %}
+                <div class="w-16 h-16 bg-slate-100 rounded border border-slate-200 flex items-center justify-center text-slate-400">
+                    <i data-lucide="package" class="w-8 h-8"></i>
+                </div>
+                {% endif %}
+                <div class="flex-1">
+                    <h3 class="text-base font-medium text-slate-900">
+                        <a href="{% url 'ecommerce:catalogproduct_detail' target_product.pk %}" class="text-blue-600 hover:underline">
+                            {{ target_product.name }}
+                        </a>
+                    </h3>
+                    <div class="text-xs text-slate-500 font-mono mt-0.5">{{ target_product.number }} · /{{ target_product.slug }}</div>
+                    <div class="text-xs text-slate-600 mt-2">
+                        Category: {% if target_product.primary_category %}{{ target_product.primary_category.name }}{% else %}None{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Relationship Configuration</h2>
+    </div>
+    <div class="card-body">
+        <dl class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div>
+                <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Type</dt>
+                <dd class="mt-1 text-sm font-semibold text-slate-900">{{ relationship.get_relationship_type_display }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Bundle Discount</dt>
+                <dd class="mt-1 text-sm font-mono text-slate-900">{{ relationship.discount_pct }}%</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Display Order</dt>
+                <dd class="mt-1 text-sm font-mono text-slate-900">{{ relationship.sort_order }}</dd>
+            </div>
+            <div class="sm:col-span-3">
+                <dt class="text-xs font-medium text-slate-500 uppercase tracking-wider">Merchandising Notes</dt>
+                <dd class="mt-1 text-sm text-slate-700">
+                    {% if relationship.notes %}{{ relationship.notes }}{% else %}<span class="text-slate-400 italic">No notes provided.</span>{% endif %}
+                </dd>
+            </div>
+        </dl>
+    </div>
+</div>
+{% endblock %}
