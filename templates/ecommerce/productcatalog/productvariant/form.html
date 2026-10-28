@@ -124,7 +124,7 @@
                     </div>
                 </div>
 
-                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-slate-200">
+                <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-200">
                     <a href="{% if is_edit %}{% url 'ecommerce:productvariant_detail' variant.pk %}{% else %}{% url 'ecommerce:productvariant_list' %}{% endif %}" class="btn btn-outline">
                         Cancel
                     </a>
