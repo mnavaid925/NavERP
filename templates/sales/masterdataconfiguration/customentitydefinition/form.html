@@ -122,6 +122,9 @@
                     {% if form.picklist_options_raw.errors %}
                     <p class="form-error text-xs text-red-600 mt-1">{{ form.picklist_options_raw.errors.0 }}</p>
                     {% endif %}
+                    {% if form.picklist_options_raw.help_text %}
+                    <p class="text-xs text-slate-500 mt-1">{{ form.picklist_options_raw.help_text }}</p>
+                    {% endif %}
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
