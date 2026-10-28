@@ -88,9 +88,10 @@ def smd_create(request):
             methodology.save()
             write_audit_log(
                 request.user,
-                "create",
                 methodology,
-                f"Created sales methodology {methodology.number} ({methodology.name})",
+                "create",
+                {"detail": f"Created sales methodology {methodology.number} ({methodology.name})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Sales methodology {methodology.number} created successfully.")
             return redirect("sales:smd_detail", pk=methodology.pk)
@@ -117,9 +118,10 @@ def smd_edit(request, pk):
             methodology = form.save()
             write_audit_log(
                 request.user,
-                "update",
                 methodology,
-                f"Updated sales methodology {methodology.number}",
+                "update",
+                {"detail": f"Updated sales methodology {methodology.number}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Sales methodology {methodology.number} updated successfully.")
             return redirect("sales:smd_detail", pk=methodology.pk)
@@ -144,9 +146,10 @@ def smd_delete(request, pk):
     num = methodology.number
     write_audit_log(
         request.user,
-        "delete",
         methodology,
-        f"Deleted sales methodology {num}",
+        "delete",
+        {"detail": f"Deleted sales methodology {num}"},
+        tenant=request.tenant,
     )
     methodology.delete()
     messages.success(request, f"Sales methodology {num} deleted.")
