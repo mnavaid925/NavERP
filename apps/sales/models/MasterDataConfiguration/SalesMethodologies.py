@@ -91,13 +91,13 @@ class SalesMethodology(TenantNumbered):
 
     def clean(self):
         super().clean()
-        if self.pipeline_id and self.pipeline.tenant_id != self.tenant_id:
-            raise ValidationError({"pipeline": "Pipeline must belong to the active workspace."})
-        if self.gating_stage_id:
-            if self.gating_stage.tenant_id != self.tenant_id:
+        if self.tenant_id:
+            if self.pipeline_id and self.pipeline.tenant_id != self.tenant_id:
+                raise ValidationError({"pipeline": "Pipeline must belong to the active workspace."})
+            if self.gating_stage_id and self.gating_stage.tenant_id != self.tenant_id:
                 raise ValidationError({"gating_stage": "Gating stage must belong to the active workspace."})
-            if self.pipeline_id and self.gating_stage.pipeline_id != self.pipeline_id:
-                raise ValidationError({"gating_stage": "Gating stage must belong to the selected pipeline."})
+        if self.gating_stage_id and self.pipeline_id and self.gating_stage.pipeline_id != self.pipeline_id:
+            raise ValidationError({"gating_stage": "Gating stage must belong to the selected pipeline."})
         if not isinstance(self.qualification_criteria, list):
             raise ValidationError({"qualification_criteria": "Qualification criteria must be a JSON array."})
 
