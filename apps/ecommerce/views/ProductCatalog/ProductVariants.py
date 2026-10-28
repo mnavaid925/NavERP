@@ -46,7 +46,9 @@ def productvariant_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    products_list = CatalogProduct.objects.filter(tenant=request.tenant).order_by("name")
+    products_list = (
+        CatalogProduct.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
+    )
 
     context = {
         "variants": page_obj,
@@ -95,7 +97,9 @@ def productvariant_create(request):
     else:
         form = ProductVariantForm(initial=initial, tenant=request.tenant)
 
-    products_list = CatalogProduct.objects.filter(tenant=request.tenant).order_by("name")
+    products_list = (
+        CatalogProduct.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
+    )
     items_list = Item.objects.filter(tenant=request.tenant).order_by("sku")
 
     context = {
@@ -126,7 +130,9 @@ def productvariant_edit(request, pk):
     else:
         form = ProductVariantForm(instance=variant, tenant=request.tenant)
 
-    products_list = CatalogProduct.objects.filter(tenant=request.tenant).order_by("name")
+    products_list = (
+        CatalogProduct.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
+    )
     items_list = Item.objects.filter(tenant=request.tenant).order_by("sku")
 
     context = {
