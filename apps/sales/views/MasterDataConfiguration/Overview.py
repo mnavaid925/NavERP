@@ -36,6 +36,7 @@ def master_data_overview(request):
 
     context = {
         "kpis": kpis,
+        "overview_stats": kpis,
         "recent_price_book_entries": recent_price_book_entries,
         "recent_custom_entities": recent_custom_entities,
         "recent_methodologies": recent_methodologies,
