@@ -1689,3 +1689,30 @@ with discount approval sign-offs and route dispatches.
 `apps/sales/migrations/0029_fieldsalesroute_fieldcheckin_mobiledevicesession_and_more.py` provides the 8.16 schema with compound indexes on `(tenant, sales_rep, route_date)`, `(tenant, check_in_at)`, `(tenant, platform)`, and `(tenant, urgency, is_read)`. `seed_sales` idempotently seeds 3 routes, 4 GPS check-ins, 3 mobile hardware devices, and 3 high-urgency deal alerts. The test suite for 8.16 is **complete and green** with 154 passing tests across 4 modules (`test_mobilesales_models.py`, `_forms.py`, `_views.py`, and `_security.py`) covering all 4 entities, Haversine mathematical distance calculation, geofence radius boundaries, CRUD workflows, method guards, atomic transactions, and cross-tenant IDOR isolation. See `.agents/tasks/gaps-sales-8.16.md` for the gap register, `.claude/tasks/research-sales-8.16.md` for domain research, `.claude/tasks/contract-sales-8.16.md` for the contract, and `.claude/skills/sales/SKILL.md` for the as-built module guide.
 
 ---
+
+### Module 8 8.18 - Integration & API Hub (built)
+
+8.18 delivers a central revenue operations integration hub, schema translation, bidirectional synchronization pipelines, and diagnostic execution logging across ERP, Marketing, Communication, BI/Warehouse, and E-Signature platforms.
+
+- **Ownership boundaries & L55 Coexistence**:
+  - Delivers the 5th integration register across NavERP (`SalesIntegrationConnector` [`SIC-`]) coexisting cleanly with SCM 4.19 (`CNX-`), Inventory 5.19 (`INT-`), Accounting 2.15, and Projects 7.18 (`IXC-`) without merging or re-declaring models.
+  - Zero outbound HTTP requests: all health pings and synchronization jobs operate in honest diagnostic mode (`status="simulated"`).
+  - Sensitive secrets (API keys, client secrets) are encrypted at rest with Fernet (`apps.core.crypto.encrypt`), submitted write-only via PasswordInput (`render_value=False`), and masked in templates (`••••••••`).
+
+**What shipped**
+
+| Model | Prefix | Carries |
+|---|---|---|
+| `SalesIntegrationConnector` | `SIC-` | External integration endpoint — category (ERP, Marketing, Comms, BI, E-Signature, Custom), provider (SAP, Oracle, NetSuite, Dynamics, HubSpot, Marketo, Slack, Teams, Snowflake, DocuSign, etc.), base URL, auth method, Fernet-encrypted credentials, health status (connected, degraded, error, offline, untested), last error log, and active state |
+| `SalesFieldMapping` | — | Declarative schema translation — connector, target entity (lead, account, opportunity, quote, order, contract, analytics), local and remote field names, direction (bidirectional, outbound, inbound), transform rules (none, uppercase, lowercase, boolean_to_int, json_extract, currency_round, value_map picklist dictionary), and default value |
+| `SalesSyncJob` | `SSJ-` | Revenue pipeline configuration — connector, entity scope (order-to-cash, lead lifecycle, deal alerts, BI warehouse feed, e-signature envelopes), sync direction, conflict policy (last_updated_wins, local_wins, remote_wins, manual review), cadence (realtime, hourly, daily, weekly, manual), batch size, and execution statistics |
+| `SalesSyncRun` | `SSR-` | Diagnostic audit trail — connector, sync job, run type (manual, scheduled, webhook, test_ping), diagnostic status (`simulated`, completed, partial, failed), start/finish timestamps, records read/written/failed/skipped, error logs, summary JSON payload, and triggering user |
+
+**Executive Console & Category Lenses**:
+- **Central Integration Hub & Monitoring Console** (`sales:integration_hub`, `/sales/hub/`): Operational command deck featuring real-time health ratios, active pipeline counters, total records synced, category breakdown cards, and recent execution logs.
+- **Dedicated Category Lenses**: Deep-linked routes with active sidebar persistence for ERP (`sales:sic_erp_list`), Marketing (`sales:sic_marketing_list`), Communication (`sales:sic_communication_list`), Business Intelligence (`sales:sic_bi_list`), and E-Signature (`sales:sic_esignature_list`).
+
+Migrations `apps/sales/migrations/0032_salesintegrationconnector_salesfieldmapping_and_more.py`, `0033_add_integration_hub_composite_indexes.py`, and `0034_sales_sync_job_batch_size_min_validator.py` provide the schema and multi-tenant composite indexes on `(tenant, health_status)`, `(tenant, status)`, and `(tenant, -started_at)`. `seed_sales` idempotently seeds 5 connectors, 5 schema field mappings, 5 synchronization jobs, and 5 execution run logs. The test suite for 8.18 is **complete and green** with 103 passing tests across 4 modules (`test_integrationapihub_models.py`, `_forms.py`, `_views.py`, and `_security.py`) covering all 4 entities, Fernet cryptography at rest, schema transformations, integer parameter overflow protection, simulated runs, and cross-tenant IDOR isolation. See `.agents/tasks/gaps-sales-8.18.md` for the gap register, `.claude/tasks/research-sales-8.18.md` for domain research, `.claude/tasks/contract-sales-8.18.md` for the contract, `.claude/tasks/review-sales-8.18.md` for review findings, and `.claude/skills/sales/SKILL.md` for the as-built module guide.
+
+---
+
