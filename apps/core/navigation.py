@@ -2656,6 +2656,15 @@ LIVE_LINKS = {
         "Sales Methodologies": "sales:smd_list",
         "Regional Settings": "sales:srg_list",
     },
+    "9.1": {
+        "Product Information Management (PIM)": "ecommerce:catalogproduct_list",
+        "Category & Navigation Hierarchy": "ecommerce:storecategory_list",
+        "Product Variants & Configurations": "ecommerce:productvariant_list",
+        "Bulk Import & Export": "ecommerce:product_import_csv",
+        "Product Relationships & Bundling": "ecommerce:productrelationship_list",
+        # Extra live leaves
+        "Catalog Overview": "ecommerce:catalog_overview",
+    },
 
 
 
