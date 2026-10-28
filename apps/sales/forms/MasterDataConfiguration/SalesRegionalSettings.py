@@ -69,7 +69,8 @@ class SalesRegionalSettingForm(TenantModelForm):
         raw = self.cleaned_data.get("supported_currencies_raw", "").strip()
         if not raw:
             return []
-        items = [c.strip().upper() for c in raw.replace(";", ",").split(",") if c.strip()]
+        cleaned = raw.replace(";", ",").replace("\n", ",")
+        items = [c.strip().upper() for c in cleaned.split(",") if c.strip()]
         return items
 
     def clean(self):
