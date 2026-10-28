@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.sales.forms.MasterDataConfiguration.SalesRegionalSettings import SalesRegionalSettingForm
 from apps.sales.models.MasterDataConfiguration.SalesRegionalSettings import SalesRegionalSetting
@@ -73,6 +74,7 @@ def srg_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def srg_create(request):
     """Create a new sales regional setting profile."""
     if request.method == "POST":
@@ -101,6 +103,7 @@ def srg_create(request):
 
 
 @login_required
+@tenant_admin_required
 def srg_edit(request, pk):
     """Edit an existing regional setting profile."""
     setting = get_object_or_404(
@@ -131,6 +134,7 @@ def srg_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def srg_delete(request, pk):
     """Delete a regional setting profile."""
