@@ -49,6 +49,8 @@ class SalesMethodologyForm(TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.tenant and not getattr(self.instance, "tenant_id", None):
+            self.instance.tenant = self.tenant
         if self.tenant:
             self.fields["pipeline"].queryset = Pipeline.objects.filter(tenant=self.tenant, is_active=True)
             self.fields["gating_stage"].queryset = PipelineStage.objects.filter(tenant=self.tenant, is_active=True)
