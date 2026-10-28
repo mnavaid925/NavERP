@@ -1,4 +1,5 @@
 """Sales 8.18 — SalesSyncJob model."""
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 
@@ -71,6 +72,11 @@ class SalesSyncJob(TenantNumbered):
             models.Index(fields=["tenant", "entity_scope"], name="sales_ssj_scope_idx"),
             models.Index(fields=["tenant", "status"], name="sales_ssj_ten_status_idx"),
         ]
+
+    def clean(self):
+        super().clean()
+        if self.connector_id and self.tenant_id and self.connector.tenant_id != self.tenant_id:
+            raise ValidationError({"connector": "Connector belongs to another tenant workspace."})
 
     def __str__(self):
         return f"{self.number} — {self.name} ({self.get_entity_scope_display()})"
