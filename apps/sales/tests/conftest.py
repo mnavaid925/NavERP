@@ -5904,3 +5904,178 @@ def iah_sync_run_a(tenant_a, iah_connector_a, iah_sync_job_a, admin_user):
 def iah_sync_run_b(tenant_b, iah_connector_b, iah_sync_job_b, admin_b):
     return _integrationapihub_sync_run(tenant_b, connector=iah_connector_b, job=iah_sync_job_b, triggered_by=admin_b)
 
+
+# ---------------------------------------------------------------------------
+# Sub-module 8.19: Master Data & Configuration Helpers & Fixtures
+# ---------------------------------------------------------------------------
+
+from apps.sales.models import (
+    SalesPriceBookEntry,
+    SalesCustomEntityDefinition,
+    SalesMethodology,
+    SalesRegionalSetting,
+)
+from apps.crm.models import PriceBook, Product
+
+
+def _masterdataconfig_price_book(tenant, name="Global Standard Price Book", currency_code="USD", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "currency_code": currency_code,
+        "region": "global",
+        "tier": "standard",
+        "price_adjustment_pct": Decimal("0.00"),
+        "is_default": False,
+        "is_active": True,
+        "description": "Standard pricing catalog.",
+    }
+    defaults.update(overrides)
+    return PriceBook.objects.create(**defaults)
+
+
+def _masterdataconfig_product(tenant, name="Enterprise Platform License", sku=None, **overrides):
+    if sku is None:
+        sku = f"SKU-{timezone.now().strftime('%f')[:6]}"
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "sku": sku,
+        "product_type": "subscription",
+        "unit_price": Decimal("1200.00"),
+        "cost": Decimal("400.00"),
+        "tax_pct": Decimal("0.00"),
+        "is_active": True,
+        "description": "Enterprise cloud platform license.",
+    }
+    defaults.update(overrides)
+    return Product.objects.create(**defaults)
+
+
+def _masterdataconfig_price_book_entry(tenant, price_book=None, product=None, **overrides):
+    if price_book is None:
+        price_book = _masterdataconfig_price_book(tenant)
+    if product is None:
+        product = _masterdataconfig_product(tenant)
+    defaults = {
+        "tenant": tenant,
+        "price_book": price_book,
+        "product": product,
+        "sku_code": product.sku,
+        "currency_code": "USD",
+        "list_price": Decimal("1200.00"),
+        "floor_price": Decimal("900.00"),
+        "pricing_model": "flat",
+        "min_quantity": 1,
+        "volume_tier_breaks": {"tier_1": {"min": 1, "discount": 0}, "tier_2": {"min": 10, "discount": 10}},
+        "is_active": True,
+        "notes": "Standard catalog entry.",
+    }
+    defaults.update(overrides)
+    return SalesPriceBookEntry.objects.create(**defaults)
+
+
+def _masterdataconfig_custom_entity(tenant, name="Deal Authority Level", entity_code="deal_auth_lvl", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "entity_code": entity_code,
+        "target_model": "opportunity",
+        "field_type": "picklist",
+        "is_required": False,
+        "formula_expression": "",
+        "lookup_target_model": "",
+        "picklist_options": ["VP", "Director", "C-Level"],
+        "validation_rule": "^(VP|Director|C-Level)$",
+        "display_order": 10,
+        "is_active": True,
+        "description": "Executive sign-off authority level required for opportunity closure.",
+    }
+    defaults.update(overrides)
+    return SalesCustomEntityDefinition.objects.create(**defaults)
+
+
+def _masterdataconfig_methodology(tenant, name="MEDDPICC Enterprise Framework", framework="meddpicc", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "framework": framework,
+        "min_passing_score": 75,
+        "is_mandatory_gate": True,
+        "qualification_criteria": {
+            "metrics": "Quantifiable business impact identified",
+            "economic_buyer": "Direct sponsor with budget authority",
+            "decision_criteria": "Formal technical evaluation matrix",
+            "decision_process": "Procurement and legal signoff timeline",
+            "identify_pain": "Documented negative consequences of inaction",
+            "champion": "Internal advocate with influence",
+            "competition": "Incumbent vendor strengths and weaknesses",
+        },
+        "coaching_guidelines": "Ensure champion is tested before scheduling final presentation.",
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return SalesMethodology.objects.create(**defaults)
+
+
+def _masterdataconfig_regional_setting(tenant, name="North America Commercial Terms", region_code="US", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "region_code": region_code,
+        "primary_currency": "USD",
+        "supported_currencies": ["USD", "CAD"],
+        "date_format": "MM/DD/YYYY",
+        "number_format": "comma_dot",
+        "tax_display_mode": "exclusive",
+        "default_quote_terms": "Net 30 days upon invoice delivery.",
+        "statutory_disclaimer": "Subject to standard regional sales warranties.",
+        "compliance_framework": "sox",
+        "cooling_off_days": 14,
+        "is_default": False,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return SalesRegionalSetting.objects.create(**defaults)
+
+
+@pytest.fixture
+def mdc_price_book_entry_a(tenant_a):
+    return _masterdataconfig_price_book_entry(tenant_a)
+
+
+@pytest.fixture
+def mdc_price_book_entry_b(tenant_b):
+    return _masterdataconfig_price_book_entry(tenant_b)
+
+
+@pytest.fixture
+def mdc_custom_entity_a(tenant_a):
+    return _masterdataconfig_custom_entity(tenant_a)
+
+
+@pytest.fixture
+def mdc_custom_entity_b(tenant_b):
+    return _masterdataconfig_custom_entity(tenant_b)
+
+
+@pytest.fixture
+def mdc_methodology_a(tenant_a):
+    return _masterdataconfig_methodology(tenant_a)
+
+
+@pytest.fixture
+def mdc_methodology_b(tenant_b):
+    return _masterdataconfig_methodology(tenant_b)
+
+
+@pytest.fixture
+def mdc_regional_setting_a(tenant_a):
+    return _masterdataconfig_regional_setting(tenant_a)
+
+
+@pytest.fixture
+def mdc_regional_setting_b(tenant_b):
+    return _masterdataconfig_regional_setting(tenant_b)
+
+
