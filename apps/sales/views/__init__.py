@@ -516,29 +516,23 @@ from .IntegrationApiHub import (
 )
 
 # 8.19 Master Data & Configuration
-from .MasterDataConfiguration.Overview import master_data_overview
-from .MasterDataConfiguration.SalesPriceBookEntries import (
+from .MasterDataConfiguration import (
+    master_data_overview,
     pbe_create,
     pbe_delete,
     pbe_detail,
     pbe_edit,
     pbe_list,
-)
-from .MasterDataConfiguration.SalesCustomEntityDefinitions import (
     sco_create,
     sco_delete,
     sco_detail,
     sco_edit,
     sco_list,
-)
-from .MasterDataConfiguration.SalesMethodologies import (
     smd_create,
     smd_delete,
     smd_detail,
     smd_edit,
     smd_list,
-)
-from .MasterDataConfiguration.SalesRegionalSettings import (
     srg_create,
     srg_delete,
     srg_detail,
