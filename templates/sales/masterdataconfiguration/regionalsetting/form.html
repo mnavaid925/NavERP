@@ -85,6 +85,9 @@
                         {% if form.supported_currencies_raw.errors %}
                         <p class="form-error text-xs text-red-600 mt-1">{{ form.supported_currencies_raw.errors.0 }}</p>
                         {% endif %}
+                        {% if form.supported_currencies_raw.help_text %}
+                        <p class="text-xs text-slate-500 mt-1">{{ form.supported_currencies_raw.help_text }}</p>
+                        {% endif %}
                     </div>
                 </div>
             </div>
