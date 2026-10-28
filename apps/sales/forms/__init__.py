@@ -155,6 +155,12 @@ from .IntegrationApiHub import (
     SalesSyncRunForm,
 )
 
+# 8.19 Master Data & Configuration
+from .MasterDataConfiguration.SalesPriceBookEntries import SalesPriceBookEntryForm
+from .MasterDataConfiguration.SalesCustomEntityDefinitions import SalesCustomEntityDefinitionForm
+from .MasterDataConfiguration.SalesMethodologies import SalesMethodologyForm
+from .MasterDataConfiguration.SalesRegionalSettings import SalesRegionalSettingForm
+
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
     "LeadQualificationForm", "LeadRoutingPreviewForm", "LeadRoutingRuleForm", "LeadRoutingRunForm",
@@ -219,6 +225,9 @@ __all__ = [
     # 8.18 Integration & API Hub
     "SalesIntegrationConnectorForm", "SalesFieldMappingForm",
     "SalesSyncJobForm", "SalesSyncRunForm",
+    # 8.19 Master Data & Configuration
+    "SalesPriceBookEntryForm", "SalesCustomEntityDefinitionForm",
+    "SalesMethodologyForm", "SalesRegionalSettingForm",
 ]
 
 
