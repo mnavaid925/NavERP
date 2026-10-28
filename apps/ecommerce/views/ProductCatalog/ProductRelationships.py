@@ -55,7 +55,12 @@ def productrelationship_detail(request, pk):
         request,
         ProductRelationship,
         pk=pk,
-        select_related=("source_product", "target_product"),
+        select_related=(
+            "source_product",
+            "target_product",
+            "source_product__primary_category",
+            "target_product__primary_category",
+        ),
     )
     context = {
         "relationship": relationship,
