@@ -33,7 +33,7 @@ def productvariant_list(request):
         )
 
     product_filter = request.GET.get("product", "").strip()
-    if product_filter:
+    if product_filter and product_filter.isdigit():
         variants_qs = variants_qs.filter(product_id=product_filter)
 
     is_active_filter = request.GET.get("is_active", "").strip()
