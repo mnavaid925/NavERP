@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Regional Setting {{ setting.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Page Header #}
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:master_data_overview' %}" class="hover:text-primary">Master Data</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:srg_list' %}" class="hover:text-primary">Regional Settings</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ setting.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">{{ setting.number }} · {{ setting.name }}</h1>
+                {% if setting.is_active %}
+                <span class="badge badge-green">Active</span>
+                {% else %}
+                <span class="badge badge-slate">Inactive</span>
+                {% endif %}
+                {% if setting.is_default %}
+                <span class="badge badge-info">Default Profile</span>
+                {% endif %}
+            </div>
+            <p class="text-sm text-slate-500 mt-1">{{ setting.get_region_code_display }} ({{ setting.primary_currency }})</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:srg_list' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                <span>Back to Settings</span>
+            </a>
+            <a href="{% url 'sales:srg_edit' setting.pk %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+                <span>Edit Setting</span>
+            </a>
+            <form method="post" action="{% url 'sales:srg_delete' setting.pk %}" class="inline" onsubmit="return confirm('Delete regional setting {{ setting.number }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger flex items-center gap-2">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    <span>Delete</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {# KPI Summary Cards #}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Region Code</span>
+                    <div class="text-xl font-bold text-slate-900 mt-1">{{ setting.get_region_code_display }}</div>
+                </div>
+                <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+                    <i data-lucide="globe" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Primary Currency</span>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ setting.primary_currency }}</div>
+                </div>
+                <div class="stat-icon green p-3 rounded-lg bg-emerald-50 text-emerald-600">
+                    <i data-lucide="dollar-sign" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Tax Display Mode</span>
+                    <div class="text-sm font-bold text-slate-900 mt-1">{{ setting.get_tax_display_mode_display }}</div>
+                </div>
+                <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+                    <i data-lucide="receipt" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Cooling-Off Period</span>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ setting.cooling_off_days }} days</div>
+                </div>
+                <div class="stat-icon orange p-3 rounded-lg bg-amber-50 text-amber-600">
+                    <i data-lucide="clock" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Main Details Grid #}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-6">
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-200">Commercial & Formatting Rules</h3>
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Profile Name</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ setting.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Region</dt>
+                        <dd class="text-sm text-slate-900 mt-1">
+                            <span class="badge badge-info">{{ setting.get_region_code_display }}</span>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Primary Currency</dt>
+                        <dd class="text-sm font-semibold text-slate-900 mt-1">{{ setting.primary_currency }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Supported Currencies</dt>
+                        <dd class="text-sm font-mono text-slate-800 mt-1">
+                            {% if setting.supported_currencies %}
+                            {{ setting.supported_currencies|join:", " }}
+                            {% else %}
+                            <span class="text-slate-400">None specified</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Date Format</dt>
+                        <dd class="text-sm font-mono text-slate-800 mt-1">{{ setting.get_date_format_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Number & Currency Format</dt>
+                        <dd class="text-sm font-mono text-slate-800 mt-1">{{ setting.get_number_format_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Tax Display Mode</dt>
+                        <dd class="text-sm text-slate-900 mt-1">{{ setting.get_tax_display_mode_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Compliance Framework</dt>
+                        <dd class="text-sm text-slate-900 mt-1">
+                            <span class="badge badge-slate">{{ setting.get_compliance_framework_display }}</span>
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+
+            {# Terms #}
+            {% if setting.default_quote_terms %}
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-2">Default Proposal Commercial Terms</h3>
+                <p class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-200 font-mono text-xs">{{ setting.default_quote_terms }}</p>
+            </div>
+            {% endif %}
+
+            {# Statutory Disclaimer #}
+            {% if setting.statutory_disclaimer %}
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-2">Statutory Legal Disclaimer & Consumer Notice</h3>
+                <p class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-200 font-mono text-xs">{{ setting.statutory_disclaimer }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        {# Sidebar Meta #}
+        <div class="space-y-6">
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-200">Profile Posture</h3>
+                <dl class="space-y-3">
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Default Setting</dt>
+                        <dd class="text-sm text-slate-900 mt-0.5">
+                            {% if setting.is_default %}
+                            <span class="badge badge-green text-xs">Default Tenant Profile</span>
+                            {% else %}
+                            <span class="text-slate-500 text-xs">Standard Regional Profile</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Statutory Cooling-Off Period</dt>
+                        <dd class="text-sm font-semibold text-slate-900 mt-0.5">{{ setting.cooling_off_days }} calendar days</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Created</dt>
+                        <dd class="text-xs text-slate-600 mt-0.5">{{ setting.created_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Last Updated</dt>
+                        <dd class="text-xs text-slate-600 mt-0.5">{{ setting.updated_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
