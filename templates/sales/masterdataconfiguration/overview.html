@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Master Data & Configuration — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Page Header #}
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Master Data & Configuration</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Master Data & Configuration Hub</h1>
+            <p class="text-sm text-slate-500 mt-1">Catalog pricing matrices, schema extensibility, qualification methodologies, and regional localization.</p>
+        </div>
+        <div class="page-actions flex flex-wrap items-center gap-3">
+            <a href="{% url 'sales:pbe_list' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="tag" class="w-4 h-4"></i>
+                <span>Price Books</span>
+            </a>
+            <a href="{% url 'sales:sco_list' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="boxes" class="w-4 h-4"></i>
+                <span>Custom Schema</span>
+            </a>
+            <a href="{% url 'sales:smd_list' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="award" class="w-4 h-4"></i>
+                <span>Methodologies</span>
+            </a>
+            <a href="{% url 'sales:srg_list' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="globe" class="w-4 h-4"></i>
+                <span>Regional Settings</span>
+            </a>
+        </div>
+    </div>
+
+    {# KPI Summary Cards #}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Price Book Entries</span>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ kpis.total_price_book_entries }}</div>
+                    <span class="text-xs text-emerald-600 mt-1 font-medium">{{ kpis.active_price_book_entries }} active</span>
+                </div>
+                <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+                    <i data-lucide="tag" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Custom Schema Fields</span>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ kpis.total_custom_definitions }}</div>
+                    <span class="text-xs text-purple-600 mt-1 font-medium">{{ kpis.active_custom_definitions }} active</span>
+                </div>
+                <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+                    <i data-lucide="boxes" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Sales Methodologies</span>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ kpis.total_methodologies }}</div>
+                    <span class="text-xs text-amber-600 mt-1 font-medium">{{ kpis.mandatory_gate_methodologies }} mandatory gates</span>
+                </div>
+                <div class="stat-icon orange p-3 rounded-lg bg-amber-50 text-amber-600">
+                    <i data-lucide="award" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Regional Profiles</span>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ kpis.total_regional_settings }}</div>
+                    <span class="text-xs text-slate-500 mt-1">Default: {{ kpis.default_regional_profile.region_code|default:"Global" }}</span>
+                </div>
+                <div class="stat-icon green p-3 rounded-lg bg-emerald-50 text-emerald-600">
+                    <i data-lucide="globe" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# 4 Quick Access Pillar Cards #}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-5 border-t-4 border-blue-500 flex flex-col justify-between">
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="tag" class="w-5 h-5 text-blue-600"></i>
+                    <h3 class="font-semibold text-slate-900">Product Pricing</h3>
+                </div>
+                <p class="text-xs text-slate-500 leading-relaxed">SKU pricing lists, floor price protection, volume discount brackets, and currency support.</p>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <a href="{% url 'sales:pbe_list' %}" class="text-xs font-medium text-primary hover:underline flex items-center gap-1">
+                    <span>Manage Pricing</span>
+                    <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                </a>
+                <a href="{% url 'sales:pbe_create' %}" class="btn btn-outline btn-sm" title="Add Price Entry">
+                    <i data-lucide="plus" class="w-3 h-3"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="card p-5 border-t-4 border-purple-500 flex flex-col justify-between">
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="boxes" class="w-5 h-5 text-purple-600"></i>
+                    <h3 class="font-semibold text-slate-900">Custom Schema</h3>
+                </div>
+                <p class="text-xs text-slate-500 leading-relaxed">Extensible sales objects, formula fields, custom relationship lookups, and validation rules.</p>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <a href="{% url 'sales:sco_list' %}" class="text-xs font-medium text-primary hover:underline flex items-center gap-1">
+                    <span>Manage Schema</span>
+                    <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                </a>
+                <a href="{% url 'sales:sco_create' %}" class="btn btn-outline btn-sm" title="Add Custom Definition">
+                    <i data-lucide="plus" class="w-3 h-3"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="card p-5 border-t-4 border-amber-500 flex flex-col justify-between">
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="award" class="w-5 h-5 text-amber-600"></i>
+                    <h3 class="font-semibold text-slate-900">Sales Methodologies</h3>
+                </div>
+                <p class="text-xs text-slate-500 leading-relaxed">MEDDIC, MEDDPICC, BANT, and Challenger qualification templates and pipeline stage gates.</p>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <a href="{% url 'sales:smd_list' %}" class="text-xs font-medium text-primary hover:underline flex items-center gap-1">
+                    <span>Manage Frameworks</span>
+                    <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                </a>
+                <a href="{% url 'sales:smd_create' %}" class="btn btn-outline btn-sm" title="Add Methodology">
+                    <i data-lucide="plus" class="w-3 h-3"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="card p-5 border-t-4 border-emerald-500 flex flex-col justify-between">
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="globe" class="w-5 h-5 text-emerald-600"></i>
+                    <h3 class="font-semibold text-slate-900">Regional Profiles</h3>
+                </div>
+                <p class="text-xs text-slate-500 leading-relaxed">Multi-currency billing rules, localized tax inclusive/exclusive display, and statutory disclosures.</p>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <a href="{% url 'sales:srg_list' %}" class="text-xs font-medium text-primary hover:underline flex items-center gap-1">
+                    <span>Manage Regions</span>
+                    <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                </a>
+                <a href="{% url 'sales:srg_create' %}" class="btn btn-outline btn-sm" title="Add Regional Profile">
+                    <i data-lucide="plus" class="w-3 h-3"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {# Recent Activity & Configuration Grids #}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {# Recent Price Book Entries #}
+        <div class="card p-5">
+            <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-200">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="tag" class="w-4 h-4 text-slate-500"></i>
+                    <h3 class="font-semibold text-slate-900">Recent Price Book Entries</h3>
+                </div>
+                <a href="{% url 'sales:pbe_list' %}" class="text-xs text-primary hover:underline">View All</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table text-xs">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Product / Price Book</th>
+                            <th>List Price</th>
+                            <th>Model</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in recent_price_book_entries %}
+                        <tr>
+                            <td class="font-medium">
+                                <a href="{% url 'sales:pbe_detail' entry.pk %}" class="text-primary hover:underline">{{ entry.number }}</a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-800">{{ entry.product.name }}</div>
+                                <div class="text-slate-400">{{ entry.price_book.name }}</div>
+                            </td>
+                            <td class="font-semibold text-slate-900">{{ entry.currency_code }} {{ entry.list_price }}</td>
+                            <td><span class="badge badge-info">{{ entry.get_pricing_model_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center py-4 text-slate-400">No price entries recorded.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {# Recent Custom Schema #}
+        <div class="card p-5">
+            <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-200">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="boxes" class="w-4 h-4 text-slate-500"></i>
+                    <h3 class="font-semibold text-slate-900">Custom Schema Extensions</h3>
+                </div>
+                <a href="{% url 'sales:sco_list' %}" class="text-xs text-primary hover:underline">View All</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table text-xs">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Field Label</th>
+                            <th>Target Model</th>
+                            <th>Type</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for def in recent_custom_entities %}
+                        <tr>
+                            <td class="font-medium">
+                                <a href="{% url 'sales:sco_detail' def.pk %}" class="text-primary hover:underline">{{ def.number }}</a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-800">{{ def.name }}</div>
+                                <div class="text-slate-400 font-mono">{{ def.entity_code }}</div>
+                            </td>
+                            <td><span class="badge badge-info">{{ def.get_target_model_display }}</span></td>
+                            <td class="text-slate-700">{{ def.get_field_type_display }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center py-4 text-slate-400">No custom definitions configured.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {# Recent Methodologies #}
+        <div class="card p-5">
+            <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-200">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="award" class="w-4 h-4 text-slate-500"></i>
+                    <h3 class="font-semibold text-slate-900">Sales Qualification Frameworks</h3>
+                </div>
+                <a href="{% url 'sales:smd_list' %}" class="text-xs text-primary hover:underline">View All</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table text-xs">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Methodology</th>
+                            <th>Framework</th>
+                            <th>Gate Policy</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for meth in recent_methodologies %}
+                        <tr>
+                            <td class="font-medium">
+                                <a href="{% url 'sales:smd_detail' meth.pk %}" class="text-primary hover:underline">{{ meth.number }}</a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-800">{{ meth.name }}</div>
+                                <div class="text-slate-400">Pass: {{ meth.min_passing_score }}%</div>
+                            </td>
+                            <td><span class="badge badge-info">{{ meth.get_framework_display }}</span></td>
+                            <td>
+                                {% if meth.is_mandatory_gate %}
+                                <span class="badge badge-amber">Mandatory</span>
+                                {% else %}
+                                <span class="badge badge-muted">Advisory</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center py-4 text-slate-400">No methodologies recorded.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {# Recent Regional Profiles #}
+        <div class="card p-5">
+            <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-200">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="globe" class="w-4 h-4 text-slate-500"></i>
+                    <h3 class="font-semibold text-slate-900">Regional Commercial Profiles</h3>
+                </div>
+                <a href="{% url 'sales:srg_list' %}" class="text-xs text-primary hover:underline">View All</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table text-xs">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Profile</th>
+                            <th>Region</th>
+                            <th>Base Currency</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for reg in recent_regional_settings %}
+                        <tr>
+                            <td class="font-medium">
+                                <a href="{% url 'sales:srg_detail' reg.pk %}" class="text-primary hover:underline">{{ reg.number }}</a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-800">{{ reg.name }}</div>
+                                {% if reg.is_default %}<span class="badge badge-green text-xs">Default</span>{% endif %}
+                            </td>
+                            <td><span class="badge badge-info">{{ reg.get_region_code_display }}</span></td>
+                            <td class="font-semibold text-slate-900">{{ reg.primary_currency }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center py-4 text-slate-400">No regional profiles configured.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
