@@ -104,10 +104,12 @@ class CatalogProduct(TenantNumbered):
 
     @property
     def price_range_display(self):
-        var_qs = self.variants.filter(is_active=True)
-        if not var_qs.exists():
+        active_vars = [v for v in self.variants.all() if v.is_active]
+        if not active_vars:
             return "No price set"
-        prices = [v.price for v in var_qs]
+        prices = [v.price for v in active_vars if v.price is not None]
+        if not prices:
+            return "No price set"
         min_p = min(prices)
         max_p = max(prices)
         if min_p == max_p:
@@ -116,7 +118,7 @@ class CatalogProduct(TenantNumbered):
 
     @property
     def total_variants_count(self):
-        return self.variants.count()
+        return len(self.variants.all())
 
     def __str__(self):
         return f"{self.name} ({self.number})"
