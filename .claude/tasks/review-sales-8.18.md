@@ -97,5 +97,21 @@
 - **PRF-M2**: `apps/sales/models/IntegrationApiHub/FieldMappings.py:62-63` — `SalesFieldMapping.__str__` accesses foreign key `self.connector.name`. Safeguard `__str__` to avoid FK lookup if not cached.
 - **PRF-M3**: `apps/sales/views/IntegrationApiHub/SyncRuns.py:57-58` — Filter dropdown querysets load full model instances. Apply `.only("id", "name", "number")` to connector and sync job filter querysets.
 
+---
+
+## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+
+**Verdict:** 53/53 tests PASS. Zero 500s, zero template leaks, 100% IDOR immunity, valid simulated actions.
+
+### Critical
+*None.*
+
+### Important
+- **QA-I1**: `apps/sales/views/IntegrationApiHub/FieldMappings.py:35-37`, `SyncJobs.py:36-38`, `SyncRuns.py:39-45` — In `sfm_list`, `ssj_list`, and `ssr_list`, incoming query parameters `connector` and `job` are filtered on the queryset using `int(connector_id)` and `int(job_id)` after checking `str.isdigit()`. On MariaDB/PostgreSQL passing an integer greater than 64-bit signed int raises `DataError: integer out of range`. Filter querysets directly using `as_db_int` (same as CR-I2 / EX-I2).
+
+### Minor
+- **QA-M1**: Category lens routes test verified all 5 built routes (`sic_erp_list`, `sic_marketing_list`, `sic_communication_list`, `sic_bi_list`, `sic_esignature_list`) redirect correctly with HTTP 302.
+
+
 
 
