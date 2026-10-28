@@ -59,6 +59,8 @@ from .MobileSales import urlpatterns as _mobile_sales
 from .WorkflowProcessAutomation import urlpatterns as _workflow_automation
 # 8.18 Integration & API Hub (L55 Coexistence: 5th integration register across NavERP)
 from .IntegrationApiHub import urlpatterns as _integration_api_hub
+# 8.19 Master Data & Configuration
+from .MasterDataConfiguration import urlpatterns as _master_data_config
 
 app_name = "sales"
 
@@ -107,6 +109,8 @@ urlpatterns = [
     *_workflow_automation,
     # 8.18 Integration & API Hub.
     *_integration_api_hub,
+    # 8.19 Master Data & Configuration.
+    *_master_data_config,
     *_pipelines,
     *_teams,
     *_competitors,
