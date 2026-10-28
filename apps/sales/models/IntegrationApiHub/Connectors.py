@@ -119,3 +119,10 @@ class SalesIntegrationConnector(TenantNumbered):
         if self.credential_encrypted:
             return "••••••••"
         return "None"
+
+    @property
+    def credential_masked(self):
+        return self.masked_credential
+
+    def has_credential(self):
+        return bool(self.credential_encrypted)
