@@ -36,13 +36,13 @@ def ssr_list(request):
             | Q(job__name__icontains=q)
         )
 
-    connector_id = request.GET.get("connector", "").strip()
-    if connector_id and connector_id.isdigit():
-        qs = qs.filter(connector_id=int(connector_id))
+    connector_id = as_db_int(request.GET.get("connector", "").strip())
+    if connector_id:
+        qs = qs.filter(connector_id=connector_id)
 
-    job_id = request.GET.get("job", "").strip()
-    if job_id and job_id.isdigit():
-        qs = qs.filter(job_id=int(job_id))
+    job_id = as_db_int(request.GET.get("job", "").strip())
+    if job_id:
+        qs = qs.filter(job_id=job_id)
 
     status = request.GET.get("status", "").strip()
     if status:
@@ -62,8 +62,8 @@ def ssr_list(request):
         "page_obj": page_obj,
         "paginator": paginator,
         "q": q,
-        "connector_id": as_db_int(connector_id),
-        "job_id": as_db_int(job_id),
+        "connector_id": connector_id,
+        "job_id": job_id,
         "status": status,
         "run_type": run_type,
         "connectors": connectors,
