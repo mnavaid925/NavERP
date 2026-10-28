@@ -184,22 +184,22 @@
                         {% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <div class="flex items-center justify-end space-x-1">
-                            <a href="{% url 'ecommerce:catalogproduct_detail' prod.pk %}" class="btn btn-icon" title="View Detail">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'ecommerce:catalogproduct_detail' prod.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'ecommerce:catalogproduct_edit' prod.pk %}" class="btn btn-icon" title="Edit Product">
+                            <a href="{% url 'ecommerce:catalogproduct_edit' prod.pk %}" class="btn btn-icon" title="Edit Product" aria-label="Edit Product">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'ecommerce:catalogproduct_publish' prod.pk %}" class="inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-blue-600 hover:bg-blue-50" title="{% if prod.status == 'active' %}Move to Draft{% else %}Publish Live{% endif %}">
+                                <button type="submit" class="btn btn-icon text-blue-600 hover:bg-blue-50" title="{% if prod.status == 'active' %}Move to Draft{% else %}Publish Live{% endif %}" aria-label="{% if prod.status == 'active' %}Move to Draft{% else %}Publish Live{% endif %}">
                                     <i data-lucide="{% if prod.status == 'active' %}eye-off{% else %}send{% endif %}"></i>
                                 </button>
                             </form>
                             <form method="post" action="{% url 'ecommerce:catalogproduct_delete' prod.pk %}" onsubmit="return confirm('Delete product {{ prod.name|escapejs }}?');" class="inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Product">
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Product" aria-label="Delete Product">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
