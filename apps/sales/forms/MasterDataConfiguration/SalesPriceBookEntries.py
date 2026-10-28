@@ -65,7 +65,7 @@ class SalesPriceBookEntryForm(TenantModelForm):
             self.fields["price_book"].queryset = PriceBook.objects.filter(tenant=self.tenant)
             self.fields["product"].queryset = Product.objects.filter(tenant=self.tenant)
             try:
-                from apps.scm.models.InventoryCatalog.Items import Item
+                from apps.scm.models import Item
                 self.fields["item"].queryset = Item.objects.filter(tenant=self.tenant)
             except Exception:
                 self.fields["item"].queryset = self.fields["item"].queryset.none()
