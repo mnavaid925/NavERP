@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Variant {{ variant.sku }}{% else %}New Product Variant{% endif %} · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:catalogproduct_list' %}">Products</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:productvariant_list' %}">Variants</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Variant{% else %}New Variant{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Variant: {{ variant.sku }}{% else %}Create Product Variant{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'ecommerce:productvariant_detail' variant.pk %}{% else %}{% url 'ecommerce:productvariant_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Variant SKU & Pricing Details</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" action="">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="mb-4 p-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.product.id_for_label }}" class="form-label">Parent Catalog Product <span class="text-red-500">*</span></label>
+                        {{ form.product }}
+                        {% if form.product.errors %}<div class="form-error">{{ form.product.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.sku.id_for_label }}" class="form-label">Variant SKU <span class="text-red-500">*</span></label>
+                        {{ form.sku }}
+                        <span class="text-xs text-slate-500">Unique identifier for inventory and checkout</span>
+                        {% if form.sku.errors %}<div class="form-error">{{ form.sku.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.name.id_for_label }}" class="form-label">Variant Name / Label <span class="text-red-500">*</span></label>
+                        {{ form.name }}
+                        <span class="text-xs text-slate-500">e.g. Navy / Large</span>
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.option_values_raw.id_for_label }}" class="form-label">Option Dimensions Matrix</label>
+                        {{ form.option_values_raw }}
+                        <span class="text-xs text-slate-500">{{ form.option_values_raw.help_text }}</span>
+                        {% if form.option_values_raw.errors %}<div class="form-error">{{ form.option_values_raw.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.price.id_for_label }}" class="form-label">Storefront Selling Price ($) <span class="text-red-500">*</span></label>
+                        {{ form.price }}
+                        {% if form.price.errors %}<div class="form-error">{{ form.price.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.compare_at_price.id_for_label }}" class="form-label">Compare-At / List Price ($)</label>
+                        {{ form.compare_at_price }}
+                        <span class="text-xs text-slate-500">Shows as strike-through discount price if higher than selling price</span>
+                        {% if form.compare_at_price.errors %}<div class="form-error">{{ form.compare_at_price.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.cost_price.id_for_label }}" class="form-label">Base Cost Price ($)</label>
+                        {{ form.cost_price }}
+                        {% if form.cost_price.errors %}<div class="form-error">{{ form.cost_price.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.barcode.id_for_label }}" class="form-label">Barcode (UPC / EAN / ISBN)</label>
+                        {{ form.barcode }}
+                        {% if form.barcode.errors %}<div class="form-error">{{ form.barcode.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.item.id_for_label }}" class="form-label">Linked SCM Warehouse Item</label>
+                        {{ form.item }}
+                        <span class="text-xs text-slate-500">Warehouse physical inventory SKU for stock decrement</span>
+                        {% if form.item.errors %}<div class="form-error">{{ form.item.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.weight_kg.id_for_label }}" class="form-label">Shipping Weight (kg)</label>
+                        {{ form.weight_kg }}
+                        {% if form.weight_kg.errors %}<div class="form-error">{{ form.weight_kg.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.image_url.id_for_label }}" class="form-label">Variant Photo URL</label>
+                        {{ form.image_url }}
+                        {% if form.image_url.errors %}<div class="form-error">{{ form.image_url.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.sort_order.id_for_label }}" class="form-label">Display Sort Order</label>
+                        {{ form.sort_order }}
+                        {% if form.sort_order.errors %}<div class="form-error">{{ form.sort_order.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group flex items-center pt-6">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.is_active }}
+                            <span class="text-sm font-medium text-slate-700">Active (Purchasable)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-slate-200">
+                    <a href="{% if is_edit %}{% url 'ecommerce:productvariant_detail' variant.pk %}{% else %}{% url 'ecommerce:productvariant_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Variant{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
