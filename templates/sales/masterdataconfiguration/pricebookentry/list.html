@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Price Book Entries — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:master_data_overview' %}" class="hover:text-primary">Master Data</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Price Book Entries</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Price Book Entries</h1>
+            <p class="text-sm text-slate-500 mt-1">Product catalog pricing, volume discount tiers, and regional price lists.</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:master_data_overview' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                <span>Configuration Hub</span>
+            </a>
+            <a href="{% url 'sales:pbe_create' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>New Entry</span>
+            </a>
+        </div>
+    </div>
+
+    {# Filter Card #}
+    <div class="card p-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <input type="text" name="q" id="filter-q" class="form-input" placeholder="Number, SKU, product, notes…" value="{{ q|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-price-book">Price Book</label>
+                <select name="price_book" id="filter-price-book" class="form-select">
+                    <option value="">All Price Books</option>
+                    {% for pb in price_books %}
+                        <option value="{{ pb.pk }}" {% if selected_price_book == pb.pk|stringformat:"d" %}selected{% endif %}>{{ pb.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-pricing-model">Pricing Model</label>
+                <select name="pricing_model" id="filter-pricing-model" class="form-select">
+                    <option value="">All Pricing Models</option>
+                    {% for value, label in pricing_models %}
+                        <option value="{{ value }}" {% if selected_pricing_model == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-active">Status</label>
+                <select name="is_active" id="filter-active" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="true" {% if selected_active == "true" or selected_active == "1" %}selected{% endif %}>Active</option>
+                    <option value="false" {% if selected_active == "false" or selected_active == "0" %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1 flex items-center justify-center gap-1">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'sales:pbe_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    {# Table Wrap #}
+    <div class="card overflow-hidden">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Entry Number</th>
+                        <th>Product / SKU</th>
+                        <th>Price Book</th>
+                        <th>Currency & List Price</th>
+                        <th>Floor Price</th>
+                        <th>Pricing Model</th>
+                        <th>MOQ</th>
+                        <th>Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                    <tr>
+                        <td class="font-medium text-slate-900">
+                            <a href="{% url 'sales:pbe_detail' entry.pk %}" class="text-primary hover:underline">
+                                {{ entry.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-800">{{ entry.product.name }}</div>
+                            {% if entry.sku_code %}
+                            <div class="text-xs text-slate-500 font-mono">{{ entry.sku_code }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="text-sm text-slate-700">{{ entry.price_book.name }}</span>
+                        </td>
+                        <td>
+                            <span class="font-semibold text-slate-900">{{ entry.currency_code }} {{ entry.list_price }}</span>
+                        </td>
+                        <td>
+                            <span class="text-sm text-slate-600">{{ entry.currency_code }} {{ entry.floor_price }}</span>
+                        </td>
+                        <td>
+                            <span class="badge badge-info text-xs">{{ entry.get_pricing_model_display }}</span>
+                        </td>
+                        <td>
+                            <span class="text-xs text-slate-700">{{ entry.min_quantity }}</span>
+                        </td>
+                        <td>
+                            {% if entry.is_active %}
+                            <span class="badge badge-green text-xs">Active</span>
+                            {% else %}
+                            <span class="badge badge-slate text-xs">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions flex items-center justify-end gap-2">
+                                <a href="{% url 'sales:pbe_detail' entry.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-primary" title="View details">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'sales:pbe_edit' entry.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit entry">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'sales:pbe_delete' entry.pk %}" class="inline" onsubmit="return confirm('Delete price book entry {{ entry.number }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete entry">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center py-12 text-slate-500">
+                            <div class="empty-state flex flex-col items-center justify-center space-y-2">
+                                <i data-lucide="tag" class="w-10 h-10 text-slate-400"></i>
+                                <p class="text-base font-medium text-slate-700">No price book entries found</p>
+                                <p class="text-sm text-slate-400">Try adjusting your search criteria or create a new entry.</p>
+                                <a href="{% url 'sales:pbe_create' %}" class="btn btn-primary mt-2">
+                                    <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Add Price Book Entry
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# Pagination #}
+        {% if page_obj.has_other_pages %}
+        <div class="pagination flex items-center justify-between border-t border-slate-200 px-4 py-3 sm:px-6">
+            <div class="text-xs text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} entries
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_price_book %}&price_book={{ selected_price_book }}{% endif %}{% if selected_pricing_model %}&pricing_model={{ selected_pricing_model }}{% endif %}{% if selected_active %}&is_active={{ selected_active }}{% endif %}" class="btn btn-outline btn-sm">
+                    Previous
+                </a>
+                {% endif %}
+                <span class="text-xs text-slate-600 px-2">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_price_book %}&price_book={{ selected_price_book }}{% endif %}{% if selected_pricing_model %}&pricing_model={{ selected_pricing_model }}{% endif %}{% if selected_active %}&is_active={{ selected_active }}{% endif %}" class="btn btn-outline btn-sm">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
