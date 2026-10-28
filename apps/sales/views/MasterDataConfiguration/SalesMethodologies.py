@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.sales.forms.MasterDataConfiguration.SalesMethodologies import SalesMethodologyForm
 from apps.sales.models.MasterDataConfiguration.SalesMethodologies import SalesMethodology
@@ -78,6 +79,7 @@ def smd_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def smd_create(request):
     """Create a new sales methodology template."""
     if request.method == "POST":
@@ -106,6 +108,7 @@ def smd_create(request):
 
 
 @login_required
+@tenant_admin_required
 def smd_edit(request, pk):
     """Edit an existing sales methodology template."""
     methodology = get_object_or_404(
@@ -136,6 +139,7 @@ def smd_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def smd_delete(request, pk):
     """Delete a sales methodology template."""
