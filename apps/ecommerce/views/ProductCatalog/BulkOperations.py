@@ -103,7 +103,7 @@ def product_import_csv(request):
             auto_create_categories = form.cleaned_data.get("auto_create_categories", True)
 
             try:
-                decoded_file = csv_file.read().decode("utf-8-sig")
+                decoded_file = csv_file.read().decode("utf-8-sig", errors="replace")
                 io_string = io.StringIO(decoded_file)
                 reader = csv.DictReader(io_string)
 
