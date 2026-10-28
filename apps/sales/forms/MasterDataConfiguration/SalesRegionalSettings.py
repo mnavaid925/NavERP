@@ -55,6 +55,8 @@ class SalesRegionalSettingForm(TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "primary_currency" in self.fields:
+            self.fields["primary_currency"].required = False
         if self.instance and self.instance.pk and self.instance.supported_currencies:
             if isinstance(self.instance.supported_currencies, list):
                 self.fields["supported_currencies_raw"].initial = ", ".join(self.instance.supported_currencies)
