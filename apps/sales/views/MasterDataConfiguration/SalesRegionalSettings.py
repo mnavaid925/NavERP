@@ -49,6 +49,7 @@ def srg_list(request):
     context = {
         "page_obj": page_obj,
         "settings": page_obj.object_list,
+        "regional_settings": page_obj.object_list,
         "region_codes": SalesRegionalSetting.REGION_CODE_CHOICES,
         "compliance_frameworks": SalesRegionalSetting.COMPLIANCE_CHOICES,
         "q": q,
@@ -69,7 +70,7 @@ def srg_detail(request, pk):
     return render(
         request,
         "sales/masterdataconfiguration/regionalsetting/detail.html",
-        {"setting": setting},
+        {"setting": setting, "regional_setting": setting},
     )
 
 
@@ -98,7 +99,7 @@ def srg_create(request):
     return render(
         request,
         "sales/masterdataconfiguration/regionalsetting/form.html",
-        {"form": form, "setting": None, "is_edit": False},
+        {"form": form, "setting": None, "regional_setting": None, "is_edit": False},
     )
 
 
@@ -129,7 +130,7 @@ def srg_edit(request, pk):
     return render(
         request,
         "sales/masterdataconfiguration/regionalsetting/form.html",
-        {"form": form, "setting": setting, "is_edit": True},
+        {"form": form, "setting": setting, "regional_setting": setting, "is_edit": True},
     )
 
 
