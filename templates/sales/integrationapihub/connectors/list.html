@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Integration Connectors — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:integration_hub' %}" class="hover:text-primary">Integration Hub</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Connectors</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Integration Connectors</h1>
+            <p class="text-sm text-slate-500 mt-1">External ERP, Marketing, Communication, BI, and E-Signature system connection profiles.</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:integration_hub' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                <span>Hub Console</span>
+            </a>
+            <a href="{% url 'sales:sic_create' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>New Connector</span>
+            </a>
+        </div>
+    </div>
+
+    {# Filter Card #}
+    <div class="card p-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <input type="text" name="q" id="filter-q" class="form-input" placeholder="Name, number, notes…" value="{{ q|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-category">Category</label>
+                <select name="category" id="filter-category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for value, label in category_choices %}
+                        <option value="{{ value }}" {% if category == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-provider">Provider</label>
+                <select name="provider" id="filter-provider" class="form-select">
+                    <option value="">All Providers</option>
+                    {% for value, label in provider_choices %}
+                        <option value="{{ value }}" {% if provider == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-health">Health Status</label>
+                <select name="health_status" id="filter-health" class="form-select">
+                    <option value="">All Health Statuses</option>
+                    {% for value, label in health_choices %}
+                        <option value="{{ value }}" {% if health_status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1 flex items-center justify-center gap-1">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or category or provider or health_status %}
+                    <a href="{% url 'sales:sic_list' %}" class="btn btn-outline" title="Clear filters">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    {# Connector Table #}
+    <div class="card overflow-hidden">
+        <div class="table-wrap">
+            <table class="table w-full text-left">
+                <thead>
+                    <tr>
+                        <th>Connector</th>
+                        <th>Category</th>
+                        <th>Provider</th>
+                        <th>Environment</th>
+                        <th>Auth / Scope</th>
+                        <th>Health</th>
+                        <th>Last Check</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+                    {% for conn in connectors %}
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td>
+                                <a href="{% url 'sales:sic_detail' conn.pk %}" class="font-medium text-primary hover:underline">
+                                    {{ conn.name }}
+                                </a>
+                                <div class="text-xs text-slate-400 font-mono">{{ conn.number }}</div>
+                            </td>
+                            <td>
+                                <span class="badge badge-info">{{ conn.get_category_display }}</span>
+                            </td>
+                            <td>
+                                <div class="text-sm font-medium text-slate-800">{{ conn.get_provider_display }}</div>
+                                <div class="text-xs text-slate-500 truncate max-w-xs">{{ conn.base_url|default:"—" }}</div>
+                            </td>
+                            <td>
+                                {% if conn.environment == 'production' %}
+                                    <span class="badge badge-green">Production</span>
+                                {% elif conn.environment == 'sandbox' %}
+                                    <span class="badge badge-amber">Sandbox</span>
+                                {% else %}
+                                    <span class="badge badge-slate">Development</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="text-xs text-slate-700">{{ conn.get_auth_method_display }}</div>
+                                <div class="text-xs text-slate-400 font-mono">{{ conn.remote_scope_ref|default:"(tenant-wide)" }}</div>
+                            </td>
+                            <td>
+                                {% if conn.health_status == 'connected' %}
+                                    <span class="badge badge-green">Connected</span>
+                                {% elif conn.health_status == 'degraded' %}
+                                    <span class="badge badge-amber">Degraded</span>
+                                {% elif conn.health_status == 'error' %}
+                                    <span class="badge badge-red">Error</span>
+                                {% elif conn.health_status == 'offline' %}
+                                    <span class="badge badge-slate">Offline</span>
+                                {% else %}
+                                    <span class="badge badge-muted">Untested</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="text-xs text-slate-500">
+                                    {% if conn.last_health_check_at %}
+                                        {{ conn.last_health_check_at|date:"M d, Y H:i" }}
+                                    {% else %}
+                                        Never
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td class="text-right">
+                                <div class="table-actions flex items-center justify-end gap-1">
+                                    <a href="{% url 'sales:sic_detail' conn.pk %}" class="btn btn-icon" title="View details">
+                                        <i data-lucide="eye" class="w-4 h-4"></i>
+                                    </a>
+                                    <a href="{% url 'sales:sic_edit' conn.pk %}" class="btn btn-icon" title="Edit">
+                                        <i data-lucide="pencil" class="w-4 h-4"></i>
+                                    </a>
+                                    <form method="post" action="{% url 'sales:sic_delete' conn.pk %}" class="inline" onsubmit="return confirm('Delete connector {{ conn.name }}?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-12">
+                                <div class="empty-state">
+                                    <i data-lucide="network" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                                    <h3 class="text-base font-semibold text-slate-700">No integration connectors found</h3>
+                                    <p class="text-sm text-slate-500 mt-1">Get started by configuring a new ERP, CRM, or messaging connector.</p>
+                                    <div class="mt-4">
+                                        <a href="{% url 'sales:sic_create' %}" class="btn btn-primary">
+                                            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Connector
+                                        </a>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# Pagination #}
+        {% if paginator.num_pages > 1 %}
+            <div class="pagination flex items-center justify-between px-6 py-3 border-t border-slate-200 text-sm">
+                <div class="text-slate-500">
+                    Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} connectors
+                </div>
+                <div class="flex items-center gap-1">
+                    <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if provider %}&provider={{ provider }}{% endif %}{% if health_status %}&health_status={{ health_status }}{% endif %}"
+                       class="btn btn-outline py-1 px-3 {% if not page_obj.has_previous %}opacity-50 pointer-events-none{% endif %}">
+                        Previous
+                    </a>
+                    <span class="px-2 text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                    <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if provider %}&provider={{ provider }}{% endif %}{% if health_status %}&health_status={{ health_status }}{% endif %}"
+                       class="btn btn-outline py-1 px-3 {% if not page_obj.has_next %}opacity-50 pointer-events-none{% endif %}">
+                        Next
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
