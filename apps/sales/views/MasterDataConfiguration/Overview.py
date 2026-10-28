@@ -1,5 +1,6 @@
 """Central Overview Dashboard for 8.19 Master Data & Configuration."""
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q
 from django.shortcuts import render
 
 from apps.sales.models.MasterDataConfiguration.SalesCustomEntityDefinitions import SalesCustomEntityDefinition
@@ -18,13 +19,26 @@ def master_data_overview(request):
     smd_qs = SalesMethodology.objects.filter(tenant=tenant)
     srg_qs = SalesRegionalSetting.objects.filter(tenant=tenant)
 
+    pbe_counts = pbe_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+    )
+    sco_counts = sco_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+    )
+    smd_counts = smd_qs.aggregate(
+        total=Count("id"),
+        mandatory_gates=Count("id", filter=Q(is_mandatory_gate=True)),
+    )
+
     kpis = {
-        "total_price_book_entries": pbe_qs.count(),
-        "active_price_book_entries": pbe_qs.filter(is_active=True).count(),
-        "total_custom_definitions": sco_qs.count(),
-        "active_custom_definitions": sco_qs.filter(is_active=True).count(),
-        "total_methodologies": smd_qs.count(),
-        "mandatory_gate_methodologies": smd_qs.filter(is_mandatory_gate=True).count(),
+        "total_price_book_entries": pbe_counts["total"] or 0,
+        "active_price_book_entries": pbe_counts["active"] or 0,
+        "total_custom_definitions": sco_counts["total"] or 0,
+        "active_custom_definitions": sco_counts["active"] or 0,
+        "total_methodologies": smd_counts["total"] or 0,
+        "mandatory_gate_methodologies": smd_counts["mandatory_gates"] or 0,
         "total_regional_settings": srg_qs.count(),
         "default_regional_profile": srg_qs.filter(is_default=True).first(),
     }
