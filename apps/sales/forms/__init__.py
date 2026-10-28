@@ -156,10 +156,12 @@ from .IntegrationApiHub import (
 )
 
 # 8.19 Master Data & Configuration
-from .MasterDataConfiguration.SalesPriceBookEntries import SalesPriceBookEntryForm
-from .MasterDataConfiguration.SalesCustomEntityDefinitions import SalesCustomEntityDefinitionForm
-from .MasterDataConfiguration.SalesMethodologies import SalesMethodologyForm
-from .MasterDataConfiguration.SalesRegionalSettings import SalesRegionalSettingForm
+from .MasterDataConfiguration import (
+    SalesCustomEntityDefinitionForm,
+    SalesMethodologyForm,
+    SalesPriceBookEntryForm,
+    SalesRegionalSettingForm,
+)
 
 __all__ = [
     "LeadScoreAdjustmentForm", "LeadScoreCorrectionForm", "LeadQualificationDecisionForm",
