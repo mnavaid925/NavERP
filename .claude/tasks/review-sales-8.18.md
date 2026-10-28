@@ -48,3 +48,31 @@
 - **EX-M3**: `apps/sales/models/IntegrationApiHub/SyncJobs.py:56` — `batch_size` field allows 0 (same as CR-M4).
 - **EX-M4**: `apps/sales/views/IntegrationApiHub/Connectors.py:168` & `SyncJobs.py:167` — Omission of `updated_at` in `update_fields` (same as CR-M2).
 
+---
+
+## Pass 3: Frontend Reviewer (`frontend-reviewer`)
+
+**Verdict:** Commit after fixing Important findings. Strict design-system badge compliance, zero comment leaks, safe pagination guards.
+
+### Critical
+*None.*
+
+### Important
+- **FE-I1**: Missing `|escapejs` in JavaScript `confirm()` dialogs across list and detail templates:
+  - `templates/sales/integrationapihub/connectors/list.html:157` (`conn.name`)
+  - `templates/sales/integrationapihub/connectors/detail.html:50` (`connector.name`)
+  - `templates/sales/integrationapihub/fieldmappings/list.html:155` (`map.local_field`, `map.remote_field`)
+  - `templates/sales/integrationapihub/syncjobs/list.html:164` (`job.name`)
+  - `templates/sales/integrationapihub/syncjobs/detail.html:46` (`job.name`)
+  - `templates/sales/integrationapihub/syncruns/list.html:157` (`run.number`)
+  - `templates/sales/integrationapihub/syncruns/detail.html:41` (`run.number`)
+  - **Issue:** Entity names containing apostrophes/quotes (e.g. "Vendor's ERP", "Customer's API", "O'Reilly") break inline JavaScript with `Uncaught SyntaxError: Unexpected identifier`.
+  - **Fix:** Apply `|escapejs` to all variables embedded inside JavaScript dialog strings (same as CR-M3, promoted to Important).
+
+### Minor
+- **FE-M1**: `templates/sales/integrationapihub/hub_dashboard.html:87,115,143,171,199` — Badges declare `{{ erp_connectors.count }} Active`, etc., but the view querysets filter only by `category` without checking `is_active=True`. Change badge text to `{{ erp_connectors.count }} Configured` to match KPI terminology.
+- **FE-M2**: `templates/sales/integrationapihub/hub_dashboard.html:59` — Hardcoded `text-green-700` unconditionally applied to `{{ healthy_count }}/{{ connectors_count }}` even when 0 connectors or health is degraded. Use neutral `text-slate-900` or condition color.
+- **FE-M3**: `apps/sales/forms/IntegrationApiHub/Connectors.py:42`, `FieldMappings.py:35-37` — Form widgets use `class: "form-checkbox"` instead of theme.css `.form-check`.
+- **FE-M4**: `templates/sales/integrationapihub/{connectors,fieldmappings,syncjobs,syncruns}/list.html` — Disabled previous/next pagination links omit `aria-disabled="true"` and `tabindex="-1"`. Add accessibility attributes.
+
+
