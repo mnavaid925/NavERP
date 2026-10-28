@@ -8,6 +8,7 @@ from django.views.decorators.http import require_POST
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.ecommerce.forms.ProductCatalog.StoreCategories import StoreCategoryForm
+from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
 from apps.ecommerce.models.ProductCatalog.StoreCategories import StoreCategory
 from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 
@@ -49,8 +50,12 @@ def storecategory_list(request):
 def storecategory_detail(request, pk):
     category = ecommerce_object(request, StoreCategory, pk=pk, select_related=("parent",))
     children = StoreCategory.objects.filter(tenant=request.tenant, parent=category).order_by("display_order", "name")
-    products = getattr(category, "products", None)
-    products_qs = products.filter(tenant=request.tenant) if products else []
+    products_qs = (
+        CatalogProduct.objects.filter(tenant=request.tenant)
+        .filter(Q(primary_category=category) | Q(categories=category))
+        .distinct()
+        .order_by("name")
+    )
 
     context = {
         "category": category,
