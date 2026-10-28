@@ -59,6 +59,8 @@ class SalesPriceBookEntryForm(TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.tenant and not getattr(self.instance, "tenant_id", None):
+            self.instance.tenant = self.tenant
         if self.tenant:
             self.fields["price_book"].queryset = PriceBook.objects.filter(tenant=self.tenant)
             self.fields["product"].queryset = Product.objects.filter(tenant=self.tenant)
