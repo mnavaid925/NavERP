@@ -1,5 +1,6 @@
 """Sales 8.18 — Integration & API Hub Dashboard & Category Views."""
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
@@ -15,11 +16,30 @@ def hub_dashboard(request):
     jobs_qs = SalesSyncJob.objects.filter(tenant=tenant)
     runs_qs = SalesSyncRun.objects.filter(tenant=tenant)
 
-    connectors_count = connectors_qs.count()
-    jobs_count = jobs_qs.count()
+    connector_stats = connectors_qs.aggregate(
+        total=Count("id"),
+        healthy=Count("id", filter=Q(health_status="connected")),
+    )
+    connectors_count = connector_stats["total"] or 0
+    healthy_count = connector_stats["healthy"] or 0
+
+    job_stats = jobs_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+    )
+    jobs_count = job_stats["total"] or 0
+    active_jobs_count = job_stats["active"] or 0
+
     runs_count = runs_qs.count()
-    healthy_count = connectors_qs.filter(health_status="connected").count()
-    active_jobs_count = jobs_qs.filter(status="active").count()
+
+    category_counts_dict = dict(
+        connectors_qs.values_list("category").annotate(total=Count("id"))
+    )
+    erp_count = category_counts_dict.get("erp", 0)
+    marketing_count = category_counts_dict.get("marketing", 0)
+    communication_count = category_counts_dict.get("communication", 0)
+    bi_count = category_counts_dict.get("bi_warehouse", 0)
+    esignature_count = category_counts_dict.get("esignature", 0)
 
     recent_runs = runs_qs.select_related("connector", "job").order_by("-started_at")[:8]
     erp_connectors = connectors_qs.filter(category="erp")
@@ -40,6 +60,12 @@ def hub_dashboard(request):
         "communication_connectors": communication_connectors,
         "bi_connectors": bi_connectors,
         "esignature_connectors": esignature_connectors,
+        "erp_count": erp_count,
+        "marketing_count": marketing_count,
+        "communication_count": communication_count,
+        "bi_count": bi_count,
+        "esignature_count": esignature_count,
+        "category_counts": category_counts_dict,
     }
     return render(request, "sales/integrationapihub/hub_dashboard.html", context)
 
