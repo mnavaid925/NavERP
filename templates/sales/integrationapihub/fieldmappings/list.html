@@ -152,7 +152,7 @@
                                     <a href="{% url 'sales:sfm_edit' map.pk %}" class="btn btn-icon" title="Edit">
                                         <i data-lucide="pencil" class="w-4 h-4"></i>
                                     </a>
-                                    <form method="post" action="{% url 'sales:sfm_delete' map.pk %}" class="inline" onsubmit="return confirm('Delete field mapping {{ map.local_field }} -> {{ map.remote_field }}?');">
+                                    <form method="post" action="{% url 'sales:sfm_delete' map.pk %}" class="inline" onsubmit="return confirm('Delete field mapping {{ map.local_field|escapejs }} -&gt; {{ map.remote_field|escapejs }}?');">
                                         {% csrf_token %}
                                         <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
                                             <i data-lucide="trash-2" class="w-4 h-4"></i>
