@@ -1,5 +1,6 @@
 """SalesRegionalSetting model for 8.19 Master Data & Configuration — Localization & Multi-Language."""
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator
 from django.db import models
 
 from apps.sales.models._base import TenantNumbered
@@ -102,6 +103,7 @@ class SalesRegionalSetting(TenantNumbered):
     )
     cooling_off_days = models.PositiveIntegerField(
         default=14,
+        validators=[MaxValueValidator(365)],
         help_text="Statutory cancellation or cooling-off period in days",
     )
     is_default = models.BooleanField(
