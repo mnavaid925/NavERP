@@ -42,6 +42,14 @@ class SalesFieldMappingForm(TenantUniqueMixin, TenantModelForm):
         if self.tenant is not None:
             self.fields["connector"].queryset = SalesIntegrationConnector.objects.filter(tenant=self.tenant)
 
+    def clean_value_map(self):
+        val = self.cleaned_data.get("value_map")
+        if not val:
+            return {}
+        if not isinstance(val, dict):
+            raise forms.ValidationError("Value map must be a valid JSON dictionary mapping.")
+        return val
+
     def clean(self):
         cleaned = super().clean()
         _reject_foreign(self, cleaned, ["connector"])
