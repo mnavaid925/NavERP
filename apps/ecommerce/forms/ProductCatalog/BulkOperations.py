@@ -19,3 +19,12 @@ class ProductImportForm(forms.Form):
         label="Auto-create missing categories",
         widget=forms.CheckboxInput(attrs={"class": "form-checkbox"}),
     )
+
+    def clean_csv_file(self):
+        uploaded_file = self.cleaned_data.get("csv_file")
+        if uploaded_file:
+            if not uploaded_file.name.lower().endswith(".csv"):
+                raise forms.ValidationError("Only .csv files are supported.")
+            if uploaded_file.size > 5 * 1024 * 1024:
+                raise forms.ValidationError("CSV file size must not exceed 5MB.")
+        return uploaded_file
