@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Field Mappings — Integration Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:integration_hub' %}" class="hover:text-primary">Integration Hub</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Field Mappings</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Schema Field Mappings</h1>
+            <p class="text-sm text-slate-500 mt-1">Cross-system field translations, transformation rules, and value mappings.</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:integration_hub' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="network" class="w-4 h-4"></i>
+                <span>Integration Hub</span>
+            </a>
+            <a href="{% url 'sales:sfm_create' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>New Field Mapping</span>
+            </a>
+        </div>
+    </div>
+
+    {# Filter Card #}
+    <div class="card p-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <input type="text" name="q" id="filter-q" class="form-input" placeholder="Field names, default…" value="{{ q|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-connector">Connector</label>
+                <select name="connector" id="filter-connector" class="form-select">
+                    <option value="">All Connectors</option>
+                    {% for conn in connectors %}
+                        <option value="{{ conn.pk }}" {% if request.GET.connector == conn.pk|stringformat:"d" %}selected{% endif %}>{{ conn.name }} ({{ conn.number }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-entity">Target Entity</label>
+                <select name="target_entity" id="filter-entity" class="form-select">
+                    <option value="">All Entities</option>
+                    {% for value, label in entity_choices %}
+                        <option value="{{ value }}" {% if target_entity == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-direction">Direction</label>
+                <select name="direction" id="filter-direction" class="form-select">
+                    <option value="">All Directions</option>
+                    {% for value, label in direction_choices %}
+                        <option value="{{ value }}" {% if direction == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1 flex items-center justify-center gap-1">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or request.GET.connector or target_entity or direction %}
+                    <a href="{% url 'sales:sfm_list' %}" class="btn btn-outline" title="Clear filters">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    {# Table Card #}
+    <div class="card overflow-hidden">
+        <div class="table-wrap">
+            <table class="table w-full text-left">
+                <thead>
+                    <tr>
+                        <th>Connector</th>
+                        <th>Target Entity</th>
+                        <th>Local Field</th>
+                        <th>Direction</th>
+                        <th>Remote Field</th>
+                        <th>Transform Rule</th>
+                        <th>Key / Req</th>
+                        <th>Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+                    {% for map in mappings %}
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td>
+                                <a href="{% url 'sales:sic_detail' map.connector.pk %}" class="font-medium text-slate-800 hover:text-primary">
+                                    {{ map.connector.name }}
+                                </a>
+                                <div class="text-xs text-slate-400 font-mono">{{ map.connector.number }}</div>
+                            </td>
+                            <td>
+                                <span class="badge badge-info">{{ map.get_target_entity_display }}</span>
+                            </td>
+                            <td class="font-mono text-sm text-slate-800 font-medium">
+                                {{ map.local_field }}
+                            </td>
+                            <td>
+                                {% if map.direction == 'bidirectional' %}
+                                    <span class="badge badge-info">⇄ Two-Way</span>
+                                {% elif map.direction == 'outbound' %}
+                                    <span class="badge badge-green">→ Outbound</span>
+                                {% else %}
+                                    <span class="badge badge-amber">← Inbound</span>
+                                {% endif %}
+                            </td>
+                            <td class="font-mono text-sm text-slate-800">
+                                {{ map.remote_field }}
+                            </td>
+                            <td>
+                                <span class="text-xs text-slate-600">{{ map.get_transform_rule_display }}</span>
+                            </td>
+                            <td>
+                                {% if map.is_key %}
+                                    <span class="badge badge-green" title="Deduplication key">Key</span>
+                                {% endif %}
+                                {% if map.is_required %}
+                                    <span class="badge badge-amber" title="Required field">Req</span>
+                                {% endif %}
+                                {% if not map.is_key and not map.is_required %}
+                                    <span class="text-slate-400 text-xs">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if map.is_active %}
+                                    <span class="badge badge-green">Active</span>
+                                {% else %}
+                                    <span class="badge badge-slate">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right">
+                                <div class="table-actions flex items-center justify-end gap-1">
+                                    <a href="{% url 'sales:sfm_detail' map.pk %}" class="btn btn-icon" title="View details">
+                                        <i data-lucide="eye" class="w-4 h-4"></i>
+                                    </a>
+                                    <a href="{% url 'sales:sfm_edit' map.pk %}" class="btn btn-icon" title="Edit">
+                                        <i data-lucide="pencil" class="w-4 h-4"></i>
+                                    </a>
+                                    <form method="post" action="{% url 'sales:sfm_delete' map.pk %}" class="inline" onsubmit="return confirm('Delete field mapping {{ map.local_field }} -> {{ map.remote_field }}?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="9" class="text-center py-12">
+                                <div class="empty-state">
+                                    <i data-lucide="columns-3" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                                    <h3 class="text-base font-semibold text-slate-700">No field mappings found</h3>
+                                    <p class="text-sm text-slate-500 mt-1">Configure translation mappings between local and remote schema fields.</p>
+                                    <div class="mt-4">
+                                        <a href="{% url 'sales:sfm_create' %}" class="btn btn-primary">
+                                            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Field Mapping
+                                        </a>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# Pagination #}
+        {% if paginator.num_pages > 1 %}
+            <div class="pagination flex items-center justify-between px-6 py-3 border-t border-slate-200 text-sm">
+                <div class="text-slate-500">
+                    Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} mappings
+                </div>
+                <div class="flex items-center gap-1">
+                    <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if q %}&q={{ q }}{% endif %}{% if request.GET.connector %}&connector={{ request.GET.connector }}{% endif %}{% if target_entity %}&target_entity={{ target_entity }}{% endif %}{% if direction %}&direction={{ direction }}{% endif %}"
+                       class="btn btn-outline py-1 px-3 {% if not page_obj.has_previous %}opacity-50 pointer-events-none{% endif %}">
+                        Previous
+                    </a>
+                    <span class="px-2 text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                    <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}{% if q %}&q={{ q }}{% endif %}{% if request.GET.connector %}&connector={{ request.GET.connector }}{% endif %}{% if target_entity %}&target_entity={{ target_entity }}{% endif %}{% if direction %}&direction={{ direction }}{% endif %}"
+                       class="btn btn-outline py-1 px-3 {% if not page_obj.has_next %}opacity-50 pointer-events-none{% endif %}">
+                        Next
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
