@@ -61,6 +61,7 @@ class SalesSyncRun(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "connector", "status"], name="sales_ssr_conn_stat_idx"),
             models.Index(fields=["tenant", "job", "-started_at"], name="sales_ssr_job_start_idx"),
+            models.Index(fields=["tenant", "-started_at"], name="sales_ssr_tenant_start_idx"),
         ]
 
     def __str__(self):
