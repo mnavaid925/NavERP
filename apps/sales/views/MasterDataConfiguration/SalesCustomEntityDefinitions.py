@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.sales.forms.MasterDataConfiguration.SalesCustomEntityDefinitions import SalesCustomEntityDefinitionForm
 from apps.sales.models.MasterDataConfiguration.SalesCustomEntityDefinitions import SalesCustomEntityDefinition
@@ -73,6 +74,7 @@ def sco_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def sco_create(request):
     """Create a new custom entity or field definition."""
     if request.method == "POST":
@@ -101,6 +103,7 @@ def sco_create(request):
 
 
 @login_required
+@tenant_admin_required
 def sco_edit(request, pk):
     """Edit an existing custom entity or field definition."""
     definition = get_object_or_404(
@@ -131,6 +134,7 @@ def sco_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def sco_delete(request, pk):
     """Delete a custom entity or field definition."""
