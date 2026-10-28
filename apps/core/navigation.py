@@ -2628,6 +2628,23 @@ LIVE_LINKS = {
         "Notification & Alert Engine": "sales:sales_alert_trigger_list",
         "Data Enrichment & Cleansing": "sales:party_enrichment_list",  # no new model — bullet 5's auto-update half IS 8.3's PartyEnrichmentEvent (verified live route); duplicate-cluster/merge half deferred to gaps-sales-8.17.md
     },
+    "8.18": {
+        # OWNERSHIP & COEXISTENCE RULING (L55 / L36 / L37)
+        # Sales 8.18 builds the 5th integration register across NavERP (SalesIntegrationConnector [SIC-]).
+        # Coexists independently with SCM 4.19 (IntegrationEndpoint [CNX-]), Inventory 5.19 (IntegrationChannel [INT-]),
+        # Accounting 2.15 (IntegrationConfig), and Projects 7.18 (ProjectIntegrationConnector [IXC-]).
+        # Zero outbound HTTP (simulated status is honest diagnostic state); credential secrets Fernet-encrypted.
+        "ERP Integration": "sales:sic_erp_list",
+        "Marketing Automation": "sales:sic_marketing_list",
+        "Communication Platforms": "sales:sic_communication_list",
+        "Business Intelligence": "sales:sic_bi_list",
+        "E-Signature & Document": "sales:sic_esignature_list",
+        "Integration Hub": "sales:integration_hub",
+        "Connectors": "sales:sic_list",
+        "Field Mappings": "sales:sfm_list",
+        "Sync Jobs": "sales:ssj_list",
+        "Sync Runs": "sales:ssr_list",
+    },
 
 
 
