@@ -27,7 +27,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" action="{% url 'ecommerce:productvariant_list' %}" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <form method="get" action="{% url 'ecommerce:productvariant_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
             <div class="form-group mb-0 md:col-span-2">
                 <label for="q" class="form-label">Search Variants</label>
                 <div class="relative">
@@ -48,12 +48,21 @@
                 </select>
             </div>
 
-            <div class="flex items-center space-x-2">
+            <div class="form-group mb-0">
+                <label for="is_active" class="form-label">Status</label>
+                <select name="is_active" id="is_active" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="true" {% if is_active_filter == "true" %}selected{% endif %}>Active</option>
+                    <option value="false" {% if is_active_filter == "false" %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+
+            <div class="flex items-center gap-2">
                 <button type="submit" class="btn btn-primary flex-1">
                     <i data-lucide="filter"></i> Filter
                 </button>
                 {% if search_query or product_filter or is_active_filter %}
-                <a href="{% url 'ecommerce:productvariant_list' %}" class="btn btn-outline" title="Clear Filters">
+                <a href="{% url 'ecommerce:productvariant_list' %}" class="btn btn-outline" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
