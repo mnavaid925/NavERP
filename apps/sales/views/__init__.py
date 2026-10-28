@@ -485,6 +485,36 @@ from .WorkflowProcessAutomation import (
     sales_process_definition_run,
 )
 
+# 8.18 Integration & API Hub
+from .IntegrationApiHub import (
+    hub_dashboard,
+    sfm_create,
+    sfm_delete,
+    sfm_detail,
+    sfm_edit,
+    sfm_list,
+    sic_bi_list,
+    sic_communication_list,
+    sic_create,
+    sic_delete,
+    sic_detail,
+    sic_edit,
+    sic_erp_list,
+    sic_esignature_list,
+    sic_list,
+    sic_marketing_list,
+    sic_test,
+    ssj_create,
+    ssj_delete,
+    ssj_detail,
+    ssj_edit,
+    ssj_list,
+    ssj_trigger,
+    ssr_delete,
+    ssr_detail,
+    ssr_list,
+)
+
 # View functions exported for URLconf routing and external imports
 __all__ = [
     name for name in globals()
@@ -534,6 +564,8 @@ __all__ = [
         # 8.17 Workflow & Process Automation
         "sales_process_definition_", "sales_assignment_rule_",
         "sales_approval_decision_", "sales_alert_trigger_",
+        # 8.18 Integration & API Hub
+        "hub_dashboard", "sic_", "sfm_", "ssj_", "ssr_",
     ))
 ]
 
