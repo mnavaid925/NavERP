@@ -84,7 +84,12 @@ def productvariant_create(request):
             variant = form.save(commit=False)
             variant.tenant = request.tenant
             variant.save()
-            write_audit_log(request, "create", variant, f"Created variant {variant.sku} for {variant.product.name}")
+            write_audit_log(
+                request.user,
+                variant,
+                "create",
+                {"sku": variant.sku, "product": variant.product.name},
+            )
             messages.success(request, f"Variant '{variant.sku}' created successfully.")
             return redirect("ecommerce:catalogproduct_detail", pk=variant.product_id)
     else:
@@ -110,7 +115,12 @@ def productvariant_edit(request, pk):
         form = ProductVariantForm(request.POST, instance=variant, tenant=request.tenant)
         if form.is_valid():
             variant = form.save()
-            write_audit_log(request, "update", variant, f"Updated variant {variant.sku} for {variant.product.name}")
+            write_audit_log(
+                request.user,
+                variant,
+                "update",
+                {"sku": variant.sku, "product": variant.product.name},
+            )
             messages.success(request, f"Variant '{variant.sku}' updated successfully.")
             return redirect("ecommerce:productvariant_detail", pk=variant.pk)
     else:
@@ -136,7 +146,12 @@ def productvariant_delete(request, pk):
     variant = ecommerce_object(request, ProductVariant, pk=pk)
     product_pk = variant.product_id
     sku = variant.sku
-    write_audit_log(request, "delete", variant, f"Deleted variant {sku}")
+    write_audit_log(
+        request.user,
+        variant,
+        "delete",
+        {"sku": sku},
+    )
     variant.delete()
     messages.success(request, f"Variant '{sku}' deleted successfully.")
     return redirect("ecommerce:catalogproduct_detail", pk=product_pk)
