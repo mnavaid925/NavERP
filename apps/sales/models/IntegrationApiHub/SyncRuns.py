@@ -1,5 +1,6 @@
 """Sales 8.18 — SalesSyncRun model."""
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -63,6 +64,13 @@ class SalesSyncRun(TenantNumbered):
             models.Index(fields=["tenant", "job", "-started_at"], name="sales_ssr_job_start_idx"),
             models.Index(fields=["tenant", "-started_at"], name="sales_ssr_tenant_start_idx"),
         ]
+
+    def clean(self):
+        super().clean()
+        if self.connector_id and self.tenant_id and self.connector.tenant_id != self.tenant_id:
+            raise ValidationError({"connector": "Connector belongs to another tenant workspace."})
+        if self.job_id and self.tenant_id and self.job.tenant_id != self.tenant_id:
+            raise ValidationError({"job": "Sync job belongs to another tenant workspace."})
 
     def __str__(self):
         return f"{self.number} — {self.get_run_type_display()} ({self.get_status_display()})"
