@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Regional Profiles & Localization — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:master_data_overview' %}" class="hover:text-primary">Master Data</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Regional Settings</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Regional Settings & Localization</h1>
+            <p class="text-sm text-slate-500 mt-1">Multi-currency billing rules, tax display conventions, and statutory commercial compliance terms.</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:master_data_overview' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                <span>Configuration Hub</span>
+            </a>
+            <a href="{% url 'sales:srg_create' %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>New Regional Setting</span>
+            </a>
+        </div>
+    </div>
+
+    {# Filter Card #}
+    <div class="card p-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <input type="text" name="q" id="filter-q" class="form-input" placeholder="Name, currency, terms, statutory…" value="{{ q|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-region">Region Code</label>
+                <select name="region_code" id="filter-region" class="form-select">
+                    <option value="">All Regions</option>
+                    {% for value, label in region_codes %}
+                        <option value="{{ value }}" {% if selected_region == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-framework">Compliance</label>
+                <select name="compliance_framework" id="filter-framework" class="form-select">
+                    <option value="">All Frameworks</option>
+                    {% for value, label in compliance_frameworks %}
+                        <option value="{{ value }}" {% if selected_framework == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-active">Status</label>
+                <select name="is_active" id="filter-active" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="true" {% if selected_active == "true" or selected_active == "1" %}selected{% endif %}>Active</option>
+                    <option value="false" {% if selected_active == "false" or selected_active == "0" %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1 flex items-center justify-center gap-1">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'sales:srg_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    {# Table Wrap #}
+    <div class="card overflow-hidden">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Number</th>
+                        <th>Profile Name</th>
+                        <th>Region</th>
+                        <th>Primary Currency</th>
+                        <th>Tax Display Mode</th>
+                        <th>Compliance Framework</th>
+                        <th>Default</th>
+                        <th>Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for setting in settings %}
+                    <tr>
+                        <td class="font-medium text-slate-900">
+                            <a href="{% url 'sales:srg_detail' setting.pk %}" class="text-primary hover:underline">
+                                {{ setting.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ setting.name }}</div>
+                            {% if setting.supported_currencies %}
+                            <div class="text-xs text-slate-500 font-mono">{{ setting.supported_currencies|join:", " }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge badge-info text-xs">{{ setting.get_region_code_display }}</span>
+                        </td>
+                        <td>
+                            <span class="font-semibold text-slate-900">{{ setting.primary_currency }}</span>
+                        </td>
+                        <td>
+                            <span class="text-xs text-slate-700">{{ setting.get_tax_display_mode_display }}</span>
+                        </td>
+                        <td>
+                            <span class="badge badge-slate text-xs">{{ setting.get_compliance_framework_display }}</span>
+                        </td>
+                        <td>
+                            {% if setting.is_default %}
+                            <span class="badge badge-green text-xs">Default Profile</span>
+                            {% else %}
+                            <span class="text-slate-400 text-xs">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if setting.is_active %}
+                            <span class="badge badge-green text-xs">Active</span>
+                            {% else %}
+                            <span class="badge badge-slate text-xs">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions flex items-center justify-end gap-2">
+                                <a href="{% url 'sales:srg_detail' setting.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-primary" title="View details">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'sales:srg_edit' setting.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit setting">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'sales:srg_delete' setting.pk %}" class="inline" onsubmit="return confirm('Delete regional setting {{ setting.number }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete setting">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center py-12 text-slate-500">
+                            <div class="empty-state flex flex-col items-center justify-center space-y-2">
+                                <i data-lucide="globe" class="w-10 h-10 text-slate-400"></i>
+                                <p class="text-base font-medium text-slate-700">No regional settings found</p>
+                                <p class="text-sm text-slate-400">Configure regional commercial currencies, terms, and tax display rules.</p>
+                                <a href="{% url 'sales:srg_create' %}" class="btn btn-primary mt-2">
+                                    <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Add Regional Setting
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# Pagination #}
+        {% if page_obj.has_other_pages %}
+        <div class="pagination flex items-center justify-between border-t border-slate-200 px-4 py-3 sm:px-6">
+            <div class="text-xs text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} settings
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_region %}&region_code={{ selected_region }}{% endif %}{% if selected_framework %}&compliance_framework={{ selected_framework }}{% endif %}{% if selected_active %}&is_active={{ selected_active }}{% endif %}" class="btn btn-outline btn-sm">
+                    Previous
+                </a>
+                {% endif %}
+                <span class="text-xs text-slate-600 px-2">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_region %}&region_code={{ selected_region }}{% endif %}{% if selected_framework %}&compliance_framework={{ selected_framework }}{% endif %}{% if selected_active %}&is_active={{ selected_active }}{% endif %}" class="btn btn-outline btn-sm">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
