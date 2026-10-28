@@ -54,3 +54,14 @@ class SalesFieldMappingForm(TenantUniqueMixin, TenantModelForm):
         cleaned = super().clean()
         _reject_foreign(self, cleaned, ["connector"])
         return cleaned
+
+    def validate_unique(self):
+        super().validate_unique()
+        if hasattr(self.instance, "validate_constraints"):
+            exclude = self._get_validation_exclusions()
+            exclude.discard("tenant")
+            try:
+                self.instance.validate_constraints(exclude=exclude)
+            except forms.ValidationError as exc:
+                self._update_errors(exc)
+
