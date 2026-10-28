@@ -140,7 +140,7 @@
                                 {% elif run.status == 'failed' %}
                                     <span class="badge badge-red">Failed</span>
                                 {% else %}
-                                    <span class="badge badge-amber">{{ run.status }}</span>
+                                    <span class="badge badge-amber">{{ run.get_status_display }}</span>
                                 {% endif %}
                             </td>
                             <td class="font-medium text-slate-700 text-xs">{{ run.records_read }}</td>
