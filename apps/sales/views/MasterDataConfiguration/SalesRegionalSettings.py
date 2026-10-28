@@ -83,9 +83,10 @@ def srg_create(request):
             setting.save()
             write_audit_log(
                 request.user,
-                "create",
                 setting,
-                f"Created regional setting {setting.number} ({setting.name})",
+                "create",
+                {"detail": f"Created regional setting {setting.number} ({setting.name})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Regional setting {setting.number} created successfully.")
             return redirect("sales:srg_detail", pk=setting.pk)
@@ -112,9 +113,10 @@ def srg_edit(request, pk):
             setting = form.save()
             write_audit_log(
                 request.user,
-                "update",
                 setting,
-                f"Updated regional setting {setting.number}",
+                "update",
+                {"detail": f"Updated regional setting {setting.number}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Regional setting {setting.number} updated successfully.")
             return redirect("sales:srg_detail", pk=setting.pk)
@@ -139,9 +141,10 @@ def srg_delete(request, pk):
     num = setting.number
     write_audit_log(
         request.user,
-        "delete",
         setting,
-        f"Deleted regional setting {num}",
+        "delete",
+        {"detail": f"Deleted regional setting {num}"},
+        tenant=request.tenant,
     )
     setting.delete()
     messages.success(request, f"Regional setting {num} deleted.")
