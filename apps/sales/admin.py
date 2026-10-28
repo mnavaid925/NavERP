@@ -1311,7 +1311,7 @@ class SalesMethodologyAdmin(admin.ModelAdmin):
     list_filter = ('framework', 'is_mandatory_gate', 'is_active', 'tenant')
     search_fields = ('number', 'name', 'coaching_guidelines')
     readonly_fields = ('tenant', 'number', 'created_at', 'updated_at')
-    list_select_related = ('pipeline', 'gating_stage')
+    list_select_related = ('pipeline', 'gating_stage', 'gating_stage__pipeline')
 
 
 @admin.register(SalesRegionalSetting)
