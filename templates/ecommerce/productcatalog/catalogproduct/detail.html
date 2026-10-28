@@ -257,10 +257,10 @@
                         {% if var.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'ecommerce:productvariant_detail' var.pk %}" class="btn btn-icon" title="View Detail">
+                        <a href="{% url 'ecommerce:productvariant_detail' var.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'ecommerce:productvariant_edit' var.pk %}" class="btn btn-icon" title="Edit Variant">
+                        <a href="{% url 'ecommerce:productvariant_edit' var.pk %}" class="btn btn-icon" title="Edit Variant" aria-label="Edit Variant">
                             <i data-lucide="pencil"></i>
                         </a>
                     </td>
@@ -332,7 +332,7 @@
                         {% if rel.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'ecommerce:productrelationship_edit' rel.pk %}" class="btn btn-icon" title="Edit">
+                        <a href="{% url 'ecommerce:productrelationship_edit' rel.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit">
                             <i data-lucide="pencil"></i>
                         </a>
                     </td>
