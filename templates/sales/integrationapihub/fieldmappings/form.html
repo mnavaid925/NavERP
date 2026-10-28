@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Field Mapping{% else %}New Field Mapping{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+    <div class="page-header">
+        <div class="breadcrumb text-sm text-slate-500 mb-1">
+            <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+            <span class="mx-1">/</span>
+            <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+            <span class="mx-1">/</span>
+            <a href="{% url 'sales:integration_hub' %}" class="hover:text-primary">Integration Hub</a>
+            <span class="mx-1">/</span>
+            <a href="{% url 'sales:sfm_list' %}" class="hover:text-primary">Field Mappings</a>
+            <span class="mx-1">/</span>
+            <span class="text-slate-700 font-medium">{% if is_edit %}Edit Mapping{% else %}New Mapping{% endif %}</span>
+        </div>
+        <h1 class="page-title text-2xl font-bold text-slate-900">
+            {% if is_edit %}Edit Field Mapping{% else %}Create Field Mapping{% endif %}
+        </h1>
+        <p class="text-sm text-slate-500 mt-1">Configure field-level translation rules and value conversions between systems.</p>
+    </div>
+
+    <form method="post" class="card p-6 space-y-6">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+                {{ form.non_field_errors }}
+            </div>
+        {% endif %}
+
+        <div class="space-y-4">
+            <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100">Connector & Target Scope</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.connector.id_for_label }}">Integration Connector *</label>
+                    {{ form.connector }}
+                    {% if form.connector.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.connector.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_entity.id_for_label }}">Target Model Entity *</label>
+                    {{ form.target_entity }}
+                    {% if form.target_entity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.target_entity.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100">Field Translation & Direction</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.local_field.id_for_label }}">Local NavERP Model Field *</label>
+                    {{ form.local_field }}
+                    <span class="text-xs text-slate-500 mt-1 block">e.g. order_number, total_amount, email</span>
+                    {% if form.local_field.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.local_field.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.remote_field.id_for_label }}">Remote System Field *</label>
+                    {{ form.remote_field }}
+                    <span class="text-xs text-slate-500 mt-1 block">e.g. VBELN, NETWR, hs_email</span>
+                    {% if form.remote_field.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.remote_field.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.direction.id_for_label }}">Sync Direction *</label>
+                    {{ form.direction }}
+                    {% if form.direction.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.direction.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.transform_rule.id_for_label }}">Transformation Rule *</label>
+                    {{ form.transform_rule }}
+                    {% if form.transform_rule.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.transform_rule.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100">Value Translation & Fallbacks</h3>
+            <div class="grid grid-cols-1 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.default_value.id_for_label }}">Default Fallback Value</label>
+                    {{ form.default_value }}
+                    <span class="text-xs text-slate-500 mt-1 block">Value assigned when source field is null or empty.</span>
+                    {% if form.default_value.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.default_value.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.value_map.id_for_label }}">Picklist Value Map (JSON)</label>
+                    {{ form.value_map }}
+                    <span class="text-xs text-slate-500 mt-1 block">JSON dictionary mapping local choices to remote choices, e.g. {"open": "O", "closed": "C"}.</span>
+                    {% if form.value_map.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.value_map.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100">Flags & Validation</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                <label class="inline-flex items-center gap-2 cursor-pointer">
+                    {{ form.is_key }}
+                    <span class="text-sm text-slate-700">Deduplication Match Key</span>
+                </label>
+                <label class="inline-flex items-center gap-2 cursor-pointer">
+                    {{ form.is_required }}
+                    <span class="text-sm text-slate-700">Required Field</span>
+                </label>
+                <label class="inline-flex items-center gap-2 cursor-pointer">
+                    {{ form.is_active }}
+                    <span class="text-sm text-slate-700">Mapping is Active</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            <a href="{% if is_edit %}{% url 'sales:sfm_detail' mapping.pk %}{% else %}{% url 'sales:sfm_list' %}{% endif %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                {% if is_edit %}Save Changes{% else %}Create Mapping{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
