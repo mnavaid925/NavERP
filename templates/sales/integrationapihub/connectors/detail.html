@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ connector.name }} — Connectors — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:integration_hub' %}" class="hover:text-primary">Integration Hub</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sic_list' %}" class="hover:text-primary">Connectors</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ connector.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">{{ connector.name }}</h1>
+                {% if connector.health_status == 'connected' %}
+                    <span class="badge badge-green">Connected</span>
+                {% elif connector.health_status == 'degraded' %}
+                    <span class="badge badge-amber">Degraded</span>
+                {% elif connector.health_status == 'error' %}
+                    <span class="badge badge-red">Error</span>
+                {% elif connector.health_status == 'offline' %}
+                    <span class="badge badge-slate">Offline</span>
+                {% else %}
+                    <span class="badge badge-muted">Untested</span>
+                {% endif %}
+                <span class="badge badge-info">{{ connector.get_category_display }}</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1 font-mono">Reference: {{ connector.number }}</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <form method="post" action="{% url 'sales:sic_test' connector.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline flex items-center gap-2" title="Test Connection Ping">
+                    <i data-lucide="activity" class="w-4 h-4 text-primary"></i>
+                    <span>Test Ping</span>
+                </button>
+            </form>
+            <a href="{% url 'sales:sic_edit' connector.pk %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+                <span>Edit</span>
+            </a>
+            <form method="post" action="{% url 'sales:sic_delete' connector.pk %}" class="inline" onsubmit="return confirm('Delete connector {{ connector.name }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger flex items-center gap-2">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    <span>Delete</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {# Metric / Status Cards #}
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Provider & Protocol</div>
+            <div class="text-lg font-bold text-slate-800 mt-1">{{ connector.get_provider_display }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">{{ connector.get_auth_method_display }}</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Environment</div>
+            <div class="text-lg font-bold text-slate-800 mt-1 capitalize">{{ connector.environment }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">Active: {{ connector.is_active|yesno:"Yes,Paused/No" }}</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Field Mappings</div>
+            <div class="text-lg font-bold text-slate-800 mt-1">{{ field_mappings.count }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">Configured attribute translations</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Scheduled Sync Jobs</div>
+            <div class="text-lg font-bold text-slate-800 mt-1">{{ sync_jobs.count }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">Automated synchronization jobs</div>
+        </div>
+    </div>
+
+    {# Configuration Details #}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-6">
+            {# Overview Card #}
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-100">Connection Endpoint Profile</h3>
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                    <div>
+                        <dt class="text-slate-500 font-medium">Base Endpoint URL</dt>
+                        <dd class="text-slate-900 font-mono text-xs mt-1 break-all">{{ connector.base_url|default:"(Direct protocol / Local mock)" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500 font-medium">Remote Scope / Workspace</dt>
+                        <dd class="text-slate-900 font-mono text-xs mt-1">{{ connector.remote_scope_ref|default:"(Tenant-wide default)" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500 font-medium">Credential Storage</dt>
+                        <dd class="text-slate-900 mt-1 flex items-center gap-2">
+                            <span class="font-mono text-xs">{{ connector.masked_credential }}</span>
+                            <span class="badge badge-info text-xs">Fernet Encrypted</span>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500 font-medium">Last Health Check</dt>
+                        <dd class="text-slate-900 mt-1">
+                            {% if connector.last_health_check_at %}
+                                {{ connector.last_health_check_at|date:"M d, Y H:i:s" }}
+                            {% else %}
+                                Never executed
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+                {% if connector.notes %}
+                    <div class="mt-4 pt-4 border-t border-slate-100">
+                        <h4 class="text-xs font-medium text-slate-500 mb-1">Operational Notes</h4>
+                        <p class="text-sm text-slate-700 whitespace-pre-line">{{ connector.notes }}</p>
+                    </div>
+                {% endif %}
+                {% if connector.last_error_message %}
+                    <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                        <div class="flex items-center gap-2 text-red-800 text-xs font-semibold">
+                            <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                            <span>Last Recorded Connection Diagnostic</span>
+                        </div>
+                        <p class="text-xs text-red-700 font-mono mt-1">{{ connector.last_error_message }}</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            {# Field Mappings Section #}
+            <div class="card p-6">
+                <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-900">Schema Field Mappings</h3>
+                        <p class="text-xs text-slate-500">Transformations and translations between NavERP models and {{ connector.name }}.</p>
+                    </div>
+                    <a href="{% url 'sales:sfm_create' %}?connector={{ connector.pk }}" class="btn btn-outline py-1 px-3 text-xs flex items-center gap-1">
+                        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                        <span>Add Mapping</span>
+                    </a>
+                </div>
+                <div class="table-wrap">
+                    <table class="table w-full text-left text-xs">
+                        <thead>
+                            <tr>
+                                <th>Target Entity</th>
+                                <th>Local Field</th>
+                                <th>Direction</th>
+                                <th>Remote Field</th>
+                                <th>Transform</th>
+                                <th>Key</th>
+                                <th class="text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200">
+                            {% for map in field_mappings %}
+                                <tr>
+                                    <td class="font-medium text-slate-900">{{ map.get_target_entity_display }}</td>
+                                    <td class="font-mono text-slate-700">{{ map.local_field }}</td>
+                                    <td>
+                                        {% if map.direction == 'bidirectional' %}
+                                            <span class="badge badge-info">⇄ Two-Way</span>
+                                        {% elif map.direction == 'outbound' %}
+                                            <span class="badge badge-green">→ Outbound</span>
+                                        {% else %}
+                                            <span class="badge badge-amber">← Inbound</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="font-mono text-slate-700">{{ map.remote_field }}</td>
+                                    <td>{{ map.get_transform_rule_display }}</td>
+                                    <td>
+                                        {% if map.is_key %}
+                                            <span class="badge badge-green">Match Key</span>
+                                        {% else %}
+                                            <span class="text-slate-400">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-right">
+                                        <a href="{% url 'sales:sfm_edit' map.pk %}" class="btn btn-icon" title="Edit">
+                                            <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-6 text-slate-400">
+                                        No custom field mappings configured. Default 1:1 schema mapping applies.
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {# Sync Jobs Section #}
+            <div class="card p-6">
+                <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-900">Configured Sync Jobs</h3>
+                        <p class="text-xs text-slate-500">Automated synchronization schedules for this connection.</p>
+                    </div>
+                    <a href="{% url 'sales:ssj_create' %}?connector={{ connector.pk }}" class="btn btn-outline py-1 px-3 text-xs flex items-center gap-1">
+                        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                        <span>Add Sync Job</span>
+                    </a>
+                </div>
+                <div class="table-wrap">
+                    <table class="table w-full text-left text-xs">
+                        <thead>
+                            <tr>
+                                <th>Job Name</th>
+                                <th>Entity Scope</th>
+                                <th>Cadence</th>
+                                <th>Conflict Policy</th>
+                                <th>Status</th>
+                                <th class="text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200">
+                            {% for job in sync_jobs %}
+                                <tr>
+                                    <td>
+                                        <a href="{% url 'sales:ssj_detail' job.pk %}" class="font-medium text-primary hover:underline">
+                                            {{ job.name }}
+                                        </a>
+                                        <div class="text-[10px] text-slate-400 font-mono">{{ job.number }}</div>
+                                    </td>
+                                    <td>{{ job.get_entity_scope_display }}</td>
+                                    <td>{{ job.get_cadence_display }}</td>
+                                    <td>{{ job.get_conflict_policy_display }}</td>
+                                    <td>
+                                        {% if job.status == 'active' %}
+                                            <span class="badge badge-green">Active</span>
+                                        {% elif job.status == 'paused' %}
+                                            <span class="badge badge-slate">Paused</span>
+                                        {% else %}
+                                            <span class="badge badge-red">Error</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-right">
+                                        <div class="flex items-center justify-end gap-1">
+                                            <form method="post" action="{% url 'sales:ssj_trigger' job.pk %}" class="inline">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-icon text-primary" title="Trigger Run Now">
+                                                    <i data-lucide="play" class="w-3.5 h-3.5"></i>
+                                                </button>
+                                            </form>
+                                            <a href="{% url 'sales:ssj_edit' job.pk %}" class="btn btn-icon" title="Edit">
+                                                <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center py-6 text-slate-400">
+                                        No synchronization jobs scheduled for this connector.
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {# Sidebar / Recent Runs #}
+        <div class="space-y-6">
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-100">Recent Sync Runs</h3>
+                <div class="space-y-3">
+                    {% for run in recent_runs %}
+                        <div class="p-3 bg-slate-50 rounded border border-slate-100 text-xs">
+                            <div class="flex items-center justify-between">
+                                <a href="{% url 'sales:ssr_detail' run.pk %}" class="font-mono text-primary font-semibold hover:underline">
+                                    {{ run.number }}
+                                </a>
+                                {% if run.status == 'simulated' %}
+                                    <span class="badge badge-info text-[10px]">Simulated</span>
+                                {% elif run.status == 'completed' %}
+                                    <span class="badge badge-green text-[10px]">Completed</span>
+                                {% elif run.status == 'failed' %}
+                                    <span class="badge badge-red text-[10px]">Failed</span>
+                                {% else %}
+                                    <span class="badge badge-amber text-[10px]">{{ run.status }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-slate-600 mt-1">Type: {{ run.get_run_type_display }}</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">{{ run.started_at|date:"M d, Y H:i:s" }}</div>
+                            <div class="mt-2 text-[11px] text-slate-700 flex items-center justify-between border-t border-slate-200/60 pt-1">
+                                <span>Read: {{ run.records_read }}</span>
+                                <span>Written: {{ run.records_written }}</span>
+                                <span>Errors: {{ run.records_failed }}</span>
+                            </div>
+                        </div>
+                    {% empty %}
+                        <p class="text-xs text-slate-400 py-4 text-center">No execution runs recorded yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
