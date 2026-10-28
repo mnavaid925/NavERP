@@ -145,10 +145,10 @@ def product_import_csv(request):
                             cat_lower = cat_name.lower()
                             category = category_cache.get(cat_lower)
                             if not category and auto_create_categories and not dry_run:
-                                category = StoreCategory.objects.create(
+                                category, _ = StoreCategory.objects.get_or_create(
                                     tenant=request.tenant,
-                                    name=cat_name,
                                     slug=slugify(cat_name),
+                                    defaults={"name": cat_name},
                                 )
                                 category_cache[cat_lower] = category
 
