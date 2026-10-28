@@ -96,6 +96,11 @@ from .models import (
     SalesFieldMapping,
     SalesSyncJob,
     SalesSyncRun,
+    # 8.19 Master Data & Configuration
+    SalesPriceBookEntry,
+    SalesCustomEntityDefinition,
+    SalesMethodology,
+    SalesRegionalSetting,
 )
 
 
@@ -1278,6 +1283,43 @@ class SalesSyncRunAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+# 8.19 Master Data & Configuration
+
+
+@admin.register(SalesPriceBookEntry)
+class SalesPriceBookEntryAdmin(admin.ModelAdmin):
+    list_display = ('number', 'product', 'price_book', 'currency_code', 'list_price', 'floor_price', 'pricing_model', 'is_active', 'tenant')
+    list_filter = ('pricing_model', 'currency_code', 'is_active', 'tenant')
+    search_fields = ('number', 'sku_code', 'product__name', 'price_book__name')
+    readonly_fields = ('tenant', 'number', 'created_at', 'updated_at')
+    list_select_related = ('product', 'price_book', 'item')
+
+
+@admin.register(SalesCustomEntityDefinition)
+class SalesCustomEntityDefinitionAdmin(admin.ModelAdmin):
+    list_display = ('number', 'name', 'entity_code', 'target_model', 'field_type', 'is_required', 'display_order', 'is_active', 'tenant')
+    list_filter = ('target_model', 'field_type', 'is_required', 'is_active', 'tenant')
+    search_fields = ('number', 'name', 'entity_code', 'formula_expression')
+    readonly_fields = ('tenant', 'number', 'created_at', 'updated_at')
+
+
+@admin.register(SalesMethodology)
+class SalesMethodologyAdmin(admin.ModelAdmin):
+    list_display = ('number', 'name', 'framework', 'pipeline', 'gating_stage', 'min_passing_score', 'is_mandatory_gate', 'is_active', 'tenant')
+    list_filter = ('framework', 'is_mandatory_gate', 'is_active', 'tenant')
+    search_fields = ('number', 'name', 'coaching_guidelines')
+    readonly_fields = ('tenant', 'number', 'created_at', 'updated_at')
+    list_select_related = ('pipeline', 'gating_stage')
+
+
+@admin.register(SalesRegionalSetting)
+class SalesRegionalSettingAdmin(admin.ModelAdmin):
+    list_display = ('number', 'name', 'region_code', 'primary_currency', 'tax_display_mode', 'compliance_framework', 'is_default', 'is_active', 'tenant')
+    list_filter = ('region_code', 'compliance_framework', 'tax_display_mode', 'is_default', 'is_active', 'tenant')
+    search_fields = ('number', 'name', 'primary_currency', 'default_quote_terms')
+    readonly_fields = ('tenant', 'number', 'created_at', 'updated_at')
 
 
 
