@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Bulk Product Import · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:catalogproduct_list' %}">Product Catalog</a>
+            <span>/</span>
+            <span>Bulk Import</span>
+        </div>
+        <h1 class="page-title">Bulk Product & Variant Import</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:product_export_csv' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Download Current Catalog CSV
+        </a>
+        <a href="{% url 'ecommerce:catalogproduct_list' %}" class="btn btn-outline">
+            <i data-lucide="package"></i> Back to Products
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Upload Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Upload CSV Catalog File</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data" action="">
+                {% csrf_token %}
+
+                {% if errors %}
+                <div class="mb-4 p-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+                    <div class="font-bold mb-1">Import Issues Encountered:</div>
+                    <ul class="list-disc pl-5 space-y-1">
+                        {% for err in errors %}
+                        <li>{{ err }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                {% if import_results %}
+                <div class="mb-4 p-4 rounded {% if import_results.dry_run %}bg-amber-50 border-amber-200 text-amber-800{% else %}bg-green-50 border-green-200 text-green-800{% endif %} border text-sm">
+                    <div class="font-bold mb-1">
+                        {% if import_results.dry_run %}Dry-Run Validation Succeeded (No records written):{% else %}Import Summary:{% endif %}
+                    </div>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <li>Rows Processed: {{ import_results.rows_processed }}</li>
+                        <li>Products Created: {{ import_results.created_products }}</li>
+                        <li>Products Updated: {{ import_results.updated_products }}</li>
+                        <li>Variants Created: {{ import_results.created_variants }}</li>
+                    </ul>
+                </div>
+                {% endif %}
+
+                <div class="space-y-4 mb-6">
+                    <div class="form-group">
+                        <label for="{{ form.csv_file.id_for_label }}" class="form-label">{{ form.csv_file.label }} <span class="text-red-500">*</span></label>
+                        {{ form.csv_file }}
+                        <span class="text-xs text-slate-500">{{ form.csv_file.help_text }}</span>
+                        {% if form.csv_file.errors %}<div class="form-error">{{ form.csv_file.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row gap-4 pt-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.dry_run }}
+                            <span class="text-sm font-medium text-slate-700">{{ form.dry_run.label }}</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.auto_create_categories }}
+                            <span class="text-sm font-medium text-slate-700">{{ form.auto_create_categories.label }}</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-slate-200">
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="upload-cloud"></i> Start CSV Import
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Instructions Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">CSV Column Format</h2>
+        </div>
+        <div class="card-body text-xs text-slate-600 space-y-3">
+            <p>Your CSV should include the following header columns (order does not matter):</p>
+            <ul class="list-disc pl-4 space-y-1 font-mono text-slate-700">
+                <li><strong>Product_Name</strong> <span class="text-red-500 font-sans">*required</span></li>
+                <li><strong>Slug</strong> (auto-generated if empty)</li>
+                <li><strong>Brand</strong> (optional)</li>
+                <li><strong>Category</strong> (optional)</li>
+                <li><strong>Status</strong> (draft, active, archived)</li>
+                <li><strong>Visibility</strong> (storefront, hidden)</li>
+                <li><strong>SKU</strong> (variant SKU)</li>
+                <li><strong>Variant_Name</strong> (e.g. Size L)</li>
+                <li><strong>Price</strong> (e.g. 29.99)</li>
+                <li><strong>Compare_At_Price</strong> (MSRP)</li>
+                <li><strong>Cost_Price</strong> (cost)</li>
+                <li><strong>Barcode</strong> (UPC/EAN)</li>
+            </ul>
+            <div class="pt-3 border-t border-slate-100">
+                <p class="text-slate-500">Rows with the same product name or slug will be attached as multiple variants to a single catalog product.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
