@@ -91,7 +91,11 @@ def catalogproduct_detail(request, pk):
         prefetch_related=("categories", "variants__item"),
     )
 
-    variants = product.variants.filter(tenant=request.tenant).order_by("sort_order", "sku")
+    variants = (
+        product.variants.filter(tenant=request.tenant)
+        .select_related("item")
+        .order_by("sort_order", "sku")
+    )
 
     rels = (
         product.relationships_from.filter(tenant=request.tenant, is_active=True)
