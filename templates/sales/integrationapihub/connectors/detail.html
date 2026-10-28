@@ -47,7 +47,7 @@
                 <i data-lucide="pencil" class="w-4 h-4"></i>
                 <span>Edit</span>
             </a>
-            <form method="post" action="{% url 'sales:sic_delete' connector.pk %}" class="inline" onsubmit="return confirm('Delete connector {{ connector.name }}?');">
+            <form method="post" action="{% url 'sales:sic_delete' connector.pk %}" class="inline" onsubmit="return confirm('Delete connector {{ connector.name|escapejs }}?');">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-danger flex items-center gap-2">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
