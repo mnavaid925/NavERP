@@ -127,7 +127,12 @@ def catalogproduct_create(request):
             product.tenant = request.tenant
             product.save()
             form.save_m2m()
-            write_audit_log(request, "create", product, f"Created catalog product {product.name} ({product.number})")
+            write_audit_log(
+                request.user,
+                product,
+                "create",
+                {"name": product.name, "number": product.number},
+            )
             messages.success(request, f"Product '{product.name}' created successfully.")
             return redirect("ecommerce:catalogproduct_detail", pk=product.pk)
     else:
@@ -155,7 +160,12 @@ def catalogproduct_edit(request, pk):
         form = CatalogProductForm(request.POST, instance=product, tenant=request.tenant)
         if form.is_valid():
             product = form.save()
-            write_audit_log(request, "update", product, f"Updated catalog product {product.name} ({product.number})")
+            write_audit_log(
+                request.user,
+                product,
+                "update",
+                {"name": product.name, "number": product.number},
+            )
             messages.success(request, f"Product '{product.name}' updated successfully.")
             return redirect("ecommerce:catalogproduct_detail", pk=product.pk)
     else:
@@ -182,7 +192,12 @@ def catalogproduct_edit(request, pk):
 def catalogproduct_delete(request, pk):
     product = ecommerce_object(request, CatalogProduct, pk=pk)
     name = product.name
-    write_audit_log(request, "delete", product, f"Deleted catalog product {name} ({product.number})")
+    write_audit_log(
+        request.user,
+        product,
+        "delete",
+        {"name": name, "number": product.number},
+    )
     product.delete()
     messages.success(request, f"Product '{name}' deleted successfully.")
     return redirect("ecommerce:catalogproduct_list")
@@ -202,6 +217,11 @@ def catalogproduct_publish(request, pk):
         action_msg = "published live"
 
     product.save()
-    write_audit_log(request, "update", product, f"Product {product.name} {action_msg}")
+    write_audit_log(
+        request.user,
+        product,
+        "update",
+        {"action": action_msg, "status": product.status},
+    )
     messages.success(request, f"Product '{product.name}' {action_msg}.")
     return redirect("ecommerce:catalogproduct_detail", pk=product.pk)
