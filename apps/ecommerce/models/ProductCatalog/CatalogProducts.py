@@ -69,6 +69,7 @@ class CatalogProduct(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status", "visibility"], name="ecom_prd_tnt_stat_vis_idx"),
             models.Index(fields=["tenant", "brand"], name="ecom_prd_tnt_brand_idx"),
+            models.Index(fields=["tenant", "-created_at"], name="ecom_prd_tnt_created_idx"),
         ]
 
     def clean(self):
