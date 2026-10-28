@@ -38,7 +38,7 @@
                 <i data-lucide="arrow-left" class="w-4 h-4"></i>
                 <span>All Runs</span>
             </a>
-            <form method="post" action="{% url 'sales:ssr_delete' run.pk %}" class="inline" onsubmit="return confirm('Delete sync run log {{ run.number }}?');">
+            <form method="post" action="{% url 'sales:ssr_delete' run.pk %}" class="inline" onsubmit="return confirm('Delete sync run log {{ run.number|escapejs }}?');">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-danger flex items-center gap-2">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
