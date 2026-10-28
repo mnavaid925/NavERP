@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Methodology {{ methodology.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Page Header #}
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:master_data_overview' %}" class="hover:text-primary">Master Data</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:smd_list' %}" class="hover:text-primary">Sales Methodologies</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ methodology.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">{{ methodology.number }} · {{ methodology.name }}</h1>
+                {% if methodology.is_active %}
+                <span class="badge badge-green">Active</span>
+                {% else %}
+                <span class="badge badge-slate">Inactive</span>
+                {% endif %}
+            </div>
+            <p class="text-sm text-slate-500 mt-1">{{ methodology.get_framework_display }}</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:smd_list' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                <span>Back to Methodologies</span>
+            </a>
+            <a href="{% url 'sales:smd_edit' methodology.pk %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+                <span>Edit Methodology</span>
+            </a>
+            <form method="post" action="{% url 'sales:smd_delete' methodology.pk %}" class="inline" onsubmit="return confirm('Delete methodology {{ methodology.number }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger flex items-center gap-2">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    <span>Delete</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {# KPI Summary Cards #}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Framework</span>
+                    <div class="text-lg font-bold text-slate-900 mt-1">{{ methodology.get_framework_display }}</div>
+                </div>
+                <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+                    <i data-lucide="award" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Passing Score</span>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ methodology.min_passing_score }}%</div>
+                </div>
+                <div class="stat-icon green p-3 rounded-lg bg-emerald-50 text-emerald-600">
+                    <i data-lucide="check-circle" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Gate Policy</span>
+                    <div class="text-lg font-bold text-slate-900 mt-1">
+                        {% if methodology.is_mandatory_gate %}
+                        <span class="badge badge-amber">Mandatory Gate</span>
+                        {% else %}
+                        <span class="badge badge-muted">Advisory</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="stat-icon orange p-3 rounded-lg bg-amber-50 text-amber-600">
+                    <i data-lucide="shield-check" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Checkpoints</span>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ methodology.qualification_criteria|length }}</div>
+                </div>
+                <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+                    <i data-lucide="list-checks" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Main Details Grid #}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-6">
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-200">Stage Gating & Alignment</h3>
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Methodology Name</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ methodology.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Framework Code</dt>
+                        <dd class="text-sm font-mono text-purple-700 font-semibold mt-1">{{ methodology.framework }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Bound Pipeline</dt>
+                        <dd class="text-sm text-slate-900 mt-1">
+                            {% if methodology.pipeline %}
+                            <span class="font-medium text-primary">{{ methodology.pipeline.name }}</span>
+                            {% else %}
+                            <span class="text-slate-400">All Pipelines (Global)</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Gating Pipeline Stage</dt>
+                        <dd class="text-sm text-slate-900 mt-1">
+                            {% if methodology.gating_stage %}
+                            <span class="badge badge-info">{{ methodology.gating_stage.name }}</span>
+                            {% else %}
+                            <span class="text-slate-400">None / No stage restriction</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+
+            {# Qualification Criteria Table #}
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-200">Qualification Checkpoints & Weightings</h3>
+                {% if methodology.qualification_criteria %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Key</th>
+                                <th>Verification Checkpoint</th>
+                                <th>Weight %</th>
+                                <th>Mandatory Flag</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for crit in methodology.qualification_criteria %}
+                            <tr>
+                                <td class="font-mono text-xs font-semibold text-slate-800">{{ crit.key }}</td>
+                                <td class="font-medium text-slate-900">{{ crit.label }}</td>
+                                <td>
+                                    <span class="font-semibold text-slate-900">{{ crit.weight|default:10 }}%</span>
+                                </td>
+                                <td>
+                                    {% if crit.is_required %}
+                                    <span class="badge badge-red text-xs">Required</span>
+                                    {% else %}
+                                    <span class="badge badge-muted text-xs">Optional</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-sm text-slate-500">No qualification criteria checklist configured.</p>
+                {% endif %}
+            </div>
+
+            {# Coaching Guidelines #}
+            {% if methodology.coaching_guidelines %}
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-2">Tactical Coaching Guidelines & Prompts</h3>
+                <p class="text-sm text-slate-700 whitespace-pre-line">{{ methodology.coaching_guidelines }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        {# Sidebar Meta #}
+        <div class="space-y-6">
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-200">Governance & Audit</h3>
+                <dl class="space-y-3">
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Enforcement Policy</dt>
+                        <dd class="text-sm text-slate-900 mt-0.5">
+                            {% if methodology.is_mandatory_gate %}
+                            <span class="badge badge-amber text-xs">Mandatory stage gate</span>
+                            {% else %}
+                            <span class="badge badge-muted text-xs">Advisory guidance</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Passing Score Threshold</dt>
+                        <dd class="text-sm font-semibold text-slate-900 mt-0.5">{{ methodology.min_passing_score }}%</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Created</dt>
+                        <dd class="text-xs text-slate-600 mt-0.5">{{ methodology.created_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Last Updated</dt>
+                        <dd class="text-xs text-slate-600 mt-0.5">{{ methodology.updated_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
