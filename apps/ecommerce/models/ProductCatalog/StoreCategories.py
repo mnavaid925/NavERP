@@ -61,7 +61,12 @@ class StoreCategory(TenantNumbered):
     def get_breadcrumbs(self):
         crumbs = []
         curr = self
+        seen = set()
         while curr:
+            if curr.pk in seen:
+                break
+            if curr.pk:
+                seen.add(curr.pk)
             crumbs.append({"pk": curr.pk, "name": curr.name, "slug": curr.slug})
             curr = curr.parent
         crumbs.reverse()
