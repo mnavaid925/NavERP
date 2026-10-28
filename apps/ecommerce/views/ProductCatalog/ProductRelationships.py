@@ -79,10 +79,14 @@ def productrelationship_create(request):
             rel.tenant = request.tenant
             rel.save()
             write_audit_log(
-                request,
-                "create",
+                request.user,
                 rel,
-                f"Created relationship {rel.get_relationship_type_display()} from {rel.source_product.name} to {rel.target_product.name}",
+                "create",
+                {
+                    "relationship_type": rel.relationship_type,
+                    "source": rel.source_product.name,
+                    "target": rel.target_product.name,
+                },
             )
             messages.success(request, "Product relationship created successfully.")
             return redirect("ecommerce:catalogproduct_detail", pk=rel.source_product_id)
@@ -109,10 +113,14 @@ def productrelationship_edit(request, pk):
         if form.is_valid():
             rel = form.save()
             write_audit_log(
-                request,
-                "update",
+                request.user,
                 rel,
-                f"Updated relationship {rel.get_relationship_type_display()} from {rel.source_product.name} to {rel.target_product.name}",
+                "update",
+                {
+                    "relationship_type": rel.relationship_type,
+                    "source": rel.source_product.name,
+                    "target": rel.target_product.name,
+                },
             )
             messages.success(request, "Product relationship updated successfully.")
             return redirect("ecommerce:productrelationship_detail", pk=rel.pk)
@@ -137,7 +145,12 @@ def productrelationship_edit(request, pk):
 def productrelationship_delete(request, pk):
     rel = ecommerce_object(request, ProductRelationship, pk=pk)
     source_id = rel.source_product_id
-    write_audit_log(request, "delete", rel, f"Deleted product relationship {rel.number}")
+    write_audit_log(
+        request.user,
+        rel,
+        "delete",
+        {"number": rel.number},
+    )
     rel.delete()
     messages.success(request, "Product relationship deleted successfully.")
     return redirect("ecommerce:catalogproduct_detail", pk=source_id)
