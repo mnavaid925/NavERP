@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.crm.models import PriceBook, Product
 from apps.sales.forms.MasterDataConfiguration.SalesPriceBookEntries import SalesPriceBookEntryForm
@@ -82,6 +83,7 @@ def pbe_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def pbe_create(request):
     """Create a new price book entry."""
     if request.method == "POST":
@@ -110,6 +112,7 @@ def pbe_create(request):
 
 
 @login_required
+@tenant_admin_required
 def pbe_edit(request, pk):
     """Edit an existing price book entry."""
     entry = get_object_or_404(
@@ -140,6 +143,7 @@ def pbe_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def pbe_delete(request, pk):
     """Delete a price book entry."""
