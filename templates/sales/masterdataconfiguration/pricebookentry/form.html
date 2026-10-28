@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Price Book Entry {{ entry.number }}{% else %}New Price Book Entry{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+    {# Page Header #}
+    <div class="page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:master_data_overview' %}" class="hover:text-primary">Master Data</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:pbe_list' %}" class="hover:text-primary">Price Book Entries</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{% if is_edit %}Edit {{ entry.number }}{% else %}New Entry{% endif %}</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">
+                {% if is_edit %}Edit Price Book Entry {{ entry.number }}{% else %}Create Price Book Entry{% endif %}
+            </h1>
+            <p class="text-sm text-slate-500 mt-1">Configure catalog product pricing terms, minimum orders, and volume brackets.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% if is_edit %}{% url 'sales:pbe_detail' entry.pk %}{% else %}{% url 'sales:pbe_list' %}{% endif %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                <span>Cancel</span>
+            </a>
+        </div>
+    </div>
+
+    {# Form Card #}
+    <div class="card p-6">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="space-y-4">
+                <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-200">Catalog Linkage</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.price_book.id_for_label }}">
+                            Price Book <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.price_book }}
+                        {% if form.price_book.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.price_book.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.product.id_for_label }}">
+                            Commercial Product <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.product }}
+                        {% if form.product.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.product.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.item.id_for_label }}">
+                            Physical Inventory SKU Link (SCM Item)
+                        </label>
+                        {{ form.item }}
+                        {% if form.item.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.item.errors.0 }}</p>
+                        {% endif %}
+                        <p class="text-xs text-slate-500 mt-1">Optional link for stock reservation & warehouse dispatch.</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.sku_code.id_for_label }}">
+                            SKU Code
+                        </label>
+                        {{ form.sku_code }}
+                        {% if form.sku_code.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.sku_code.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4 pt-4 border-t border-slate-200">
+                <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-200">Pricing & Margin Controls</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.currency_code.id_for_label }}">
+                            Currency <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.currency_code }}
+                        {% if form.currency_code.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.currency_code.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.list_price.id_for_label }}">
+                            List Price <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.list_price }}
+                        {% if form.list_price.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.list_price.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.floor_price.id_for_label }}">
+                            Floor Price (Margin Guard)
+                        </label>
+                        {{ form.floor_price }}
+                        {% if form.floor_price.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.floor_price.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.pricing_model.id_for_label }}">
+                            Pricing Model
+                        </label>
+                        {{ form.pricing_model }}
+                        {% if form.pricing_model.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.pricing_model.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.min_quantity.id_for_label }}">
+                            Minimum Order Quantity (MOQ)
+                        </label>
+                        {{ form.min_quantity }}
+                        {% if form.min_quantity.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.min_quantity.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label text-sm font-medium" for="{{ form.volume_tier_breaks_raw.id_for_label }}">
+                        {{ form.volume_tier_breaks_raw.label }}
+                    </label>
+                    {{ form.volume_tier_breaks_raw }}
+                    {% if form.volume_tier_breaks_raw.errors %}
+                    <p class="form-error text-xs text-red-600 mt-1">{{ form.volume_tier_breaks_raw.errors.0 }}</p>
+                    {% endif %}
+                    <p class="text-xs text-slate-500 mt-1">Provide an array of JSON objects with min_qty, discount_pct, or unit_price.</p>
+                </div>
+            </div>
+
+            <div class="space-y-4 pt-4 border-t border-slate-200">
+                <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-200">Validity & Administration</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.valid_from.id_for_label }}">
+                            Effective Start Date
+                        </label>
+                        {{ form.valid_from }}
+                        {% if form.valid_from.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.valid_from.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.valid_to.id_for_label }}">
+                            Expiration Date
+                        </label>
+                        {{ form.valid_to }}
+                        {% if form.valid_to.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.valid_to.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label text-sm font-medium" for="{{ form.notes.id_for_label }}">
+                        Internal Notes
+                    </label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}
+                    <p class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="flex items-center gap-2 pt-2">
+                    {{ form.is_active }}
+                    <label class="form-label text-sm font-medium cursor-pointer" for="{{ form.is_active.id_for_label }}">
+                        Active for quotes and orders
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'sales:pbe_detail' entry.pk %}{% else %}{% url 'sales:pbe_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if is_edit %}Save Changes{% else %}Create Entry{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
