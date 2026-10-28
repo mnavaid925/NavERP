@@ -164,7 +164,7 @@ def ssj_trigger(request, pk):
     job.last_run_at = now
     job.total_runs_count += 1
     job.total_records_synced += 5
-    job.save(update_fields=["last_run_at", "total_runs_count", "total_records_synced"])
+    job.save(update_fields=["last_run_at", "total_runs_count", "total_records_synced", "updated_at"])
 
     run = SalesSyncRun(
         tenant=tenant,
