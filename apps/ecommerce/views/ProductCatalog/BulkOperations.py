@@ -243,7 +243,7 @@ def product_import_csv(request):
                     "errors_count": len(errors),
                 }
 
-                if not dry_run and not errors:
+                if not dry_run and (created_products > 0 or created_variants > 0):
                     write_audit_log(
                         request.user,
                         None,
@@ -251,10 +251,17 @@ def product_import_csv(request):
                         {"message": f"Imported {created_products} products and {created_variants} variants from CSV"},
                         tenant=request.tenant,
                     )
-                    messages.success(
-                        request,
-                        f"CSV Import complete: {created_products} products created, {created_variants} variants added.",
-                    )
+                if not dry_run:
+                    if not errors:
+                        messages.success(
+                            request,
+                            f"CSV Import complete: {created_products} products created, {created_variants} variants added.",
+                        )
+                    else:
+                        messages.warning(
+                            request,
+                            f"CSV Import completed with warnings: {created_products} products created, {created_variants} variants added, {len(errors)} error(s).",
+                        )
             except Exception as exc:
                 errors.append(f"File reading error: {str(exc)}")
     else:
