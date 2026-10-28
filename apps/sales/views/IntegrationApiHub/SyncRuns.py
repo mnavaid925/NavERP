@@ -54,8 +54,8 @@ def ssr_list(request):
 
     page_obj = paginate(request, qs, per_page=20)
     paginator = page_obj.paginator
-    connectors = SalesIntegrationConnector.objects.filter(tenant=tenant)
-    jobs = SalesSyncJob.objects.filter(tenant=tenant)
+    connectors = SalesIntegrationConnector.objects.filter(tenant=tenant).only("id", "name", "number")
+    jobs = SalesSyncJob.objects.filter(tenant=tenant).only("id", "name", "number")
 
     context = {
         "runs": page_obj.object_list,
