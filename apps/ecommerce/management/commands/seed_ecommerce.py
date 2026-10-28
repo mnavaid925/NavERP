@@ -28,6 +28,7 @@ class Command(BaseCommand):
                 self._seed_tenant(tenant)
 
         self.stdout.write(self.style.SUCCESS("eCommerce seeding completed successfully."))
+        self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view eCommerce data. The superuser (admin) has no tenant and sees no data.")
 
     def _seed_tenant(self, tenant):
         # 1. Categories
