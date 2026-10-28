@@ -8,7 +8,7 @@ from django.views.decorators.http import require_POST
 
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
-from apps.crm.models import PriceBook, Product
+from apps.crm.models import PriceBook
 from apps.sales.forms.MasterDataConfiguration.SalesPriceBookEntries import SalesPriceBookEntryForm
 from apps.sales.models.MasterDataConfiguration.SalesPriceBookEntries import SalesPriceBookEntry
 
@@ -50,14 +50,12 @@ def pbe_list(request):
     page_obj = paginator.get_page(page_number)
 
     price_books = PriceBook.objects.filter(tenant=tenant)
-    products = Product.objects.filter(tenant=tenant)
 
     context = {
         "page_obj": page_obj,
         "entries": page_obj.object_list,
         "price_book_entries": page_obj.object_list,
         "price_books": price_books,
-        "products": products,
         "pricing_models": SalesPriceBookEntry.PRICING_MODEL_CHOICES,
         "q": q,
         "selected_price_book": selected_price_book,
