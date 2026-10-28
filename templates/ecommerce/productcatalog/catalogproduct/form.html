@@ -137,7 +137,7 @@
                     </div>
                 </div>
 
-                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-slate-200">
+                <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-200">
                     <a href="{% if is_edit %}{% url 'ecommerce:catalogproduct_detail' product.pk %}{% else %}{% url 'ecommerce:catalogproduct_list' %}{% endif %}" class="btn btn-outline">
                         Cancel
                     </a>
