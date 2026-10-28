@@ -18099,3 +18099,301 @@ Sub-module 8.18 (Integration & API Hub) completed end-to-end adhering strictly t
 - **Phase 7 (Skill & README)**: Documented 8.18 in `.claude/skills/sales/SKILL.md` and `README.md`.
 - **Gap Register Link**: [.agents/tasks/gaps-sales-8.18.md](file:///c:/xampp/htdocs/NavERP/.agents/tasks/gaps-sales-8.18.md) (5 runtime/transport infrastructure gaps tracked).
 
+
+
+---
+
+# Sub-module 8.19 — Master Data & Configuration (Module 8: Sales Management System, sales) — plan from research-sales-8.19.md (2026-10-28)
+
+**Repo state at plan time:** BASE `97e29ddd54668d5335849c36be560bb12c8f84ea`. Working tree clean. `apps/sales/` exists and is fully packaged (21 sub-module folders per layer) — this run **EXTENDS** it: **no scaffold, no `config/settings.py` / `config/urls.py` changes.** **Next migration: `0035`** — verified: `apps/sales/migrations/` ends at `0034_alter_salessyncjob_batch_size.py`. **Re-verify the number at generation time (L43/L51/L53).**
+
+## The pinned decisions this plan executes literally
+
+**(a) `<SubModule>` package folder = `MasterDataConfiguration`** in all four layers (`apps/sales/{models,forms,views,urls}/MasterDataConfiguration/`). Matches house style (PascalCase, drops `&` — siblings: `QuoteProposalCPQ`, `TerritoryQuotaManagement`, `WorkflowProcessAutomation`, `IntegrationApiHub`). Use this exact string in EVERY path.
+
+**(b) Template sub-module folder = `templates/sales/masterdataconfiguration/`** — verified house convention (`sales/masterdataconfiguration/`). This is a **multi-entity** sub-module → four entity folders + overview dashboard:
+- `templates/sales/masterdataconfiguration/pricebookentry/{list,detail,form}.html`
+- `templates/sales/masterdataconfiguration/customentitydefinition/{list,detail,form}.html`
+- `templates/sales/masterdataconfiguration/salesmethodology/{list,detail,form}.html`
+- `templates/sales/masterdataconfiguration/regionalsetting/{list,detail,form}.html`
+- `templates/sales/masterdataconfiguration/overview.html` (Master Data & Configuration Central Overview)
+
+**(c) Entity filenames (layers line up one-to-one):** `SalesPriceBookEntries.py`, `SalesCustomEntityDefinitions.py`, `SalesMethodologies.py`, `SalesRegionalSettings.py` in each of `models/`, `forms/`, `views/`, `urls/` under `MasterDataConfiguration/`, plus `Overview.py` in `views/` and `urls/`.
+
+**(d) URL names** (house convention verified: concise snake_case with explicit semantic aliases):
+- Price Book Entries: `pbe_list` / `pbe_detail` / `pbe_create` / `pbe_edit` / `pbe_delete` + **`pbe_clone`** (POST clone entry to target currency or price book)
+- Custom Entity Definitions: `sco_list` / `sco_detail` / `sco_create` / `sco_edit` / `sco_delete`
+- Sales Methodologies: `smd_list` / `smd_detail` / `smd_create` / `smd_edit` / `smd_delete`
+- Regional Settings: `srg_list` / `srg_detail` / `srg_create` / `srg_edit` / `srg_delete`
+- Central Overview: `master_data_overview`
+- **First-match-wins:** literal routes (`…/create/`, `…/overview/`, `…/clone/`) BEFORE every `<int:pk>` route, in each entity url module AND in the concatenated `urls/__init__.py`.
+
+**(e) Spine Entity Reuse:**
+- Reuses `core.Tenant` (multi-tenant root isolation).
+- Reuses `core.Party` (central customer and partner accounts).
+- Reuses `crm.PriceBook` [`PB-`] (`apps/crm/models/SalesForceAutomation/PriceBooks/PriceBook.py` — whose docstring explicitly anticipates: *"PriceBookEntry is a documented future enhancement, not built here."* Sub-module 8.19 delivers this junction table!).
+- Reuses `crm.Product` [`PRD-`] (`apps/crm/models/SalesForceAutomation/Products/Product.py` — catalog product master).
+- Reuses `sales.Pipeline` [`PIPE-`] and `sales.PipelineStage` (`apps/sales/models/OpportunityPipeline/Pipelines/Pipeline.py` — pipeline stage-gate mapping).
+- Reuses `accounting.Currency` (`apps/accounting/models/GeneralLedger/Currencies/Currency.py` — currency codes and formatting).
+- Reuses `accounts.User` (`settings.AUTH_USER_MODEL` — maintainers, owners, and audit stamps).
+
+**(f) Number Prefix Collision Audit:**
+- `PBE-` (`SalesPriceBookEntry`): **FREE** (0 collisions across repo)
+- `SCO-` (`SalesCustomEntityDefinition`): **FREE** (0 collisions across repo)
+- `SMD-` (`SalesMethodology`): **FREE** (0 collisions across repo)
+- `SRG-` (`SalesRegionalSetting`): **FREE** (0 collisions across repo)
+All four extend `apps/sales/models/_base.py::TenantNumbered` (`number = models.CharField(max_length=20, editable=False)`).
+
+**(g) Audit Logging:** Every write path calls `write_audit_log(user, obj, action, changes=None, tenant=None)` (`apps/core/utils.py`).
+
+**(h) Final Sub-module of Module 8:** Sub-module 8.19 is the final sub-module of Module 8 (Sales Management System), completing the entire roadmap 8.1 through 8.19.
+
+---
+
+## Models (from research — 4)
+
+All four live in the NEW package `apps/sales/models/MasterDataConfiguration/`, extend `TenantNumbered`, and are re-exported from `apps/sales/models/__init__.py`.
+
+### 1. `SalesPriceBookEntry` [`PBE-`] — `SalesPriceBookEntries.py` — **NavERP.md bullet 1 (Product Catalog & Pricing)**
+Drivers: Salesforce `PricebookEntry` & CPQ floor pricing; Dynamics 365 Price List Items & markups; SAP CX price condition records; Zoho CRM volume pricing tiers.
+
+| Field | Type | Notes |
+|---|---|---|
+| `price_book` | FK `crm.PriceBook`, CASCADE, related_name `sales_entries` | Target price book catalog |
+| `product` | FK `crm.Product`, SET_NULL, null, blank, related_name `sales_price_book_entries` | Catalog sellable product |
+| `sku_code` | Char(64), db_index=True | SKU code (auto-populated from Product or custom entered) |
+| `item_name` | Char(255) | Descriptive item name / title |
+| `currency_code` | Char(3), default "USD" | ISO currency code (USD, EUR, GBP, CAD, AUD, JPY) |
+| `list_price` | Decimal(12, 2), default 0 | Standard catalog list price in this book & currency |
+| `floor_price` | Decimal(12, 2), default 0 | Minimum allowed price without executive exception |
+| `cost_price` | Decimal(12, 2), default 0 | Product base cost for margin calculations |
+| `pricing_model` | Char(30), `PRICING_MODEL_CHOICES`, default `flat` | flat / tier_volume / tier_graduated / markup_cost |
+| `min_quantity` | PositiveIntegerField, default 1 | Minimum order quantity (MOQ) |
+| `volume_tier_breaks` | JSONField, default list, blank | Tier matrix: `[{"min_qty": 10, "max_qty": 49, "unit_price": 90.0, "discount_pct": 10}]` |
+| `valid_from` | DateField, null, blank | Temporal validity start date |
+| `valid_to` | DateField, null, blank | Temporal validity end date |
+| `is_active` | BooleanField, default True, db_index=True | Active/inactive toggle |
+
+- **Meta:** `ordering = ["price_book", "sku_code", "id"]`; `UniqueConstraint(fields=["tenant", "price_book", "sku_code", "currency_code"], name="sales_pbe_tnt_pb_sku_cur_uniq")`; indexes: `("tenant", "price_book", "is_active")` (name `sales_pbe_tnt_pb_act_idx`), `("tenant", "currency_code")` (name `sales_pbe_tnt_cur_idx`), `("tenant", "sku_code")` (name `sales_pbe_tnt_sku_idx`).
+- **Form excludes:** `tenant`, `number` (auto), `created_at`, `updated_at`.
+- **FKs:** `crm.PriceBook`, `crm.Product` — verified.
+
+### 2. `SalesCustomEntityDefinition` [`SCO-`] — `SalesCustomEntityDefinitions.py` — **NavERP.md bullet 2 (Custom Fields & Objects)**
+Drivers: Salesforce `CustomObject` & `CustomField` metadata; HubSpot Custom Objects & Properties; Dynamics 365 Dataverse Custom Tables & Power Fx formulas; Zoho CRM Custom Modules.
+
+| Field | Type | Notes |
+|---|---|---|
+| `entity_scope` | Char(40), `ENTITY_SCOPE_CHOICES`, default `opportunity` | opportunity / quote / order / contract / account / custom_object |
+| `api_name` | SlugField(60) | Machine-readable identifier e.g. `saas_deployment_type` |
+| `display_name` | Char(120) | User-facing label e.g. "SaaS Deployment Type" |
+| `plural_name` | Char(140), blank | Plural label e.g. "SaaS Deployment Types" |
+| `field_type` | Char(30), `FIELD_TYPE_CHOICES`, default `text` | text / number / currency / percent / date / boolean / picklist / formula / lookup_relationship |
+| `target_model` | Char(120), blank | Target model for lookups (e.g. `crm.Opportunity`, `core.Party`, `sales.CPQQuote`) |
+| `relationship_type` | Char(30), `RELATIONSHIP_TYPE_CHOICES`, default `none` | none / lookup_1_n / master_detail |
+| `formula_expression` | TextField, blank | Formula expression string (e.g. `"{expected_arr} * {commission_rate_pct} / 100"`) |
+| `validation_rule_expression` | TextField, blank | Data validation rule (e.g. `"discount_pct <= 25"`) |
+| `picklist_options` | JSONField, default list, blank | Ordered list of string options for picklist fields |
+| `default_value` | Char(255), blank | Default value string |
+| `help_text` | Char(255), blank | Contextual input tooltip guidance |
+| `is_required` | BooleanField, default False | Required field enforcement |
+| `is_searchable` | BooleanField, default True | Search index eligibility toggle |
+| `display_order` | PositiveIntegerField, default 1 | UI render sort ordering |
+| `is_active` | BooleanField, default True, db_index=True | Active toggle |
+
+- **Meta:** `ordering = ["entity_scope", "display_order", "id"]`; `UniqueConstraint(fields=["tenant", "entity_scope", "api_name"], name="sales_sco_tnt_scope_api_uniq")`; indexes: `("tenant", "entity_scope", "is_active")` (name `sales_sco_tnt_scope_act_idx`), `("tenant", "field_type")` (name `sales_sco_tnt_type_idx`).
+- **Form excludes:** `tenant`, `number` (auto), `created_at`, `updated_at`.
+- **FKs:** None (metadata definition register).
+
+### 3. `SalesMethodology` [`SMD-`] — `SalesMethodologies.py` — **NavERP.md bullet 3 (Sales Methodology Configuration)**
+Drivers: Salesforce Sales Path & Guidance for Success; Oracle CX Sales MEDDPICC deal assessments; Dynamics 365 Business Process Flow stage gates; HubSpot Playbooks.
+
+| Field | Type | Notes |
+|---|---|---|
+| `pipeline` | FK `sales.Pipeline`, SET_NULL, null, blank, related_name `methodologies` | Target sales pipeline |
+| `target_stage` | FK `sales.PipelineStage`, SET_NULL, null, blank, related_name `methodology_gates` | Stage where methodology checklist gate applies |
+| `methodology_type` | Char(30), `METHODOLOGY_TYPE_CHOICES`, default `meddpicc` | meddic / meddpicc / bant / spin / challenger / command_message / sandler / custom |
+| `name` | Char(120) | Methodology title (e.g. "Enterprise MEDDPICC Gate", "Mid-Market BANT Qualification") |
+| `code` | SlugField(40) | Identifier slug (e.g. `enterprise-meddpicc`, `smb-bant`) |
+| `description` | TextField, blank | Strategic objective & qualification instructions |
+| `qualification_criteria` | JSONField, default list | Checklist schema: `[{"code": "EB", "label": "Economic Buyer Access", "required": true, "weight": 20}]` |
+| `min_passing_score` | PositiveIntegerField, default 70 | Minimum passing score percentage (0–100) |
+| `mandatory_gate_enforcement` | BooleanField, default True | Blocks stage advancement until required criteria verified |
+| `coaching_guidelines` | TextField, blank | Tactical coaching advice displayed to sales reps |
+| `is_active` | BooleanField, default True, db_index=True | Active toggle |
+
+- **Meta:** `ordering = ["pipeline", "name", "id"]`; `UniqueConstraint(fields=["tenant", "pipeline", "target_stage", "code"], name="sales_smd_tnt_pipe_stg_uniq")`; indexes: `("tenant", "methodology_type", "is_active")` (name `sales_smd_tnt_type_act_idx`), `("tenant", "target_stage")` (name `sales_smd_tnt_stg_idx`).
+- **Form excludes:** `tenant`, `number` (auto), `created_at`, `updated_at`.
+- **FKs:** `sales.Pipeline`, `sales.PipelineStage` — verified.
+
+### 4. `SalesRegionalSetting` [`SRG-`] — `SalesRegionalSettings.py` — **NavERP.md bullet 4 (Localization & Multi-Language)**
+Drivers: SAP Sales Cloud localization & VAT profiles; Salesforce Multi-Currency & Translation Workbench; Dynamics 365 regional formats; SugarCRM statutory commercial legal terms.
+
+| Field | Type | Notes |
+|---|---|---|
+| `region_code` | Char(10), db_index=True | Regional territory key: `NA`, `EMEA`, `APAC`, `DACH`, `UK`, `LATAM` |
+| `region_name` | Char(120) | Region title (e.g. "North America Commercial", "EMEA Central Europe") |
+| `primary_currency_code` | Char(3), default "USD" | Primary commercial currency code (USD, EUR, GBP, CAD, AUD) |
+| `supported_currencies` | JSONField, default list | Permitted secondary transaction currencies (e.g. `["USD", "EUR", "CAD"]`) |
+| `date_format` | Char(20), `DATE_FORMAT_CHOICES`, default `YYYY-MM-DD` | YYYY-MM-DD / MM/DD/YYYY / DD/MM/YYYY / DD.MM.YYYY |
+| `number_format` | Char(20), `NUMBER_FORMAT_CHOICES`, default `1,234.56` | 1,234.56 / 1.234,56 / 1 234,56 |
+| `tax_display_mode` | Char(20), `TAX_DISPLAY_CHOICES`, default `tax_exclusive` | tax_exclusive / tax_inclusive |
+| `default_quote_terms` | TextField, blank | Standard contractual payment & delivery terms |
+| `legal_disclaimer` | TextField, blank | Local statutory regulatory disclaimers & footer text |
+| `compliance_framework` | Char(30), `COMPLIANCE_CHOICES`, default `standard` | standard / gdpr_commercial / sox_revenue / fda_regulated / export_controlled / local_statutory |
+| `cooling_off_days` | PositiveIntegerField, default 0 | Statutory cancellation / cooling-off period in days |
+| `is_default` | BooleanField, default False | Default tenant regional profile toggle |
+| `is_active` | BooleanField, default True, db_index=True | Active toggle |
+
+- **Meta:** `ordering = ["region_code", "id"]`; `UniqueConstraint(fields=["tenant", "region_code"], name="sales_srg_tnt_region_code_uniq")`; indexes: `("tenant", "is_default", "is_active")` (name `sales_srg_tnt_def_act_idx`), `("tenant", "primary_currency_code")` (name `sales_srg_tnt_cur_idx`).
+- **Form excludes:** `tenant`, `number` (auto), `created_at`, `updated_at`.
+- **FKs:** None (regional profile register).
+
+---
+
+## Backend (apps/sales/{models,forms,views,urls}/MasterDataConfiguration/)
+
+Build entity by entity — finish one entity's 4 backend files + 3 templates before starting the next; do NOT touch shared files until Integrate.
+
+### Models
+- [ ] `apps/sales/models/MasterDataConfiguration/SalesPriceBookEntries.py` (incl. `PRICING_MODEL_CHOICES`, volume tier calculation helper, margin helper)
+- [ ] `apps/sales/models/MasterDataConfiguration/SalesCustomEntityDefinitions.py` (incl. `ENTITY_SCOPE_CHOICES`, `FIELD_TYPE_CHOICES`, `RELATIONSHIP_TYPE_CHOICES`)
+- [ ] `apps/sales/models/MasterDataConfiguration/SalesMethodologies.py` (incl. `METHODOLOGY_TYPE_CHOICES`, qualification assessment helper)
+- [ ] `apps/sales/models/MasterDataConfiguration/SalesRegionalSettings.py` (incl. `DATE_FORMAT_CHOICES`, `NUMBER_FORMAT_CHOICES`, `TAX_DISPLAY_CHOICES`, `COMPLIANCE_CHOICES`)
+- [ ] Absolute imports only inside packages (`from apps.sales.models._base import *`); write each file in order, then `ast.parse` it (L64)
+
+### Forms
+- [ ] `apps/sales/forms/MasterDataConfiguration/SalesPriceBookEntries.py` — `SalesPriceBookEntryForm` (excludes per model 1; narrows `price_book` and `product` querysets to `tenant=request.tenant, is_active=True`; JSON validation on `volume_tier_breaks`; `ClonePriceBookEntryForm` for clone action)
+- [ ] `apps/sales/forms/MasterDataConfiguration/SalesCustomEntityDefinitions.py` — `SalesCustomEntityDefinitionForm` (excludes per model 2; JSON validation on `picklist_options`; conditional field validation)
+- [ ] `apps/sales/forms/MasterDataConfiguration/SalesMethodologies.py` — `SalesMethodologyForm` (excludes per model 3; narrows `pipeline` and `target_stage` querysets to `tenant=request.tenant`; JSON validation on `qualification_criteria`)
+- [ ] `apps/sales/forms/MasterDataConfiguration/SalesRegionalSettings.py` — `SalesRegionalSettingForm` (excludes per model 4; JSON validation on `supported_currencies`; handles single-default enforcement)
+- [ ] All four forms inherit **`TenantModelForm` from `apps.core.forms`**; scope all foreign keys with `tenant=request.tenant`; declare explicit `fields = [...]` lists.
+
+### Views (function-based, `@login_required`; privileged writes `@tenant_admin_required`; every queryset filtered `tenant=request.tenant`; audit via `write_audit_log`)
+- [ ] `apps/sales/views/MasterDataConfiguration/SalesPriceBookEntries.py` — list (search `q` over SKU/item_name/price_book + filters `price_book`, `currency_code`, `pricing_model`, `is_active` + pagination), create, detail, edit, delete (POST+confirm), **`pbe_clone` POST** (clones entry to another price book or currency with margin factor).
+- [ ] `apps/sales/views/MasterDataConfiguration/SalesCustomEntityDefinitions.py` — list (search `q` over display_name/api_name + filters `entity_scope`, `field_type`, `relationship_type`, `is_active`), create, detail, edit, delete.
+- [ ] `apps/sales/views/MasterDataConfiguration/SalesMethodologies.py` — list (search `q` over name/code + filters `methodology_type`, `pipeline`, `is_active`), create, detail (includes visual interactive qualification checklist preview), edit, delete.
+- [ ] `apps/sales/views/MasterDataConfiguration/SalesRegionalSettings.py` — list (search `q` over region_code/region_name + filters `primary_currency_code`, `tax_display_mode`, `compliance_framework`, `is_active`), create, detail, edit, delete.
+- [ ] `apps/sales/views/MasterDataConfiguration/Overview.py` — `master_data_overview` central dashboard summarizing total price book entries, custom entity counts, active methodologies, and regional coverage.
+- [ ] Context-var contract (PINNED — L7):
+  - List vars: `price_book_entries`, `custom_entities`, `methodologies`, `regional_settings`
+  - Detail vars: `price_book_entry`, `custom_entity`, `methodology`, `regional_setting`
+  - Edit-mode object var = same singular name; `form` in both create and edit
+  - Dropdown context querysets: `price_books_list`, `products_list`, `pipelines_list`, `pipeline_stages_list`
+  - Choices context: `pricing_model_choices`, `entity_scope_choices`, `field_type_choices`, `relationship_type_choices`, `methodology_type_choices`, `date_format_choices`, `number_format_choices`, `tax_display_mode_choices`, `compliance_framework_choices`
+  - Every list view paginates with `page_obj`/`is_paginated`.
+
+### URLs
+- [ ] `apps/sales/urls/MasterDataConfiguration/SalesPriceBookEntries.py` (`price-book-entries/`, `.../create/`, `.../<int:pk>/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/`, `.../<int:pk>/clone/`)
+- [ ] `apps/sales/urls/MasterDataConfiguration/SalesCustomEntityDefinitions.py` (`custom-entities/`, `.../create/`, `.../<int:pk>/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/`)
+- [ ] `apps/sales/urls/MasterDataConfiguration/SalesMethodologies.py` (`methodologies/`, `.../create/`, `.../<int:pk>/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/`)
+- [ ] `apps/sales/urls/MasterDataConfiguration/SalesRegionalSettings.py` (`regional-settings/`, `.../create/`, `.../<int:pk>/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/`)
+- [ ] `apps/sales/urls/MasterDataConfiguration/Overview.py` (`master-data/overview/`)
+- [ ] `apps/sales/urls/MasterDataConfiguration/__init__.py` — combines all sub-module URLs
+- [ ] `apps/sales/urls/__init__.py` — wire `MasterDataConfiguration` into `urlpatterns` (literal routes before `<int:pk>` routes)
+
+### Package re-exports, admin, migration, seeder (Integrate — single writer)
+- [ ] Verify every expected file landed BEFORE wiring anything (L21/L54)
+- [ ] `apps/sales/models/__init__.py` — add 8.19 re-export block (4 models + their CHOICES constants); missing re-export = ImportError at runtime
+- [ ] `apps/sales/forms/__init__.py` — add 8.19 re-export block (4 forms)
+- [ ] `apps/sales/views/__init__.py` — add 8.19 re-export block (all view functions)
+- [ ] `apps/sales/urls/__init__.py` — include the URL module
+- [ ] `apps/sales/admin.py` — register all 4 models (`SalesPriceBookEntryAdmin`, `SalesCustomEntityDefinitionAdmin`, `SalesMethodologyAdmin`, `SalesRegionalSettingAdmin`) with `list_display`, `list_filter`, `search_fields`, `readonly_fields`, `formfield_for_foreignkey` narrowed by tenant
+- [ ] `venv\Scripts\python.exe manage.py makemigrations sales` → **`0035_*.py`** (re-verify number first; run `checks.run_checks()` in-process BEFORE makemigrations — L65)
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `apps/sales/management/commands/seed_sales.py` — extend with `_seed_master_data_configuration(self, tenant, owner)` (surgical Edit): idempotent, creates representative price book entries across currencies/tiers, custom entity definitions (opportunity & quote extensions), methodology templates (MEDDPICC & BANT stage gates), and regional commercial settings (NA, EMEA, APAC). Run **twice** — identical counts
+- [ ] One file per commit, explicit paths, PowerShell `;` separators, never `git push`
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — add ONE `LIVE_LINKS["8.19"]` entry (surgical Edit), bullet text VERBATIM from NavERP.md lines 1441–1446:
+  ```python
+  "8.19": {
+      # OWNERSHIP & SPINE RULING
+      # Sales 8.19 completes the Sales Management System with master data, catalog pricing,
+      # extensible entity modeling, pipeline methodology qualification, and regional commercial settings.
+      # Concrete junction entries link crm.PriceBook and crm.Product with volume tiers and floor price protection.
+      # Formal methodology stage-gates link to sales.Pipeline and sales.PipelineStage.
+      # Regional commercial settings standardize currencies, VAT display, formatting, and statutory notices.
+      "Product Catalog & Pricing": "sales:pbe_list",
+      "Custom Fields & Objects": "sales:sco_list",
+      "Sales Methodology Configuration": "sales:smd_list",
+      "Localization & Multi-Language": "sales:srg_list",
+      # Extra live leaves:
+      "Configuration Overview": "sales:master_data_overview",
+      "Price Book Entries": "sales:pbe_list",
+      "Custom Entities": "sales:sco_list",
+      "Sales Methodologies": "sales:smd_list",
+      "Regional Settings": "sales:srg_list",
+  },
+  ```
+  All targets are STAFF-facing management pages (L32). No `config/settings.py` / `config/urls.py` changes (app already wired).
+
+---
+
+## Templates (templates/sales/masterdataconfiguration/)
+
+13 templates: 4 entities × 3 pages + 1 central overview dashboard. All extend `base.html`.
+
+- [ ] `pricebookentry/list.html` — filter bar (`q`, `price_books_list`, `pricing_model_choices`, `currency_code`, active/inactive); Actions column (view / edit / delete-POST + `{% csrf_token %}` + confirm dialog); empty state; pagination; badges: `flat→badge-slate, tier_volume→badge-info, tier_graduated→badge-indigo, markup_cost→badge-amber`, active: `True→badge-green, False→badge-muted` (L33 — colour-named only)
+- [ ] `pricebookentry/detail.html` — header with `PBE-` number + SKU code + pricing model badge; Actions sidebar (Edit, Clone POST button, Delete POST+confirm, Back to List); pricing metrics card (List Price, Floor Price, Margin %); volume tier breaks table formatted cleanly; validity period indicator
+- [ ] `pricebookentry/form.html` — `{% csrf_token %}`; excluded fields never rendered; price book & product select dropdowns; pricing model radio/select; volume tier JSON input helper; floor price protection guidance; Save/Cancel
+- [ ] `customentitydefinition/{list,detail,form}.html` — list filters `q`, `entity_scope_choices`, `field_type_choices`, `relationship_type_choices`, active/inactive; detail shows target entity, API name, field type badge, formula/validation expression code box, picklist options table; form with entity scope, field type, picklist builder, and validation expression
+- [ ] `salesmethodology/{list,detail,form}.html` — list filters `q`, `methodology_type_choices`, `pipelines_list`, active/inactive; detail shows methodology badge (`meddpicc→badge-green, bant→badge-info, spin→badge-amber`), target stage gate, passing score threshold, interactive checklist criteria table with score weights and mandatory flags, coaching guidelines block; form with criteria JSON builder and stage selector
+- [ ] `regionalsetting/{list,detail,form}.html` — list filters `q`, `tax_display_mode_choices`, `compliance_framework_choices`, active/inactive; detail shows region code, primary & supported currencies, tax display mode (`tax_exclusive→badge-slate, tax_inclusive→badge-green`), date/number format samples, default quote terms and statutory legal disclaimer; form with currency tags, format selectors, and compliance profile
+- [ ] `overview.html` — Master Data & Configuration Overview Dashboard: metric cards for total price book entries, custom schema definitions, pipeline methodology gates, and regional commercial profiles; quick navigation links to all four registers
+- [ ] Every template comment single-line `{# … #}` (L2); every list page's filter select preserves state via `request.GET` comparisons (`|stringformat:"d"` for PKs); smoke must grep rendered HTML for `{#`/`{% comment` leaks and for invalid badge classes (zero hits)
+
+---
+
+## Verify
+
+- [ ] `venv\Scripts\python.exe manage.py makemigrations --check --dry-run` → `No changes detected` (after migrate)
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_sales` — run **twice**; second run produces identical counts (idempotent)
+- [ ] `venv\Scripts\python.exe manage.py check` → 0 issues
+- [ ] All new url names reverse cleanly (standard CRUD + `pbe_clone` + `master_data_overview`) — no `NoReverseMatch`
+- [ ] **temp/ smoke sweep as `admin_acme` / `password`** (L34 — NOT `password123`; content assertions, not just status codes, L3/L8):
+  - 4 list pages + overview dashboard → 200 with seeded records visible (`PBE-`, `SCO-`, `SMD-`, `SRG-`)
+  - 4 detail + 4 create + 4 edit → 200
+  - `pbe_clone` POST → 302 + message; new `PBE-` row created with target currency or price book
+  - Filter GET params on every list + junk params (`?page=999`, `?currency=invalid`, `?price_book=999999999999`) → 200, no 500, fallback to unfiltered (L11); page 2 → 200
+  - **Cross-tenant IDOR** → `admin_globex` pks on detail/edit/delete → 404 for `admin_acme`
+  - Grep rendered HTML: zero `{#` / `{% comment` leaks; zero semantic badge names (L33)
+- [ ] Sidebar human pass (L30): `LIVE_LINKS["8.19"]` present; 4 Live bullets resolving to distinct staff-reachable hrefs
+- [ ] `.agents/tasks/gaps-sales-8.19.md` verified and linked from the review/close-out block below
+
+---
+
+## Close-out
+
+- [ ] Phase 4 — six reviewers ONE AFTER ANOTHER (`code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`), each reading `BASE...HEAD` (BASE = `97e29ddd54668d5335849c36be560bb12c8f84ea`), findings appended to `.claude/tasks/review-sales-8.19.md`, deduped + sorted C→I→M with IDs, committed (L48/L50 — serial, never in main context prose)
+- [ ] Phase 5 — `code-fixer` burns the findings file in ID order, one commit per file, marks `[x] fixed` / `[~] skipped — reason`; main session applies nothing itself
+- [ ] Phase 6 — Tests: contract + shared `conftest.py` first (step-1 agent owns it), then `test_masterdataconfiguration_models.py` → `test_masterdataconfiguration_forms.py` → `test_masterdataconfiguration_views.py` → `test_masterdataconfiguration_security.py`, one at a time, every function `test_masterdataconfiguration_*`, helpers `_masterdataconfiguration_*`; finish with ONE **full unfiltered** sales-suite green run (never `-k`, L47)
+- [ ] Phase 7 — update `.claude/skills/sales/SKILL.md` with 8.19 models/routes/templates/seeder rows; mark 8.19 complete in `README.md`; record every deferred item below in `.agents/tasks/gaps-sales-8.19.md` (ID / Owner / Waiting For / checkbox / Done When — never delete entries) and link it from this section
+- [ ] Review notes filled in below at the end; `git push` NEVER — stop at commit every time
+
+---
+
+## Later passes / deferred (Gap Register items for `.agents/tasks/gaps-sales-8.19.md`)
+
+- **GAP-sales-8.19-01: Live Multi-Currency Automated FX Exchange Rate Feed API Integration** — Automated scheduled retrieval of live foreign exchange rates from central banks or external API feeds with volatility hedging. In this pass, currency codes, price book rates, and static multiplier conversions are stored cleanly.
+- **GAP-sales-8.19-02: Runtime Dynamic Database DDL Schema Altering for Custom Entities** — Executing live dynamic PostgreSQL/SQLite `ALTER TABLE ADD COLUMN` or generating dynamic Django virtual models at runtime is deferred for data safety and tenant isolation. 8.19 establishes the metadata registry for custom objects, attributes, formulas, and relationships.
+- **GAP-sales-8.19-03: Dynamic Formula AST Evaluation Sandboxing & Cross-Table Expression Engine** — Sandboxed Python or JavaScript AST compilation executing user-defined formulas across joined models. In 8.19, declarative formula expressions and validation rules are stored and validated via safe token substitution.
+- **GAP-sales-8.19-04: Real-Time Localized Tax Jurisdiction Rating API (Vertex / Avalara AvaTax)** — Live external geocoded tax calculation by street address via Avalara or Vertex Cloud. 8.19 establishes regional tax display modes (`tax_exclusive` vs `tax_inclusive`), regional compliance profiles, and cooling-off periods.
+- **GAP-sales-8.19-05: Multilingual GNU Gettext PO/MO Translation Pack Catalog Importer & In-Place UI Translation** — An interactive in-browser Translation Workbench for translating all sales UI strings and importing/exporting GNU gettext `.po`/`.mo` files. Regional formatting (dates, numbers) and localized legal notices are fully supported in 8.19.
+
+---
+
+## Declined, with reasons (so it is not re-litigated)
+
+- **Duplicating price book catalog master**: CRM 1.4 already provides `crm.PriceBook` [`PB-`] and `crm.Product` [`PRD-`]. Rather than inventing a redundant second price book table, 8.19 builds the concrete junction `SalesPriceBookEntry` [`PBE-`] linking them with currency, list price, floor price, volume tier discount schedules, and validity windows.
+- **Dynamic DDL execution on user save**: Altering the live database schema (`ALTER TABLE`) directly from user web requests introduces SQL injection risks, migration drift, and locking issues. 8.19 safely isolates custom fields in a metadata registry with JSON picklist values and formula expressions.
+- **Arbitrary Python `eval()` / `exec()` for formulas**: Arbitrary code execution in web request handlers is a severe security vulnerability. Formulas are stored as declarative expression templates with tokenized parameter parsing.
+- **Consolidating regional settings into core tenant settings**: Core tenant settings manage system-wide tenancy; sales regional settings govern commercial sales terms, currency lists, VAT presentation, quote terms, and statutory cooling-off days per commercial operating territory.
+- **A 5th model for pricing volume tier lines**: Volume tier brackets are modeled as structured JSON (`volume_tier_breaks`) directly on `SalesPriceBookEntry`, avoiding relational bloat and multiple round-trips for line item pricing.
+
+## Review notes
+
+(filled in at the end of Phase 7)
