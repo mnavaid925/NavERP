@@ -83,9 +83,10 @@ def sco_create(request):
             definition.save()
             write_audit_log(
                 request.user,
-                "create",
                 definition,
-                f"Created custom entity definition {definition.number} ({definition.name})",
+                "create",
+                {"detail": f"Created custom entity definition {definition.number} ({definition.name})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Custom definition {definition.number} created successfully.")
             return redirect("sales:sco_detail", pk=definition.pk)
@@ -112,9 +113,10 @@ def sco_edit(request, pk):
             definition = form.save()
             write_audit_log(
                 request.user,
-                "update",
                 definition,
-                f"Updated custom entity definition {definition.number}",
+                "update",
+                {"detail": f"Updated custom entity definition {definition.number}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Custom definition {definition.number} updated successfully.")
             return redirect("sales:sco_detail", pk=definition.pk)
@@ -139,9 +141,10 @@ def sco_delete(request, pk):
     num = definition.number
     write_audit_log(
         request.user,
-        "delete",
         definition,
-        f"Deleted custom entity definition {num}",
+        "delete",
+        {"detail": f"Deleted custom entity definition {num}"},
+        tenant=request.tenant,
     )
     definition.delete()
     messages.success(request, f"Custom definition {num} deleted.")
