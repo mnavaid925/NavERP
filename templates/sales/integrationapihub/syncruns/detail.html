@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Execution Run {{ run.number }} — Integration Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:integration_hub' %}" class="hover:text-primary">Integration Hub</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:ssr_list' %}" class="hover:text-primary">Sync Runs</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium font-mono">{{ run.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900 font-mono">{{ run.number }}</h1>
+                {% if run.status == 'simulated' %}
+                    <span class="badge badge-info">Simulated Run</span>
+                {% elif run.status == 'completed' %}
+                    <span class="badge badge-green">Completed</span>
+                {% elif run.status == 'failed' %}
+                    <span class="badge badge-red">Failed</span>
+                {% else %}
+                    <span class="badge badge-amber">{{ run.status }}</span>
+                {% endif %}
+                <span class="badge badge-slate">{{ run.get_run_type_display }}</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1 font-mono">Started: {{ run.started_at|date:"M d, Y H:i:s" }}</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:ssr_list' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                <span>All Runs</span>
+            </a>
+            <form method="post" action="{% url 'sales:ssr_delete' run.pk %}" class="inline" onsubmit="return confirm('Delete sync run log {{ run.number }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger flex items-center gap-2">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    <span>Delete</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {# KPI Metrics #}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Records Read</div>
+            <div class="text-2xl font-bold text-slate-800 mt-1">{{ run.records_read }}</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Records Written</div>
+            <div class="text-2xl font-bold text-green-700 mt-1">{{ run.records_written }}</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Records Failed</div>
+            <div class="text-2xl font-bold text-red-600 mt-1">{{ run.records_failed }}</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Records Skipped</div>
+            <div class="text-2xl font-bold text-slate-600 mt-1">{{ run.records_skipped }}</div>
+        </div>
+    </div>
+
+    {# Execution Details #}
+    <div class="card p-6 space-y-6">
+        <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-100">Execution Parameters</h3>
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+            <div>
+                <dt class="text-slate-500 font-medium">Connector</dt>
+                <dd class="text-slate-900 mt-1">
+                    <a href="{% url 'sales:sic_detail' run.connector.pk %}" class="font-medium text-primary hover:underline">
+                        {{ run.connector.name }}
+                    </a>
+                    <span class="text-xs text-slate-400 font-mono ml-1">({{ run.connector.number }})</span>
+                </dd>
+            </div>
+            <div>
+                <dt class="text-slate-500 font-medium">Associated Job</dt>
+                <dd class="text-slate-900 mt-1">
+                    {% if run.job %}
+                        <a href="{% url 'sales:ssj_detail' run.job.pk %}" class="font-medium text-primary hover:underline">
+                            {{ run.job.name }}
+                        </a>
+                        <span class="text-xs text-slate-400 font-mono ml-1">({{ run.job.number }})</span>
+                    {% else %}
+                        <span class="text-slate-500">Ad-hoc health ping / test execution</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div>
+                <dt class="text-slate-500 font-medium">Triggered By</dt>
+                <dd class="text-slate-900 mt-1">
+                    {% if run.triggered_by %}
+                        {{ run.triggered_by.get_full_name|default:run.triggered_by.username }}
+                    {% else %}
+                        <span class="text-slate-400">System / Scheduler</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div>
+                <dt class="text-slate-500 font-medium">Execution Timestamps</dt>
+                <dd class="text-slate-900 mt-1 text-xs font-mono">
+                    Started: {{ run.started_at|date:"Y-m-d H:i:s" }}<br>
+                    Finished: {{ run.finished_at|date:"Y-m-d H:i:s"|default:"Running / In-Progress" }}
+                </dd>
+            </div>
+        </dl>
+
+        {% if run.error_log %}
+            <div class="pt-4 border-t border-slate-100">
+                <h4 class="text-sm font-semibold text-red-800 mb-2">Error Log & Diagnostics</h4>
+                <div class="bg-red-50 text-red-800 p-4 rounded-md font-mono text-xs border border-red-200 whitespace-pre-wrap">
+                    {{ run.error_log }}
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="pt-4 border-t border-slate-100">
+            <h4 class="text-sm font-semibold text-slate-800 mb-2">Diagnostic Summary Payload</h4>
+            {% if run.summary_payload %}
+                <div class="bg-slate-900 text-slate-100 p-4 rounded-md font-mono text-xs overflow-x-auto">
+                    <pre>{{ run.summary_payload }}</pre>
+                </div>
+            {% else %}
+                <p class="text-xs text-slate-400">No diagnostic metadata payload recorded.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
