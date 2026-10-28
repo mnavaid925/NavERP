@@ -171,12 +171,12 @@
         </div>
         <div class="flex space-x-2">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if product_filter %}&product={{ product_filter }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if product_filter %}&product={{ product_filter }}{% endif %}{% if is_active_filter %}&is_active={{ is_active_filter }}{% endif %}" class="btn btn-outline btn-sm">
                 Previous
             </a>
             {% endif %}
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if product_filter %}&product={{ product_filter }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if product_filter %}&product={{ product_filter }}{% endif %}{% if is_active_filter %}&is_active={{ is_active_filter }}{% endif %}" class="btn btn-outline btn-sm">
                 Next
             </a>
             {% endif %}
