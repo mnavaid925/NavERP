@@ -165,7 +165,7 @@ def sic_test(request, pk):
     else:
         obj.health_status = "offline"
         obj.last_error_message = "Connector is currently inactive/paused."
-    obj.save(update_fields=["last_health_check_at", "health_status", "last_error_message"])
+    obj.save(update_fields=["last_health_check_at", "health_status", "last_error_message", "updated_at"])
 
     # Create audit run log
     run = SalesSyncRun(
