@@ -2634,11 +2634,11 @@ LIVE_LINKS = {
         # Coexists independently with SCM 4.19 (IntegrationEndpoint [CNX-]), Inventory 5.19 (IntegrationChannel [INT-]),
         # Accounting 2.15 (IntegrationConfig), and Projects 7.18 (ProjectIntegrationConnector [IXC-]).
         # Zero outbound HTTP (simulated status is honest diagnostic state); credential secrets Fernet-encrypted.
-        "ERP Integration": "sales:sic_erp_list",
-        "Marketing Automation": "sales:sic_marketing_list",
-        "Communication Platforms": "sales:sic_communication_list",
-        "Business Intelligence": "sales:sic_bi_list",
-        "E-Signature & Document": "sales:sic_esignature_list",
+        "ERP Integration": "sales:sic_list?category=erp",
+        "Marketing Automation": "sales:sic_list?category=marketing",
+        "Communication Platforms": "sales:sic_list?category=communication",
+        "Business Intelligence": "sales:sic_list?category=bi",
+        "E-Signature & Document": "sales:sic_list?category=esignature",
         "Integration Hub": "sales:integration_hub",
         "Connectors": "sales:sic_list",
         "Field Mappings": "sales:sfm_list",
