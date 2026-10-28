@@ -2645,6 +2645,17 @@ LIVE_LINKS = {
         "Sync Jobs": "sales:ssj_list",
         "Sync Runs": "sales:ssr_list",
     },
+    "8.19": {
+        "Configuration Overview": "sales:master_data_overview",
+        "Product Catalog & Pricing": "sales:pbe_list",
+        "Custom Fields & Objects": "sales:sco_list",
+        "Sales Methodology Configuration": "sales:smd_list",
+        "Localization & Multi-Language": "sales:srg_list",
+        "Price Book Entries": "sales:pbe_list",
+        "Custom Entities": "sales:sco_list",
+        "Sales Methodologies": "sales:smd_list",
+        "Regional Settings": "sales:srg_list",
+    },
 
 
 
