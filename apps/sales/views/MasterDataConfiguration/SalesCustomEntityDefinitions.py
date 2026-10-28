@@ -49,6 +49,7 @@ def sco_list(request):
     context = {
         "page_obj": page_obj,
         "definitions": page_obj.object_list,
+        "custom_entities": page_obj.object_list,
         "target_models": SalesCustomEntityDefinition.TARGET_MODEL_CHOICES,
         "field_types": SalesCustomEntityDefinition.FIELD_TYPE_CHOICES,
         "q": q,
@@ -69,7 +70,7 @@ def sco_detail(request, pk):
     return render(
         request,
         "sales/masterdataconfiguration/customentitydefinition/detail.html",
-        {"definition": definition},
+        {"definition": definition, "custom_entity": definition},
     )
 
 
@@ -98,7 +99,7 @@ def sco_create(request):
     return render(
         request,
         "sales/masterdataconfiguration/customentitydefinition/form.html",
-        {"form": form, "definition": None, "is_edit": False},
+        {"form": form, "definition": None, "custom_entity": None, "is_edit": False},
     )
 
 
@@ -129,7 +130,7 @@ def sco_edit(request, pk):
     return render(
         request,
         "sales/masterdataconfiguration/customentitydefinition/form.html",
-        {"form": form, "definition": definition, "is_edit": True},
+        {"form": form, "definition": definition, "custom_entity": definition, "is_edit": True},
     )
 
 
