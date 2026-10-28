@@ -197,10 +197,12 @@ from .IntegrationApiHub import (
     TRANSFORM_CHOICES,
 )
 # 8.19 Master Data & Configuration
-from .MasterDataConfiguration.SalesPriceBookEntries import SalesPriceBookEntry
-from .MasterDataConfiguration.SalesCustomEntityDefinitions import SalesCustomEntityDefinition
-from .MasterDataConfiguration.SalesMethodologies import SalesMethodology
-from .MasterDataConfiguration.SalesRegionalSettings import SalesRegionalSetting
+from .MasterDataConfiguration import (
+    SalesCustomEntityDefinition,
+    SalesMethodology,
+    SalesPriceBookEntry,
+    SalesRegionalSetting,
+)
 
 __all__ = [
     "TenantEventOwned", "TenantNumbered", "TenantOwned", "LeadScoreEvent",
