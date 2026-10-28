@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Custom Definition {{ definition.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Page Header #}
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:master_data_overview' %}" class="hover:text-primary">Master Data</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sco_list' %}" class="hover:text-primary">Custom Entities & Fields</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{{ definition.number }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="page-title text-2xl font-bold text-slate-900">{{ definition.number }} · {{ definition.name }}</h1>
+                {% if definition.is_active %}
+                <span class="badge badge-green">Active</span>
+                {% else %}
+                <span class="badge badge-slate">Inactive</span>
+                {% endif %}
+            </div>
+            <p class="text-sm text-slate-500 mt-1">Custom schema extension on {{ definition.get_target_model_display }}</p>
+        </div>
+        <div class="page-actions flex items-center gap-3">
+            <a href="{% url 'sales:sco_list' %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                <span>Back to Definitions</span>
+            </a>
+            <a href="{% url 'sales:sco_edit' definition.pk %}" class="btn btn-primary flex items-center gap-2">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+                <span>Edit Definition</span>
+            </a>
+            <form method="post" action="{% url 'sales:sco_delete' definition.pk %}" class="inline" onsubmit="return confirm('Delete custom definition {{ definition.number }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger flex items-center gap-2">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    <span>Delete</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {# KPI Summary Cards #}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Target Model</span>
+                    <div class="text-lg font-bold text-slate-900 mt-1">{{ definition.get_target_model_display }}</div>
+                </div>
+                <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+                    <i data-lucide="database" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Field Type</span>
+                    <div class="text-lg font-bold text-slate-900 mt-1">{{ definition.get_field_type_display }}</div>
+                </div>
+                <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+                    <i data-lucide="hash" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Mandatory Field</span>
+                    <div class="text-lg font-bold text-slate-900 mt-1">
+                        {% if definition.is_required %}Required{% else %}Optional{% endif %}
+                    </div>
+                </div>
+                <div class="stat-icon orange p-3 rounded-lg bg-amber-50 text-amber-600">
+                    <i data-lucide="alert-circle" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card card p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Display Order</span>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">{{ definition.display_order }}</div>
+                </div>
+                <div class="stat-icon green p-3 rounded-lg bg-emerald-50 text-emerald-600">
+                    <i data-lucide="arrow-down-narrow-wide" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Main Details Grid #}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-6">
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-200">Schema Metadata</h3>
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Label</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ definition.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">API Entity Code</dt>
+                        <dd class="text-sm font-mono text-purple-700 font-semibold mt-1">{{ definition.entity_code }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Target Model</dt>
+                        <dd class="text-sm text-slate-900 mt-1">
+                            <span class="badge badge-info">{{ definition.get_target_model_display }}</span>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Field Type</dt>
+                        <dd class="text-sm font-medium text-slate-900 mt-1">{{ definition.get_field_type_display }}</dd>
+                    </div>
+                    {% if definition.formula_expression %}
+                    <div class="sm:col-span-2">
+                        <dt class="text-xs font-medium text-slate-500">Formula Calculation Expression</dt>
+                        <dd class="text-sm font-mono bg-slate-50 p-3 rounded-md text-slate-800 mt-1 border border-slate-200">
+                            {{ definition.formula_expression }}
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if definition.lookup_target_model %}
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Lookup Target Relationship</dt>
+                        <dd class="text-sm font-mono text-slate-800 mt-1">→ {{ definition.lookup_target_model }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if definition.validation_rule %}
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Validation Rule (Regex)</dt>
+                        <dd class="text-sm font-mono text-slate-700 mt-1">{{ definition.validation_rule }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+
+            {# Picklist Options #}
+            {% if definition.picklist_options %}
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-200">Picklist Options</h3>
+                <div class="flex flex-wrap gap-2">
+                    {% for opt in definition.picklist_options %}
+                    <span class="badge badge-slate text-sm px-3 py-1">{{ opt }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {# Description #}
+            {% if definition.description %}
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-2">Description & Rationale</h3>
+                <p class="text-sm text-slate-700 whitespace-pre-line">{{ definition.description }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        {# Sidebar Meta #}
+        <div class="space-y-6">
+            <div class="card p-6">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-200">Administration & Audit</h3>
+                <dl class="space-y-3">
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Requirement</dt>
+                        <dd class="text-sm text-slate-900 mt-0.5">
+                            {% if definition.is_required %}
+                            <span class="badge badge-amber text-xs">Mandatory on input</span>
+                            {% else %}
+                            <span class="badge badge-muted text-xs">Optional input</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Created</dt>
+                        <dd class="text-xs text-slate-600 mt-0.5">{{ definition.created_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Last Updated</dt>
+                        <dd class="text-xs text-slate-600 mt-0.5">{{ definition.updated_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
