@@ -123,12 +123,13 @@ class SalesPriceBookEntry(TenantNumbered):
 
     def clean(self):
         super().clean()
-        if self.price_book_id and self.price_book.tenant_id != self.tenant_id:
-            raise ValidationError({"price_book": "Price book must belong to the active workspace."})
-        if self.product_id and self.product.tenant_id != self.tenant_id:
-            raise ValidationError({"product": "Product must belong to the active workspace."})
-        if self.item_id and self.item.tenant_id != self.tenant_id:
-            raise ValidationError({"item": "Inventory item must belong to the active workspace."})
+        if self.tenant_id:
+            if self.price_book_id and self.price_book.tenant_id != self.tenant_id:
+                raise ValidationError({"price_book": "Price book must belong to the active workspace."})
+            if self.product_id and self.product.tenant_id != self.tenant_id:
+                raise ValidationError({"product": "Product must belong to the active workspace."})
+            if self.item_id and self.item.tenant_id != self.tenant_id:
+                raise ValidationError({"item": "Inventory item must belong to the active workspace."})
         if self.floor_price is not None and self.list_price is not None:
             if self.floor_price > self.list_price:
                 raise ValidationError({"floor_price": "Floor price cannot exceed list price."})
