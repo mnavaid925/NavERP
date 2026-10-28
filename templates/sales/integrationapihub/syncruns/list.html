@@ -186,12 +186,14 @@
                 </div>
                 <div class="flex items-center gap-1">
                     <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if q %}&q={{ q }}{% endif %}{% if request.GET.connector %}&connector={{ request.GET.connector }}{% endif %}{% if request.GET.job %}&job={{ request.GET.job }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if run_type %}&run_type={{ run_type }}{% endif %}"
-                       class="btn btn-outline py-1 px-3 {% if not page_obj.has_previous %}opacity-50 pointer-events-none{% endif %}">
+                       class="btn btn-outline py-1 px-3 {% if not page_obj.has_previous %}opacity-50 pointer-events-none{% endif %}"
+                       {% if not page_obj.has_previous %}aria-disabled="true" tabindex="-1"{% endif %}>
                         Previous
                     </a>
                     <span class="px-2 text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
                     <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}{% if q %}&q={{ q }}{% endif %}{% if request.GET.connector %}&connector={{ request.GET.connector }}{% endif %}{% if request.GET.job %}&job={{ request.GET.job }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if run_type %}&run_type={{ run_type }}{% endif %}"
-                       class="btn btn-outline py-1 px-3 {% if not page_obj.has_next %}opacity-50 pointer-events-none{% endif %}">
+                       class="btn btn-outline py-1 px-3 {% if not page_obj.has_next %}opacity-50 pointer-events-none{% endif %}"
+                       {% if not page_obj.has_next %}aria-disabled="true" tabindex="-1"{% endif %}>
                         Next
                     </a>
                 </div>
