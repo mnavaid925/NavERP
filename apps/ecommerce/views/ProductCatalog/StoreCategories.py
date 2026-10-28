@@ -15,7 +15,9 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 
 @login_required
 def storecategory_list(request):
-    categories_qs = ecommerce_scope(StoreCategory.objects.select_related("parent"), request)
+    categories_qs = ecommerce_scope(
+        StoreCategory.objects.select_related("parent", "parent__parent"), request
+    )
 
     search_query = request.GET.get("q", "").strip()
     if search_query:
