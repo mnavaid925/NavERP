@@ -33,8 +33,15 @@ def catalog_overview(request):
     avg_score_res = products_qs.aggregate(avg_score=Avg("pim_completeness"))["avg_score"]
     avg_pim_completeness = round(avg_score_res or 0, 1)
 
-    recent_products = products_qs.select_related("primary_category").order_by("-created_at")[:6]
-    recent_categories = categories_qs.order_by("display_order", "name")[:8]
+    recent_products = (
+        products_qs.select_related("primary_category")
+        .prefetch_related("variants")
+        .order_by("-created_at")[:6]
+    )
+    recent_categories = (
+        categories_qs.select_related("parent")
+        .order_by("display_order", "name")[:8]
+    )
 
     context = {
         "total_products": total_products,
