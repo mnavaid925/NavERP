@@ -118,7 +118,7 @@
                         <dt class="text-xs font-medium text-slate-500">Inventory SKU Link</dt>
                         <dd class="text-sm text-slate-900 mt-1">
                             {% if entry.item %}
-                            <span class="font-medium text-primary">{{ entry.item.number }} · {{ entry.item.name }}</span>
+                            <span class="font-medium text-primary">{{ entry.item.sku }} · {{ entry.item.name }}</span>
                             {% else %}
                             <span class="text-slate-400">None linked</span>
                             {% endif %}
