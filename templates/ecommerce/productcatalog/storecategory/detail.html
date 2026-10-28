@@ -168,10 +168,10 @@
                         {% if child.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'ecommerce:storecategory_detail' child.pk %}" class="btn btn-icon" title="View Detail">
+                        <a href="{% url 'ecommerce:storecategory_detail' child.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'ecommerce:storecategory_edit' child.pk %}" class="btn btn-icon" title="Edit">
+                        <a href="{% url 'ecommerce:storecategory_edit' child.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit">
                             <i data-lucide="pencil"></i>
                         </a>
                     </td>
@@ -180,6 +180,62 @@
                 <tr>
                     <td colspan="5" class="text-center py-6 text-sm text-slate-500">
                         No direct sub-categories under this category.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Products in Category -->
+<div class="card mt-6">
+    <div class="card-header flex items-center justify-between">
+        <h3 class="card-title">Products in Category</h3>
+        <span class="badge badge-secondary">{{ products|length }} Products</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Number</th>
+                    <th>Status</th>
+                    <th>Visibility</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for prod in products %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'ecommerce:catalogproduct_detail' prod.pk %}" class="hover:text-primary-600">
+                                {{ prod.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500 font-mono">{{ prod.slug }}</div>
+                    </td>
+                    <td class="font-mono text-sm">{{ prod.number|default:"-" }}</td>
+                    <td>
+                        <span class="badge badge-{{ prod.status_badge }}">{{ prod.get_status_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ prod.visibility_badge }}">{{ prod.get_visibility_display }}</span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'ecommerce:catalogproduct_detail' prod.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'ecommerce:catalogproduct_edit' prod.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-6 text-sm text-slate-500">
+                        No products currently assigned to this category.
                     </td>
                 </tr>
                 {% endfor %}
