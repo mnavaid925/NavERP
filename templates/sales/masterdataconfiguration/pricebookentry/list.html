@@ -69,7 +69,7 @@
                     <i data-lucide="search" class="w-4 h-4"></i>
                     <span>Filter</span>
                 </button>
-                <a href="{% url 'sales:pbe_list' %}" class="btn btn-outline" title="Reset Filters">
+                <a href="{% url 'sales:pbe_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
                     <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                 </a>
             </div>
@@ -131,15 +131,15 @@
                         </td>
                         <td class="text-right">
                             <div class="table-actions flex items-center justify-end gap-2">
-                                <a href="{% url 'sales:pbe_detail' entry.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-primary" title="View details">
+                                <a href="{% url 'sales:pbe_detail' entry.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-primary" title="View details" aria-label="View details">
                                     <i data-lucide="eye" class="w-4 h-4"></i>
                                 </a>
-                                <a href="{% url 'sales:pbe_edit' entry.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit entry">
+                                <a href="{% url 'sales:pbe_edit' entry.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit entry" aria-label="Edit entry">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </a>
                                 <form method="post" action="{% url 'sales:pbe_delete' entry.pk %}" class="inline" onsubmit="return confirm('Delete price book entry {{ entry.number }}?');">
                                     {% csrf_token %}
-                                    <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete entry">
+                                    <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete entry" aria-label="Delete entry">
                                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                                     </button>
                                 </form>
