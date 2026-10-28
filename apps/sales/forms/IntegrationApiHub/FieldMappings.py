@@ -2,12 +2,12 @@
 from django import forms
 
 from apps.core.forms import TenantModelForm
-from apps.sales.forms._common import _reject_foreign
+from apps.sales.forms._common import TenantUniqueMixin, _reject_foreign
 from apps.sales.models.IntegrationApiHub.Connectors import SalesIntegrationConnector
 from apps.sales.models.IntegrationApiHub.FieldMappings import SalesFieldMapping
 
 
-class SalesFieldMappingForm(TenantModelForm):
+class SalesFieldMappingForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = SalesFieldMapping
         fields = [
