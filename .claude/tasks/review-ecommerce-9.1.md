@@ -76,5 +76,22 @@ None.
 - `[ ]` **M12**: `apps/ecommerce/models/ProductCatalog/CatalogProducts.py:69-72` — Missing compound index on `(tenant, -created_at)` for `CatalogProduct`. Add `models.Index(fields=["tenant", "-created_at"], name="ecom_prd_tnt_created_idx")`.
 - `[ ]` **M13**: `apps/ecommerce/views/ProductCatalog/ProductVariants.py:49` & `apps/ecommerce/views/ProductCatalog/ProductRelationships.py:96,130` — Unconstrained model instantiation for dropdown filters. Add `.only("id", "name")` to product dropdown queries.
 
+---
+
+## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+
+### Critical
+None.
+
+### Important
+- `[ ]` **I16**: `apps/ecommerce/views/ProductCatalog/CatalogProducts.py:44-48` — Runtime 500 on non-numeric or injection `category` query param: unhandled ValueError when requesting `/ecommerce/products/?category=abc` or SQL characters. Guard with `.isdigit()`. (Reinforces I1).
+- `[ ]` **I17**: `apps/ecommerce/views/ProductCatalog/ProductVariants.py:35-38` — Runtime 500 on non-numeric or injection `product` query param: unhandled ValueError when requesting `/ecommerce/variants/?product=abc`. Guard with `.isdigit()`. (Reinforces I2).
+- `[ ]` **I18**: `apps/ecommerce/views/ProductCatalog/BulkOperations.py:150-197` — CSV Dry-run validation completely bypasses field and numeric parsing: variant validation and Decimal conversions only executed inside `if not dry_run:`. Move parsing outside so dry-run validates rows and catches bad numbers.
+
+### Minor
+- `[ ]` **M14**: `apps/ecommerce/forms/ProductCatalog/BulkOperations.py:5-9` — `ProductImportForm` lacks server-side file extension check. Add `clean_csv_file` asserting `.endswith(".csv")`.
+- `[ ]` **M15**: `apps/ecommerce/forms/ProductCatalog/ProductVariants.py:55` & `apps/ecommerce/models/ProductCatalog/ProductVariants.py:68` — `sort_order` required in `ProductVariantForm` without initial default. Make `required=False` or set `initial=0`.
+
+
 
 
