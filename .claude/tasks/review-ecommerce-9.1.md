@@ -22,3 +22,19 @@ None.
 - `[ ]` **M2**: `apps/ecommerce/views/ProductCatalog/BulkOperations.py:144` — In CSV import, `StoreCategory.objects.create(tenant=request.tenant, name=cat_name, slug=slugify(cat_name))` can raise an `IntegrityError` if another category with the same slug already exists. Use `StoreCategory.objects.get_or_create(tenant=request.tenant, slug=slugify(cat_name), defaults={"name": cat_name})`.
 - `[ ]` **M3**: `apps/ecommerce/models/ProductCatalog/StoreCategories.py:61` — `get_breadcrumbs()` traverses `curr.parent` without tracking seen PKs, which could trigger an infinite loop in the event of an ancestor hierarchy cycle in the database. Maintain `seen = set()` inside `get_breadcrumbs()` and break if `curr.pk in seen`.
 - `[ ]` **M4**: `templates/ecommerce/productcatalog/productvariant/list.html:167` — Pagination links omit `is_active_filter` (and `catalogproduct/list.html:214` omits `visibility_filter`/`brand_filter`), dropping active filter criteria when paginating to page 2. Append missing filter query parameters to pagination URLs.
+
+---
+
+## Pass 2: Codebase Explorer (`explorer`)
+
+### Critical
+None.
+
+### Important
+- `[ ]` **I5**: `templates/ecommerce/productcatalog/catalogproduct/list.html:33-75` — Filter UI dropdowns omitted for `visibility` and `brand`: The view implements filtering on `visibility` and `brand` and passes `visibility_choices`, `brands_list`, `visibility_filter`, and `brand_filter` in context, but the `<form>` omits `<select name="visibility">` and `<select name="brand">` elements. Add dropdowns to the filter form.
+- `[ ]` **I6**: `apps/ecommerce/views/ProductCatalog/StoreCategories.py:52-53` — Category products query ignores `primary_category`: In `storecategory_detail`, `category.products.filter(...)` only traverses products where this category is in ManyToMany `categories`. Products having this category assigned as `primary_category` are omitted. Update query to `CatalogProduct.objects.filter(tenant=request.tenant).filter(Q(primary_category=category) | Q(categories=category)).distinct()`.
+
+### Minor
+- `[ ]` **M5**: `templates/ecommerce/productcatalog/productvariant/list.html:30-62` — Filter UI dropdown omitted for `is_active`: The view supports filtering on `is_active` and passes `is_active_filter` in context, but the filter form only provides `q` and `product` inputs. Add an `is_active` filter select.
+- `[ ]` **M6**: `templates/ecommerce/productcatalog/storecategory/detail.html:138-190` — Context variable `products` unrendered in detail template: The view queries and passes `products` to context in accordance with the contract, but `storecategory/detail.html` does not render a products section or count badge. Add a products table section under the category detail page.
+
