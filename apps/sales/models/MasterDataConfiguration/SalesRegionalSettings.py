@@ -126,7 +126,7 @@ class SalesRegionalSetting(TenantNumbered):
             ),
         ]
         indexes = [
-            models.Index(fields=["tenant", "is_active", "is_default"], name="sales_srg_tnt_def_idx"),
+            models.Index(fields=["tenant", "is_default", "is_active"], name="sales_srg_tnt_def_idx"),
             models.Index(fields=["tenant", "region_code"], name="sales_srg_code_idx"),
             models.Index(fields=["tenant", "compliance_framework"], name="sales_srg_cmpl_idx"),
         ]
