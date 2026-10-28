@@ -56,4 +56,25 @@ None.
 - `[ ]` **M7**: `templates/ecommerce/productcatalog/**/` — Add explicit `aria-label` attributes to all icon-only action buttons alongside `title`.
 - `[ ]` **M8**: `templates/ecommerce/productcatalog/bulk_import.html:82` & form templates — Replace `space-x-*` with `gap-*` for RTL safety.
 
+---
+
+## Pass 4: Performance Reviewer (`performance-reviewer`)
+
+### Critical
+None.
+
+### Important
+- `[ ]` **I12**: `apps/ecommerce/models/ProductCatalog/CatalogProducts.py:106-120` & `templates/ecommerce/productcatalog/catalogproduct/list.html:133,137` — N+1 query amplification in `price_range_display` and `total_variants_count`: `self.variants.filter(is_active=True)` and `self.variants.count()` bypass the prefetch cache, triggering 60 extra queries on a 20-row page. Operate in-memory on prefetched `self.variants.all()`.
+- `[ ]` **I13**: `apps/ecommerce/views/ProductCatalog/Overview.py:36-37` & `templates/ecommerce/productcatalog/overview.html:140,188` — Missing `select_related` and `prefetch_related` on Overview dashboard cards. Add `.select_related("parent")` to `recent_categories` and `.select_related("primary_category").prefetch_related("variants")` to `recent_products`.
+- `[ ]` **I14**: `apps/ecommerce/views/ProductCatalog/CatalogProducts.py:94` & `templates/ecommerce/productcatalog/catalogproduct/detail.html:250` — Missing `select_related("item")` on `product.variants` in `catalogproduct_detail`. Add `.select_related("item")`.
+- `[ ]` **I15**: `apps/ecommerce/views/ProductCatalog/BulkOperations.py:140-142` — Uncached category lookup in CSV Import loop triggers redundant DB query per row. Preload categories into an in-memory dictionary prior to looping.
+
+### Minor
+- `[ ]` **M9**: `apps/ecommerce/views/ProductCatalog/Overview.py:20-34` — Multiple individual KPI queries against `CatalogProduct`. Combine into a single conditional `.aggregate()` query.
+- `[ ]` **M10**: `apps/ecommerce/views/ProductCatalog/ProductRelationships.py:54-59` & `templates/ecommerce/productcatalog/productrelationship/detail.html:68,97` — Chained N+1 queries in `productrelationship_detail`. Add `source_product__primary_category` and `target_product__primary_category` to `select_related`.
+- `[ ]` **M11**: `apps/ecommerce/views/ProductCatalog/StoreCategories.py:17` & `templates/ecommerce/productcatalog/storecategory/list.html:93` — Category hierarchy breadcrumb query depth in `storecategory_list`. Use `select_related("parent", "parent__parent")`.
+- `[ ]` **M12**: `apps/ecommerce/models/ProductCatalog/CatalogProducts.py:69-72` — Missing compound index on `(tenant, -created_at)` for `CatalogProduct`. Add `models.Index(fields=["tenant", "-created_at"], name="ecom_prd_tnt_created_idx")`.
+- `[ ]` **M13**: `apps/ecommerce/views/ProductCatalog/ProductVariants.py:49` & `apps/ecommerce/views/ProductCatalog/ProductRelationships.py:96,130` — Unconstrained model instantiation for dropdown filters. Add `.only("id", "name")` to product dropdown queries.
+
+
 
