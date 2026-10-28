@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Integration & API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">Integration & API Hub</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">Integration & API Hub</h1>
+            <p class="text-sm text-slate-500 mt-1">Enterprise connectors, bi-directional sync pipelines, and RevOps data exchange center.</p>
+        </div>
+        <div class="page-actions flex items-center gap-2">
+            <a href="{% url 'sales:sic_list' %}" class="btn btn-outline flex items-center gap-1.5">
+                <i data-lucide="network" class="w-4 h-4"></i>
+                <span>Connectors</span>
+            </a>
+            <a href="{% url 'sales:sfm_list' %}" class="btn btn-outline flex items-center gap-1.5">
+                <i data-lucide="columns-3" class="w-4 h-4"></i>
+                <span>Mappings</span>
+            </a>
+            <a href="{% url 'sales:ssj_list' %}" class="btn btn-outline flex items-center gap-1.5">
+                <i data-lucide="repeat" class="w-4 h-4"></i>
+                <span>Sync Jobs</span>
+            </a>
+            <a href="{% url 'sales:sic_create' %}" class="btn btn-primary flex items-center gap-1.5">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>New Connector</span>
+            </a>
+        </div>
+    </div>
+
+    {# KPI Summary Metrics #}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Configured Connectors</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ connectors_count }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">{{ healthy_count }} currently connected & healthy</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Scheduled Sync Jobs</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ jobs_count }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">{{ active_jobs_count }} active pipelines</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Execution Runs</div>
+            <div class="text-2xl font-bold text-slate-900 mt-1">{{ runs_count }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">Simulated & scheduled sync runs</div>
+        </div>
+        <div class="card p-4">
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Integration Health</div>
+            <div class="text-2xl font-bold text-green-700 mt-1">
+                {% if connectors_count > 0 %}
+                    {{ healthy_count }}/{{ connectors_count }}
+                {% else %}
+                    100%
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 mt-0.5">Healthy connection ratio</div>
+        </div>
+    </div>
+
+    {# 5 Enterprise Integration Categories #}
+    <div class="space-y-4">
+        <h2 class="text-lg font-bold text-slate-900">Enterprise Integration Categories</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+            {# 1. ERP Integration #}
+            <div class="card p-5 hover:shadow-md transition-shadow">
+                <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                            <i data-lucide="boxes" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-slate-900 text-sm">ERP & Finance Sync</h3>
+                            <p class="text-xs text-slate-500">SAP, Oracle, NetSuite, Dynamics</p>
+                        </div>
+                    </div>
+                    <span class="badge badge-info">{{ erp_connectors.count }} Active</span>
+                </div>
+                <p class="text-xs text-slate-600 mt-3">
+                    Order-to-cash synchronization, customer master replication, sales invoice handoff, and fulfillment status updates.
+                </p>
+                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <a href="{% url 'sales:sic_erp_list' %}" class="text-primary font-medium hover:underline flex items-center gap-1">
+                        <span>View Connectors</span>
+                        <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                    </a>
+                    <a href="{% url 'sales:sic_create' %}?category=erp" class="text-slate-500 hover:text-slate-800">
+                        + Add ERP
+                    </a>
+                </div>
+            </div>
+
+            {# 2. Marketing Automation #}
+            <div class="card p-5 hover:shadow-md transition-shadow">
+                <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                            <i data-lucide="megaphone" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-slate-900 text-sm">Marketing Automation</h3>
+                            <p class="text-xs text-slate-500">HubSpot, Marketo, Pardot, Eloqua</p>
+                        </div>
+                    </div>
+                    <span class="badge badge-info">{{ marketing_connectors.count }} Active</span>
+                </div>
+                <p class="text-xs text-slate-600 mt-3">
+                    Bidirectional lead and contact lifecycle sync, campaign attribution, scoring signals, and engagement history ingestion.
+                </p>
+                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <a href="{% url 'sales:sic_marketing_list' %}" class="text-primary font-medium hover:underline flex items-center gap-1">
+                        <span>View Connectors</span>
+                        <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                    </a>
+                    <a href="{% url 'sales:sic_create' %}?category=marketing" class="text-slate-500 hover:text-slate-800">
+                        + Add Marketing
+                    </a>
+                </div>
+            </div>
+
+            {# 3. Communication Platforms #}
+            <div class="card p-5 hover:shadow-md transition-shadow">
+                <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                            <i data-lucide="message-square" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-slate-900 text-sm">Communications & Telephony</h3>
+                            <p class="text-xs text-slate-500">Slack, Microsoft Teams, Zoom</p>
+                        </div>
+                    </div>
+                    <span class="badge badge-info">{{ communication_connectors.count }} Active</span>
+                </div>
+                <p class="text-xs text-slate-600 mt-3">
+                    Milestone and closed-won alerts, stage change broadcasts, deal room collaboration channels, and telephony call logging.
+                </p>
+                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <a href="{% url 'sales:sic_communication_list' %}" class="text-primary font-medium hover:underline flex items-center gap-1">
+                        <span>View Connectors</span>
+                        <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                    </a>
+                    <a href="{% url 'sales:sic_create' %}?category=communication" class="text-slate-500 hover:text-slate-800">
+                        + Add Comms
+                    </a>
+                </div>
+            </div>
+
+            {# 4. Business Intelligence #}
+            <div class="card p-5 hover:shadow-md transition-shadow">
+                <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-slate-900 text-sm">BI & Data Warehouse</h3>
+                            <p class="text-xs text-slate-500">Tableau, Power BI, Looker, Snowflake</p>
+                        </div>
+                    </div>
+                    <span class="badge badge-info">{{ bi_connectors.count }} Active</span>
+                </div>
+                <p class="text-xs text-slate-600 mt-3">
+                    Enterprise sales data warehouse feeds, daily revenue aggregates, pipeline velocity extracts, and BI dashboard sync.
+                </p>
+                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <a href="{% url 'sales:sic_bi_list' %}" class="text-primary font-medium hover:underline flex items-center gap-1">
+                        <span>View Connectors</span>
+                        <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                    </a>
+                    <a href="{% url 'sales:sic_create' %}?category=bi_warehouse" class="text-slate-500 hover:text-slate-800">
+                        + Add BI / Lake
+                    </a>
+                </div>
+            </div>
+
+            {# 5. E-Signature & Document #}
+            <div class="card p-5 hover:shadow-md transition-shadow">
+                <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+                            <i data-lucide="file-check-2" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-slate-900 text-sm">E-Signature & CLM</h3>
+                            <p class="text-xs text-slate-500">DocuSign, Adobe Sign, PandaDoc</p>
+                        </div>
+                    </div>
+                    <span class="badge badge-info">{{ esignature_connectors.count }} Active</span>
+                </div>
+                <p class="text-xs text-slate-600 mt-3">
+                    Contract envelope dispatch, live signature milestone tracking, counter-signature callbacks, and executed document filing.
+                </p>
+                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <a href="{% url 'sales:sic_esignature_list' %}" class="text-primary font-medium hover:underline flex items-center gap-1">
+                        <span>View Connectors</span>
+                        <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                    </a>
+                    <a href="{% url 'sales:sic_create' %}?category=esignature" class="text-slate-500 hover:text-slate-800">
+                        + Add E-Sign
+                    </a>
+                </div>
+            </div>
+
+            {# 6. Custom API Gateway #}
+            <div class="card p-5 hover:shadow-md transition-shadow bg-slate-50/50">
+                <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center">
+                            <i data-lucide="code-2" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-slate-900 text-sm">Custom API & Webhooks</h3>
+                            <p class="text-xs text-slate-500">REST, GraphQL & Webhook Endpoints</p>
+                        </div>
+                    </div>
+                    <span class="badge badge-slate">Custom</span>
+                </div>
+                <p class="text-xs text-slate-600 mt-3">
+                    Flexible webhook endpoints and HMAC-authenticated generic REST channels for proprietary in-house microservices.
+                </p>
+                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <a href="{% url 'sales:sic_list' %}?category=custom" class="text-primary font-medium hover:underline flex items-center gap-1">
+                        <span>View Custom</span>
+                        <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                    </a>
+                    <a href="{% url 'sales:sic_create' %}?category=custom" class="text-slate-500 hover:text-slate-800">
+                        + Add Custom
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Recent Sync Runs Activity #}
+    <div class="card p-6">
+        <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+            <div>
+                <h3 class="text-base font-semibold text-slate-900">Recent Synchronization Activity</h3>
+                <p class="text-xs text-slate-500">Latest execution audit records and connection test pings.</p>
+            </div>
+            <a href="{% url 'sales:ssr_list' %}" class="btn btn-outline py-1 px-3 text-xs flex items-center gap-1">
+                <span>View Full Audit Log</span>
+                <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table w-full text-left text-xs">
+                <thead>
+                    <tr>
+                        <th>Run Ref</th>
+                        <th>Connector</th>
+                        <th>Job / Purpose</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Read</th>
+                        <th>Written</th>
+                        <th>Failed</th>
+                        <th>Timestamp</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+                    {% for run in recent_runs %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'sales:ssr_detail' run.pk %}" class="font-mono text-primary font-medium hover:underline">
+                                    {{ run.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <a href="{% url 'sales:sic_detail' run.connector.pk %}" class="font-medium text-slate-800 hover:text-primary">
+                                    {{ run.connector.name }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if run.job %}
+                                    {{ run.job.name }}
+                                {% else %}
+                                    <span class="text-slate-400">Connection test ping</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ run.get_run_type_display }}</td>
+                            <td>
+                                {% if run.status == 'simulated' %}
+                                    <span class="badge badge-info">Simulated</span>
+                                {% elif run.status == 'completed' %}
+                                    <span class="badge badge-green">Completed</span>
+                                {% elif run.status == 'failed' %}
+                                    <span class="badge badge-red">Failed</span>
+                                {% else %}
+                                    <span class="badge badge-amber">{{ run.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ run.records_read }}</td>
+                            <td class="text-green-700 font-medium">{{ run.records_written }}</td>
+                            <td class="text-red-600 font-medium">{{ run.records_failed }}</td>
+                            <td class="text-slate-500 font-mono">{{ run.started_at|date:"M d, H:i:s" }}</td>
+                            <td class="text-right">
+                                <a href="{% url 'sales:ssr_detail' run.pk %}" class="btn btn-icon" title="View details">
+                                    <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="10" class="text-center py-8 text-slate-400">
+                                No execution runs recorded yet. Use the "Test Ping" button on any connector to trigger a diagnostic run.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
