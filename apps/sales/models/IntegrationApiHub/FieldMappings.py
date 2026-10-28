@@ -1,4 +1,5 @@
 """Sales 8.18 — SalesFieldMapping model."""
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from apps.sales.models._base import TenantOwned
@@ -58,6 +59,13 @@ class SalesFieldMapping(TenantOwned):
         indexes = [
             models.Index(fields=["tenant", "connector", "target_entity"], name="sales_sfm_conn_ent_idx"),
         ]
+
+    def clean(self):
+        super().clean()
+        if self.connector_id and self.tenant_id and self.connector.tenant_id != self.tenant_id:
+            raise ValidationError({"connector": "Connector belongs to another tenant workspace."})
+        if self.value_map and not isinstance(self.value_map, dict):
+            raise ValidationError({"value_map": "Value map must be a dictionary."})
 
     def __str__(self):
         conn_name = getattr(self.connector, "name", f"Connector #{self.connector_id}") if self.connector_id else "None"
