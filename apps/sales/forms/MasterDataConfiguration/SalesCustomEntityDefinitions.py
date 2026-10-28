@@ -69,7 +69,13 @@ class SalesCustomEntityDefinitionForm(TenantModelForm):
                     return [str(item).strip() for item in parsed if str(item).strip()]
             except json.JSONDecodeError:
                 pass
-        return [line.strip() for line in raw.splitlines() if line.strip()]
+        items = []
+        for line in raw.splitlines():
+            for part in line.split(","):
+                val = part.strip()
+                if val:
+                    items.append(val)
+        return items
 
     def clean(self):
         cleaned_data = super().clean()
