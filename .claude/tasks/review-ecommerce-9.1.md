@@ -1,97 +1,55 @@
 # Review Findings — Sub-module 9.1: Product Catalog Management (Module 9 eCommerce, `ecommerce`)
 
-- **Changeset under review:** `862cd01946276c3da699da5c244955a20f65ed12...36e6c1f63f2f3697384313e44e37aba441db1cdc`
+- **Changeset under review:** `862cd01946276c3da699da5c244955a20f65ed12...HEAD`
 - **Date:** 2026-10-28
-- **Phase:** Phase 4 Review (6 serial reviewers)
+- **Phase:** Phase 4 Review (6 serial reviewers completed: code-reviewer, explorer, frontend-reviewer, performance-reviewer, qa-smoke-tester, security-reviewer)
 
 ---
 
-## Pass 1: Code Reviewer (`code-reviewer`)
+## Executive Summary
 
-### Critical
-None.
-
-### Important
-- `[ ]` **I1**: `apps/ecommerce/views/ProductCatalog/CatalogProducts.py:45` — Unvalidated integer filter: `category_filter` is passed directly to `Q(primary_category_id=category_filter)` without `.isdigit()` validation, raising an unhandled 500 `ValueError` on malformed GET queries (Lesson L11). Guard with `if category_filter and category_filter.isdigit():`.
-- `[ ]` **I2**: `apps/ecommerce/views/ProductCatalog/ProductVariants.py:36` — Unvalidated integer filter: `product_filter` is passed directly to `variants_qs.filter(product_id=product_filter)` without `.isdigit()` validation, raising a 500 `ValueError` on non-numeric input (Lesson L11). Guard with `if product_filter and product_filter.isdigit():`.
-- `[ ]` **I3**: `apps/ecommerce/views/ProductCatalog/BulkOperations.py:169` — Hand-parsed CSV numeric values for `Price` and `Cost_Price` lack per-value `try/except (InvalidOperation, TypeError, ValueError)` and `.is_finite()` guards, causing non-numeric strings or NaN/Infinity to crash the entire CSV import (Lesson L35). Wrap `Price` and `Cost_Price` parsing in `try/except` with `.is_finite()` checks and record row-level error messages.
-- `[ ]` **I4**: `apps/ecommerce/management/commands/seed_ecommerce.py:30` — Seeder completion message omits tenant admin login instructions and the standard warning that the `admin` superuser has `tenant=None` by design so seeded catalog data will not appear for it (Checklist Item 10). Append tenant user instructions (`admin_acme / password`).
-
-### Minor
-- `[ ]` **M1**: `apps/ecommerce/forms/ProductCatalog/CatalogProducts.py:64` — `reject_foreign(self, cleaned_data, ["primary_category", "item"])` omits the ManyToMany `"categories"` field from cross-tenant validation (which `reject_foreign` supports). Update to `reject_foreign(self, cleaned_data, ["primary_category", "item", "categories"])`.
-- `[ ]` **M2**: `apps/ecommerce/views/ProductCatalog/BulkOperations.py:144` — In CSV import, `StoreCategory.objects.create(tenant=request.tenant, name=cat_name, slug=slugify(cat_name))` can raise an `IntegrityError` if another category with the same slug already exists. Use `StoreCategory.objects.get_or_create(tenant=request.tenant, slug=slugify(cat_name), defaults={"name": cat_name})`.
-- `[ ]` **M3**: `apps/ecommerce/models/ProductCatalog/StoreCategories.py:61` — `get_breadcrumbs()` traverses `curr.parent` without tracking seen PKs, which could trigger an infinite loop in the event of an ancestor hierarchy cycle in the database. Maintain `seen = set()` inside `get_breadcrumbs()` and break if `curr.pk in seen`.
-- `[ ]` **M4**: `templates/ecommerce/productcatalog/productvariant/list.html:167` — Pagination links omit `is_active_filter` (and `catalogproduct/list.html:214` omits `visibility_filter`/`brand_filter`), dropping active filter criteria when paginating to page 2. Append missing filter query parameters to pagination URLs.
+- **Critical:** 0
+- **Important:** 14
+- **Minor:** 12
+- **Total Unique Findings:** 26
 
 ---
 
-## Pass 2: Codebase Explorer (`explorer`)
-
-### Critical
-None.
-
-### Important
-- `[ ]` **I5**: `templates/ecommerce/productcatalog/catalogproduct/list.html:33-75` — Filter UI dropdowns omitted for `visibility` and `brand`: The view implements filtering on `visibility` and `brand` and passes `visibility_choices`, `brands_list`, `visibility_filter`, and `brand_filter` in context, but the `<form>` omits `<select name="visibility">` and `<select name="brand">` elements. Add dropdowns to the filter form.
-- `[ ]` **I6**: `apps/ecommerce/views/ProductCatalog/StoreCategories.py:52-53` — Category products query ignores `primary_category`: In `storecategory_detail`, `category.products.filter(...)` only traverses products where this category is in ManyToMany `categories`. Products having this category assigned as `primary_category` are omitted. Update query to `CatalogProduct.objects.filter(tenant=request.tenant).filter(Q(primary_category=category) | Q(categories=category)).distinct()`.
-
-### Minor
-- `[ ]` **M5**: `templates/ecommerce/productcatalog/productvariant/list.html:30-62` — Filter UI dropdown omitted for `is_active`: The view supports filtering on `is_active` and passes `is_active_filter` in context, but the filter form only provides `q` and `product` inputs. Add an `is_active` filter select.
-- `[ ]` **M6**: `templates/ecommerce/productcatalog/storecategory/detail.html:138-190` — Context variable `products` unrendered in detail template: The view queries and passes `products` to context in accordance with the contract, but `storecategory/detail.html` does not render a products section or count badge. Add a products table section under the category detail page.
+## Critical
+*None.*
 
 ---
 
-## Pass 3: Frontend Reviewer (`frontend-reviewer`)
+## Important
 
-### Critical
-None.
-
-### Important
-- `[ ]` **I7**: `templates/ecommerce/productcatalog/catalogproduct/list.html:33-75` — Filter UI dropdowns omitted for `visibility` and `brand`: Expand grid to include `<select name="visibility">` and `<select name="brand">` matching the view context.
-- `[ ]` **I8**: `templates/ecommerce/productcatalog/catalogproduct/list.html:214,219` — Pagination links drop `visibility` and `brand` query parameters (Lesson L9). Append `&visibility={{ visibility_filter }}&brand={{ brand_filter }}`.
-- `[ ]` **I9**: `templates/ecommerce/productcatalog/productvariant/list.html:30-62` — Missing `is_active` filter dropdown in variant filter bar. Add `<select name="is_active">`.
-- `[ ]` **I10**: `templates/ecommerce/productcatalog/productvariant/list.html:165,170` — Pagination links drop `is_active` query parameter (Lesson L9). Append `&is_active={{ is_active_filter }}`.
-- `[ ]` **I11**: `templates/ecommerce/productcatalog/storecategory/detail.html:189` — Category detail page omits catalog products display. Add "Products in Category" card section below the Sub-Categories card.
-
-### Minor
-- `[ ]` **M7**: `templates/ecommerce/productcatalog/**/` — Add explicit `aria-label` attributes to all icon-only action buttons alongside `title`.
-- `[ ]` **M8**: `templates/ecommerce/productcatalog/bulk_import.html:82` & form templates — Replace `space-x-*` with `gap-*` for RTL safety.
-
----
-
-## Pass 4: Performance Reviewer (`performance-reviewer`)
-
-### Critical
-None.
-
-### Important
-- `[ ]` **I12**: `apps/ecommerce/models/ProductCatalog/CatalogProducts.py:106-120` & `templates/ecommerce/productcatalog/catalogproduct/list.html:133,137` — N+1 query amplification in `price_range_display` and `total_variants_count`: `self.variants.filter(is_active=True)` and `self.variants.count()` bypass the prefetch cache, triggering 60 extra queries on a 20-row page. Operate in-memory on prefetched `self.variants.all()`.
-- `[ ]` **I13**: `apps/ecommerce/views/ProductCatalog/Overview.py:36-37` & `templates/ecommerce/productcatalog/overview.html:140,188` — Missing `select_related` and `prefetch_related` on Overview dashboard cards. Add `.select_related("parent")` to `recent_categories` and `.select_related("primary_category").prefetch_related("variants")` to `recent_products`.
-- `[ ]` **I14**: `apps/ecommerce/views/ProductCatalog/CatalogProducts.py:94` & `templates/ecommerce/productcatalog/catalogproduct/detail.html:250` — Missing `select_related("item")` on `product.variants` in `catalogproduct_detail`. Add `.select_related("item")`.
-- `[ ]` **I15**: `apps/ecommerce/views/ProductCatalog/BulkOperations.py:140-142` — Uncached category lookup in CSV Import loop triggers redundant DB query per row. Preload categories into an in-memory dictionary prior to looping.
-
-### Minor
-- `[ ]` **M9**: `apps/ecommerce/views/ProductCatalog/Overview.py:20-34` — Multiple individual KPI queries against `CatalogProduct`. Combine into a single conditional `.aggregate()` query.
-- `[ ]` **M10**: `apps/ecommerce/views/ProductCatalog/ProductRelationships.py:54-59` & `templates/ecommerce/productcatalog/productrelationship/detail.html:68,97` — Chained N+1 queries in `productrelationship_detail`. Add `source_product__primary_category` and `target_product__primary_category` to `select_related`.
-- `[ ]` **M11**: `apps/ecommerce/views/ProductCatalog/StoreCategories.py:17` & `templates/ecommerce/productcatalog/storecategory/list.html:93` — Category hierarchy breadcrumb query depth in `storecategory_list`. Use `select_related("parent", "parent__parent")`.
-- `[ ]` **M12**: `apps/ecommerce/models/ProductCatalog/CatalogProducts.py:69-72` — Missing compound index on `(tenant, -created_at)` for `CatalogProduct`. Add `models.Index(fields=["tenant", "-created_at"], name="ecom_prd_tnt_created_idx")`.
-- `[ ]` **M13**: `apps/ecommerce/views/ProductCatalog/ProductVariants.py:49` & `apps/ecommerce/views/ProductCatalog/ProductRelationships.py:96,130` — Unconstrained model instantiation for dropdown filters. Add `.only("id", "name")` to product dropdown queries.
+- [ ] **I1**: `apps/ecommerce/views/ProductCatalog/CatalogProducts.py:45` & `apps/ecommerce/views/ProductCatalog/ProductVariants.py:36` — Unvalidated integer filter query params: `category` and `product` passed directly without `.isdigit()` check causing 500 `ValueError` on non-numeric or injection payloads (Lesson L11). Guard both with `if category_filter and category_filter.isdigit():` and `if product_filter and product_filter.isdigit():`.
+- [ ] **I2**: `apps/ecommerce/views/ProductCatalog/BulkOperations.py:150-197` — CSV import Decimal parsing and dry-run validation bypass: Move `Price` and `Cost_Price` parsing and validation outside `if not dry_run:` block so dry-run actually catches validation errors; wrap Decimal conversions with `try/except (InvalidOperation, TypeError, ValueError)` checking `.is_finite()` and `>= 0`.
+- [ ] **I3**: `apps/ecommerce/forms/ProductCatalog/CatalogProducts.py:64` — Multi-tenant M2M validation omission: include `"categories"` in `reject_foreign(self, cleaned_data, ["primary_category", "item", "categories"])` to prevent cross-tenant category association.
+- [ ] **I4**: `apps/ecommerce/forms/ProductCatalog/BulkOperations.py:5-9` — CSV file upload validation: In `ProductImportForm`, add `clean_csv_file()` validating `.endswith('.csv')` and file size limit (`5 * 1024 * 1024` bytes / 5MB).
+- [ ] **I5**: `templates/ecommerce/productcatalog/catalogproduct/list.html:33-75` — Filter UI dropdowns omitted for `visibility` and `brand`: The view passes `visibility_choices`, `brands_list`, `visibility_filter`, and `brand_filter` in context, but the `<form>` omits `<select name="visibility">` and `<select name="brand">` elements. Add dropdowns to the filter form.
+- [ ] **I6**: `templates/ecommerce/productcatalog/catalogproduct/list.html:214,219` — Pagination links drop `visibility` and `brand` query parameters (Lesson L9). Append `&visibility={{ visibility_filter }}&brand={{ brand_filter }}`.
+- [ ] **I7**: `templates/ecommerce/productcatalog/productvariant/list.html:30-62` — Filter UI dropdown omitted for `is_active`: Add `<select name="is_active">` to variant list filter bar.
+- [ ] **I8**: `templates/ecommerce/productcatalog/productvariant/list.html:165,170` — Pagination links drop `is_active` query parameter (Lesson L9). Append `&is_active={{ is_active_filter }}`.
+- [ ] **I9**: `apps/ecommerce/views/ProductCatalog/StoreCategories.py:52-53` & `templates/ecommerce/productcatalog/storecategory/detail.html:189` — StoreCategory detail omits `primary_category` products and template omits products table: Update view query to `CatalogProduct.objects.filter(tenant=request.tenant).filter(Q(primary_category=category) | Q(categories=category)).distinct()` and add "Products in Category" card section in `detail.html`.
+- [ ] **I10**: `apps/ecommerce/models/ProductCatalog/CatalogProducts.py:106-120` — N+1 query amplification in `price_range_display` and `total_variants_count`: `self.variants.filter(is_active=True)` and `self.variants.count()` bypass prefetch cache, triggering 60 extra queries on a 20-row page. Operate in-memory on prefetched `self.variants.all()`.
+- [ ] **I11**: `apps/ecommerce/views/ProductCatalog/Overview.py:36-37` — Missing `select_related` and `prefetch_related` on Overview dashboard cards. Add `.select_related("parent")` to `recent_categories` and `.select_related("primary_category").prefetch_related("variants")` to `recent_products`.
+- [ ] **I12**: `apps/ecommerce/views/ProductCatalog/CatalogProducts.py:94` — Missing `select_related("item")` on `product.variants` in `catalogproduct_detail`.
+- [ ] **I13**: `apps/ecommerce/views/ProductCatalog/BulkOperations.py:140-142` — Uncached category lookup in CSV Import loop triggers redundant DB query per row. Preload categories into an in-memory dictionary prior to looping.
+- [ ] **I14**: `apps/ecommerce/management/commands/seed_ecommerce.py:30` — Seeder completion message omits tenant admin login instructions and superuser warning. Append tenant user instructions (`admin_acme / password`).
 
 ---
 
-## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+## Minor
 
-### Critical
-None.
-
-### Important
-- `[ ]` **I16**: `apps/ecommerce/views/ProductCatalog/CatalogProducts.py:44-48` — Runtime 500 on non-numeric or injection `category` query param: unhandled ValueError when requesting `/ecommerce/products/?category=abc` or SQL characters. Guard with `.isdigit()`. (Reinforces I1).
-- `[ ]` **I17**: `apps/ecommerce/views/ProductCatalog/ProductVariants.py:35-38` — Runtime 500 on non-numeric or injection `product` query param: unhandled ValueError when requesting `/ecommerce/variants/?product=abc`. Guard with `.isdigit()`. (Reinforces I2).
-- `[ ]` **I18**: `apps/ecommerce/views/ProductCatalog/BulkOperations.py:150-197` — CSV Dry-run validation completely bypasses field and numeric parsing: variant validation and Decimal conversions only executed inside `if not dry_run:`. Move parsing outside so dry-run validates rows and catches bad numbers.
-
-### Minor
-- `[ ]` **M14**: `apps/ecommerce/forms/ProductCatalog/BulkOperations.py:5-9` — `ProductImportForm` lacks server-side file extension check. Add `clean_csv_file` asserting `.endswith(".csv")`.
-- `[ ]` **M15**: `apps/ecommerce/forms/ProductCatalog/ProductVariants.py:55` & `apps/ecommerce/models/ProductCatalog/ProductVariants.py:68` — `sort_order` required in `ProductVariantForm` without initial default. Make `required=False` or set `initial=0`.
-
-
-
-
+- [ ] **M1**: `apps/ecommerce/views/ProductCatalog/BulkOperations.py:144` — In CSV import, `StoreCategory.objects.create(tenant=request.tenant, name=cat_name, slug=slugify(cat_name))` can raise `IntegrityError` if category exists. Use `StoreCategory.objects.get_or_create(tenant=request.tenant, slug=slugify(cat_name), defaults={"name": cat_name})`.
+- [ ] **M2**: `apps/ecommerce/models/ProductCatalog/StoreCategories.py:61` — `get_breadcrumbs()` traverses `curr.parent` without cycle detection. Maintain `seen = set()` inside `get_breadcrumbs()` and break if `curr.pk in seen`.
+- [ ] **M3**: `templates/ecommerce/productcatalog/**/` — Add explicit `aria-label` attributes to all icon-only action buttons alongside `title`.
+- [ ] **M4**: `templates/ecommerce/productcatalog/bulk_import.html:82` & form templates — Replace `space-x-*` with `gap-*` for RTL safety.
+- [ ] **M5**: `apps/ecommerce/views/ProductCatalog/Overview.py:20-34` — Multiple individual KPI queries against `CatalogProduct`. Combine into a single conditional `.aggregate()` query.
+- [ ] **M6**: `apps/ecommerce/views/ProductCatalog/ProductRelationships.py:54-59` — Chained N+1 queries in `productrelationship_detail`. Add `source_product__primary_category` and `target_product__primary_category` to `select_related`.
+- [ ] **M7**: `apps/ecommerce/views/ProductCatalog/StoreCategories.py:17` — Category hierarchy breadcrumb query depth in `storecategory_list`. Use `select_related("parent", "parent__parent")`.
+- [ ] **M8**: `apps/ecommerce/models/ProductCatalog/CatalogProducts.py:69-72` — Missing compound index on `(tenant, -created_at)` for `CatalogProduct`. Add `models.Index(fields=["tenant", "-created_at"], name="ecom_prd_tnt_created_idx")`.
+- [ ] **M9**: `apps/ecommerce/views/ProductCatalog/ProductVariants.py:49` & `apps/ecommerce/views/ProductCatalog/ProductRelationships.py:96,130` — Unconstrained model instantiation for dropdown filters. Add `.only("id", "name")` to product dropdown queries.
+- [ ] **M10**: `apps/ecommerce/forms/ProductCatalog/ProductVariants.py:55` & `apps/ecommerce/models/ProductCatalog/ProductVariants.py:68` — `sort_order` required in `ProductVariantForm` without initial default. Set `initial=0`.
+- [ ] **M11**: `apps/ecommerce/views/ProductCatalog/BulkOperations.py:211` — Bulk CSV import skips audit logging when partial row-level validation errors occur. Write audit log if `created_products > 0 or created_variants > 0`.
+- [ ] **M12**: `apps/ecommerce/views/ProductCatalog/BulkOperations.py:106` — Missing `errors="replace"` fallback during CSV decode: use `csv_file.read().decode("utf-8-sig", errors="replace")`.
