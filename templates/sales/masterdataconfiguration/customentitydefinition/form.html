@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Custom Definition {{ definition.number }}{% else %}New Custom Definition{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+    {# Page Header #}
+    <div class="page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="breadcrumb text-sm text-slate-500 mb-1">
+                <a href="{% url 'dashboard:home' %}" class="hover:text-primary">Home</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sales_overview' %}" class="hover:text-primary">Sales</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:master_data_overview' %}" class="hover:text-primary">Master Data</a>
+                <span class="mx-1">/</span>
+                <a href="{% url 'sales:sco_list' %}" class="hover:text-primary">Custom Entities & Fields</a>
+                <span class="mx-1">/</span>
+                <span class="text-slate-700 font-medium">{% if is_edit %}Edit {{ definition.number }}{% else %}New Definition{% endif %}</span>
+            </div>
+            <h1 class="page-title text-2xl font-bold text-slate-900">
+                {% if is_edit %}Edit Custom Definition {{ definition.number }}{% else %}Create Custom Sales Definition{% endif %}
+            </h1>
+            <p class="text-sm text-slate-500 mt-1">Define custom fields, formula expressions, and object relationship lookups.</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% if is_edit %}{% url 'sales:sco_detail' definition.pk %}{% else %}{% url 'sales:sco_list' %}{% endif %}" class="btn btn-outline flex items-center gap-2">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                <span>Cancel</span>
+            </a>
+        </div>
+    </div>
+
+    {# Form Card #}
+    <div class="card p-6">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="space-y-4">
+                <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-200">Field Identity & Target</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.name.id_for_label }}">
+                            Display Label <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.name.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.entity_code.id_for_label }}">
+                            API Entity Code <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.entity_code }}
+                        {% if form.entity_code.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.entity_code.errors.0 }}</p>
+                        {% endif %}
+                        <p class="text-xs text-slate-500 mt-1">Unique code within target model (e.g. margin_rate_c).</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.target_model.id_for_label }}">
+                            Target Sales Model <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.target_model }}
+                        {% if form.target_model.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.target_model.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.field_type.id_for_label }}">
+                            Data Type <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.field_type }}
+                        {% if form.field_type.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.field_type.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4 pt-4 border-t border-slate-200">
+                <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-200">Formulas, Lookups & Validation</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.formula_expression.id_for_label }}">
+                            Formula Expression
+                        </label>
+                        {{ form.formula_expression }}
+                        {% if form.formula_expression.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.formula_expression.errors.0 }}</p>
+                        {% endif %}
+                        <p class="text-xs text-slate-500 mt-1">Required if field type is Formula, e.g. (amount - cost) / amount * 100.</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.lookup_target_model.id_for_label }}">
+                            Lookup Target Model
+                        </label>
+                        {{ form.lookup_target_model }}
+                        {% if form.lookup_target_model.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.lookup_target_model.errors.0 }}</p>
+                        {% endif %}
+                        <p class="text-xs text-slate-500 mt-1">Target class for Lookup or Master-Detail relationships.</p>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label text-sm font-medium" for="{{ form.picklist_options_raw.id_for_label }}">
+                        {{ form.picklist_options_raw.label }}
+                    </label>
+                    {{ form.picklist_options_raw }}
+                    {% if form.picklist_options_raw.errors %}
+                    <p class="form-error text-xs text-red-600 mt-1">{{ form.picklist_options_raw.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.validation_rule.id_for_label }}">
+                            Validation Regex
+                        </label>
+                        {{ form.validation_rule }}
+                        {% if form.validation_rule.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.validation_rule.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium" for="{{ form.display_order.id_for_label }}">
+                            Display Order
+                        </label>
+                        {{ form.display_order }}
+                        {% if form.display_order.errors %}
+                        <p class="form-error text-xs text-red-600 mt-1">{{ form.display_order.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4 pt-4 border-t border-slate-200">
+                <h3 class="text-base font-semibold text-slate-900 pb-2 border-b border-slate-200">Behavior & Documentation</h3>
+                <div class="form-group">
+                    <label class="form-label text-sm font-medium" for="{{ form.description.id_for_label }}">
+                        Description & Usage Rationale
+                    </label>
+                    {{ form.description }}
+                    {% if form.description.errors %}
+                    <p class="form-error text-xs text-red-600 mt-1">{{ form.description.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="flex items-center gap-6 pt-2">
+                    <div class="flex items-center gap-2">
+                        {{ form.is_required }}
+                        <label class="form-label text-sm font-medium cursor-pointer" for="{{ form.is_required.id_for_label }}">
+                            Mandatory field on input
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{ form.is_active }}
+                        <label class="form-label text-sm font-medium cursor-pointer" for="{{ form.is_active.id_for_label }}">
+                            Active in schema
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'sales:sco_detail' definition.pk %}{% else %}{% url 'sales:sco_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if is_edit %}Save Changes{% else %}Create Definition{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
