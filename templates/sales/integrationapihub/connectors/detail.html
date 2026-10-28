@@ -71,12 +71,12 @@
         </div>
         <div class="card p-4">
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Field Mappings</div>
-            <div class="text-lg font-bold text-slate-800 mt-1">{{ field_mappings.count }}</div>
+            <div class="text-lg font-bold text-slate-800 mt-1">{{ field_mappings|length }}</div>
             <div class="text-xs text-slate-500 mt-0.5">Configured attribute translations</div>
         </div>
         <div class="card p-4">
             <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Scheduled Sync Jobs</div>
-            <div class="text-lg font-bold text-slate-800 mt-1">{{ sync_jobs.count }}</div>
+            <div class="text-lg font-bold text-slate-800 mt-1">{{ sync_jobs|length }}</div>
             <div class="text-xs text-slate-500 mt-0.5">Automated synchronization jobs</div>
         </div>
     </div>
