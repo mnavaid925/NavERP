@@ -43,7 +43,6 @@ class SalesPriceBookEntry(TenantNumbered):
         max_length=64,
         blank=True,
         default="",
-        db_index=True,
         help_text="Distributor or manufacturer SKU code",
     )
     currency_code = models.CharField(
