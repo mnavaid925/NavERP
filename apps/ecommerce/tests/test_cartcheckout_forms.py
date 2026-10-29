@@ -17,7 +17,7 @@ import pytest
 from django.utils import timezone
 
 from apps.accounting.models import TaxCode
-from apps.core.models import Party, Role
+from apps.core.models import Party, PartyRole
 from apps.ecommerce.forms.CartCheckout.Carts import CartForm, CartItemForm
 from apps.ecommerce.forms.CartCheckout.CheckoutSessions import CheckoutSessionForm
 from apps.ecommerce.forms.CartCheckout.ShippingMethods import ShippingMethodConfigForm
@@ -47,7 +47,7 @@ pytestmark = pytest.mark.django_db
 
 def _cartcheckout_create_party_customer(tenant, name="Customer Tester"):
     party = Party.objects.create(tenant=tenant, name=name, party_type="individual")
-    Role.objects.create(party=party, role="customer")
+    PartyRole.objects.create(party=party, role="customer")
     return party
 
 
