@@ -133,7 +133,7 @@
               </td>
               <td class="text-right text-xs text-slate-500">&le; {{ alloc.low_stock_threshold }}</td>
               <td class="text-right table-actions">
-                <a href="{% url 'ecommerce:inventoryallocation_adjust' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="Adjust stock">
+                <a href="{% url 'ecommerce:inventoryallocation_adjust' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="Adjust stock" aria-label="Adjust stock for {{ alloc.variant.sku }}">
                   <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
                 </a>
               </td>
@@ -192,7 +192,7 @@
                   {{ center.get_center_type_display }}
                 </span>
               </td>
-              <td class="text-xs font-mono text-slate-600">{{ center.daily_cutoff_time|default:"—" }}</td>
+              <td class="text-xs font-mono text-slate-600">{{ center.daily_cutoff_time|time:"H:i"|default:"—" }}</td>
               <td>
                 {% if center.is_active %}
                 <span class="badge badge-green">Active</span>
@@ -257,7 +257,7 @@
                 <form action="{% url 'ecommerce:channelinventorysync_trigger' sync.pk %}" method="post" class="inline">
                   {% csrf_token %}
                   <input type="hidden" name="next" value="{{ request.get_full_path }}" />
-                  <button type="submit" class="btn btn-icon btn-outline p-1" title="Trigger Instant Sync">
+                  <button type="submit" class="btn btn-icon btn-outline p-1" title="Trigger Instant Sync" aria-label="Trigger instant sync for {{ sync.channel_name }}">
                     <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                   </button>
                 </form>
