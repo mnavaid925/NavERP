@@ -91,6 +91,10 @@ class SearchQueryLog(TenantNumbered):
                 name="idx_esql_ten_zr_created",
             ),
             models.Index(
+                fields=["tenant", "is_zero_result", "normalized_query"],
+                name="idx_esql_ten_zr_norm",
+            ),
+            models.Index(
                 fields=["tenant", "normalized_query"],
                 name="idx_esql_ten_norm_q",
             ),
