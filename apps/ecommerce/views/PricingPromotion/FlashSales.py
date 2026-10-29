@@ -76,12 +76,10 @@ def flashsale_create(request):
             sale.tenant = request.tenant
             sale.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "CREATE",
-                "FlashSale",
-                sale.pk,
-                f"Created flash sale {sale.number} ({sale.title})",
+                sale,
+                "create",
+                {"title": sale.title, "number": sale.number},
             )
             messages.success(request, f"Flash sale '{sale.title}' created successfully.")
             return redirect("ecommerce:flashsale_detail", pk=sale.pk)
@@ -108,12 +106,10 @@ def flashsale_edit(request, pk):
         if form.is_valid():
             sale = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "UPDATE",
-                "FlashSale",
-                sale.pk,
-                f"Updated flash sale {sale.number} ({sale.title})",
+                sale,
+                "update",
+                {"title": sale.title, "number": sale.number},
             )
             messages.success(request, f"Flash sale '{sale.title}' updated successfully.")
             return redirect("ecommerce:flashsale_detail", pk=sale.pk)
@@ -137,12 +133,10 @@ def flashsale_delete(request, pk):
     number = sale.number
     sale.delete()
     write_audit_log(
-        request.tenant,
         request.user,
-        "DELETE",
-        "FlashSale",
-        pk,
-        f"Deleted flash sale {number} ({title})",
+        sale,
+        "delete",
+        {"title": title, "number": number},
     )
     messages.success(request, f"Flash sale '{title}' ({number}) was deleted.")
     return redirect("ecommerce:flashsale_list")
