@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}Order Routing Rules · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Order Routing Rules</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Order Routing & Sourcing Rules</h1>
+      <p class="text-sm text-slate-500 mt-1">Configure automated fulfillment node selection, split shipment policies, and drop-ship preferences.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:orderroutingrule_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Routing Rule</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Rule name, number, country..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-strategy" class="block text-xs font-medium text-slate-600 mb-1">Routing Strategy</label>
+        <select id="filter-strategy" name="strategy" class="form-select w-full text-sm">
+          <option value="">All Strategies</option>
+          {% for val, label in strategy_choices %}
+            <option value="{{ val }}" {% if current_strategy == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Rule Status</label>
+        <select id="filter-status" name="is_active" class="form-select w-full text-sm">
+          <option value="">All Statuses</option>
+          <option value="1" {% if current_status == '1' %}selected{% endif %}>Active</option>
+          <option value="0" {% if current_status == '0' %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-outline text-sm flex-1">
+          Filter
+        </button>
+        {% if search_query or current_strategy or current_status %}
+          <a href="{% url 'ecommerce:orderroutingrule_list' %}" class="btn btn-outline text-slate-500 text-sm">
+            Clear
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Table -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse text-sm">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs font-semibold uppercase">
+            <th class="py-3 px-4">Rule #</th>
+            <th class="py-3 px-4">Rule Name</th>
+            <th class="py-3 px-4">Strategy</th>
+            <th class="py-3 px-4 text-center">Priority</th>
+            <th class="py-3 px-4">Geographic Scope</th>
+            <th class="py-3 px-4">Assigned Center</th>
+            <th class="py-3 px-4 text-center">Split Allowed</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for rule in rules %}
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-blue-600">
+                <a href="{% url 'ecommerce:orderroutingrule_detail' pk=rule.pk %}" class="hover:underline">
+                  {{ rule.number }}
+                </a>
+              </td>
+              <td class="py-3 px-4 font-medium text-slate-900">
+                {{ rule.name }}
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge badge-info text-xs">{{ rule.get_strategy_display }}</span>
+              </td>
+              <td class="py-3 px-4 text-center font-mono font-semibold text-slate-700">
+                {{ rule.priority }}
+              </td>
+              <td class="py-3 px-4 text-slate-600">
+                {% if rule.destination_country %}
+                  {{ rule.destination_country }}{% if rule.destination_region %}, {{ rule.destination_region }}{% endif %}
+                {% else %}
+                  <span class="text-slate-400">Global Wildcard</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-slate-700">
+                {% if rule.preferred_fulfillment_center %}
+                  {{ rule.preferred_fulfillment_center.name }}
+                {% else %}
+                  <span class="text-slate-400">Dynamic Heuristic</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-center">
+                {% if rule.allow_split_shipment %}
+                  <span class="badge badge-green text-xs">Yes</span>
+                {% else %}
+                  <span class="badge badge-slate text-xs">No</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if rule.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-slate">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="table-actions flex items-center justify-end gap-1">
+                  <a
+                    href="{% url 'ecommerce:orderroutingrule_detail' pk=rule.pk %}"
+                    class="btn btn-icon text-slate-500 hover:text-blue-600"
+                    title="View details"
+                    aria-label="View rule {{ rule.name }}"
+                  >
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a
+                    href="{% url 'ecommerce:orderroutingrule_edit' pk=rule.pk %}"
+                    class="btn btn-icon text-slate-500 hover:text-amber-600"
+                    title="Edit rule"
+                    aria-label="Edit rule {{ rule.name }}"
+                  >
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form
+                    method="post"
+                    action="{% url 'ecommerce:orderroutingrule_delete' pk=rule.pk %}"
+                    onsubmit="return confirm('Delete routing rule {{ rule.name }}?');"
+                    class="inline"
+                  >
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="btn btn-icon text-slate-400 hover:text-red-600"
+                      title="Delete rule"
+                      aria-label="Delete rule {{ rule.name }}"
+                    >
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9" class="py-12 text-center">
+                <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                  <i data-lucide="git-branch" class="w-12 h-12 text-slate-300 mb-3"></i>
+                  <h3 class="text-base font-semibold text-slate-700">No Routing Rules Found</h3>
+                  <p class="text-xs text-slate-500 mt-1 mb-4">Define sourcing policies for intelligent warehouse routing and split shipments.</p>
+                  <a href="{% url 'ecommerce:orderroutingrule_create' %}" class="btn btn-primary inline-flex items-center gap-2 text-sm">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Create Routing Rule</span>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+        <div>
+          Showing page {{ page_obj.number }} of {{ paginator.num_pages }}
+        </div>
+        <div class="flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a
+              href="?page={{ page_obj.previous_page_number }}{% if current_q %}&q={{ current_q }}{% endif %}{% if current_strategy %}&strategy={{ current_strategy }}{% endif %}{% if current_status %}&is_active={{ current_status }}{% endif %}"
+              class="btn btn-outline py-1 px-3 text-xs"
+            >
+              Previous
+            </a>
+          {% endif %}
+          <span class="py-1 px-3 bg-slate-100 rounded text-xs font-mono font-medium text-slate-700">
+            {{ page_obj.number }}
+          </span>
+          {% if page_obj.has_next %}
+            <a
+              href="?page={{ page_obj.next_page_number }}{% if current_q %}&q={{ current_q }}{% endif %}{% if current_strategy %}&strategy={{ current_strategy }}{% endif %}{% if current_status %}&is_active={{ current_status }}{% endif %}"
+              class="btn btn-outline py-1 px-3 text-xs"
+            >
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
