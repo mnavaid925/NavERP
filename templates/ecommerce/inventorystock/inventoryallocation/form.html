@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_create %}New Stock Allocation{% else %}Edit Allocation: {{ allocation.variant.sku }}{% endif %} | eCommerce{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex items-center justify-between">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-primary">eCommerce</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:inventory_operations' %}" class="hover:text-primary">Inventory & Stock</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:inventoryallocation_list' %}" class="hover:text-primary">Stock Allocations</a>
+        <span class="mx-2">/</span>
+        <span>{% if is_create %}New Allocation{% else %}Edit{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_create %}Create Stock Allocation{% else %}Edit Stock Allocation: {{ allocation.variant.sku }} @ {{ allocation.fulfillment_center.code }}{% endif %}
+      </h1>
+    </div>
+    <div class="page-actions">
+      <a href="{% if is_create %}{% url 'ecommerce:inventoryallocation_list' %}{% else %}{% url 'ecommerce:inventoryallocation_detail' allocation.pk %}{% endif %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Cancel</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.errors %}
+      <div class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm">
+        <div class="font-semibold mb-1">Please correct the errors below:</div>
+        <ul class="list-disc list-inside">
+          {% for field, errors in form.errors.items %}
+            {% for error in errors %}
+              <li>{{ field }}: {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <!-- SKU & Location Assignment -->
+      <div class="space-y-4">
+        <h3 class="text-base font-semibold text-slate-900 border-b pb-2">Product Variant & Fulfillment Center</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.product.id_for_label }}">Catalog Product *</label>
+            {{ form.product }}
+            {% if form.product.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.product.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.variant.id_for_label }}">Product Variant (SKU) *</label>
+            {{ form.variant }}
+            {% if form.variant.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.variant.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.fulfillment_center.id_for_label }}">Fulfillment Center *</label>
+            {{ form.fulfillment_center }}
+            {% if form.fulfillment_center.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.fulfillment_center.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.zone_bin.id_for_label }}">Storage Zone / Bin Coordinate</label>
+          {{ form.zone_bin }}
+          <p class="text-xs text-slate-400 mt-1">e.g. Aisle 4, Shelf C, Bin 12</p>
+        </div>
+      </div>
+
+      <!-- Quantities & Buffer Rules -->
+      <div class="space-y-4">
+        <h3 class="text-base font-semibold text-slate-900 border-b pb-2">Stock Balances & Safety Buffers</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.quantity_on_hand.id_for_label }}">Physical On Hand *</label>
+            {{ form.quantity_on_hand }}
+            <p class="text-xs text-slate-400 mt-1">Total physical inventory units</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.quantity_allocated.id_for_label }}">Allocated / Committed *</label>
+            {{ form.quantity_allocated }}
+            <p class="text-xs text-slate-400 mt-1">Reserved for open pending orders</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.safety_stock_buffer.id_for_label }}">Safety Stock Buffer *</label>
+            {{ form.safety_stock_buffer }}
+            <p class="text-xs text-slate-400 mt-1">Withheld from online sales channels</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.low_stock_threshold.id_for_label }}">Low Stock Alert Threshold *</label>
+            {{ form.low_stock_threshold }}
+            <p class="text-xs text-slate-400 mt-1">ATP level that triggers low stock warning</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.restock_lead_time_days.id_for_label }}">Restock Lead Time (Days) *</label>
+            {{ form.restock_lead_time_days }}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.last_counted_at.id_for_label }}">Last Counted Timestamp</label>
+            {{ form.last_counted_at }}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.notes.id_for_label }}">Operational Notes</label>
+          {{ form.notes }}
+        </div>
+      </div>
+
+      <!-- Submit Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t">
+        <a href="{% if is_create %}{% url 'ecommerce:inventoryallocation_list' %}{% else %}{% url 'ecommerce:inventoryallocation_detail' allocation.pk %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary flex items-center gap-2">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if is_create %}Create Allocation{% else %}Save Changes{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
