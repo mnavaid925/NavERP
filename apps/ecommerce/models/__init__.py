@@ -7,6 +7,10 @@ from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPoli
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
 from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
+from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder, EcommerceOrderLine
+from apps.ecommerce.models.OrderManagement.OrderFulfillments import OrderFulfillment
+from apps.ecommerce.models.OrderManagement.OrderRoutingRules import OrderRoutingRule
+from apps.ecommerce.models.OrderManagement.ReturnMerchandiseAuthorizations import ReturnMerchandiseAuthorization
 from apps.ecommerce.models.PricingPromotion.CompetitorPriceMonitors import CompetitorPriceMonitor
 from apps.ecommerce.models.PricingPromotion.CouponPromotions import CouponPromotion
 from apps.ecommerce.models.PricingPromotion.DynamicPriceRules import DynamicPriceRule
@@ -40,5 +44,11 @@ __all__ = [
     "CheckoutSession",
     "ShippingMethodConfig",
     "PaymentMethodConfig",
+    # 9.5 Order Management System (OMS)
+    "EcommerceOrder",
+    "EcommerceOrderLine",
+    "OrderRoutingRule",
+    "OrderFulfillment",
+    "ReturnMerchandiseAuthorization",
 ]
 
