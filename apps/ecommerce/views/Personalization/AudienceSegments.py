@@ -19,7 +19,7 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 
 @login_required
 def audiencesegment_list(request):
-    qs = ecommerce_scope(AudienceSegment.objects.all(), request)
+    qs = ecommerce_scope(AudienceSegment.objects.all(), request).select_related("target_category")
 
     search_query = request.GET.get("q", "").strip()
     lifecycle_stage = request.GET.get("lifecycle_stage", "").strip()
@@ -62,7 +62,7 @@ def audiencesegment_list(request):
 @login_required
 def audiencesegment_detail(request, pk):
     segment = ecommerce_object(request, AudienceSegment, pk)
-    experiences = segment.experiences.filter(is_active=True).order_by("-priority")
+    experiences = segment.experiences.filter(is_active=True).select_related("target_segment", "target_category", "target_product").order_by("-priority")
     strategies = segment.recommendation_strategies.filter(is_active=True)
 
     context = {
