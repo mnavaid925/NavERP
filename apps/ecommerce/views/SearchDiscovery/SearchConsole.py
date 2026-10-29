@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
 from django.db import models
-from django.db.models import Avg, Count, F, Q
+from django.db.models import Avg, Count, F, Min, Q
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 
@@ -253,11 +253,11 @@ def search_console(request):
     # 5. Sorting
     if sort_order == "price_asc":
         product_list = list(
-            base_qs.order_by("variants__price").distinct()[:100]
+            base_qs.annotate(min_price=Min("variants__price")).order_by("min_price")[:100]
         )
     elif sort_order == "price_desc":
         product_list = list(
-            base_qs.order_by("-variants__price").distinct()[:100]
+            base_qs.annotate(min_price=Min("variants__price")).order_by("-min_price")[:100]
         )
     elif sort_order == "newest":
         product_list = list(base_qs.order_by("-created_at").distinct()[:100])
