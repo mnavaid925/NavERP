@@ -161,5 +161,28 @@
   - **Description:** Admin classes do not set `list_select_related` for related FKs.
   - **Suggested Fix:** Add `list_select_related` on the 5 admin classes.
 
+---
+
+## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+
+### Critical
+- [ ] *(Directly Reproduced [C1]) Runtime 500 / `TypeError` on all 13 POST actions calling `write_audit_log`*
+- [ ] *(Directly Reproduced [C2]) Runtime 500 / `AttributeError` in `customerprivacyrequest_generate_export` on `Address.postal_code`*
+
+### Important
+- [ ] *(Directly Reproduced [I1 / QA-I1]) Runtime 500 / `ValueError` in `customerwishlist_item_add` on malformed `desired_quantity`*
+- [ ] **[QA-I2] Runtime 500 / `ValueError` in `customerwishlist_item_add` on empty or invalid `product` POST data**
+  - **File:** `apps/ecommerce/views/CustomerProfile/CustomerWishlists.py:185`
+  - **Description:** `get_object_or_404(CatalogProduct, pk=product_id)` crashes with `ValueError: Field 'id' expected a number but got ''`.
+  - **Suggested Fix:** Validate `product_id` is non-empty and digits before querying.
+
+- [ ] *(Directly Reproduced [I4 / QA-I3]) Contract drift in wishlist detail product dropdown (`() - $`)*
+- [ ] *(Directly Reproduced [I3 / QA-I4]) Inconsistent permission decorators on wishlist item actions*
+
+### Minor
+- [ ] *(Corroborated [I7 / QA-M1]) Non-existent address fields in templates*
+- [ ] *(Corroborated [M1 / QA-M2]) Undefined `.badge-purple` theme class*
+
+
 
 
