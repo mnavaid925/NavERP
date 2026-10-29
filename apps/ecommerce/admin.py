@@ -4,6 +4,10 @@ from apps.ecommerce.models.CartCheckout.Carts import Cart, CartItem
 from apps.ecommerce.models.CartCheckout.CheckoutSessions import CheckoutSession
 from apps.ecommerce.models.CartCheckout.PaymentMethods import PaymentMethodConfig
 from apps.ecommerce.models.CartCheckout.ShippingMethods import ShippingMethodConfig
+from apps.ecommerce.models.CustomerProfile.CustomerAccountProfiles import CustomerAccountProfile
+from apps.ecommerce.models.CustomerProfile.CustomerAddressPreferences import CustomerAddressPreference
+from apps.ecommerce.models.CustomerProfile.CustomerPrivacyRequests import CustomerPrivacyRequest
+from apps.ecommerce.models.CustomerProfile.CustomerWishlists import CustomerWishlist, CustomerWishlistItem
 from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPolicy
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
@@ -201,6 +205,54 @@ class ReturnMerchandiseAuthorizationAdmin(admin.ModelAdmin):
     list_filter = ["return_type", "status", "reason", "refund_status", "restocking_status", "tenant"]
     search_fields = ["number", "order__number", "customer__name", "return_tracking_number"]
     ordering = ["-created_at"]
+
+
+@admin.register(CustomerAccountProfile)
+class CustomerAccountProfileAdmin(admin.ModelAdmin):
+    list_display = ["number", "customer", "user", "tier", "status", "auth_mode", "phone_number", "phone_verified", "total_spent", "order_count"]
+    list_filter = ["tier", "status", "auth_mode", "phone_verified", "tenant"]
+    search_fields = ["number", "customer__name", "user__username", "phone_number"]
+    ordering = ["-created_at"]
+
+
+@admin.register(CustomerAddressPreference)
+class CustomerAddressPreferenceAdmin(admin.ModelAdmin):
+    list_display = ["number", "customer", "label", "is_default_shipping", "is_default_billing", "preferred_delivery_window", "requires_signature"]
+    list_filter = ["is_default_shipping", "is_default_billing", "preferred_delivery_window", "requires_signature", "tenant"]
+    search_fields = ["number", "customer__name", "label", "recipient_name"]
+    ordering = ["-created_at"]
+
+
+class CustomerWishlistItemInline(admin.TabularInline):
+    model = CustomerWishlistItem
+    extra = 1
+    fields = ["product", "variant", "desired_quantity", "priority", "comment"]
+
+
+@admin.register(CustomerWishlist)
+class CustomerWishlistAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "customer", "visibility", "is_default", "share_token"]
+    list_filter = ["visibility", "is_default", "tenant"]
+    search_fields = ["number", "name", "customer__name", "share_token"]
+    ordering = ["-created_at"]
+    inlines = [CustomerWishlistItemInline]
+
+
+@admin.register(CustomerWishlistItem)
+class CustomerWishlistItemAdmin(admin.ModelAdmin):
+    list_display = ["wishlist", "product", "variant", "desired_quantity", "priority"]
+    list_filter = ["priority", "tenant"]
+    search_fields = ["wishlist__name", "product__name", "comment"]
+    ordering = ["-created_at"]
+
+
+@admin.register(CustomerPrivacyRequest)
+class CustomerPrivacyRequestAdmin(admin.ModelAdmin):
+    list_display = ["number", "customer", "request_type", "status", "statutory_deadline", "completed_at", "requested_by_email"]
+    list_filter = ["request_type", "status", "tenant"]
+    search_fields = ["number", "customer__name", "requested_by_email", "resolution_notes"]
+    ordering = ["-created_at"]
+
 
 
 
