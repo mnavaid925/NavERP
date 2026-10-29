@@ -1,16 +1,21 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
 from apps.accounting.models.GeneralLedger.Currencies import Currency
-from apps.core.models import Party, Tenant
+from apps.core.models import Address, Party, Tenant
 from apps.ecommerce.models.CartCheckout.Carts import Cart, CartItem
 from apps.ecommerce.models.CartCheckout.CheckoutSessions import CheckoutSession
 from apps.ecommerce.models.CartCheckout.PaymentMethods import PaymentMethodConfig
 from apps.ecommerce.models.CartCheckout.ShippingMethods import ShippingMethodConfig
+from apps.ecommerce.models.CustomerProfile.CustomerAccountProfiles import CustomerAccountProfile
+from apps.ecommerce.models.CustomerProfile.CustomerAddressPreferences import CustomerAddressPreference
+from apps.ecommerce.models.CustomerProfile.CustomerPrivacyRequests import CustomerPrivacyRequest
+from apps.ecommerce.models.CustomerProfile.CustomerWishlists import CustomerWishlist, CustomerWishlistItem
 from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPolicy
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
@@ -1363,6 +1368,113 @@ class Command(BaseCommand):
                         "authorized_at": now - timedelta(hours=4),
                     },
                 )
+
+        # -------------------------------------------------------------
+        # 9.6 Customer Account & Profile
+        # -------------------------------------------------------------
+        if cust_party:
+            usd_curr = Currency.objects.filter(code="USD").first()
+            User = get_user_model()
+            user_account = User.objects.filter(tenant=tenant).first()
+
+            # 1. Customer Profiles
+            CustomerAccountProfile.objects.get_or_create(
+                tenant=tenant,
+                customer=cust_party,
+                defaults={
+                    "user": user_account,
+                    "tier": "gold",
+                    "status": "active",
+                    "auth_mode": "password",
+                    "phone_number": "+1 (312) 555-0142",
+                    "phone_verified": True,
+                    "preferred_currency": usd_curr,
+                    "preferred_language": "en",
+                    "email_marketing_opt_in": True,
+                    "sms_marketing_opt_in": True,
+                    "notification_frequency": "weekly_digest",
+                    "total_spent": Decimal("485.50"),
+                    "order_count": 4,
+                    "last_order_at": now - timedelta(days=2),
+                    "internal_notes": "Valued enterprise VIP client; prefers morning deliveries.",
+                },
+            )
+
+            # 2. Customer Address Preferences
+            pref_addr = Address.objects.filter(tenant=tenant).first()
+            if not pref_addr:
+                pref_addr = Address.objects.create(
+                    tenant=tenant,
+                    line1="742 Evergreen Terrace",
+                    city="Springfield",
+                    state="OR",
+                    postal_code="97477",
+                    country="United States",
+                )
+
+            CustomerAddressPreference.objects.get_or_create(
+                tenant=tenant,
+                customer=cust_party,
+                label="Primary Residence",
+                defaults={
+                    "address": pref_addr,
+                    "is_default_shipping": True,
+                    "is_default_billing": True,
+                    "recipient_name": cust_party.name,
+                    "contact_phone": "+1 (312) 555-0142",
+                    "delivery_instructions": "Gate code #4092. Leave behind porch planter box.",
+                    "preferred_delivery_window": "morning",
+                    "requires_signature": False,
+                },
+            )
+
+            # 3. Wishlists & Items
+            wishlist_demo, _ = CustomerWishlist.objects.get_or_create(
+                tenant=tenant,
+                customer=cust_party,
+                name="Winter Tech & Apparel Favorites",
+                defaults={
+                    "slug": "winter-tech-apparel-favorites",
+                    "visibility": "shared",
+                    "is_default": True,
+                    "notes": "Curated selection for holiday wardrobe upgrades.",
+                },
+            )
+
+            sample_prod = CatalogProduct.objects.filter(tenant=tenant).first()
+            if sample_prod:
+                CustomerWishlistItem.objects.get_or_create(
+                    tenant=tenant,
+                    wishlist=wishlist_demo,
+                    product=sample_prod,
+                    defaults={
+                        "desired_quantity": 2,
+                        "priority": "high",
+                        "comment": "Prefer navy or dark slate colorway.",
+                    },
+                )
+
+            # 4. Privacy & GDPR Requests
+            CustomerPrivacyRequest.objects.get_or_create(
+                tenant=tenant,
+                customer=cust_party,
+                request_type="access_export",
+                defaults={
+                    "status": "completed",
+                    "statutory_deadline": (now + timedelta(days=25)).date(),
+                    "completed_at": now - timedelta(days=1),
+                    "requested_by_email": "privacy.officer@acme.example.com",
+                    "verification_method": "account_login",
+                    "data_export_payload": {
+                        "customer": cust_party.name,
+                        "tier": "gold",
+                        "orders_count": 4,
+                        "verified": True,
+                    },
+                    "resolution_notes": "Statutory GDPR portability export package compiled and delivered via secure portal.",
+                },
+            )
+
 
 
 
