@@ -49,6 +49,7 @@
           name="q"
           value="{{ q }}"
           placeholder="Search products by title, SKU, brand, or synonym terms..."
+          aria-label="Search catalog"
           class="form-input w-full pl-11 pr-24 py-3 text-base rounded-lg border-slate-300 focus:border-blue-500"
           autocomplete="off"
           hx-get="{% url 'ecommerce:search_autocomplete' %}"
@@ -252,6 +253,7 @@
                 name="price_min"
                 value="{{ active_filters.price_min }}"
                 placeholder="Min $"
+                aria-label="Minimum price"
                 class="form-input text-xs py-1 px-2"
               >
               <input
@@ -259,6 +261,7 @@
                 name="price_max"
                 value="{{ active_filters.price_max }}"
                 placeholder="Max $"
+                aria-label="Maximum price"
                 class="form-input text-xs py-1 px-2"
               >
             </div>
