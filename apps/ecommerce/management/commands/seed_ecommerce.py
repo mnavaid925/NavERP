@@ -24,6 +24,10 @@ from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder
 from apps.ecommerce.models.OrderManagement.OrderFulfillments import OrderFulfillment
 from apps.ecommerce.models.OrderManagement.OrderRoutingRules import OrderRoutingRule
 from apps.ecommerce.models.OrderManagement.ReturnMerchandiseAuthorizations import ReturnMerchandiseAuthorization
+from apps.ecommerce.models.Personalization.AudienceSegments import AudienceSegment
+from apps.ecommerce.models.Personalization.PersonalizedExperiences import PersonalizedExperience
+from apps.ecommerce.models.Personalization.RecommendationStrategies import RecommendationStrategy
+from apps.ecommerce.models.Personalization.ShopperBehaviorEvents import ShopperBehaviorEvent
 from apps.ecommerce.models.PricingPromotion.CompetitorPriceMonitors import CompetitorPriceMonitor
 from apps.ecommerce.models.PricingPromotion.CouponPromotions import CouponPromotion
 from apps.ecommerce.models.PricingPromotion.DynamicPriceRules import DynamicPriceRule
@@ -1688,6 +1692,208 @@ class Command(BaseCommand):
                     "session_key": "demo_session_analytics_key",
                 },
             )
+
+        # =========================================================================
+        # 9.8 Personalization & Recommendation Engine
+        # =========================================================================
+        # 1. Audience Segments
+        vip_segment, _ = AudienceSegment.objects.get_or_create(
+            tenant=tenant,
+            code="vip-champions",
+            defaults={
+                "name": "VIP Champions & High-Value Buyers",
+                "lifecycle_stage": "high_value_vip",
+                "min_order_count": 3,
+                "min_lifetime_spend": Decimal("500.00"),
+                "cached_member_count": 4,
+                "last_evaluated_at": timezone.now(),
+                "is_active": True,
+                "description": "High-value shoppers with multiple orders and >$500 lifetime spend.",
+            },
+        )
+
+        repeat_segment, _ = AudienceSegment.objects.get_or_create(
+            tenant=tenant,
+            code="active-repeat",
+            defaults={
+                "name": "Active Repeat Customers",
+                "lifecycle_stage": "active_repeat",
+                "recency_days_max": 30,
+                "min_order_count": 2,
+                "min_lifetime_spend": Decimal("100.00"),
+                "cached_member_count": 7,
+                "last_evaluated_at": timezone.now(),
+                "is_active": True,
+                "description": "Engaged shoppers purchasing within the past 30 days.",
+            },
+        )
+
+        at_risk_segment, _ = AudienceSegment.objects.get_or_create(
+            tenant=tenant,
+            code="at-risk-lapsed",
+            defaults={
+                "name": "At-Risk Lapsed Shoppers",
+                "lifecycle_stage": "at_risk",
+                "recency_days_max": 90,
+                "min_order_count": 1,
+                "min_lifetime_spend": Decimal("0.00"),
+                "cached_member_count": 3,
+                "last_evaluated_at": timezone.now(),
+                "is_active": True,
+                "description": "Shoppers with past orders who have not purchased in over 90 days.",
+            },
+        )
+
+        apparel_segment, _ = AudienceSegment.objects.get_or_create(
+            tenant=tenant,
+            code="apparel-enthusiasts",
+            defaults={
+                "name": "Apparel & Fashion Enthusiasts",
+                "lifecycle_stage": "all",
+                "target_category": apparel,
+                "cached_member_count": 5,
+                "last_evaluated_at": timezone.now(),
+                "is_active": True,
+                "description": "Shoppers demonstrating strong affinity for the Apparel & Fashion category.",
+            },
+        )
+
+        # 2. Recommendation Strategies
+        rec_pdp, _ = RecommendationStrategy.objects.get_or_create(
+            tenant=tenant,
+            code="pdp-similar",
+            defaults={
+                "name": "PDP Related & Similar Items",
+                "algorithm": "related_products",
+                "placement": "pdp_related",
+                "fallback_strategy": "trending_popular",
+                "max_items": 6,
+                "min_rating": Decimal("3.50"),
+                "same_brand_only": False,
+                "only_in_stock": True,
+                "is_active": True,
+                "description": "Recommends similar category items on product detail pages.",
+            },
+        )
+
+        rec_cart, _ = RecommendationStrategy.objects.get_or_create(
+            tenant=tenant,
+            code="cart-fbt",
+            defaults={
+                "name": "Cart Frequently Bought Together",
+                "algorithm": "frequently_bought_together",
+                "placement": "cart_cross_sell",
+                "fallback_strategy": "trending_popular",
+                "max_items": 4,
+                "only_in_stock": True,
+                "is_active": True,
+                "description": "Association co-occurrence upsell items in checkout drawer.",
+            },
+        )
+
+        rec_home, _ = RecommendationStrategy.objects.get_or_create(
+            tenant=tenant,
+            code="home-trending",
+            defaults={
+                "name": "Homepage Trending & Popular Feed",
+                "algorithm": "trending_popular",
+                "placement": "homepage_feed",
+                "fallback_strategy": "new_arrivals",
+                "max_items": 8,
+                "only_in_stock": True,
+                "is_active": True,
+                "description": "Showcases high-velocity trending items across the catalog.",
+            },
+        )
+
+        # 3. Personalized Experiences
+        PersonalizedExperience.objects.get_or_create(
+            tenant=tenant,
+            name="VIP Winter Early Access Hero",
+            defaults={
+                "experience_type": "home_hero",
+                "target_segment": vip_segment,
+                "target_category": apparel,
+                "headline": "VIP Exclusive: Early Access Winter Collection",
+                "subheadline": "Enjoy private access and an automatic 20% loyalty reward at checkout.",
+                "cta_label": "Shop VIP Collection",
+                "cta_url": "/ecommerce/catalog/",
+                "priority": 25,
+                "is_active": True,
+                "impression_count": 142,
+                "click_count": 38,
+                "conversion_count": 12,
+            },
+        )
+
+        PersonalizedExperience.objects.get_or_create(
+            tenant=tenant,
+            name="1-Hour Cart Abandonment Recovery Trigger",
+            defaults={
+                "experience_type": "cart_abandonment",
+                "target_segment": repeat_segment,
+                "target_product": sample_prod,
+                "headline": "Did you forget something in your cart?",
+                "subheadline": "Your items are waiting for you. Complete your order before items sell out.",
+                "cta_label": "Return to Cart",
+                "cta_url": "/ecommerce/cart/",
+                "trigger_delay_hours": 1,
+                "priority": 15,
+                "is_active": True,
+                "impression_count": 89,
+                "click_count": 27,
+                "conversion_count": 9,
+            },
+        )
+
+        PersonalizedExperience.objects.get_or_create(
+            tenant=tenant,
+            name="Lapsed Customer Win-Back Campaign",
+            defaults={
+                "experience_type": "win_back",
+                "target_segment": at_risk_segment,
+                "headline": "We miss you! Take $15 off your next order",
+                "subheadline": "Explore new arrivals with code WELCOMEBACK15.",
+                "cta_label": "Claim Your $15 Voucher",
+                "cta_url": "/ecommerce/catalog/",
+                "trigger_delay_hours": 24,
+                "priority": 10,
+                "is_active": True,
+                "impression_count": 64,
+                "click_count": 14,
+                "conversion_count": 4,
+            },
+        )
+
+        # 4. Behavioral Clickstream Events
+        customer_profile = CustomerAccountProfile.objects.filter(tenant=tenant).first()
+        behavior_events_data = [
+            ("page_view", "session_user_alpha", sample_prod, apparel, 1),
+            ("product_view", "session_user_alpha", sample_prod, apparel, 2),
+            ("category_view", "session_user_alpha", None, apparel, 1),
+            ("cart_add", "session_user_alpha", sample_prod, apparel, 5),
+            ("search_query", "session_user_alpha", None, None, 1),
+            ("page_view", "session_user_beta", None, electronics, 1),
+            ("product_view", "session_user_beta", sample_prod, electronics, 2),
+            ("checkout_start", "session_user_beta", sample_prod, None, 7),
+            ("order_purchase", "session_user_beta", sample_prod, apparel, 10),
+            ("wishlist_add", "session_user_gamma", sample_prod, apparel, 3),
+        ]
+        for ev_type, sess_k, prd, cat, score in behavior_events_data:
+            ShopperBehaviorEvent.objects.get_or_create(
+                tenant=tenant,
+                session_key=sess_k,
+                event_type=ev_type,
+                defaults={
+                    "customer_profile": customer_profile,
+                    "product": prd,
+                    "category": cat,
+                    "intent_score_delta": score,
+                    "referrer_url": "https://store.example.com/",
+                    "payload_json": {"source": "demo_seed"},
+                },
+            )
+
 
 
 
