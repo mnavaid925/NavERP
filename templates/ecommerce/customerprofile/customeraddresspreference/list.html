@@ -103,7 +103,7 @@
               </td>
               <td class="py-3 px-4 text-xs text-slate-700">
                 <div>{{ pref.address.line1 }}</div>
-                <div class="text-slate-500">{{ pref.address.city }}{% if pref.address.state %}, {{ pref.address.state }}{% endif %} {{ pref.address.postal_code }}</div>
+                <div class="text-slate-500">{% if pref.address.city %}{{ pref.address.city }}{% endif %}{% if pref.address.country %}{% if pref.address.city %}, {% endif %}{{ pref.address.country }}{% endif %}</div>
               </td>
               <td class="py-3 px-4 text-xs">
                 <span class="badge badge-slate">{{ pref.get_preferred_delivery_window_display }}</span>
