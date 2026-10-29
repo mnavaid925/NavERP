@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit {{ preference.number }}{% else %}New Address Preference{% endif %} · eCommerce · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:customeraddresspreference_list' %}" class="hover:text-blue-600">Address Preferences</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}Edit {{ preference.number }}{% else %}New Preference{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Address Preference: {{ preference.number }}{% else %}Create Address Preference{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Configure courier delivery instructions, time windows, and default address flags.</p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <form method="post" class="card bg-white shadow-sm border border-slate-200 rounded-lg p-6 space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="p-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700 space-y-1">
+        {% for error in form.non_field_errors %}
+          <p>{{ error }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- Target Customer & Address -->
+    <div class="space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2">Target Customer & Address</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="id_customer" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Customer <span class="text-red-500">*</span>
+          </label>
+          {{ form.customer }}
+          {% if form.customer.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.customer.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="id_address" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Physical Address <span class="text-red-500">*</span>
+          </label>
+          {{ form.address }}
+          {% if form.address.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.address.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Label & Defaults -->
+    <div class="space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2">Label & Defaults</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="form-group">
+          <label for="id_label" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Address Label <span class="text-red-500">*</span>
+          </label>
+          {{ form.label }}
+          {% if form.label.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.label.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group flex items-center pt-6">
+          <label class="flex items-center gap-2 cursor-pointer">
+            {{ form.is_default_shipping }}
+            <span class="text-sm font-medium text-slate-700">Default Shipping Address</span>
+          </label>
+        </div>
+
+        <div class="form-group flex items-center pt-6">
+          <label class="flex items-center gap-2 cursor-pointer">
+            {{ form.is_default_billing }}
+            <span class="text-sm font-medium text-slate-700">Default Billing Address</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recipient & Logistics -->
+    <div class="space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2">Recipient & Courier Logistics</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="id_recipient_name" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Attention / Recipient Name
+          </label>
+          {{ form.recipient_name }}
+          {% if form.recipient_name.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.recipient_name.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="id_contact_phone" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Delivery Contact Phone
+          </label>
+          {{ form.contact_phone }}
+          {% if form.contact_phone.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.contact_phone.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="id_preferred_delivery_window" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Preferred Delivery Window
+          </label>
+          {{ form.preferred_delivery_window }}
+          {% if form.preferred_delivery_window.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.preferred_delivery_window.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group flex items-center pt-6">
+          <label class="flex items-center gap-2 cursor-pointer">
+            {{ form.requires_signature }}
+            <span class="text-sm font-medium text-slate-700">Require Signature on Delivery</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="id_delivery_instructions" class="form-label block text-sm font-medium text-slate-700 mb-1">
+          Courier Delivery Instructions
+        </label>
+        {{ form.delivery_instructions }}
+        {% if form.delivery_instructions.errors %}
+          <p class="form-error text-xs text-red-600 mt-1">{{ form.delivery_instructions.errors.0 }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+      <a href="{% if is_edit %}{% url 'ecommerce:customeraddresspreference_detail' preference.pk %}{% else %}{% url 'ecommerce:customeraddresspreference_list' %}{% endif %}" class="btn btn-outline">
+        Cancel
+      </a>
+      <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="check" class="w-4 h-4"></i>
+        <span>Save Address Preference</span>
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
