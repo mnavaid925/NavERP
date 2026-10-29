@@ -62,6 +62,37 @@ from apps.ecommerce.views.InventoryStock.InventoryAllocations import (
     inventoryallocation_list,
 )
 from apps.ecommerce.views.InventoryStock.Operations import inventory_operations
+from apps.ecommerce.views.OrderManagement.EcommerceOrders import (
+    ecommerceorder_cancel,
+    ecommerceorder_create,
+    ecommerceorder_delete,
+    ecommerceorder_detail,
+    ecommerceorder_edit,
+    ecommerceorder_list,
+)
+from apps.ecommerce.views.OrderManagement.OrderFulfillments import (
+    orderfulfillment_create,
+    orderfulfillment_delete,
+    orderfulfillment_detail,
+    orderfulfillment_edit,
+    orderfulfillment_list,
+    orderfulfillment_ship,
+)
+from apps.ecommerce.views.OrderManagement.OrderRoutingRules import (
+    orderroutingrule_create,
+    orderroutingrule_delete,
+    orderroutingrule_detail,
+    orderroutingrule_edit,
+    orderroutingrule_list,
+)
+from apps.ecommerce.views.OrderManagement.ReturnMerchandiseAuthorizations import (
+    returnmerchandiseauthorization_complete,
+    returnmerchandiseauthorization_create,
+    returnmerchandiseauthorization_delete,
+    returnmerchandiseauthorization_detail,
+    returnmerchandiseauthorization_edit,
+    returnmerchandiseauthorization_list,
+)
 from apps.ecommerce.views.PricingPromotion.CompetitorPriceMonitors import (
     competitorpricemonitor_create,
     competitorpricemonitor_delete,
@@ -225,5 +256,29 @@ __all__ = [
     "paymentmethodconfig_edit",
     "paymentmethodconfig_delete",
     "paymentmethodconfig_toggle",
+    # 9.5 Order Management System (OMS)
+    "ecommerceorder_list",
+    "ecommerceorder_create",
+    "ecommerceorder_detail",
+    "ecommerceorder_edit",
+    "ecommerceorder_delete",
+    "ecommerceorder_cancel",
+    "orderroutingrule_list",
+    "orderroutingrule_create",
+    "orderroutingrule_detail",
+    "orderroutingrule_edit",
+    "orderroutingrule_delete",
+    "orderfulfillment_list",
+    "orderfulfillment_create",
+    "orderfulfillment_detail",
+    "orderfulfillment_edit",
+    "orderfulfillment_delete",
+    "orderfulfillment_ship",
+    "returnmerchandiseauthorization_list",
+    "returnmerchandiseauthorization_create",
+    "returnmerchandiseauthorization_detail",
+    "returnmerchandiseauthorization_edit",
+    "returnmerchandiseauthorization_delete",
+    "returnmerchandiseauthorization_complete",
 ]
 
