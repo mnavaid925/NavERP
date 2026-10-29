@@ -33,9 +33,14 @@ class CustomerWishlist(TenantNumbered):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_ewsl_tenant_num_uniq"),
+        ]
         indexes = [
             models.Index(fields=["tenant", "customer"], name="idx_ewsl_ten_cust"),
             models.Index(fields=["tenant", "share_token"], name="idx_ewsl_ten_token"),
+            models.Index(fields=["tenant", "visibility"], name="idx_ewsl_ten_vis"),
+            models.Index(fields=["tenant", "customer", "is_default"], name="idx_ewsl_ten_cust_def"),
         ]
 
     def __str__(self):
