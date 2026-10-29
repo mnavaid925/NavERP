@@ -84,7 +84,10 @@ class CheckoutSessionForm(TenantModelForm):
             "tax_amount": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
             "total_amount": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
             "payment_status": forms.Select(attrs={"class": "form-select"}),
-            "expires_at": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}),
+            "expires_at": forms.DateTimeInput(
+                attrs={"class": "form-input", "type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
         }
 
     def __init__(self, *args, **kwargs):
