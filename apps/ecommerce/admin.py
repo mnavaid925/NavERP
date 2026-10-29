@@ -4,6 +4,10 @@ from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPoli
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
 from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
+from apps.ecommerce.models.PricingPromotion.CompetitorPriceMonitors import CompetitorPriceMonitor
+from apps.ecommerce.models.PricingPromotion.CouponPromotions import CouponPromotion
+from apps.ecommerce.models.PricingPromotion.DynamicPriceRules import DynamicPriceRule
+from apps.ecommerce.models.PricingPromotion.FlashSales import FlashSale
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
 from apps.ecommerce.models.ProductCatalog.ProductRelationships import ProductRelationship
 from apps.ecommerce.models.ProductCatalog.ProductVariants import ProductVariant
@@ -79,4 +83,36 @@ class ChannelInventorySyncAdmin(admin.ModelAdmin):
     list_filter = ["channel_type", "sync_status", "sync_mode", "tenant"]
     search_fields = ["number", "channel_name", "variant__sku", "variant__name"]
     ordering = ["variant__sku", "channel_type"]
+
+
+@admin.register(DynamicPriceRule)
+class DynamicPriceRuleAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "rule_type", "adjustment_value", "scope", "customer_segment", "priority", "is_active", "valid_from", "valid_to"]
+    list_filter = ["rule_type", "scope", "customer_segment", "loyalty_tier", "is_active", "tenant"]
+    search_fields = ["name", "number", "description"]
+    ordering = ["-priority", "-created_at"]
+
+
+@admin.register(CouponPromotion)
+class CouponPromotionAdmin(admin.ModelAdmin):
+    list_display = ["number", "code", "name", "discount_type", "discount_value", "min_spend", "used_count", "usage_limit_total", "is_active"]
+    list_filter = ["discount_type", "is_stackable", "loyalty_tier_required", "is_active", "tenant"]
+    search_fields = ["code", "name", "number"]
+    ordering = ["-created_at"]
+
+
+@admin.register(FlashSale)
+class FlashSaleAdmin(admin.ModelAdmin):
+    list_display = ["number", "title", "status", "discount_percentage", "flash_price", "inventory_cap", "units_sold", "start_time", "end_time"]
+    list_filter = ["status", "tenant"]
+    search_fields = ["title", "number", "badge_label"]
+    ordering = ["-start_time"]
+
+
+@admin.register(CompetitorPriceMonitor)
+class CompetitorPriceMonitorAdmin(admin.ModelAdmin):
+    list_display = ["number", "competitor_name", "variant", "competitor_price", "match_strategy", "min_margin_pct", "is_in_stock", "status", "last_scraped_at"]
+    list_filter = ["match_strategy", "status", "is_in_stock", "tenant"]
+    search_fields = ["competitor_name", "number", "variant__sku"]
+    ordering = ["-last_scraped_at", "-created_at"]
 
