@@ -15,6 +15,10 @@ from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder
 from apps.ecommerce.models.OrderManagement.OrderFulfillments import OrderFulfillment
 from apps.ecommerce.models.OrderManagement.OrderRoutingRules import OrderRoutingRule
 from apps.ecommerce.models.OrderManagement.ReturnMerchandiseAuthorizations import ReturnMerchandiseAuthorization
+from apps.ecommerce.models.Personalization.AudienceSegments import AudienceSegment
+from apps.ecommerce.models.Personalization.PersonalizedExperiences import PersonalizedExperience
+from apps.ecommerce.models.Personalization.RecommendationStrategies import RecommendationStrategy
+from apps.ecommerce.models.Personalization.ShopperBehaviorEvents import ShopperBehaviorEvent
 from apps.ecommerce.models.PricingPromotion.CompetitorPriceMonitors import CompetitorPriceMonitor
 from apps.ecommerce.models.PricingPromotion.CouponPromotions import CouponPromotion
 from apps.ecommerce.models.PricingPromotion.DynamicPriceRules import DynamicPriceRule
@@ -69,5 +73,10 @@ __all__ = [
     "SearchFacetConfig",
     "SearchMerchandisingRule",
     "SearchQueryLog",
+    # 9.8 Personalization & Recommendation Engine
+    "AudienceSegment",
+    "RecommendationStrategy",
+    "PersonalizedExperience",
+    "ShopperBehaviorEvent",
 ]
 
