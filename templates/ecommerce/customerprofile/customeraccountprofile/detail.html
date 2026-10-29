@@ -236,7 +236,7 @@
                   {% if pref.is_default_billing %}<span class="badge badge-info text-[10px]">Default Billing</span>{% endif %}
                 </div>
                 <div class="text-xs text-slate-600 mt-1">
-                  {{ pref.address.line1 }}{% if pref.address.line2 %}, {{ pref.address.line2 }}{% endif %}, {{ pref.address.city }}
+                  {{ pref.address.line1 }}{% if pref.address.city %}, {{ pref.address.city }}{% endif %}{% if pref.address.country %}, {{ pref.address.country }}{% endif %}
                 </div>
                 {% if pref.delivery_instructions %}
                   <div class="text-xs text-slate-500 italic mt-1">"{{ pref.delivery_instructions }}"</div>
