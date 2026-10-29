@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_create %}New Backorder Policy{% else %}Edit Policy: {{ policy.variant.sku }}{% endif %} | eCommerce{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex items-center justify-between">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-primary">eCommerce</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:inventory_operations' %}" class="hover:text-primary">Inventory & Stock</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:backorderpolicy_list' %}" class="hover:text-primary">Backorder Policies</a>
+        <span class="mx-2">/</span>
+        <span>{% if is_create %}New Policy{% else %}Edit{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_create %}Create Backorder / Pre-Order Policy{% else %}Edit Policy: {{ policy.variant.sku }}{% endif %}
+      </h1>
+    </div>
+    <div class="page-actions">
+      <a href="{% if is_create %}{% url 'ecommerce:backorderpolicy_list' %}{% else %}{% url 'ecommerce:backorderpolicy_detail' policy.pk %}{% endif %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Cancel</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.errors %}
+      <div class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm">
+        <div class="font-semibold mb-1">Please correct the errors below:</div>
+        <ul class="list-disc list-inside">
+          {% for field, errors in form.errors.items %}
+            {% for error in errors %}
+              <li>{{ field }}: {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <div class="space-y-4">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.variant.id_for_label }}">Product Variant (SKU) *</label>
+          {{ form.variant }}
+          {% if form.variant.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.variant.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.policy_type.id_for_label }}">Policy Mode *</label>
+            {{ form.policy_type }}
+            <p class="text-xs text-slate-400 mt-1">Controls storefront checkout behavior when stock drops to 0</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.expected_availability_date.id_for_label }}">Expected Restock / Release Date</label>
+            {{ form.expected_availability_date }}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.storefront_message.id_for_label }}">Storefront Availability Notice</label>
+          {{ form.storefront_message }}
+          <p class="text-xs text-slate-400 mt-1">e.g. "Available for Pre-Order. Expected to ship November 15th."</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.max_backorder_quantity.id_for_label }}">Maximum Backorder Cap</label>
+            {{ form.max_backorder_quantity }}
+            <p class="text-xs text-slate-400 mt-1">0 = unlimited backorders permitted</p>
+          </div>
+          <div class="flex items-center gap-3 pt-6">
+            {{ form.auto_notify_waitlist }}
+            <label for="{{ form.auto_notify_waitlist.id_for_label }}" class="text-sm font-medium text-slate-700">
+              Auto-Notify Waitlist Upon Restock
+            </label>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          {{ form.is_active }}
+          <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-slate-700">
+            Policy is Active
+          </label>
+        </div>
+
+        <div class="form-group pt-2">
+          <label class="form-label" for="{{ form.notes.id_for_label }}">Internal Notes</label>
+          {{ form.notes }}
+        </div>
+      </div>
+
+      <!-- Submit Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t">
+        <a href="{% if is_create %}{% url 'ecommerce:backorderpolicy_list' %}{% else %}{% url 'ecommerce:backorderpolicy_detail' policy.pk %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary flex items-center gap-2">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if is_create %}Create Policy{% else %}Save Changes{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
