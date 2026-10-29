@@ -86,12 +86,10 @@ def competitorpricemonitor_create(request):
             monitor.tenant = request.tenant
             monitor.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "CREATE",
-                "CompetitorPriceMonitor",
-                monitor.pk,
-                f"Created competitor price monitor for {monitor.competitor_name} - {monitor.variant.sku}",
+                monitor,
+                "create",
+                {"competitor": monitor.competitor_name, "sku": monitor.variant.sku},
             )
             messages.success(request, f"Competitor price monitor for '{monitor.competitor_name}' created.")
             return redirect("ecommerce:competitorpricemonitor_detail", pk=monitor.pk)
@@ -118,12 +116,10 @@ def competitorpricemonitor_edit(request, pk):
         if form.is_valid():
             monitor = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "UPDATE",
-                "CompetitorPriceMonitor",
-                monitor.pk,
-                f"Updated competitor price monitor {monitor.number}",
+                monitor,
+                "update",
+                {"number": monitor.number},
             )
             messages.success(request, f"Competitor monitor '{monitor.number}' updated successfully.")
             return redirect("ecommerce:competitorpricemonitor_detail", pk=monitor.pk)
@@ -147,12 +143,10 @@ def competitorpricemonitor_delete(request, pk):
     number = monitor.number
     monitor.delete()
     write_audit_log(
-        request.tenant,
         request.user,
-        "DELETE",
-        "CompetitorPriceMonitor",
-        pk,
-        f"Deleted competitor monitor {number} ({comp})",
+        monitor,
+        "delete",
+        {"competitor": comp, "number": number},
     )
     messages.success(request, f"Competitor monitor '{number}' was deleted.")
     return redirect("ecommerce:competitorpricemonitor_list")
@@ -173,12 +167,10 @@ def competitorpricemonitor_sync(request, pk):
     monitor.save()
 
     write_audit_log(
-        request.tenant,
         request.user,
-        "UPDATE",
-        "CompetitorPriceMonitor",
-        monitor.pk,
-        f"Synchronized price check for {monitor.competitor_name} - {monitor.variant.sku}",
+        monitor,
+        "update",
+        {"action": "sync", "competitor": monitor.competitor_name},
     )
     messages.success(request, f"Simulated live price scrape completed for {monitor.competitor_name}.")
     return redirect("ecommerce:competitorpricemonitor_detail", pk=monitor.pk)
