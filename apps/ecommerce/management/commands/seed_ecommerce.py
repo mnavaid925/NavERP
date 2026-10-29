@@ -1401,7 +1401,7 @@ class Command(BaseCommand):
             )
 
             # 2. Customer Address Preferences
-            pref_addr = Address.objects.filter(tenant=tenant).first()
+            pref_addr = Address.objects.filter(tenant=tenant, party=cust_party).first()
             if not pref_addr:
                 pref_addr = Address.objects.create(
                     tenant=tenant,
