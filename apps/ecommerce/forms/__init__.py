@@ -1,4 +1,11 @@
 from apps.ecommerce.forms._common import TenantUniqueMixin, reject_foreign
+from apps.ecommerce.forms.InventoryStock.BackorderPolicies import BackorderPolicyForm
+from apps.ecommerce.forms.InventoryStock.ChannelInventorySyncs import ChannelInventorySyncForm
+from apps.ecommerce.forms.InventoryStock.FulfillmentCenters import FulfillmentCenterForm
+from apps.ecommerce.forms.InventoryStock.InventoryAllocations import (
+    InventoryAllocationForm,
+    StockAdjustmentActionForm,
+)
 from apps.ecommerce.forms.ProductCatalog.BulkOperations import ProductImportForm
 from apps.ecommerce.forms.ProductCatalog.CatalogProducts import CatalogProductForm
 from apps.ecommerce.forms.ProductCatalog.ProductRelationships import (
@@ -16,4 +23,11 @@ __all__ = [
     "ProductVariantForm",
     "ProductRelationshipForm",
     "ProductImportForm",
+    # 9.2 Inventory & Stock Management
+    "FulfillmentCenterForm",
+    "InventoryAllocationForm",
+    "StockAdjustmentActionForm",
+    "BackorderPolicyForm",
+    "ChannelInventorySyncForm",
 ]
+
