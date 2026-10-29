@@ -91,10 +91,10 @@ def searchquerylog_delete(request, pk):
     query_text = log.query_text
     log.delete()
     write_audit_log(
-        request,
-        action="delete",
-        instance=log,
-        notes=f"Deleted search query log {number} ('{query_text}')",
+        request.user,
+        log,
+        "delete",
+        {"number": number, "query_text": query_text},
     )
     messages.success(request, f"Search log '{number}' deleted.")
     return redirect("ecommerce:searchquerylog_list")
