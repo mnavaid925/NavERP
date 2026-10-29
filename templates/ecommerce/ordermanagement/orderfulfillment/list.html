@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Order Fulfillments · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Fulfillments</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Order Fulfillments & Shipments</h1>
+      <p class="text-sm text-slate-500 mt-1">Track warehouse fulfillment packages, split shipments, carrier consignments, and proof of delivery.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:orderfulfillment_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Fulfillment</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Package #, order #, tracking, carrier..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Package Status</label>
+        <select id="filter-status" name="status" class="form-select w-full text-sm">
+          <option value="">All Package Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if current_status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-center" class="block text-xs font-medium text-slate-600 mb-1">Fulfillment Center</label>
+        <select id="filter-center" name="center" class="form-select w-full text-sm">
+          <option value="">All Centers</option>
+          {% for center in centers %}
+            <option value="{{ center.pk }}" {% if current_center == center.pk|stringformat:"d" %}selected{% endif %}>
+              {{ center.name }} ({{ center.code }})
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-outline text-sm flex-1">
+          Filter
+        </button>
+        {% if search_query or current_status or current_center %}
+          <a href="{% url 'ecommerce:orderfulfillment_list' %}" class="btn btn-outline text-slate-500 text-sm">
+            Clear
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Table -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse text-sm">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs font-semibold uppercase">
+            <th class="py-3 px-4">Package #</th>
+            <th class="py-3 px-4">Order #</th>
+            <th class="py-3 px-4">Fulfillment Node</th>
+            <th class="py-3 px-4">Carrier</th>
+            <th class="py-3 px-4">Tracking Number</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4">Est. Delivery</th>
+            <th class="py-3 px-4 text-right">Freight Cost</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for f in fulfillments %}
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-blue-600">
+                <a href="{% url 'ecommerce:orderfulfillment_detail' pk=f.pk %}" class="hover:underline">
+                  {{ f.number }}
+                </a>
+              </td>
+              <td class="py-3 px-4 font-mono">
+                <a href="{% url 'ecommerce:ecommerceorder_detail' pk=f.order.pk %}" class="hover:underline text-slate-800">
+                  {{ f.order.number }}
+                </a>
+              </td>
+              <td class="py-3 px-4 text-slate-700">
+                {% if f.fulfillment_center %}
+                  {{ f.fulfillment_center.name }}
+                {% else %}
+                  <span class="text-slate-400">Default Node</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 font-medium text-slate-800">{{ f.carrier_name }}</td>
+              <td class="py-3 px-4 font-mono text-slate-700">
+                {% if f.tracking_url %}
+                  <a href="{{ f.tracking_url }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline inline-flex items-center gap-1">
+                    <span>{{ f.tracking_number|default:"Tracking Link" }}</span>
+                    <i data-lucide="external-link" class="w-3 h-3"></i>
+                  </a>
+                {% else %}
+                  {{ f.tracking_number|default:"Pending" }}
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if f.status == 'delivered' %}
+                  <span class="badge badge-green text-xs">{{ f.get_status_display }}</span>
+                {% elif f.status == 'in_transit' or f.status == 'out_for_delivery' or f.status == 'shipped' %}
+                  <span class="badge badge-info text-xs">{{ f.get_status_display }}</span>
+                {% elif f.status == 'failed_delivery' %}
+                  <span class="badge badge-red text-xs">{{ f.get_status_display }}</span>
+                {% elif f.status == 'allocated' or f.status == 'picking' or f.status == 'packing' %}
+                  <span class="badge badge-amber text-xs">{{ f.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-slate text-xs">{{ f.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-slate-600">
+                {{ f.estimated_delivery_date|default:"TBD" }}
+              </td>
+              <td class="py-3 px-4 text-right font-mono text-slate-900">
+                ${{ f.shipping_cost|floatformat:2 }}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="table-actions flex items-center justify-end gap-1">
+                  <a
+                    href="{% url 'ecommerce:orderfulfillment_detail' pk=f.pk %}"
+                    class="btn btn-icon text-slate-500 hover:text-blue-600"
+                    title="View details"
+                    aria-label="View fulfillment {{ f.number }}"
+                  >
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a
+                    href="{% url 'ecommerce:orderfulfillment_edit' pk=f.pk %}"
+                    class="btn btn-icon text-slate-500 hover:text-amber-600"
+                    title="Edit fulfillment"
+                    aria-label="Edit fulfillment {{ f.number }}"
+                  >
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form
+                    method="post"
+                    action="{% url 'ecommerce:orderfulfillment_delete' pk=f.pk %}"
+                    onsubmit="return confirm('Delete fulfillment {{ f.number }}?');"
+                    class="inline"
+                  >
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="btn btn-icon text-slate-400 hover:text-red-600"
+                      title="Delete package"
+                      aria-label="Delete fulfillment {{ f.number }}"
+                    >
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9" class="py-12 text-center">
+                <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                  <i data-lucide="package" class="w-12 h-12 text-slate-300 mb-3"></i>
+                  <h3 class="text-base font-semibold text-slate-700">No Fulfillments Found</h3>
+                  <p class="text-xs text-slate-500 mt-1 mb-4">Create fulfillment packages to track dispatched consignments and carrier tracking numbers.</p>
+                  <a href="{% url 'ecommerce:orderfulfillment_create' %}" class="btn btn-primary inline-flex items-center gap-2 text-sm">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Create Fulfillment</span>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+        <div>
+          Showing page {{ page_obj.number }} of {{ paginator.num_pages }}
+        </div>
+        <div class="flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a
+              href="?page={{ page_obj.previous_page_number }}{% if current_q %}&q={{ current_q }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_center %}&center={{ current_center }}{% endif %}"
+              class="btn btn-outline py-1 px-3 text-xs"
+            >
+              Previous
+            </a>
+          {% endif %}
+          <span class="py-1 px-3 bg-slate-100 rounded text-xs font-mono font-medium text-slate-700">
+            {{ page_obj.number }}
+          </span>
+          {% if page_obj.has_next %}
+            <a
+              href="?page={{ page_obj.next_page_number }}{% if current_q %}&q={{ current_q }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_center %}&center={{ current_center }}{% endif %}"
+              class="btn btn-outline py-1 px-3 text-xs"
+            >
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
