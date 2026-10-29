@@ -39,6 +39,7 @@ def search_console(request):
         ("price_asc", "Price: Low to High"),
         ("price_desc", "Price: High to Low"),
         ("newest", "Newest Arrivals"),
+        ("rating", "Customer Rating"),
     ]
 
     applied_synonyms = []
