@@ -1,9 +1,9 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery: categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, or 9.7), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine: categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, or 9.8), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine)
 
 The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, and an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising (boosting, burying, pinning, banner announcements, URL redirect forwarding), query performance and zero-result search telemetry analytics, instant search-as-you-type autocomplete, and an interactive Search Workbench Console. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
@@ -59,6 +59,11 @@ apps/ecommerce/
 │   │   ├── SearchFacetConfigs.py    # SearchFacetConfig model (ESFC-)
 │   │   ├── SearchMerchandisingRules.py # SearchMerchandisingRule model (ESMR-)
 │   │   └── SearchQueryLogs.py       # SearchQueryLog model (ESQL-)
+│   ├── Personalization/
+│   │   ├── AudienceSegments.py      # AudienceSegment model (ESEG-)
+│   │   ├── RecommendationStrategies.py # RecommendationStrategy model (EREC-)
+│   │   ├── PersonalizedExperiences.py # PersonalizedExperience model (EPEX-)
+│   │   └── ShopperBehaviorEvents.py # ShopperBehaviorEvent model (ESBE-)
 │   └── __init__.py                  # Surgical re-exports of all models
 ├── forms/
 │   ├── _common.py                   # TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -98,6 +103,11 @@ apps/ecommerce/
 │   │   ├── SearchFacetConfigs.py    # SearchFacetConfigForm
 │   │   ├── SearchMerchandisingRules.py # SearchMerchandisingRuleForm
 │   │   └── SearchQueryLogs.py       # SearchQueryLogForm, SearchQueryLogFilterForm
+│   ├── Personalization/
+│   │   ├── AudienceSegments.py      # AudienceSegmentForm
+│   │   ├── RecommendationStrategies.py # RecommendationStrategyForm
+│   │   ├── PersonalizedExperiences.py # PersonalizedExperienceForm
+│   │   └── ShopperBehaviorEvents.py # ShopperBehaviorEventFilterForm
 │   └── __init__.py                  # Re-exports of all forms
 ├── views/
 │   ├── _common.py                   # ecommerce_scope, ecommerce_object, csv_safe, write_audit_log
@@ -140,6 +150,12 @@ apps/ecommerce/
 │   │   ├── SearchMerchandisingRules.py # searchmerchandisingrule CRUD + toggle
 │   │   ├── SearchQueryLogs.py       # searchquerylog list, detail, delete
 │   │   └── SearchConsole.py         # search_console, search_autocomplete, search_analytics
+│   ├── Personalization/
+│   │   ├── AudienceSegments.py      # audiencesegment CRUD + toggle, recalculate
+│   │   ├── RecommendationStrategies.py # recommendationstrategy CRUD + toggle
+│   │   ├── PersonalizedExperiences.py # personalizedexperience CRUD + toggle
+│   │   ├── ShopperBehaviorEvents.py # shopperbehaviorevent list, detail, delete
+│   │   └── PersonalizationConsole.py # personalization_console, recommendation_simulate
 │   └── __init__.py                  # Re-exports of all views
 ├── urls/
 │   ├── ProductCatalog/
@@ -181,6 +197,12 @@ apps/ecommerce/
 │   │   ├── SearchMerchandisingRules.py # discovery/merchandising/ paths
 │   │   ├── SearchQueryLogs.py       # discovery/telemetry/ paths
 │   │   └── SearchConsole.py         # discovery/search/, autocomplete, analytics paths
+│   ├── Personalization/
+│   │   ├── AudienceSegments.py      # personalization/segments/ paths
+│   │   ├── RecommendationStrategies.py # personalization/strategies/ paths
+│   │   ├── PersonalizedExperiences.py # personalization/experiences/ paths
+│   │   ├── ShopperBehaviorEvents.py # personalization/telemetry/ paths
+│   │   └── PersonalizationConsole.py # personalization/console/ paths
 │   └── __init__.py                  # Concatenates all urlpatterns with app_name="ecommerce"
 ├── admin.py                         # Django admin registrations
 ├── apps.py                          # EcommerceConfig
@@ -253,6 +275,16 @@ apps/ecommerce/
 
 
 
+
+---
+
+### Sub-module 9.8: Personalization & Recommendation Engine
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `AudienceSegment` | `ESEG-` | `name`, `code`, `lifecycle_stage`, `recency_days_max`, `min_order_count`, `min_lifetime_spend`, `cached_member_count`, `last_evaluated_at`, `is_active` | `StoreCategory` (`target_category`) | Auto-slugifies code, validates non-negative spend, tenant FK assertion in `clean()` |
+| `RecommendationStrategy` | `EREC-` | `name`, `code`, `algorithm`, `placement`, `fallback_strategy`, `max_items`, `min_rating`, `same_brand_only`, `only_in_stock`, `is_active` | `AudienceSegment` (`target_segment`), `StoreCategory` (`target_category`) | Bound validation (max_items 1-50, rating 0-5), multi-tenant FK assertion in `clean()` |
+| `PersonalizedExperience` | `EPEX-` | `name`, `experience_type`, `headline`, `subheadline`, `cta_label`, `cta_url`, `hero_image_url`, `trigger_delay_hours`, `priority`, `start_date`, `end_date`, `is_active`, metrics | `AudienceSegment` (`target_segment`), `StoreCategory` (`target_category`), `CatalogProduct` (`target_product`) | Safe URL scheme validation (rejects `javascript:`, `data:`, `vbscript:`), date boundary enforcement, multi-tenant FK assertion |
+| `ShopperBehaviorEvent` | `ESBE-` | `event_type`, `session_key`, `intent_score_delta`, `referrer_url`, `ip_address`, `user_agent`, `payload_json` | `CustomerAccountProfile` (`customer_profile`), `core.Party` (`party`), `auth.User` (`user`), `CatalogProduct` (`product`), `StoreCategory` (`category`) | Behavioral clickstream telemetry stream for collaborative filtering & intent tracking |
 
 ---
 
@@ -455,6 +487,36 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 
 ---
 
+### 9.8 Personalization & Recommendation Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `personalization/segments/` | `audiencesegment_list` | `audiencesegment_list` | Audience cohort segments table with lifecycle filter |
+| `personalization/segments/create/` | `audiencesegment_create` | `audiencesegment_create` | Create audience cohort segment |
+| `personalization/segments/<int:pk>/` | `audiencesegment_detail` | `audiencesegment_detail` | Cohort detail with member count and attached campaigns |
+| `personalization/segments/<int:pk>/edit/` | `audiencesegment_edit` | `audiencesegment_edit` | Edit cohort criteria |
+| `personalization/segments/<int:pk>/delete/` | `audiencesegment_delete` | `audiencesegment_delete` | Delete audience segment (POST, tenant admin) |
+| `personalization/segments/<int:pk>/toggle/` | `audiencesegment_toggle` | `audiencesegment_toggle` | Quick toggle active status (POST, tenant admin) |
+| `personalization/segments/<int:pk>/recalculate/` | `audiencesegment_recalculate` | `audiencesegment_recalculate` | Trigger on-demand cohort RFM evaluation (POST) |
+| `personalization/strategies/` | `recommendationstrategy_list` | `recommendationstrategy_list` | Recommendation rules table with algorithm & placement filters |
+| `personalization/strategies/create/` | `recommendationstrategy_create` | `recommendationstrategy_create` | Create algorithmic recommendation strategy |
+| `personalization/strategies/<int:pk>/` | `recommendationstrategy_detail` | `recommendationstrategy_detail` | Strategy detail with placement parameters |
+| `personalization/strategies/<int:pk>/edit/` | `recommendationstrategy_edit` | `recommendationstrategy_edit` | Edit recommendation algorithm parameters |
+| `personalization/strategies/<int:pk>/delete/` | `recommendationstrategy_delete` | `recommendationstrategy_delete` | Delete recommendation strategy (POST, tenant admin) |
+| `personalization/strategies/<int:pk>/toggle/` | `recommendationstrategy_toggle` | `recommendationstrategy_toggle` | Quick toggle active status (POST, tenant admin) |
+| `personalization/experiences/` | `personalizedexperience_list` | `personalizedexperience_list` | Personalized experiences & banners table |
+| `personalization/experiences/create/` | `personalizedexperience_create` | `personalizedexperience_create` | Create personalized banner, spotlight, or abandonment trigger |
+| `personalization/experiences/<int:pk>/` | `personalizedexperience_detail` | `personalizedexperience_detail` | Experience detail with CTR & conversion metrics |
+| `personalization/experiences/<int:pk>/edit/` | `personalizedexperience_edit` | `personalizedexperience_edit` | Edit experience creative & audience targeting |
+| `personalization/experiences/<int:pk>/delete/` | `personalizedexperience_delete` | `personalizedexperience_delete` | Delete experience (POST, tenant admin) |
+| `personalization/experiences/<int:pk>/toggle/` | `personalizedexperience_toggle` | `personalizedexperience_toggle` | Quick toggle active status (POST, tenant admin) |
+| `personalization/telemetry/` | `shopperbehaviorevent_list` | `shopperbehaviorevent_list` | Shopper behavioral telemetry event stream |
+| `personalization/telemetry/<int:pk>/` | `shopperbehaviorevent_detail` | `shopperbehaviorevent_detail` | Behavior event payload detail |
+| `personalization/telemetry/<int:pk>/delete/` | `shopperbehaviorevent_delete` | `shopperbehaviorevent_delete` | Delete behavior log (POST, tenant admin) |
+| `personalization/console/` | `personalization_console` | `personalization_console` | Personalization Workbench Console with live recommendation simulator |
+| `personalization/console/simulate/` | `recommendation_simulate` | `recommendation_simulate` | HTMX recommendation algorithm simulator partial endpoint |
+
+---
+
 ## 4. Templates & Design System
 
 Templates are stored under `templates/ecommerce/`:
@@ -492,6 +554,13 @@ Templates are stored under `templates/ecommerce/`:
   - `querylog/` — `list.html` (with zero-result alerts, search latency pills, and sort order tags), `detail.html` (with execution metrics, shopper attribution, and applied filters viewer).
   - `console/` — `console.html` (Search Workbench: live query search, active facet checkboxes, price range slider, merchandising overrides preview, fallback zero-result suggestions), `autocomplete_results.html` (HTMX search-as-you-type instant dropdown).
   - `analytics/` — `analytics.html` (Search Telemetry: total volume, zero-result search rate, search latency cards, top zero-result queries table, and click attribution).
+
+- `personalization/`
+  - `audiencesegment/` — `list.html` (with lifecycle badges, spend thresholds, and member counts), `detail.html` (with cohort criteria, member recalculation action, and attached campaigns), `form.html`.
+  - `recommendationstrategy/` — `list.html` (with algorithm and placement pills), `detail.html` (with threshold meters, brand filtering, and target category), `form.html`.
+  - `personalizedexperience/` — `list.html` (with campaign type badges and CTR meters), `detail.html` (with hero artwork preview, audience cohort link, and conversion counters), `form.html`.
+  - `shopperbehaviorevent/` — `list.html` (telemetry table with event type badges and simulator shortcut), `detail.html` (with JSON payload inspector).
+  - `console/` — `workbench.html` (Personalization Console: VIP counts, cart triggers, 24h event volume, interactive recommendation simulator, and active campaign ribbon preview), `partials/recommendations_preview.html` (HTMX recommendation cards with artwork and rating stars).
 
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
@@ -539,6 +608,10 @@ The command provisions:
 - 5 Search Facet Configurations: Brand, Category, Price Range Slider, In-Stock Availability, Color Swatches.
 - 4 Search Merchandising Rules: Pin Pro Laptop to Slot 1 on 'laptop', Boost Noise-Cancelling Headphones on 'audio', Promotional Banner on 'clearance', Customer Support Redirect on 'help'.
 - 6 Search Query Logs: Successful searches, zero-result queries ('vintage typewriter'), applied facet filters, and latency tracking.
+- 4 Audience Segments: High-Value VIP Champions, Active Repeat Buyers, New Browsers (First-Time), and At-Risk Cart Abandoners.
+- 4 Recommendation Strategies: PDP Related Products (Content-Based), Cart Cross-Sell Frequently Bought Together (Co-occurrence), Homepage Trending & Popular, and Category Best Sellers.
+- 3 Personalized Experiences: VIP Homepage Hero Takeover, Cart Abandonment Recovery Popup, and Audio Category Spotlight Ribbon.
+- 10 Shopper Behavior Events: Page views, PDP product inspections, cart additions, search queries, and category browses with realistic intent scores.
 - All demo data is scoped to tenant `acme`.
 
 ---
@@ -612,6 +685,13 @@ LIVE_LINKS["9.6"] = {
     "Address Preferences": "ecommerce:customeraddresspreference_list",
     "Wishlists": "ecommerce:customerwishlist_list",
     "Privacy Requests": "ecommerce:customerprivacyrequest_list",
+}
+LIVE_LINKS["9.8"] = {
+    "Personalization Workbench": "ecommerce:personalization_console",
+    "Audience Segments": "ecommerce:audiencesegment_list",
+    "Recommendation Strategies": "ecommerce:recommendationstrategy_list",
+    "Personalized Experiences": "ecommerce:personalizedexperience_list",
+    "Shopper Behavior Telemetry": "ecommerce:shopperbehaviorevent_list",
 }
 LIVE_LINKS["9.7"] = {
     "Search Workbench Console": "ecommerce:search_console",
