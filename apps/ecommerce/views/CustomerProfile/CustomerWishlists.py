@@ -91,12 +91,11 @@ def customerwishlist_create(request):
             wishlist.tenant = request.tenant
             wishlist.save()
             write_audit_log(
+                request.user,
+                wishlist,
+                "create",
+                changes={"number": wishlist.number, "name": wishlist.name},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="CustomerWishlist",
-                object_id=str(wishlist.pk),
-                object_repr=str(wishlist),
             )
             messages.success(request, f"Wishlist {wishlist.name} ({wishlist.number}) created successfully.")
             return redirect("ecommerce:customerwishlist_detail", pk=wishlist.pk)
@@ -125,12 +124,11 @@ def customerwishlist_edit(request, pk):
         if form.is_valid():
             wishlist = form.save()
             write_audit_log(
+                request.user,
+                wishlist,
+                "update",
+                changes={"number": wishlist.number, "name": wishlist.name},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="CustomerWishlist",
-                object_id=str(wishlist.pk),
-                object_repr=str(wishlist),
             )
             messages.success(request, f"Wishlist {wishlist.name} ({wishlist.number}) updated successfully.")
             return redirect("ecommerce:customerwishlist_detail", pk=wishlist.pk)
@@ -158,16 +156,14 @@ def customerwishlist_delete(request, pk):
     wishlist = ecommerce_object(request, CustomerWishlist, pk)
     number = wishlist.number
     name = wishlist.name
-    wishlist_id = wishlist.pk
-    wishlist.delete()
     write_audit_log(
+        request.user,
+        wishlist,
+        "delete",
+        changes={"number": number, "name": name},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="CustomerWishlist",
-        object_id=str(wishlist_id),
-        object_repr=f"CustomerWishlist {number} ({name})",
     )
+    wishlist.delete()
     messages.success(request, f"Wishlist {name} ({number}) deleted successfully.")
     return redirect("ecommerce:customerwishlist_list")
 
