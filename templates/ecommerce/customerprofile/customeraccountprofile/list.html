@@ -72,7 +72,7 @@
           <i data-lucide="filter" class="w-4 h-4"></i>
           <span>Filter</span>
         </button>
-        <a href="{% url 'ecommerce:customeraccountprofile_list' %}" class="btn btn-outline text-slate-600" title="Reset Filters">
+        <a href="{% url 'ecommerce:customeraccountprofile_list' %}" class="btn btn-outline text-slate-600" title="Reset Filters" aria-label="Reset Filters">
           <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
         </a>
       </div>
@@ -167,15 +167,15 @@
               </td>
               <td class="py-3 px-4 text-center">
                 <div class="table-actions flex items-center justify-center gap-2">
-                  <a href="{% url 'ecommerce:customeraccountprofile_detail' p.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View Profile">
+                  <a href="{% url 'ecommerce:customeraccountprofile_detail' p.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View Profile" aria-label="View Profile">
                     <i data-lucide="eye" class="w-4 h-4"></i>
                   </a>
-                  <a href="{% url 'ecommerce:customeraccountprofile_edit' p.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit Profile">
+                  <a href="{% url 'ecommerce:customeraccountprofile_edit' p.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit Profile" aria-label="Edit Profile">
                     <i data-lucide="pencil" class="w-4 h-4"></i>
                   </a>
                   <form method="post" action="{% url 'ecommerce:customeraccountprofile_delete' p.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete customer profile {{ p.number }}?');">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete Profile">
+                    <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete Profile" aria-label="Delete Profile">
                       <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>
                   </form>
