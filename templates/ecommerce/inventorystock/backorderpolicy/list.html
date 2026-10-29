@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Backorder & Pre-Order Policies | eCommerce{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-primary">eCommerce</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:inventory_operations' %}" class="hover:text-primary">Inventory & Stock</a>
+        <span class="mx-2">/</span>
+        <span>Backorders & Pre-orders</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Backorder & Pre-Order Rules</h1>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:inventory_operations' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>Operations Console</span>
+      </a>
+      <a href="{% url 'ecommerce:backorderpolicy_create' %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Policy</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Search & Filter Bar -->
+  <div class="card p-4">
+    <form method="get" class="flex flex-col md:flex-row items-center gap-4">
+      <div class="flex-1 w-full relative">
+        <input type="text" name="q" value="{{ search_query }}" placeholder="Search by SKU, variant name, storefront message..." class="form-input w-full pl-9" />
+        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+      </div>
+      <div class="w-full md:w-60">
+        <select name="policy_type" class="form-select w-full">
+          <option value="">All Policy Types</option>
+          {% for code, label in policy_type_choices %}
+          <option value="{{ code }}" {% if policy_type_filter == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="w-full md:w-44">
+        <select name="is_active" class="form-select w-full">
+          <option value="">All Statuses</option>
+          <option value="1" {% if active_filter == "1" %}selected{% endif %}>Active Only</option>
+          <option value="0" {% if active_filter == "0" %}selected{% endif %}>Inactive Only</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-outline w-full md:w-auto flex items-center justify-center gap-2">
+        <i data-lucide="filter" class="w-4 h-4"></i>
+        <span>Filter</span>
+      </button>
+      {% if search_query or policy_type_filter or active_filter %}
+      <a href="{% url 'ecommerce:backorderpolicy_list' %}" class="text-sm text-slate-500 hover:text-slate-800">Clear</a>
+      {% endif %}
+    </form>
+  </div>
+
+  <!-- Policies Table -->
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table w-full">
+        <thead>
+          <tr>
+            <th>SKU & Variant</th>
+            <th>Product Family</th>
+            <th>Policy Mode</th>
+            <th>Storefront Availability Message</th>
+            <th>Expected Date</th>
+            <th class="text-right">Waitlist Count / Cap</th>
+            <th>Status</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for policy in policies %}
+          <tr class="hover:bg-slate-50/50">
+            <td>
+              <div class="font-mono font-medium text-slate-900">
+                <a href="{% url 'ecommerce:backorderpolicy_detail' policy.pk %}" class="hover:text-primary">
+                  {{ policy.variant.sku }}
+                </a>
+              </div>
+              <div class="text-xs text-slate-500">{{ policy.variant.name }}</div>
+            </td>
+            <td>
+              <span class="text-sm text-slate-800">{{ policy.variant.product.name }}</span>
+              <div class="text-xs text-slate-400 font-mono">{{ policy.number }}</div>
+            </td>
+            <td>
+              <span class="badge {% if policy.policy_type == 'deny_when_empty' %}badge-slate{% elif policy.policy_type == 'pre_order_only' %}badge-info{% else %}badge-amber{% endif %}">
+                {{ policy.get_policy_type_display }}
+              </span>
+            </td>
+            <td>
+              <span class="text-xs text-slate-700 italic max-w-xs block truncate" title="{{ policy.storefront_message }}">
+                {{ policy.storefront_message|default:"—" }}
+              </span>
+            </td>
+            <td>
+              {% if policy.expected_availability_date %}
+              <span class="text-xs font-mono text-slate-800">{{ policy.expected_availability_date|date:"M d, Y" }}</span>
+              {% else %}
+              <span class="text-xs text-slate-400">—</span>
+              {% endif %}
+            </td>
+            <td class="text-right font-medium">
+              <span class="text-slate-900">{{ policy.current_backorder_count }}</span>
+              <span class="text-slate-400">/</span>
+              <span class="text-slate-600">{% if policy.max_backorder_quantity == 0 %}&infin;{% else %}{{ policy.max_backorder_quantity }}{% endif %}</span>
+            </td>
+            <td>
+              {% if policy.is_active %}
+              <span class="badge badge-green">Active</span>
+              {% else %}
+              <span class="badge badge-slate">Disabled</span>
+              {% endif %}
+            </td>
+            <td class="text-right table-actions">
+              <div class="flex items-center justify-end gap-2">
+                <a href="{% url 'ecommerce:backorderpolicy_detail' policy.pk %}" class="btn btn-icon btn-outline p-1" title="View details">
+                  <i data-lucide="eye" class="w-4 h-4 text-slate-600"></i>
+                </a>
+                <a href="{% url 'ecommerce:backorderpolicy_edit' policy.pk %}" class="btn btn-icon btn-outline p-1" title="Edit policy">
+                  <i data-lucide="pencil" class="w-4 h-4 text-slate-600"></i>
+                </a>
+                <form action="{% url 'ecommerce:backorderpolicy_delete' policy.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete backorder policy for {{ policy.variant.sku }}?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon btn-outline p-1 hover:text-red-600" title="Delete policy">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="8">
+              <div class="empty-state text-center py-12">
+                <i data-lucide="calendar-clock" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                <h3 class="text-base font-medium text-slate-700">No backorder or pre-order policies found</h3>
+                <p class="text-sm text-slate-500 mt-1">Configure customer availability messaging and pre-order waitlist caps.</p>
+                <div class="mt-4">
+                  <a href="{% url 'ecommerce:backorderpolicy_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Create Policy</span>
+                  </a>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm">
+      <div class="text-slate-500">
+        Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} policies)
+      </div>
+      <div class="flex items-center gap-1">
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}&q={{ search_query }}&policy_type={{ policy_type_filter }}&is_active={{ active_filter }}" class="btn btn-outline py-1 px-3">Prev</a>
+        {% else %}
+        <span class="btn btn-outline py-1 px-3 opacity-50 cursor-not-allowed">Prev</span>
+        {% endif %}
+
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&q={{ search_query }}&policy_type={{ policy_type_filter }}&is_active={{ active_filter }}" class="btn btn-outline py-1 px-3">Next</a>
+        {% else %}
+        <span class="btn btn-outline py-1 px-3 opacity-50 cursor-not-allowed">Next</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
