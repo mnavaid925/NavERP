@@ -92,6 +92,8 @@ class CheckoutSessionForm(TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "billing_country" in self.fields:
+            self.fields["billing_country"].required = False
         if self.tenant:
             self.fields["cart"].queryset = Cart.objects.filter(tenant=self.tenant)
             self.fields["customer"].queryset = Party.objects.filter(
