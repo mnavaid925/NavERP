@@ -57,29 +57,29 @@
 
   <!-- Stat Cards -->
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <div class="stat-card">
       <div class="flex items-center justify-between">
         <div>
           <div class="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Spend</div>
           <div class="text-2xl font-bold text-slate-900 mt-1">${{ profile.total_spent }}</div>
         </div>
-        <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+        <div class="stat-icon blue">
           <i data-lucide="dollar-sign" class="w-5 h-5"></i>
         </div>
       </div>
     </div>
-    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <div class="stat-card">
       <div class="flex items-center justify-between">
         <div>
           <div class="text-xs font-medium text-slate-500 uppercase tracking-wide">Orders Placed</div>
           <div class="text-2xl font-bold text-slate-900 mt-1">{{ profile.order_count }}</div>
         </div>
-        <div class="w-10 h-10 rounded-full bg-green-50 text-green-600 flex items-center justify-center">
+        <div class="stat-icon green">
           <i data-lucide="shopping-bag" class="w-5 h-5"></i>
         </div>
       </div>
     </div>
-    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <div class="stat-card">
       <div class="flex items-center justify-between">
         <div>
           <div class="text-xs font-medium text-slate-500 uppercase tracking-wide">Phone Status</div>
@@ -93,12 +93,12 @@
             {% endif %}
           </div>
         </div>
-        <div class="w-10 h-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
+        <div class="stat-icon purple">
           <i data-lucide="phone" class="w-5 h-5"></i>
         </div>
       </div>
     </div>
-    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <div class="stat-card">
       <div class="flex items-center justify-between">
         <div>
           <div class="text-xs font-medium text-slate-500 uppercase tracking-wide">Last Order</div>
@@ -110,7 +110,7 @@
             {% endif %}
           </div>
         </div>
-        <div class="w-10 h-10 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center">
+        <div class="stat-icon orange">
           <i data-lucide="calendar" class="w-5 h-5"></i>
         </div>
       </div>
