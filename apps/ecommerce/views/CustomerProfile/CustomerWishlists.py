@@ -65,7 +65,7 @@ def customerwishlist_detail(request, pk):
         select_related=("customer",),
         prefetch_related=("items__product", "items__variant"),
     )
-    items = wishlist.items.all().select_related("product", "variant")
+    items = wishlist.items.all()
     products = CatalogProduct.objects.filter(tenant=request.tenant, status="active")
 
     context = {
