@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit Competitor Monitor · {{ monitor.competitor_name }}{% else %}New Competitor Monitor{% endif %} · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl">
+  <!-- Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:competitorpricemonitor_list' %}" class="hover:text-blue-600">Competitor Monitors</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}Edit #{{ monitor.number }}{% else %}New Monitor{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Competitor Price Monitor{% else %}Add Competitor Price Monitor{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Configure automated competitor price tracking, match strategies, and margin protection safety floors.
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+    <form method="post" class="p-6 space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Competitor & Product Anchor -->
+      <div class="space-y-4">
+        <h2 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
+          Competitor Listing Identification
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.competitor_name.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Competitor Name <span class="text-red-500">*</span>
+            </label>
+            {{ form.competitor_name }}
+            {% if form.competitor_name.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.competitor_name.errors }}</div>
+            {% endif %}
+            <p class="text-xs text-slate-500 mt-1">Retailer or platform name (e.g. Amazon, Walmart, Target).</p>
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.variant.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Tracked Product Variant <span class="text-red-500">*</span>
+            </label>
+            {{ form.variant }}
+            {% if form.variant.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.variant.errors }}</div>
+            {% endif %}
+            <p class="text-xs text-slate-500 mt-1">Our catalog SKU that corresponds to competitor listing.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.product.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Parent Product (Optional)
+            </label>
+            {{ form.product }}
+            {% if form.product.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.product.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.competitor_url.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Competitor Product URL <span class="text-red-500">*</span>
+            </label>
+            {{ form.competitor_url }}
+            {% if form.competitor_url.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.competitor_url.errors }}</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Pricing & Scrape State -->
+      <div class="space-y-4 pt-4">
+        <h2 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
+          Competitor Price Data
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.competitor_price.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Competitor Price ($) <span class="text-red-500">*</span>
+            </label>
+            {{ form.competitor_price }}
+            {% if form.competitor_price.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.competitor_price.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.competitor_currency.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Currency Code
+            </label>
+            {{ form.competitor_currency }}
+            {% if form.competitor_currency.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.competitor_currency.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Tracking Status <span class="text-red-500">*</span>
+            </label>
+            {{ form.status }}
+            {% if form.status.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.status.errors }}</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          {{ form.is_in_stock }}
+          <label for="{{ form.is_in_stock.id_for_label }}" class="text-sm font-medium text-slate-700">
+            Competitor currently has item in stock (price match rules only apply when competitor has inventory)
+          </label>
+        </div>
+      </div>
+
+      <!-- Repricing Strategy & Margin Guard -->
+      <div class="space-y-4 pt-4">
+        <h2 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
+          Repricing Strategy & Margin Guard
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.match_strategy.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Price Match Strategy <span class="text-red-500">*</span>
+            </label>
+            {{ form.match_strategy }}
+            {% if form.match_strategy.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.match_strategy.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.beat_by_value.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Beat By Deduction Value
+            </label>
+            {{ form.beat_by_value }}
+            {% if form.beat_by_value.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.beat_by_value.errors }}</div>
+            {% endif %}
+            <p class="text-xs text-slate-500 mt-1">Fixed dollar amount (e.g. 1.00) or percentage (e.g. 5.00) to undercut competitor.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.min_margin_pct.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Minimum Gross Margin Floor (%) <span class="text-red-500">*</span>
+            </label>
+            {{ form.min_margin_pct }}
+            {% if form.min_margin_pct.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.min_margin_pct.errors }}</div>
+            {% endif %}
+            <p class="text-xs text-slate-500 mt-1">Guarantees selling price is at least X% above unit cost price.</p>
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.floor_price.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Absolute Price Floor ($ Optional)
+            </label>
+            {{ form.floor_price }}
+            {% if form.floor_price.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.floor_price.errors }}</div>
+            {% endif %}
+            <p class="text-xs text-slate-500 mt-1">Hard dollar price below which dynamic repricing will never drop.</p>
+          </div>
+        </div>
+
+        <div class="form-group pt-2">
+          <label for="{{ form.notes.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Competitive Intelligence Notes
+          </label>
+          {{ form.notes }}
+          {% if form.notes.errors %}
+            <div class="form-error text-red-600 text-xs mt-1">{{ form.notes.errors }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-200">
+        {% if is_edit %}
+          <a href="{% url 'ecommerce:competitorpricemonitor_detail' pk=monitor.pk %}" class="btn btn-outline">Cancel</a>
+        {% else %}
+          <a href="{% url 'ecommerce:competitorpricemonitor_list' %}" class="btn btn-outline">Cancel</a>
+        {% endif %}
+        <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if is_edit %}Save Changes{% else %}Create Monitor{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
