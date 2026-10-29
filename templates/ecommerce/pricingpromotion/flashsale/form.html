@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit Flash Sale · {{ sale.title }}{% else %}New Flash Sale{% endif %} · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl">
+  <!-- Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:flashsale_list' %}" class="hover:text-blue-600">Flash Sales</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}Edit #{{ sale.number }}{% else %}New Sale{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Flash Sale{% else %}Create Flash Sale{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Configure high-velocity promotional flash events with countdown styling and stock quotas.
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+    <form method="post" class="p-6 space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Event Identity -->
+      <div class="space-y-4">
+        <h2 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
+          Event Details
+        </h2>
+
+        <div class="form-group">
+          <label for="{{ form.title.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Flash Sale Title <span class="text-red-500">*</span>
+          </label>
+          {{ form.title }}
+          {% if form.title.errors %}
+            <div class="form-error text-red-600 text-xs mt-1">{{ form.title.errors }}</div>
+          {% endif %}
+          <p class="text-xs text-slate-500 mt-1">Headline shown on storefront countdown banners.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Event Status <span class="text-red-500">*</span>
+            </label>
+            {{ form.status }}
+            {% if form.status.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.status.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.badge_label.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Badge Label <span class="text-red-500">*</span>
+            </label>
+            {{ form.badge_label }}
+            {% if form.badge_label.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.badge_label.errors }}</div>
+            {% endif %}
+            <p class="text-xs text-slate-500 mt-1">Short badge tag (e.g. FLASH DEAL, LIGHTNING, 24H ONLY).</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Target Products -->
+      <div class="space-y-4 pt-4">
+        <h2 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
+          Target Featured Product
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.variant.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Specific SKU Variant
+            </label>
+            {{ form.variant }}
+            {% if form.variant.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.variant.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.product.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Catalog Product
+            </label>
+            {{ form.product }}
+            {% if form.product.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.product.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.category.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Store Category
+            </label>
+            {{ form.category }}
+            {% if form.category.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.category.errors }}</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Pricing & Quota -->
+      <div class="space-y-4 pt-4">
+        <h2 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
+          Promotional Price & Stock Quota
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.discount_percentage.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Discount Percentage (%) <span class="text-red-500">*</span>
+            </label>
+            {{ form.discount_percentage }}
+            {% if form.discount_percentage.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.discount_percentage.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.flash_price.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Fixed Flash Price ($ Override)
+            </label>
+            {{ form.flash_price }}
+            {% if form.flash_price.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.flash_price.errors }}</div>
+            {% endif %}
+            <p class="text-xs text-slate-500 mt-1">Optional exact dollar price (takes precedence over percentage).</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.inventory_cap.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Promotional Inventory Cap <span class="text-red-500">*</span>
+            </label>
+            {{ form.inventory_cap }}
+            {% if form.inventory_cap.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.inventory_cap.errors }}</div>
+            {% endif %}
+            <p class="text-xs text-slate-500 mt-1">Total units allocated at the promotional price.</p>
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.max_units_per_order.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Max Units Per Order <span class="text-red-500">*</span>
+            </label>
+            {{ form.max_units_per_order }}
+            {% if form.max_units_per_order.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.max_units_per_order.errors }}</div>
+            {% endif %}
+            <p class="text-xs text-slate-500 mt-1">Anti-scalping purchase cap per customer order.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Schedule & Styling -->
+      <div class="space-y-4 pt-4">
+        <h2 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
+          Schedule & Storefront Styling
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.start_time.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              Start Time <span class="text-red-500">*</span>
+            </label>
+            {{ form.start_time }}
+            {% if form.start_time.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.start_time.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.end_time.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+              End Time <span class="text-red-500">*</span>
+            </label>
+            {{ form.end_time }}
+            {% if form.end_time.errors %}
+              <div class="form-error text-red-600 text-xs mt-1">{{ form.end_time.errors }}</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.banner_bg_color.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Banner Color Code
+          </label>
+          {{ form.banner_bg_color }}
+          {% if form.banner_bg_color.errors %}
+            <div class="form-error text-red-600 text-xs mt-1">{{ form.banner_bg_color.errors }}</div>
+          {% endif %}
+          <p class="text-xs text-slate-500 mt-1">Hex color (e.g. #ef4444 for Red, #8b5cf6 for Purple).</p>
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.terms_and_conditions.id_for_label }}" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Terms & Special Conditions
+          </label>
+          {{ form.terms_and_conditions }}
+          {% if form.terms_and_conditions.errors %}
+            <div class="form-error text-red-600 text-xs mt-1">{{ form.terms_and_conditions.errors }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-200">
+        {% if is_edit %}
+          <a href="{% url 'ecommerce:flashsale_detail' pk=sale.pk %}" class="btn btn-outline">Cancel</a>
+        {% else %}
+          <a href="{% url 'ecommerce:flashsale_list' %}" class="btn btn-outline">Cancel</a>
+        {% endif %}
+        <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if is_edit %}Save Changes{% else %}Create Flash Sale{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
