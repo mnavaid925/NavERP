@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}{{ sale.title }} · Flash Sale · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl">
+  <!-- Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:flashsale_list' %}" class="hover:text-blue-600">Flash Sales</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ sale.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ sale.title }}</h1>
+        {% if sale.status == 'active' %}
+          <span class="badge badge-green">Active</span>
+        {% elif sale.status == 'scheduled' %}
+          <span class="badge badge-amber">Scheduled</span>
+        {% elif sale.status == 'ended' %}
+          <span class="badge badge-slate">Ended</span>
+        {% elif sale.status == 'paused' %}
+          <span class="badge badge-red">Paused</span>
+        {% else %}
+          <span class="badge badge-muted">Draft</span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-slate-400 font-mono mt-1">{{ sale.number }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:flashsale_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to List</span>
+      </a>
+      <a href="{% url 'ecommerce:flashsale_edit' pk=sale.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Flash Sale</span>
+      </a>
+      <form
+        action="{% url 'ecommerce:flashsale_delete' pk=sale.pk %}"
+        method="post"
+        class="inline"
+        onsubmit="return confirm('Are you sure you want to delete flash sale {{ sale.title }}?');"
+      >
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger inline-flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Storefront Preview Callout Banner -->
+  <div class="rounded-lg p-5 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm" style="background-color: {{ sale.banner_bg_color|default:'#ef4444' }};">
+    <div>
+      <div class="flex items-center gap-2 mb-1">
+        <span class="bg-white/20 backdrop-blur-sm text-xs font-bold uppercase tracking-wider py-0.5 px-2 rounded">
+          {{ sale.badge_label }}
+        </span>
+        {% if sale.is_live %}
+          <span class="bg-emerald-500/80 text-xs font-semibold py-0.5 px-2 rounded">LIVE NOW</span>
+        {% endif %}
+      </div>
+      <h2 class="text-xl font-bold">{{ sale.title }}</h2>
+      <p class="text-sm opacity-90 mt-1">
+        Ends {{ sale.end_time|date:"F d, Y @ H:i" }} · Limited promotional stock
+      </p>
+    </div>
+    <div class="text-right">
+      <div class="text-3xl font-extrabold">
+        {% if sale.flash_price %}
+          ${{ sale.flash_price|floatformat:2 }}
+        {% else %}
+          {{ sale.discount_percentage|floatformat:0 }}% OFF
+        {% endif %}
+      </div>
+      <div class="text-xs opacity-80 mt-1">Limited to {{ sale.max_units_per_order }} per customer</div>
+    </div>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Promotional Rate</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">
+        {% if sale.flash_price %}
+          ${{ sale.flash_price|floatformat:2 }}
+        {% else %}
+          {{ sale.discount_percentage|floatformat:2 }}%
+        {% endif %}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">
+        {% if sale.flash_price %}Fixed price override{% else %}Discount off MSRP{% endif %}
+      </div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Units Claimed</div>
+      <div class="text-2xl font-bold font-mono text-slate-900 mt-1">
+        {{ sale.units_sold }} <span class="text-sm text-slate-400 font-normal">/ {{ sale.inventory_cap }}</span>
+      </div>
+      <div class="text-xs text-slate-500 mt-1">{{ sale.sold_percentage }}% sold</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Remaining Stock</div>
+      <div class="text-2xl font-bold font-mono text-blue-600 mt-1">
+        {{ sale.remaining_units }}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">Units available at promo price</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Order Limit</div>
+      <div class="text-2xl font-bold font-mono text-slate-800 mt-1">{{ sale.max_units_per_order }}</div>
+      <div class="text-xs text-slate-500 mt-1">Max units per transaction</div>
+    </div>
+  </div>
+
+  <!-- Detailed Configuration -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="card bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <h2 class="text-base font-semibold text-slate-800">Target & Product Anchors</h2>
+      </div>
+      <div class="card-body p-5 space-y-4 text-sm">
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Event Title</span>
+          <span class="font-medium text-slate-900">{{ sale.title }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Event Number</span>
+          <span class="font-mono text-slate-800">{{ sale.number }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Product SKU Variant</span>
+          <span>
+            {% if sale.variant %}
+              <a href="{% url 'ecommerce:productvariant_detail' pk=sale.variant.pk %}" class="font-mono text-blue-600 hover:underline">
+                {{ sale.variant.sku }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Catalog Product</span>
+          <span>
+            {% if sale.product %}
+              <a href="{% url 'ecommerce:catalogproduct_detail' pk=sale.product.pk %}" class="text-blue-600 hover:underline">
+                {{ sale.product.name }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Store Category</span>
+          <span>
+            {% if sale.category %}
+              <a href="{% url 'ecommerce:storecategory_detail' pk=sale.category.pk %}" class="text-blue-600 hover:underline">
+                {{ sale.category.name }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Callout Badge Label</span>
+          <span class="badge badge-info">{{ sale.badge_label }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <h2 class="text-base font-semibold text-slate-800">Schedule & Quota Controls</h2>
+      </div>
+      <div class="card-body p-5 space-y-4 text-sm">
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Start Time</span>
+          <span class="text-slate-900">{{ sale.start_time|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">End Time</span>
+          <span class="text-slate-900">{{ sale.end_time|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Inventory Cap</span>
+          <span class="font-mono text-slate-900">{{ sale.inventory_cap }} units</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Currently Live</span>
+          <span>
+            {% if sale.is_live %}
+              <span class="badge badge-green">In Progress</span>
+            {% else %}
+              <span class="badge badge-slate">Not Live</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Created At</span>
+          <span class="text-slate-500">{{ sale.created_at|date:"Y-m-d H:i" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if sale.terms_and_conditions %}
+    <div class="card p-5 bg-white border border-slate-200 rounded-lg">
+      <h3 class="text-sm font-semibold text-slate-800 mb-2">Terms & Special Conditions</h3>
+      <p class="text-sm text-slate-600 whitespace-pre-line">{{ sale.terms_and_conditions }}</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
