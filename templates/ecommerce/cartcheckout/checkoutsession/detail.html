@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+
+{% block title %}Checkout {{ session.number }} · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:checkoutsession_list' %}">Checkout Sessions</a>
+            <span>/</span>
+            <span>{{ session.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Session {{ session.number }}</h1>
+            {% if session.status == "in_progress" %}
+                <span class="badge badge-amber">In Progress</span>
+            {% elif session.status == "processing" %}
+                <span class="badge badge-info">Processing</span>
+            {% elif session.status == "completed" %}
+                <span class="badge badge-green">Completed</span>
+            {% elif session.status == "abandoned" %}
+                <span class="badge badge-red">Abandoned</span>
+            {% else %}
+                <span class="badge badge-slate">{{ session.get_status_display }}</span>
+            {% endif %}
+            <span class="badge badge-slate">{{ session.get_flow_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if session.status != "completed" %}
+        <form method="post" action="{% url 'ecommerce:checkoutsession_advance' session.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" title="Advance to next checkout funnel step">
+                <i data-lucide="arrow-right"></i> Next Step
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'ecommerce:checkoutsession_edit' session.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        <form method="post" action="{% url 'ecommerce:checkoutsession_delete' session.pk %}" onsubmit="return confirm('Delete checkout session {{ session.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Funnel Step Progress Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-semibold uppercase tracking-wider">
+            <div class="flex items-center gap-2 {% if session.current_step == 'contact' %}text-blue-600 font-bold{% else %}text-slate-500{% endif %}">
+                <span class="w-6 h-6 rounded-full flex items-center justify-center {% if session.current_step == 'contact' %}bg-blue-600 text-white{% else %}bg-slate-200 text-slate-700{% endif %}">1</span>
+                <span>Contact Details</span>
+            </div>
+            <i data-lucide="chevron-right" class="hidden md:block text-slate-300 w-4 h-4"></i>
+
+            <div class="flex items-center gap-2 {% if session.current_step == 'shipping_address' %}text-blue-600 font-bold{% else %}text-slate-500{% endif %}">
+                <span class="w-6 h-6 rounded-full flex items-center justify-center {% if session.current_step == 'shipping_address' %}bg-blue-600 text-white{% else %}bg-slate-200 text-slate-700{% endif %}">2</span>
+                <span>Shipping Address</span>
+            </div>
+            <i data-lucide="chevron-right" class="hidden md:block text-slate-300 w-4 h-4"></i>
+
+            <div class="flex items-center gap-2 {% if session.current_step == 'shipping_method' %}text-blue-600 font-bold{% else %}text-slate-500{% endif %}">
+                <span class="w-6 h-6 rounded-full flex items-center justify-center {% if session.current_step == 'shipping_method' %}bg-blue-600 text-white{% else %}bg-slate-200 text-slate-700{% endif %}">3</span>
+                <span>Shipping Method</span>
+            </div>
+            <i data-lucide="chevron-right" class="hidden md:block text-slate-300 w-4 h-4"></i>
+
+            <div class="flex items-center gap-2 {% if session.current_step == 'payment' %}text-blue-600 font-bold{% else %}text-slate-500{% endif %}">
+                <span class="w-6 h-6 rounded-full flex items-center justify-center {% if session.current_step == 'payment' %}bg-blue-600 text-white{% else %}bg-slate-200 text-slate-700{% endif %}">4</span>
+                <span>Payment</span>
+            </div>
+            <i data-lucide="chevron-right" class="hidden md:block text-slate-300 w-4 h-4"></i>
+
+            <div class="flex items-center gap-2 {% if session.current_step == 'review' %}text-blue-600 font-bold{% elif session.current_step == 'completed' %}text-green-600 font-bold{% else %}text-slate-500{% endif %}">
+                <span class="w-6 h-6 rounded-full flex items-center justify-center {% if session.current_step == 'completed' %}bg-green-600 text-white{% elif session.current_step == 'review' %}bg-blue-600 text-white{% else %}bg-slate-200 text-slate-700{% endif %}">5</span>
+                <span>{% if session.current_step == 'completed' %}Order Placed{% else %}Review & Order{% endif %}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Shopper & Address Details -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h3 class="card-title">Shopper & Address Snapshot</h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Shipping Address -->
+                <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <h4 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-blue-600"></i> Shipping Destination
+                    </h4>
+                    <div class="text-sm font-medium text-slate-900">{{ session.shipping_name|default:"Not specified yet" }}</div>
+                    <div class="text-sm text-slate-600 mt-1">{{ session.shipping_address_line1 }}</div>
+                    {% if session.shipping_address_line2 %}
+                        <div class="text-sm text-slate-600">{{ session.shipping_address_line2 }}</div>
+                    {% endif %}
+                    <div class="text-sm text-slate-600">
+                        {{ session.shipping_city }}{% if session.shipping_state %}, {{ session.shipping_state }}{% endif %} {{ session.shipping_postal_code }}
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1 uppercase font-semibold">{{ session.shipping_country }}</div>
+                </div>
+
+                <!-- Billing Address -->
+                <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <h4 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <i data-lucide="credit-card" class="w-4 h-4 text-slate-600"></i> Billing Details
+                    </h4>
+                    {% if session.billing_same_as_shipping %}
+                        <div class="text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded inline-block mb-2">
+                            Same as Shipping Address
+                        </div>
+                    {% endif %}
+                    <div class="text-sm font-medium text-slate-900">{{ session.billing_name|default:session.shipping_name }}</div>
+                    <div class="text-sm text-slate-600 mt-1">{{ session.billing_address_line1|default:session.shipping_address_line1 }}</div>
+                    <div class="text-sm text-slate-600">
+                        {{ session.billing_city|default:session.shipping_city }}{% if session.billing_state %}, {{ session.billing_state }}{% endif %} {{ session.billing_postal_code|default:session.shipping_postal_code }}
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1 uppercase font-semibold">{{ session.billing_country|default:session.shipping_country }}</div>
+                </div>
+            </div>
+
+            <dl class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-4 border-t border-slate-200">
+                <div>
+                    <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Email Contact</dt>
+                    <dd class="text-sm font-medium text-slate-900 mt-1">{{ session.email }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Phone</dt>
+                    <dd class="text-sm text-slate-700 mt-1">{{ session.phone|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Linked Cart</dt>
+                    <dd class="text-sm mt-1">
+                        <a href="{% url 'ecommerce:cart_detail' session.cart.pk %}" class="text-blue-600 hover:underline font-medium">
+                            {{ session.cart.number }}
+                        </a>
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Totals & Payment Status -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Checkout Totals</h3>
+        </div>
+        <div class="card-body">
+            <div class="space-y-3">
+                <div class="flex justify-between text-sm">
+                    <span class="text-slate-600">Subtotal</span>
+                    <span class="font-medium text-slate-900">${{ session.subtotal_amount }}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-slate-600">Discounts</span>
+                    <span class="font-medium text-green-600">-${{ session.discount_amount }}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-slate-600">Shipping Fee</span>
+                    <span class="font-medium text-slate-900">${{ session.shipping_amount }}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-slate-600">Tax Amount</span>
+                    <span class="font-medium text-slate-900">${{ session.tax_amount }}</span>
+                </div>
+                <div class="pt-3 border-t border-slate-200 flex justify-between text-base font-bold">
+                    <span class="text-slate-900">Total Payable</span>
+                    <span class="text-slate-900">${{ session.total_amount }}</span>
+                </div>
+            </div>
+
+            <div class="mt-6 pt-4 border-t border-slate-200">
+                <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Payment Status</div>
+                <div class="flex items-center gap-2">
+                    {% if session.payment_status == "paid" %}
+                        <span class="badge badge-green">Paid</span>
+                    {% elif session.payment_status == "authorized" %}
+                        <span class="badge badge-info">Authorized</span>
+                    {% elif session.payment_status == "failed" %}
+                        <span class="badge badge-red">Failed</span>
+                    {% else %}
+                        <span class="badge badge-amber">Pending</span>
+                    {% endif %}
+                    {% if session.payment_transaction_id %}
+                        <span class="text-xs font-mono text-slate-600">Tx: {{ session.payment_transaction_id }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Shipping, Payment, and Tax Compliance Card -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h3 class="card-title">Fulfillment, Gateway & Tax Compliance</h3>
+    </div>
+    <div class="card-body">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+                <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Selected Shipping Method</dt>
+                <dd class="text-sm font-medium text-slate-900 mt-1">
+                    {% if session.shipping_method %}
+                        {{ session.shipping_method.name }} ({{ session.shipping_method.get_carrier_display }})
+                    {% else %}
+                        <span class="text-slate-400">Not selected yet</span>
+                    {% endif %}
+                </dd>
+            </div>
+
+            <div>
+                <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Selected Payment Gateway</dt>
+                <dd class="text-sm font-medium text-slate-900 mt-1">
+                    {% if session.payment_method %}
+                        {{ session.payment_method.name }} ({{ session.payment_method.get_provider_display }})
+                    {% else %}
+                        <span class="text-slate-400">Not selected yet</span>
+                    {% endif %}
+                </dd>
+            </div>
+
+            <div>
+                <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tax Code & Exemption</dt>
+                <dd class="text-sm font-medium text-slate-900 mt-1">
+                    {% if session.is_tax_exempt %}
+                        <span class="badge badge-green">Tax Exempt (Cert: {{ session.tax_exemption_number|default:"Captured" }})</span>
+                    {% elif session.tax_code %}
+                        {{ session.tax_code.name }} ({{ session.tax_rate|floatformat:2 }}%)
+                    {% else %}
+                        <span class="text-slate-500">Standard Nexus Rate</span>
+                    {% endif %}
+                </dd>
+                {% if session.tax_jurisdiction %}
+                    <div class="text-xs text-slate-500 mt-1">Jurisdiction: {{ session.tax_jurisdiction }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cart Line Items Snapshot -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Cart Line Items ({{ cart.items.count }} items)</h3>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Variant / SKU</th>
+                    <th>Quantity</th>
+                    <th>Unit Price</th>
+                    <th class="text-right">Line Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in cart.items.all %}
+                <tr>
+                    <td class="font-medium text-slate-900">{{ item.product.name }}</td>
+                    <td>
+                        {% if item.variant %}
+                            <span class="text-slate-700">{{ item.variant.sku }}</span>
+                        {% else %}
+                            <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ item.quantity }}</td>
+                    <td>${{ item.unit_price }}</td>
+                    <td class="text-right font-semibold text-slate-900">${{ item.total_price }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-6 text-slate-500">
+                        No items found in linked cart.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
