@@ -31,7 +31,7 @@
 
   <!-- Filters & Search -->
   <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
-    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
       <div>
         <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
         <div class="relative">
@@ -61,6 +61,15 @@
           <option value="">All Widgets</option>
           {% for val, label in widget_type_choices %}
             <option value="{{ val }}" {% if selected_widget == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-logic" class="block text-xs font-medium text-slate-600 mb-1">Filter Logic</label>
+        <select id="filter-logic" name="filter_logic" class="form-select w-full text-sm">
+          <option value="">All Logic</option>
+          {% for val, label in filter_logic_choices %}
+            <option value="{{ val }}" {% if selected_logic == val %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>
