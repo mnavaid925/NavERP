@@ -30,7 +30,7 @@ Child model `CustomerWishlistItem` inherits from `apps.ecommerce.models._base.Te
   - `auth_mode`: `CharField(max_length=25, choices=AUTH_MODE_CHOICES, default='password')`
   - `phone_number`: `CharField(max_length=32, blank=True)`
   - `phone_verified`: `BooleanField(default=False)`
-  - `preferred_currency`: `ForeignKey('accounting.Currency', null=True, blank=True, on_delete=SET_NULL, related_name='customer_profiles')`
+  - `preferred_currency`: `ForeignKey('accounting.Currency', null=True, blank=True, on_delete=SET_NULL, related_name='ecommerce_customer_profiles')`
   - `preferred_language`: `CharField(max_length=10, default='en')`
   - `email_marketing_opt_in`: `BooleanField(default=False)`
   - `sms_marketing_opt_in`: `BooleanField(default=False)`
