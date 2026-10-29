@@ -2688,6 +2688,13 @@ LIVE_LINKS = {
         "Tax Calculation & Compliance": "ecommerce:checkoutsession_list",
         "Payment Method Orchestration": "ecommerce:paymentmethodconfig_list",
     },
+    "9.5": {
+        "Order Capture & Validation": "ecommerce:ecommerceorder_list",
+        "Order Routing & Splitting": "ecommerce:orderroutingrule_list",
+        "Order Status & Tracking": "ecommerce:orderfulfillment_list",
+        "Order Modifications & Cancellations": "ecommerce:ecommerceorder_list",
+        "Returns & Exchanges (RMA)": "ecommerce:returnmerchandiseauthorization_list",
+    },
 
 
 
