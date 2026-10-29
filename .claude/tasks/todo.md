@@ -18827,72 +18827,72 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 ## Backend Package Structure (`apps/ecommerce/`)
 
 ### Layer 1: Models (`apps/ecommerce/models/InventoryStock/`)
-- [ ] `models/InventoryStock/__init__.py`
-- [ ] `models/InventoryStock/FulfillmentCenters.py`
-- [ ] `models/InventoryStock/InventoryAllocations.py`
-- [ ] `models/InventoryStock/BackorderPolicies.py`
-- [ ] `models/InventoryStock/ChannelInventorySyncs.py`
-- [ ] `models/__init__.py` — add 9.2 re-export block (4 models + CHOICES)
+- [x] `models/InventoryStock/__init__.py`
+- [x] `models/InventoryStock/FulfillmentCenters.py`
+- [x] `models/InventoryStock/InventoryAllocations.py`
+- [x] `models/InventoryStock/BackorderPolicies.py`
+- [x] `models/InventoryStock/ChannelInventorySyncs.py`
+- [x] `models/__init__.py` — add 9.2 re-export block (4 models + CHOICES)
 
 ### Layer 2: Forms (`apps/ecommerce/forms/InventoryStock/`)
-- [ ] `forms/InventoryStock/__init__.py`
-- [ ] `forms/InventoryStock/FulfillmentCenters.py` — `FulfillmentCenterForm`
-- [ ] `forms/InventoryStock/InventoryAllocations.py` — `InventoryAllocationForm`, `StockAdjustmentActionForm`
-- [ ] `forms/InventoryStock/BackorderPolicies.py` — `BackorderPolicyForm`
-- [ ] `forms/InventoryStock/ChannelInventorySyncs.py` — `ChannelInventorySyncForm`
-- [ ] `forms/__init__.py` — add 9.2 re-export block
+- [x] `forms/InventoryStock/__init__.py`
+- [x] `forms/InventoryStock/FulfillmentCenters.py` — `FulfillmentCenterForm`
+- [x] `forms/InventoryStock/InventoryAllocations.py` — `InventoryAllocationForm`, `StockAdjustmentActionForm`
+- [x] `forms/InventoryStock/BackorderPolicies.py` — `BackorderPolicyForm`
+- [x] `forms/InventoryStock/ChannelInventorySyncs.py` — `ChannelInventorySyncForm`
+- [x] `forms/__init__.py` — add 9.2 re-export block
 
 ### Layer 3: Views (`apps/ecommerce/views/InventoryStock/`)
-- [ ] `views/InventoryStock/__init__.py`
-- [ ] `views/InventoryStock/Operations.py` — `inventory_operations` console
-- [ ] `views/InventoryStock/FulfillmentCenters.py` — CRUD views
-- [ ] `views/InventoryStock/InventoryAllocations.py` — CRUD views + `inventoryallocation_adjust` action
-- [ ] `views/InventoryStock/BackorderPolicies.py` — CRUD views
-- [ ] `views/InventoryStock/ChannelInventorySyncs.py` — CRUD views + `channelinventorysync_trigger` action
-- [ ] `views/__init__.py` — add 9.2 re-export block
+- [x] `views/InventoryStock/__init__.py`
+- [x] `views/InventoryStock/Operations.py` — `inventory_operations` console
+- [x] `views/InventoryStock/FulfillmentCenters.py` — CRUD views
+- [x] `views/InventoryStock/InventoryAllocations.py` — CRUD views + `inventoryallocation_adjust` action
+- [x] `views/InventoryStock/BackorderPolicies.py` — CRUD views
+- [x] `views/InventoryStock/ChannelInventorySyncs.py` — CRUD views + `channelinventorysync_trigger` action
+- [x] `views/__init__.py` — add 9.2 re-export block
 
 ### Layer 4: URLs (`apps/ecommerce/urls/InventoryStock/`)
-- [ ] `urls/InventoryStock/__init__.py`
-- [ ] `urls/InventoryStock/Operations.py`
-- [ ] `urls/InventoryStock/FulfillmentCenters.py`
-- [ ] `urls/InventoryStock/InventoryAllocations.py`
-- [ ] `urls/InventoryStock/BackorderPolicies.py`
-- [ ] `urls/InventoryStock/ChannelInventorySyncs.py`
-- [ ] `urls/__init__.py` — concatenate 9.2 urlpatterns into ecommerce routing
+- [x] `urls/InventoryStock/__init__.py`
+- [x] `urls/InventoryStock/Operations.py`
+- [x] `urls/InventoryStock/FulfillmentCenters.py`
+- [x] `urls/InventoryStock/InventoryAllocations.py`
+- [x] `urls/InventoryStock/BackorderPolicies.py`
+- [x] `urls/InventoryStock/ChannelInventorySyncs.py`
+- [x] `urls/__init__.py` — concatenate 9.2 urlpatterns into ecommerce routing
 
 ### Layer 5: Admin & Seeder
-- [ ] `admin.py` — register `FulfillmentCenterAdmin`, `InventoryAllocationAdmin`, `BackorderPolicyAdmin`, `ChannelInventorySyncAdmin`
-- [ ] `apps/ecommerce/management/commands/seed_ecommerce.py` — extend seeder with demo fulfillment centers, stock allocations across variants, backorder policies, and channel sync runs.
-- [ ] `apps/core/navigation.py` — add `LIVE_LINKS["9.2"]` entry with all 5 NavERP.md bullets.
+- [x] `admin.py` — register `FulfillmentCenterAdmin`, `InventoryAllocationAdmin`, `BackorderPolicyAdmin`, `ChannelInventorySyncAdmin`
+- [x] `apps/ecommerce/management/commands/seed_ecommerce.py` — extend seeder with demo fulfillment centers, stock allocations across variants, backorder policies, and channel sync runs.
+- [x] `apps/core/navigation.py` — add `LIVE_LINKS["9.2"]` entry with all 5 NavERP.md bullets.
 
 ---
 
 ## Templates (`templates/ecommerce/inventorystock/`)
 
-- [ ] `templates/ecommerce/inventorystock/overview.html` (Inventory & Fulfillment Operations console)
-- [ ] `templates/ecommerce/inventorystock/fulfillmentcenter/list.html`
-- [ ] `templates/ecommerce/inventorystock/fulfillmentcenter/detail.html`
-- [ ] `templates/ecommerce/inventorystock/fulfillmentcenter/form.html`
-- [ ] `templates/ecommerce/inventorystock/inventoryallocation/list.html`
-- [ ] `templates/ecommerce/inventorystock/inventoryallocation/detail.html`
-- [ ] `templates/ecommerce/inventorystock/inventoryallocation/form.html`
-- [ ] `templates/ecommerce/inventorystock/inventoryallocation/adjust.html`
-- [ ] `templates/ecommerce/inventorystock/backorderpolicy/list.html`
-- [ ] `templates/ecommerce/inventorystock/backorderpolicy/detail.html`
-- [ ] `templates/ecommerce/inventorystock/backorderpolicy/form.html`
-- [ ] `templates/ecommerce/inventorystock/channelinventorysync/list.html`
-- [ ] `templates/ecommerce/inventorystock/channelinventorysync/detail.html`
-- [ ] `templates/ecommerce/inventorystock/channelinventorysync/form.html`
+- [x] `templates/ecommerce/inventorystock/overview.html` (Inventory & Fulfillment Operations console)
+- [x] `templates/ecommerce/inventorystock/fulfillmentcenter/list.html`
+- [x] `templates/ecommerce/inventorystock/fulfillmentcenter/detail.html`
+- [x] `templates/ecommerce/inventorystock/fulfillmentcenter/form.html`
+- [x] `templates/ecommerce/inventorystock/inventoryallocation/list.html`
+- [x] `templates/ecommerce/inventorystock/inventoryallocation/detail.html`
+- [x] `templates/ecommerce/inventorystock/inventoryallocation/form.html`
+- [x] `templates/ecommerce/inventorystock/inventoryallocation/adjust.html`
+- [x] `templates/ecommerce/inventorystock/backorderpolicy/list.html`
+- [x] `templates/ecommerce/inventorystock/backorderpolicy/detail.html`
+- [x] `templates/ecommerce/inventorystock/backorderpolicy/form.html`
+- [x] `templates/ecommerce/inventorystock/channelinventorysync/list.html`
+- [x] `templates/ecommerce/inventorystock/channelinventorysync/detail.html`
+- [x] `templates/ecommerce/inventorystock/channelinventorysync/form.html`
 
 ---
 
 ## Verification Steps
-- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce` -> verify `0003_...`
-- [ ] `venv\Scripts\python.exe manage.py migrate`
-- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1)
-- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency)
-- [ ] `venv\Scripts\python.exe manage.py check`
-- [ ] Smoke test script in `temp/smoke_ecommerce_9_2.py`:
+- [x] `venv\Scripts\python.exe manage.py makemigrations ecommerce` -> verify `0003_...`
+- [x] `venv\Scripts\python.exe manage.py migrate`
+- [x] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1)
+- [x] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency)
+- [x] `venv\Scripts\python.exe manage.py check`
+- [x] Smoke test script in `temp/smoke_ecommerce_9_2.py`:
   - Login as `admin_acme`
   - GET all new 9.2 URLs -> verify 200/302
   - Check rendered HTML: no leaked comments (`{#`), proper title, seeded records visible
@@ -18903,20 +18903,30 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 ---
 
 ## Close-Out Steps
-- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`
-- [ ] Append findings to `.claude/tasks/review-ecommerce-9.2.md`
-- [ ] Run Phase 5 `code-fixer` agent to burn down findings
-- [ ] Run Phase 6 automated test suite:
+- [x] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`
+- [x] Append findings to `.claude/tasks/review-ecommerce-9.2.md`
+- [x] Run Phase 5 `code-fixer` agent to burn down findings
+- [x] Run Phase 6 automated test suite:
   - Update `apps/ecommerce/tests/conftest.py`
   - Author `test_inventorystock_models.py`
   - Author `test_inventorystock_forms.py`
   - Author `test_inventorystock_views.py`
   - Author `test_inventorystock_security.py`
-  - Run full unfiltered suite `pytest apps/ecommerce/tests/`
-- [ ] Phase 7 documentation:
+  - Run full unfiltered suite `pytest apps/ecommerce/tests/` (333 passed, 0 failed)
+- [x] Phase 7 documentation:
   - Update `.claude/skills/ecommerce/SKILL.md`
   - Update `README.md`
   - Track any deferred features in `.claude/tasks/gaps-ecommerce-9.2.md`
+
+### 9.2 Close-Out Summary
+- **Status**: COMPLETE. All 5 NavERP.md 9.2 bullets fully covered.
+- **Models**: `FulfillmentCenter` (`EFC-`), `InventoryAllocation` (`EAL-`), `BackorderPolicy` (`EBK-`), `ChannelInventorySync` (`ESYN-`).
+- **Migrations**: `0003_fulfillmentcenter_channelinventorysync_and_more.py`.
+- **Navigation**: `LIVE_LINKS["9.2"] = ("ecommerce:inventory_operations", "9.2 Inventory & Stock", "ecommerce")`.
+- **Seeder**: Idempotent demo data in `seed_ecommerce`.
+- **Test Suite**: 333 passed, 0 failed across full unfiltered `apps/ecommerce/tests/`.
+- **Review Register**: 15/15 findings resolved in `.claude/tasks/review-ecommerce-9.2.md`.
+- **Gap Register**: Documented in `.claude/tasks/gaps-ecommerce-9.2.md`.
 
 
 ---
