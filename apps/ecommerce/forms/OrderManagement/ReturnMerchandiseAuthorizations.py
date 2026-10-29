@@ -55,4 +55,8 @@ class ReturnMerchandiseAuthorizationForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["order", "customer", "restocking_center"])
+        fee = cleaned.get("restocking_fee") or 0
+        refund = cleaned.get("refund_amount") or 0
+        if fee > refund and refund > 0:
+            self.add_error("restocking_fee", "Restocking fee cannot exceed the total refund amount.")
         return cleaned
