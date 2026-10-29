@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
@@ -90,7 +90,7 @@ def customeraccountprofile_detail(request, pk):
 
     wishlists = []
     if hasattr(profile.customer, "ecommerce_wishlists"):
-        wishlists = profile.customer.ecommerce_wishlists.filter(tenant=request.tenant).prefetch_related("items")
+        wishlists = profile.customer.ecommerce_wishlists.filter(tenant=request.tenant).annotate(items_count=Count("items"))
 
     privacy_requests = []
     if hasattr(profile.customer, "ecommerce_privacy_requests"):
