@@ -2681,6 +2681,14 @@ LIVE_LINKS = {
         "Loyalty & Rewards Pricing": "ecommerce:couponpromotion_list",
         "Price Matching & Competitive Monitoring": "ecommerce:competitorpricemonitor_list",
     },
+    "9.4": {
+        "Persistent & Guest Cart": "ecommerce:cart_list",
+        "One-Page & Multi-Step Checkout": "ecommerce:checkoutsession_list",
+        "Shipping Rate Calculation": "ecommerce:shippingmethodconfig_list",
+        "Tax Calculation & Compliance": "ecommerce:checkoutsession_list",
+        "Payment Method Orchestration": "ecommerce:paymentmethodconfig_list",
+    },
+
 
 
 
