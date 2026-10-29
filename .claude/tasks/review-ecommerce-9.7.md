@@ -99,3 +99,35 @@
   Adopt `.stat-card`, `.stat-value`, and `.stat-label` structure without hardcoding light-mode background classes over `.stat-icon.<color>`.
 - [ ] **FE-M3** — Missing `filter_logic` Select Dropdown in Facet Filter Form (`templates/ecommerce/searchdiscovery/facetconfig/list.html:34-75`):
   Context provides `filter_logic_choices` and `selected_logic`, but form omits the dropdown.
+
+
+---
+
+## Pass 4: `performance-reviewer` Findings
+
+### Critical
+- [ ] **PERF-C1** — Cartesian Explosion & DB Incompatibility on Price Sorting (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:252-259`):
+  Ordering `base_qs` via `order_by("variants__price").distinct()[:100]` creates an SQL join against reverse FK `ProductVariant`. Multi-variant products duplicate rows and `SELECT DISTINCT` with `ORDER BY` on joined column fails on PostgreSQL. Annotate `base_qs = base_qs.annotate(min_price=Min("variants__price"))` before ordering.
+
+### Important
+- [ ] **PERF-I1** — N+1 Queries on Pinned Merchandising Products in `search_console` (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:213-215, 241`):
+  `active_rules` lacks `select_related("boosted_product__item", "boosted_product__primary_category")` and `prefetch_related("boosted_product__variants")`, firing individual queries per pinned rule when accessing `sku` and `base_price`.
+- [ ] **PERF-I2** — N+1 Queries on Fallback Product Recommendations (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:288-294`):
+  `fallback_recommendations` lacks `select_related("item", "primary_category")` and `prefetch_related("variants")`, firing up to 8 queries per zero-result search.
+- [ ] **PERF-I3** — Full-Table Scan & Per-Item `UPDATE` Queries in Synonym Loop (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:93-117`):
+  Pre-filter active synonyms in SQL by `Q(root_term=norm_q) | Q(synonyms__icontains=norm_q)` instead of iterating full table, and batch `hit_count` updates outside the loop.
+- [ ] **PERF-I4** — Redundant Category Count Aggregation in Facet Loop Discarded by Template (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:178-206`):
+  Template explicitly ignores category facet groups at line 217 because categories are rendered independently. Skip querying category counts in `facet_groups`.
+- [ ] **PERF-I5** — Multiple Table Scans in `search_analytics` Dashboard (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:415-426`):
+  Consolidate `count()`, zero-result count, and avg execution time into a single `aggregate()` query using conditional `Count("id", filter=Q(is_zero_result=True))`.
+
+### Minor
+- [ ] **PERF-M1** — Missing Nested `select_related` on Product Item in Merchandising Rule Detail (`apps/ecommerce/views/SearchDiscovery/SearchMerchandisingRules.py:69-78`):
+  Add `boosted_product__item` to `select_related`.
+- [ ] **PERF-M2** — Missing Composite Index for Rule Priority Evaluation (`apps/ecommerce/models/SearchDiscovery/SearchMerchandisingRules.py:121-137`):
+  Add composite index `(tenant, is_active, -priority)` to `SearchMerchandisingRule.Meta.indexes`.
+- [ ] **PERF-M3** — Missing Composite Index for Zero-Result Query Aggregation (`apps/ecommerce/models/SearchDiscovery/SearchQueryLogs.py:87-100`):
+  Add composite index `(tenant, is_zero_result, normalized_query)` to `SearchQueryLog.Meta.indexes`.
+- [ ] **PERF-M4** — Unnecessary Full Model Hydration on Keystroke Autocomplete (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:345-370`):
+  Use `.only("id", "number", "name", "brand", "item__sku")` and annotate `Min("variants__price")`.
+
