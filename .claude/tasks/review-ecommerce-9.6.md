@@ -71,3 +71,34 @@
   - **File:** `apps/ecommerce/forms/CustomerProfile/CustomerWishlists.py:42-74`
   - **Description:** `clean()` does not verify `variant.product == product`.
   - **Suggested Fix:** Add validation error if `variant and variant.product != product`.
+
+---
+
+## Pass 2: Explorer (`explorer`)
+
+### Critical
+- [ ] *(Corroborated [C2]) Spine Integration: Missing `core.Address.postal_code` in GDPR Export* (`CustomerPrivacyRequests.py:207`)
+- [ ] *(Corroborated [C3]) Core Tenancy: Missing `UniqueConstraint(fields=["tenant", "number"])` across all 4 models*
+
+### Important
+- [ ] **[I5] Cross-Party Address Assignment in `CustomerAddressPreferenceForm`**
+  - **File:** `apps/ecommerce/forms/CustomerProfile/CustomerAddressPreferences.py:42-49`
+  - **Description:** `clean()` confirms tenant isolation but does not verify `address.party == customer`. An operator could assign another party's address to a customer.
+  - **Suggested Fix:** Add check `if customer and address and address.party_id != customer.pk: self.add_error("address", "The selected address does not belong to this customer.")`.
+
+- [ ] **[I6] Seeder Defect: Unfiltered Party Lookup in `seed_ecommerce.py` Leads to Cross-Party Linking**
+  - **File:** `apps/ecommerce/management/commands/seed_ecommerce.py:1404-1414`
+  - **Description:** `Address.objects.filter(tenant=tenant).first()` returns any address in the tenant, which might belong to a non-customer party.
+  - **Suggested Fix:** Change to `Address.objects.filter(tenant=tenant, party=cust_party).first()`.
+
+- [ ] **[I7] Template Address Attribute Drift on `core.Address`**
+  - **Files:**
+    - `templates/ecommerce/customerprofile/customeraddresspreference/list.html:106`
+    - `templates/ecommerce/customerprofile/customeraddresspreference/detail.html:69, 75`
+    - `templates/ecommerce/customerprofile/customeraccountprofile/detail.html:239`
+  - **Description:** Templates expect `line2`, `state`, `postal_code` which do not exist on `core.Address`.
+  - **Suggested Fix:** Render `{{ pref.address.line1 }}{% if pref.address.city %}, {{ pref.address.city }}{% endif %}{% if pref.address.country %}, {{ pref.address.country }}{% endif %}`.
+
+### Minor
+- [ ] *(Corroborated [M1]) Undefined `badge-purple` theme class in customeraccountprofile templates*
+
