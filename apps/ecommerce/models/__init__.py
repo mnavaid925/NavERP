@@ -23,6 +23,10 @@ from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
 from apps.ecommerce.models.ProductCatalog.ProductRelationships import ProductRelationship
 from apps.ecommerce.models.ProductCatalog.ProductVariants import ProductVariant
 from apps.ecommerce.models.ProductCatalog.StoreCategories import StoreCategory
+from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacetConfig
+from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
+from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
+from apps.ecommerce.models.SearchDiscovery.SearchSynonyms import SearchSynonym
 
 __all__ = [
     "TenantOwned",
@@ -60,5 +64,10 @@ __all__ = [
     "CustomerWishlist",
     "CustomerWishlistItem",
     "CustomerPrivacyRequest",
+    # 9.7 Search & Product Discovery
+    "SearchSynonym",
+    "SearchFacetConfig",
+    "SearchMerchandisingRule",
+    "SearchQueryLog",
 ]
 
