@@ -382,7 +382,9 @@ def test_customerprofile_privacy_request_generate_export_action(client_a, tenant
     assert ecom_privacy_request_a.data_export_payload is not None
     assert ecom_privacy_request_a.status == "completed"
     assert ecom_privacy_request_a.completed_at is not None
-    assert "customer" in ecom_privacy_request_a.data_export_payload
+    assert "customer_name" in ecom_privacy_request_a.data_export_payload
+    assert "addresses" in ecom_privacy_request_a.data_export_payload
+    assert "wishlists" in ecom_privacy_request_a.data_export_payload
 
 
 def test_customerprofile_privacy_request_anonymize_action(client_a, tenant_a, ecom_customer_a):
