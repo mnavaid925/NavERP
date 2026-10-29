@@ -1,11 +1,11 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS): categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier packaging/tracking, and return merchandise authorizations). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, or 9.5), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile: categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, and GDPR privacy requests). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, or 9.6), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile)
 
-The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, and an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, and return merchandise authorization (RMA) workflows. It integrates seamlessly with the NavERP core spine and physical supply chain:
+The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, and return merchandise authorization (RMA) workflows, as well as an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation with priority ranking, and statutory GDPR/CCPA privacy request management with automated JSON data portability exports and right-to-erasure account anonymization workflows. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
 - **Physical Inventory Boundary**: Products, variants, and fulfillment centers link to `scm.Item` and `scm.Location` via string foreign keys. Module 9 does not duplicate inventory ledger balances or physical bin movements; physical warehouse stock and valuation remain anchored in `apps/scm` and `apps/inventory`, while eCommerce manages digital storefront availability, reservations, buffers, and channel broadcasting.
 - **App Path**: `apps/ecommerce/`
@@ -49,6 +49,11 @@ apps/ecommerce/
 │   │   ├── OrderRoutingRules.py     # OrderRoutingRule model (EORT-)
 │   │   ├── OrderFulfillments.py     # OrderFulfillment model (EFUL-)
 │   │   └── ReturnMerchandiseAuthorizations.py # ReturnMerchandiseAuthorization model (ERMA-)
+│   ├── CustomerProfile/
+│   │   ├── CustomerAccountProfiles.py # CustomerAccountProfile model (ECAP-)
+│   │   ├── CustomerAddressPreferences.py # CustomerAddressPreference model (ECAD-)
+│   │   ├── CustomerWishlists.py     # CustomerWishlist (EWSL-) & CustomerWishlistItem models
+│   │   └── CustomerPrivacyRequests.py # CustomerPrivacyRequest model (ECPR-)
 │   └── __init__.py                  # Surgical re-exports of all models
 ├── forms/
 │   ├── _common.py                   # TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -78,6 +83,11 @@ apps/ecommerce/
 │   │   ├── OrderRoutingRules.py     # OrderRoutingRuleForm
 │   │   ├── OrderFulfillments.py     # OrderFulfillmentForm
 │   │   └── ReturnMerchandiseAuthorizations.py # ReturnMerchandiseAuthorizationForm
+│   ├── CustomerProfile/
+│   │   ├── CustomerAccountProfiles.py # CustomerAccountProfileForm
+│   │   ├── CustomerAddressPreferences.py # CustomerAddressPreferenceForm
+│   │   ├── CustomerWishlists.py     # CustomerWishlistForm, CustomerWishlistItemForm
+│   │   └── CustomerPrivacyRequests.py # CustomerPrivacyRequestForm
 │   └── __init__.py                  # Re-exports of all forms
 ├── views/
 │   ├── _common.py                   # ecommerce_scope, ecommerce_object, csv_safe, write_audit_log
@@ -109,6 +119,11 @@ apps/ecommerce/
 │   │   ├── OrderRoutingRules.py     # orderroutingrule CRUD
 │   │   ├── OrderFulfillments.py     # orderfulfillment CRUD + ship action
 │   │   └── ReturnMerchandiseAuthorizations.py # returnmerchandiseauthorization CRUD + complete action
+│   ├── CustomerProfile/
+│   │   ├── CustomerAccountProfiles.py # customeraccountprofile CRUD
+│   │   ├── CustomerAddressPreferences.py # customeraddresspreference CRUD
+│   │   ├── CustomerWishlists.py     # customerwishlist CRUD + item_add, item_delete
+│   │   └── CustomerPrivacyRequests.py # customerprivacyrequest CRUD + generate_export, anonymize
 │   └── __init__.py                  # Re-exports of all views
 ├── urls/
 │   ├── ProductCatalog/
@@ -134,12 +149,16 @@ apps/ecommerce/
 │   │   ├── CheckoutSessions.py      # cart-checkout/sessions/ paths
 │   │   ├── ShippingMethods.py       # cart-checkout/shipping-methods/ paths
 │   │   └── PaymentMethods.py        # cart-checkout/payment-methods/ paths
-│   └── OrderManagement/
-│       ├── EcommerceOrders.py       # orders/ paths
-│       ├── OrderRoutingRules.py     # routing-rules/ paths
-│       ├── OrderFulfillments.py     # fulfillments/ paths
-│       └── ReturnMerchandiseAuthorizations.py # returns/ paths
-│   │   └── PaymentMethods.py        # cart-checkout/payment-methods/ paths
+│   ├── OrderManagement/
+│   │   ├── EcommerceOrders.py       # orders/ paths
+│   │   ├── OrderRoutingRules.py     # routing-rules/ paths
+│   │   ├── OrderFulfillments.py     # fulfillments/ paths
+│   │   └── ReturnMerchandiseAuthorizations.py # returns/ paths
+│   ├── CustomerProfile/
+│   │   ├── CustomerAccountProfiles.py # customer-profiles/ paths
+│   │   ├── CustomerAddressPreferences.py # address-preferences/ paths
+│   │   ├── CustomerWishlists.py     # wishlists/ paths
+│   │   └── CustomerPrivacyRequests.py # privacy-requests/ paths
 │   └── __init__.py                  # Concatenates all urlpatterns with app_name="ecommerce"
 ├── admin.py                         # Django admin registrations
 ├── apps.py                          # EcommerceConfig
@@ -192,6 +211,16 @@ apps/ecommerce/
 | `OrderRoutingRule` | `EORT-` | `name`, `strategy` (closest_location, fewest_splits, highest_inventory, drop_ship_preferred, manual), `priority`, `destination_country`, `destination_region`, `preferred_fulfillment_center`, `allow_split_shipment`, `enable_dropship`, `is_active` | `ecommerce.FulfillmentCenter` | Evaluates closest fulfillment nodes and split shipment allowance |
 | `OrderFulfillment` | `EFUL-` | `order`, `fulfillment_center`, `carrier_name`, `tracking_number`, `tracking_url`, `status`, `shipping_cost`, `shipped_at`, `estimated_delivery_date`, `actual_delivery_date`, `shipping_label_url`, `notification_sent` | `ecommerce.FulfillmentCenter` | `mark_shipped()`, `mark_delivered()`, auto-syncs parent order fulfillment status |
 | `ReturnMerchandiseAuthorization` | `ERMA-` | `order`, `customer`, `return_type` (refund, exchange, store_credit), `status`, `reason`, `restocking_fee`, `refund_amount`, `refund_status`, `restocking_status`, `restocking_center` | `core.Party` (`customer`), `ecommerce.FulfillmentCenter` | `authorize()`, `complete_settlement()`, validates restocking fee <= refund amount |
+
+### Sub-module 9.6: Customer Account & Profile
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `CustomerAccountProfile` | `ECAP-` | `customer`, `user`, `tier`, `status`, `auth_mode`, `phone_number`, `phone_verified`, `preferred_currency`, `preferred_language`, `email_marketing_opt_in`, `sms_marketing_opt_in`, `notification_frequency`, `marketing_consent_at`, `unsubscribe_token`, `total_spent`, `order_count`, `last_order_at`, `internal_notes` | `core.Party` (`customer`), `settings.AUTH_USER_MODEL`, `accounting.Currency` | Unique per `(tenant, customer)`, auto-generates `unsubscribe_token` and captures consent timestamp |
+| `CustomerAddressPreference` | `ECAD-` | `customer`, `address`, `label`, `is_default_shipping`, `is_default_billing`, `recipient_name`, `contact_phone`, `delivery_instructions`, `preferred_delivery_window`, `requires_signature` | `core.Party` (`customer`), `core.Address` | Manages single default shipping & billing address across customer preferences on save |
+| `CustomerWishlist` | `EWSL-` | `customer`, `name`, `slug`, `visibility` (private/shared/public), `is_default`, `share_token`, `notes` | `core.Party` (`customer`) | Auto slug generation, token generation, single default wishlist flag management on save |
+| `CustomerWishlistItem` | — | `wishlist`, `product`, `variant`, `desired_quantity`, `priority` (low/medium/high/highest), `comment` | `CustomerWishlist`, `ecommerce.CatalogProduct`, `ecommerce.ProductVariant` | TenantOwned, priority ranking, variant-product relationship validation |
+| `CustomerPrivacyRequest` | `ECPR-` | `customer`, `request_type` (access_export, rectification, erasure_anonymize, restriction, opt_out_sale), `status`, `statutory_deadline`, `completed_at`, `requested_by_email`, `verification_method`, `data_export_payload`, `resolution_notes` | `core.Party` (`customer`) | Defaults 30-day statutory deadline, auto-stamps `completed_at`, triggers automated JSON export & account anonymization |
+
 
 
 ---
@@ -336,6 +365,34 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 | `returns/<int:pk>/delete/` | `returnmerchandiseauthorization_delete` | `returnmerchandiseauthorization_delete` | Delete return authorization (POST only, tenant admin) |
 | `returns/<int:pk>/complete/` | `returnmerchandiseauthorization_complete` | `returnmerchandiseauthorization_complete` | Finalize RMA refund settlement and restock (POST) |
 
+### 9.6 Customer Account & Profile Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `customer-profiles/` | `customeraccountprofile_list` | `customeraccountprofile_list` | Customer account profiles table with tier, status, auth mode, and search filters |
+| `customer-profiles/create/` | `customeraccountprofile_create` | `customeraccountprofile_create` | Create new customer account profile |
+| `customer-profiles/<int:pk>/` | `customeraccountprofile_detail` | `customeraccountprofile_detail` | Profile detail with recent orders, address preferences, wishlists, and privacy requests |
+| `customer-profiles/<int:pk>/edit/` | `customeraccountprofile_edit` | `customeraccountprofile_edit` | Edit customer account profile information |
+| `customer-profiles/<int:pk>/delete/` | `customeraccountprofile_delete` | `customeraccountprofile_delete` | Delete customer account profile (POST only, tenant admin) |
+| `address-preferences/` | `customeraddresspreference_list` | `customeraddresspreference_list` | Address preferences table with delivery window filter |
+| `address-preferences/create/` | `customeraddresspreference_create` | `customeraddresspreference_create` | Create customer address preference linked to core.Address |
+| `address-preferences/<int:pk>/` | `customeraddresspreference_detail` | `customeraddresspreference_detail` | Address preference detail with instructions and delivery window |
+| `address-preferences/<int:pk>/edit/` | `customeraddresspreference_edit` | `customeraddresspreference_edit` | Edit address preference attributes |
+| `address-preferences/<int:pk>/delete/` | `customeraddresspreference_delete` | `customeraddresspreference_delete` | Delete address preference (POST only, tenant admin) |
+| `wishlists/` | `customerwishlist_list` | `customerwishlist_list` | Customer wishlists table with visibility filter |
+| `wishlists/create/` | `customerwishlist_create` | `customerwishlist_create` | Create new customer wishlist |
+| `wishlists/<int:pk>/` | `customerwishlist_detail` | `customerwishlist_detail` | Wishlist detail with items table, priority indicators, and item quick-add form |
+| `wishlists/<int:pk>/edit/` | `customerwishlist_edit` | `customerwishlist_edit` | Edit wishlist name, visibility, and notes |
+| `wishlists/<int:pk>/delete/` | `customerwishlist_delete` | `customerwishlist_delete` | Delete wishlist (POST only, tenant admin) |
+| `wishlists/<int:pk>/items/add/` | `customerwishlist_item_add` | `customerwishlist_item_add` | Add product/variant item to wishlist (POST, tenant admin) |
+| `wishlists/items/<int:item_pk>/delete/` | `customerwishlist_item_delete` | `customerwishlist_item_delete` | Remove item from wishlist (POST, tenant admin) |
+| `privacy-requests/` | `customerprivacyrequest_list` | `customerprivacyrequest_list` | Statutory privacy requests table with type and status filters |
+| `privacy-requests/create/` | `customerprivacyrequest_create` | `customerprivacyrequest_create` | Log incoming GDPR/CCPA privacy request |
+| `privacy-requests/<int:pk>/` | `customerprivacyrequest_detail` | `customerprivacyrequest_detail` | Privacy request detail with timeline, payload viewer, and action buttons |
+| `privacy-requests/<int:pk>/edit/` | `customerprivacyrequest_edit` | `customerprivacyrequest_edit` | Edit privacy request metadata |
+| `privacy-requests/<int:pk>/delete/` | `customerprivacyrequest_delete` | `customerprivacyrequest_delete` | Delete privacy request (POST only, tenant admin) |
+| `privacy-requests/<int:pk>/generate-export/` | `customerprivacyrequest_generate_export` | `customerprivacyrequest_generate_export` | Generate comprehensive JSON data portability export (POST, tenant admin) |
+| `privacy-requests/<int:pk>/anonymize/` | `customerprivacyrequest_anonymize` | `customerprivacyrequest_anonymize` | Execute right-to-erasure GDPR anonymization workflow (POST, tenant admin) |
+
 ---
 
 ## 4. Templates & Design System
@@ -363,6 +420,11 @@ Templates are stored under `templates/ecommerce/`:
   - `orderroutingrule/` — `list.html` (with routing strategy badges and priority pills), `detail.html` (with destination scope and preferred center), `form.html`.
   - `orderfulfillment/` — `list.html` (with carrier badges and tracking links), `detail.html` (with tracking progress, dispatch metadata, and carrier ship action), `form.html`.
   - `returnmerchandiseauthorization/` — `list.html` (with return type badges and refund statuses), `detail.html` (with inspection notes, fee deduction, restocking center, and complete settlement action), `form.html`.
+- `customerprofile/`
+  - `customeraccountprofile/` — `list.html` (with tier, status, and auth mode badges), `detail.html` (with customer header, loyalty stats, address preferences, wishlists, and privacy requests), `form.html`.
+  - `customeraddresspreference/` — `list.html` (with default shipping/billing badges and delivery window pills), `detail.html` (with physical address details and delivery instructions), `form.html`.
+  - `customerwishlist/` — `list.html` (with visibility badges and items count), `detail.html` (with items table, priority badges, and quick-add form), `form.html`.
+  - `customerprivacyrequest/` — `list.html` (with request type and workflow status badges), `detail.html` (with request timeline, data export action, anonymization modal, and payload viewer), `form.html`.
 
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
@@ -401,6 +463,11 @@ The command provisions:
 - 3 Order Routing Rules: Domestic Express Routing (closest location), West Coast Drop-Ship Routing (drop-ship preferred), High Stock Allocation (highest inventory).
 - 4 Order Fulfillments: Carrier-dispatched FedEx Ground package with live tracking, Shipped DHL Express package, Allocated draft package, and Delivered package.
 - 3 Return Merchandise Authorizations (RMA): Damaged item refund with restock quarantine, Wrong item replacement return, and Size/fit customer return with restocking fee.
+- 4 Customer Account Profiles across bronze, silver, gold, and platinum tiers with marketing consent and preferences.
+- 5 Customer Address Preferences with default shipping, default billing, delivery instructions, and window selections.
+- 4 Customer Wishlists with private, shared, and public visibilities.
+- 6 Customer Wishlist Items with priority indicators and quantity targets.
+- 4 Customer Privacy Requests covering access/export, rectification, erasure/anonymization, and CCPA opt-out.
 - All demo data is scoped to tenant `acme`.
 
 ---
@@ -428,6 +495,10 @@ The command provisions:
    - Competitive repricing suggestions must never breach the `margin_floor_price` calculated from variant unit cost (`cost_price * (1 + min_margin_pct/100)`). If competitor undercuts below margin floor, monitor flags `is_margin_risk` and clamps suggested price to floor.
 8. **Checkout Billing Address Inheritance**:
    - When `billing_same_as_shipping` is True, `CheckoutSession.save()` automatically clones shipping address fields into the corresponding billing fields. In forms, `billing_country` is made non-required since it is populated server-side.
+9. **Single Default Address & Wishlist Constraints**:
+   - `CustomerAddressPreference` and `CustomerWishlist` models enforce single-default rules on save: when `is_default_shipping`, `is_default_billing`, or `is_default` is set to True, all sibling records for that customer are automatically unset.
+10. **Statutory Privacy & Anonymization Guards**:
+    - Right-to-erasure workflows de-identify personal customer profiles, revoke marketing consents, deactivate associated authentication users (`user.is_active = False`), and privatize public wishlists in atomic transactions.
 
 ---
 
@@ -457,6 +528,17 @@ LIVE_LINKS["9.5"] = {
     "Carrier Dispatch & Shipment Tracking": "ecommerce:orderfulfillment_list",
     "Returns & RMA Management": "ecommerce:returnmerchandiseauthorization_list",
     "Omnichannel Order Orchestration": "ecommerce:ecommerceorder_list",
+}
+LIVE_LINKS["9.6"] = {
+    "Registration & Authentication": "ecommerce:customeraccountprofile_list",
+    "Account Dashboard & Order History": "ecommerce:customeraccountprofile_list",
+    "Address Book & Preferences": "ecommerce:customeraddresspreference_list",
+    "Communication Preferences": "ecommerce:customeraccountprofile_list",
+    "Account Security & Privacy": "ecommerce:customerprivacyrequest_list",
+    "Customer Profiles": "ecommerce:customeraccountprofile_list",
+    "Address Preferences": "ecommerce:customeraddresspreference_list",
+    "Wishlists": "ecommerce:customerwishlist_list",
+    "Privacy Requests": "ecommerce:customerprivacyrequest_list",
 }
 ```
 Appears under the eCommerce section of the primary navigation bar.
