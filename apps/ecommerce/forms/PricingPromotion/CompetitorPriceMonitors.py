@@ -54,6 +54,14 @@ class CompetitorPriceMonitorForm(TenantUniqueMixin, TenantModelForm):
             raise forms.ValidationError("Competitor price cannot be negative.")
         return val
 
+    def clean_competitor_currency(self):
+        code = self.cleaned_data.get("competitor_currency", "USD")
+        if code:
+            code = code.strip().upper()
+            if len(code) != 3:
+                raise forms.ValidationError("Competitor currency code must be exactly 3 characters.")
+        return code
+
     def clean_min_margin_pct(self):
         val = self.cleaned_data.get("min_margin_pct")
         if val is not None and val < Decimal("0.00"):
