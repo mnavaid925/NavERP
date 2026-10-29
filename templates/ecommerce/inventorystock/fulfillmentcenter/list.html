@@ -129,15 +129,15 @@
             </td>
             <td class="text-right table-actions">
               <div class="flex items-center justify-end gap-2">
-                <a href="{% url 'ecommerce:fulfillmentcenter_detail' center.pk %}" class="btn btn-icon btn-outline p-1" title="View details">
+                <a href="{% url 'ecommerce:fulfillmentcenter_detail' center.pk %}" class="btn btn-icon btn-outline p-1" title="View details" aria-label="View details of {{ center.name }}">
                   <i data-lucide="eye" class="w-4 h-4 text-slate-600"></i>
                 </a>
-                <a href="{% url 'ecommerce:fulfillmentcenter_edit' center.pk %}" class="btn btn-icon btn-outline p-1" title="Edit center">
+                <a href="{% url 'ecommerce:fulfillmentcenter_edit' center.pk %}" class="btn btn-icon btn-outline p-1" title="Edit center" aria-label="Edit center {{ center.name }}">
                   <i data-lucide="pencil" class="w-4 h-4 text-slate-600"></i>
                 </a>
                 <form action="{% url 'ecommerce:fulfillmentcenter_delete' center.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete fulfillment center {{ center.name }}?');">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-icon btn-outline p-1 hover:text-red-600" title="Delete center">
+                  <button type="submit" class="btn btn-icon btn-outline p-1 hover:text-red-600" title="Delete center" aria-label="Delete center {{ center.name }}">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </form>
