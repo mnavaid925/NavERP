@@ -204,7 +204,7 @@ def test_personalization_experience_creation_and_autonumber(tenant_a):
     exp = _personalization_experience(tenant_a, name="Flash Promo")
     assert exp.pk is not None
     assert exp.number.startswith("EPEX-")
-    assert exp.experience_type == "vip_welcome"
+    assert exp.experience_type == "home_hero"
     assert exp.priority == 10
     assert exp.is_active is True
     assert "Flash Promo" in str(exp)
