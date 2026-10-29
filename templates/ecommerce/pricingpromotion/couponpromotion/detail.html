@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}{{ coupon.code }} · Coupon · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl">
+  <!-- Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:couponpromotion_list' %}" class="hover:text-blue-600">Coupons & Discounts</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ coupon.code }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold font-mono text-slate-900">{{ coupon.code }}</h1>
+        {% if coupon.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-slate">Inactive</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-600 mt-1">{{ coupon.name }} <span class="text-xs text-slate-400 font-mono">({{ coupon.number }})</span></p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:couponpromotion_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to List</span>
+      </a>
+      <a href="{% url 'ecommerce:couponpromotion_edit' pk=coupon.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Coupon</span>
+      </a>
+      <form
+        action="{% url 'ecommerce:couponpromotion_delete' pk=coupon.pk %}"
+        method="post"
+        class="inline"
+        onsubmit="return confirm('Are you sure you want to delete coupon {{ coupon.code }}?');"
+      >
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger inline-flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Primary Stat Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Discount Rate</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">
+        {% if coupon.discount_type == 'percentage' %}
+          <span class="text-emerald-600">{{ coupon.discount_value|floatformat:2 }}%</span>
+        {% elif coupon.discount_type in 'fixed_cart,fixed_item' %}
+          <span class="text-emerald-600">${{ coupon.discount_value|floatformat:2 }}</span>
+        {% elif coupon.discount_type == 'free_shipping' %}
+          <span class="text-blue-600">Free Ship</span>
+        {% endif %}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">{{ coupon.get_discount_type_display }}</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Minimum Spend</div>
+      <div class="text-2xl font-bold font-mono text-slate-800 mt-1">
+        {% if coupon.min_spend > 0 %}
+          ${{ coupon.min_spend|floatformat:2 }}
+        {% else %}
+          <span class="text-slate-400">No Min</span>
+        {% endif %}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">
+        {% if coupon.max_discount_amount %}
+          Max Cap: ${{ coupon.max_discount_amount|floatformat:2 }}
+        {% else %}
+          No discount cap
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Redemptions Used</div>
+      <div class="text-2xl font-bold font-mono text-slate-800 mt-1">{{ coupon.used_count }}</div>
+      <div class="text-xs text-slate-500 mt-1">
+        {% if coupon.usage_limit_total %}
+          Limit: {{ coupon.usage_limit_total }} total
+        {% else %}
+          Unlimited global uses
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Remaining Uses</div>
+      <div class="text-2xl font-bold font-mono mt-1">
+        {% if coupon.remaining_redemptions is not None %}
+          <span class="text-blue-600">{{ coupon.remaining_redemptions }}</span>
+        {% else %}
+          <span class="text-slate-500">Unlimited</span>
+        {% endif %}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">{{ coupon.usage_limit_per_customer }} use(s) per customer</div>
+    </div>
+  </div>
+
+  <!-- Detailed Rule Configuration -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="card bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <h2 class="text-base font-semibold text-slate-800">Coupon Parameters</h2>
+      </div>
+      <div class="card-body p-5 space-y-4 text-sm">
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Coupon Code</span>
+          <span class="font-mono font-bold text-slate-900">{{ coupon.code }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Internal Number</span>
+          <span class="font-mono text-slate-800">{{ coupon.number }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Campaign Name</span>
+          <span class="text-slate-900 font-medium">{{ coupon.name }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Discount Type</span>
+          <span class="text-slate-900">{{ coupon.get_discount_type_display }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Stackable with other rules</span>
+          <span>
+            {% if coupon.is_stackable %}
+              <span class="badge badge-green">Yes (Stackable)</span>
+            {% else %}
+              <span class="badge badge-slate">Exclusive (Non-stackable)</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Loyalty Tier Requirement</span>
+          <span>
+            {% if coupon.loyalty_tier_required != 'none' %}
+              <span class="badge badge-amber">{{ coupon.get_loyalty_tier_required_display }}</span>
+            {% else %}
+              <span class="text-slate-500">None (Public)</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Customer Account Restriction</span>
+          <span class="text-slate-900">
+            {% if coupon.customer %}
+              {{ coupon.customer.name }}
+            {% else %}
+              <span class="text-slate-400">All Customers</span>
+            {% endif %}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <h2 class="text-base font-semibold text-slate-800">Schedule & Limits</h2>
+      </div>
+      <div class="card-body p-5 space-y-4 text-sm">
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Valid From</span>
+          <span class="text-slate-900">{{ coupon.valid_from|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Valid To</span>
+          <span class="text-slate-900">
+            {% if coupon.valid_to %}
+              {{ coupon.valid_to|date:"Y-m-d H:i" }}
+            {% else %}
+              <span class="text-slate-400">Indefinite</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Global Usage Limit</span>
+          <span class="font-mono text-slate-900">
+            {% if coupon.usage_limit_total %}
+              {{ coupon.usage_limit_total }}
+            {% else %}
+              <span class="text-slate-400">Unlimited</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Usage Per Customer</span>
+          <span class="font-mono text-slate-900">{{ coupon.usage_limit_per_customer }} max</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Currently Valid</span>
+          <span>
+            {% if coupon.is_currently_valid %}
+              <span class="badge badge-green">Ready for Checkout</span>
+            {% else %}
+              <span class="badge badge-red">Unavailable</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Created At</span>
+          <span class="text-slate-500">{{ coupon.created_at|date:"Y-m-d H:i" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
