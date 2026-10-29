@@ -18692,3 +18692,228 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 - **Gaps Register**: Documented in `.claude/tasks/gaps-ecommerce-9.1.md` (0 open defects, 3 architectural feature deferrals documented).
 - **Status**: 100% Complete & Verified Green.
 
+
+
+---
+
+# Sub-module 9.2 — Inventory & Stock Management (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.2.md` (2026-10-29)
+
+**Repo state at plan time:** BASE `f78cf6de0a0efe5cffe7089328ce2e10964cf83b`. Working tree clean. `apps/ecommerce/` is an **EXISTING APP** — this run **EXTENDS** the app with Sub-module 9.2 packages (`models/InventoryStock/`, `forms/InventoryStock/`, `views/InventoryStock/`, `urls/InventoryStock/`, and `templates/ecommerce/inventorystock/`). Next migration will be incremental: **`0003_...`**. Free prefixes verified: `EFC`, `EAL`, `EBK`, `ESYN`.
+
+## The pinned decisions this plan executes literally
+
+- **Physical Inventory Boundary**: Reuses `scm.Item` (`apps/scm/models/InventoryManagement/Items.py:73`) and `ecommerce.ProductVariant` (`apps/ecommerce/models/ProductCatalog/ProductVariants.py:18`). Sub-module 9.2 does NOT duplicate physical inventory SKU records.
+- **Physical Warehouses**: Reuses `scm.Location` (`apps/scm/models/InventoryManagement/Locations.py:14`, `LOC-`) as an optional physical location target for `FulfillmentCenter.location`.
+- **Physical Stock Ledger**: Reuses `scm.StockTransfer` [`TRF-`] and `scm.StockAdjustment` [`ADJ-`] for physical inter-warehouse transfers and cycle count adjustments. Sub-module 9.2 does NOT create duplicate transfer or adjustment ledger tables.
+- **Digital Available-to-Promise (ATP)**: Calculated in real-time as `max(0, quantity_on_hand - quantity_allocated - safety_stock_buffer)`. Storefronts consume ATP, not raw physical on-hand.
+- **Audit Logging**: Reuses `core.AuditLog` (`apps.core.utils.log_action`) for inventory adjustments, backorder policy updates, and channel sync triggers.
+
+---
+
+## Models (from research — 4)
+
+### 1. `FulfillmentCenter` [`EFC`] — `FulfillmentCenters.py`
+- Inherits `TenantNumbered` (`NUMBER_PREFIX = "EFC"`).
+- Fields:
+  - `name`: CharField(max_length=100) — e.g. "Primary West Coast DC", "Chicago 3PL Hub"
+  - `code`: CharField(max_length=30) — Unique slug/identifier per tenant
+  - `center_type`: CharField(max_length=30, choices=CENTER_TYPE_CHOICES, default="internal_warehouse")
+    - `internal_warehouse`: Internal Warehouse / DC
+    - `third_party_3pl`: 3PL Fulfillment Partner (ShipBob, etc.)
+    - `retail_store`: Retail Store (Ship-from-Store / Local Pickup)
+    - `dropshipper`: Drop-Ship Vendor Facility
+  - `location`: ForeignKey("scm.Location", null=True, blank=True, on_delete=models.SET_NULL, related_name="ecommerce_fulfillment_centers")
+  - `priority`: PositiveSmallIntegerField(default=1) — Fulfillment priority ranking (1 = highest)
+  - `is_active`: BooleanField(default=True)
+  - `supports_pick_pack_ship`: BooleanField(default=True)
+  - `supports_customer_pickup`: BooleanField(default=False)
+  - `daily_cutoff_time`: TimeField(null=True, blank=True) — Daily order dispatch cutoff
+  - `address_line1`: CharField(max_length=255, blank=True)
+  - `city`: CharField(max_length=100, blank=True)
+  - `state`: CharField(max_length=100, blank=True)
+  - `postal_code`: CharField(max_length=20, blank=True)
+  - `country`: CharField(max_length=100, default="United States")
+  - `contact_email`: EmailField(blank=True)
+  - `contact_phone`: CharField(max_length=30, blank=True)
+  - `notes`: TextField(blank=True)
+- Meta: `ordering = ["priority", "name"]`, `UniqueConstraint(fields=["tenant", "code"], name="ecom_fc_tenant_code_uniq")`, indexes: `(tenant, is_active)`, `(tenant, center_type)`.
+- Excluded from form: `tenant`, `number`, `created_at`, `updated_at`.
+
+### 2. `InventoryAllocation` [`EAL`] — `InventoryAllocations.py`
+- Inherits `TenantNumbered` (`NUMBER_PREFIX = "EAL"`).
+- Fields:
+  - `product`: ForeignKey("ecommerce.CatalogProduct", on_delete=models.CASCADE, related_name="inventory_allocations")
+  - `variant`: ForeignKey("ecommerce.ProductVariant", on_delete=models.CASCADE, related_name="inventory_allocations")
+  - `fulfillment_center`: ForeignKey("ecommerce.FulfillmentCenter", on_delete=models.CASCADE, related_name="inventory_allocations")
+  - `zone_bin`: CharField(max_length=50, blank=True) — Storage zone or bin (e.g. "Aisle 3, Shelf B, Bin 12")
+  - `quantity_on_hand`: IntegerField(default=0) — Total physical units on hand
+  - `quantity_allocated`: IntegerField(default=0) — Units reserved for pending unfulfilled orders
+  - `safety_stock_buffer`: PositiveIntegerField(default=0) — Units withheld from online channels to prevent stockouts
+  - `low_stock_threshold`: PositiveIntegerField(default=5) — Threshold triggering low stock alert
+  - `is_low_stock_alert`: BooleanField(default=False) — Automated alert flag
+  - `restock_lead_time_days`: PositiveSmallIntegerField(default=7) — Estimated supplier replenishment days
+  - `last_counted_at`: DateTimeField(null=True, blank=True) — Last physical cycle count audit
+  - `notes`: TextField(blank=True)
+- Properties:
+  - `available_to_promise`: `max(0, self.quantity_on_hand - self.quantity_allocated - self.safety_stock_buffer)`
+  - `is_out_of_stock`: `self.available_to_promise == 0`
+- `clean()`:
+  - `is_low_stock_alert` automatically set to True when `available_to_promise <= low_stock_threshold`.
+  - Ensures `variant.product == product`.
+- Meta: `ordering = ["variant__sku", "fulfillment_center__priority"]`, `UniqueConstraint(fields=["tenant", "variant", "fulfillment_center"], name="ecom_inv_tnt_var_fc_uniq")`, indexes: `(tenant, is_low_stock_alert)`, `(tenant, fulfillment_center)`.
+- Excluded from form: `tenant`, `number`, `is_low_stock_alert`, `created_at`, `updated_at`.
+
+### 3. `BackorderPolicy` [`EBK`] — `BackorderPolicies.py`
+- Inherits `TenantNumbered` (`NUMBER_PREFIX = "EBK"`).
+- Fields:
+  - `variant`: OneToOneField("ecommerce.ProductVariant", on_delete=models.CASCADE, related_name="backorder_policy")
+  - `policy_type`: CharField(max_length=35, choices=POLICY_TYPE_CHOICES, default="deny_when_empty")
+    - `deny_when_empty`: Deny Purchases When Out of Stock (Standard)
+    - `allow_backorder_with_notice`: Allow Backorders with Warning Notice
+    - `pre_order_only`: Pre-Order Mode (Advance Launch Campaign)
+  - `storefront_message`: CharField(max_length=255, blank=True) — Custom notice (e.g. "Ships on Nov 15th")
+  - `expected_availability_date`: DateField(null=True, blank=True) — Expected restock / release date
+  - `max_backorder_quantity`: PositiveIntegerField(default=0) — 0 = unlimited backorders allowed
+  - `current_backorder_count`: PositiveIntegerField(default=0) — Cumulative committed backorders/pre-orders
+  - `auto_notify_waitlist`: BooleanField(default=True) — Automatically alert waitlist customers upon restock
+  - `is_active`: BooleanField(default=True)
+  - `notes`: TextField(blank=True)
+- Properties:
+  - `is_backorder_allowed`: `self.is_active and (self.max_backorder_quantity == 0 or self.current_backorder_count < self.max_backorder_quantity)`
+- Meta: `ordering = ["variant__sku"]`, `UniqueConstraint(fields=["tenant", "variant"], name="ecom_bk_tenant_variant_uniq")`, indexes: `(tenant, policy_type)`, `(tenant, is_active)`.
+- Excluded from form: `tenant`, `number`, `current_backorder_count`, `created_at`, `updated_at`.
+
+### 4. `ChannelInventorySync` [`ESYN`] — `ChannelInventorySyncs.py`
+- Inherits `TenantNumbered` (`NUMBER_PREFIX = "ESYN"`).
+- Fields:
+  - `variant`: ForeignKey("ecommerce.ProductVariant", on_delete=models.CASCADE, related_name="channel_syncs")
+  - `channel_type`: CharField(max_length=30, choices=CHANNEL_TYPE_CHOICES, default="web_storefront")
+    - `web_storefront`: Direct Web Storefront
+    - `amazon_marketplace`: Amazon Marketplace
+    - `walmart_marketplace`: Walmart Marketplace
+    - `pos_retail`: Retail POS Register
+    - `wholesale_b2b`: B2B Wholesale Portal
+  - `channel_name`: CharField(max_length=100) — e.g. "US Amazon Prime", "Downtown POS Register"
+  - `fulfillment_center`: ForeignKey("ecommerce.FulfillmentCenter", null=True, blank=True, on_delete=models.SET_NULL, related_name="channel_syncs")
+  - `sync_mode`: CharField(max_length=25, choices=SYNC_MODE_CHOICES, default="real_time")
+    - `real_time`: Real-Time Event Sync
+    - `scheduled_batch`: Scheduled Hourly Batch
+    - `manual`: Manual Push Only
+  - `allocation_buffer_pct`: DecimalField(max_digits=5, decimal_places=2, default=0.0) — Percentage buffer withheld (e.g. 5.00%)
+  - `last_synced_quantity`: IntegerField(default=0) — Quantity last broadcasted to external channel
+  - `sync_status`: CharField(max_length=25, choices=SYNC_STATUS_CHOICES, default="synced")
+    - `synced`: In Sync
+    - `pending`: Sync Pending
+    - `sync_error`: Sync Error
+    - `disabled`: Feed Disabled
+  - `last_synced_at`: DateTimeField(null=True, blank=True)
+  - `error_message`: TextField(blank=True)
+- Meta: `ordering = ["variant__sku", "channel_type"]`, `UniqueConstraint(fields=["tenant", "variant", "channel_type", "channel_name"], name="ecom_sync_tnt_var_chn_uniq")`, indexes: `(tenant, sync_status)`, `(tenant, channel_type)`.
+- Excluded from form: `tenant`, `number`, `last_synced_quantity`, `last_synced_at`, `error_message`, `created_at`, `updated_at`.
+
+---
+
+## Operations & Console Projections
+
+- [ ] **Inventory & Stock Operations Console (`inventory_operations`)**: Central dashboard view providing:
+  - KPI Stat Cards: Total On-Hand, Total Allocated, Net Available-to-Promise (ATP), Active Low-Stock Alerts, Active Backorder/Pre-order Campaigns, Channel Sync Health.
+  - Multi-Location Stock Visibility Matrix: Variant-by-FulfillmentCenter cross-tabular stock level table.
+  - Quick-action shortcuts: Stock Adjustment in-line trigger, Sync Refresh trigger, link to `scm.StockTransfer` and `scm.StockAdjustment`.
+- [ ] **Quick Stock Adjustment Action (`inventoryallocation_adjust`)**: Modal/page POST action allowing warehouse operators to quickly log inventory adjustments (+/- count, reason: cycle count, damage write-off, receipt reconciliation).
+- [ ] **Channel Sync Trigger Action (`channelinventorysync_trigger`)**: Manual sync trigger recalculating ATP, factoring in `allocation_buffer_pct`, updating `last_synced_quantity`, and setting `sync_status = "synced"`.
+
+---
+
+## Backend Package Structure (`apps/ecommerce/`)
+
+### Layer 1: Models (`apps/ecommerce/models/InventoryStock/`)
+- [ ] `models/InventoryStock/__init__.py`
+- [ ] `models/InventoryStock/FulfillmentCenters.py`
+- [ ] `models/InventoryStock/InventoryAllocations.py`
+- [ ] `models/InventoryStock/BackorderPolicies.py`
+- [ ] `models/InventoryStock/ChannelInventorySyncs.py`
+- [ ] `models/__init__.py` — add 9.2 re-export block (4 models + CHOICES)
+
+### Layer 2: Forms (`apps/ecommerce/forms/InventoryStock/`)
+- [ ] `forms/InventoryStock/__init__.py`
+- [ ] `forms/InventoryStock/FulfillmentCenters.py` — `FulfillmentCenterForm`
+- [ ] `forms/InventoryStock/InventoryAllocations.py` — `InventoryAllocationForm`, `StockAdjustmentActionForm`
+- [ ] `forms/InventoryStock/BackorderPolicies.py` — `BackorderPolicyForm`
+- [ ] `forms/InventoryStock/ChannelInventorySyncs.py` — `ChannelInventorySyncForm`
+- [ ] `forms/__init__.py` — add 9.2 re-export block
+
+### Layer 3: Views (`apps/ecommerce/views/InventoryStock/`)
+- [ ] `views/InventoryStock/__init__.py`
+- [ ] `views/InventoryStock/Operations.py` — `inventory_operations` console
+- [ ] `views/InventoryStock/FulfillmentCenters.py` — CRUD views
+- [ ] `views/InventoryStock/InventoryAllocations.py` — CRUD views + `inventoryallocation_adjust` action
+- [ ] `views/InventoryStock/BackorderPolicies.py` — CRUD views
+- [ ] `views/InventoryStock/ChannelInventorySyncs.py` — CRUD views + `channelinventorysync_trigger` action
+- [ ] `views/__init__.py` — add 9.2 re-export block
+
+### Layer 4: URLs (`apps/ecommerce/urls/InventoryStock/`)
+- [ ] `urls/InventoryStock/__init__.py`
+- [ ] `urls/InventoryStock/Operations.py`
+- [ ] `urls/InventoryStock/FulfillmentCenters.py`
+- [ ] `urls/InventoryStock/InventoryAllocations.py`
+- [ ] `urls/InventoryStock/BackorderPolicies.py`
+- [ ] `urls/InventoryStock/ChannelInventorySyncs.py`
+- [ ] `urls/__init__.py` — concatenate 9.2 urlpatterns into ecommerce routing
+
+### Layer 5: Admin & Seeder
+- [ ] `admin.py` — register `FulfillmentCenterAdmin`, `InventoryAllocationAdmin`, `BackorderPolicyAdmin`, `ChannelInventorySyncAdmin`
+- [ ] `apps/ecommerce/management/commands/seed_ecommerce.py` — extend seeder with demo fulfillment centers, stock allocations across variants, backorder policies, and channel sync runs.
+- [ ] `apps/core/navigation.py` — add `LIVE_LINKS["9.2"]` entry with all 5 NavERP.md bullets.
+
+---
+
+## Templates (`templates/ecommerce/inventorystock/`)
+
+- [ ] `templates/ecommerce/inventorystock/overview.html` (Inventory & Fulfillment Operations console)
+- [ ] `templates/ecommerce/inventorystock/fulfillmentcenter/list.html`
+- [ ] `templates/ecommerce/inventorystock/fulfillmentcenter/detail.html`
+- [ ] `templates/ecommerce/inventorystock/fulfillmentcenter/form.html`
+- [ ] `templates/ecommerce/inventorystock/inventoryallocation/list.html`
+- [ ] `templates/ecommerce/inventorystock/inventoryallocation/detail.html`
+- [ ] `templates/ecommerce/inventorystock/inventoryallocation/form.html`
+- [ ] `templates/ecommerce/inventorystock/inventoryallocation/adjust.html`
+- [ ] `templates/ecommerce/inventorystock/backorderpolicy/list.html`
+- [ ] `templates/ecommerce/inventorystock/backorderpolicy/detail.html`
+- [ ] `templates/ecommerce/inventorystock/backorderpolicy/form.html`
+- [ ] `templates/ecommerce/inventorystock/channelinventorysync/list.html`
+- [ ] `templates/ecommerce/inventorystock/channelinventorysync/detail.html`
+- [ ] `templates/ecommerce/inventorystock/channelinventorysync/form.html`
+
+---
+
+## Verification Steps
+- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce` -> verify `0003_...`
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1)
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency)
+- [ ] `venv\Scripts\python.exe manage.py check`
+- [ ] Smoke test script in `temp/smoke_ecommerce_9_2.py`:
+  - Login as `admin_acme`
+  - GET all new 9.2 URLs -> verify 200/302
+  - Check rendered HTML: no leaked comments (`{#`), proper title, seeded records visible
+  - Test cross-tenant isolation (IDOR -> 404)
+  - Test negative/non-numeric filter inputs (L11)
+  - Verify `LIVE_LINKS["9.2"]` sidebar navigation
+
+---
+
+## Close-Out Steps
+- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`
+- [ ] Append findings to `.claude/tasks/review-ecommerce-9.2.md`
+- [ ] Run Phase 5 `code-fixer` agent to burn down findings
+- [ ] Run Phase 6 automated test suite:
+  - Update `apps/ecommerce/tests/conftest.py`
+  - Author `test_inventorystock_models.py`
+  - Author `test_inventorystock_forms.py`
+  - Author `test_inventorystock_views.py`
+  - Author `test_inventorystock_security.py`
+  - Run full unfiltered suite `pytest apps/ecommerce/tests/`
+- [ ] Phase 7 documentation:
+  - Update `.claude/skills/ecommerce/SKILL.md`
+  - Update `README.md`
+  - Track any deferred features in `.claude/tasks/gaps-ecommerce-9.2.md`
