@@ -2695,6 +2695,17 @@ LIVE_LINKS = {
         "Order Modifications & Cancellations": "ecommerce:ecommerceorder_list",
         "Returns & Exchanges (RMA)": "ecommerce:returnmerchandiseauthorization_list",
     },
+    "9.6": {
+        "Registration & Authentication": "ecommerce:customeraccountprofile_list",
+        "Account Dashboard & Order History": "ecommerce:customeraccountprofile_list",
+        "Address Book & Preferences": "ecommerce:customeraddresspreference_list",
+        "Communication Preferences": "ecommerce:customeraccountprofile_list",
+        "Account Security & Privacy": "ecommerce:customerprivacyrequest_list",
+        "Customer Profiles": "ecommerce:customeraccountprofile_list",
+        "Address Preferences": "ecommerce:customeraddresspreference_list",
+        "Wishlists": "ecommerce:customerwishlist_list",
+        "Privacy Requests": "ecommerce:customerprivacyrequest_list",
+    },
 
 
 
