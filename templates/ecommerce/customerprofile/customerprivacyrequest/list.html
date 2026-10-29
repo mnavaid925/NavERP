@@ -63,7 +63,7 @@
           <i data-lucide="filter" class="w-4 h-4"></i>
           <span>Filter</span>
         </button>
-        <a href="{% url 'ecommerce:customerprivacyrequest_list' %}" class="btn btn-outline text-slate-600" title="Reset Filters">
+        <a href="{% url 'ecommerce:customerprivacyrequest_list' %}" class="btn btn-outline text-slate-600" title="Reset Filters" aria-label="Reset Filters">
           <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
         </a>
       </div>
@@ -130,15 +130,15 @@
               </td>
               <td class="py-3 px-4 text-center">
                 <div class="table-actions flex items-center justify-center gap-2">
-                  <a href="{% url 'ecommerce:customerprivacyrequest_detail' req.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View Request">
+                  <a href="{% url 'ecommerce:customerprivacyrequest_detail' req.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View Request" aria-label="View Request">
                     <i data-lucide="eye" class="w-4 h-4"></i>
                   </a>
-                  <a href="{% url 'ecommerce:customerprivacyrequest_edit' req.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit Request">
+                  <a href="{% url 'ecommerce:customerprivacyrequest_edit' req.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit Request" aria-label="Edit Request">
                     <i data-lucide="pencil" class="w-4 h-4"></i>
                   </a>
                   <form method="post" action="{% url 'ecommerce:customerprivacyrequest_delete' req.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete privacy request {{ req.number }}?');">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete Request">
+                    <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete Request" aria-label="Delete Request">
                       <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>
                   </form>
