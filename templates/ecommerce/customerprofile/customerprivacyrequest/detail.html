@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}{{ privacy_request.number }} · Privacy Request · NavERP{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:customerprivacyrequest_list' %}" class="hover:text-blue-600">Privacy Requests</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ privacy_request.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ privacy_request.get_request_type_display }}</h1>
+        {% if privacy_request.status == "completed" %}
+          <span class="badge badge-green">{{ privacy_request.get_status_display }}</span>
+        {% elif privacy_request.status == "processing" %}
+          <span class="badge badge-amber">{{ privacy_request.get_status_display }}</span>
+        {% elif privacy_request.status == "identity_verified" %}
+          <span class="badge badge-info">{{ privacy_request.get_status_display }}</span>
+        {% elif privacy_request.status == "rejected" %}
+          <span class="badge badge-red">{{ privacy_request.get_status_display }}</span>
+        {% else %}
+          <span class="badge badge-slate">{{ privacy_request.get_status_display }}</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">Request #{{ privacy_request.number }} · Subject: {{ privacy_request.customer.name }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:customerprivacyrequest_edit' privacy_request.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:customerprivacyrequest_delete' privacy_request.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete privacy request {{ privacy_request.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger inline-flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Statutory SLA Bar -->
+  <div class="card p-4 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+        <i data-lucide="clock" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-xs font-semibold uppercase tracking-wider text-slate-500">Statutory 30-Day SLA Deadline</div>
+        <div class="text-base font-bold text-slate-900">{{ privacy_request.statutory_deadline|date:"F d, Y" }}</div>
+      </div>
+    </div>
+    <div class="text-right">
+      {% if privacy_request.completed_at %}
+        <span class="badge badge-green">Resolved on {{ privacy_request.completed_at|date:"M d, Y" }}</span>
+      {% else %}
+        <span class="badge badge-amber">Action Required</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- Request Details -->
+    <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
+        <i data-lucide="shield-check" class="w-4 h-4 text-purple-600"></i>
+        <span>Request Information</span>
+      </h2>
+      <dl class="space-y-3 text-sm">
+        <div>
+          <dt class="text-xs font-medium text-slate-500">Customer Subject</dt>
+          <dd class="text-slate-900 font-medium">{{ privacy_request.customer.name }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-500">Requester Contact Email</dt>
+          <dd class="text-slate-900">{{ privacy_request.requested_by_email|default:"None provided" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-500">Identity Verification Method</dt>
+          <dd class="text-slate-800 font-mono text-xs">{{ privacy_request.verification_method }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-500">Created At</dt>
+          <dd class="text-slate-600">{{ privacy_request.created_at|date:"M d, Y H:i" }}</dd>
+        </div>
+        {% if privacy_request.resolution_notes %}
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Resolution Audit Notes</dt>
+            <dd class="text-xs text-slate-700 bg-slate-50 p-2.5 rounded border border-slate-200 mt-1 whitespace-pre-line">
+              {{ privacy_request.resolution_notes }}
+            </dd>
+          </div>
+        {% endif %}
+      </dl>
+    </div>
+
+    <!-- Fulfillment Actions -->
+    <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
+        <i data-lucide="cog" class="w-4 h-4 text-blue-600"></i>
+        <span>Statutory Fulfillment Actions</span>
+      </h2>
+
+      {% if privacy_request.request_type == "access_export" %}
+        <div class="p-4 bg-blue-50/60 border border-blue-200 rounded-lg space-y-3">
+          <h3 class="text-sm font-semibold text-blue-900 flex items-center gap-1.5">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>Compile Data Portability Export</span>
+          </h3>
+          <p class="text-xs text-blue-700">
+            Compiles customer profile, address preferences, orders, and wishlists into an immutable, machine-readable JSON payload.
+          </p>
+          <form method="post" action="{% url 'ecommerce:customerprivacyrequest_generate_export' privacy_request.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary w-full text-xs py-2 inline-flex items-center justify-center gap-2">
+              <i data-lucide="file-json" class="w-4 h-4"></i>
+              <span>Generate JSON Export Payload</span>
+            </button>
+          </form>
+        </div>
+      {% elif privacy_request.request_type == "erasure_anonymize" %}
+        <div class="p-4 bg-red-50/60 border border-red-200 rounded-lg space-y-3">
+          <h3 class="text-sm font-semibold text-red-900 flex items-center gap-1.5">
+            <i data-lucide="user-x" class="w-4 h-4"></i>
+            <span>Execute Right to Erasure / Anonymization</span>
+          </h3>
+          <p class="text-xs text-red-700">
+            Irreversibly scrubs phone numbers, marketing opt-ins, address instructions, and unlinks auth credentials while preserving tax-mandated order transaction ledgers.
+          </p>
+          <form method="post" action="{% url 'ecommerce:customerprivacyrequest_anonymize' privacy_request.pk %}" onsubmit="return confirm('WARNING: This permanently anonymizes customer personal data. Proceed?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger w-full text-xs py-2 inline-flex items-center justify-center gap-2">
+              <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+              <span>Execute GDPR Erasure</span>
+            </button>
+          </form>
+        </div>
+      {% else %}
+        <p class="text-xs text-slate-500">Review customer profile data and update request status accordingly.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- JSON Payload Viewer -->
+  {% if privacy_request.data_export_payload %}
+    <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-3">
+      <h3 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
+        <i data-lucide="code" class="w-4 h-4 text-slate-600"></i>
+        <span>Compiled Data Portability Payload (JSON)</span>
+      </h3>
+      <pre class="p-4 bg-slate-900 text-slate-100 rounded-lg text-xs font-mono overflow-x-auto max-h-96">{{ privacy_request.data_export_payload|pprint }}</pre>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
