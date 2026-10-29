@@ -81,7 +81,11 @@ def searchsynonym_create(request):
             messages.success(request, f"Search synonym rule '{synonym.name}' created.")
             return redirect("ecommerce:searchsynonym_detail", pk=synonym.pk)
     else:
-        form = SearchSynonymForm(tenant=request.tenant)
+        initial = {}
+        root_param = request.GET.get("root", "").strip()
+        if root_param:
+            initial["root_term"] = root_param
+        form = SearchSynonymForm(tenant=request.tenant, initial=initial)
 
     context = {
         "form": form,
