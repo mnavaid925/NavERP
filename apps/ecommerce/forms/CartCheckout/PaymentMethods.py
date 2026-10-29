@@ -38,6 +38,10 @@ class PaymentMethodConfigForm(TenantModelForm):
             "supports_refunds": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["supported_currencies"].required = False
+
     def clean_supported_currencies(self):
         val = self.cleaned_data.get("supported_currencies", "")
         if val:
