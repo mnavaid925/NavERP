@@ -79,7 +79,7 @@
                     {% if item.variant %}
                       {{ item.variant.name }} ({{ item.variant.sku }})
                     {% else %}
-                      {{ item.product.sku }}
+                      {{ item.product.number }}
                     {% endif %}
                   </td>
                   <td class="py-2.5 px-3 text-center font-semibold text-slate-900">
@@ -133,7 +133,7 @@
             <select id="add-product" name="product" required class="form-select w-full text-sm">
               <option value="">Select a product...</option>
               {% for p in products %}
-                <option value="{{ p.pk }}">{{ p.name }} ({{ p.sku }}) - ${{ p.base_price }}</option>
+                <option value="{{ p.pk }}">{{ p.name }} ({{ p.number }}) - {{ p.price_range_display }}</option>
               {% endfor %}
             </select>
           </div>
