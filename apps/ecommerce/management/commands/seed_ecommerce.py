@@ -331,11 +331,10 @@ class Command(BaseCommand):
         )
 
         # 7. (9.2) Stock Allocations across Variants
-        v1 = ProductVariant.objects.filter(tenant=tenant, sku="TSH-NVY-M").first()
-        v2 = ProductVariant.objects.filter(tenant=tenant, sku="TSH-NVY-L").first()
-        v3 = ProductVariant.objects.filter(tenant=tenant, sku="TSH-BLK-M").first()
-        v4 = ProductVariant.objects.filter(tenant=tenant, sku="HDPH-BLK").first()
-        v5 = ProductVariant.objects.filter(tenant=tenant, sku="TOT-NAT").first()
+        v1 = ProductVariant.objects.filter(tenant=tenant, sku="TSH-NAVY-M").first()
+        v2 = ProductVariant.objects.filter(tenant=tenant, sku="TSH-NAVY-L").first()
+        v3 = ProductVariant.objects.filter(tenant=tenant, sku="HDP-BLK").first()
+        v4 = ProductVariant.objects.filter(tenant=tenant, sku="TOT-NAT").first()
 
         now = timezone.now()
 
@@ -397,24 +396,6 @@ class Command(BaseCommand):
                 fulfillment_center=fc_west,
                 defaults={
                     "product": v3.product,
-                    "zone_bin": "Aisle 2, Bin B-01",
-                    "quantity_on_hand": 0,
-                    "quantity_allocated": 0,
-                    "safety_stock_buffer": 5,
-                    "low_stock_threshold": 10,
-                    "restock_lead_time_days": 10,
-                    "last_counted_at": now,
-                    "notes": "Out of stock; awaiting factory container delivery.",
-                },
-            )
-
-        if v4:
-            InventoryAllocation.objects.get_or_create(
-                tenant=tenant,
-                variant=v4,
-                fulfillment_center=fc_west,
-                defaults={
-                    "product": v4.product,
                     "zone_bin": "Secure Cage, Bin S-03",
                     "quantity_on_hand": 55,
                     "quantity_allocated": 8,
@@ -427,10 +408,10 @@ class Command(BaseCommand):
             )
             InventoryAllocation.objects.get_or_create(
                 tenant=tenant,
-                variant=v4,
+                variant=v3,
                 fulfillment_center=fc_store,
                 defaults={
-                    "product": v4.product,
+                    "product": v3.product,
                     "zone_bin": "Backroom Shelf 3",
                     "quantity_on_hand": 12,
                     "quantity_allocated": 2,
@@ -442,13 +423,13 @@ class Command(BaseCommand):
                 },
             )
 
-        if v5:
+        if v4:
             InventoryAllocation.objects.get_or_create(
                 tenant=tenant,
-                variant=v5,
+                variant=v4,
                 fulfillment_center=fc_west,
                 defaults={
-                    "product": v5.product,
+                    "product": v4.product,
                     "zone_bin": "Aisle 5, Bin C-09",
                     "quantity_on_hand": 210,
                     "quantity_allocated": 20,
@@ -476,10 +457,10 @@ class Command(BaseCommand):
                 },
             )
 
-        if v3:
+        if v2:
             BackorderPolicy.objects.get_or_create(
                 tenant=tenant,
-                variant=v3,
+                variant=v2,
                 defaults={
                     "policy_type": "deny_when_empty",
                     "storefront_message": "Item is temporarily out of stock. Join waitlist for notification.",
@@ -492,10 +473,10 @@ class Command(BaseCommand):
                 },
             )
 
-        if v4:
+        if v3:
             BackorderPolicy.objects.get_or_create(
                 tenant=tenant,
-                variant=v4,
+                variant=v3,
                 defaults={
                     "policy_type": "allow_backorder_with_notice",
                     "storefront_message": "Backordered: Expected to ship within 7-10 business days.",
@@ -538,10 +519,10 @@ class Command(BaseCommand):
                 },
             )
 
-        if v4:
+        if v3:
             ChannelInventorySync.objects.get_or_create(
                 tenant=tenant,
-                variant=v4,
+                variant=v3,
                 channel_type="walmart_marketplace",
                 channel_name="Walmart Marketplace Storefront",
                 defaults={
@@ -554,10 +535,10 @@ class Command(BaseCommand):
                 },
             )
 
-        if v5:
+        if v4:
             ChannelInventorySync.objects.get_or_create(
                 tenant=tenant,
-                variant=v5,
+                variant=v4,
                 channel_type="pos_retail",
                 channel_name="SoHo Retail POS Terminal",
                 defaults={
@@ -569,4 +550,5 @@ class Command(BaseCommand):
                     "last_synced_at": now,
                 },
             )
+
 
