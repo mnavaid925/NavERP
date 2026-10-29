@@ -73,10 +73,10 @@ def searchsynonym_create(request):
             synonym.tenant = request.tenant
             synonym.save()
             write_audit_log(
-                request,
-                action="create",
-                instance=synonym,
-                notes=f"Created search synonym {synonym.number} ({synonym.root_term})",
+                request.user,
+                synonym,
+                "create",
+                {"number": synonym.number, "root_term": synonym.root_term},
             )
             messages.success(request, f"Search synonym rule '{synonym.name}' created.")
             return redirect("ecommerce:searchsynonym_detail", pk=synonym.pk)
@@ -104,10 +104,10 @@ def searchsynonym_edit(request, pk):
         if form.is_valid():
             synonym = form.save()
             write_audit_log(
-                request,
-                action="update",
-                instance=synonym,
-                notes=f"Updated search synonym {synonym.number} ({synonym.root_term})",
+                request.user,
+                synonym,
+                "update",
+                {"number": synonym.number, "root_term": synonym.root_term},
             )
             messages.success(request, f"Search synonym rule '{synonym.name}' updated.")
             return redirect("ecommerce:searchsynonym_detail", pk=synonym.pk)
@@ -131,10 +131,10 @@ def searchsynonym_delete(request, pk):
     name = synonym.name
     synonym.delete()
     write_audit_log(
-        request,
-        action="delete",
-        instance=synonym,
-        notes=f"Deleted search synonym {number} ({name})",
+        request.user,
+        synonym,
+        "delete",
+        {"number": number, "name": name},
     )
     messages.success(request, f"Search synonym rule '{name}' deleted.")
     return redirect("ecommerce:searchsynonym_list")
@@ -149,10 +149,10 @@ def searchsynonym_toggle(request, pk):
     synonym.save(update_fields=["is_active", "updated_at"])
     state = "activated" if synonym.is_active else "deactivated"
     write_audit_log(
-        request,
-        action="update",
-        instance=synonym,
-        notes=f"{state.capitalize()} search synonym {synonym.number}",
+        request.user,
+        synonym,
+        "update",
+        {"is_active": synonym.is_active},
     )
     messages.success(request, f"Search synonym rule '{synonym.name}' {state}.")
     return redirect("ecommerce:searchsynonym_detail", pk=synonym.pk)
