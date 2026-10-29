@@ -45,8 +45,8 @@ class SearchMerchandisingRuleForm(TenantUniqueMixin, TenantModelForm):
             "banner_image_url": forms.URLInput(attrs={"class": "form-input", "placeholder": "https://..."}),
             "banner_link_url": forms.TextInput(attrs={"class": "form-input", "placeholder": "/category/spring-sale/"}),
             "priority": forms.NumberInput(attrs={"class": "form-input", "min": "1"}),
-            "start_date": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}),
-            "end_date": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}),
+            "start_date": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+            "end_date": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
             "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox rounded text-primary"}),
         }
 
