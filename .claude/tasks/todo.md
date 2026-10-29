@@ -19205,68 +19205,68 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 ## Backend Packages (`apps/ecommerce/`)
 
 ### Layer 1: Models (`apps/ecommerce/models/OrderManagement/`)
-- [ ] `models/OrderManagement/__init__.py`
-- [ ] `models/OrderManagement/EcommerceOrders.py`
-- [ ] `models/OrderManagement/OrderRoutingRules.py`
-- [ ] `models/OrderManagement/OrderFulfillments.py`
-- [ ] `models/OrderManagement/ReturnMerchandiseAuthorizations.py`
-- [ ] `models/__init__.py` — add 9.5 re-export block
+- [x] `models/OrderManagement/__init__.py`
+- [x] `models/OrderManagement/EcommerceOrders.py`
+- [x] `models/OrderManagement/OrderRoutingRules.py`
+- [x] `models/OrderManagement/OrderFulfillments.py`
+- [x] `models/OrderManagement/ReturnMerchandiseAuthorizations.py`
+- [x] `models/__init__.py` — add 9.5 re-export block
 
 ### Layer 2: Forms (`apps/ecommerce/forms/OrderManagement/`)
-- [ ] `forms/OrderManagement/__init__.py`
-- [ ] `forms/OrderManagement/EcommerceOrders.py` — `EcommerceOrderForm` & `EcommerceOrderLineForm`
-- [ ] `forms/OrderManagement/OrderRoutingRules.py` — `OrderRoutingRuleForm`
-- [ ] `forms/OrderManagement/OrderFulfillments.py` — `OrderFulfillmentForm`
-- [ ] `forms/OrderManagement/ReturnMerchandiseAuthorizations.py` — `ReturnMerchandiseAuthorizationForm`
-- [ ] `forms/__init__.py` — add 9.5 re-export block
+- [x] `forms/OrderManagement/__init__.py`
+- [x] `forms/OrderManagement/EcommerceOrders.py` — `EcommerceOrderForm` & `EcommerceOrderLineForm`
+- [x] `forms/OrderManagement/OrderRoutingRules.py` — `OrderRoutingRuleForm`
+- [x] `forms/OrderManagement/OrderFulfillments.py` — `OrderFulfillmentForm`
+- [x] `forms/OrderManagement/ReturnMerchandiseAuthorizations.py` — `ReturnMerchandiseAuthorizationForm`
+- [x] `forms/__init__.py` — add 9.5 re-export block
 
 ### Layer 3: Views (`apps/ecommerce/views/OrderManagement/`)
-- [ ] `views/OrderManagement/__init__.py`
-- [ ] `views/OrderManagement/EcommerceOrders.py` — full CRUD (list, create, detail, edit, delete) + cancellation action + search, filters, pagination
-- [ ] `views/OrderManagement/OrderRoutingRules.py` — full CRUD (list, create, detail, edit, delete) + search, filters, pagination
-- [ ] `views/OrderManagement/OrderFulfillments.py` — full CRUD (list, create, detail, edit, delete) + status update action + search, filters, pagination
-- [ ] `views/OrderManagement/ReturnMerchandiseAuthorizations.py` — full CRUD (list, create, detail, edit, delete) + inspect/complete action + search, filters, pagination
-- [ ] `views/__init__.py` — add 9.5 re-export block
+- [x] `views/OrderManagement/__init__.py`
+- [x] `views/OrderManagement/EcommerceOrders.py` — full CRUD (list, create, detail, edit, delete) + cancellation action + search, filters, pagination
+- [x] `views/OrderManagement/OrderRoutingRules.py` — full CRUD (list, create, detail, edit, delete) + search, filters, pagination
+- [x] `views/OrderManagement/OrderFulfillments.py` — full CRUD (list, create, detail, edit, delete) + status update action + search, filters, pagination
+- [x] `views/OrderManagement/ReturnMerchandiseAuthorizations.py` — full CRUD (list, create, detail, edit, delete) + inspect/complete action + search, filters, pagination
+- [x] `views/__init__.py` — add 9.5 re-export block
 
 ### Layer 4: URLs (`apps/ecommerce/urls/OrderManagement/`)
-- [ ] `urls/OrderManagement/__init__.py`
-- [ ] `urls/OrderManagement/EcommerceOrders.py`
-- [ ] `urls/OrderManagement/OrderRoutingRules.py`
-- [ ] `urls/OrderManagement/OrderFulfillments.py`
-- [ ] `urls/OrderManagement/ReturnMerchandiseAuthorizations.py`
-- [ ] `urls/__init__.py` — concatenate 9.5 urlpatterns into ecommerce routing
+- [x] `urls/OrderManagement/__init__.py`
+- [x] `urls/OrderManagement/EcommerceOrders.py`
+- [x] `urls/OrderManagement/OrderRoutingRules.py`
+- [x] `urls/OrderManagement/OrderFulfillments.py`
+- [x] `urls/OrderManagement/ReturnMerchandiseAuthorizations.py`
+- [x] `urls/__init__.py` — concatenate 9.5 urlpatterns into ecommerce routing
 
 ### Layer 5: Admin & Seeder & Navigation
-- [ ] `admin.py` — register `EcommerceOrderAdmin`, `OrderRoutingRuleAdmin`, `OrderFulfillmentAdmin`, `ReturnMerchandiseAuthorizationAdmin`
-- [ ] `apps/ecommerce/management/commands/seed_ecommerce.py` — extend seeder with demo orders, order lines, routing rules, fulfillments, and RMA records
-- [ ] `apps/core/navigation.py` — add `LIVE_LINKS["9.5"]` entry with all 5 NavERP.md bullets
+- [x] `admin.py` — register `EcommerceOrderAdmin`, `OrderRoutingRuleAdmin`, `OrderFulfillmentAdmin`, `ReturnMerchandiseAuthorizationAdmin`
+- [x] `apps/ecommerce/management/commands/seed_ecommerce.py` — extend seeder with demo orders, order lines, routing rules, fulfillments, and RMA records
+- [x] `apps/core/navigation.py` — add `LIVE_LINKS["9.5"]` entry with all 5 NavERP.md bullets
 
 ---
 
 ## Templates (`templates/ecommerce/ordermanagement/`)
 
-- [ ] `templates/ecommerce/ordermanagement/ecommerceorder/list.html`
-- [ ] `templates/ecommerce/ordermanagement/ecommerceorder/detail.html`
-- [ ] `templates/ecommerce/ordermanagement/ecommerceorder/form.html`
-- [ ] `templates/ecommerce/ordermanagement/orderroutingrule/list.html`
-- [ ] `templates/ecommerce/ordermanagement/orderroutingrule/detail.html`
-- [ ] `templates/ecommerce/ordermanagement/orderroutingrule/form.html`
-- [ ] `templates/ecommerce/ordermanagement/orderfulfillment/list.html`
-- [ ] `templates/ecommerce/ordermanagement/orderfulfillment/detail.html`
-- [ ] `templates/ecommerce/ordermanagement/orderfulfillment/form.html`
-- [ ] `templates/ecommerce/ordermanagement/returnmerchandiseauthorization/list.html`
-- [ ] `templates/ecommerce/ordermanagement/returnmerchandiseauthorization/detail.html`
-- [ ] `templates/ecommerce/ordermanagement/returnmerchandiseauthorization/form.html`
+- [x] `templates/ecommerce/ordermanagement/ecommerceorder/list.html`
+- [x] `templates/ecommerce/ordermanagement/ecommerceorder/detail.html`
+- [x] `templates/ecommerce/ordermanagement/ecommerceorder/form.html`
+- [x] `templates/ecommerce/ordermanagement/orderroutingrule/list.html`
+- [x] `templates/ecommerce/ordermanagement/orderroutingrule/detail.html`
+- [x] `templates/ecommerce/ordermanagement/orderroutingrule/form.html`
+- [x] `templates/ecommerce/ordermanagement/orderfulfillment/list.html`
+- [x] `templates/ecommerce/ordermanagement/orderfulfillment/detail.html`
+- [x] `templates/ecommerce/ordermanagement/orderfulfillment/form.html`
+- [x] `templates/ecommerce/ordermanagement/returnmerchandiseauthorization/list.html`
+- [x] `templates/ecommerce/ordermanagement/returnmerchandiseauthorization/detail.html`
+- [x] `templates/ecommerce/ordermanagement/returnmerchandiseauthorization/form.html`
 
 ---
 
 ## Verification Steps
-- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
-- [ ] `venv\Scripts\python.exe manage.py migrate`
-- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1)
-- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency)
-- [ ] `venv\Scripts\python.exe manage.py check`
-- [ ] Smoke test script in `temp/smoke_ecommerce_9_5.py`:
+- [x] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
+- [x] `venv\Scripts\python.exe manage.py migrate`
+- [x] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1)
+- [x] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency)
+- [x] `venv\Scripts\python.exe manage.py check`
+- [x] Smoke test script in `temp/smoke_ecommerce_9_5.py`:
   - Login as `admin_acme`
   - GET all new 9.5 URLs -> verify 200/302
   - Check rendered HTML: no leaked comments (`{#`), proper title, seeded records visible
@@ -19277,20 +19277,29 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 ---
 
 ## Close-Out Steps
-- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`
-- [ ] Append findings to `.claude/tasks/review-ecommerce-9.5.md`
-- [ ] Run Phase 5 `code-fixer` agent to burn down findings
-- [ ] Run Phase 6 automated test suite:
+- [x] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`
+- [x] Append findings to `.claude/tasks/review-ecommerce-9.5.md`
+- [x] Run Phase 5 `code-fixer` agent to burn down findings
+- [x] Run Phase 6 automated test suite:
   - Update `apps/ecommerce/tests/conftest.py`
   - Author `test_ordermanagement_models.py`
   - Author `test_ordermanagement_forms.py`
   - Author `test_ordermanagement_views.py`
   - Author `test_ordermanagement_security.py`
-  - Run full unfiltered suite `pytest apps/ecommerce/tests/`
-- [ ] Phase 7 documentation:
+  - Run full unfiltered suite `pytest apps/ecommerce/tests/` (524 passed, 0 failed)
+- [x] Phase 7 documentation:
   - Update `.claude/skills/ecommerce/SKILL.md`
   - Update `README.md`
-  - Track any deferred features in `.claude/tasks/gaps-ecommerce-9.5.md`
+  - Track any deferred features in `.claude/tasks/gaps-ecommerce-9.5.md` (None)
+
+## Review & Results (Sub-module 9.5: Order Management System)
+- **Models delivered**: `EcommerceOrder` (`EORD-`), `EcommerceOrderLine`, `OrderRoutingRule` (`EORT-`), `OrderFulfillment` (`EFUL-`), `ReturnMerchandiseAuthorization` (`ERMA-`).
+- **Templates delivered**: 12 templates under `templates/ecommerce/ordermanagement/` with Tailwind CSS, color-named badges (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`), stat cards, and modals.
+- **Seeder**: Idempotent seeding verified twice; created 4 orders, 8 lines, 3 routing rules, 4 fulfillments, 3 returns.
+- **Smoke test**: 16/16 URLs return 200/302, 0 leaked comments, L11 integer param guarding verified, cross-tenant IDOR 404 verified.
+- **Review**: 6 serial passes recorded 3 findings (`I1`, `I2`, `M1`), all burned down in Phase 5.
+- **Test suite**: Full unfiltered eCommerce test suite passed with 524/524 green tests in 95s (SQLite in-memory, zero warnings/errors).
+- **Gaps**: None (all planned 9.5 models, methods, routes, templates, and workflows implemented and verified).
 
 
 ---
