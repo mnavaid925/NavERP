@@ -462,15 +462,20 @@ def search_analytics(request):
     tenant = request.tenant
 
     logs_qs = SearchQueryLog.objects.filter(tenant=tenant)
-    total_searches = logs_qs.count()
-    zero_result_searches = logs_qs.filter(is_zero_result=True).count()
+    stats = logs_qs.aggregate(
+        total=Count("id"),
+        zero_results=Count("id", filter=Q(is_zero_result=True)),
+        avg_latency=Avg("execution_time_ms"),
+    )
+    total_searches = stats["total"] or 0
+    zero_result_searches = stats["zero_results"] or 0
     zero_result_rate = (
         round((zero_result_searches / total_searches) * 100, 1)
         if total_searches > 0
         else 0.0
     )
 
-    avg_latency = logs_qs.aggregate(avg_time=Avg("execution_time_ms"))["avg_time"] or 0
+    avg_latency = stats["avg_latency"] or 0
     avg_latency_ms = round(avg_latency, 1)
 
     top_queries = (
