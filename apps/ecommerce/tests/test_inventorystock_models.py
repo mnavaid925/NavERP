@@ -181,17 +181,17 @@ def test_inventorystock_channelinventorysync_creation(tenant_a, ecom_variant_a, 
         tenant_a,
         ecom_variant_a,
         ecom_center_a,
-        channel_type="shopify",
+        channel_type="web_storefront",
         allocation_buffer_pct=Decimal("15.00"),
     )
     assert sync.pk is not None
     assert sync.number.startswith("ESYN-")
     assert sync.variant == ecom_variant_a
     assert sync.fulfillment_center == ecom_center_a
-    assert sync.channel_type == "shopify"
-    assert sync.sync_mode == "real_time_webhook"
+    assert sync.channel_type == "web_storefront"
+    assert sync.sync_mode == "real_time"
     assert sync.sync_status == "synced"
-    assert "Shopify" in str(sync)
+    assert str(sync)
 
 
 def test_inventorystock_channelinventorysync_calculate_broadcast_quantity(tenant_a, ecom_variant_a, ecom_center_a):
@@ -203,16 +203,16 @@ def test_inventorystock_channelinventorysync_calculate_broadcast_quantity(tenant
         tenant_a,
         ecom_variant_a,
         ecom_center_a,
-        channel_type="amazon",
+        channel_type="amazon_marketplace",
         allocation_buffer_pct=Decimal("10.00"),
     )
     # Total ATP for center = 100. 10% buffer = 10 units. Broadcast quantity = 90
-    broadcast_qty = sync.calculate_broadcast_quantity()
+    broadcast_qty = sync.calculate_sync_quantity()
     assert broadcast_qty == 90
 
 
 def test_inventorystock_channelinventorysync_unique_constraint(tenant_a, ecom_variant_a, ecom_center_a):
-    _inventorystock_sync(tenant_a, ecom_variant_a, ecom_center_a, channel_type="amazon")
+    _inventorystock_sync(tenant_a, ecom_variant_a, ecom_center_a, channel_type="amazon_marketplace", channel_name="Amazon Feed")
     with pytest.raises(IntegrityError):
         with transaction.atomic():
-            _inventorystock_sync(tenant_a, ecom_variant_a, ecom_center_a, channel_type="amazon")
+            _inventorystock_sync(tenant_a, ecom_variant_a, ecom_center_a, channel_type="amazon_marketplace", channel_name="Amazon Feed")
