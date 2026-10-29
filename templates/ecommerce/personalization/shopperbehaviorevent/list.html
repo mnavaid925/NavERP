@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Behavioral Event Telemetry · Personalization & Recommendations · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:personalization_console' %}" class="hover:text-blue-600">Personalization</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Behavioral Telemetry</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Behavioral Telemetry</h1>
+      <p class="text-sm text-slate-500 mt-1">Real-time shopper interaction clickstream: views, cart additions, search queries, and intent velocity.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:personalization_console' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="sliders" class="w-4 h-4"></i>
+        <span>Personalization Console</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ q }}"
+            placeholder="Event #, session key, URL..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-type" class="block text-xs font-medium text-slate-600 mb-1">Event Type</label>
+        <select id="filter-type" name="event_type" class="form-select w-full text-sm">
+          <option value="">All Event Types</option>
+          {% for val, label in event_type_choices %}
+            <option value="{{ val }}" {% if selected_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-primary w-full text-sm py-2">
+          Filter
+        </button>
+        <a href="{% url 'ecommerce:shopperbehaviorevent_list' %}" class="btn btn-outline text-sm py-2 px-3" title="Reset Filters">
+          Reset
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Table Card -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            <th class="py-3 px-4">Event #</th>
+            <th class="py-3 px-4">Event Type</th>
+            <th class="py-3 px-4">Session / Identity</th>
+            <th class="py-3 px-4">Interacted Target</th>
+            <th class="py-3 px-4 text-center">Score Delta</th>
+            <th class="py-3 px-4">Timestamp</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-sm">
+          {% for evt in events %}
+            <tr class="hover:bg-slate-50/75 transition-colors">
+              <td class="py-3 px-4">
+                <a href="{% url 'ecommerce:shopperbehaviorevent_detail' evt.pk %}" class="font-mono text-xs text-blue-600 hover:text-blue-800">
+                  {{ evt.number }}
+                </a>
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge badge-info">{{ evt.get_event_type_display }}</span>
+              </td>
+              <td class="py-3 px-4 text-xs font-mono text-slate-600">
+                <div class="truncate max-w-[140px]" title="{{ evt.session_key }}">{{ evt.session_key }}</div>
+                {% if evt.customer_profile %}
+                  <div class="text-[11px] text-slate-400 font-sans mt-0.5">Profile: {{ evt.customer_profile.number }}</div>
+                {% elif evt.user %}
+                  <div class="text-[11px] text-slate-400 font-sans mt-0.5">User: {{ evt.user.username }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-700">
+                {% if evt.product %}
+                  <div class="font-medium text-slate-900 truncate max-w-xs">{{ evt.product.name }}</div>
+                {% endif %}
+                {% if evt.category %}
+                  <div class="text-slate-400 text-[11px]">Category: {{ evt.category.name }}</div>
+                {% endif %}
+                {% if not evt.product and not evt.category %}
+                  <span class="text-slate-400 truncate max-w-xs block">{{ evt.referrer_url|default:"Site Page" }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-center font-semibold text-slate-800">
+                +{{ evt.intent_score_delta }}
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-500 whitespace-nowrap">
+                {{ evt.created_at|date:"M d, Y H:i:s" }}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="table-actions flex items-center justify-end gap-1">
+                  <a
+                    href="{% url 'ecommerce:shopperbehaviorevent_detail' evt.pk %}"
+                    class="btn btn-icon p-1.5 text-slate-500 hover:text-blue-600 rounded"
+                    title="View Telemetry"
+                  >
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'ecommerce:shopperbehaviorevent_delete' evt.pk %}" class="inline" onsubmit="return confirm('Delete behavior log {{ evt.number }}?');">
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="btn btn-icon p-1.5 text-slate-500 hover:text-red-600 rounded"
+                      title="Delete Event"
+                    >
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="py-8 text-center text-slate-500">
+                <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                  <i data-lucide="activity" class="w-10 h-10 text-slate-300 mb-2"></i>
+                  <p class="font-medium text-slate-700">No behavioral events captured</p>
+                  <p class="text-xs text-slate-400 mt-1">Telemetry will record page views, product clicks, and intent signals.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+        <div>
+          Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} events
+        </div>
+        <div class="flex items-center gap-2">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_type %}&event_type={{ selected_type }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Previous
+            </a>
+          {% endif %}
+          <span class="text-xs font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_type %}&event_type={{ selected_type }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
