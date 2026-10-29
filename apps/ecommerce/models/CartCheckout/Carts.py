@@ -145,7 +145,7 @@ class CartItem(models.Model):
         return f"{self.quantity}x {product_title} @ {self.unit_price}"
 
     def save(self, *args, **kwargs):
-        if self.variant and not self.unit_price:
+        if self.variant and (self.unit_price is None or self.unit_price == Decimal("0.00")):
             self.unit_price = self.variant.price
         self.total_price = (self.unit_price * self.quantity).quantize(Decimal("0.01"))
         super().save(*args, **kwargs)
