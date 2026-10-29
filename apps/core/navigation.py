@@ -2674,6 +2674,13 @@ LIVE_LINKS = {
         # Extra live leaves
         "Inventory Operations Console": "ecommerce:inventory_operations",
     },
+    "9.3": {
+        "Dynamic Pricing Rules": "ecommerce:dynamicpricerule_list",
+        "Discount & Coupon Management": "ecommerce:couponpromotion_list",
+        "Flash Sales & Limited-Time Offers": "ecommerce:flashsale_list",
+        "Loyalty & Rewards Pricing": "ecommerce:couponpromotion_list",
+        "Price Matching & Competitive Monitoring": "ecommerce:competitorpricemonitor_list",
+    },
 
 
 
