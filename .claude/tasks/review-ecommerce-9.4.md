@@ -27,12 +27,12 @@ The six passes identified **6 actionable findings** (0 Critical, 3 Important, 3 
 
 | ID | Severity | Category | Target | Description | Status |
 |---|---|---|---|---|---|
-| **I1** | Important | Performance | `views/CartCheckout/Carts.py` | `cart_list` incurs an N+1 query in the template loop via `cart.item_count` (`items.all()`). Annotate `total_items` in view queryset using `Sum('items__quantity')`. | [ ] open |
-| **I2** | Important | UX / Forms | `forms/CartCheckout/CheckoutSessions.py` | `expires_at` `datetime-local` widget renders blank on edit mode because Django DateTimeField default format includes seconds and tzoffset. Add `format='%Y-%m-%dT%H:%M'` to widget. | [ ] open |
-| **I3** | Important | Data Integrity | `forms/CartCheckout/ShippingMethods.py` & `PaymentMethods.py` | `destination_countries` and `supported_currencies` accept unnormalized mixed-case string inputs. Add `clean_*` methods to uppercase and strip whitespace. | [ ] open |
-| **M1** | Minor | Robustness | `models/CartCheckout/Carts.py` | In `CartItem.save()`, `if self.variant and not self.unit_price:` treats explicit zero price (`0.00`) as falsy and overwrites it. Use `if self.variant and self.unit_price is None:`. | [ ] open |
-| **M2** | Minor | Code Quality | `views/CartCheckout/CheckoutSessions.py` | `checkoutsession_detail` loads `TaxCode.objects.filter(tenant=request.tenant)` and shipping/payment configs. Order these querysets explicitly with `.order_by('name')` or `.order_by('sort_order')`. | [ ] open |
-| **M3** | Minor | Consistency | `templates/ecommerce/cartcheckout/cart/list.html` | Empty state button icon uses `<i data-lucide="plus"></i>`. Ensure icon initialization runs cleanly without duplicate SVG rendering. | [ ] open |
+| **I1** | Important | Performance | `views/CartCheckout/Carts.py` | `cart_list` incurs an N+1 query in the template loop via `cart.item_count` (`items.all()`). Annotate `total_items` in view queryset using `Sum('items__quantity')`. | [x] fixed |
+| **I2** | Important | UX / Forms | `forms/CartCheckout/CheckoutSessions.py` | `expires_at` `datetime-local` widget renders blank on edit mode because Django DateTimeField default format includes seconds and tzoffset. Add `format='%Y-%m-%dT%H:%M'` to widget. | [x] fixed |
+| **I3** | Important | Data Integrity | `forms/CartCheckout/ShippingMethods.py` & `PaymentMethods.py` | `destination_countries` and `supported_currencies` accept unnormalized mixed-case string inputs. Add `clean_*` methods to uppercase and strip whitespace. | [x] fixed |
+| **M1** | Minor | Robustness | `models/CartCheckout/Carts.py` | In `CartItem.save()`, `if self.variant and not self.unit_price:` treats explicit zero price (`0.00`) as falsy and overwrites it. Use `if self.variant and self.unit_price is None:`. | [x] fixed |
+| **M2** | Minor | Code Quality | `views/CartCheckout/CheckoutSessions.py` | `checkoutsession_detail` loads `TaxCode.objects.filter(tenant=request.tenant)` and shipping/payment configs. Order these querysets explicitly with `.order_by('name')` or `.order_by('sort_order')`. | [x] fixed |
+| **M3** | Minor | Consistency | `templates/ecommerce/cartcheckout/cart/list.html` | Empty state button icon uses `<i data-lucide="plus"></i>`. Ensure icon initialization runs cleanly without duplicate SVG rendering. | [x] fixed |
 
 ---
 
