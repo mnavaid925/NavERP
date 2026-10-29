@@ -1,0 +1,40 @@
+<div class="space-y-4">
+  <div class="flex items-center justify-between text-xs text-slate-500 pb-2 border-b border-slate-100">
+    <div>
+      Strategy: <span class="font-semibold text-slate-800">{{ strategy.name|default:"Dynamic Related Items" }}</span>
+      <span class="badge badge-info ml-1.5">{{ strategy.get_algorithm_display|default:"Related Products" }}</span>
+    </div>
+    <div>Anchor: <span class="font-medium text-slate-800">{{ anchor_product.name|default:"Catalog Top" }}</span></div>
+  </div>
+
+  <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+    {% for product in simulated_recommendations %}
+      <div class="p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-400 transition-colors flex flex-col justify-between text-left">
+        <div>
+          <div class="aspect-square bg-slate-100 rounded-md flex items-center justify-center mb-2 overflow-hidden">
+            {% if product.images.first %}
+              <img src="{{ product.images.first.image_url }}" alt="{{ product.name }}" class="w-full h-full object-cover">
+            {% else %}
+              <i data-lucide="package" class="w-8 h-8 text-slate-300"></i>
+            {% endif %}
+          </div>
+          <div class="text-[11px] font-semibold text-slate-900 truncate" title="{{ product.name }}">
+            {{ product.name }}
+          </div>
+          <div class="text-[10px] text-slate-400 font-mono mt-0.5 truncate">{{ product.sku }}</div>
+          {% if product.brand %}
+            <div class="text-[10px] text-slate-500 mt-0.5">{{ product.brand }}</div>
+          {% endif %}
+        </div>
+        <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-900">${{ product.base_price }}</span>
+          <span class="badge badge-green text-[9px] py-0 px-1">Rec</span>
+        </div>
+      </div>
+    {% empty %}
+      <div class="col-span-full py-8 text-center text-slate-400 text-xs">
+        No recommendations generated for this anchor product and strategy combination.
+      </div>
+    {% endfor %}
+  </div>
+</div>
