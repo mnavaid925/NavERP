@@ -6,6 +6,7 @@ from django.db import models
 from django.db.models import Avg, Count, F, Min, Q
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone
 
 from apps.core.utils import write_audit_log
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
@@ -21,6 +22,7 @@ from apps.ecommerce.views._common import ecommerce_scope
 def search_console(request):
     start_time = time.time()
     tenant = request.tenant
+    now = timezone.now()
 
     q = request.GET.get("q", "").strip()
     category_id = request.GET.get("category", "").strip()
@@ -46,12 +48,17 @@ def search_console(request):
     # Check for direct redirect rules if query given
     if q:
         norm_q = q.lower()
+        schedule_q = (
+            (Q(start_date__isnull=True) | Q(start_date__lte=now))
+            & (Q(end_date__isnull=True) | Q(end_date__gte=now))
+        )
         redirect_rule = (
             SearchMerchandisingRule.objects.filter(
                 tenant=tenant,
                 is_active=True,
                 action_type="redirect",
             )
+            .filter(schedule_q)
             .filter(
                 Q(match_type="exact", trigger_query__iexact=norm_q)
                 | Q(match_type="contains", trigger_query__icontains=norm_q)
@@ -214,9 +221,14 @@ def search_console(request):
     pin_rules = []
     score_modifiers = {}  # product_id -> int score modifier
 
-    active_rules = SearchMerchandisingRule.objects.filter(
-        tenant=tenant, is_active=True
-    ).order_by("-priority")
+    active_rules = (
+        SearchMerchandisingRule.objects.filter(tenant=tenant, is_active=True)
+        .filter(
+            (Q(start_date__isnull=True) | Q(start_date__lte=now))
+            & (Q(end_date__isnull=True) | Q(end_date__gte=now))
+        )
+        .order_by("-priority")
+    )
 
     for rule in active_rules:
         is_triggered = False
