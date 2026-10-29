@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}{{ fulfillment.number }} · Fulfillments · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:orderfulfillment_list' %}" class="hover:text-blue-600">Fulfillments</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium font-mono">{{ fulfillment.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 font-mono">{{ fulfillment.number }}</h1>
+        {% if fulfillment.status == 'delivered' %}
+          <span class="badge badge-green">{{ fulfillment.get_status_display }}</span>
+        {% elif fulfillment.status == 'in_transit' or fulfillment.status == 'out_for_delivery' or fulfillment.status == 'shipped' %}
+          <span class="badge badge-info">{{ fulfillment.get_status_display }}</span>
+        {% elif fulfillment.status == 'failed_delivery' %}
+          <span class="badge badge-red">{{ fulfillment.get_status_display }}</span>
+        {% elif fulfillment.status == 'allocated' or fulfillment.status == 'picking' or fulfillment.status == 'packing' %}
+          <span class="badge badge-amber">{{ fulfillment.get_status_display }}</span>
+        {% else %}
+          <span class="badge badge-slate">{{ fulfillment.get_status_display }}</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Consigned for Order <a href="{% url 'ecommerce:ecommerceorder_detail' pk=fulfillment.order.pk %}" class="font-mono font-medium text-blue-600 hover:underline">{{ fulfillment.order.number }}</a>
+        ({{ fulfillment.order.customer.name }})
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      {% if fulfillment.status != 'shipped' and fulfillment.status != 'delivered' %}
+        <form method="post" action="{% url 'ecommerce:orderfulfillment_ship' pk=fulfillment.pk %}" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+            <i data-lucide="truck" class="w-4 h-4"></i>
+            <span>Mark as Shipped</span>
+          </button>
+        </form>
+      {% endif %}
+      <a href="{% url 'ecommerce:orderfulfillment_edit' pk=fulfillment.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Package</span>
+      </a>
+      <form
+        method="post"
+        action="{% url 'ecommerce:orderfulfillment_delete' pk=fulfillment.pk %}"
+        onsubmit="return confirm('Delete fulfillment {{ fulfillment.number }}?');"
+        class="inline"
+      >
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+          Delete
+        </button>
+      </form>
+      <a href="{% url 'ecommerce:orderfulfillment_list' %}" class="btn btn-outline">
+        Back
+      </a>
+    </div>
+  </div>
+
+  <!-- Detail Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- Carrier & Tracking Info -->
+    <div class="card p-6 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
+        <i data-lucide="compass" class="w-5 h-5 text-blue-600"></i>
+        <h3 class="text-base font-semibold text-slate-800">Carrier & Consignment Tracking</h3>
+      </div>
+      <dl class="space-y-3 text-sm">
+        <div>
+          <dt class="text-slate-500">Shipping Carrier:</dt>
+          <dd class="font-semibold text-slate-800 mt-0.5">{{ fulfillment.carrier_name }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Tracking Number:</dt>
+          <dd class="font-mono font-medium text-slate-900 mt-0.5">
+            {{ fulfillment.tracking_number|default:"Not assigned yet" }}
+          </dd>
+        </div>
+        {% if fulfillment.tracking_url %}
+          <div>
+            <dt class="text-slate-500">Carrier Tracking Portal:</dt>
+            <dd class="mt-0.5">
+              <a href="{{ fulfillment.tracking_url }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline inline-flex items-center gap-1">
+                <span>Track Package Online</span>
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+              </a>
+            </dd>
+          </div>
+        {% endif %}
+        {% if fulfillment.shipping_label_url %}
+          <div>
+            <dt class="text-slate-500">Shipping Label Documentation:</dt>
+            <dd class="mt-0.5">
+              <a href="{{ fulfillment.shipping_label_url }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline inline-flex items-center gap-1">
+                <span>View Shipping Label PDF</span>
+                <i data-lucide="file" class="w-3.5 h-3.5"></i>
+              </a>
+            </dd>
+          </div>
+        {% endif %}
+      </dl>
+    </div>
+
+    <!-- Sourcing Node & Delivery Timeline -->
+    <div class="card p-6 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
+        <i data-lucide="clock" class="w-5 h-5 text-amber-600"></i>
+        <h3 class="text-base font-semibold text-slate-800">Sourcing Node & Timeline</h3>
+      </div>
+      <dl class="space-y-3 text-sm">
+        <div>
+          <dt class="text-slate-500">Origin Fulfillment Center:</dt>
+          <dd class="font-medium text-slate-800 mt-0.5">
+            {% if fulfillment.fulfillment_center %}
+              {{ fulfillment.fulfillment_center.name }} ({{ fulfillment.fulfillment_center.code }})
+            {% else %}
+              <span class="text-slate-400">Default Fulfillment Node</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Freight Shipping Cost:</dt>
+          <dd class="font-mono font-bold text-slate-900 mt-0.5">
+            ${{ fulfillment.shipping_cost|floatformat:2 }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Dispatched Date & Time:</dt>
+          <dd class="font-medium text-slate-700 mt-0.5">
+            {{ fulfillment.shipped_at|date:"M d, Y H:i"|default:"Not yet collected by carrier" }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Estimated Delivery Date:</dt>
+          <dd class="font-medium text-slate-700 mt-0.5">
+            {{ fulfillment.estimated_delivery_date|date:"F d, Y"|default:"TBD by carrier" }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Actual Delivery Date:</dt>
+          <dd class="font-medium text-slate-700 mt-0.5">
+            {{ fulfillment.actual_delivery_date|date:"F d, Y"|default:"In transit" }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Customer Notification Sent:</dt>
+          <dd class="mt-0.5">
+            {% if fulfillment.notification_sent %}
+              <span class="badge badge-green text-xs">Transmitted</span>
+            {% else %}
+              <span class="badge badge-slate text-xs">Pending Dispatch Notice</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  {% if fulfillment.notes %}
+    <div class="card p-6 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Operational Notes</h3>
+      <p class="text-sm text-slate-600 whitespace-pre-line">{{ fulfillment.notes }}</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
