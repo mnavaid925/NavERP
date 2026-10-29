@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}{{ monitor.competitor_name }} · Competitor Price Monitor · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl">
+  <!-- Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:competitorpricemonitor_list' %}" class="hover:text-blue-600">Competitor Monitors</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ monitor.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ monitor.competitor_name }}</h1>
+        {% if monitor.is_margin_risk %}
+          <span class="badge badge-red">Margin Risk</span>
+        {% elif monitor.status == 'active' %}
+          <span class="badge badge-green">Active</span>
+        {% elif monitor.status == 'margin_suppressed' %}
+          <span class="badge badge-amber">Suppressed</span>
+        {% else %}
+          <span class="badge badge-slate">{{ monitor.get_status_display }}</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Tracked SKU: <span class="font-mono font-medium text-slate-700">{{ monitor.variant.sku }}</span>
+        ({{ monitor.variant.name }}) · {{ monitor.number }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <form action="{% url 'ecommerce:competitorpricemonitor_sync' pk=monitor.pk %}" method="post" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline inline-flex items-center gap-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span>Check Price Now</span>
+        </button>
+      </form>
+      <a href="{% url 'ecommerce:competitorpricemonitor_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to List</span>
+      </a>
+      <a href="{% url 'ecommerce:competitorpricemonitor_edit' pk=monitor.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Monitor</span>
+      </a>
+      <form
+        action="{% url 'ecommerce:competitorpricemonitor_delete' pk=monitor.pk %}"
+        method="post"
+        class="inline"
+        onsubmit="return confirm('Are you sure you want to delete this monitor?');"
+      >
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger inline-flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Primary Stats Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Competitor Price</div>
+      <div class="text-2xl font-bold font-mono text-slate-900 mt-1">
+        ${{ monitor.competitor_price|floatformat:2 }}
+      </div>
+      <div class="text-xs mt-1">
+        {% if monitor.is_in_stock %}
+          <span class="text-emerald-600 font-medium">In Stock at Competitor</span>
+        {% else %}
+          <span class="text-red-500 font-medium">Out of Stock at Competitor</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Our Store Selling Price</div>
+      <div class="text-2xl font-bold font-mono text-slate-800 mt-1">
+        ${{ monitor.variant.price|floatformat:2 }}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">Unit Cost: ${{ monitor.variant.cost_price|floatformat:2 }}</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Suggested Match Price</div>
+      <div class="text-2xl font-bold font-mono text-blue-600 mt-1">
+        {% if monitor.suggested_price %}
+          ${{ monitor.suggested_price|floatformat:2 }}
+        {% else %}
+          <span class="text-slate-400">Manual</span>
+        {% endif %}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">{{ monitor.get_match_strategy_display }}</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Margin Safety Floor</div>
+      <div class="text-2xl font-bold font-mono text-slate-800 mt-1">
+        ${{ monitor.margin_floor_price|floatformat:2 }}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">Min {{ monitor.min_margin_pct }}% above cost</div>
+    </div>
+  </div>
+
+  <!-- Detailed Sections -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="card bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <h2 class="text-base font-semibold text-slate-800">Competitor Listing Details</h2>
+      </div>
+      <div class="card-body p-5 space-y-4 text-sm">
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Retailer / Platform</span>
+          <span class="font-medium text-slate-900">{{ monitor.competitor_name }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Tracked SKU Variant</span>
+          <a href="{% url 'ecommerce:productvariant_detail' pk=monitor.variant.pk %}" class="font-mono text-blue-600 hover:underline">
+            {{ monitor.variant.sku }}
+          </a>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Parent Catalog Product</span>
+          <span>
+            {% if monitor.product %}
+              <a href="{% url 'ecommerce:catalogproduct_detail' pk=monitor.product.pk %}" class="text-blue-600 hover:underline">
+                {{ monitor.product.name }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Competitor Product URL</span>
+          <a href="{{ monitor.competitor_url }}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline inline-flex items-center gap-1 max-w-xs truncate">
+            <span>{{ monitor.competitor_url }}</span>
+            <i data-lucide="external-link" class="w-3.5 h-3.5 shrink-0"></i>
+          </a>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Currency</span>
+          <span class="font-mono text-slate-900">{{ monitor.competitor_currency }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Last Scraped Check</span>
+          <span class="text-slate-700">
+            {% if monitor.last_scraped_at %}
+              {{ monitor.last_scraped_at|date:"Y-m-d H:i" }}
+            {% else %}
+              <span class="text-slate-400">Never checked</span>
+            {% endif %}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <h2 class="text-base font-semibold text-slate-800">Match Strategy & Margin Guard</h2>
+      </div>
+      <div class="card-body p-5 space-y-4 text-sm">
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Automated Repricing Strategy</span>
+          <span class="font-medium text-slate-900">{{ monitor.get_match_strategy_display }}</span>
+        </div>
+        {% if monitor.match_strategy in 'beat_by_fixed,beat_by_percent' %}
+          <div class="flex justify-between py-2 border-b border-slate-100">
+            <span class="text-slate-500">Beat By Deduction</span>
+            <span class="font-mono text-slate-900">{{ monitor.beat_by_value }}</span>
+          </div>
+        {% endif %}
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Minimum Gross Margin</span>
+          <span class="font-mono text-slate-900">{{ monitor.min_margin_pct }}% above cost</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Absolute Price Floor</span>
+          <span class="font-mono text-slate-900">
+            {% if monitor.floor_price %}
+              ${{ monitor.floor_price|floatformat:2 }}
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Margin Protection Status</span>
+          <span>
+            {% if monitor.is_margin_risk %}
+              <span class="badge badge-red">Price Undercuts Margin Floor</span>
+            {% else %}
+              <span class="badge badge-green">Margin Protected</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Created At</span>
+          <span class="text-slate-500">{{ monitor.created_at|date:"Y-m-d H:i" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if monitor.notes %}
+    <div class="card p-5 bg-white border border-slate-200 rounded-lg">
+      <h3 class="text-sm font-semibold text-slate-800 mb-2">Competitive Intelligence Notes</h3>
+      <p class="text-sm text-slate-600 whitespace-pre-line">{{ monitor.notes }}</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
