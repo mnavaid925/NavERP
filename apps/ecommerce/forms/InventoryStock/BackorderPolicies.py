@@ -32,7 +32,13 @@ class BackorderPolicyForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if hasattr(self, "tenant") and self.tenant is not None:
-            self.fields["variant"].queryset = ProductVariant.objects.filter(tenant=self.tenant)
+            self.fields["variant"].queryset = ProductVariant.objects.filter(tenant=self.tenant).select_related("product")
+
+    def clean_max_backorder_quantity(self):
+        qty = self.cleaned_data.get("max_backorder_quantity")
+        if qty is not None and qty < 0:
+            raise forms.ValidationError("Maximum backorder quantity cannot be negative.")
+        return qty
 
     def clean(self):
         cleaned = super().clean()
