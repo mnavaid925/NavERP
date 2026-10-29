@@ -131,6 +131,10 @@ class SearchMerchandisingRule(TenantNumbered):
                 name="idx_esmr_ten_act_type",
             ),
             models.Index(
+                fields=["tenant", "is_active", "-priority"],
+                name="idx_esmr_ten_act_prio",
+            ),
+            models.Index(
                 fields=["tenant", "trigger_query"],
                 name="idx_esmr_ten_trig_q",
             ),
