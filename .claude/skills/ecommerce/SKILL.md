@@ -184,6 +184,16 @@ apps/ecommerce/
 | `ShippingMethodConfig` | `ESHP-` | `name`, `code`, `carrier`, `calculation_type`, `base_rate`, `cost_per_kg`, `free_shipping_threshold`, `destination_countries`, `is_active`, `sort_order` | — | `calculate_rate(subtotal, total_weight_kg)` (flat, weight tiered, free threshold, pickup) |
 | `PaymentMethodConfig` | `EPMC-` | `name`, `provider`, `method_category`, `environment`, `is_active`, `display_order`, `fee_type`, `fee_amount`, `min_order_amount`, `max_order_amount`, `supported_currencies` | — | `calculate_surcharge(subtotal)`, `is_eligible_for_amount(subtotal)` |
 
+### Sub-module 9.5: Order Management System (OMS)
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `EcommerceOrder` | `EORD-` | `customer`, `guest_email`, `currency`, `status`, `payment_status`, `fulfillment_status`, `fraud_risk_level`, `fraud_score`, `subtotal_amount`, `discount_amount`, `shipping_amount`, `tax_amount`, `total_amount`, `applied_coupon`, shipping/billing addresses | `core.Party` (`customer`), `accounting.Currency`, `CouponPromotion`, `core.Address` | `recalculate_totals()`, `can_cancel()`, `cancel_order(reason)` |
+| `EcommerceOrderLine` | — | `order`, `product`, `variant`, `sku`, `product_name`, `quantity`, `fulfilled_quantity`, `returned_quantity`, `unit_price`, `unit_discount`, `line_total`, `status` | `ecommerce.CatalogProduct`, `ecommerce.ProductVariant` | Computes `line_total = (quantity * unit_price) - (quantity * unit_discount)` |
+| `OrderRoutingRule` | `EORT-` | `name`, `strategy` (closest_location, fewest_splits, highest_inventory, drop_ship_preferred, manual), `priority`, `destination_country`, `destination_region`, `preferred_fulfillment_center`, `allow_split_shipment`, `enable_dropship`, `is_active` | `ecommerce.FulfillmentCenter` | Evaluates closest fulfillment nodes and split shipment allowance |
+| `OrderFulfillment` | `EFUL-` | `order`, `fulfillment_center`, `carrier_name`, `tracking_number`, `tracking_url`, `status`, `shipping_cost`, `shipped_at`, `estimated_delivery_date`, `actual_delivery_date`, `shipping_label_url`, `notification_sent` | `ecommerce.FulfillmentCenter` | `mark_shipped()`, `mark_delivered()`, auto-syncs parent order fulfillment status |
+| `ReturnMerchandiseAuthorization` | `ERMA-` | `order`, `customer`, `return_type` (refund, exchange, store_credit), `status`, `reason`, `restocking_fee`, `refund_amount`, `refund_status`, `restocking_status`, `restocking_center` | `core.Party` (`customer`), `ecommerce.FulfillmentCenter` | `authorize()`, `complete_settlement()`, validates restocking fee <= refund amount |
+
+
 ---
 
 ## 3. URLs & Routes
@@ -299,6 +309,33 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 | `cart-checkout/payment-methods/<int:pk>/delete/` | `paymentmethodconfig_delete` | `paymentmethodconfig_delete` | Delete payment method (POST only, tenant admin) |
 | `cart-checkout/payment-methods/<int:pk>/toggle/` | `paymentmethodconfig_toggle` | `paymentmethodconfig_toggle` | Quick toggle payment gateway active status (POST) |
 
+### 9.5 Order Management System Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `orders/` | `ecommerceorder_list` | `ecommerceorder_list` | Omnichannel orders list with status, payment, fulfillment, and fraud filters |
+| `orders/create/` | `ecommerceorder_create` | `ecommerceorder_create` | Create new customer order with line items |
+| `orders/<int:pk>/` | `ecommerceorder_detail` | `ecommerceorder_detail` | Order detail with lines, fulfillments, return authorizations, and financial summary |
+| `orders/<int:pk>/edit/` | `ecommerceorder_edit` | `ecommerceorder_edit` | Edit order details, shipping address, and notes |
+| `orders/<int:pk>/delete/` | `ecommerceorder_delete` | `ecommerceorder_delete` | Delete order (POST only, tenant admin) |
+| `orders/<int:pk>/cancel/` | `ecommerceorder_cancel` | `ecommerceorder_cancel` | Cancel order & release allocated inventory (POST) |
+| `routing-rules/` | `orderroutingrule_list` | `orderroutingrule_list` | Order fulfillment routing rules with strategy filter |
+| `routing-rules/create/` | `orderroutingrule_create` | `orderroutingrule_create` | Configure new fulfillment routing rule |
+| `routing-rules/<int:pk>/` | `orderroutingrule_detail` | `orderroutingrule_detail` | Routing rule detail view with strategy parameters |
+| `routing-rules/<int:pk>/edit/` | `orderroutingrule_edit` | `orderroutingrule_edit` | Edit routing rule priority, strategy, and nodes |
+| `routing-rules/<int:pk>/delete/` | `orderroutingrule_delete` | `orderroutingrule_delete` | Delete routing rule (POST only, tenant admin) |
+| `fulfillments/` | `orderfulfillment_list` | `orderfulfillment_list` | Order fulfillment packages with carrier and status filters |
+| `fulfillments/create/` | `orderfulfillment_create` | `orderfulfillment_create` | Create fulfillment package for order |
+| `fulfillments/<int:pk>/` | `orderfulfillment_detail` | `orderfulfillment_detail` | Fulfillment detail with tracking timeline and label links |
+| `fulfillments/<int:pk>/edit/` | `orderfulfillment_edit` | `orderfulfillment_edit` | Edit fulfillment package tracking and delivery info |
+| `fulfillments/<int:pk>/delete/` | `orderfulfillment_delete` | `orderfulfillment_delete` | Delete fulfillment package (POST only, tenant admin) |
+| `fulfillments/<int:pk>/ship/` | `orderfulfillment_ship` | `orderfulfillment_ship` | Mark fulfillment package as shipped with carrier (POST) |
+| `returns/` | `returnmerchandiseauthorization_list` | `returnmerchandiseauthorization_list` | Return merchandise authorizations (RMA) with status & type filters |
+| `returns/create/` | `returnmerchandiseauthorization_create` | `returnmerchandiseauthorization_create` | Initiate customer return authorization |
+| `returns/<int:pk>/` | `returnmerchandiseauthorization_detail` | `returnmerchandiseauthorization_detail` | RMA detail with inspection findings and settlement status |
+| `returns/<int:pk>/edit/` | `returnmerchandiseauthorization_edit` | `returnmerchandiseauthorization_edit` | Edit return authorization parameters |
+| `returns/<int:pk>/delete/` | `returnmerchandiseauthorization_delete` | `returnmerchandiseauthorization_delete` | Delete return authorization (POST only, tenant admin) |
+| `returns/<int:pk>/complete/` | `returnmerchandiseauthorization_complete` | `returnmerchandiseauthorization_complete` | Finalize RMA refund settlement and restock (POST) |
+
 ---
 
 ## 4. Templates & Design System
@@ -321,6 +358,11 @@ Templates are stored under `templates/ecommerce/`:
   - `checkoutsession/` — `list.html` (with funnel step indicators, flow types, payment statuses), `detail.html` (with step progress stepper, shipping & billing address panels, tax breakdown, advance step button), `form.html`.
   - `shippingmethod/` — `list.html` (with carrier logos/badges, rate calculation badges, active toggle), `detail.html` (with delivery estimation windows, threshold info), `form.html`.
   - `paymentmethod/` — `list.html` (with payment provider badges, environment pills, active toggle), `detail.html` (with fee structures, currency support lists, instructions), `form.html`.
+- `ordermanagement/`
+  - `ecommerceorder/` — `list.html` (with order status, payment, fulfillment, and fraud badges), `detail.html` (with order overview, customer card, items table, fulfillments timeline, returns panel, cancellation modal), `form.html`.
+  - `orderroutingrule/` — `list.html` (with routing strategy badges and priority pills), `detail.html` (with destination scope and preferred center), `form.html`.
+  - `orderfulfillment/` — `list.html` (with carrier badges and tracking links), `detail.html` (with tracking progress, dispatch metadata, and carrier ship action), `form.html`.
+  - `returnmerchandiseauthorization/` — `list.html` (with return type badges and refund statuses), `detail.html` (with inspection notes, fee deduction, restocking center, and complete settlement action), `form.html`.
 
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
@@ -354,6 +396,11 @@ The command provisions:
 - 4 Checkout Sessions: In-progress contact step session, Shipping method selection session, Ready-for-payment session, and Completed session with order reference.
 - 4 Shipping Methods: Standard Ground (Flat Rate), Express Air (Weight Tiered), Free Shipping over $100, and Store Pickup.
 - 4 Payment Methods: Stripe Credit Card, PayPal Express Wallet, Klarna BNPL, and Cash on Delivery with surcharge and order limit rules.
+- 4 eCommerce Orders: Validated priority order, In-fulfillment partially shipped order, Delivered & completed order, and Cancelled customer order.
+- 8 eCommerce Order Lines with line discounts, quantities, and line statuses.
+- 3 Order Routing Rules: Domestic Express Routing (closest location), West Coast Drop-Ship Routing (drop-ship preferred), High Stock Allocation (highest inventory).
+- 4 Order Fulfillments: Carrier-dispatched FedEx Ground package with live tracking, Shipped DHL Express package, Allocated draft package, and Delivered package.
+- 3 Return Merchandise Authorizations (RMA): Damaged item refund with restock quarantine, Wrong item replacement return, and Size/fit customer return with restocking fee.
 - All demo data is scoped to tenant `acme`.
 
 ---
@@ -403,6 +450,13 @@ LIVE_LINKS["9.4"] = {
     "One-Page & Multi-Step Checkout": "ecommerce:checkoutsession_list",
     "Shipping Methods & Calculation": "ecommerce:shippingmethodconfig_list",
     "Payment Gateway Configuration": "ecommerce:paymentmethodconfig_list",
+}
+LIVE_LINKS["9.5"] = {
+    "Order Lifecycle & Validation": "ecommerce:ecommerceorder_list",
+    "Order Routing & Distributed Sourcing": "ecommerce:orderroutingrule_list",
+    "Carrier Dispatch & Shipment Tracking": "ecommerce:orderfulfillment_list",
+    "Returns & RMA Management": "ecommerce:returnmerchandiseauthorization_list",
+    "Omnichannel Order Orchestration": "ecommerce:ecommerceorder_list",
 }
 ```
 Appears under the eCommerce section of the primary navigation bar.
