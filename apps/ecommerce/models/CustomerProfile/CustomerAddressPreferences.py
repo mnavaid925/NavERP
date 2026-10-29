@@ -41,10 +41,16 @@ class CustomerAddressPreference(TenantNumbered):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_ecad_tenant_num_uniq"),
+        ]
         indexes = [
             models.Index(fields=["tenant", "customer"], name="idx_ecad_ten_cust"),
             models.Index(fields=["tenant", "is_default_shipping"], name="idx_ecad_ten_def_shp"),
             models.Index(fields=["tenant", "is_default_billing"], name="idx_ecad_ten_def_bil"),
+            models.Index(fields=["tenant", "preferred_delivery_window"], name="idx_ecad_ten_win"),
+            models.Index(fields=["tenant", "customer", "is_default_shipping"], name="idx_ecad_ten_cst_shp"),
+            models.Index(fields=["tenant", "customer", "is_default_billing"], name="idx_ecad_ten_cst_bil"),
         ]
 
     def __str__(self):
