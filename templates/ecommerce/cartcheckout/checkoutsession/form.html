@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Checkout {{ session.number }}{% else %}New Checkout Session{% endif %} · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:checkoutsession_list' %}">Checkout Sessions</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Session{% else %}New Session{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Checkout {{ session.number }}{% else %}Create Checkout Session{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                <strong>Please correct the errors below:</strong>
+                <ul class="list-disc ml-5 mt-2">
+                    {% for field in form %}
+                        {% for error in field.errors %}
+                            <li>{{ field.label }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                    {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-2">
+                1. Cart & Shopper Identification
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label for="{{ form.cart.id_for_label }}" class="form-label">Linked Cart *</label>
+                    {{ form.cart }}
+                    {% if form.cart.errors %}
+                        <div class="form-error">{{ form.cart.errors.0 }}</div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.customer.id_for_label }}" class="form-label">Customer (Optional)</label>
+                    {{ form.customer }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.email.id_for_label }}" class="form-label">Email Address *</label>
+                    {{ form.email }}
+                    {% if form.email.errors %}
+                        <div class="form-error">{{ form.email.errors.0 }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label for="{{ form.phone.id_for_label }}" class="form-label">Phone Number</label>
+                    {{ form.phone }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.flow_type.id_for_label }}" class="form-label">Checkout Flow</label>
+                    {{ form.flow_type }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.current_step.id_for_label }}" class="form-label">Current Step</label>
+                    {{ form.current_step }}
+                </div>
+            </div>
+
+            <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-2 pt-4">
+                2. Shipping Address
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label for="{{ form.shipping_name.id_for_label }}" class="form-label">Recipient Name</label>
+                    {{ form.shipping_name }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.shipping_country.id_for_label }}" class="form-label">Country (2-letter ISO)</label>
+                    {{ form.shipping_country }}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label for="{{ form.shipping_address_line1.id_for_label }}" class="form-label">Address Line 1</label>
+                    {{ form.shipping_address_line1 }}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label for="{{ form.shipping_address_line2.id_for_label }}" class="form-label">Address Line 2 (Apt / Suite)</label>
+                    {{ form.shipping_address_line2 }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.shipping_city.id_for_label }}" class="form-label">City</label>
+                    {{ form.shipping_city }}
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="form-group">
+                        <label for="{{ form.shipping_state.id_for_label }}" class="form-label">State / Province</label>
+                        {{ form.shipping_state }}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.shipping_postal_code.id_for_label }}" class="form-label">Postal Code</label>
+                        {{ form.shipping_postal_code }}
+                    </div>
+                </div>
+            </div>
+
+            <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-2 pt-4">
+                3. Methods & Tax Compliance
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label for="{{ form.shipping_method.id_for_label }}" class="form-label">Shipping Method</label>
+                    {{ form.shipping_method }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.payment_method.id_for_label }}" class="form-label">Payment Gateway</label>
+                    {{ form.payment_method }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.tax_code.id_for_label }}" class="form-label">Tax Code</label>
+                    {{ form.tax_code }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.tax_jurisdiction.id_for_label }}" class="form-label">Tax Jurisdiction</label>
+                    {{ form.tax_jurisdiction }}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                {{ form.is_tax_exempt }}
+                <label for="{{ form.is_tax_exempt.id_for_label }}" class="text-sm font-medium text-slate-800">
+                    B2B Tax Exemption Applied
+                </label>
+                <div class="flex-1 ml-4">
+                    {{ form.tax_exemption_number }}
+                </div>
+            </div>
+
+            <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-2 pt-4">
+                4. Financial Totals & Lifecycle
+            </h3>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div class="form-group">
+                    <label for="{{ form.subtotal_amount.id_for_label }}" class="form-label">Subtotal</label>
+                    {{ form.subtotal_amount }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.discount_amount.id_for_label }}" class="form-label">Discounts</label>
+                    {{ form.discount_amount }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.shipping_amount.id_for_label }}" class="form-label">Shipping</label>
+                    {{ form.shipping_amount }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.tax_amount.id_for_label }}" class="form-label">Tax</label>
+                    {{ form.tax_amount }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.total_amount.id_for_label }}" class="form-label">Total Amount</label>
+                    {{ form.total_amount }}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label for="{{ form.status.id_for_label }}" class="form-label">Session Status</label>
+                    {{ form.status }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.payment_status.id_for_label }}" class="form-label">Payment Status</label>
+                    {{ form.payment_status }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.expires_at.id_for_label }}" class="form-label">Expires At</label>
+                    {{ form.expires_at }}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% url 'ecommerce:checkoutsession_list' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    {% if is_edit %}Save Changes{% else %}Create Session{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
