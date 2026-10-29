@@ -314,13 +314,14 @@ def search_console(request):
     # 6. Apply Pinned Products to Fixed Slots (1-indexed)
     pin_rules.sort(key=lambda item: item[0])
     for slot_idx, pinned_prod in pin_rules:
-        # Avoid duplicate if product already in list
-        product_list = [p for p in product_list if p.id != pinned_prod.id]
-        insert_idx = max(0, slot_idx - 1)
-        if insert_idx < len(product_list):
-            product_list.insert(insert_idx, pinned_prod)
-        else:
-            product_list.append(pinned_prod)
+        if pinned_prod and pinned_prod.status == "active":
+            # Avoid duplicate if product already in list
+            product_list = [p for p in product_list if p.id != pinned_prod.id]
+            insert_idx = max(0, slot_idx - 1)
+            if insert_idx < len(product_list):
+                product_list.insert(insert_idx, pinned_prod)
+            else:
+                product_list.append(pinned_prod)
 
     total_results = len(product_list)
     latency_ms = int((time.time() - start_time) * 1000)
