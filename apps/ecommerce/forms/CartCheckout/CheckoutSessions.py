@@ -107,3 +107,29 @@ class CheckoutSessionForm(TenantModelForm):
                 tenant=self.tenant
             )
             self.fields["tax_code"].queryset = TaxCode.objects.filter(tenant=self.tenant)
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("billing_same_as_shipping"):
+            if not cleaned.get("billing_country"):
+                cleaned["billing_country"] = cleaned.get("shipping_country") or "US"
+                self.instance.billing_country = cleaned["billing_country"]
+            if not cleaned.get("billing_name"):
+                cleaned["billing_name"] = cleaned.get("shipping_name", "")
+                self.instance.billing_name = cleaned["billing_name"]
+            if not cleaned.get("billing_address_line1"):
+                cleaned["billing_address_line1"] = cleaned.get("shipping_address_line1", "")
+                self.instance.billing_address_line1 = cleaned["billing_address_line1"]
+            if not cleaned.get("billing_city"):
+                cleaned["billing_city"] = cleaned.get("shipping_city", "")
+                self.instance.billing_city = cleaned["billing_city"]
+            if not cleaned.get("billing_state"):
+                cleaned["billing_state"] = cleaned.get("shipping_state", "")
+                self.instance.billing_state = cleaned["billing_state"]
+            if not cleaned.get("billing_postal_code"):
+                cleaned["billing_postal_code"] = cleaned.get("shipping_postal_code", "")
+                self.instance.billing_postal_code = cleaned["billing_postal_code"]
+        elif not cleaned.get("billing_country"):
+            cleaned["billing_country"] = "US"
+            self.instance.billing_country = "US"
+        return cleaned
