@@ -12,7 +12,7 @@ from django.views.decorators.http import require_POST
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.ecommerce.forms.Personalization.AudienceSegments import AudienceSegmentForm
-from apps.ecommerce.models.CustomerAccount.CustomerAccountProfiles import CustomerAccountProfile
+from apps.ecommerce.models.CustomerProfile.CustomerAccountProfiles import CustomerAccountProfile
 from apps.ecommerce.models.Personalization.AudienceSegments import AudienceSegment
 from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 
