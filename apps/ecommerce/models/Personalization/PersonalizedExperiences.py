@@ -143,12 +143,15 @@ class PersonalizedExperience(TenantNumbered):
                 raise ValidationError({"hero_image_url": "Image URL must begin with '/', 'http://', or 'https://'."})
 
         # C3: Model-level tenant foreign key validation
+        fk_errors = {}
         if self.target_segment_id and self.target_segment and self.target_segment.tenant_id != self.tenant_id:
-            raise ValidationError({"target_segment": "Target segment belongs to another workspace."})
+            fk_errors["target_segment"] = "Target segment belongs to another workspace."
         if self.target_category_id and self.target_category and self.target_category.tenant_id != self.tenant_id:
-            raise ValidationError({"target_category": "Target category belongs to another workspace."})
+            fk_errors["target_category"] = "Target category belongs to another workspace."
         if self.target_product_id and self.target_product and self.target_product.tenant_id != self.tenant_id:
-            raise ValidationError({"target_product": "Target product belongs to another workspace."})
+            fk_errors["target_product"] = "Target product belongs to another workspace."
+        if fk_errors:
+            raise ValidationError(fk_errors)
 
     def __str__(self):
         return f"{self.name} ({self.get_experience_type_display()})"
