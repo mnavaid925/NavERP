@@ -53,6 +53,12 @@ class FlashSaleForm(TenantUniqueMixin, TenantModelForm):
             self.fields["variant"].queryset = ProductVariant.objects.filter(tenant=self.tenant).select_related("product")
             self.fields["category"].queryset = StoreCategory.objects.filter(tenant=self.tenant)
 
+    def clean_inventory_cap(self):
+        cap = self.cleaned_data.get("inventory_cap")
+        if cap is not None and cap < 1:
+            raise forms.ValidationError("Promotional inventory cap must be at least 1 unit.")
+        return cap
+
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["product", "variant", "category"])
