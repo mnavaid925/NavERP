@@ -83,10 +83,15 @@ class CustomerAccountProfile(TenantNumbered):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_ecap_tenant_num_uniq"),
+            models.UniqueConstraint(fields=["tenant", "customer"], name="ecommerce_ecap_tenant_cust_uniq"),
+        ]
         indexes = [
             models.Index(fields=["tenant", "tier"], name="idx_ecap_ten_tier"),
             models.Index(fields=["tenant", "status"], name="idx_ecap_ten_stat"),
             models.Index(fields=["tenant", "customer"], name="idx_ecap_ten_cust"),
+            models.Index(fields=["tenant", "auth_mode"], name="idx_ecap_ten_auth"),
         ]
 
     def __str__(self):
