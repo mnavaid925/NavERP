@@ -46,6 +46,7 @@ class FulfillmentCenterForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["priority"].help_text = "Priority for automated order routing and fulfillment (1 is highest priority)."
         if hasattr(self, "tenant") and self.tenant is not None:
             self.fields["location"].queryset = Location.objects.filter(tenant=self.tenant)
 
