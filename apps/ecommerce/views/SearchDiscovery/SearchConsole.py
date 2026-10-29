@@ -203,6 +203,8 @@ def search_console(request):
             group["items"] = [
                 {"value": "1", "label": "In Stock Only", "count": ""},
             ]
+        for itm in group["items"]:
+            itm["is_selected"] = (active_filters.get(fc.code) == str(itm["value"]))
         facet_groups.append(group)
 
     # 4. Merchandising Rules Evaluation (Boost, Bury, Pin, Block, Banner)
