@@ -11,6 +11,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.core.utils import write_audit_log
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
+from apps.ecommerce.models.ProductCatalog.ProductVariants import ProductVariant
 from apps.ecommerce.models.ProductCatalog.StoreCategories import StoreCategory
 from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacetConfig
 from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
@@ -217,6 +218,23 @@ def search_console(request):
         elif fc.source_type == "availability":
             group["items"] = [
                 {"value": "1", "label": "In Stock Only", "count": ""},
+            ]
+        elif fc.source_type == "variant_option" and fc.option_key:
+            variant_options = ProductVariant.objects.filter(
+                tenant=tenant,
+                product__in=base_qs,
+            ).values_list("option_values", flat=True)
+            counts = {}
+            for ov in variant_options:
+                if isinstance(ov, dict):
+                    val = ov.get(fc.option_key)
+                    if val is not None and val != "":
+                        str_val = str(val)
+                        counts[str_val] = counts.get(str_val, 0) + 1
+            sorted_options = sorted(counts.items(), key=lambda x: (-x[1], x[0]))[: fc.max_values_shown]
+            group["items"] = [
+                {"value": opt_val, "label": opt_val, "count": opt_cnt}
+                for opt_val, opt_cnt in sorted_options
             ]
         for itm in group["items"]:
             itm["is_selected"] = (active_filters.get(fc.code) == str(itm["value"]))
