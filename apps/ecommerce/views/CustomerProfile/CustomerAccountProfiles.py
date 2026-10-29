@@ -122,12 +122,11 @@ def customeraccountprofile_create(request):
             profile.tenant = request.tenant
             profile.save()
             write_audit_log(
+                request.user,
+                profile,
+                "create",
+                changes={"number": profile.number},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="CustomerAccountProfile",
-                object_id=str(profile.pk),
-                object_repr=str(profile),
             )
             messages.success(request, f"Customer profile {profile.number} created successfully.")
             return redirect("ecommerce:customeraccountprofile_detail", pk=profile.pk)
@@ -156,12 +155,11 @@ def customeraccountprofile_edit(request, pk):
         if form.is_valid():
             profile = form.save()
             write_audit_log(
+                request.user,
+                profile,
+                "update",
+                changes={"number": profile.number},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="CustomerAccountProfile",
-                object_id=str(profile.pk),
-                object_repr=str(profile),
             )
             messages.success(request, f"Customer profile {profile.number} updated successfully.")
             return redirect("ecommerce:customeraccountprofile_detail", pk=profile.pk)
@@ -188,15 +186,13 @@ def customeraccountprofile_edit(request, pk):
 def customeraccountprofile_delete(request, pk):
     profile = ecommerce_object(request, CustomerAccountProfile, pk)
     number = profile.number
-    profile_id = profile.pk
-    profile.delete()
     write_audit_log(
+        request.user,
+        profile,
+        "delete",
+        changes={"number": number},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="CustomerAccountProfile",
-        object_id=str(profile_id),
-        object_repr=f"CustomerAccountProfile {number}",
     )
+    profile.delete()
     messages.success(request, f"Customer profile {number} deleted successfully.")
     return redirect("ecommerce:customeraccountprofile_list")
