@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Flash Sales & Limited-Time Offers · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Flash Sales</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Flash Sales & Limited-Time Offers</h1>
+      <p class="text-sm text-slate-500 mt-1">High-velocity flash deals, inventory-gated caps, countdown banners, and anti-scalping limits.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:flashsale_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Flash Sale</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Title, number, badge, SKU, product..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Status</label>
+        <select id="filter-status" name="status" class="form-select w-full text-sm">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-outline flex-1 text-sm inline-flex items-center justify-center gap-1">
+          <i data-lucide="filter" class="w-4 h-4"></i>
+          <span>Filter</span>
+        </button>
+        {% if search_query or status_filter %}
+          <a href="{% url 'ecommerce:flashsale_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear filters">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Data Table -->
+  <div class="card overflow-hidden bg-white shadow-sm border border-slate-200 rounded-lg">
+    <div class="table-wrap">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+            <th class="py-3 px-4">Event Title</th>
+            <th class="py-3 px-4">Featured Target</th>
+            <th class="py-3 px-4">Promotional Discount</th>
+            <th class="py-3 px-4">Claimed / Quota</th>
+            <th class="py-3 px-4">Schedule Window</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-sm">
+          {% for s in sales %}
+            <tr class="hover:bg-slate-50/75 transition-colors">
+              <td class="py-3 px-4">
+                <a href="{% url 'ecommerce:flashsale_detail' pk=s.pk %}" class="font-medium text-blue-600 hover:underline block">
+                  {{ s.title }}
+                </a>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-xs text-slate-400 font-mono">{{ s.number }}</span>
+                  <span class="badge badge-info text-xs py-0 px-1.5">{{ s.badge_label }}</span>
+                </div>
+              </td>
+              <td class="py-3 px-4">
+                {% if s.variant %}
+                  <div class="font-mono text-xs text-slate-800">{{ s.variant.sku }}</div>
+                  <div class="text-xs text-slate-500">{{ s.variant.product.name }}</div>
+                {% elif s.product %}
+                  <div class="text-xs text-slate-800 font-medium">{{ s.product.name }}</div>
+                {% elif s.category %}
+                  <div class="text-xs text-slate-800">Category: {{ s.category.name }}</div>
+                {% else %}
+                  <span class="text-xs text-slate-400">All Featured Items</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-semibold text-emerald-700">
+                  {% if s.flash_price %}
+                    ${{ s.flash_price|floatformat:2 }} Fixed
+                  {% else %}
+                    {{ s.discount_percentage|floatformat:0 }}% Off
+                  {% endif %}
+                </div>
+                <span class="text-xs text-slate-400">Max {{ s.max_units_per_order }}/order</span>
+              </td>
+              <td class="py-3 px-4">
+                <div class="flex items-center justify-between text-xs mb-1">
+                  <span class="font-mono font-medium text-slate-700">{{ s.units_sold }} / {{ s.inventory_cap }}</span>
+                  <span class="text-slate-400">{{ s.sold_percentage }}%</span>
+                </div>
+                <div class="w-32 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                  <div class="bg-red-500 h-1.5 rounded-full" style="width: {{ s.sold_percentage }}%;"></div>
+                </div>
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-600">
+                <div>{{ s.start_time|date:"M d, H:i" }}</div>
+                <div class="text-slate-400">to {{ s.end_time|date:"M d, H:i" }}</div>
+              </td>
+              <td class="py-3 px-4">
+                {% if s.status == 'active' %}
+                  <span class="badge badge-green">Active</span>
+                {% elif s.status == 'scheduled' %}
+                  <span class="badge badge-amber">Scheduled</span>
+                {% elif s.status == 'ended' %}
+                  <span class="badge badge-slate">Ended</span>
+                {% elif s.status == 'paused' %}
+                  <span class="badge badge-red">Paused</span>
+                {% else %}
+                  <span class="badge badge-muted">Draft</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="table-actions flex items-center justify-end gap-1">
+                  <a
+                    href="{% url 'ecommerce:flashsale_detail' pk=s.pk %}"
+                    class="btn btn-icon text-slate-500 hover:text-blue-600"
+                    title="View details"
+                    aria-label="View flash sale {{ s.title }}"
+                  >
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a
+                    href="{% url 'ecommerce:flashsale_edit' pk=s.pk %}"
+                    class="btn btn-icon text-slate-500 hover:text-amber-600"
+                    title="Edit flash sale"
+                    aria-label="Edit flash sale {{ s.title }}"
+                  >
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form
+                    action="{% url 'ecommerce:flashsale_delete' pk=s.pk %}"
+                    method="post"
+                    class="inline"
+                    onsubmit="return confirm('Are you sure you want to delete flash sale {{ s.title }}?');"
+                  >
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="btn btn-icon text-slate-500 hover:text-red-600"
+                      title="Delete flash sale"
+                      aria-label="Delete flash sale {{ s.title }}"
+                    >
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="py-12 text-center">
+                <div class="empty-state max-w-sm mx-auto">
+                  <i data-lucide="zap" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                  <h3 class="text-base font-semibold text-slate-800">No flash sales found</h3>
+                  <p class="text-sm text-slate-500 mt-1 mb-4">Create limited-time promotions with live countdown timers and stock caps.</p>
+                  <a href="{% url 'ecommerce:flashsale_create' %}" class="btn btn-primary text-sm inline-flex items-center gap-2">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Create Flash Sale</span>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between border-t border-slate-200 px-4 py-3 bg-white text-sm">
+        <div class="text-slate-500">
+          Showing <span class="font-medium">{{ page_obj.start_index }}</span> to <span class="font-medium">{{ page_obj.end_index }}</span> of <span class="font-medium">{{ paginator.count }}</span> sales
+        </div>
+        <div class="flex items-center gap-2">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline py-1 px-3 text-sm">
+              Previous
+            </a>
+          {% endif %}
+          <span class="text-slate-600 px-2 font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline py-1 px-3 text-sm">
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
