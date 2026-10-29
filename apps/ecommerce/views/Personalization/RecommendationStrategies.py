@@ -14,7 +14,9 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 
 @login_required
 def recommendationstrategy_list(request):
-    qs = ecommerce_scope(RecommendationStrategy.objects.all(), request)
+    qs = ecommerce_scope(RecommendationStrategy.objects.all(), request).select_related(
+        "target_segment", "target_category"
+    )
 
     search_query = request.GET.get("q", "").strip()
     algorithm = request.GET.get("algorithm", "").strip()
