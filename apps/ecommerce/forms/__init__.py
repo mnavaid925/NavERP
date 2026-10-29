@@ -6,6 +6,10 @@ from apps.ecommerce.forms.InventoryStock.InventoryAllocations import (
     InventoryAllocationForm,
     StockAdjustmentActionForm,
 )
+from apps.ecommerce.forms.PricingPromotion.CompetitorPriceMonitors import CompetitorPriceMonitorForm
+from apps.ecommerce.forms.PricingPromotion.CouponPromotions import CouponPromotionForm
+from apps.ecommerce.forms.PricingPromotion.DynamicPriceRules import DynamicPriceRuleForm
+from apps.ecommerce.forms.PricingPromotion.FlashSales import FlashSaleForm
 from apps.ecommerce.forms.ProductCatalog.BulkOperations import ProductImportForm
 from apps.ecommerce.forms.ProductCatalog.CatalogProducts import CatalogProductForm
 from apps.ecommerce.forms.ProductCatalog.ProductRelationships import (
@@ -29,5 +33,10 @@ __all__ = [
     "StockAdjustmentActionForm",
     "BackorderPolicyForm",
     "ChannelInventorySyncForm",
+    # 9.3 Pricing & Promotion Engine
+    "DynamicPriceRuleForm",
+    "CouponPromotionForm",
+    "FlashSaleForm",
+    "CompetitorPriceMonitorForm",
 ]
 
