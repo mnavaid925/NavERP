@@ -1405,10 +1405,10 @@ class Command(BaseCommand):
             if not pref_addr:
                 pref_addr = Address.objects.create(
                     tenant=tenant,
+                    party=cust_party,
+                    kind="shipping",
                     line1="742 Evergreen Terrace",
                     city="Springfield",
-                    state="OR",
-                    postal_code="97477",
                     country="United States",
                 )
 
