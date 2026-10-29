@@ -20,7 +20,11 @@ def compute_recommendations(tenant, anchor_product=None, strategy=None, max_item
     Supports related_products, frequently_bought_together, collaborative, and trending_popular.
     """
     recommended_products = []
-    base_qs = CatalogProduct.objects.filter(tenant=tenant).exclude(status="archived")
+    base_qs = (
+        CatalogProduct.objects.filter(tenant=tenant)
+        .exclude(status="archived")
+        .select_related("primary_category")
+    )
 
     if anchor_product:
         base_qs = base_qs.exclude(pk=anchor_product.pk)
@@ -31,7 +35,9 @@ def compute_recommendations(tenant, anchor_product=None, strategy=None, max_item
     same_brand_only = strategy.same_brand_only if strategy else False
 
     if target_category:
-        base_qs = base_qs.filter(category=target_category)
+        base_qs = base_qs.filter(
+            Q(primary_category=target_category) | Q(categories=target_category)
+        ).distinct()
 
     if same_brand_only and anchor_product and anchor_product.brand:
         base_qs = base_qs.filter(brand__iexact=anchor_product.brand)
@@ -78,9 +84,14 @@ def compute_recommendations(tenant, anchor_product=None, strategy=None, max_item
             recommended_products = list(base_qs.filter(id__in=co_viewed_ids))
 
     # 3. Related Products (Same category, similar price bracket)
-    elif algorithm == "related_products" and anchor_product and anchor_product.category:
+    elif algorithm == "related_products" and anchor_product and anchor_product.primary_category:
         recommended_products = list(
-            base_qs.filter(category=anchor_product.category).order_by("-created_at")[:max_items]
+            base_qs.filter(
+                Q(primary_category=anchor_product.primary_category)
+                | Q(categories=anchor_product.primary_category)
+            )
+            .distinct()
+            .order_by("-created_at")[:max_items]
         )
 
     # 4. Trending & Popular (Most clickstream events or recent created)
@@ -115,7 +126,9 @@ def personalization_console(request):
     segments = ecommerce_scope(AudienceSegment.objects.all(), request)
     strategies = ecommerce_scope(RecommendationStrategy.objects.all(), request)
     experiences = ecommerce_scope(PersonalizedExperience.objects.all(), request)
-    recent_events = ecommerce_scope(ShopperBehaviorEvent.objects.all(), request)[:10]
+    recent_events = ecommerce_scope(ShopperBehaviorEvent.objects.all(), request).select_related(
+        "product", "customer_profile"
+    )[:10]
 
     # Metrics
     vip_segments_count = segments.filter(lifecycle_stage="high_value_vip", is_active=True).count()
