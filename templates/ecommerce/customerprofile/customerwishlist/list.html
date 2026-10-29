@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Wishlists · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Customer Wishlists</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Customer Wishlists</h1>
+      <p class="text-sm text-slate-500 mt-1">Manage customer saved product lists, item quantities, priorities, and shareable public tokens.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:customerwishlist_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Create Wishlist</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Wishlist name, customer, token..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-visibility" class="block text-xs font-medium text-slate-600 mb-1">Visibility</label>
+        <select id="filter-visibility" name="visibility" class="form-select w-full text-sm">
+          <option value="">All Visibility Levels</option>
+          {% for val, label in visibility_choices %}
+            <option value="{{ val }}" {% if current_visibility == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2 md:col-span-2">
+        <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+          <i data-lucide="filter" class="w-4 h-4"></i>
+          <span>Filter</span>
+        </button>
+        <a href="{% url 'ecommerce:customerwishlist_list' %}" class="btn btn-outline text-slate-600" title="Reset Filters">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Table -->
+  <div class="card overflow-hidden bg-white shadow-sm border border-slate-200 rounded-lg">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse text-sm">
+        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs font-semibold uppercase">
+          <tr>
+            <th class="py-3 px-4">Ref #</th>
+            <th class="py-3 px-4">Wishlist Name</th>
+            <th class="py-3 px-4">Customer</th>
+            <th class="py-3 px-4">Visibility</th>
+            <th class="py-3 px-4 text-center">Items</th>
+            <th class="py-3 px-4">Share Token</th>
+            <th class="py-3 px-4 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-slate-700">
+          {% for w in wishlists %}
+            <tr class="hover:bg-slate-50/80 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-blue-600">
+                <a href="{% url 'ecommerce:customerwishlist_detail' w.pk %}" class="hover:underline">
+                  {{ w.number }}
+                </a>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-semibold text-slate-900">
+                  <a href="{% url 'ecommerce:customerwishlist_detail' w.pk %}" class="hover:underline">
+                    {{ w.name }}
+                  </a>
+                </div>
+                {% if w.is_default %}
+                  <span class="badge badge-green text-[10px]">Primary Default</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 font-medium text-slate-800">
+                {{ w.customer.name }}
+              </td>
+              <td class="py-3 px-4 text-xs">
+                {% if w.visibility == "public" %}
+                  <span class="badge badge-green">{{ w.get_visibility_display }}</span>
+                {% elif w.visibility == "shared" %}
+                  <span class="badge badge-info">{{ w.get_visibility_display }}</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ w.get_visibility_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-center">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
+                  {{ w.items.count }}
+                </span>
+              </td>
+              <td class="py-3 px-4 text-xs font-mono text-slate-500">
+                {{ w.share_token|truncatechars:18 }}
+              </td>
+              <td class="py-3 px-4 text-center">
+                <div class="table-actions flex items-center justify-center gap-2">
+                  <a href="{% url 'ecommerce:customerwishlist_detail' w.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View Wishlist">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'ecommerce:customerwishlist_edit' w.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit Wishlist">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'ecommerce:customerwishlist_delete' w.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete wishlist {{ w.name }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete Wishlist">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="py-12 text-center">
+                <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                  <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                    <i data-lucide="heart" class="w-6 h-6"></i>
+                  </div>
+                  <h3 class="text-base font-semibold text-slate-800">No Wishlists Found</h3>
+                  <p class="text-sm text-slate-500 mt-1 mb-4">No customer wishlists created yet.</p>
+                  <a href="{% url 'ecommerce:customerwishlist_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Create Wishlist</span>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+        <div>
+          Showing page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total wishlists)
+        </div>
+        <div class="flex items-center gap-2">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_visibility %}&visibility={{ current_visibility }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Previous
+            </a>
+          {% endif %}
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_visibility %}&visibility={{ current_visibility }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
