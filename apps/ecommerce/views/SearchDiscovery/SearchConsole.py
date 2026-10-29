@@ -196,23 +196,13 @@ def search_console(request):
     )
     facet_groups = []
     for fc in facet_configs:
+        if fc.source_type == "category":
+            continue
         group = {
             "config": fc,
             "items": [],
         }
-        if fc.source_type == "category":
-            cats = (
-                StoreCategory.objects.filter(tenant=tenant, is_active=True)
-                .annotate(
-                    prod_count=Count(
-                        "primary_products",
-                        filter=Q(primary_products__status="active"),
-                    )
-                )
-                .filter(prod_count__gt=0)[: fc.max_values_shown]
-            )
-            group["items"] = [{"value": str(c.id), "label": c.name, "count": c.prod_count} for c in cats]
-        elif fc.source_type == "brand":
+        if fc.source_type == "brand":
             brands = (
                 CatalogProduct.objects.filter(tenant=tenant, status="active")
                 .exclude(brand="")
