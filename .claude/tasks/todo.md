@@ -18917,3 +18917,122 @@ Nested folder structure per house convention. All templates extend `"base.html"`
   - Update `.claude/skills/ecommerce/SKILL.md`
   - Update `README.md`
   - Track any deferred features in `.claude/tasks/gaps-ecommerce-9.2.md`
+
+
+---
+
+# Sub-module 9.3 — Pricing & Promotion Engine (Module 9: eCommerce Management System, `ecommerce`) — plan from research-ecommerce-9.3.md (2026-10-29)
+
+## Models (from research — 4 models in `apps/ecommerce/models/PricingPromotion/`)
+
+- [ ] `DynamicPriceRule` [EDPR-] — Dynamic pricing rules with volume tiers, customer segments, geo/currency pricing, and time windows.
+  - Fields: `number`, `name`, `rule_type` (`percentage_discount`, `fixed_discount`, `fixed_price_override`), `adjustment_value`, `scope` (`storewide`, `category`, `product`, `variant`), `category` (FK `ecommerce.StoreCategory`), `product` (FK `ecommerce.CatalogProduct`), `variant` (FK `ecommerce.ProductVariant`), `customer_segment` (`all`, `retail`, `wholesale`, `vip`, `b2b`), `loyalty_tier` (`none`, `bronze`, `silver`, `gold`, `platinum`), `min_quantity` (positive int for volume breaks), `country_code`, `currency_code`, `valid_from`, `valid_to`, `priority` (int, default 10), `is_active` (bool), `description`.
+  - FKs: `core.Tenant`, `ecommerce.StoreCategory` (nullable), `ecommerce.CatalogProduct` (nullable), `ecommerce.ProductVariant` (nullable).
+  - Form excludes: `tenant`, `number`, `created_at`, `updated_at`.
+
+- [ ] `CouponPromotion` [ECPN-] — Coupon and voucher code engine with usage limits, spend requirements, stackability, and loyalty tiers.
+  - Fields: `number`, `code` (uppercase unique per tenant), `name`, `discount_type` (`percentage`, `fixed_cart`, `fixed_item`, `free_shipping`), `discount_value`, `min_spend`, `max_discount_amount`, `usage_limit_total`, `usage_limit_per_customer`, `used_count`, `is_stackable`, `loyalty_tier_required` (`none`, `bronze`, `silver`, `gold`, `platinum`), `customer` (FK `core.Party`, nullable for single-shopper coupon), `valid_from`, `valid_to`, `is_active`.
+  - FKs: `core.Tenant`, `core.Party` (nullable).
+  - Form excludes: `tenant`, `number`, `used_count`, `created_at`, `updated_at`.
+
+- [ ] `FlashSale` [EFLS-] — Time-delimited flash campaigns with countdown timer metadata, inventory reservation caps, and anti-scalping purchase quotas.
+  - Fields: `number`, `title`, `status` (`draft`, `scheduled`, `active`, `paused`, `ended`), `product` (FK `ecommerce.CatalogProduct`), `variant` (FK `ecommerce.ProductVariant`), `category` (FK `ecommerce.StoreCategory`), `discount_percentage`, `flash_price`, `inventory_cap`, `units_sold`, `max_units_per_order`, `start_time`, `end_time`, `badge_label`, `banner_bg_color`, `terms_and_conditions`.
+  - FKs: `core.Tenant`, `ecommerce.CatalogProduct` (nullable), `ecommerce.ProductVariant` (nullable), `ecommerce.StoreCategory` (nullable).
+  - Form excludes: `tenant`, `number`, `units_sold`, `created_at`, `updated_at`.
+
+- [ ] `CompetitorPriceMonitor` [ECPM-] — Competitor price intelligence tracker, automated match strategies, and margin protection safety floors.
+  - Fields: `number`, `competitor_name`, `product` (FK `ecommerce.CatalogProduct`), `variant` (FK `ecommerce.ProductVariant`, required), `competitor_url`, `competitor_price`, `competitor_currency`, `is_in_stock`, `last_scraped_at`, `match_strategy` (`manual`, `match_exact`, `beat_by_fixed`, `beat_by_percent`), `beat_by_value`, `min_margin_pct`, `floor_price`, `status` (`active`, `paused`, `margin_suppressed`, `out_of_stock`), `notes`.
+  - FKs: `core.Tenant`, `ecommerce.CatalogProduct` (nullable), `ecommerce.ProductVariant` (on_delete=models.CASCADE).
+  - Form excludes: `tenant`, `number`, `last_scraped_at`, `created_at`, `updated_at`.
+
+---
+
+## Backend Packages (`apps/ecommerce/`)
+
+### Layer 1: Models (`apps/ecommerce/models/PricingPromotion/`)
+- [ ] `models/PricingPromotion/__init__.py`
+- [ ] `models/PricingPromotion/DynamicPriceRules.py`
+- [ ] `models/PricingPromotion/CouponPromotions.py`
+- [ ] `models/PricingPromotion/FlashSales.py`
+- [ ] `models/PricingPromotion/CompetitorPriceMonitors.py`
+- [ ] `models/__init__.py` — add 9.3 re-export block
+
+### Layer 2: Forms (`apps/ecommerce/forms/PricingPromotion/`)
+- [ ] `forms/PricingPromotion/__init__.py`
+- [ ] `forms/PricingPromotion/DynamicPriceRules.py` — `DynamicPriceRuleForm`
+- [ ] `forms/PricingPromotion/CouponPromotions.py` — `CouponPromotionForm`
+- [ ] `forms/PricingPromotion/FlashSales.py` — `FlashSaleForm`
+- [ ] `forms/PricingPromotion/CompetitorPriceMonitors.py` — `CompetitorPriceMonitorForm`
+- [ ] `forms/__init__.py` — add 9.3 re-export block
+
+### Layer 3: Views (`apps/ecommerce/views/PricingPromotion/`)
+- [ ] `views/PricingPromotion/__init__.py`
+- [ ] `views/PricingPromotion/DynamicPriceRules.py` — full CRUD (list, create, detail, edit, delete) + search, filters, pagination
+- [ ] `views/PricingPromotion/CouponPromotions.py` — full CRUD (list, create, detail, edit, delete) + search, filters, pagination
+- [ ] `views/PricingPromotion/FlashSales.py` — full CRUD (list, create, detail, edit, delete) + status toggle action
+- [ ] `views/PricingPromotion/CompetitorPriceMonitors.py` — full CRUD (list, create, detail, edit, delete) + scrape/sync trigger simulation action
+- [ ] `views/__init__.py` — add 9.3 re-export block
+
+### Layer 4: URLs (`apps/ecommerce/urls/PricingPromotion/`)
+- [ ] `urls/PricingPromotion/__init__.py`
+- [ ] `urls/PricingPromotion/DynamicPriceRules.py`
+- [ ] `urls/PricingPromotion/CouponPromotions.py`
+- [ ] `urls/PricingPromotion/FlashSales.py`
+- [ ] `urls/PricingPromotion/CompetitorPriceMonitors.py`
+- [ ] `urls/__init__.py` — concatenate 9.3 urlpatterns into ecommerce routing
+
+### Layer 5: Admin & Seeder & Navigation
+- [ ] `admin.py` — register `DynamicPriceRuleAdmin`, `CouponPromotionAdmin`, `FlashSaleAdmin`, `CompetitorPriceMonitorAdmin`
+- [ ] `apps/ecommerce/management/commands/seed_ecommerce.py` — extend seeder with demo price rules, coupon codes, flash sales, and competitor tracking rows
+- [ ] `apps/core/navigation.py` — add `LIVE_LINKS["9.3"]` entry with all 5 NavERP.md bullets
+
+---
+
+## Templates (`templates/ecommerce/pricingpromotion/`)
+
+- [ ] `templates/ecommerce/pricingpromotion/dynamicpricerule/list.html`
+- [ ] `templates/ecommerce/pricingpromotion/dynamicpricerule/detail.html`
+- [ ] `templates/ecommerce/pricingpromotion/dynamicpricerule/form.html`
+- [ ] `templates/ecommerce/pricingpromotion/couponpromotion/list.html`
+- [ ] `templates/ecommerce/pricingpromotion/couponpromotion/detail.html`
+- [ ] `templates/ecommerce/pricingpromotion/couponpromotion/form.html`
+- [ ] `templates/ecommerce/pricingpromotion/flashsale/list.html`
+- [ ] `templates/ecommerce/pricingpromotion/flashsale/detail.html`
+- [ ] `templates/ecommerce/pricingpromotion/flashsale/form.html`
+- [ ] `templates/ecommerce/pricingpromotion/competitorpricemonitor/list.html`
+- [ ] `templates/ecommerce/pricingpromotion/competitorpricemonitor/detail.html`
+- [ ] `templates/ecommerce/pricingpromotion/competitorpricemonitor/form.html`
+
+---
+
+## Verification Steps
+- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1)
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency)
+- [ ] `venv\Scripts\python.exe manage.py check`
+- [ ] Smoke test script in `temp/smoke_ecommerce_9_3.py`:
+  - Login as `admin_acme`
+  - GET all new 9.3 URLs -> verify 200/302
+  - Check rendered HTML: no leaked comments (`{#`), proper title, seeded records visible
+  - Test cross-tenant isolation (IDOR -> 404)
+  - Test negative/non-numeric filter inputs (L11)
+  - Verify `LIVE_LINKS["9.3"]` sidebar navigation
+
+---
+
+## Close-Out Steps
+- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`
+- [ ] Append findings to `.claude/tasks/review-ecommerce-9.3.md`
+- [ ] Run Phase 5 `code-fixer` agent to burn down findings
+- [ ] Run Phase 6 automated test suite:
+  - Update `apps/ecommerce/tests/conftest.py`
+  - Author `test_pricingpromotion_models.py`
+  - Author `test_pricingpromotion_forms.py`
+  - Author `test_pricingpromotion_views.py`
+  - Author `test_pricingpromotion_security.py`
+  - Run full unfiltered suite `pytest apps/ecommerce/tests/`
+- [ ] Phase 7 documentation:
+  - Update `.claude/skills/ecommerce/SKILL.md`
+  - Update `README.md`
+  - Track any deferred features in `.claude/tasks/gaps-ecommerce-9.3.md`
