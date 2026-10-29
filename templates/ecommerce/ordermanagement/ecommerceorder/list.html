@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Orders · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Orders</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">eCommerce Orders</h1>
+      <p class="text-sm text-slate-500 mt-1">Manage order lifecycle, validation, payment settlements, fulfillment state, and fraud screening.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:ecommerceorder_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Create Order</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Order #, customer, email..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Order Status</label>
+        <select id="filter-status" name="status" class="form-select w-full text-sm">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if current_status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-payment" class="block text-xs font-medium text-slate-600 mb-1">Payment Status</label>
+        <select id="filter-payment" name="payment_status" class="form-select w-full text-sm">
+          <option value="">All Payments</option>
+          {% for val, label in payment_status_choices %}
+            <option value="{{ val }}" {% if current_payment == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-fulfillment" class="block text-xs font-medium text-slate-600 mb-1">Fulfillment Status</label>
+        <select id="filter-fulfillment" name="fulfillment_status" class="form-select w-full text-sm">
+          <option value="">All Fulfillments</option>
+          {% for val, label in fulfillment_status_choices %}
+            <option value="{{ val }}" {% if current_fulfillment == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="flex-1">
+          <label for="filter-fraud" class="block text-xs font-medium text-slate-600 mb-1">Fraud Risk</label>
+          <select id="filter-fraud" name="fraud_risk_level" class="form-select w-full text-sm">
+            <option value="">All Risks</option>
+            {% for val, label in fraud_risk_choices %}
+              <option value="{{ val }}" {% if current_fraud == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-outline text-sm self-end" title="Apply filter">
+          Filter
+        </button>
+        {% if search_query or current_status or current_payment or current_fulfillment or current_fraud %}
+          <a href="{% url 'ecommerce:ecommerceorder_list' %}" class="btn btn-outline text-slate-500 text-sm self-end" title="Clear filters">
+            Clear
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Orders Table -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse text-sm">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs font-semibold uppercase">
+            <th class="py-3 px-4">Order #</th>
+            <th class="py-3 px-4">Customer</th>
+            <th class="py-3 px-4">Placed Date</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4">Payment</th>
+            <th class="py-3 px-4">Fulfillment</th>
+            <th class="py-3 px-4 text-right">Grand Total</th>
+            <th class="py-3 px-4">Fraud Score</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for order in orders %}
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-blue-600">
+                <a href="{% url 'ecommerce:ecommerceorder_detail' pk=order.pk %}" class="hover:underline">
+                  {{ order.number }}
+                </a>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-800">{{ order.customer.name }}</div>
+                {% if order.guest_email %}
+                  <div class="text-xs text-slate-400 font-mono">{{ order.guest_email }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-slate-500 whitespace-nowrap">
+                {{ order.created_at|date:"M d, Y H:i" }}
+              </td>
+              <td class="py-3 px-4">
+                {% if order.status == 'validated' or order.status == 'fulfilled' %}
+                  <span class="badge badge-green">{{ order.get_status_display }}</span>
+                {% elif order.status == 'cancelled' %}
+                  <span class="badge badge-red">{{ order.get_status_display }}</span>
+                {% elif order.status == 'processing' or order.status == 'partially_fulfilled' %}
+                  <span class="badge badge-amber">{{ order.get_status_display }}</span>
+                {% elif order.status == 'pending_validation' %}
+                  <span class="badge badge-info">{{ order.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ order.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if order.payment_status == 'captured' %}
+                  <span class="badge badge-green">{{ order.get_payment_status_display }}</span>
+                {% elif order.payment_status == 'failed' or order.payment_status == 'refunded' %}
+                  <span class="badge badge-red">{{ order.get_payment_status_display }}</span>
+                {% elif order.payment_status == 'authorized' or order.payment_status == 'partially_refunded' %}
+                  <span class="badge badge-amber">{{ order.get_payment_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ order.get_payment_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if order.fulfillment_status == 'fulfilled' %}
+                  <span class="badge badge-green">{{ order.get_fulfillment_status_display }}</span>
+                {% elif order.fulfillment_status == 'partially_fulfilled' %}
+                  <span class="badge badge-amber">{{ order.get_fulfillment_status_display }}</span>
+                {% elif order.fulfillment_status == 'returned' %}
+                  <span class="badge badge-red">{{ order.get_fulfillment_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ order.get_fulfillment_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right font-mono font-medium text-slate-900">
+                ${{ order.total_amount|floatformat:2 }}
+                <span class="text-xs text-slate-400 font-sans">{{ order.currency.code }}</span>
+              </td>
+              <td class="py-3 px-4">
+                {% if order.fraud_risk_level == 'low' %}
+                  <span class="badge badge-green text-xs font-mono">{{ order.fraud_score }}/100</span>
+                {% elif order.fraud_risk_level == 'medium' %}
+                  <span class="badge badge-amber text-xs font-mono">{{ order.fraud_score }}/100</span>
+                {% else %}
+                  <span class="badge badge-red text-xs font-mono">{{ order.fraud_score }}/100 (High)</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="table-actions flex items-center justify-end gap-1">
+                  <a
+                    href="{% url 'ecommerce:ecommerceorder_detail' pk=order.pk %}"
+                    class="btn btn-icon text-slate-500 hover:text-blue-600"
+                    title="View order"
+                    aria-label="View order {{ order.number }}"
+                  >
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a
+                    href="{% url 'ecommerce:ecommerceorder_edit' pk=order.pk %}"
+                    class="btn btn-icon text-slate-500 hover:text-amber-600"
+                    title="Edit order"
+                    aria-label="Edit order {{ order.number }}"
+                  >
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form
+                    method="post"
+                    action="{% url 'ecommerce:ecommerceorder_delete' pk=order.pk %}"
+                    onsubmit="return confirm('Delete order {{ order.number }}? This cannot be undone.');"
+                    class="inline"
+                  >
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="btn btn-icon text-slate-400 hover:text-red-600"
+                      title="Delete order"
+                      aria-label="Delete order {{ order.number }}"
+                    >
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9" class="py-12 text-center">
+                <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                  <i data-lucide="shopping-bag" class="w-12 h-12 text-slate-300 mb-3"></i>
+                  <h3 class="text-base font-semibold text-slate-700">No eCommerce Orders Found</h3>
+                  <p class="text-xs text-slate-500 mt-1 mb-4">No customer orders matching the current filter criteria.</p>
+                  <a href="{% url 'ecommerce:ecommerceorder_create' %}" class="btn btn-primary inline-flex items-center gap-2 text-sm">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Create New Order</span>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+        <div>
+          Showing page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total records)
+        </div>
+        <div class="flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a
+              href="?page={{ page_obj.previous_page_number }}{% if current_q %}&q={{ current_q }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_payment %}&payment_status={{ current_payment }}{% endif %}{% if current_fulfillment %}&fulfillment_status={{ current_fulfillment }}{% endif %}{% if current_fraud %}&fraud_risk_level={{ current_fraud }}{% endif %}"
+              class="btn btn-outline py-1 px-3 text-xs"
+            >
+              Previous
+            </a>
+          {% endif %}
+          <span class="py-1 px-3 bg-slate-100 rounded text-xs font-mono font-medium text-slate-700">
+            {{ page_obj.number }}
+          </span>
+          {% if page_obj.has_next %}
+            <a
+              href="?page={{ page_obj.next_page_number }}{% if current_q %}&q={{ current_q }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_payment %}&payment_status={{ current_payment }}{% endif %}{% if current_fulfillment %}&fulfillment_status={{ current_fulfillment }}{% endif %}{% if current_fraud %}&fraud_risk_level={{ current_fraud }}{% endif %}"
+              class="btn btn-outline py-1 px-3 text-xs"
+            >
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
