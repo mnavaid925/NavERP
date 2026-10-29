@@ -44,3 +44,39 @@
 - [ ] **M3** — Nullable `category_scope` Unique Constraint in `SearchFacetConfig` (`SearchFacetConfigs.py:92-95`):
   Unique constraint allows duplicate global codes on databases where NULL!=NULL.
 - [ ] **M4** — Unbound Form `SearchQueryLogFilterForm` in `searchquerylog_list` (`SearchQueryLogs.py:50`).
+
+
+---
+
+## Pass 2: `explorer` Findings
+
+### Critical
+- [ ] **E-C1** — Broken Facet Checkbox State in Search Console Template (`templates/ecommerce/searchdiscovery/console/console.html:230`):
+  `{% if active_filters|dictsort:fg.config.code %}checked{% endif %}` fails silently. In `search_console` view, annotate each item in `facet_groups` with `"is_selected": (active_filters.get(fc.code) == itm["value"])`, and in template use `{% if itm.is_selected %}checked{% endif %}`.
+- [ ] **E-C2** — Invalid Attribute `product.category` Causes Silent Blank (L7) (`templates/ecommerce/searchdiscovery/console/console.html:291-293`):
+  `CatalogProduct` has `primary_category`, not `category`.
+- [ ] **E-C3** — Duplicate Products & PostgreSQL Incompatibility in Price Sorting (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:253-259`):
+  Ordering by field across 1-to-many joined table causes duplicate products and breaks on Postgres. Annotate `min_price = Min("variants__price")`.
+- [ ] **E-C4** — Duplicate Search Query Log Created on Redirect Intercepts (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:67-77, 296-309`):
+  Double query log creation on redirect rules.
+- [ ] **E-C5** — Merchandising Campaign Schedules Ignored in Search Console (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:48-61, 213-220`):
+  Rules do not filter `start_date` and `end_date`.
+
+### Important
+- [ ] **E-I1** — Contract Pinned `sort_choices` Omission in Search Console View (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:33-38`):
+  `('rating', 'Customer Rating')` missing from `sort_choices`.
+- [ ] **E-I2** — Missing Model-Level Cross-Tenant FK Validation in `clean()` (`SearchFacetConfigs.py:107`, `SearchMerchandisingRules.py:142`, `SearchQueryLogs.py:105`).
+- [ ] **E-I3** — Variant Option Facets Silently Excluded from Facet Groups (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:173-206`):
+  No handler for `fc.source_type == "variant_option"` in `facet_groups`.
+- [ ] **E-I4** — N+1 Queries on Boosted Products in Search Console Rule Loop (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:213-215, 241`):
+  `active_rules` lacks `select_related("boosted_product", "target_category")`.
+- [ ] **E-I5** — HTML5 `datetime-local` Format Missing on Edit Forms (`apps/ecommerce/forms/SearchDiscovery/SearchMerchandisingRules.py:48-49`):
+  Add `format="%Y-%m-%dT%H:%M"` to widgets.
+- [ ] **E-I6** — Inactive / Draft Products Injected via Fixed Slot Pin Rules (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:241, 273-282`).
+- [ ] **E-I7** — Unscoped Customer Attribution on Query Logs (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:307`).
+
+### Minor
+- [ ] **E-M1** — Unused `root` Query Parameter on `searchsynonym_create` (`apps/ecommerce/views/SearchDiscovery/SearchSynonyms.py:84`).
+- [ ] **E-M2** — Nullable Unique Constraint on Global Facet Codes (`SearchFacetConfigs.py:92-95`).
+- [ ] **E-M3** — Synonym Trigger Limited to Exact Full-String Equality (`SearchConsole.py:98`).
+- [ ] **E-M4** — Unbound `SearchQueryLogFilterForm` in `searchquerylog_list` (`SearchQueryLogs.py:21-54`).
