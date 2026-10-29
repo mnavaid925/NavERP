@@ -21,6 +21,7 @@ def cart_list(request):
         ecommerce_scope(Cart.objects.all(), request)
         .select_related("customer")
         .annotate(total_items=Coalesce(Sum("items__quantity"), 0))
+        .order_by("-last_activity_at", "-id")
     )
 
     q = request.GET.get("q", "").strip()
