@@ -13,7 +13,9 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 
 @login_required
 def shopperbehaviorevent_list(request):
-    qs = ecommerce_scope(ShopperBehaviorEvent.objects.all(), request)
+    qs = ecommerce_scope(ShopperBehaviorEvent.objects.all(), request).select_related(
+        "product", "category", "customer_profile", "user"
+    )
 
     search_query = request.GET.get("q", "").strip()
     event_type = request.GET.get("event_type", "").strip()
