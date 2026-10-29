@@ -97,7 +97,7 @@
         </div>
         <div class="flex justify-between">
           <span class="text-slate-500">Last Physical Count:</span>
-          <span class="text-slate-700 font-mono text-xs">{{ allocation.last_counted_at|date:"Y-m-d H:i"|default:"Never audited" }}</span>
+          <span class="text-slate-700 font-mono text-xs">{{ allocation.last_counted_at|date:"N j, Y, P"|default:"Never audited" }}</span>
         </div>
       </div>
     </div>
@@ -220,7 +220,7 @@
             <td class="text-right table-actions">
               <form action="{% url 'ecommerce:channelinventorysync_trigger' sync.pk %}" method="post" class="inline">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-icon btn-outline p-1" title="Trigger Sync">
+                <button type="submit" class="btn btn-icon btn-outline p-1" title="Trigger Sync" aria-label="Trigger sync for {{ sync.channel_name }}">
                   <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                 </button>
               </form>
