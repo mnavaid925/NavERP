@@ -11,7 +11,7 @@ from apps.core.utils import write_audit_log
 from apps.ecommerce.forms.InventoryStock.InventoryAllocations import InventoryAllocationForm, StockAdjustmentActionForm
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
 from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
-from apps.ecommerce.models.ProductCatalog.Variants import ProductVariant
+from apps.ecommerce.models.ProductCatalog.ProductVariants import ProductVariant
 from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 
 
