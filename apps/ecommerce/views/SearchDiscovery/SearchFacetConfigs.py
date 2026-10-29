@@ -93,10 +93,10 @@ def searchfacetconfig_create(request):
             facet_config.tenant = request.tenant
             facet_config.save()
             write_audit_log(
-                request,
-                action="create",
-                instance=facet_config,
-                notes=f"Created facet config {facet_config.number} ({facet_config.name})",
+                request.user,
+                facet_config,
+                "create",
+                {"number": facet_config.number, "name": facet_config.name},
             )
             messages.success(
                 request, f"Facet configuration '{facet_config.name}' created."
@@ -128,10 +128,10 @@ def searchfacetconfig_edit(request, pk):
         if form.is_valid():
             facet_config = form.save()
             write_audit_log(
-                request,
-                action="update",
-                instance=facet_config,
-                notes=f"Updated facet config {facet_config.number} ({facet_config.name})",
+                request.user,
+                facet_config,
+                "update",
+                {"number": facet_config.number, "name": facet_config.name},
             )
             messages.success(
                 request, f"Facet configuration '{facet_config.name}' updated."
@@ -161,10 +161,10 @@ def searchfacetconfig_delete(request, pk):
     name = facet_config.name
     facet_config.delete()
     write_audit_log(
-        request,
-        action="delete",
-        instance=facet_config,
-        notes=f"Deleted facet config {number} ({name})",
+        request.user,
+        facet_config,
+        "delete",
+        {"number": number, "name": name},
     )
     messages.success(request, f"Facet configuration '{name}' deleted.")
     return redirect("ecommerce:searchfacetconfig_list")
@@ -179,10 +179,10 @@ def searchfacetconfig_toggle(request, pk):
     facet_config.save(update_fields=["is_active", "updated_at"])
     state = "activated" if facet_config.is_active else "deactivated"
     write_audit_log(
-        request,
-        action="update",
-        instance=facet_config,
-        notes=f"{state.capitalize()} facet config {facet_config.number}",
+        request.user,
+        facet_config,
+        "update",
+        {"is_active": facet_config.is_active},
     )
     messages.success(
         request, f"Facet configuration '{facet_config.name}' {state}."
