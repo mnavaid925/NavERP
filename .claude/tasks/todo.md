@@ -8,6 +8,329 @@
 > Do not mass-tick the backlog.
 ---
 
+# Sub-module 9.7: Search & Product Discovery (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.7.md` (2026-10-30)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 (Product Catalog), 9.2 (Inventory & Stock), 9.3 (Pricing & Promotion), 9.4 (Shopping Cart & Checkout), 9.5 (Order Management System), and 9.6 (Customer Account & Profile).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0007_customeraccountprofile_idx_ecap_ten_auth_and_more.py`, so **9.7 claims `0008`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.7.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/SearchDiscovery/`
+> Template folder name: `templates/ecommerce/searchdiscovery/{synonym,facetconfig,merchandisingrule,querylog,console,analytics}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Catalog Product & Variant Spine (L36/L37)**: The primary searchable entities are `ecommerce.CatalogProduct` (`EPRD-`, 9.1) and `ecommerce.ProductVariant` (`PVR-`, 9.1). Sub-module 9.7 provides search configuration, synonym expansions, merchandising overrides, and execution telemetry operating directly against the catalog spine. Declaring duplicate product or index tables violates L36/L37.
+- **Category Hierarchy Spine**: Category scoping, browse filters, and query redirects reuse `ecommerce.StoreCategory` (`ECAT-`, 9.1).
+- **Shopper Identity & Telemetry Spine**: Query logs optionally link authenticated shoppers to `core.Party` (`core.Party`, Core Spine) and `accounts.User`.
+- **Clean Sibling Boundary (9.7 vs. 9.8)**: 9.7 owns query-driven search, autocomplete suggestions, dynamic faceted navigation, merchandising rules (boost, bury, pin, block, redirect, banner), zero-result tracking, and search telemetry. 9.8 (sibling) owns deep clickstream session tracking, machine learning collaborative filtering, and shopper RFM segmentation.
+- **Multi-Tenancy & Isolation**: All search configurations, synonym dictionaries, facet definitions, merchandising rules, and query logs are strictly partitioned by `tenant` (`core.Tenant`). Synonyms and boost rules defined in Workspace A never influence search results in Workspace B.
+- **Base Class**: All 4 models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`), providing `tenant` FK (`on_delete=CASCADE`), auto-number generation, and timestamps.
+- **Prefix Collision Sweep**: `ESYM`, `ESFC`, `ESMR`, `ESQL` verified 100% free across repo.
+
+---
+
+## 9.7-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO duplicate product or variant index table** — Search operates directly on `ecommerce.CatalogProduct` and `ecommerce.ProductVariant`.
+- [ ] **NO external SaaS cluster requirement** — Fully operational on Django ORM (PostgreSQL/SQLite compatible); SaaS webhook sync (Algolia/Elasticsearch) is deferred to enterprise integrations.
+- [ ] **NO deep neural net binary inference in-process** — Multi-modal visual search is implemented via visual attribute/category/style heuristics; binary PyTorch/CLIP tensor extraction is deferred to external ML service.
+- [ ] **NO second customer or account table** — Telemetry links directly to `core.Party` and `accounts.User`.
+- [ ] **NO machine-learning collaborative filtering** — Sibling Sub-module 9.8 owns shopper recommendation vectors.
+
+---
+
+## Models (4 models in `apps/ecommerce/models/SearchDiscovery/`)
+
+- [ ] **`SearchSynonym`** [Prefix: `ESYM-`] (`apps/ecommerce/models/SearchDiscovery/SearchSynonyms.py`)
+  - **Purpose**: Dictionary of query expansions, directional mappings, and typo replacements bridging vocabulary gaps between shopper search terms and catalog product attributes.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `SYNONYM_TYPE_CHOICES = [("two_way", "Two-Way Equivalent"), ("one_way", "One-Way Directional"), ("replacement", "Explicit Replacement")]`
+  - **Fields**:
+    - `name`: `CharField(max_length=120, help_text="Administrative label for this synonym rule")`
+    - `synonym_type`: `CharField(max_length=20, choices=SYNONYM_TYPE_CHOICES, default="two_way")`
+    - `root_term`: `CharField(max_length=120, db_index=True, help_text="Root trigger keyword for one-way and replacement rules; primary anchor for two-way")`
+    - `synonyms`: `TextField(help_text="Comma-separated list of synonym terms, e.g. 'couch, sofa, settee'")`
+    - `is_active`: `BooleanField(default=True)`
+    - `hit_count`: `PositiveIntegerField(default=0, help_text="Times this synonym rule has expanded a search query")`
+    - `notes`: `TextField(blank=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_esym_tenant_num_uniq")`
+    - `Index(fields=["tenant", "is_active", "synonym_type"], name="idx_esym_ten_act_type")`
+    - `Index(fields=["tenant", "root_term"], name="idx_esym_ten_root")`
+  - **Form Exclusions**: `tenant`, `number`, `hit_count`, `created_at`, `updated_at`.
+  - **Validation & Business Logic**:
+    - `root_term` stripped and normalized to lowercase.
+    - `synonyms` stripped, split, and deduplicated.
+    - If `synonym_type == "replacement"`, synonyms must contain exactly one replacement term.
+
+- [ ] **`SearchFacetConfig`** [Prefix: `ESFC-`] (`apps/ecommerce/models/SearchDiscovery/SearchFacetConfigs.py`)
+  - **Purpose**: Governs dynamic faceted navigation and sidebar filters across search result pages and category listings (attributes, visualization widgets, multi-select logic, category scoping).
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `SOURCE_TYPE_CHOICES = [("category", "Category Hierarchy"), ("brand", "Product Brand"), ("price", "Price Range"), ("variant_option", "Variant Option / Attribute"), ("availability", "Stock Availability"), ("rating", "Customer Rating"), ("tag", "Product Tag")]`
+    - `WIDGET_TYPE_CHOICES = [("checkbox", "Checkboxes (Multi-Select)"), ("color_swatch", "Color Swatches"), ("price_slider", "Price Range Slider"), ("rating_stars", "Rating Star Filter"), ("toggle", "Boolean Toggle"), ("dropdown", "Single-Select Dropdown")]`
+    - `FILTER_LOGIC_CHOICES = [("disjunctive", "Disjunctive (OR)"), ("conjunctive", "Conjunctive (AND)")]`
+  - **Fields**:
+    - `name`: `CharField(max_length=100, help_text="Storefront display heading, e.g. 'Brand', 'Color', 'Price'")`
+    - `code`: `CharField(max_length=50, help_text="Machine identifier, e.g. 'brand', 'price', 'category', 'color', 'size', 'in_stock'")`
+    - `source_type`: `CharField(max_length=30, choices=SOURCE_TYPE_CHOICES, default="brand")`
+    - `option_key`: `CharField(max_length=50, blank=True, help_text="Key in ProductVariant.option_values (e.g. 'Size', 'Color') when source_type='variant_option'")`
+    - `widget_type`: `CharField(max_length=20, choices=WIDGET_TYPE_CHOICES, default="checkbox")`
+    - `filter_logic`: `CharField(max_length=15, choices=FILTER_LOGIC_CHOICES, default="disjunctive", help_text="Disjunctive (OR) allows multi-select within facet; Conjunctive (AND) requires all selected values")`
+    - `display_order`: `PositiveIntegerField(default=0, help_text="Sidebar vertical presentation order")`
+    - `is_collapsed_by_default`: `BooleanField(default=False)`
+    - `max_values_shown`: `PositiveIntegerField(default=10, help_text="Max filter items displayed before 'Show More' toggle")`
+    - `is_searchable`: `BooleanField(default=False, help_text="Show in-facet search box for facets with 10+ values like Brands")`
+    - `category_scope`: `ForeignKey("ecommerce.StoreCategory", on_delete=models.SET_NULL, null=True, blank=True, related_name="scoped_facets", help_text="Optional: Restrict this filter to a specific category hierarchy")`
+    - `is_active`: `BooleanField(default=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_esfc_tenant_num_uniq")`
+    - `UniqueConstraint(fields=["tenant", "code", "category_scope"], name="ecommerce_esfc_code_cat_uniq")`
+    - `Index(fields=["tenant", "is_active", "display_order"], name="idx_esfc_ten_act_disp")`
+  - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
+  - **Validation & Business Logic**:
+    - `code` normalized to lowercase slug.
+    - If `source_type == "variant_option"`, `option_key` is required.
+
+- [ ] **`SearchMerchandisingRule`** [Prefix: `ESMR-`] (`apps/ecommerce/models/SearchDiscovery/SearchMerchandisingRules.py`)
+  - **Purpose**: Merchandising studio rules controlling catalog presentation on search results and category browse listings (pinning hero products, score boosting/burying, exclusions, query redirects, promotional banners).
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `RULE_TYPE_CHOICES = [("query", "Search Query Trigger"), ("category", "Category Listing Trigger"), ("global", "Global Catalog Rule")]`
+    - `MATCH_TYPE_CHOICES = [("exact", "Exact Query Match"), ("contains", "Contains Keyword"), ("starts_with", "Starts With Keyword")]`
+    - `ACTION_TYPE_CHOICES = [("boost", "Boost Product Score"), ("bury", "Bury Product Score"), ("pin", "Pin Product to Slot"), ("block", "Block / Exclude Product"), ("redirect", "Query URL Redirect"), ("banner", "Promotional Banner Injection")]`
+  - **Fields**:
+    - `name`: `CharField(max_length=150, help_text="Rule description, e.g. 'Pin Air Max on Sneakers Query'")`
+    - `rule_type`: `CharField(max_length=20, choices=RULE_TYPE_CHOICES, default="query")`
+    - `trigger_query`: `CharField(max_length=200, blank=True, help_text="Target search query string when rule_type='query'")`
+    - `match_type`: `CharField(max_length=20, choices=MATCH_TYPE_CHOICES, default="exact")`
+    - `target_category`: `ForeignKey("ecommerce.StoreCategory", on_delete=models.SET_NULL, null=True, blank=True, related_name="merchandising_rules", help_text="Target category listing when rule_type='category'")`
+    - `action_type`: `CharField(max_length=20, choices=ACTION_TYPE_CHOICES, default="boost")`
+    - `boosted_product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.CASCADE, null=True, blank=True, related_name="merchandising_rules", help_text="Target product for boost, bury, pin, or block actions")`
+    - `boost_weight`: `IntegerField(default=10, validators=[MinValueValidator(-100), MaxValueValidator(100)], help_text="Relevance score modifier (-100 to +100). Positive boosts; negative buries")`
+    - `pin_position`: `PositiveIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(50)], help_text="Fixed 1-indexed rank position (1=Slot 1, 2=Slot 2) when action_type='pin'")`
+    - `redirect_url`: `CharField(max_length=255, blank=True, help_text="Target URL when action_type='redirect'")`
+    - `banner_title`: `CharField(max_length=150, blank=True, help_text="Promotional banner heading when action_type='banner'")`
+    - `banner_body`: `TextField(blank=True, help_text="Promotional banner body text / discount copy")`
+    - `banner_image_url`: `URLField(blank=True, help_text="Promotional banner background or artwork image")`
+    - `banner_link_url`: `CharField(max_length=255, blank=True, help_text="Click destination for banner")`
+    - `priority`: `PositiveIntegerField(default=10, help_text="Evaluation priority (higher number evaluated first)")`
+    - `start_date`: `DateTimeField(null=True, blank=True, help_text="Optional campaign start time")`
+    - `end_date`: `DateTimeField(null=True, blank=True, help_text="Optional campaign end time")`
+    - `is_active`: `BooleanField(default=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_esmr_tenant_num_uniq")`
+    - `Index(fields=["tenant", "is_active", "rule_type"], name="idx_esmr_ten_act_type")`
+    - `Index(fields=["tenant", "trigger_query"], name="idx_esmr_ten_trig_q")`
+  - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
+  - **Validation & Business Logic**:
+    - If `rule_type == "query"`, `trigger_query` is required.
+    - If `rule_type == "category"`, `target_category` is required.
+    - If `action_type in ("boost", "bury", "pin", "block")`, `boosted_product` is required.
+    - If `action_type == "pin"`, `pin_position` is required (>= 1).
+    - If `action_type == "redirect"`, `redirect_url` is required.
+    - If `action_type == "banner"`, `banner_title` is required.
+    - If both `start_date` and `end_date` are set, `end_date >= start_date`.
+
+- [ ] **`SearchQueryLog`** [Prefix: `ESQL-`] (`apps/ecommerce/models/SearchDiscovery/SearchQueryLogs.py`)
+  - **Purpose**: Search analytics and discovery telemetry tracking executed shopper searches, hit counts, latency, zero-result flags, applied filters, and product click events.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Fields**:
+    - `query_text`: `CharField(max_length=255, db_index=True, help_text="Raw search query string entered by shopper")`
+    - `normalized_query`: `CharField(max_length=255, db_index=True, help_text="Cleaned, lowercase, stripped search term for grouping")`
+    - `results_count`: `PositiveIntegerField(default=0, help_text="Count of matching products returned")`
+    - `is_zero_result`: `BooleanField(default=False, db_index=True, help_text="True if search returned 0 items (null-result)")`
+    - `execution_time_ms`: `PositiveIntegerField(default=0, help_text="Search latency in milliseconds")`
+    - `applied_filters`: `JSONField(default=dict, blank=True, help_text="Dictionary of facet filters applied during query")`
+    - `sort_order`: `CharField(max_length=30, default="relevance", help_text="Active sort order selected (e.g. relevance, price_asc, newest)")`
+    - `redirected_to`: `CharField(max_length=255, blank=True, help_text="Destination URL if intercepted by redirect rule")`
+    - `clicked_product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.SET_NULL, null=True, blank=True, related_name="search_clicks", help_text="First product clicked by shopper from search results")`
+    - `click_position`: `PositiveIntegerField(null=True, blank=True, help_text="1-indexed rank position of clicked product")`
+    - `session_key`: `CharField(max_length=64, blank=True, db_index=True, help_text="Shopper session key for anonymous attribution")`
+    - `customer`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="ecommerce_search_logs", help_text="Shopper party record if authenticated")`
+    - `ip_address`: `GenericIPAddressField(null=True, blank=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_esql_tenant_num_uniq")`
+    - `Index(fields=["tenant", "is_zero_result", "-created_at"], name="idx_esql_ten_zr_created")`
+    - `Index(fields=["tenant", "normalized_query"], name="idx_esql_ten_norm_q")`
+    - `Index(fields=["tenant", "-created_at"], name="idx_esql_ten_created")`
+  - **Form Exclusions**: `tenant`, `number`, `execution_time_ms`, `created_at`, `updated_at`.
+
+---
+
+## Backend Packages & Files (Entity-by-Entity)
+
+### 1. Models Package
+- [ ] `apps/ecommerce/models/SearchDiscovery/__init__.py` (re-exports `SearchSynonym`, `SearchFacetConfig`, `SearchMerchandisingRule`, `SearchQueryLog`)
+- [ ] `apps/ecommerce/models/SearchDiscovery/SearchSynonyms.py` (`SearchSynonym`, prefix `ESYM`)
+- [ ] `apps/ecommerce/models/SearchDiscovery/SearchFacetConfigs.py` (`SearchFacetConfig`, prefix `ESFC`)
+- [ ] `apps/ecommerce/models/SearchDiscovery/SearchMerchandisingRules.py` (`SearchMerchandisingRule`, prefix `ESMR`)
+- [ ] `apps/ecommerce/models/SearchDiscovery/SearchQueryLogs.py` (`SearchQueryLog`, prefix `ESQL`)
+
+### 2. Forms Package
+- [ ] `apps/ecommerce/forms/SearchDiscovery/__init__.py` (re-exports all forms)
+- [ ] `apps/ecommerce/forms/SearchDiscovery/SearchSynonyms.py` (`SearchSynonymForm` with `TenantUniqueMixin` & clean normalization)
+- [ ] `apps/ecommerce/forms/SearchDiscovery/SearchFacetConfigs.py` (`SearchFacetConfigForm` with `reject_foreign` for category_scope)
+- [ ] `apps/ecommerce/forms/SearchDiscovery/SearchMerchandisingRules.py` (`SearchMerchandisingRuleForm` with `reject_foreign` for target_category and boosted_product)
+- [ ] `apps/ecommerce/forms/SearchDiscovery/SearchQueryLogs.py` (`SearchQueryLogFilterForm` for analytics and search log review)
+
+### 3. Views Package (Function-Based Views, Tenant Scoped, Audit Log Instrumented)
+- [ ] `apps/ecommerce/views/SearchDiscovery/__init__.py`
+- [ ] `apps/ecommerce/views/SearchDiscovery/SearchSynonyms.py`:
+  - [ ] `searchsynonym_list` (filters: `synonym_type`, `is_active`; search: `number`, `name`, `root_term`, `synonyms`; pagination)
+  - [ ] `searchsynonym_detail` (rule definition, expansions preview, usage hit count, notes)
+  - [ ] `searchsynonym_create`
+  - [ ] `searchsynonym_edit`
+  - [ ] `searchsynonym_delete` (POST)
+  - [ ] `searchsynonym_toggle` (POST action to toggle active status)
+- [ ] `apps/ecommerce/views/SearchDiscovery/SearchFacetConfigs.py`:
+  - [ ] `searchfacetconfig_list` (filters: `source_type`, `widget_type`, `filter_logic`, `is_active`; search: `name`, `code`; ordering by `display_order`)
+  - [ ] `searchfacetconfig_detail` (widget configuration, category scope, value preview)
+  - [ ] `searchfacetconfig_create`
+  - [ ] `searchfacetconfig_edit`
+  - [ ] `searchfacetconfig_delete` (POST)
+  - [ ] `searchfacetconfig_toggle` (POST action to toggle active status)
+- [ ] `apps/ecommerce/views/SearchDiscovery/SearchMerchandisingRules.py`:
+  - [ ] `searchmerchandisingrule_list` (filters: `rule_type`, `action_type`, `is_active`; search: `name`, `trigger_query`, `redirect_url`; ordering by priority)
+  - [ ] `searchmerchandisingrule_detail` (trigger criteria, consequence payload, preview banner card)
+  - [ ] `searchmerchandisingrule_create`
+  - [ ] `searchmerchandisingrule_edit`
+  - [ ] `searchmerchandisingrule_delete` (POST)
+  - [ ] `searchmerchandisingrule_toggle` (POST action to toggle active status)
+- [ ] `apps/ecommerce/views/SearchDiscovery/SearchQueryLogs.py`:
+  - [ ] `searchquerylog_list` (filters: `is_zero_result`, `sort_order`, date range; search: `query_text`, `normalized_query`; pagination)
+  - [ ] `searchquerylog_detail` (telemetry payload, applied facet JSON, execution latency, customer attribution, clicked product)
+  - [ ] `searchquerylog_delete` (POST)
+- [ ] `apps/ecommerce/views/SearchDiscovery/SearchConsole.py`:
+  - [ ] `search_console` (interactive search discovery workbench: query execution with synonym expansion, merchandising rule enforcement, dynamic facet calculation, visual similarity heuristic matching, and null-result fallback suggestions)
+  - [ ] `search_autocomplete` (JSON/HTMX endpoint: search-as-you-type returning top matching products, suggested query terms, and matching categories)
+  - [ ] `search_analytics` (discovery analytics dashboard: total searches, zero-result search rate %, top search queries table, null-result recovery opportunities)
+
+### 4. URLs Package
+- [ ] `apps/ecommerce/urls/SearchDiscovery/__init__.py`
+- [ ] `apps/ecommerce/urls/SearchDiscovery/SearchSynonyms.py` (`searchsynonym_list`, `searchsynonym_create`, `searchsynonym_detail`, `searchsynonym_edit`, `searchsynonym_delete`, `searchsynonym_toggle`)
+- [ ] `apps/ecommerce/urls/SearchDiscovery/SearchFacetConfigs.py` (`searchfacetconfig_list`, `searchfacetconfig_create`, `searchfacetconfig_detail`, `searchfacetconfig_edit`, `searchfacetconfig_delete`, `searchfacetconfig_toggle`)
+- [ ] `apps/ecommerce/urls/SearchDiscovery/SearchMerchandisingRules.py` (`searchmerchandisingrule_list`, `searchmerchandisingrule_create`, `searchmerchandisingrule_detail`, `searchmerchandisingrule_edit`, `searchmerchandisingrule_delete`, `searchmerchandisingrule_toggle`)
+- [ ] `apps/ecommerce/urls/SearchDiscovery/SearchQueryLogs.py` (`searchquerylog_list`, `searchquerylog_detail`, `searchquerylog_delete`)
+- [ ] `apps/ecommerce/urls/SearchDiscovery/SearchConsole.py` (`search_console`, `search_autocomplete`, `search_analytics`)
+
+### 5. Package Re-Exports & Integrations
+- [ ] `apps/ecommerce/models/__init__.py`: Surgical re-export of `SearchSynonym`, `SearchFacetConfig`, `SearchMerchandisingRule`, `SearchQueryLog` + update `__all__`.
+- [ ] `apps/ecommerce/forms/__init__.py`: Surgical re-export of `SearchSynonymForm`, `SearchFacetConfigForm`, `SearchMerchandisingRuleForm`, `SearchQueryLogFilterForm` + update `__all__`.
+- [ ] `apps/ecommerce/views/__init__.py`: Surgical re-export of all 9.7 view functions + update `__all__`.
+- [ ] `apps/ecommerce/urls/__init__.py`: Wire `apps.ecommerce.urls.SearchDiscovery.urlpatterns` into `ecommerce` url patterns.
+- [ ] `apps/ecommerce/admin.py`: Register `SearchSynonymAdmin`, `SearchFacetConfigAdmin`, `SearchMerchandisingRuleAdmin`, and `SearchQueryLogAdmin`.
+- [ ] `apps/ecommerce/management/commands/seed_ecommerce.py`: Extend `_seed_tenant()` idempotently with:
+  - 3+ synonym rules (two-way "sneakers, trainers, kicks", one-way "audio -> headphones, speakers", replacement "sammsung -> samsung").
+  - 5+ facet configurations (Category, Brand, Price Range, Variant Option Size/Color, Stock Availability).
+  - 4+ merchandising rules (Pin hero product on "running shoes", Boost high-margin item, URL redirect for "customer service", Promotional banner on "black friday").
+  - 10+ search query logs (covering standard queries, multi-filter searches, and zero-result queries for telemetry analytics).
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["9.7"]` mapping all 5 NavERP.md feature bullets:
+  ```python
+  "9.7": {
+      "Site Search & Autocomplete": "ecommerce:search_console",
+      "Faceted Search & Filtering": "ecommerce:searchfacetconfig_list",
+      "Visual Search & AI Recommendations": "ecommerce:search_console",
+      "Search Analytics & Merchandising": "ecommerce:searchmerchandisingrule_list",
+      "Personalized Browse Experience": "ecommerce:search_console",
+      # Extra live leaves
+      "Synonyms": "ecommerce:searchsynonym_list",
+      "Facet Configurations": "ecommerce:searchfacetconfig_list",
+      "Merchandising Rules": "ecommerce:searchmerchandisingrule_list",
+      "Query Logs": "ecommerce:searchquerylog_list",
+      "Search Analytics": "ecommerce:search_analytics",
+  },
+  ```
+
+---
+
+## Templates Package
+
+- [ ] `templates/ecommerce/searchdiscovery/synonym/list.html` (filter bar for `synonym_type`, `is_active`; search; hit count badges; pagination; toggle switch)
+- [ ] `templates/ecommerce/searchdiscovery/synonym/detail.html` (rule summary, synonym chips, hit statistics, audit metadata)
+- [ ] `templates/ecommerce/searchdiscovery/synonym/form.html` (type selector, root term input, comma-separated synonyms textarea, active toggle)
+
+- [ ] `templates/ecommerce/searchdiscovery/facetconfig/list.html` (filter bar for `source_type`, `widget_type`, `filter_logic`, `is_active`; display order badges; search; pagination)
+- [ ] `templates/ecommerce/searchdiscovery/facetconfig/detail.html` (widget preview, source attribute mapping, category scope card, logic configuration)
+- [ ] `templates/ecommerce/searchdiscovery/facetconfig/form.html` (name, code slug, source type selector, widget type selector, category selector with `reject_foreign`)
+
+- [ ] `templates/ecommerce/searchdiscovery/merchandisingrule/list.html` (filter bar for `rule_type`, `action_type`, `is_active`; priority badges; search; pagination)
+- [ ] `templates/ecommerce/searchdiscovery/merchandisingrule/detail.html` (trigger conditions, consequence card, banner preview, target product details)
+- [ ] `templates/ecommerce/searchdiscovery/merchandisingrule/form.html` (trigger query, rule type, action selector, product picker, weight slider, banner inputs)
+
+- [ ] `templates/ecommerce/searchdiscovery/querylog/list.html` (filter bar for `is_zero_result`, `sort_order`; search; execution latency badges; pagination)
+- [ ] `templates/ecommerce/searchdiscovery/querylog/detail.html` (query telemetry, results count, applied filter tags, customer attribution, clicked product)
+
+- [ ] `templates/ecommerce/searchdiscovery/console/console.html` (interactive search discovery workbench: search input with autocomplete trigger, dynamic facet sidebar, product result grid with boost/pin badges, visual style matching recommendations, zero-result fallback alerts)
+- [ ] `templates/ecommerce/searchdiscovery/console/autocomplete_results.html` (HTMX partial rendering instant suggestions, matching categories, and top product snippets)
+
+- [ ] `templates/ecommerce/searchdiscovery/analytics/analytics.html` (discovery analytics dashboard: KPI summary cards [total searches, null-result rate %, average latency ms], top search queries table, zero-result search recovery table)
+
+---
+
+## Integration, Database & Migrations
+
+- [ ] Run `python manage.py makemigrations ecommerce` -> generates `0008_searchfacetconfig_searchmerchandisingrule_and_more.py`.
+- [ ] Run `python manage.py migrate ecommerce` -> applies migration `0008` cleanly.
+- [ ] Run `python manage.py seed_ecommerce` twice -> verifies idempotency with 0 errors.
+- [ ] Run `python manage.py check` -> 0 system check issues reported.
+
+---
+
+## Phase 3.5 — Smoke Test Gate (`qa-smoke-tester` agent)
+
+- [ ] Verify HTTP 200 response for all new 9.7 routes under `admin_acme`.
+- [ ] Verify search console renders live query results, facet filters, and synonym expansions.
+- [ ] Verify cross-tenant isolation: Workspace A rules/synonyms never leak to Workspace B (assert 404 on foreign IDOR).
+- [ ] Verify empty search query, invalid filter params, and zero-result fallbacks handle gracefully without 500 errors.
+
+---
+
+## Phase 4 — Six Serial Review Passes
+
+- [ ] Review Pass 1: `code-reviewer` (Django ORM, FBV standards, tenant filtering, clean() validation)
+- [ ] Review Pass 2: `explorer` (Contract adherence, model fields, context keys, URL reverse matches)
+- [ ] Review Pass 3: `frontend-reviewer` (Tailwind, color-named badges only, filter state preservation, responsive grid)
+- [ ] Review Pass 4: `performance-reviewer` (Select related, query count, index utilization, paginated queries)
+- [ ] Review Pass 5: `qa-smoke-tester` (Form submissions, validation errors, filter execution, HTMX autocomplete)
+- [ ] Review Pass 6: `security-reviewer` (Tenant isolation, IDOR prevention, XSS escaping, SQL injection safety)
+- [ ] Consolidate all findings into `.claude/tasks/review-ecommerce-9.7.md` with deterministic IDs (C1.., I1.., M1..).
+
+---
+
+## Phase 5 — Finding Remediation (`code-fixer` agent)
+
+- [ ] Resolve all Critical findings one-by-one with immediate discrete git commits.
+- [ ] Resolve all Important findings one-by-one with immediate discrete git commits.
+- [ ] Resolve all Minor findings one-by-one with immediate discrete git commits.
+- [ ] Verify `python manage.py check` remains clean.
+
+---
+
+## Phase 6 — Automated Test Suite
+
+- [ ] Authored `apps/ecommerce/tests/test_searchdiscovery_models.py` (model creation, validation, `clean()`, auto-numbering, constraints)
+- [ ] Authored `apps/ecommerce/tests/test_searchdiscovery_forms.py` (form validation, slug formatting, `reject_foreign`, clean logic)
+- [ ] Authored `apps/ecommerce/tests/test_searchdiscovery_views.py` (FBV endpoints, search console, autocomplete, filters, pagination, toggle actions)
+- [ ] Authored `apps/ecommerce/tests/test_searchdiscovery_security.py` (cross-tenant IDOR protection, unauthenticated redirection, audit log verification)
+- [ ] Update `apps/ecommerce/tests/conftest.py` with 9.7 test fixtures.
+- [ ] Run full unfiltered app test suite: `pytest apps/ecommerce/tests/` (100% green, 0 failures).
+
+---
+
+## Phase 7 — Close-out & Documentation
+
+- [ ] Author/update `.claude/skills/ecommerce/SKILL.md` with 9.7 models, routes, templates, and seeder entities.
+- [ ] Update `README.md` marking Sub-module 9.7 complete.
+- [ ] Create `.claude/tasks/gaps-ecommerce-9.7.md` (record any deferred AI/ML cluster webhooks or state `**Gaps**: None`).
+- [ ] Record close-out summary in `.claude/tasks/todo.md`.
+
+
+---
 ### 8.11 — Customer Success & Account Management (app `sales`, extends `core.Party` + `crm.Opportunity` + `scm.SalesOrder` + `sales.AccountPlan` + `accounting.Currency`) — plan from `research-sales-8.11.md` (2026-10-19)
 
 > **This plan EXTENDS an existing app.** `apps/sales/` is live with 8.1–8.10. **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.** Migration is **incremental**: the leaf today is `0020_commissionadjustment_sales_cadj_ten_stat_idx_and_more.py`, so **8.11 claims `0021`**.
