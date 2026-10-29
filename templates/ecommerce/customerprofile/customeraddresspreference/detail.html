@@ -64,20 +64,15 @@
           </div>
           <div>
             <dt class="text-xs font-medium text-slate-500">Street Address</dt>
-            <dd class="text-slate-900">
-              {{ preference.address.line1 }}
-              {% if preference.address.line2 %}<br>{{ preference.address.line2 }}{% endif %}
-            </dd>
+            <dd class="text-slate-900">{{ preference.address.line1 }}</dd>
           </div>
           <div>
-            <dt class="text-xs font-medium text-slate-500">City, State, Postal Code</dt>
-            <dd class="text-slate-900">
-              {{ preference.address.city }}{% if preference.address.state %}, {{ preference.address.state }}{% endif %} {{ preference.address.postal_code }}
-            </dd>
+            <dt class="text-xs font-medium text-slate-500">City</dt>
+            <dd class="text-slate-900">{{ preference.address.city|default:"—" }}</dd>
           </div>
           <div>
             <dt class="text-xs font-medium text-slate-500">Country</dt>
-            <dd class="text-slate-900">{{ preference.address.country }}</dd>
+            <dd class="text-slate-900">{{ preference.address.country|default:"—" }}</dd>
           </div>
         </dl>
       </div>
