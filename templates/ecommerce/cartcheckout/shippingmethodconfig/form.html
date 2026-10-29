@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ method.name }}{% else %}New Shipping Method{% endif %} · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:shippingmethodconfig_list' %}">Shipping Methods</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Method{% else %}New Method{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Shipping Method {{ method.name }}{% else %}Create Shipping Method{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                <strong>Please correct the errors below:</strong>
+                <ul class="list-disc ml-5 mt-2">
+                    {% for field in form %}
+                        {% for error in field.errors %}
+                            <li>{{ field.label }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                    {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label for="{{ form.name.id_for_label }}" class="form-label">Method Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}
+                        <div class="form-error">{{ form.name.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.code.id_for_label }}" class="form-label">Method Code *</label>
+                    {{ form.code }}
+                    {% if form.code.errors %}
+                        <div class="form-error">{{ form.code.errors.0 }}</div>
+                    {% endif %}
+                    <p class="text-xs text-slate-500 mt-1">Unique identifier (e.g. GROUND, EXPRESS, FREE_SHIP).</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.carrier.id_for_label }}" class="form-label">Carrier</label>
+                    {{ form.carrier }}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.calculation_type.id_for_label }}" class="form-label">Calculation Type</label>
+                    {{ form.calculation_type }}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.base_rate.id_for_label }}" class="form-label">Base Rate ($)</label>
+                    {{ form.base_rate }}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.cost_per_kg.id_for_label }}" class="form-label">Cost per kg ($)</label>
+                    {{ form.cost_per_kg }}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.free_shipping_threshold.id_for_label }}" class="form-label">Free Shipping Threshold ($)</label>
+                    {{ form.free_shipping_threshold }}
+                    <p class="text-xs text-slate-500 mt-1">Order subtotal threshold to qualify for free shipping.</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.destination_countries.id_for_label }}" class="form-label">Destination Countries</label>
+                    {{ form.destination_countries }}
+                    <p class="text-xs text-slate-500 mt-1">Comma-separated country ISOs or ALL.</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="form-group">
+                        <label for="{{ form.estimated_days_min.id_for_label }}" class="form-label">Min Days</label>
+                        {{ form.estimated_days_min }}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.estimated_days_max.id_for_label }}" class="form-label">Max Days</label>
+                        {{ form.estimated_days_max }}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.sort_order.id_for_label }}" class="form-label">Sort Order</label>
+                    {{ form.sort_order }}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.description.id_for_label }}" class="form-label">Customer Description</label>
+                {{ form.description }}
+            </div>
+
+            <div class="flex items-center gap-2">
+                {{ form.is_active }}
+                <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-slate-800">
+                    Active (surfaced at checkout)
+                </label>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% url 'ecommerce:shippingmethodconfig_list' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    {% if is_edit %}Save Changes{% else %}Create Method{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
