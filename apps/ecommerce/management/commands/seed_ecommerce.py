@@ -559,11 +559,11 @@ class Command(BaseCommand):
         self._seed_pricing_promotion(tenant, now)
 
     def _seed_pricing_promotion(self, tenant, now):
-        cat_apparel = StoreCategory.objects.filter(tenant=tenant, slug="apparel").first()
-        prod_headphones = CatalogProduct.objects.filter(tenant=tenant, slug="pro-noise-cancelling-headphones").first()
-        v1 = ProductVariant.objects.filter(tenant=tenant, sku="PNC-BLK").first()
-        v2 = ProductVariant.objects.filter(tenant=tenant, sku="PNC-SLV").first()
-        v3 = ProductVariant.objects.filter(tenant=tenant, sku="ACT-TEE-M").first()
+        cat_apparel = StoreCategory.objects.filter(tenant=tenant).first()
+        v1 = ProductVariant.objects.filter(tenant=tenant, sku="HDP-BLK").first()
+        v2 = ProductVariant.objects.filter(tenant=tenant, sku="TSH-NAVY-M").first()
+        v3 = ProductVariant.objects.filter(tenant=tenant, sku="TOT-NAT").first()
+        prod_headphones = v1.product if v1 else None
 
         # 1. DynamicPriceRule
         DynamicPriceRule.objects.get_or_create(
