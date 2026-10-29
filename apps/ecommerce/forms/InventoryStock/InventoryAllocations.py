@@ -41,7 +41,7 @@ class InventoryAllocationForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if hasattr(self, "tenant") and self.tenant is not None:
             self.fields["product"].queryset = CatalogProduct.objects.filter(tenant=self.tenant)
-            self.fields["variant"].queryset = ProductVariant.objects.filter(tenant=self.tenant)
+            self.fields["variant"].queryset = ProductVariant.objects.filter(tenant=self.tenant).select_related("product")
             self.fields["fulfillment_center"].queryset = FulfillmentCenter.objects.filter(tenant=self.tenant)
 
     def clean(self):
