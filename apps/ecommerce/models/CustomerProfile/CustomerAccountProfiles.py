@@ -61,7 +61,7 @@ class CustomerAccountProfile(TenantNumbered):
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name="customer_profiles",
+        related_name="ecommerce_customer_profiles",
     )
     preferred_language = models.CharField(max_length=10, default="en")
 
