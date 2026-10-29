@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit Order {{ order.number }}{% else %}New eCommerce Order{% endif %} · eCommerce · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:ecommerceorder_list' %}" class="hover:text-blue-600">Orders</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}{{ order.number }}{% else %}New{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Order {{ order.number }}{% else %}Create eCommerce Order{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Configure customer order details, address snapshots, payment and fulfillment states.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      {% if is_edit %}
+        <a href="{% url 'ecommerce:ecommerceorder_detail' pk=order.pk %}" class="btn btn-outline">Cancel</a>
+      {% else %}
+        <a href="{% url 'ecommerce:ecommerceorder_list' %}" class="btn btn-outline">Cancel</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Form Body -->
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.errors %}
+      <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+        <div class="font-bold mb-1">Please correct the errors below:</div>
+        <ul class="list-disc list-inside space-y-1">
+          {% for field, errors in form.errors.items %}
+            {% for error in errors %}
+              <li><strong>{{ field|title }}:</strong> {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <!-- 1. Customer & Account Identity -->
+    <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <h3 class="text-base font-semibold text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-2">
+        <i data-lucide="user" class="w-4 h-4 text-blue-600"></i>
+        <span>Customer & Transaction Currency</span>
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label for="{{ form.customer.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Customer Account <span class="text-red-500">*</span>
+          </label>
+          {{ form.customer }}
+          <span class="text-xs text-slate-400">Core Party customer record</span>
+        </div>
+        <div>
+          <label for="{{ form.guest_email.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Guest / Notification Email
+          </label>
+          {{ form.guest_email }}
+        </div>
+        <div>
+          <label for="{{ form.currency.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Currency <span class="text-red-500">*</span>
+          </label>
+          {{ form.currency }}
+          <span class="text-xs text-slate-400">Global ISO 4217 currency</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Order Processing & Validation State -->
+    <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <h3 class="text-base font-semibold text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-2">
+        <i data-lucide="shield-check" class="w-4 h-4 text-green-600"></i>
+        <span>Order State & Fraud Risk Evaluation</span>
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label for="{{ form.status.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Order Status
+          </label>
+          {{ form.status }}
+        </div>
+        <div>
+          <label for="{{ form.payment_status.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Payment Status
+          </label>
+          {{ form.payment_status }}
+        </div>
+        <div>
+          <label for="{{ form.fulfillment_status.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Fulfillment Status
+          </label>
+          {{ form.fulfillment_status }}
+        </div>
+        <div>
+          <label for="{{ form.inventory_reservation_status.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Inventory Reservation
+          </label>
+          {{ form.inventory_reservation_status }}
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
+        <div>
+          <label for="{{ form.fraud_risk_level.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Fraud Risk Level
+          </label>
+          {{ form.fraud_risk_level }}
+        </div>
+        <div>
+          <label for="{{ form.fraud_score.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Fraud Score (0-100)
+          </label>
+          {{ form.fraud_score }}
+        </div>
+        <div>
+          <label for="{{ form.address_verification_status.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            AVS Verification Status
+          </label>
+          {{ form.address_verification_status }}
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Financial Adjustments & Promotions -->
+    <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <h3 class="text-base font-semibold text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-2">
+        <i data-lucide="tag" class="w-4 h-4 text-amber-600"></i>
+        <span>Financial Adjustments & Applied Promotions</span>
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label for="{{ form.discount_amount.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Discount Amount ($)
+          </label>
+          {{ form.discount_amount }}
+        </div>
+        <div>
+          <label for="{{ form.shipping_amount.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Shipping Charges ($)
+          </label>
+          {{ form.shipping_amount }}
+        </div>
+        <div>
+          <label for="{{ form.tax_amount.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Tax Amount ($)
+          </label>
+          {{ form.tax_amount }}
+        </div>
+        <div>
+          <label for="{{ form.applied_coupon.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Applied Coupon Code
+          </label>
+          {{ form.applied_coupon }}
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Shipping Address Snapshot -->
+    <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <h3 class="text-base font-semibold text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-2">
+        <i data-lucide="map-pin" class="w-4 h-4 text-blue-600"></i>
+        <span>Shipping Address Snapshot</span>
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label for="{{ form.shipping_name.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Recipient Name <span class="text-red-500">*</span>
+          </label>
+          {{ form.shipping_name }}
+        </div>
+        <div>
+          <label for="{{ form.shipping_address_line1.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Address Line 1 <span class="text-red-500">*</span>
+          </label>
+          {{ form.shipping_address_line1 }}
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label for="{{ form.shipping_city.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            City <span class="text-red-500">*</span>
+          </label>
+          {{ form.shipping_city }}
+        </div>
+        <div>
+          <label for="{{ form.shipping_state.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            State / Region
+          </label>
+          {{ form.shipping_state }}
+        </div>
+        <div>
+          <label for="{{ form.shipping_postal_code.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Postal / ZIP Code <span class="text-red-500">*</span>
+          </label>
+          {{ form.shipping_postal_code }}
+        </div>
+        <div>
+          <label for="{{ form.shipping_country.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Country <span class="text-red-500">*</span>
+          </label>
+          {{ form.shipping_country }}
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Billing Address Snapshot -->
+    <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <h3 class="text-base font-semibold text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-2">
+        <i data-lucide="credit-card" class="w-4 h-4 text-slate-600"></i>
+        <span>Billing Address Snapshot</span>
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label for="{{ form.billing_name.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Billing Name
+          </label>
+          {{ form.billing_name }}
+        </div>
+        <div>
+          <label for="{{ form.billing_address_line1.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Billing Line 1
+          </label>
+          {{ form.billing_address_line1 }}
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label for="{{ form.billing_city.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            City
+          </label>
+          {{ form.billing_city }}
+        </div>
+        <div>
+          <label for="{{ form.billing_state.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            State / Region
+          </label>
+          {{ form.billing_state }}
+        </div>
+        <div>
+          <label for="{{ form.billing_postal_code.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Postal / ZIP Code
+          </label>
+          {{ form.billing_postal_code }}
+        </div>
+        <div>
+          <label for="{{ form.billing_country.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Country
+          </label>
+          {{ form.billing_country }}
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. Operational & Customer Notes -->
+    <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <h3 class="text-base font-semibold text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-2">
+        <i data-lucide="file-text" class="w-4 h-4 text-slate-600"></i>
+        <span>Notes & Instructions</span>
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label for="{{ form.customer_notes.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Customer Delivery Instructions
+          </label>
+          {{ form.customer_notes }}
+        </div>
+        <div>
+          <label for="{{ form.internal_notes.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+            Internal Staff Remarks
+          </label>
+          {{ form.internal_notes }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="flex items-center justify-end gap-3 pt-4">
+      {% if is_edit %}
+        <a href="{% url 'ecommerce:ecommerceorder_detail' pk=order.pk %}" class="btn btn-outline">Cancel</a>
+      {% else %}
+        <a href="{% url 'ecommerce:ecommerceorder_list' %}" class="btn btn-outline">Cancel</a>
+      {% endif %}
+      <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="check" class="w-4 h-4"></i>
+        <span>{% if is_edit %}Save Changes{% else %}Create Order{% endif %}</span>
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
