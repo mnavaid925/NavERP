@@ -91,10 +91,10 @@ def searchmerchandisingrule_create(request):
             rule.tenant = request.tenant
             rule.save()
             write_audit_log(
-                request,
-                action="create",
-                instance=rule,
-                notes=f"Created merchandising rule {rule.number} ({rule.name})",
+                request.user,
+                rule,
+                "create",
+                {"number": rule.number, "name": rule.name},
             )
             messages.success(request, f"Merchandising rule '{rule.name}' created.")
             return redirect("ecommerce:searchmerchandisingrule_detail", pk=rule.pk)
@@ -122,10 +122,10 @@ def searchmerchandisingrule_edit(request, pk):
         if form.is_valid():
             rule = form.save()
             write_audit_log(
-                request,
-                action="update",
-                instance=rule,
-                notes=f"Updated merchandising rule {rule.number} ({rule.name})",
+                request.user,
+                rule,
+                "update",
+                {"number": rule.number, "name": rule.name},
             )
             messages.success(request, f"Merchandising rule '{rule.name}' updated.")
             return redirect("ecommerce:searchmerchandisingrule_detail", pk=rule.pk)
@@ -151,10 +151,10 @@ def searchmerchandisingrule_delete(request, pk):
     name = rule.name
     rule.delete()
     write_audit_log(
-        request,
-        action="delete",
-        instance=rule,
-        notes=f"Deleted merchandising rule {number} ({name})",
+        request.user,
+        rule,
+        "delete",
+        {"number": number, "name": name},
     )
     messages.success(request, f"Merchandising rule '{name}' deleted.")
     return redirect("ecommerce:searchmerchandisingrule_list")
@@ -169,10 +169,10 @@ def searchmerchandisingrule_toggle(request, pk):
     rule.save(update_fields=["is_active", "updated_at"])
     state = "activated" if rule.is_active else "deactivated"
     write_audit_log(
-        request,
-        action="update",
-        instance=rule,
-        notes=f"{state.capitalize()} merchandising rule {rule.number}",
+        request.user,
+        rule,
+        "update",
+        {"is_active": rule.is_active},
     )
     messages.success(request, f"Merchandising rule '{rule.name}' {state}.")
     return redirect("ecommerce:searchmerchandisingrule_detail", pk=rule.pk)
