@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}{{ wishlist.name }} · Wishlist · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:customerwishlist_list' %}" class="hover:text-blue-600">Wishlists</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ wishlist.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ wishlist.name }}</h1>
+        {% if wishlist.visibility == "public" %}
+          <span class="badge badge-green">{{ wishlist.get_visibility_display }}</span>
+        {% elif wishlist.visibility == "shared" %}
+          <span class="badge badge-info">{{ wishlist.get_visibility_display }}</span>
+        {% else %}
+          <span class="badge badge-slate">{{ wishlist.get_visibility_display }}</span>
+        {% endif %}
+        {% if wishlist.is_default %}
+          <span class="badge badge-green">Default Wishlist</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">Wishlist #{{ wishlist.number }} for {{ wishlist.customer.name }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:customerwishlist_edit' wishlist.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Wishlist</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:customerwishlist_delete' wishlist.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete wishlist {{ wishlist.name }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger inline-flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Items Column (2/3) -->
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <i data-lucide="heart" class="w-4 h-4 text-pink-600"></i>
+            <span>Wishlist Items ({{ items|length }})</span>
+          </h2>
+        </div>
+
+        <div class="table-wrap overflow-x-auto">
+          <table class="table w-full text-left border-collapse text-sm">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs font-semibold uppercase">
+              <tr>
+                <th class="py-2.5 px-3">Product</th>
+                <th class="py-2.5 px-3">Variant / SKU</th>
+                <th class="py-2.5 px-3 text-center">Desired Qty</th>
+                <th class="py-2.5 px-3">Priority</th>
+                <th class="py-2.5 px-3">Comment</th>
+                <th class="py-2.5 px-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 text-slate-700">
+              {% for item in items %}
+                <tr class="hover:bg-slate-50/80">
+                  <td class="py-2.5 px-3">
+                    <a href="{% url 'ecommerce:catalogproduct_detail' item.product.pk %}" class="font-medium text-blue-600 hover:underline">
+                      {{ item.product.name }}
+                    </a>
+                  </td>
+                  <td class="py-2.5 px-3 text-xs text-slate-600">
+                    {% if item.variant %}
+                      {{ item.variant.name }} ({{ item.variant.sku }})
+                    {% else %}
+                      {{ item.product.sku }}
+                    {% endif %}
+                  </td>
+                  <td class="py-2.5 px-3 text-center font-semibold text-slate-900">
+                    {{ item.desired_quantity }}
+                  </td>
+                  <td class="py-2.5 px-3 text-xs">
+                    {% if item.priority == "highest" %}
+                      <span class="badge badge-red">{{ item.get_priority_display }}</span>
+                    {% elif item.priority == "high" %}
+                      <span class="badge badge-amber">{{ item.get_priority_display }}</span>
+                    {% elif item.priority == "medium" %}
+                      <span class="badge badge-info">{{ item.get_priority_display }}</span>
+                    {% else %}
+                      <span class="badge badge-slate">{{ item.get_priority_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td class="py-2.5 px-3 text-xs text-slate-500">
+                    {{ item.comment|default:"—" }}
+                  </td>
+                  <td class="py-2.5 px-3 text-center">
+                    <form method="post" action="{% url 'ecommerce:customerwishlist_item_delete' item.pk %}" onsubmit="return confirm('Remove item from wishlist?');">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-icon text-slate-400 hover:text-red-600" title="Remove Item">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="6" class="py-8 text-center text-xs text-slate-500">
+                    This wishlist has no items yet. Use the form below to add products.
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Add Item Card -->
+      <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+        <h3 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
+          <i data-lucide="plus-circle" class="w-4 h-4 text-blue-600"></i>
+          <span>Add Product to Wishlist</span>
+        </h3>
+        <form method="post" action="{% url 'ecommerce:customerwishlist_item_add' wishlist.pk %}" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+          {% csrf_token %}
+          <div class="md:col-span-2">
+            <label for="add-product" class="block text-xs font-medium text-slate-600 mb-1">Catalog Product</label>
+            <select id="add-product" name="product" required class="form-select w-full text-sm">
+              <option value="">Select a product...</option>
+              {% for p in products %}
+                <option value="{{ p.pk }}">{{ p.name }} ({{ p.sku }}) - ${{ p.base_price }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label for="add-qty" class="block text-xs font-medium text-slate-600 mb-1">Desired Quantity</label>
+            <input type="number" id="add-qty" name="desired_quantity" value="1" min="1" class="form-input w-full text-sm">
+          </div>
+          <div>
+            <label for="add-priority" class="block text-xs font-medium text-slate-600 mb-1">Priority</label>
+            <select id="add-priority" name="priority" class="form-select w-full text-sm">
+              {% for val, label in priority_choices %}
+                <option value="{{ val }}" {% if val == "medium" %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="md:col-span-3">
+            <label for="add-comment" class="block text-xs font-medium text-slate-600 mb-1">Personal Note / Comment</label>
+            <input type="text" id="add-comment" name="comment" placeholder="Optional notes (size, color, gift for whom)" class="form-input w-full text-sm">
+          </div>
+          <div>
+            <button type="submit" class="btn btn-primary w-full inline-flex items-center justify-center gap-2">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Add Item</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Info Column (1/3) -->
+    <div class="space-y-6">
+      <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2">Wishlist Details</h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Customer</dt>
+            <dd class="text-slate-900 font-medium">{{ wishlist.customer.name }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Slug</dt>
+            <dd class="text-slate-700 font-mono text-xs">{{ wishlist.slug }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Public Sharing Link Token</dt>
+            <dd class="mt-1">
+              <div class="p-2 bg-slate-50 border border-slate-200 rounded font-mono text-xs text-slate-700 break-all">
+                {{ wishlist.share_token }}
+              </div>
+            </dd>
+          </div>
+          {% if wishlist.notes %}
+            <div>
+              <dt class="text-xs font-medium text-slate-500">Notes</dt>
+              <dd class="text-xs text-slate-700 mt-1 whitespace-pre-line bg-slate-50 p-2.5 rounded border border-slate-200">
+                {{ wishlist.notes }}
+              </dd>
+            </div>
+          {% endif %}
+          <div class="pt-2 border-t border-slate-100 text-xs text-slate-400">
+            Created: {{ wishlist.created_at|date:"M d, Y H:i" }}<br>
+            Updated: {{ wishlist.updated_at|date:"M d, Y H:i" }}
+          </div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
