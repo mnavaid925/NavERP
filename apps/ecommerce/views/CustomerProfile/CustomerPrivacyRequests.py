@@ -4,6 +4,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -243,38 +244,44 @@ def customerprivacyrequest_generate_export(request, pk):
 @require_POST
 def customerprivacyrequest_anonymize(request, pk):
     privacy_request = ecommerce_object(request, CustomerPrivacyRequest, pk)
+    if privacy_request.request_type != "erasure_anonymize":
+        messages.error(request, "Only erasure / anonymization requests can be processed for data anonymization.")
+        return redirect("ecommerce:customerprivacyrequest_detail", pk=privacy_request.pk)
+
     customer = privacy_request.customer
 
-    # Anonymize Customer Profile
-    profile = CustomerAccountProfile.objects.filter(tenant=request.tenant, customer=customer).first()
-    if profile:
-        profile.phone_number = ""
-        profile.phone_verified = False
-        profile.user = None
-        profile.email_marketing_opt_in = False
-        profile.sms_marketing_opt_in = False
-        profile.status = "anonymized"
-        profile.internal_notes = f"GDPR Anonymized per {privacy_request.number} on {timezone.now().strftime('%Y-%m-%d')}."
-        profile.save()
+    with transaction.atomic():
+        # Anonymize Customer Profile
+        profile = CustomerAccountProfile.objects.filter(tenant=request.tenant, customer=customer).first()
+        if profile:
+            profile.phone_number = ""
+            profile.phone_verified = False
+            profile.user = None
+            profile.email_marketing_opt_in = False
+            profile.sms_marketing_opt_in = False
+            profile.status = "anonymized"
+            profile.internal_notes = f"GDPR Anonymized per {privacy_request.number} on {timezone.now().strftime('%Y-%m-%d')}."
+            profile.save()
 
-    # Clear address preference instructions and contact numbers
-    CustomerAddressPreference.objects.filter(tenant=request.tenant, customer=customer).update(
-        recipient_name="GDPR Anonymized",
-        contact_phone="",
-        delivery_instructions="",
-    )
+        # Clear address preference instructions and contact numbers
+        CustomerAddressPreference.objects.filter(tenant=request.tenant, customer=customer).update(
+            recipient_name="GDPR Anonymized",
+            contact_phone="",
+            delivery_instructions="",
+        )
 
-    privacy_request.status = "completed"
-    privacy_request.completed_at = timezone.now()
-    privacy_request.resolution_notes = f"Customer PII anonymized and marketing opt-ins revoked on {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}."
-    privacy_request.save()
+        privacy_request.status = "completed"
+        privacy_request.completed_at = timezone.now()
+        privacy_request.resolution_notes = f"Customer PII anonymized and marketing opt-ins revoked on {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}."
+        privacy_request.save()
 
-    write_audit_log(
-        request.user,
-        privacy_request,
-        "anonymize",
-        changes={"customer": customer.name, "action": "gdpr_erasure"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            request.user,
+            privacy_request,
+            "anonymize",
+            changes={"customer": customer.name, "action": "gdpr_erasure"},
+            tenant=request.tenant,
+        )
+
     messages.success(request, f"Customer PII anonymized successfully under {privacy_request.number}.")
     return redirect("ecommerce:customerprivacyrequest_detail", pk=privacy_request.pk)
