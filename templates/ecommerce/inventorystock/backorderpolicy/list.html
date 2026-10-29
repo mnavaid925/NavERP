@@ -123,15 +123,15 @@
             </td>
             <td class="text-right table-actions">
               <div class="flex items-center justify-end gap-2">
-                <a href="{% url 'ecommerce:backorderpolicy_detail' policy.pk %}" class="btn btn-icon btn-outline p-1" title="View details">
+                <a href="{% url 'ecommerce:backorderpolicy_detail' policy.pk %}" class="btn btn-icon btn-outline p-1" title="View details" aria-label="View details of {{ policy.variant.sku }}">
                   <i data-lucide="eye" class="w-4 h-4 text-slate-600"></i>
                 </a>
-                <a href="{% url 'ecommerce:backorderpolicy_edit' policy.pk %}" class="btn btn-icon btn-outline p-1" title="Edit policy">
+                <a href="{% url 'ecommerce:backorderpolicy_edit' policy.pk %}" class="btn btn-icon btn-outline p-1" title="Edit policy" aria-label="Edit policy for {{ policy.variant.sku }}">
                   <i data-lucide="pencil" class="w-4 h-4 text-slate-600"></i>
                 </a>
                 <form action="{% url 'ecommerce:backorderpolicy_delete' policy.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete backorder policy for {{ policy.variant.sku }}?');">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-icon btn-outline p-1 hover:text-red-600" title="Delete policy">
+                  <button type="submit" class="btn btn-icon btn-outline p-1 hover:text-red-600" title="Delete policy" aria-label="Delete policy for {{ policy.variant.sku }}">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </form>
