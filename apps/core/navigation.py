@@ -2706,6 +2706,18 @@ LIVE_LINKS = {
         "Wishlists": "ecommerce:customerwishlist_list",
         "Privacy Requests": "ecommerce:customerprivacyrequest_list",
     },
+    "9.7": {
+        "Site Search & Autocomplete": "ecommerce:search_console",
+        "Faceted Search & Filtering": "ecommerce:searchfacetconfig_list",
+        "Visual Search & AI Recommendations": "ecommerce:search_console",
+        "Search Analytics & Merchandising": "ecommerce:searchmerchandisingrule_list",
+        "Personalized Browse Experience": "ecommerce:search_console",
+        "Synonyms": "ecommerce:searchsynonym_list",
+        "Facet Configurations": "ecommerce:searchfacetconfig_list",
+        "Merchandising Rules": "ecommerce:searchmerchandisingrule_list",
+        "Query Logs": "ecommerce:searchquerylog_list",
+        "Search Analytics": "ecommerce:search_analytics",
+    },
 
 
 
