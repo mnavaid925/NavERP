@@ -19046,3 +19046,236 @@ Nested folder structure per house convention. All templates extend `"base.html"`
   - Update `.claude/skills/ecommerce/SKILL.md`
   - Update `README.md`
   - Track any deferred features in `.claude/tasks/gaps-ecommerce-9.3.md`
+
+
+---
+
+# Sub-module 9.5 — Order Management System (OMS) (Module 9: eCommerce, `ecommerce`) — plan from `research-ecommerce-9.5.md` (2026-10-29)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 (Product Catalog), 9.2 (Inventory & Stock), and 9.3 (Pricing & Promotion).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0004_competitorpricemonitor_couponpromotion_and_more.py`, so **9.5 claims `0005`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.5.md` (Phase 1).
+
+**THE OWNERSHIP RULINGS (L28 / L29 / L36 / L37):**
+1. **Customers**: **REUSE `core.Party` (Core Spine)** with role `customer`. eCommerce orders and RMAs link directly to `core.Party`.
+2. **Customer Addresses**: **REUSE `core.Address` (Core Spine)**, plus immutable address snapshot fields on `EcommerceOrder` to preserve historical delivery accuracy.
+3. **Products & Variants**: **REUSE `ecommerce.CatalogProduct` (`EPRD-`) and `ecommerce.ProductVariant` (`PVR-`)**. Line items snapshot SKU and product titles.
+4. **Fulfillment Centers**: **REUSE `ecommerce.FulfillmentCenter` (`EFC-`, 9.2)** for multi-location order routing and return restocking destinations.
+5. **Promotions & Coupons**: **REUSE `ecommerce.CouponPromotion` (`ECPN-`, 9.3)** for applied promo codes.
+6. **Currency & Finance**: **REUSE `accounting.Currency` (Accounting 2.2)**. No private currency tables.
+7. **Admins & Schedulers**: **REUSE `accounts.User` (`settings.AUTH_USER_MODEL`)**.
+
+- [ ] **There is NO duplicate customer table, NO duplicate product master, NO duplicate warehouse master, and NO private currency table.**
+- [ ] Every 9.5 FK to external/spine modules is declared **by string** (`'core.Party'`, `'core.Address'`, `'accounting.Currency'`, `'ecommerce.FulfillmentCenter'`, `'ecommerce.CouponPromotion'`).
+
+---
+
+## Models (4 Models + 1 Child Line Model)
+
+### 1. `EcommerceOrder` [EORD-] & `EcommerceOrderLine` [EOLN-] (`models/OrderManagement/EcommerceOrders.py`)
+- [ ] `class EcommerceOrder(TenantNumbered)`, `NUMBER_PREFIX = "EORD"`
+  - `tenant`: FK `'core.Tenant'`
+  - `number`: CharField max_length=20, editable=False (`EORD-#####`)
+  - `customer`: FK `'core.Party'`, on_delete=models.PROTECT, related_name='ecommerce_orders'
+  - `guest_email`: EmailField, blank=True
+  - `currency`: FK `'accounting.Currency'`, on_delete=models.PROTECT, related_name='ecommerce_orders'
+  - `status`: CharField max_length=25, choices: `draft`, `pending_validation`, `validated`, `processing`, `partially_fulfilled`, `fulfilled`, `cancelled`, `closed` (default: `pending_validation`)
+  - `payment_status`: CharField max_length=25, choices: `pending`, `authorized`, `captured`, `partially_refunded`, `refunded`, `failed` (default: `pending`)
+  - `fulfillment_status`: CharField max_length=25, choices: `unfulfilled`, `partially_fulfilled`, `fulfilled`, `returned` (default: `unfulfilled`)
+  - `fraud_risk_level`: CharField max_length=15, choices: `low`, `medium`, `high`, `flagged` (default: `low`)
+  - `fraud_score`: PositiveSmallIntegerField default=10, validators 0-100
+  - `address_verification_status`: CharField max_length=20, choices: `unverified`, `passed`, `failed`, `corrected` (default: `unverified`)
+  - `inventory_reservation_status`: CharField max_length=20, choices: `none`, `reserved`, `allocated`, `released` (default: `none`)
+  - `subtotal_amount`: DecimalField max_digits=12, decimal_places=2, default=0.00
+  - `discount_amount`: DecimalField max_digits=12, decimal_places=2, default=0.00
+  - `shipping_amount`: DecimalField max_digits=12, decimal_places=2, default=0.00
+  - `tax_amount`: DecimalField max_digits=12, decimal_places=2, default=0.00
+  - `total_amount`: DecimalField max_digits=12, decimal_places=2, default=0.00
+  - `applied_coupon`: FK `'ecommerce.CouponPromotion'`, null=True, blank=True, on_delete=models.SET_NULL, related_name='orders'
+  - `shipping_address`: FK `'core.Address'`, null=True, blank=True, on_delete=models.SET_NULL, related_name='shipping_orders'
+  - `shipping_name`: CharField max_length=150
+  - `shipping_address_line1`: CharField max_length=255
+  - `shipping_city`: CharField max_length=100
+  - `shipping_state`: CharField max_length=100, blank=True
+  - `shipping_postal_code`: CharField max_length=30
+  - `shipping_country`: CharField max_length=100
+  - `billing_address`: FK `'core.Address'`, null=True, blank=True, on_delete=models.SET_NULL, related_name='billing_orders'
+  - `billing_name`: CharField max_length=150, blank=True
+  - `billing_address_line1`: CharField max_length=255, blank=True
+  - `billing_city`: CharField max_length=100, blank=True
+  - `billing_state`: CharField max_length=100, blank=True
+  - `billing_postal_code`: CharField max_length=30, blank=True
+  - `billing_country`: CharField max_length=100, blank=True
+  - `cancellation_reason`: TextField blank=True
+  - `cancelled_at`: DateTimeField null=True, blank=True
+  - `customer_notes`: TextField blank=True
+  - `internal_notes`: TextField blank=True
+  - Meta: ordering `["-created_at"]`, UniqueConstraint `["tenant", "number"]`, indexes `["tenant", "status"]`, `["tenant", "customer"]`
+  - Form excludes: `tenant`, `number`, `subtotal_amount`, `total_amount`, `cancelled_at`
+- [ ] `class EcommerceOrderLine(TenantOwned)`
+  - `order`: FK `EcommerceOrder`, on_delete=models.CASCADE, related_name='lines'
+  - `product`: FK `'ecommerce.CatalogProduct'`, on_delete=models.PROTECT, related_name='order_lines'
+  - `variant`: FK `'ecommerce.ProductVariant'`, null=True, blank=True, on_delete=models.SET_NULL, related_name='order_lines'
+  - `sku`: CharField max_length=80
+  - `product_name`: CharField max_length=200
+  - `quantity`: PositiveIntegerField default=1
+  - `fulfilled_quantity`: PositiveIntegerField default=0
+  - `returned_quantity`: PositiveIntegerField default=0
+  - `unit_price`: DecimalField max_digits=12, decimal_places=2, default=0.00
+  - `unit_discount`: DecimalField max_digits=12, decimal_places=2, default=0.00
+  - `line_total`: DecimalField max_digits=12, decimal_places=2, default=0.00
+  - `status`: CharField max_length=20, choices: `pending`, `reserved`, `routing`, `fulfilled`, `cancelled`, `returned` (default: `pending`)
+  - Meta: ordering `["id"]`, indexes `["tenant", "order"]`
+
+### 2. `OrderRoutingRule` [EORT-] (`models/OrderManagement/OrderRoutingRules.py`)
+- [ ] `class OrderRoutingRule(TenantNumbered)`, `NUMBER_PREFIX = "EORT"`
+  - `tenant`: FK `'core.Tenant'`
+  - `number`: CharField max_length=20, editable=False (`EORT-#####`)
+  - `name`: CharField max_length=150
+  - `strategy`: CharField max_length=30, choices: `closest_location`, `fewest_splits`, `highest_inventory`, `drop_ship_preferred`, `manual` (default: `closest_location`)
+  - `priority`: PositiveIntegerField default=10
+  - `destination_country`: CharField max_length=100, blank=True
+  - `destination_region`: CharField max_length=100, blank=True
+  - `preferred_fulfillment_center`: FK `'ecommerce.FulfillmentCenter'`, null=True, blank=True, on_delete=models.SET_NULL, related_name='routing_rules'
+  - `allow_split_shipment`: BooleanField default=True
+  - `enable_dropship`: BooleanField default=False
+  - `is_active`: BooleanField default=True
+  - `description`: TextField blank=True
+  - Meta: ordering `["priority", "name"]`, UniqueConstraint `["tenant", "number"]`, indexes `["tenant", "is_active"]`
+  - Form excludes: `tenant`, `number`
+
+### 3. `OrderFulfillment` [EFUL-] (`models/OrderManagement/OrderFulfillments.py`)
+- [ ] `class OrderFulfillment(TenantNumbered)`, `NUMBER_PREFIX = "EFUL"`
+  - `tenant`: FK `'core.Tenant'`
+  - `number`: CharField max_length=20, editable=False (`EFUL-#####`)
+  - `order`: FK `'ecommerce.EcommerceOrder'`, on_delete=models.CASCADE, related_name='fulfillments'
+  - `fulfillment_center`: FK `'ecommerce.FulfillmentCenter'`, null=True, blank=True, on_delete=models.SET_NULL, related_name='fulfillments'
+  - `carrier_name`: CharField max_length=80
+  - `tracking_number`: CharField max_length=100, blank=True
+  - `tracking_url`: URLField blank=True
+  - `status`: CharField max_length=25, choices: `draft`, `allocated`, `picking`, `packing`, `shipped`, `in_transit`, `out_for_delivery`, `delivered`, `failed_delivery` (default: `allocated`)
+  - `shipping_cost`: DecimalField max_digits=10, decimal_places=2, default=0.00
+  - `shipped_at`: DateTimeField null=True, blank=True
+  - `estimated_delivery_date`: DateField null=True, blank=True
+  - `actual_delivery_date`: DateField null=True, blank=True
+  - `shipping_label_url`: URLField blank=True
+  - `notification_sent`: BooleanField default=False
+  - `notes`: TextField blank=True
+  - Meta: ordering `["-created_at"]`, UniqueConstraint `["tenant", "number"]`, indexes `["tenant", "order"]`, `["tenant", "status"]`
+  - Form excludes: `tenant`, `number`, `shipped_at`, `actual_delivery_date`
+
+### 4. `ReturnMerchandiseAuthorization` [ERMA-] (`models/OrderManagement/ReturnMerchandiseAuthorizations.py`)
+- [ ] `class ReturnMerchandiseAuthorization(TenantNumbered)`, `NUMBER_PREFIX = "ERMA"`
+  - `tenant`: FK `'core.Tenant'`
+  - `number`: CharField max_length=20, editable=False (`ERMA-#####`)
+  - `order`: FK `'ecommerce.EcommerceOrder'`, on_delete=models.CASCADE, related_name='returns'
+  - `customer`: FK `'core.Party'`, on_delete=models.CASCADE, related_name='ecommerce_returns'
+  - `return_type`: CharField max_length=20, choices: `refund`, `exchange`, `store_credit` (default: `refund`)
+  - `status`: CharField max_length=25, choices: `requested`, `authorized`, `label_generated`, `in_transit`, `received`, `inspected`, `approved`, `rejected`, `completed` (default: `requested`)
+  - `reason`: CharField max_length=30, choices: `damaged_defective`, `wrong_item_sent`, `size_fit_issue`, `not_as_described`, `changed_mind`, `late_delivery`, `other` (default: `changed_mind`)
+  - `return_shipping_label_url`: URLField blank=True
+  - `return_tracking_number`: CharField max_length=100, blank=True
+  - `restocking_fee`: DecimalField max_digits=10, decimal_places=2, default=0.00
+  - `refund_amount`: DecimalField max_digits=12, decimal_places=2, default=0.00
+  - `refund_status`: CharField max_length=20, choices: `pending`, `processed`, `failed`, `waived` (default: `pending`)
+  - `restocking_status`: CharField max_length=20, choices: `pending`, `restocked`, `scrapped`, `quarantined` (default: `pending`)
+  - `restocking_center`: FK `'ecommerce.FulfillmentCenter'`, null=True, blank=True, on_delete=models.SET_NULL, related_name='rma_restocks'
+  - `customer_notes`: TextField blank=True
+  - `inspection_notes`: TextField blank=True
+  - `authorized_at`: DateTimeField null=True, blank=True
+  - `completed_at`: DateTimeField null=True, blank=True
+  - Meta: ordering `["-created_at"]`, UniqueConstraint `["tenant", "number"]`, indexes `["tenant", "order"]`, `["tenant", "status"]`
+  - Form excludes: `tenant`, `number`, `authorized_at`, `completed_at`
+
+---
+
+## Backend Packages (`apps/ecommerce/`)
+
+### Layer 1: Models (`apps/ecommerce/models/OrderManagement/`)
+- [ ] `models/OrderManagement/__init__.py`
+- [ ] `models/OrderManagement/EcommerceOrders.py`
+- [ ] `models/OrderManagement/OrderRoutingRules.py`
+- [ ] `models/OrderManagement/OrderFulfillments.py`
+- [ ] `models/OrderManagement/ReturnMerchandiseAuthorizations.py`
+- [ ] `models/__init__.py` — add 9.5 re-export block
+
+### Layer 2: Forms (`apps/ecommerce/forms/OrderManagement/`)
+- [ ] `forms/OrderManagement/__init__.py`
+- [ ] `forms/OrderManagement/EcommerceOrders.py` — `EcommerceOrderForm` & `EcommerceOrderLineForm`
+- [ ] `forms/OrderManagement/OrderRoutingRules.py` — `OrderRoutingRuleForm`
+- [ ] `forms/OrderManagement/OrderFulfillments.py` — `OrderFulfillmentForm`
+- [ ] `forms/OrderManagement/ReturnMerchandiseAuthorizations.py` — `ReturnMerchandiseAuthorizationForm`
+- [ ] `forms/__init__.py` — add 9.5 re-export block
+
+### Layer 3: Views (`apps/ecommerce/views/OrderManagement/`)
+- [ ] `views/OrderManagement/__init__.py`
+- [ ] `views/OrderManagement/EcommerceOrders.py` — full CRUD (list, create, detail, edit, delete) + cancellation action + search, filters, pagination
+- [ ] `views/OrderManagement/OrderRoutingRules.py` — full CRUD (list, create, detail, edit, delete) + search, filters, pagination
+- [ ] `views/OrderManagement/OrderFulfillments.py` — full CRUD (list, create, detail, edit, delete) + status update action + search, filters, pagination
+- [ ] `views/OrderManagement/ReturnMerchandiseAuthorizations.py` — full CRUD (list, create, detail, edit, delete) + inspect/complete action + search, filters, pagination
+- [ ] `views/__init__.py` — add 9.5 re-export block
+
+### Layer 4: URLs (`apps/ecommerce/urls/OrderManagement/`)
+- [ ] `urls/OrderManagement/__init__.py`
+- [ ] `urls/OrderManagement/EcommerceOrders.py`
+- [ ] `urls/OrderManagement/OrderRoutingRules.py`
+- [ ] `urls/OrderManagement/OrderFulfillments.py`
+- [ ] `urls/OrderManagement/ReturnMerchandiseAuthorizations.py`
+- [ ] `urls/__init__.py` — concatenate 9.5 urlpatterns into ecommerce routing
+
+### Layer 5: Admin & Seeder & Navigation
+- [ ] `admin.py` — register `EcommerceOrderAdmin`, `OrderRoutingRuleAdmin`, `OrderFulfillmentAdmin`, `ReturnMerchandiseAuthorizationAdmin`
+- [ ] `apps/ecommerce/management/commands/seed_ecommerce.py` — extend seeder with demo orders, order lines, routing rules, fulfillments, and RMA records
+- [ ] `apps/core/navigation.py` — add `LIVE_LINKS["9.5"]` entry with all 5 NavERP.md bullets
+
+---
+
+## Templates (`templates/ecommerce/ordermanagement/`)
+
+- [ ] `templates/ecommerce/ordermanagement/ecommerceorder/list.html`
+- [ ] `templates/ecommerce/ordermanagement/ecommerceorder/detail.html`
+- [ ] `templates/ecommerce/ordermanagement/ecommerceorder/form.html`
+- [ ] `templates/ecommerce/ordermanagement/orderroutingrule/list.html`
+- [ ] `templates/ecommerce/ordermanagement/orderroutingrule/detail.html`
+- [ ] `templates/ecommerce/ordermanagement/orderroutingrule/form.html`
+- [ ] `templates/ecommerce/ordermanagement/orderfulfillment/list.html`
+- [ ] `templates/ecommerce/ordermanagement/orderfulfillment/detail.html`
+- [ ] `templates/ecommerce/ordermanagement/orderfulfillment/form.html`
+- [ ] `templates/ecommerce/ordermanagement/returnmerchandiseauthorization/list.html`
+- [ ] `templates/ecommerce/ordermanagement/returnmerchandiseauthorization/detail.html`
+- [ ] `templates/ecommerce/ordermanagement/returnmerchandiseauthorization/form.html`
+
+---
+
+## Verification Steps
+- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1)
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency)
+- [ ] `venv\Scripts\python.exe manage.py check`
+- [ ] Smoke test script in `temp/smoke_ecommerce_9_5.py`:
+  - Login as `admin_acme`
+  - GET all new 9.5 URLs -> verify 200/302
+  - Check rendered HTML: no leaked comments (`{#`), proper title, seeded records visible
+  - Test cross-tenant isolation (IDOR -> 404)
+  - Test negative/non-numeric filter inputs (L11)
+  - Verify `LIVE_LINKS["9.5"]` sidebar navigation
+
+---
+
+## Close-Out Steps
+- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`
+- [ ] Append findings to `.claude/tasks/review-ecommerce-9.5.md`
+- [ ] Run Phase 5 `code-fixer` agent to burn down findings
+- [ ] Run Phase 6 automated test suite:
+  - Update `apps/ecommerce/tests/conftest.py`
+  - Author `test_ordermanagement_models.py`
+  - Author `test_ordermanagement_forms.py`
+  - Author `test_ordermanagement_views.py`
+  - Author `test_ordermanagement_security.py`
+  - Run full unfiltered suite `pytest apps/ecommerce/tests/`
+- [ ] Phase 7 documentation:
+  - Update `.claude/skills/ecommerce/SKILL.md`
+  - Update `README.md`
+  - Track any deferred features in `.claude/tasks/gaps-ecommerce-9.5.md`
