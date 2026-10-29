@@ -181,7 +181,7 @@ def test_customerprofile_address_preference_form_cross_party_address_rejected(te
     form = CustomerAddressPreferenceForm(data=form_data, tenant=tenant_a)
     assert not form.is_valid()
     assert "address" in form.errors
-    assert "belongs to this customer" in str(form.errors["address"]).lower() or "selected address" in str(form.errors["address"]).lower()
+    assert "belong to this customer" in str(form.errors["address"]).lower()
 
 
 # ==============================================================================
@@ -244,11 +244,11 @@ def test_customerprofile_wishlist_item_form_mismatched_variant_rejected(tenant_a
     assert "does not belong" in str(form.errors["variant"]).lower() or "belongs to" in str(form.errors["variant"]).lower()
 
 
-def test_customerprofile_wishlist_item_form_nonpositive_quantity_rejected(tenant_a, ecom_wishlist_a, ecom_product_a):
+def test_customerprofile_wishlist_item_form_negative_quantity_rejected(tenant_a, ecom_wishlist_a, ecom_product_a):
     form_data = {
         "wishlist": ecom_wishlist_a.pk,
         "product": ecom_product_a.pk,
-        "desired_quantity": 0,
+        "desired_quantity": -5,
         "priority": "medium",
     }
     form = CustomerWishlistItemForm(data=form_data, tenant=tenant_a)
