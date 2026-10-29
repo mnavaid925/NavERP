@@ -64,12 +64,12 @@ Sub-module 9.5 Order Management System (OMS) has been built adhering strictly to
 
 | ID | Severity | Area | Finding Description | Status |
 |---|---|---|---|---|
-| **I1** | Important | Views/Models | In `OrderFulfillments.py` / `OrderFulfillmentForm`: When a fulfillment is saved with `status='shipped'` (or `in_transit`), ensure `shipped_at` is automatically stamped if it was left null. | `[ ] open` |
-| **I2** | Important | Forms/Validation | In `ReturnMerchandiseAuthorizations.py`: In `ReturnMerchandiseAuthorizationForm`, validate that `restocking_fee` does not exceed `refund_amount` to prevent negative net refunds. | `[ ] open` |
-| **M1** | Minor | Views/Orders | In `OrderFulfillments.py` `orderfulfillment_ship`: When package is shipped, if all fulfillments for the order are shipped/delivered, update `order.fulfillment_status = 'fulfilled'`. | `[ ] open` |
+| **I1** | Important | Views/Models | In `OrderFulfillments.py` / `OrderFulfillmentForm`: When a fulfillment is saved with `status='shipped'` (or `in_transit`), ensure `shipped_at` is automatically stamped if it was left null. | `[x] fixed` (4533d1a8) |
+| **I2** | Important | Forms/Validation | In `ReturnMerchandiseAuthorizations.py`: In `ReturnMerchandiseAuthorizationForm`, validate that `restocking_fee` does not exceed `refund_amount` to prevent negative net refunds. | `[x] fixed` (8be5d265) |
+| **M1** | Minor | Views/Orders | In `OrderFulfillments.py` `orderfulfillment_ship`: When package is shipped, if all fulfillments for the order are shipped/delivered, update `order.fulfillment_status = 'fulfilled'`. | `[x] fixed` (bc2bb96a) |
 
 ---
 
 ## 4. Hand-off to `code-fixer` Agent
 
-The findings above (`I1`, `I2`, `M1`) are prioritized and ready for Phase 5 `code-fixer` to burn down in ID order, committing one file per commit.
+All 3 findings (`I1`, `I2`, `M1`) have been burned down and verified in ID order. No open findings remain.
