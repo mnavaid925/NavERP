@@ -157,6 +157,14 @@ class SearchMerchandisingRule(TenantNumbered):
         if self.action_type == "redirect" and not self.redirect_url:
             raise ValidationError({"redirect_url": "Destination URL is required for query redirect rules."})
 
+        for field_name, url_val in [("redirect_url", self.redirect_url), ("banner_link_url", self.banner_link_url)]:
+            if url_val:
+                url_clean = url_val.strip().lower()
+                if url_clean.startswith(("javascript:", "data:", "vbscript:", "//")):
+                    raise ValidationError({field_name: "Unsafe URL scheme or protocol-relative URL is not permitted."})
+                if not (url_clean.startswith("/") or url_clean.startswith("http://") or url_clean.startswith("https://")):
+                    raise ValidationError({field_name: "URL must be an absolute path (starting with /) or a full http:// or https:// URL."})
+
         if self.action_type == "banner" and not self.banner_title:
             raise ValidationError({"banner_title": "Banner title is required for promotional banner rules."})
 
