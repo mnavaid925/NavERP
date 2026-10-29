@@ -1,5 +1,9 @@
 from django.contrib import admin
 
+from apps.ecommerce.models.CartCheckout.Carts import Cart, CartItem
+from apps.ecommerce.models.CartCheckout.CheckoutSessions import CheckoutSession
+from apps.ecommerce.models.CartCheckout.PaymentMethods import PaymentMethodConfig
+from apps.ecommerce.models.CartCheckout.ShippingMethods import ShippingMethodConfig
 from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPolicy
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
@@ -115,4 +119,44 @@ class CompetitorPriceMonitorAdmin(admin.ModelAdmin):
     list_filter = ["match_strategy", "status", "is_in_stock", "tenant"]
     search_fields = ["competitor_name", "number", "variant__sku"]
     ordering = ["-last_scraped_at", "-created_at"]
+
+
+class CartItemInline(admin.TabularInline):
+    model = CartItem
+    extra = 0
+    fields = ["product", "variant", "quantity", "unit_price", "total_price"]
+
+
+@admin.register(Cart)
+class CartAdmin(admin.ModelAdmin):
+    list_display = ["number", "customer", "email", "status", "currency", "subtotal", "grand_total", "coupon_code", "last_activity_at"]
+    list_filter = ["status", "currency", "tenant"]
+    search_fields = ["number", "email", "session_key", "coupon_code"]
+    ordering = ["-last_activity_at"]
+    inlines = [CartItemInline]
+
+
+@admin.register(CheckoutSession)
+class CheckoutSessionAdmin(admin.ModelAdmin):
+    list_display = ["number", "cart", "email", "shipping_name", "flow_type", "current_step", "status", "payment_status", "total_amount", "created_at"]
+    list_filter = ["status", "flow_type", "current_step", "payment_status", "tenant"]
+    search_fields = ["number", "email", "shipping_name", "cart__number"]
+    ordering = ["-created_at"]
+
+
+@admin.register(ShippingMethodConfig)
+class ShippingMethodConfigAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "code", "carrier", "calculation_type", "base_rate", "cost_per_kg", "is_active", "sort_order"]
+    list_filter = ["carrier", "calculation_type", "is_active", "tenant"]
+    search_fields = ["name", "code", "description"]
+    ordering = ["sort_order", "name"]
+
+
+@admin.register(PaymentMethodConfig)
+class PaymentMethodConfigAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "provider", "method_category", "environment", "fee_type", "fee_amount", "is_active", "display_order"]
+    list_filter = ["provider", "method_category", "environment", "is_active", "tenant"]
+    search_fields = ["name", "instructions"]
+    ordering = ["display_order", "name"]
+
 
