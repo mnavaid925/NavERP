@@ -51,12 +51,12 @@ def _cartcheckout_create_party_customer(tenant, name="Customer Tester"):
     return party
 
 
-def _cartcheckout_create_tax_code(tenant, code="SALESTAX"):
+def _cartcheckout_create_tax_code(tenant, name="Tax STATE-TX"):
     return TaxCode.objects.create(
         tenant=tenant,
-        code=code,
-        name=f"Tax {code}",
-        rate=Decimal("0.0825"),
+        name=name,
+        jurisdiction="Travis County",
+        rate_pct=Decimal("8.250"),
     )
 
 
