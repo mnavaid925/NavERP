@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand
@@ -9,6 +10,10 @@ from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPoli
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
 from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
+from apps.ecommerce.models.PricingPromotion.CompetitorPriceMonitors import CompetitorPriceMonitor
+from apps.ecommerce.models.PricingPromotion.CouponPromotions import CouponPromotion
+from apps.ecommerce.models.PricingPromotion.DynamicPriceRules import DynamicPriceRule
+from apps.ecommerce.models.PricingPromotion.FlashSales import FlashSale
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
 from apps.ecommerce.models.ProductCatalog.ProductRelationships import (
     ProductRelationship,
@@ -548,6 +553,264 @@ class Command(BaseCommand):
                     "last_synced_quantity": 0,
                     "sync_status": "synced",
                     "last_synced_at": now,
+                },
+            )
+
+        self._seed_pricing_promotion(tenant, now)
+
+    def _seed_pricing_promotion(self, tenant, now):
+        cat_apparel = StoreCategory.objects.filter(tenant=tenant, slug="apparel").first()
+        prod_headphones = CatalogProduct.objects.filter(tenant=tenant, slug="pro-noise-cancelling-headphones").first()
+        v1 = ProductVariant.objects.filter(tenant=tenant, sku="PNC-BLK").first()
+        v2 = ProductVariant.objects.filter(tenant=tenant, sku="PNC-SLV").first()
+        v3 = ProductVariant.objects.filter(tenant=tenant, sku="ACT-TEE-M").first()
+
+        # 1. DynamicPriceRule
+        DynamicPriceRule.objects.get_or_create(
+            tenant=tenant,
+            name="VIP Autumn Clearance 15% Off",
+            defaults={
+                "rule_type": "percentage_discount",
+                "adjustment_value": Decimal("15.0000"),
+                "scope": "storewide",
+                "customer_segment": "vip",
+                "loyalty_tier": "gold",
+                "min_quantity": 1,
+                "valid_from": now - timedelta(days=5),
+                "valid_to": now + timedelta(days=60),
+                "priority": 20,
+                "is_active": True,
+                "description": "Storewide 15% discount for Gold VIP members.",
+            },
+        )
+
+        DynamicPriceRule.objects.get_or_create(
+            tenant=tenant,
+            name="Bulk Wholesale Tier - 20% Off 10+ Units",
+            defaults={
+                "rule_type": "percentage_discount",
+                "adjustment_value": Decimal("20.0000"),
+                "scope": "storewide",
+                "customer_segment": "wholesale",
+                "loyalty_tier": "none",
+                "min_quantity": 10,
+                "valid_from": now - timedelta(days=30),
+                "valid_to": now + timedelta(days=180),
+                "priority": 30,
+                "is_active": True,
+                "description": "Quantity volume break for B2B wholesale buyers.",
+            },
+        )
+
+        if cat_apparel:
+            DynamicPriceRule.objects.get_or_create(
+                tenant=tenant,
+                name="Apparel Fixed $10 Off",
+                defaults={
+                    "rule_type": "fixed_discount",
+                    "adjustment_value": Decimal("10.0000"),
+                    "scope": "category",
+                    "category": cat_apparel,
+                    "customer_segment": "all",
+                    "loyalty_tier": "none",
+                    "min_quantity": 1,
+                    "valid_from": now - timedelta(days=2),
+                    "valid_to": now + timedelta(days=30),
+                    "priority": 15,
+                    "is_active": True,
+                    "description": "Seasonal category discount on apparel.",
+                },
+            )
+
+        if v1:
+            DynamicPriceRule.objects.get_or_create(
+                tenant=tenant,
+                name="Flagship SKU Special $249 Override",
+                defaults={
+                    "rule_type": "fixed_price_override",
+                    "adjustment_value": Decimal("249.0000"),
+                    "scope": "variant",
+                    "variant": v1,
+                    "customer_segment": "retail",
+                    "loyalty_tier": "none",
+                    "min_quantity": 1,
+                    "valid_from": now - timedelta(days=1),
+                    "valid_to": now + timedelta(days=14),
+                    "priority": 25,
+                    "is_active": True,
+                    "description": "Promotional retail price override for PNC-BLK.",
+                },
+            )
+
+        # 2. CouponPromotion
+        CouponPromotion.objects.get_or_create(
+            tenant=tenant,
+            code="WELCOME10",
+            defaults={
+                "name": "New Shopper 10% Welcome Voucher",
+                "discount_type": "percentage",
+                "discount_value": Decimal("10.0000"),
+                "min_spend": Decimal("50.0000"),
+                "usage_limit_per_customer": 1,
+                "is_stackable": False,
+                "loyalty_tier_required": "none",
+                "valid_from": now - timedelta(days=10),
+                "valid_to": now + timedelta(days=90),
+                "is_active": True,
+            },
+        )
+
+        CouponPromotion.objects.get_or_create(
+            tenant=tenant,
+            code="VIPGOLD2026",
+            defaults={
+                "name": "Gold Tier Exclusive 20% Off",
+                "discount_type": "percentage",
+                "discount_value": Decimal("20.0000"),
+                "min_spend": Decimal("100.0000"),
+                "max_discount_amount": Decimal("50.0000"),
+                "usage_limit_total": 200,
+                "used_count": 14,
+                "usage_limit_per_customer": 2,
+                "is_stackable": True,
+                "loyalty_tier_required": "gold",
+                "valid_from": now - timedelta(days=3),
+                "valid_to": now + timedelta(days=45),
+                "is_active": True,
+            },
+        )
+
+        CouponPromotion.objects.get_or_create(
+            tenant=tenant,
+            code="FREESHIP",
+            defaults={
+                "name": "Free Standard Ground Shipping",
+                "discount_type": "free_shipping",
+                "discount_value": Decimal("0.0000"),
+                "min_spend": Decimal("75.0000"),
+                "usage_limit_per_customer": 5,
+                "is_stackable": True,
+                "loyalty_tier_required": "none",
+                "valid_from": now - timedelta(days=7),
+                "valid_to": now + timedelta(days=60),
+                "is_active": True,
+            },
+        )
+
+        CouponPromotion.objects.get_or_create(
+            tenant=tenant,
+            code="SAVE25",
+            defaults={
+                "name": "$25 Off Orders Over $150",
+                "discount_type": "fixed_cart",
+                "discount_value": Decimal("25.0000"),
+                "min_spend": Decimal("150.0000"),
+                "usage_limit_total": 500,
+                "used_count": 42,
+                "usage_limit_per_customer": 1,
+                "is_stackable": False,
+                "loyalty_tier_required": "none",
+                "valid_from": now - timedelta(days=5),
+                "valid_to": now + timedelta(days=30),
+                "is_active": True,
+            },
+        )
+
+        # 3. FlashSale
+        FlashSale.objects.get_or_create(
+            tenant=tenant,
+            title="Midnight Lightning Deal - 40% Off Audio",
+            defaults={
+                "status": "active",
+                "variant": v1,
+                "product": prod_headphones,
+                "discount_percentage": Decimal("40.00"),
+                "inventory_cap": 50,
+                "units_sold": 19,
+                "max_units_per_order": 2,
+                "start_time": now - timedelta(hours=6),
+                "end_time": now + timedelta(hours=18),
+                "badge_label": "LIGHTNING DEAL",
+                "banner_bg_color": "#ef4444",
+                "terms_and_conditions": "Limited stock. One deal per customer household. No rainchecks.",
+            },
+        )
+
+        FlashSale.objects.get_or_create(
+            tenant=tenant,
+            title="Weekend Apparel Blowout",
+            defaults={
+                "status": "scheduled",
+                "category": cat_apparel,
+                "discount_percentage": Decimal("25.00"),
+                "inventory_cap": 150,
+                "units_sold": 0,
+                "max_units_per_order": 4,
+                "start_time": now + timedelta(days=2),
+                "end_time": now + timedelta(days=4),
+                "badge_label": "WEEKEND SPECIAL",
+                "banner_bg_color": "#8b5cf6",
+                "terms_and_conditions": "Valid online only across all apparel categories.",
+            },
+        )
+
+        # 4. CompetitorPriceMonitor
+        if v1:
+            CompetitorPriceMonitor.objects.get_or_create(
+                tenant=tenant,
+                competitor_name="Amazon US",
+                variant=v1,
+                defaults={
+                    "product": prod_headphones,
+                    "competitor_url": "https://www.amazon.com/dp/B0EXAMPLE1",
+                    "competitor_price": Decimal("279.0000"),
+                    "competitor_currency": "USD",
+                    "is_in_stock": True,
+                    "last_scraped_at": now - timedelta(hours=2),
+                    "match_strategy": "beat_by_fixed",
+                    "beat_by_value": Decimal("1.0000"),
+                    "min_margin_pct": Decimal("15.00"),
+                    "floor_price": Decimal("220.0000"),
+                    "status": "active",
+                    "notes": "Amazon Prime seller listing. Auto-beat by $1 with 15% margin floor.",
+                },
+            )
+
+            CompetitorPriceMonitor.objects.get_or_create(
+                tenant=tenant,
+                competitor_name="BestBuy Marketplace",
+                variant=v1,
+                defaults={
+                    "product": prod_headphones,
+                    "competitor_url": "https://www.bestbuy.com/site/example-audio",
+                    "competitor_price": Decimal("289.9900"),
+                    "competitor_currency": "USD",
+                    "is_in_stock": True,
+                    "last_scraped_at": now - timedelta(hours=4),
+                    "match_strategy": "match_exact",
+                    "beat_by_value": Decimal("0.0000"),
+                    "min_margin_pct": Decimal("10.00"),
+                    "status": "active",
+                    "notes": "Exact match tracking for BestBuy online storefront.",
+                },
+            )
+
+        if v3:
+            CompetitorPriceMonitor.objects.get_or_create(
+                tenant=tenant,
+                competitor_name="Walmart Store",
+                variant=v3,
+                defaults={
+                    "competitor_url": "https://www.walmart.com/ip/example-tee",
+                    "competitor_price": Decimal("24.5000"),
+                    "competitor_currency": "USD",
+                    "is_in_stock": True,
+                    "last_scraped_at": now - timedelta(hours=8),
+                    "match_strategy": "beat_by_percent",
+                    "beat_by_value": Decimal("5.0000"),
+                    "min_margin_pct": Decimal("12.00"),
+                    "status": "active",
+                    "notes": "Competitor apparel tracking with 5% undercut rule.",
                 },
             )
 
