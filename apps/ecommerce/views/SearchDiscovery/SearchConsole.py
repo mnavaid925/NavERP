@@ -233,6 +233,8 @@ def search_console(request):
             (Q(start_date__isnull=True) | Q(start_date__lte=now))
             & (Q(end_date__isnull=True) | Q(end_date__gte=now))
         )
+        .select_related("boosted_product__item", "boosted_product__primary_category")
+        .prefetch_related("boosted_product__variants")
         .order_by("-priority")
     )
 
