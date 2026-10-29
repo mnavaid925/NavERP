@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Facet Configurations · Search & Discovery · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:search_console' %}" class="hover:text-blue-600">Search & Discovery</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Facet Configurations</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Facet Configurations</h1>
+      <p class="text-sm text-slate-500 mt-1">Configure faceted sidebar navigation, filter widgets, and multi-select logic across catalog search and category browse.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:search_console' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="compass" class="w-4 h-4"></i>
+        <span>Search Workbench</span>
+      </a>
+      <a href="{% url 'ecommerce:searchfacetconfig_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Facet Config</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ q }}"
+            placeholder="Name, code, attribute..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-source" class="block text-xs font-medium text-slate-600 mb-1">Source Type</label>
+        <select id="filter-source" name="source_type" class="form-select w-full text-sm">
+          <option value="">All Sources</option>
+          {% for val, label in source_type_choices %}
+            <option value="{{ val }}" {% if selected_source == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-widget" class="block text-xs font-medium text-slate-600 mb-1">Widget Type</label>
+        <select id="filter-widget" name="widget_type" class="form-select w-full text-sm">
+          <option value="">All Widgets</option>
+          {% for val, label in widget_type_choices %}
+            <option value="{{ val }}" {% if selected_widget == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Status</label>
+        <select id="filter-status" name="is_active" class="form-select w-full text-sm">
+          <option value="">All Statuses</option>
+          <option value="true" {% if selected_active == "true" or selected_active == "1" %}selected{% endif %}>Active</option>
+          <option value="false" {% if selected_active == "false" or selected_active == "0" %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-primary w-full text-sm py-2">
+          Filter
+        </button>
+        <a href="{% url 'ecommerce:searchfacetconfig_list' %}" class="btn btn-outline text-sm py-2 px-3" title="Reset Filters">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Facet Configs Table -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            <th class="py-3 px-4 w-16 text-center">Order</th>
+            <th class="py-3 px-4">Facet Name / Code</th>
+            <th class="py-3 px-4">Source Type</th>
+            <th class="py-3 px-4">Widget</th>
+            <th class="py-3 px-4">Logic</th>
+            <th class="py-3 px-4">Category Scope</th>
+            <th class="py-3 px-4 text-center">Status</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200 text-sm">
+          {% for facet in facet_configs %}
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="py-3 px-4 text-center font-mono font-bold text-slate-600">
+                {{ facet.display_order }}
+              </td>
+              <td class="py-3 px-4">
+                <a href="{% url 'ecommerce:searchfacetconfig_detail' facet.pk %}" class="font-medium text-blue-600 hover:underline">
+                  {{ facet.name }}
+                </a>
+                <div class="text-xs text-slate-500 font-mono">{{ facet.code }}</div>
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge badge-info">{{ facet.get_source_type_display }}</span>
+                {% if facet.option_key %}
+                  <div class="text-xs text-slate-500 font-mono mt-0.5">key: {{ facet.option_key }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge badge-slate">{{ facet.get_widget_type_display }}</span>
+              </td>
+              <td class="py-3 px-4">
+                {% if facet.filter_logic == "disjunctive" %}
+                  <span class="badge badge-amber">Disjunctive (OR)</span>
+                {% else %}
+                  <span class="badge badge-slate">Conjunctive (AND)</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-slate-600">
+                {% if facet.category_scope %}
+                  <span class="text-xs font-medium text-slate-800">{{ facet.category_scope.name }}</span>
+                {% else %}
+                  <span class="text-xs text-slate-400 italic">Global (All)</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-center">
+                {% if facet.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-muted">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="table-actions flex items-center justify-end gap-1">
+                  <a href="{% url 'ecommerce:searchfacetconfig_detail' facet.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="View Details">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'ecommerce:searchfacetconfig_edit' facet.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="Edit">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'ecommerce:searchfacetconfig_delete' facet.pk %}" class="inline" onsubmit="return confirm('Delete facet configuration {{ facet.name }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-icon btn-outline text-red-600 hover:bg-red-50" title="Delete">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8" class="py-12 text-center">
+                <div class="empty-state flex flex-col items-center justify-center">
+                  <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                    <i data-lucide="sliders" class="w-6 h-6"></i>
+                  </div>
+                  <h3 class="text-sm font-semibold text-slate-800 mb-1">No Facet Configurations Found</h3>
+                  <p class="text-xs text-slate-500 max-w-sm mb-4">Create faceted filters (categories, brands, price sliders, color swatches) to guide shopper navigation.</p>
+                  <a href="{% url 'ecommerce:searchfacetconfig_create' %}" class="btn btn-primary text-xs">
+                    Create First Facet Config
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50 text-xs text-slate-600">
+        <div>
+          Showing page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)
+        </div>
+        <div class="flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_source %}&source_type={{ selected_source }}{% endif %}{% if selected_widget %}&widget_type={{ selected_widget }}{% endif %}{% if selected_logic %}&filter_logic={{ selected_logic }}{% endif %}{% if selected_active %}&is_active={{ selected_active }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">
+              Previous
+            </a>
+          {% else %}
+            <span class="btn btn-outline py-1 px-2 text-xs opacity-50 cursor-not-allowed">Previous</span>
+          {% endif %}
+
+          <span class="px-2 py-1 font-semibold text-slate-800">{{ page_obj.number }}</span>
+
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_source %}&source_type={{ selected_source }}{% endif %}{% if selected_widget %}&widget_type={{ selected_widget }}{% endif %}{% if selected_logic %}&filter_logic={{ selected_logic }}{% endif %}{% if selected_active %}&is_active={{ selected_active }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">
+              Next
+            </a>
+          {% else %}
+            <span class="btn btn-outline py-1 px-2 text-xs opacity-50 cursor-not-allowed">Next</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
