@@ -63,9 +63,9 @@ def checkoutsession_detail(request, pk):
         select_related=("cart", "customer", "shipping_method", "payment_method", "tax_code"),
         prefetch_related=("cart__items__product", "cart__items__variant"),
     )
-    tax_codes = TaxCode.objects.filter(tenant=request.tenant)
-    shipping_methods = ShippingMethodConfig.objects.filter(tenant=request.tenant, is_active=True)
-    payment_methods = PaymentMethodConfig.objects.filter(tenant=request.tenant, is_active=True)
+    tax_codes = TaxCode.objects.filter(tenant=request.tenant).order_by("name")
+    shipping_methods = ShippingMethodConfig.objects.filter(tenant=request.tenant, is_active=True).order_by("sort_order", "name")
+    payment_methods = PaymentMethodConfig.objects.filter(tenant=request.tenant, is_active=True).order_by("display_order", "name")
 
     context = {
         "session": session,
