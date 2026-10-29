@@ -3,6 +3,10 @@ from apps.ecommerce.forms.CartCheckout.Carts import CartForm, CartItemForm
 from apps.ecommerce.forms.CartCheckout.CheckoutSessions import CheckoutSessionForm
 from apps.ecommerce.forms.CartCheckout.PaymentMethods import PaymentMethodConfigForm
 from apps.ecommerce.forms.CartCheckout.ShippingMethods import ShippingMethodConfigForm
+from apps.ecommerce.forms.CustomerProfile.CustomerAccountProfiles import CustomerAccountProfileForm
+from apps.ecommerce.forms.CustomerProfile.CustomerAddressPreferences import CustomerAddressPreferenceForm
+from apps.ecommerce.forms.CustomerProfile.CustomerPrivacyRequests import CustomerPrivacyRequestForm
+from apps.ecommerce.forms.CustomerProfile.CustomerWishlists import CustomerWishlistForm, CustomerWishlistItemForm
 from apps.ecommerce.forms.InventoryStock.BackorderPolicies import BackorderPolicyForm
 from apps.ecommerce.forms.InventoryStock.ChannelInventorySyncs import ChannelInventorySyncForm
 from apps.ecommerce.forms.InventoryStock.FulfillmentCenters import FulfillmentCenterForm
@@ -58,5 +62,11 @@ __all__ = [
     "OrderRoutingRuleForm",
     "OrderFulfillmentForm",
     "ReturnMerchandiseAuthorizationForm",
+    # 9.6 Customer Account & Profile
+    "CustomerAccountProfileForm",
+    "CustomerAddressPreferenceForm",
+    "CustomerWishlistForm",
+    "CustomerWishlistItemForm",
+    "CustomerPrivacyRequestForm",
 ]
 
