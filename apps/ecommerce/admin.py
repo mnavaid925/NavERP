@@ -16,6 +16,10 @@ from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder
 from apps.ecommerce.models.OrderManagement.OrderFulfillments import OrderFulfillment
 from apps.ecommerce.models.OrderManagement.OrderRoutingRules import OrderRoutingRule
 from apps.ecommerce.models.OrderManagement.ReturnMerchandiseAuthorizations import ReturnMerchandiseAuthorization
+from apps.ecommerce.models.Personalization.AudienceSegments import AudienceSegment
+from apps.ecommerce.models.Personalization.PersonalizedExperiences import PersonalizedExperience
+from apps.ecommerce.models.Personalization.RecommendationStrategies import RecommendationStrategy
+from apps.ecommerce.models.Personalization.ShopperBehaviorEvents import ShopperBehaviorEvent
 from apps.ecommerce.models.PricingPromotion.CompetitorPriceMonitors import CompetitorPriceMonitor
 from apps.ecommerce.models.PricingPromotion.CouponPromotions import CouponPromotion
 from apps.ecommerce.models.PricingPromotion.DynamicPriceRules import DynamicPriceRule
@@ -296,6 +300,43 @@ class SearchQueryLogAdmin(admin.ModelAdmin):
     search_fields = ["number", "query_text", "normalized_query", "redirected_to", "session_key", "customer__name"]
     list_select_related = ["customer", "clicked_product"]
     ordering = ["-created_at"]
+
+
+@admin.register(AudienceSegment)
+class AudienceSegmentAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "code", "lifecycle_stage", "cached_member_count", "is_active", "last_evaluated_at"]
+    list_filter = ["lifecycle_stage", "is_active", "tenant"]
+    search_fields = ["number", "name", "code", "description"]
+    list_select_related = ["target_category"]
+    ordering = ["name"]
+
+
+@admin.register(RecommendationStrategy)
+class RecommendationStrategyAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "code", "algorithm", "placement", "fallback_strategy", "max_items", "is_active"]
+    list_filter = ["algorithm", "placement", "fallback_strategy", "is_active", "tenant"]
+    search_fields = ["number", "name", "code", "description"]
+    list_select_related = ["target_category", "target_segment"]
+    ordering = ["placement", "name"]
+
+
+@admin.register(PersonalizedExperience)
+class PersonalizedExperienceAdmin(admin.ModelAdmin):
+    list_display = ["priority", "name", "experience_type", "target_segment", "impression_count", "click_count", "is_active"]
+    list_filter = ["experience_type", "is_active", "tenant"]
+    search_fields = ["number", "name", "headline", "cta_label"]
+    list_select_related = ["target_segment", "target_category", "target_product"]
+    ordering = ["-priority", "-created_at"]
+
+
+@admin.register(ShopperBehaviorEvent)
+class ShopperBehaviorEventAdmin(admin.ModelAdmin):
+    list_display = ["number", "event_type", "session_key", "product", "intent_score_delta", "created_at"]
+    list_filter = ["event_type", "tenant"]
+    search_fields = ["number", "session_key", "referrer_url", "product__name"]
+    list_select_related = ["product", "category", "customer_profile", "party", "user"]
+    ordering = ["-created_at"]
+
 
 
 
