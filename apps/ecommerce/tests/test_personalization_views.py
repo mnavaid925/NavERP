@@ -242,6 +242,7 @@ def test_personalization_experience_crud_flow(client_a, tenant_a, ecom_segment_a
         "subheadline": "Save big this week",
         "cta_label": "Claim Now",
         "cta_url": "/vip-promo/",
+        "trigger_delay_hours": 0,
         "priority": 12,
         "is_active": True,
     }
@@ -307,8 +308,8 @@ def test_personalization_preview_simulator_view(client_a, tenant_a, ecom_strateg
     # GET or POST simulation
     resp = client_a.post(preview_url, {
         "strategy_id": ecom_strategy_a.pk,
-        "anchor_product_id": ecom_product_a.pk,
+        "product_id": ecom_product_a.pk,
     })
     assert resp.status_code == 200
-    assert "recommended_products" in resp.context
+    assert "simulated_recommendations" in resp.context
     assert resp.context["strategy"] == ecom_strategy_a
