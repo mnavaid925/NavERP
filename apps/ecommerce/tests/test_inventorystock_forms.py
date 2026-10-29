@@ -172,7 +172,7 @@ def test_inventorystock_adjustment_action_form_requires_reason():
 def test_inventorystock_backorderpolicy_form_valid(tenant_a, ecom_variant_a):
     data = {
         "variant": ecom_variant_a.pk,
-        "policy_type": "allow_with_backorder_notice",
+        "policy_type": "allow_backorder_with_notice",
         "storefront_message": "Accepting orders. Shipping in 2 weeks.",
         "max_backorder_quantity": 40,
         "auto_notify_waitlist": True,
@@ -218,10 +218,10 @@ def test_inventorystock_backorderpolicy_form_rejects_foreign_variant(tenant_a, e
 def test_inventorystock_channelinventorysync_form_valid(tenant_a, ecom_variant_a, ecom_center_a):
     data = {
         "variant": ecom_variant_a.pk,
-        "channel_type": "walmart",
+        "channel_type": "walmart_marketplace",
         "channel_name": "Walmart Marketplace Feed",
         "fulfillment_center": ecom_center_a.pk,
-        "sync_mode": "hourly_batch",
+        "sync_mode": "scheduled_batch",
         "allocation_buffer_pct": "12.50",
         "sync_status": "pending",
     }
@@ -237,10 +237,10 @@ def test_inventorystock_channelinventorysync_form_valid(tenant_a, ecom_variant_a
 def test_inventorystock_channelinventorysync_form_rejects_foreign_variant(tenant_a, ecom_variant_b, ecom_center_a):
     data = {
         "variant": ecom_variant_b.pk,  # Tenant B variant!
-        "channel_type": "amazon",
+        "channel_type": "amazon_marketplace",
         "channel_name": "US Amazon Feed",
         "fulfillment_center": ecom_center_a.pk,
-        "sync_mode": "manual_only",
+        "sync_mode": "manual",
         "allocation_buffer_pct": "5.00",
         "sync_status": "pending",
     }
