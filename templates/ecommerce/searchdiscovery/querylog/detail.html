@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Log {{ log.number }} · Search Query Logs · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+  <!-- Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:search_console' %}" class="hover:text-blue-600">Search & Discovery</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:searchquerylog_list' %}" class="hover:text-blue-600">Query Logs</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ log.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 font-mono">"{{ log.query_text }}"</h1>
+        {% if log.is_zero_result %}
+          <span class="badge badge-red">Zero Results</span>
+        {% else %}
+          <span class="badge badge-green">{{ log.results_count }} Results</span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-slate-500 mt-1 font-mono">Log: {{ log.number }} · Executed: {{ log.created_at|date:"M d, Y H:i:s" }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'ecommerce:searchquerylog_list' %}" class="btn btn-outline text-sm">
+        Back to Logs
+      </a>
+      <a href="{% url 'ecommerce:search_console' %}?q={{ log.query_text }}" class="btn btn-primary text-sm inline-flex items-center gap-1">
+        <i data-lucide="compass" class="w-4 h-4"></i>
+        <span>Replay in Workbench</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:searchquerylog_delete' log.pk %}" class="inline" onsubmit="return confirm('Delete query log {{ log.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm inline-flex items-center gap-1">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- Main Query Details -->
+    <div class="md:col-span-2 space-y-6">
+      <div class="card bg-white p-6 shadow-sm border border-slate-200 rounded-lg">
+        <h2 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-100">
+          Search Execution Telemetry
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Raw Query</span>
+            <div class="font-mono text-sm font-semibold text-slate-900 bg-slate-50 px-3 py-2 rounded border border-slate-200">
+              {{ log.query_text }}
+            </div>
+          </div>
+          <div>
+            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Normalized Term</span>
+            <div class="font-mono text-sm text-slate-700 bg-slate-50 px-3 py-2 rounded border border-slate-200">
+              {{ log.normalized_query }}
+            </div>
+          </div>
+          <div>
+            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Execution Latency</span>
+            <span class="font-bold text-slate-900">{{ log.execution_time_ms }} ms</span>
+          </div>
+          <div>
+            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Sort Order Applied</span>
+            <span class="font-mono text-xs text-slate-700 bg-slate-50 px-2 py-1 rounded border border-slate-200">{{ log.sort_order }}</span>
+          </div>
+        </div>
+
+        {% if log.redirected_to %}
+          <div class="mt-4 pt-4 border-t border-slate-100">
+            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Intercepted by Redirect Rule</span>
+            <code class="font-mono text-xs text-blue-700 bg-blue-50 px-3 py-2 rounded border border-blue-200 block">
+              &rarr; {{ log.redirected_to }}
+            </code>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Applied Filters -->
+      <div class="card bg-white p-6 shadow-sm border border-slate-200 rounded-lg">
+        <h2 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-100">
+          Applied Facet Filters
+        </h2>
+        {% if applied_filters_items %}
+          <div class="space-y-2">
+            {% for key, val in applied_filters_items %}
+              <div class="flex items-center justify-between text-xs py-1.5 px-3 bg-slate-50 rounded border border-slate-200">
+                <span class="font-mono font-semibold text-slate-700">{{ key }}</span>
+                <span class="font-mono text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">{{ val }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-xs text-slate-400 italic">No facet filters were applied for this search.</p>
+        {% endif %}
+      </div>
+
+      <!-- Click Attribution -->
+      <div class="card bg-white p-6 shadow-sm border border-slate-200 rounded-lg">
+        <h2 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-100">
+          Shopper Click Attribution
+        </h2>
+        {% if log.clicked_product %}
+          <div class="flex items-center gap-3 p-3 bg-slate-50 rounded border border-slate-200">
+            <i data-lucide="mouse-pointer" class="w-5 h-5 text-blue-600"></i>
+            <div>
+              <div class="text-sm font-semibold text-slate-900">
+                <a href="{% url 'ecommerce:catalogproduct_detail' log.clicked_product.pk %}" class="text-blue-600 hover:underline">
+                  {{ log.clicked_product.name }}
+                </a>
+              </div>
+              <div class="text-xs text-slate-500">
+                Rank Position: <span class="font-bold text-slate-800">#{{ log.click_position|default:"1" }}</span> in search results
+              </div>
+            </div>
+          </div>
+        {% else %}
+          <p class="text-xs text-slate-400 italic">No product click event was recorded for this search session.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Sidebar Shopper Attribution -->
+    <div class="space-y-6">
+      <div class="card bg-white p-6 shadow-sm border border-slate-200 rounded-lg text-sm space-y-3">
+        <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider pb-2 border-b border-slate-100">
+          Shopper Session
+        </h2>
+        <div>
+          <span class="text-xs text-slate-500 block">Session Key:</span>
+          <span class="font-mono text-xs text-slate-700 break-all">{{ log.session_key|default:"Anonymous" }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Authenticated Customer:</span>
+          {% if log.customer %}
+            <span class="text-xs font-semibold text-blue-600">{{ log.customer.name }}</span>
+          {% else %}
+            <span class="text-xs text-slate-400 italic">Guest Shopper</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Client IP Address:</span>
+          <span class="font-mono text-xs text-slate-700">{{ log.ip_address|default:"Unknown" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
