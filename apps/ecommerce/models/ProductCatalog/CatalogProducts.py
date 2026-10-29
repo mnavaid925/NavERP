@@ -104,6 +104,26 @@ class CatalogProduct(TenantNumbered):
         super().save(*args, **kwargs)
 
     @property
+    def sku(self):
+        if self.item_id and getattr(self.item, "sku", None):
+            return self.item.sku
+        first_var = self.variants.first()
+        if first_var and first_var.sku:
+            return first_var.sku
+        return self.number
+
+    @property
+    def base_price(self):
+        first_var = self.variants.first()
+        if first_var and first_var.price is not None:
+            return f"{first_var.price:.2f}"
+        return "0.00"
+
+    @property
+    def category(self):
+        return self.primary_category
+
+    @property
     def price_range_display(self):
         active_vars = [v for v in self.variants.all() if v.is_active]
         if not active_vars:
