@@ -1,11 +1,11 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile: categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, and GDPR privacy requests). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, or 9.6), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery: categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, or 9.7), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery)
 
-The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, and return merchandise authorization (RMA) workflows, as well as an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation with priority ranking, and statutory GDPR/CCPA privacy request management with automated JSON data portability exports and right-to-erasure account anonymization workflows. It integrates seamlessly with the NavERP core spine and physical supply chain:
+The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, and an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising (boosting, burying, pinning, banner announcements, URL redirect forwarding), query performance and zero-result search telemetry analytics, instant search-as-you-type autocomplete, and an interactive Search Workbench Console. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
 - **Physical Inventory Boundary**: Products, variants, and fulfillment centers link to `scm.Item` and `scm.Location` via string foreign keys. Module 9 does not duplicate inventory ledger balances or physical bin movements; physical warehouse stock and valuation remain anchored in `apps/scm` and `apps/inventory`, while eCommerce manages digital storefront availability, reservations, buffers, and channel broadcasting.
 - **App Path**: `apps/ecommerce/`
@@ -54,6 +54,11 @@ apps/ecommerce/
 │   │   ├── CustomerAddressPreferences.py # CustomerAddressPreference model (ECAD-)
 │   │   ├── CustomerWishlists.py     # CustomerWishlist (EWSL-) & CustomerWishlistItem models
 │   │   └── CustomerPrivacyRequests.py # CustomerPrivacyRequest model (ECPR-)
+│   ├── SearchDiscovery/
+│   │   ├── SearchSynonyms.py        # SearchSynonym model (ESYM-)
+│   │   ├── SearchFacetConfigs.py    # SearchFacetConfig model (ESFC-)
+│   │   ├── SearchMerchandisingRules.py # SearchMerchandisingRule model (ESMR-)
+│   │   └── SearchQueryLogs.py       # SearchQueryLog model (ESQL-)
 │   └── __init__.py                  # Surgical re-exports of all models
 ├── forms/
 │   ├── _common.py                   # TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -88,6 +93,11 @@ apps/ecommerce/
 │   │   ├── CustomerAddressPreferences.py # CustomerAddressPreferenceForm
 │   │   ├── CustomerWishlists.py     # CustomerWishlistForm, CustomerWishlistItemForm
 │   │   └── CustomerPrivacyRequests.py # CustomerPrivacyRequestForm
+│   ├── SearchDiscovery/
+│   │   ├── SearchSynonyms.py        # SearchSynonymForm
+│   │   ├── SearchFacetConfigs.py    # SearchFacetConfigForm
+│   │   ├── SearchMerchandisingRules.py # SearchMerchandisingRuleForm
+│   │   └── SearchQueryLogs.py       # SearchQueryLogForm, SearchQueryLogFilterForm
 │   └── __init__.py                  # Re-exports of all forms
 ├── views/
 │   ├── _common.py                   # ecommerce_scope, ecommerce_object, csv_safe, write_audit_log
@@ -124,6 +134,12 @@ apps/ecommerce/
 │   │   ├── CustomerAddressPreferences.py # customeraddresspreference CRUD
 │   │   ├── CustomerWishlists.py     # customerwishlist CRUD + item_add, item_delete
 │   │   └── CustomerPrivacyRequests.py # customerprivacyrequest CRUD + generate_export, anonymize
+│   ├── SearchDiscovery/
+│   │   ├── SearchSynonyms.py        # searchsynonym CRUD + toggle
+│   │   ├── SearchFacetConfigs.py    # searchfacetconfig CRUD + toggle
+│   │   ├── SearchMerchandisingRules.py # searchmerchandisingrule CRUD + toggle
+│   │   ├── SearchQueryLogs.py       # searchquerylog list, detail, delete
+│   │   └── SearchConsole.py         # search_console, search_autocomplete, search_analytics
 │   └── __init__.py                  # Re-exports of all views
 ├── urls/
 │   ├── ProductCatalog/
@@ -159,6 +175,12 @@ apps/ecommerce/
 │   │   ├── CustomerAddressPreferences.py # address-preferences/ paths
 │   │   ├── CustomerWishlists.py     # wishlists/ paths
 │   │   └── CustomerPrivacyRequests.py # privacy-requests/ paths
+│   ├── SearchDiscovery/
+│   │   ├── SearchSynonyms.py        # discovery/synonyms/ paths
+│   │   ├── SearchFacetConfigs.py    # discovery/facets/ paths
+│   │   ├── SearchMerchandisingRules.py # discovery/merchandising/ paths
+│   │   ├── SearchQueryLogs.py       # discovery/telemetry/ paths
+│   │   └── SearchConsole.py         # discovery/search/, autocomplete, analytics paths
 │   └── __init__.py                  # Concatenates all urlpatterns with app_name="ecommerce"
 ├── admin.py                         # Django admin registrations
 ├── apps.py                          # EcommerceConfig
@@ -220,6 +242,15 @@ apps/ecommerce/
 | `CustomerWishlist` | `EWSL-` | `customer`, `name`, `slug`, `visibility` (private/shared/public), `is_default`, `share_token`, `notes` | `core.Party` (`customer`) | Auto slug generation, token generation, single default wishlist flag management on save |
 | `CustomerWishlistItem` | — | `wishlist`, `product`, `variant`, `desired_quantity`, `priority` (low/medium/high/highest), `comment` | `CustomerWishlist`, `ecommerce.CatalogProduct`, `ecommerce.ProductVariant` | TenantOwned, priority ranking, variant-product relationship validation |
 | `CustomerPrivacyRequest` | `ECPR-` | `customer`, `request_type` (access_export, rectification, erasure_anonymize, restriction, opt_out_sale), `status`, `statutory_deadline`, `completed_at`, `requested_by_email`, `verification_method`, `data_export_payload`, `resolution_notes` | `core.Party` (`customer`) | Defaults 30-day statutory deadline, auto-stamps `completed_at`, triggers automated JSON export & account anonymization |
+
+### Sub-module 9.7: Search & Product Discovery
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `SearchSynonym` | `ESYM-` | `name`, `synonym_type` (two_way, one_way, replacement), `root_term`, `synonyms`, `is_active`, `hit_count`, `notes` | — | `get_synonym_list()`, normalization & validation in `clean()` |
+| `SearchFacetConfig` | `ESFC-` | `name`, `code`, `source_type` (category, brand, price, variant_option, availability, rating, tag), `option_key`, `widget_type` (checkbox, color_swatch, price_slider, rating_stars, toggle, dropdown), `filter_logic` (disjunctive, conjunctive), `display_order`, `is_collapsed_by_default`, `max_values_shown`, `is_searchable`, `category_scope`, `is_active` | `ecommerce.StoreCategory` (`category_scope`) | Unique per `(tenant, code, category_scope)`, automatic slugification of machine code, cross-tenant FK protection |
+| `SearchMerchandisingRule` | `ESMR-` | `name`, `rule_type` (query, category, global), `trigger_query`, `match_type` (exact, contains, starts_with), `target_category`, `action_type` (boost, bury, pin, block, redirect, banner), `boosted_product`, `boost_weight`, `pin_position`, `redirect_url`, `banner_title`, `banner_body`, `banner_image_url`, `banner_link_url`, `priority`, `start_date`, `end_date`, `is_active` | `ecommerce.StoreCategory` (`target_category`), `ecommerce.CatalogProduct` (`boosted_product`) | URL scheme sanitization, protocol-relative check, schedule boundary enforcement, cross-tenant validation |
+| `SearchQueryLog` | `ESQL-` | `query_text`, `normalized_query`, `results_count`, `is_zero_result`, `execution_time_ms`, `applied_filters`, `sort_order`, `redirected_to`, `clicked_product`, `click_position`, `session_key`, `customer`, `ip_address` | `ecommerce.CatalogProduct` (`clicked_product`), `core.Party` (`customer`) | Search telemetry, zero-result grouping, latency tracking, tenant-scoped customer attribution |
+
 
 
 
@@ -393,6 +424,35 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 | `privacy-requests/<int:pk>/generate-export/` | `customerprivacyrequest_generate_export` | `customerprivacyrequest_generate_export` | Generate comprehensive JSON data portability export (POST, tenant admin) |
 | `privacy-requests/<int:pk>/anonymize/` | `customerprivacyrequest_anonymize` | `customerprivacyrequest_anonymize` | Execute right-to-erasure GDPR anonymization workflow (POST, tenant admin) |
 
+### 9.7 Search & Product Discovery Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `discovery/synonyms/` | `searchsynonym_list` | `searchsynonym_list` | Synonym mappings table with search & type filter |
+| `discovery/synonyms/create/` | `searchsynonym_create` | `searchsynonym_create` | Add new synonym rule (pre-populates `?root=`) |
+| `discovery/synonyms/<int:pk>/` | `searchsynonym_detail` | `searchsynonym_detail` | Synonym detail with hit counts & notes |
+| `discovery/synonyms/<int:pk>/edit/` | `searchsynonym_edit` | `searchsynonym_edit` | Edit synonym mapping terms |
+| `discovery/synonyms/<int:pk>/delete/` | `searchsynonym_delete` | `searchsynonym_delete` | Delete synonym rule (POST only, tenant admin) |
+| `discovery/synonyms/<int:pk>/toggle/` | `searchsynonym_toggle` | `searchsynonym_toggle` | Quick toggle active status (POST only, tenant admin) |
+| `discovery/facets/` | `searchfacetconfig_list` | `searchfacetconfig_list` | Facet filters table with source type and widget filters |
+| `discovery/facets/create/` | `searchfacetconfig_create` | `searchfacetconfig_create` | Configure new storefront facet filter |
+| `discovery/facets/<int:pk>/` | `searchfacetconfig_detail` | `searchfacetconfig_detail` | Facet config detail with category scope |
+| `discovery/facets/<int:pk>/edit/` | `searchfacetconfig_edit` | `searchfacetconfig_edit` | Edit facet filter display and logic parameters |
+| `discovery/facets/<int:pk>/delete/` | `searchfacetconfig_delete` | `searchfacetconfig_delete` | Delete facet config (POST only, tenant admin) |
+| `discovery/facets/<int:pk>/toggle/` | `searchfacetconfig_toggle` | `searchfacetconfig_toggle` | Quick toggle active status (POST only, tenant admin) |
+| `discovery/merchandising/` | `searchmerchandisingrule_list` | `searchmerchandisingrule_list` | Merchandising rules table with rule & action filters |
+| `discovery/merchandising/create/` | `searchmerchandisingrule_create` | `searchmerchandisingrule_create` | Create merchandising rule (boost, pin, banner, redirect) |
+| `discovery/merchandising/<int:pk>/` | `searchmerchandisingrule_detail` | `searchmerchandisingrule_detail` | Merchandising rule detail with target product & schedule |
+| `discovery/merchandising/<int:pk>/edit/` | `searchmerchandisingrule_edit` | `searchmerchandisingrule_edit` | Edit merchandising rule parameters |
+| `discovery/merchandising/<int:pk>/delete/` | `searchmerchandisingrule_delete` | `searchmerchandisingrule_delete` | Delete merchandising rule (POST only, tenant admin) |
+| `discovery/merchandising/<int:pk>/toggle/` | `searchmerchandisingrule_toggle` | `searchmerchandisingrule_toggle` | Quick toggle active status (POST only, tenant admin) |
+| `discovery/telemetry/` | `searchquerylog_list` | `searchquerylog_list` | Search query logs with zero-result filter |
+| `discovery/telemetry/<int:pk>/` | `searchquerylog_detail` | `searchquerylog_detail` | Search query telemetry detail with latency and applied filters |
+| `discovery/telemetry/<int:pk>/delete/` | `searchquerylog_delete` | `searchquerylog_delete` | Delete query log entry (POST only, tenant admin) |
+| `discovery/search/` | `search_console` | `search_console` | Interactive Search Workbench Console with live facet filters & merchandise preview |
+| `discovery/search/autocomplete/` | `search_autocomplete` | `search_autocomplete` | Search-as-you-type instant autocomplete (JSON and HTMX partials) |
+| `discovery/analytics/` | `search_analytics` | `search_analytics` | Search discovery analytics: latency, null-result queries, click attribution |
+
+
 ---
 
 ## 4. Templates & Design System
@@ -425,6 +485,13 @@ Templates are stored under `templates/ecommerce/`:
   - `customeraddresspreference/` — `list.html` (with default shipping/billing badges and delivery window pills), `detail.html` (with physical address details and delivery instructions), `form.html`.
   - `customerwishlist/` — `list.html` (with visibility badges and items count), `detail.html` (with items table, priority badges, and quick-add form), `form.html`.
   - `customerprivacyrequest/` — `list.html` (with request type and workflow status badges), `detail.html` (with request timeline, data export action, anonymization modal, and payload viewer), `form.html`.
+- `searchdiscovery/`
+  - `synonym/` — `list.html` (with synonym type badges and hit count pills), `detail.html` (with root anchor, mapped synonyms tags, and activity stats), `form.html`.
+  - `facetconfig/` — `list.html` (with source type and widget badges, active toggles), `detail.html` (with category scope and filter logic breakdown), `form.html`.
+  - `merchandisingrule/` — `list.html` (with rule type and action badges, priority indicators), `detail.html` (with target product card, campaign schedule, and action preview), `form.html`.
+  - `querylog/` — `list.html` (with zero-result alerts, search latency pills, and sort order tags), `detail.html` (with execution metrics, shopper attribution, and applied filters viewer).
+  - `console/` — `console.html` (Search Workbench: live query search, active facet checkboxes, price range slider, merchandising overrides preview, fallback zero-result suggestions), `autocomplete_results.html` (HTMX search-as-you-type instant dropdown).
+  - `analytics/` — `analytics.html` (Search Telemetry: total volume, zero-result search rate, search latency cards, top zero-result queries table, and click attribution).
 
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
@@ -468,6 +535,10 @@ The command provisions:
 - 4 Customer Wishlists with private, shared, and public visibilities.
 - 6 Customer Wishlist Items with priority indicators and quantity targets.
 - 4 Customer Privacy Requests covering access/export, rectification, erasure/anonymization, and CCPA opt-out.
+- 4 Search Synonyms: Notebook/Laptop, Earbuds/Headphones, Clicker/Mouse, Display/Monitor.
+- 5 Search Facet Configurations: Brand, Category, Price Range Slider, In-Stock Availability, Color Swatches.
+- 4 Search Merchandising Rules: Pin Pro Laptop to Slot 1 on 'laptop', Boost Noise-Cancelling Headphones on 'audio', Promotional Banner on 'clearance', Customer Support Redirect on 'help'.
+- 6 Search Query Logs: Successful searches, zero-result queries ('vintage typewriter'), applied facet filters, and latency tracking.
 - All demo data is scoped to tenant `acme`.
 
 ---
@@ -489,7 +560,7 @@ The command provisions:
 5. **Integer Query Param Guarding (Lesson L11)**:
    - Always validate foreign key filter parameters before passing to ORM: `if param and param.isdigit():`.
 6. **Open Redirect Validation**:
-   - Always validate `next` parameters with `url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()})`.
+   - Always validate `next` and auto-redirect parameters with `url_has_allowed_host_and_scheme(url, allowed_hosts={request.get_host()})`.
 7. **Pricing Engine Precedence & Margin Protection**:
    - Flash sales take highest priority during active windows.
    - Competitive repricing suggestions must never breach the `margin_floor_price` calculated from variant unit cost (`cost_price * (1 + min_margin_pct/100)`). If competitor undercuts below margin floor, monitor flags `is_margin_risk` and clamps suggested price to floor.
@@ -499,6 +570,8 @@ The command provisions:
    - `CustomerAddressPreference` and `CustomerWishlist` models enforce single-default rules on save: when `is_default_shipping`, `is_default_billing`, or `is_default` is set to True, all sibling records for that customer are automatically unset.
 10. **Statutory Privacy & Anonymization Guards**:
     - Right-to-erasure workflows de-identify personal customer profiles, revoke marketing consents, deactivate associated authentication users (`user.is_active = False`), and privatize public wishlists in atomic transactions.
+11. **Search Discovery Merchandising & Deduplication**:
+    - Reverse FK price sorting (`variants__price`) must be annotated via `Min("variants__price")` before ordering to avoid row duplication and PostgreSQL `SELECT DISTINCT` ordering exceptions. Pinned products in merchandising rules verify `status == "active"` before insertion into rank slots.
 
 ---
 
@@ -540,5 +613,14 @@ LIVE_LINKS["9.6"] = {
     "Wishlists": "ecommerce:customerwishlist_list",
     "Privacy Requests": "ecommerce:customerprivacyrequest_list",
 }
+LIVE_LINKS["9.7"] = {
+    "Search Workbench Console": "ecommerce:search_console",
+    "Search Analytics Dashboard": "ecommerce:search_analytics",
+    "Synonym Dictionaries": "ecommerce:searchsynonym_list",
+    "Faceted Search Configuration": "ecommerce:searchfacetconfig_list",
+    "Visual Merchandising Rules": "ecommerce:searchmerchandisingrule_list",
+    "Search Query Telemetry Logs": "ecommerce:searchquerylog_list",
+}
 ```
+Appears under the eCommerce section of the primary navigation bar.
 Appears under the eCommerce section of the primary navigation bar.
