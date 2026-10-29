@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}{{ rule.name }} · Dynamic Pricing Rule · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl">
+  <!-- Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:dynamicpricerule_list' %}" class="hover:text-blue-600">Dynamic Pricing Rules</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ rule.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ rule.name }}</h1>
+        {% if rule.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-slate">Inactive</span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-slate-400 font-mono mt-1">{{ rule.number }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:dynamicpricerule_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to List</span>
+      </a>
+      <a href="{% url 'ecommerce:dynamicpricerule_edit' pk=rule.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Rule</span>
+      </a>
+      <form
+        action="{% url 'ecommerce:dynamicpricerule_delete' pk=rule.pk %}"
+        method="post"
+        class="inline"
+        onsubmit="return confirm('Are you sure you want to delete this pricing rule?');"
+      >
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger inline-flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Primary Stat / Discount Summary -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Adjustment Effect</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">
+        {% if rule.rule_type == 'percentage_discount' %}
+          <span class="text-emerald-600">{{ rule.adjustment_value|floatformat:2 }}% Off</span>
+        {% elif rule.rule_type == 'fixed_discount' %}
+          <span class="text-emerald-600">-${{ rule.adjustment_value|floatformat:2 }}</span>
+        {% elif rule.rule_type == 'fixed_price_override' %}
+          <span class="text-blue-600">${{ rule.adjustment_value|floatformat:2 }}</span>
+        {% endif %}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">{{ rule.get_rule_type_display }}</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Scope & Target</div>
+      <div class="text-lg font-semibold text-slate-800 mt-1">
+        <span class="badge badge-info">{{ rule.get_scope_display }}</span>
+      </div>
+      <div class="text-xs text-slate-600 mt-1 truncate">
+        {% if rule.scope == 'category' and rule.category %}
+          {{ rule.category.name }}
+        {% elif rule.scope == 'product' and rule.product %}
+          {{ rule.product.name }}
+        {% elif rule.scope == 'variant' and rule.variant %}
+          SKU: {{ rule.variant.sku }}
+        {% else %}
+          Storewide Catalog
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Customer Audience</div>
+      <div class="text-lg font-semibold text-slate-800 mt-1">{{ rule.get_customer_segment_display }}</div>
+      <div class="text-xs text-slate-500 mt-1">
+        {% if rule.loyalty_tier != 'none' %}
+          Req: <span class="badge badge-amber text-xs">{{ rule.get_loyalty_tier_display }}</span>
+        {% else %}
+          No tier requirement
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg">
+      <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Priority & Order</div>
+      <div class="text-2xl font-bold font-mono text-slate-800 mt-1">{{ rule.priority }}</div>
+      <div class="text-xs text-slate-500 mt-1">Min Qty: {{ rule.min_quantity }}+</div>
+    </div>
+  </div>
+
+  <!-- Detailed Rule Configuration -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="card bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <h2 class="text-base font-semibold text-slate-800">Rule Parameters</h2>
+      </div>
+      <div class="card-body p-5 space-y-4 text-sm">
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Rule Name</span>
+          <span class="font-medium text-slate-900">{{ rule.name }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Internal Number</span>
+          <span class="font-mono text-slate-800">{{ rule.number }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Calculation Mode</span>
+          <span class="text-slate-900">{{ rule.get_rule_type_display }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Adjustment Value</span>
+          <span class="font-mono font-semibold text-slate-900">{{ rule.adjustment_value }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Minimum Quantity Tier</span>
+          <span class="font-mono text-slate-900">{{ rule.min_quantity }} unit(s)</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Country Code (Geo-Pricing)</span>
+          <span class="font-mono text-slate-900">{% if rule.country_code %}{{ rule.country_code }}{% else %}<span class="text-slate-400">Global (All Countries)</span>{% endif %}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Currency</span>
+          <span class="font-mono text-slate-900">{{ rule.currency_code }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <h2 class="text-base font-semibold text-slate-800">Targeting & Schedule</h2>
+      </div>
+      <div class="card-body p-5 space-y-4 text-sm">
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Catalog Scope</span>
+          <span class="font-medium text-slate-900">{{ rule.get_scope_display }}</span>
+        </div>
+        {% if rule.scope == 'category' and rule.category %}
+          <div class="flex justify-between py-2 border-b border-slate-100">
+            <span class="text-slate-500">Category Link</span>
+            <a href="{% url 'ecommerce:storecategory_detail' pk=rule.category.pk %}" class="text-blue-600 hover:underline">
+              {{ rule.category.name }}
+            </a>
+          </div>
+        {% elif rule.scope == 'product' and rule.product %}
+          <div class="flex justify-between py-2 border-b border-slate-100">
+            <span class="text-slate-500">Product Link</span>
+            <a href="{% url 'ecommerce:catalogproduct_detail' pk=rule.product.pk %}" class="text-blue-600 hover:underline">
+              {{ rule.product.name }}
+            </a>
+          </div>
+        {% elif rule.scope == 'variant' and rule.variant %}
+          <div class="flex justify-between py-2 border-b border-slate-100">
+            <span class="text-slate-500">Variant SKU</span>
+            <a href="{% url 'ecommerce:productvariant_detail' pk=rule.variant.pk %}" class="font-mono text-blue-600 hover:underline">
+              {{ rule.variant.sku }} ({{ rule.variant.name }})
+            </a>
+          </div>
+        {% endif %}
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Valid From</span>
+          <span class="text-slate-900">{{ rule.valid_from|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Valid To</span>
+          <span class="text-slate-900">
+            {% if rule.valid_to %}
+              {{ rule.valid_to|date:"Y-m-d H:i" }}
+            {% else %}
+              <span class="text-slate-400">Indefinite</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-slate-100">
+          <span class="text-slate-500">Active Status</span>
+          <span>
+            {% if rule.is_active %}
+              <span class="badge badge-green">Enabled</span>
+            {% else %}
+              <span class="badge badge-slate">Disabled</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Created At</span>
+          <span class="text-slate-500">{{ rule.created_at|date:"Y-m-d H:i" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if rule.description %}
+    <div class="card p-5 bg-white border border-slate-200 rounded-lg">
+      <h3 class="text-sm font-semibold text-slate-800 mb-2">Description & Internal Notes</h3>
+      <p class="text-sm text-slate-600 whitespace-pre-line">{{ rule.description }}</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
