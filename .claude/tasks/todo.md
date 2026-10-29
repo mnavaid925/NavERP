@@ -19560,7 +19560,7 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 
 ## Models (from research — 4 models + 1 child line model in `apps/ecommerce/models/CustomerProfile/`)
 
-- [ ] **`CustomerAccountProfile`** [Prefix: `ECAP-`] (`models/CustomerProfile/CustomerAccountProfiles.py`)
+- [x] **`CustomerAccountProfile`** [Prefix: `ECAP-`] (`models/CustomerProfile/CustomerAccountProfiles.py`)
   - **Purpose**: Central customer profile augmenting `core.Party` and `accounts.User` with customer tier, spend metrics, and communication consent.
   - **Inherits**: `TenantNumbered`
   - **Choices**:
@@ -19592,7 +19592,7 @@ Nested folder structure per house convention. All templates extend `"base.html"`
   - **Form Exclusions**: `tenant`, `number`, `total_orders_count`, `total_spend_amount`, `loyalty_points_balance`, `unsubscribe_token`, `double_opt_in_confirmed_at`, `phone_verified_at`, `created_at`, `updated_at`.
   - **Drivers**: Shopify Plus / Klaviyo customer consent, Yotpo tier progression, commercetools auth tracking.
 
-- [ ] **`CustomerAddressPreference`** [Prefix: `ECAD-`] (`models/CustomerProfile/CustomerAddressPreferences.py`)
+- [x] **`CustomerAddressPreference`** [Prefix: `ECAD-`] (`models/CustomerProfile/CustomerAddressPreferences.py`)
   - **Purpose**: Logistics delivery instructions and shipping/billing preferences overlay linking `core.Party` to `core.Address`.
   - **Inherits**: `TenantNumbered`
   - **Choices**:
@@ -19612,7 +19612,7 @@ Nested folder structure per house convention. All templates extend `"base.html"`
   - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
   - **Drivers**: Amazon / Shopify Plus delivery instructions, Adobe Commerce multi-address defaults.
 
-- [ ] **`CustomerWishlist`** [Prefix: `EWSL-`] & **`CustomerWishlistItem`** (`models/CustomerProfile/CustomerWishlists.py`)
+- [x] **`CustomerWishlist`** [Prefix: `EWSL-`] & **`CustomerWishlistItem`** (`models/CustomerProfile/CustomerWishlists.py`)
   - **Purpose**: Multiple named product collections for saved items, shareable tokens, and cart replenishment.
   - **Inherits**: `TenantNumbered` (`CustomerWishlist`)
   - **Choices**:
@@ -19639,7 +19639,7 @@ Nested folder structure per house convention. All templates extend `"base.html"`
   - **Form Exclusions**: `tenant`, `number`, `share_token`, `item_count`, `created_at`, `updated_at`.
   - **Drivers**: BigCommerce Wishlists API, Salesforce B2C ProductList, Adobe Commerce Add-All-to-Cart.
 
-- [ ] **`CustomerPrivacyRequest`** [Prefix: `ECPR-`] (`models/CustomerProfile/CustomerPrivacyRequests.py`)
+- [x] **`CustomerPrivacyRequest`** [Prefix: `ECPR-`] (`models/CustomerProfile/CustomerPrivacyRequests.py`)
   - **Purpose**: GDPR / CCPA Data Subject Access Requests (DSAR), data portability export generator, and statutory-compliant account erasure workflow.
   - **Inherits**: `TenantNumbered`
   - **Choices**:
@@ -19668,34 +19668,34 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 ## Backend Packages (`apps/ecommerce/{models,forms,views,urls}/CustomerProfile/`)
 
 ### 1. Models Package
-- [ ] `apps/ecommerce/models/CustomerProfile/__init__.py`
-- [ ] `apps/ecommerce/models/CustomerProfile/CustomerAccountProfiles.py`
-- [ ] `apps/ecommerce/models/CustomerProfile/CustomerAddressPreferences.py`
-- [ ] `apps/ecommerce/models/CustomerProfile/CustomerWishlists.py` (includes `CustomerWishlist` and `CustomerWishlistItem`)
-- [ ] `apps/ecommerce/models/CustomerProfile/CustomerPrivacyRequests.py`
+- [x] `apps/ecommerce/models/CustomerProfile/__init__.py`
+- [x] `apps/ecommerce/models/CustomerProfile/CustomerAccountProfiles.py`
+- [x] `apps/ecommerce/models/CustomerProfile/CustomerAddressPreferences.py`
+- [x] `apps/ecommerce/models/CustomerProfile/CustomerWishlists.py` (includes `CustomerWishlist` and `CustomerWishlistItem`)
+- [x] `apps/ecommerce/models/CustomerProfile/CustomerPrivacyRequests.py`
 
 ### 2. Forms Package
-- [ ] `apps/ecommerce/forms/CustomerProfile/__init__.py`
-- [ ] `apps/ecommerce/forms/CustomerProfile/CustomerAccountProfiles.py` (`CustomerAccountProfileForm`)
-- [ ] `apps/ecommerce/forms/CustomerProfile/CustomerAddressPreferences.py` (`CustomerAddressPreferenceForm`)
-- [ ] `apps/ecommerce/forms/CustomerProfile/CustomerWishlists.py` (`CustomerWishlistForm`, `CustomerWishlistItemForm`)
-- [ ] `apps/ecommerce/forms/CustomerProfile/CustomerPrivacyRequests.py` (`CustomerPrivacyRequestForm`, `CustomerPrivacyProcessForm`)
+- [x] `apps/ecommerce/forms/CustomerProfile/__init__.py`
+- [x] `apps/ecommerce/forms/CustomerProfile/CustomerAccountProfiles.py` (`CustomerAccountProfileForm`)
+- [x] `apps/ecommerce/forms/CustomerProfile/CustomerAddressPreferences.py` (`CustomerAddressPreferenceForm`)
+- [x] `apps/ecommerce/forms/CustomerProfile/CustomerWishlists.py` (`CustomerWishlistForm`, `CustomerWishlistItemForm`)
+- [x] `apps/ecommerce/forms/CustomerProfile/CustomerPrivacyRequests.py` (`CustomerPrivacyRequestForm`, `CustomerPrivacyProcessForm`)
 
 ### 3. Views Package (Function-Based Views, Tenant Scoped, Audit Log Instrumented)
-- [ ] `apps/ecommerce/views/CustomerProfile/__init__.py`
-- [ ] `apps/ecommerce/views/CustomerProfile/CustomerAccountProfiles.py`:
+- [x] `apps/ecommerce/views/CustomerProfile/__init__.py`
+- [x] `apps/ecommerce/views/CustomerProfile/CustomerAccountProfiles.py`:
   - `customeraccountprofile_list` (filters: `status`, `tier`, `auth_mode`, `is_phone_verified`, `marketing_email_opt_in`; search: code, party name, phone; pagination)
   - `customeraccountprofile_detail` (metrics summary, addresses list, wishlists summary, order history preview)
   - `customeraccountprofile_create`
   - `customeraccountprofile_edit`
   - `customeraccountprofile_delete`
-- [ ] `apps/ecommerce/views/CustomerProfile/CustomerAddressPreferences.py`:
+- [x] `apps/ecommerce/views/CustomerProfile/CustomerAddressPreferences.py`:
   - `customeraddresspreference_list` (filters: `label`, `delivery_window`, `is_default_shipping`, `is_default_billing`; search: recipient, code, customer; pagination)
   - `customeraddresspreference_detail`
   - `customeraddresspreference_create`
   - `customeraddresspreference_edit`
   - `customeraddresspreference_delete`
-- [ ] `apps/ecommerce/views/CustomerProfile/CustomerWishlists.py`:
+- [x] `apps/ecommerce/views/CustomerProfile/CustomerWishlists.py`:
   - `customerwishlist_list` (filters: `visibility`, `is_default`; search: name, code, customer; pagination)
   - `customerwishlist_detail` (renders wishlist items, add item form, total value)
   - `customerwishlist_create`
@@ -19703,7 +19703,7 @@ Nested folder structure per house convention. All templates extend `"base.html"`
   - `customerwishlist_delete`
   - `customerwishlist_add_item` (HTMX / POST action to add product to wishlist)
   - `customerwishlist_remove_item` (HTMX / POST action to delete item)
-- [ ] `apps/ecommerce/views/CustomerProfile/CustomerPrivacyRequests.py`:
+- [x] `apps/ecommerce/views/CustomerProfile/CustomerPrivacyRequests.py`:
   - `customerprivacyrequest_list` (filters: `request_type`, `status`; search: code, customer, rejection reason; pagination)
   - `customerprivacyrequest_detail` (status badge, audit trail, export viewer, anonymization summary)
   - `customerprivacyrequest_create`
@@ -19712,25 +19712,25 @@ Nested folder structure per house convention. All templates extend `"base.html"`
   - `customerprivacyrequest_process` (action: executes data export compilation or customer PII anonymization)
 
 ### 4. URLs Package
-- [ ] `apps/ecommerce/urls/CustomerProfile/__init__.py`
-- [ ] `apps/ecommerce/urls/CustomerProfile/CustomerAccountProfiles.py`
-- [ ] `apps/ecommerce/urls/CustomerProfile/CustomerAddressPreferences.py`
-- [ ] `apps/ecommerce/urls/CustomerProfile/CustomerWishlists.py`
-- [ ] `apps/ecommerce/urls/CustomerProfile/CustomerPrivacyRequests.py`
+- [x] `apps/ecommerce/urls/CustomerProfile/__init__.py`
+- [x] `apps/ecommerce/urls/CustomerProfile/CustomerAccountProfiles.py`
+- [x] `apps/ecommerce/urls/CustomerProfile/CustomerAddressPreferences.py`
+- [x] `apps/ecommerce/urls/CustomerProfile/CustomerWishlists.py`
+- [x] `apps/ecommerce/urls/CustomerProfile/CustomerPrivacyRequests.py`
 
 ### 5. Package Re-Exports & Integrations
-- [ ] `apps/ecommerce/models/__init__.py`: Surgical re-export of `CustomerAccountProfile`, `CustomerAddressPreference`, `CustomerWishlist`, `CustomerWishlistItem`, `CustomerPrivacyRequest` + update `__all__`.
-- [ ] `apps/ecommerce/forms/__init__.py`: Surgical re-export of `CustomerAccountProfileForm`, `CustomerAddressPreferenceForm`, `CustomerWishlistForm`, `CustomerWishlistItemForm`, `CustomerPrivacyRequestForm`, `CustomerPrivacyProcessForm` + update `__all__`.
-- [ ] `apps/ecommerce/views/__init__.py`: Surgical re-export of all 9.6 view functions + update `__all__`.
-- [ ] `apps/ecommerce/urls/__init__.py`: Wire `apps.ecommerce.urls.CustomerProfile.urlpatterns` into `ecommerce` url patterns.
-- [ ] `apps/ecommerce/admin.py`: Register `CustomerAccountProfileAdmin`, `CustomerAddressPreferenceAdmin`, `CustomerWishlistAdmin` (with tabular inline `CustomerWishlistItemInline`), and `CustomerPrivacyRequestAdmin`.
-- [ ] `apps/ecommerce/management/commands/seed_ecommerce.py`: Extend `_seed_tenant()` idempotently with customer profiles, address preferences with courier instructions, multi-item wishlists, and GDPR privacy requests.
+- [x] `apps/ecommerce/models/__init__.py`: Surgical re-export of `CustomerAccountProfile`, `CustomerAddressPreference`, `CustomerWishlist`, `CustomerWishlistItem`, `CustomerPrivacyRequest` + update `__all__`.
+- [x] `apps/ecommerce/forms/__init__.py`: Surgical re-export of `CustomerAccountProfileForm`, `CustomerAddressPreferenceForm`, `CustomerWishlistForm`, `CustomerWishlistItemForm`, `CustomerPrivacyRequestForm`, `CustomerPrivacyProcessForm` + update `__all__`.
+- [x] `apps/ecommerce/views/__init__.py`: Surgical re-export of all 9.6 view functions + update `__all__`.
+- [x] `apps/ecommerce/urls/__init__.py`: Wire `apps.ecommerce.urls.CustomerProfile.urlpatterns` into `ecommerce` url patterns.
+- [x] `apps/ecommerce/admin.py`: Register `CustomerAccountProfileAdmin`, `CustomerAddressPreferenceAdmin`, `CustomerWishlistAdmin` (with tabular inline `CustomerWishlistItemInline`), and `CustomerPrivacyRequestAdmin`.
+- [x] `apps/ecommerce/management/commands/seed_ecommerce.py`: Extend `_seed_tenant()` idempotently with customer profiles, address preferences with courier instructions, multi-item wishlists, and GDPR privacy requests.
 
 ---
 
 ## Wire-up
 
-- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["9.6"]` mapping all 5 NavERP.md feature bullets to staff-facing management views:
+- [x] `apps/core/navigation.py`: Add `LIVE_LINKS["9.6"]` mapping all 5 NavERP.md feature bullets to staff-facing management views:
   ```python
   "9.6": {
       "Registration & Authentication": "ecommerce:customeraccountprofile_list",
@@ -19752,32 +19752,32 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 
 Color-named badge tokens (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`) strictly used everywhere (no semantic `-success/-danger` classes, L33).
 
-- [ ] `templates/ecommerce/customerprofile/customeraccountprofile/list.html` (filter bar for status, tier, auth_mode, verified phone, opt-in; search; pagination; actions)
-- [ ] `templates/ecommerce/customerprofile/customeraccountprofile/detail.html` (profile stats, spend metrics, consent preferences, addresses, recent orders, wishlists)
-- [ ] `templates/ecommerce/customerprofile/customeraccountprofile/form.html` (tier, auth mode, phone, currency, consent toggles)
+- [x] `templates/ecommerce/customerprofile/customeraccountprofile/list.html` (filter bar for status, tier, auth_mode, verified phone, opt-in; search; pagination; actions)
+- [x] `templates/ecommerce/customerprofile/customeraccountprofile/detail.html` (profile stats, spend metrics, consent preferences, addresses, recent orders, wishlists)
+- [x] `templates/ecommerce/customerprofile/customeraccountprofile/form.html` (tier, auth mode, phone, currency, consent toggles)
 
-- [ ] `templates/ecommerce/customerprofile/customeraddresspreference/list.html` (filter bar for label, delivery window, defaults; search; table; pagination)
-- [ ] `templates/ecommerce/customerprofile/customeraddresspreference/detail.html` (courier instructions, time window, address card)
-- [ ] `templates/ecommerce/customerprofile/customeraddresspreference/form.html` (label, defaults, delivery notes, window selector)
+- [x] `templates/ecommerce/customerprofile/customeraddresspreference/list.html` (filter bar for label, delivery window, defaults; search; table; pagination)
+- [x] `templates/ecommerce/customerprofile/customeraddresspreference/detail.html` (courier instructions, time window, address card)
+- [x] `templates/ecommerce/customerprofile/customeraddresspreference/form.html` (label, defaults, delivery notes, window selector)
 
-- [ ] `templates/ecommerce/customerprofile/customerwishlist/list.html` (filter bar for visibility, default; search; item counts; share tokens)
-- [ ] `templates/ecommerce/customerprofile/customerwishlist/detail.html` (wishlist items table, desired quantity, priority badges, add item inline modal/form)
-- [ ] `templates/ecommerce/customerprofile/customerwishlist/form.html` (name, slug, visibility, notes)
+- [x] `templates/ecommerce/customerprofile/customerwishlist/list.html` (filter bar for visibility, default; search; item counts; share tokens)
+- [x] `templates/ecommerce/customerprofile/customerwishlist/detail.html` (wishlist items table, desired quantity, priority badges, add item inline modal/form)
+- [x] `templates/ecommerce/customerprofile/customerwishlist/form.html` (name, slug, visibility, notes)
 
-- [ ] `templates/ecommerce/customerprofile/customerprivacyrequest/list.html` (filter bar for request type, status; statutory countdown SLA badges; search; pagination)
-- [ ] `templates/ecommerce/customerprofile/customerprivacyrequest/detail.html` (request summary, 30-day compliance timeline, export JSON viewer, anonymization action)
-- [ ] `templates/ecommerce/customerprofile/customerprivacyrequest/form.html` (customer selector, request type, resolution notes)
+- [x] `templates/ecommerce/customerprofile/customerprivacyrequest/list.html` (filter bar for request type, status; statutory countdown SLA badges; search; pagination)
+- [x] `templates/ecommerce/customerprofile/customerprivacyrequest/detail.html` (request summary, 30-day compliance timeline, export JSON viewer, anonymization action)
+- [x] `templates/ecommerce/customerprofile/customerprivacyrequest/form.html` (customer selector, request type, resolution notes)
 
 ---
 
 ## Verify
 
-- [ ] Run `venv\Scripts\python.exe manage.py makemigrations ecommerce` -> verify incremental migration `0006_...` generated.
-- [ ] Run `venv\Scripts\python.exe manage.py migrate`.
-- [ ] Run `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1).
-- [ ] Run `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency, zero duplicate errors).
-- [ ] Run `venv\Scripts\python.exe manage.py check` (0 issues reported).
-- [ ] Run smoke test script in `temp/smoke_ecommerce_9_6.py`:
+- [x] Run `venv\Scripts\python.exe manage.py makemigrations ecommerce` -> verify incremental migration `0006_...` generated.
+- [x] Run `venv\Scripts\python.exe manage.py migrate`.
+- [x] Run `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1).
+- [x] Run `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency, zero duplicate errors).
+- [x] Run `venv\Scripts\python.exe manage.py check` (0 issues reported).
+- [x] Run smoke test script in `temp/smoke_ecommerce_9_6.py`:
   - Authenticate as `admin_acme` / `password`.
   - GET all new 9.6 URLs -> verify 200/302 responses.
   - Assert HTML content: page titles, table headers, seeded customer profiles/wishlists, no leaked Django tags (`{#`).
@@ -19789,17 +19789,17 @@ Color-named badge tokens (`badge-green`, `badge-red`, `badge-amber`, `badge-info
 
 ## Close-Out Steps
 
-- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
-- [ ] Append findings to `.claude/tasks/review-ecommerce-9.6.md`.
-- [ ] Run Phase 5 `code-fixer` agent to resolve all findings in priority order.
-- [ ] Run Phase 6 automated test suite:
+- [x] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
+- [x] Append findings to `.claude/tasks/review-ecommerce-9.6.md`.
+- [x] Run Phase 5 `code-fixer` agent to resolve all findings in priority order.
+- [x] Run Phase 6 automated test suite:
   - Update `apps/ecommerce/tests/conftest.py` with 9.6 fixtures.
   - Author `test_customerprofile_models.py`
   - Author `test_customerprofile_forms.py`
   - Author `test_customerprofile_views.py`
   - Author `test_customerprofile_security.py`
-  - Run full unfiltered test suite: `venv\Scripts\pytest apps/ecommerce/tests/`.
-- [ ] Phase 7 documentation:
+  - Run full unfiltered test suite: `venv\Scripts\pytest apps/ecommerce/tests/` (588 tests passed).
+- [x] Phase 7 documentation:
   - Update `.claude/skills/ecommerce/SKILL.md` with 9.6 models, views, and routes.
   - Update `README.md`.
   - Record any deferred items or gaps in `.claude/tasks/gaps-ecommerce-9.6.md`.
@@ -19816,4 +19816,8 @@ Color-named badge tokens (`badge-green`, `badge-red`, `badge-amber`, `badge-info
 ---
 
 ## Review Notes
-(To be populated during Phase 4-5 review and close-out)
+- **Review Passes (Phase 4)**: Six serial reviewers executed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`). All findings compiled into `.claude/tasks/review-ecommerce-9.6.md`.
+- **Finding Remediation (Phase 5)**: `code-fixer` resolved all 22 findings (5 Critical, 11 Important, 6 Minor) across 22 discrete, single-file commits with incremental migration `0007_customeraccountprofile_idx_ecap_ten_auth_and_more.py` applied.
+- **Test Automation (Phase 6)**: Authored 4 test modules (`test_customerprofile_models.py`, `test_customerprofile_forms.py`, `test_customerprofile_views.py`, `test_customerprofile_security.py`) and updated `conftest.py`. Full unfiltered app test suite passes with **588 passed, 0 failed** (100% green).
+- **Skill & Documentation (Phase 7)**: Updated `.claude/skills/ecommerce/SKILL.md` and `README.md`.
+- **Gaps**: None. Recorded in `.claude/tasks/gaps-ecommerce-9.6.md`.
