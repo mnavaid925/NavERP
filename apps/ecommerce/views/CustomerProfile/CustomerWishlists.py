@@ -169,6 +169,7 @@ def customerwishlist_delete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def customerwishlist_item_add(request, pk):
     wishlist = ecommerce_object(request, CustomerWishlist, pk)
@@ -215,6 +216,7 @@ def customerwishlist_item_add(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def customerwishlist_item_delete(request, item_pk):
     item = ecommerce_object(request, CustomerWishlistItem, item_pk)
