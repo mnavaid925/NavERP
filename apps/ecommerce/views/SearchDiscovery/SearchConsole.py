@@ -7,6 +7,7 @@ from django.db.models import Avg, Count, F, Min, Q
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.core.utils import write_audit_log
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
@@ -86,7 +87,12 @@ def search_console(request):
             query_logged = True
             # In console workbench, we can show the redirect notice or forward if user clicked
             if request.GET.get("auto_redirect") == "1":
-                return redirect(redirect_url)
+                if url_has_allowed_host_and_scheme(
+                    url=redirect_url,
+                    allowed_hosts={request.get_host()},
+                    require_https=request.is_secure(),
+                ):
+                    return redirect(redirect_url)
 
     # Base products queryset
     base_qs = (
