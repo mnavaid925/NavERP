@@ -2665,6 +2665,16 @@ LIVE_LINKS = {
         # Extra live leaves
         "Catalog Overview": "ecommerce:catalog_overview",
     },
+    "9.2": {
+        "Real-Time Stock Tracking": "ecommerce:inventoryallocation_list",
+        "Warehouse & Fulfillment Center Management": "ecommerce:fulfillmentcenter_list",
+        "Stock Transfers & Adjustments": "ecommerce:inventory_operations",
+        "Backorder & Pre-Order Management": "ecommerce:backorderpolicy_list",
+        "Multi-Channel Inventory Sync": "ecommerce:channelinventorysync_list",
+        # Extra live leaves
+        "Inventory Operations Console": "ecommerce:inventory_operations",
+    },
+
 
 
 
