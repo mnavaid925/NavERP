@@ -4,6 +4,7 @@ from apps.ecommerce.urls.InventoryStock import urlpatterns as _inventorystock_ur
 from apps.ecommerce.urls.OrderManagement import urlpatterns as _ordermanagement_urls
 from apps.ecommerce.urls.PricingPromotion import urlpatterns as _pricingpromotion_urls
 from apps.ecommerce.urls.ProductCatalog import urlpatterns as _productcatalog_urls
+from apps.ecommerce.urls.SearchDiscovery import urlpatterns as _searchdiscovery_urls
 
 app_name = "ecommerce"
 
@@ -14,6 +15,7 @@ urlpatterns = (
     + list(_cartcheckout_urls)
     + list(_ordermanagement_urls)
     + list(_customerprofile_urls)
+    + list(_searchdiscovery_urls)
 )
 
 
