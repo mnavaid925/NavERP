@@ -41,6 +41,7 @@ def search_console(request):
     applied_merchandising_rules = []
     promotional_banners = []
     redirect_url = ""
+    query_logged = False
 
     # Check for direct redirect rules if query given
     if q:
@@ -75,6 +76,7 @@ def search_console(request):
                 sort_order=sort_order,
                 session_key=request.session.session_key or "",
             )
+            query_logged = True
             # In console workbench, we can show the redirect notice or forward if user clicked
             if request.GET.get("auto_redirect") == "1":
                 return redirect(redirect_url)
@@ -295,7 +297,7 @@ def search_console(request):
         )
 
     # 8. Log Search Query Telemetry
-    if q:
+    if q and not query_logged:
         SearchQueryLog.objects.create(
             tenant=tenant,
             query_text=q,
