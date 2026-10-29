@@ -338,6 +338,12 @@ def search_console(request):
 
     # 8. Log Search Query Telemetry
     if q and not query_logged:
+        user_party = getattr(request.user, "party", None) if hasattr(request.user, "party") else None
+        customer_party = (
+            user_party
+            if (user_party and getattr(user_party, "tenant_id", None) == tenant.pk)
+            else None
+        )
         SearchQueryLog.objects.create(
             tenant=tenant,
             query_text=q,
@@ -348,7 +354,7 @@ def search_console(request):
             applied_filters=active_filters,
             sort_order=sort_order,
             session_key=request.session.session_key or "",
-            customer=getattr(request.user, "party", None) if hasattr(request.user, "party") else None,
+            customer=customer_party,
             ip_address=request.META.get("REMOTE_ADDR"),
         )
 
