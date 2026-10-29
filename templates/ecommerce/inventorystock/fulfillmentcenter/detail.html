@@ -58,7 +58,7 @@
         </div>
         <div class="flex justify-between">
           <span class="text-slate-500">Daily Order Cutoff:</span>
-          <span class="font-mono text-slate-700">{{ center.daily_cutoff_time|default:"No cutoff set" }}</span>
+          <span class="font-mono text-slate-700">{{ center.daily_cutoff_time|time:"H:i"|default:"No cutoff set" }}</span>
         </div>
         <div class="flex justify-between">
           <span class="text-slate-500">Pick-Pack-Ship:</span>
@@ -188,10 +188,10 @@
               {% endif %}
             </td>
             <td class="text-right table-actions">
-              <a href="{% url 'ecommerce:inventoryallocation_detail' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="View allocation">
+              <a href="{% url 'ecommerce:inventoryallocation_detail' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="View allocation" aria-label="View allocation for {{ alloc.variant.sku }}">
                 <i data-lucide="eye" class="w-4 h-4"></i>
               </a>
-              <a href="{% url 'ecommerce:inventoryallocation_adjust' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="Quick adjust stock">
+              <a href="{% url 'ecommerce:inventoryallocation_adjust' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="Quick adjust stock" aria-label="Quick adjust stock for {{ alloc.variant.sku }}">
                 <i data-lucide="sliders" class="w-4 h-4"></i>
               </a>
             </td>
