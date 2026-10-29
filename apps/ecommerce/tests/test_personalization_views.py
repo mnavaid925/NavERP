@@ -303,7 +303,7 @@ def test_personalization_console_view(client_a, tenant_a, ecom_segment_a, ecom_s
 
 
 def test_personalization_preview_simulator_view(client_a, tenant_a, ecom_strategy_a, ecom_product_a):
-    preview_url = reverse("ecommerce:personalization_preview")
+    preview_url = reverse("ecommerce:recommendation_simulate")
     # GET or POST simulation
     resp = client_a.post(preview_url, {
         "strategy_id": ecom_strategy_a.pk,
