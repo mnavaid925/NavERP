@@ -102,3 +102,26 @@
 ### Minor
 - [ ] *(Corroborated [M1]) Undefined `badge-purple` theme class in customeraccountprofile templates*
 
+---
+
+## Pass 3: Frontend Reviewer (`frontend-reviewer`)
+
+### Critical
+*(None)*
+
+### Important
+- [ ] *(Corroborated [M1 / FE-I1]) Invalid theme badge class `.badge-purple` in customeraccountprofile list and detail templates (Lesson L33)*
+- [ ] *(Corroborated [I7 / FE-I2]) Non-existent fields accessed on `core.Address` (`line2`, `state`, `postal_code`) across address and profile templates*
+
+### Minor
+- [ ] **[M4] Ad-hoc Stat Card Styling in `customeraccountprofile/detail.html`**
+  - **File:** `templates/ecommerce/customerprofile/customeraccountprofile/detail.html:66, 77, 96, 113`
+  - **Description:** Inline flex wrappers with raw Tailwind colors used instead of theme.css `.stat-card` / `.stat-icon` components.
+  - **Suggested Fix:** Align stat cards with `theme.css` `.stat-card` / `.stat-icon` classes.
+
+- [ ] **[M5] Missing `aria-label` on Icon-Only Action Buttons**
+  - **Files:** All 4 list templates (`customeraccountprofile/list.html`, `customeraddresspreference/list.html`, `customerwishlist/list.html`, `customerprivacyrequest/list.html`)
+  - **Description:** Action buttons (view, edit, delete, reset filter) provide `title="..."` but omit `aria-label="..."`.
+  - **Suggested Fix:** Add `aria-label` matching `title` on icon-only buttons for accessibility.
+
+
