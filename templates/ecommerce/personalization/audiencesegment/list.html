@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Audience Segments · Personalization & Recommendations · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:personalization_console' %}" class="hover:text-blue-600">Personalization</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Audience Segments</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Audience Segments</h1>
+      <p class="text-sm text-slate-500 mt-1">Dynamic shopper cohorts defined by RFM metrics, customer lifecycle tiers, and category affinities.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:personalization_console' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="sliders" class="w-4 h-4"></i>
+        <span>Personalization Console</span>
+      </a>
+      <a href="{% url 'ecommerce:audiencesegment_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Audience Segment</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ q }}"
+            placeholder="Segment #, name, code..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-stage" class="block text-xs font-medium text-slate-600 mb-1">Lifecycle Stage</label>
+        <select id="filter-stage" name="lifecycle_stage" class="form-select w-full text-sm">
+          <option value="">All Lifecycle Stages</option>
+          {% for val, label in lifecycle_choices %}
+            <option value="{{ val }}" {% if selected_lifecycle == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Status</label>
+        <select id="filter-status" name="is_active" class="form-select w-full text-sm">
+          <option value="">All Statuses</option>
+          <option value="true" {% if selected_active == "true" or selected_active == "1" %}selected{% endif %}>Active</option>
+          <option value="false" {% if selected_active == "false" or selected_active == "0" %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-primary w-full text-sm py-2">
+          Filter
+        </button>
+        <a href="{% url 'ecommerce:audiencesegment_list' %}" class="btn btn-outline text-sm py-2 px-3" title="Reset Filters">
+          Reset
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Table Card -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            <th class="py-3 px-4">Segment</th>
+            <th class="py-3 px-4">Lifecycle Stage</th>
+            <th class="py-3 px-4">RFM Criteria</th>
+            <th class="py-3 px-4">Affinity Category</th>
+            <th class="py-3 px-4 text-right">Cached Members</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-sm">
+          {% for seg in segments %}
+            <tr class="hover:bg-slate-50/75 transition-colors">
+              <td class="py-3 px-4">
+                <a href="{% url 'ecommerce:audiencesegment_detail' seg.pk %}" class="font-medium text-blue-600 hover:text-blue-800">
+                  {{ seg.name }}
+                </a>
+                <div class="text-xs text-slate-400 font-mono mt-0.5">{{ seg.number }} · {{ seg.code }}</div>
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge badge-info">{{ seg.get_lifecycle_stage_display }}</span>
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-600 space-y-0.5">
+                {% if seg.recency_days_max %}
+                  <div>Recency: &le; {{ seg.recency_days_max }} days</div>
+                {% endif %}
+                {% if seg.min_order_count > 0 %}
+                  <div>Orders: &ge; {{ seg.min_order_count }}</div>
+                {% endif %}
+                {% if seg.min_lifetime_spend > 0 %}
+                  <div>Spend: &ge; ${{ seg.min_lifetime_spend }}</div>
+                {% endif %}
+                {% if not seg.recency_days_max and seg.min_order_count == 0 and seg.min_lifetime_spend == 0 %}
+                  <span class="text-slate-400">All shoppers</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if seg.target_category %}
+                  <span class="badge badge-slate">{{ seg.target_category.name }}</span>
+                {% else %}
+                  <span class="text-xs text-slate-400">Any category</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right font-semibold text-slate-900">
+                {{ seg.cached_member_count }}
+                {% if seg.last_evaluated_at %}
+                  <div class="text-[10px] text-slate-400 font-normal">
+                    {{ seg.last_evaluated_at|date:"M d, H:i" }}
+                  </div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if seg.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-slate">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="table-actions flex items-center justify-end gap-1">
+                  <a
+                    href="{% url 'ecommerce:audiencesegment_detail' seg.pk %}"
+                    class="btn btn-icon p-1.5 text-slate-500 hover:text-blue-600 rounded"
+                    title="View Segment"
+                  >
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a
+                    href="{% url 'ecommerce:audiencesegment_edit' seg.pk %}"
+                    class="btn btn-icon p-1.5 text-slate-500 hover:text-amber-600 rounded"
+                    title="Edit Segment"
+                  >
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'ecommerce:audiencesegment_toggle' seg.pk %}" class="inline">
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="btn btn-icon p-1.5 text-slate-500 hover:text-slate-800 rounded"
+                      title="{% if seg.is_active %}Deactivate{% else %}Activate{% endif %}"
+                    >
+                      <i data-lucide="power" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                  <form method="post" action="{% url 'ecommerce:audiencesegment_delete' seg.pk %}" class="inline" onsubmit="return confirm('Delete audience segment {{ seg.name }}?');">
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="btn btn-icon p-1.5 text-slate-500 hover:text-red-600 rounded"
+                      title="Delete Segment"
+                    >
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="py-8 text-center text-slate-500">
+                <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                  <i data-lucide="users" class="w-10 h-10 text-slate-300 mb-2"></i>
+                  <p class="font-medium text-slate-700">No audience segments found</p>
+                  <p class="text-xs text-slate-400 mt-1">Create cohorts based on RFM behavior or shopper lifetime value.</p>
+                  <a href="{% url 'ecommerce:audiencesegment_create' %}" class="btn btn-primary text-xs mt-3">
+                    Add First Segment
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+        <div>
+          Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} segments
+        </div>
+        <div class="flex items-center gap-2">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_lifecycle %}&lifecycle_stage={{ selected_lifecycle }}{% endif %}{% if selected_active %}&is_active={{ selected_active }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Previous
+            </a>
+          {% endif %}
+          <span class="text-xs font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_lifecycle %}&lifecycle_stage={{ selected_lifecycle }}{% endif %}{% if selected_active %}&is_active={{ selected_active }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
