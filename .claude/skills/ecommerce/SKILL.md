@@ -1,11 +1,11 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine: categories, products, variants, relationships, fulfillment centers, stock allocations, ATP, backorders, sync feeds, dynamic pricing rules, discount coupons, flash sales, competitor price monitoring). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, or 9.3), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS): categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier packaging/tracking, and return merchandise authorizations). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, or 9.5), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System)
 
-The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, and competitive repricing intelligence. It integrates seamlessly with the NavERP core spine and physical supply chain:
+The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, and an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, and return merchandise authorization (RMA) workflows. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
 - **Physical Inventory Boundary**: Products, variants, and fulfillment centers link to `scm.Item` and `scm.Location` via string foreign keys. Module 9 does not duplicate inventory ledger balances or physical bin movements; physical warehouse stock and valuation remain anchored in `apps/scm` and `apps/inventory`, while eCommerce manages digital storefront availability, reservations, buffers, and channel broadcasting.
 - **App Path**: `apps/ecommerce/`
@@ -39,6 +39,16 @@ apps/ecommerce/
 │   │   ├── CouponPromotions.py      # CouponPromotion model (ECPN-)
 │   │   ├── FlashSales.py            # FlashSale model (EFLS-)
 │   │   └── CompetitorPriceMonitors.py # CompetitorPriceMonitor model (ECPM-)
+│   ├── CartCheckout/
+│   │   ├── Carts.py                 # Cart (ECRT-) & CartItem models
+│   │   ├── CheckoutSessions.py      # CheckoutSession model (ECKS-)
+│   │   ├── ShippingMethods.py       # ShippingMethodConfig model (ESHP-)
+│   │   └── PaymentMethods.py        # PaymentMethodConfig model (EPMC-)
+│   ├── OrderManagement/
+│   │   ├── EcommerceOrders.py       # EcommerceOrder (EORD-) & EcommerceOrderLine models
+│   │   ├── OrderRoutingRules.py     # OrderRoutingRule model (EORT-)
+│   │   ├── OrderFulfillments.py     # OrderFulfillment model (EFUL-)
+│   │   └── ReturnMerchandiseAuthorizations.py # ReturnMerchandiseAuthorization model (ERMA-)
 │   └── __init__.py                  # Surgical re-exports of all models
 ├── forms/
 │   ├── _common.py                   # TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -58,6 +68,16 @@ apps/ecommerce/
 │   │   ├── CouponPromotions.py      # CouponPromotionForm
 │   │   ├── FlashSales.py            # FlashSaleForm
 │   │   └── CompetitorPriceMonitors.py # CompetitorPriceMonitorForm
+│   ├── CartCheckout/
+│   │   ├── Carts.py                 # CartForm, CartItemForm
+│   │   ├── CheckoutSessions.py      # CheckoutSessionForm, CheckoutStepAdvanceForm
+│   │   ├── ShippingMethods.py       # ShippingMethodConfigForm
+│   │   └── PaymentMethods.py        # PaymentMethodConfigForm
+│   ├── OrderManagement/
+│   │   ├── EcommerceOrders.py       # EcommerceOrderForm, EcommerceOrderLineForm
+│   │   ├── OrderRoutingRules.py     # OrderRoutingRuleForm
+│   │   ├── OrderFulfillments.py     # OrderFulfillmentForm
+│   │   └── ReturnMerchandiseAuthorizations.py # ReturnMerchandiseAuthorizationForm
 │   └── __init__.py                  # Re-exports of all forms
 ├── views/
 │   ├── _common.py                   # ecommerce_scope, ecommerce_object, csv_safe, write_audit_log
@@ -79,6 +99,16 @@ apps/ecommerce/
 │   │   ├── CouponPromotions.py      # couponpromotion CRUD
 │   │   ├── FlashSales.py            # flashsale CRUD
 │   │   └── CompetitorPriceMonitors.py # competitorpricemonitor CRUD + sync action
+│   ├── CartCheckout/
+│   │   ├── Carts.py                 # cart CRUD + recover action
+│   │   ├── CheckoutSessions.py      # checkoutsession CRUD + advance action
+│   │   ├── ShippingMethods.py       # shippingmethodconfig CRUD + toggle action
+│   │   └── PaymentMethods.py        # paymentmethodconfig CRUD + toggle action
+│   ├── OrderManagement/
+│   │   ├── EcommerceOrders.py       # ecommerceorder CRUD + cancel action
+│   │   ├── OrderRoutingRules.py     # orderroutingrule CRUD
+│   │   ├── OrderFulfillments.py     # orderfulfillment CRUD + ship action
+│   │   └── ReturnMerchandiseAuthorizations.py # returnmerchandiseauthorization CRUD + complete action
 │   └── __init__.py                  # Re-exports of all views
 ├── urls/
 │   ├── ProductCatalog/
@@ -99,6 +129,17 @@ apps/ecommerce/
 │   │   ├── CouponPromotions.py      # pricing/coupons/ paths
 │   │   ├── FlashSales.py            # pricing/flash-sales/ paths
 │   │   └── CompetitorPriceMonitors.py # pricing/competitors/ paths
+│   ├── CartCheckout/
+│   │   ├── Carts.py                 # cart-checkout/carts/ paths
+│   │   ├── CheckoutSessions.py      # cart-checkout/sessions/ paths
+│   │   ├── ShippingMethods.py       # cart-checkout/shipping-methods/ paths
+│   │   └── PaymentMethods.py        # cart-checkout/payment-methods/ paths
+│   └── OrderManagement/
+│       ├── EcommerceOrders.py       # orders/ paths
+│       ├── OrderRoutingRules.py     # routing-rules/ paths
+│       ├── OrderFulfillments.py     # fulfillments/ paths
+│       └── ReturnMerchandiseAuthorizations.py # returns/ paths
+│   │   └── PaymentMethods.py        # cart-checkout/payment-methods/ paths
 │   └── __init__.py                  # Concatenates all urlpatterns with app_name="ecommerce"
 ├── admin.py                         # Django admin registrations
 ├── apps.py                          # EcommerceConfig
@@ -133,6 +174,15 @@ apps/ecommerce/
 | `CouponPromotion` | `ECPN-` | `code`, `name`, `discount_type`, `discount_value`, `min_spend`, `max_discount_amount`, `usage_limit_total`, `is_active` | `customer` (`core.Party`) | `calculate_discount(cart_subtotal)`, `is_currently_valid`, `remaining_redemptions` |
 | `FlashSale` | `EFLS-` | `title`, `status`, `discount_percentage`, `flash_price`, `inventory_cap`, `units_sold`, `max_units_per_order`, `start_time`, `end_time` | `product`, `variant`, `category` | `calculate_effective_price(original_price)`, `is_live`, `remaining_units`, `sold_percentage` |
 | `CompetitorPriceMonitor` | `ECPM-` | `competitor_name`, `competitor_url`, `competitor_price`, `match_strategy`, `beat_by_value`, `min_margin_pct`, `floor_price`, `status` | `product`, `variant` | `margin_floor_price`, `suggested_price`, `is_margin_risk` |
+
+### Sub-module 9.4: Shopping Cart & Checkout
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `Cart` | `ECRT-` | `customer`, `session_key`, `email`, `status`, `currency`, `subtotal`, `discount_total`, `tax_total`, `shipping_total`, `grand_total`, `coupon_code`, `recovery_token` | `core.Party` (`customer`) | `recalculate_totals()`, `generate_recovery_token()`, `mark_abandoned()`, `item_count` |
+| `CartItem` | — | `cart`, `product`, `variant`, `quantity`, `unit_price`, `total_price`, `custom_attributes` | `ecommerce.CatalogProduct`, `ecommerce.ProductVariant` | Auto calculates `total_price = unit_price * quantity` |
+| `CheckoutSession` | `ECKS-` | `cart`, `customer`, `email`, `phone`, `flow_type`, `current_step`, `status`, shipping fields, billing fields, financial totals, `payment_status`, `expires_at`, `completed_at` | `Cart`, `core.Party`, `ShippingMethodConfig`, `PaymentMethodConfig`, `accounting.TaxCode` | `advance_step()` (funnel progression), auto fills billing address |
+| `ShippingMethodConfig` | `ESHP-` | `name`, `code`, `carrier`, `calculation_type`, `base_rate`, `cost_per_kg`, `free_shipping_threshold`, `destination_countries`, `is_active`, `sort_order` | — | `calculate_rate(subtotal, total_weight_kg)` (flat, weight tiered, free threshold, pickup) |
+| `PaymentMethodConfig` | `EPMC-` | `name`, `provider`, `method_category`, `environment`, `is_active`, `display_order`, `fee_type`, `fee_amount`, `min_order_amount`, `max_order_amount`, `supported_currencies` | — | `calculate_surcharge(subtotal)`, `is_eligible_for_amount(subtotal)` |
 
 ---
 
@@ -221,6 +271,34 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 | `pricing/competitors/<int:pk>/delete/` | `competitorpricemonitor_delete` | `competitorpricemonitor_delete` | Delete monitor (POST, tenant admin) |
 | `pricing/competitors/<int:pk>/sync/` | `competitorpricemonitor_sync` | `competitorpricemonitor_sync` | Trigger instant competitor price scrape check (POST) |
 
+### 9.4 Shopping Cart & Checkout Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `cart-checkout/carts/` | `cart_list` | `cart_list` | Shopping carts table with search and status filters |
+| `cart-checkout/carts/create/` | `cart_create` | `cart_create` | Manually initiate cart for customer or guest |
+| `cart-checkout/carts/<int:pk>/` | `cart_detail` | `cart_detail` | Cart detail with items, customer, totals, and abandonment recovery |
+| `cart-checkout/carts/<int:pk>/edit/` | `cart_edit` | `cart_edit` | Edit cart attributes, coupon code, status, and notes |
+| `cart-checkout/carts/<int:pk>/delete/` | `cart_delete` | `cart_delete` | Delete cart (POST only, tenant admin) |
+| `cart-checkout/carts/<int:pk>/recover/` | `cart_recover` | `cart_recover` | Generate recovery token & trigger recovery email (POST) |
+| `cart-checkout/sessions/` | `checkoutsession_list` | `checkoutsession_list` | Checkout sessions table with flow & status filters |
+| `cart-checkout/sessions/create/` | `checkoutsession_create` | `checkoutsession_create` | Launch checkout session from existing active cart |
+| `cart-checkout/sessions/<int:pk>/` | `checkoutsession_detail` | `checkoutsession_detail` | Checkout session detail: shipping/billing address, tax breakdown, totals |
+| `cart-checkout/sessions/<int:pk>/edit/` | `checkoutsession_edit` | `checkoutsession_edit` | Edit checkout session information |
+| `cart-checkout/sessions/<int:pk>/delete/` | `checkoutsession_delete` | `checkoutsession_delete` | Delete checkout session (POST only, tenant admin) |
+| `cart-checkout/sessions/<int:pk>/advance/` | `checkoutsession_advance` | `checkoutsession_advance` | Advance session to next conversion funnel step (POST) |
+| `cart-checkout/shipping-methods/` | `shippingmethodconfig_list` | `shippingmethodconfig_list` | Shipping methods configuration table |
+| `cart-checkout/shipping-methods/create/` | `shippingmethodconfig_create` | `shippingmethodconfig_create` | Add shipping method & carrier rate calculation rule |
+| `cart-checkout/shipping-methods/<int:pk>/` | `shippingmethodconfig_detail` | `shippingmethodconfig_detail` | Shipping method detail & tier matrix breakdown |
+| `cart-checkout/shipping-methods/<int:pk>/edit/` | `shippingmethodconfig_edit` | `shippingmethodconfig_edit` | Edit shipping method rates and destination rules |
+| `cart-checkout/shipping-methods/<int:pk>/delete/` | `shippingmethodconfig_delete` | `shippingmethodconfig_delete` | Delete shipping method (POST only, tenant admin) |
+| `cart-checkout/shipping-methods/<int:pk>/toggle/` | `shippingmethodconfig_toggle` | `shippingmethodconfig_toggle` | Quick toggle shipping method active status (POST) |
+| `cart-checkout/payment-methods/` | `paymentmethodconfig_list` | `paymentmethodconfig_list` | Payment methods & gateway configuration table |
+| `cart-checkout/payment-methods/create/` | `paymentmethodconfig_create` | `paymentmethodconfig_create` | Connect payment gateway / payment method rule |
+| `cart-checkout/payment-methods/<int:pk>/` | `paymentmethodconfig_detail` | `paymentmethodconfig_detail` | Payment method detail & fee / threshold settings |
+| `cart-checkout/payment-methods/<int:pk>/edit/` | `paymentmethodconfig_edit` | `paymentmethodconfig_edit` | Edit payment provider, fee type, or currency settings |
+| `cart-checkout/payment-methods/<int:pk>/delete/` | `paymentmethodconfig_delete` | `paymentmethodconfig_delete` | Delete payment method (POST only, tenant admin) |
+| `cart-checkout/payment-methods/<int:pk>/toggle/` | `paymentmethodconfig_toggle` | `paymentmethodconfig_toggle` | Quick toggle payment gateway active status (POST) |
+
 ---
 
 ## 4. Templates & Design System
@@ -238,6 +316,11 @@ Templates are stored under `templates/ecommerce/`:
   - `couponpromotion/` — `list.html`, `detail.html`, `form.html`.
   - `flashsale/` — `list.html` (with active live badges), `detail.html` (with inventory sell-through progress bar), `form.html`.
   - `competitorpricemonitor/` — `list.html` (with margin risk warnings and suggested repricing), `detail.html` (with margin floor breakdown and instant sync button), `form.html`.
+- `cartcheckout/`
+  - `cart/` — `list.html` (with cart status badges and items count), `detail.html` (with line items table, financial breakdown, recovery URL trigger), `form.html`.
+  - `checkoutsession/` — `list.html` (with funnel step indicators, flow types, payment statuses), `detail.html` (with step progress stepper, shipping & billing address panels, tax breakdown, advance step button), `form.html`.
+  - `shippingmethod/` — `list.html` (with carrier logos/badges, rate calculation badges, active toggle), `detail.html` (with delivery estimation windows, threshold info), `form.html`.
+  - `paymentmethod/` — `list.html` (with payment provider badges, environment pills, active toggle), `detail.html` (with fee structures, currency support lists, instructions), `form.html`.
 
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
@@ -266,6 +349,11 @@ The command provisions:
 - 4 Coupon Codes: `WELCOME10` (10% off), `SAVE50` ($50 off $200 min spend), `VIPFREESHIP` (Free shipping), `BLACKFRIDAY` (25% off max $100 cap).
 - 3 Flash Sales: Midnight Audio Lightning Deal, Weekend Computing Blitz, Flash Clearance.
 - 4 Competitor Price Monitors: Amazon US, Walmart, Best Buy, and Newegg with beat-by-fixed, beat-by-percent, and margin floor protection.
+- 4 Shopping Carts: Active authenticated cart, Abandoned guest cart with recovery token, Multi-item cart in checkout, and Converted historical cart.
+- 6 Cart Items with automatic total price calculation and variant pricing inheritance.
+- 4 Checkout Sessions: In-progress contact step session, Shipping method selection session, Ready-for-payment session, and Completed session with order reference.
+- 4 Shipping Methods: Standard Ground (Flat Rate), Express Air (Weight Tiered), Free Shipping over $100, and Store Pickup.
+- 4 Payment Methods: Stripe Credit Card, PayPal Express Wallet, Klarna BNPL, and Cash on Delivery with surcharge and order limit rules.
 - All demo data is scoped to tenant `acme`.
 
 ---
@@ -291,6 +379,8 @@ The command provisions:
 7. **Pricing Engine Precedence & Margin Protection**:
    - Flash sales take highest priority during active windows.
    - Competitive repricing suggestions must never breach the `margin_floor_price` calculated from variant unit cost (`cost_price * (1 + min_margin_pct/100)`). If competitor undercuts below margin floor, monitor flags `is_margin_risk` and clamps suggested price to floor.
+8. **Checkout Billing Address Inheritance**:
+   - When `billing_same_as_shipping` is True, `CheckoutSession.save()` automatically clones shipping address fields into the corresponding billing fields. In forms, `billing_country` is made non-required since it is populated server-side.
 
 ---
 
@@ -306,6 +396,13 @@ LIVE_LINKS["9.3"] = {
     "Flash Sales & Limited-Time Offers": "ecommerce:flashsale_list",
     "Loyalty & Rewards Pricing": "ecommerce:couponpromotion_list",
     "Price Matching & Competitive Monitoring": "ecommerce:competitorpricemonitor_list",
+}
+LIVE_LINKS["9.4"] = {
+    "Shopping Carts & Guest Sessions": "ecommerce:cart_list",
+    "Abandoned Cart Recovery": "ecommerce:cart_list",
+    "One-Page & Multi-Step Checkout": "ecommerce:checkoutsession_list",
+    "Shipping Methods & Calculation": "ecommerce:shippingmethodconfig_list",
+    "Payment Gateway Configuration": "ecommerce:paymentmethodconfig_list",
 }
 ```
 Appears under the eCommerce section of the primary navigation bar.
