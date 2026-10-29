@@ -11,6 +11,7 @@ from apps.core.utils import write_audit_log
 from apps.ecommerce.forms.InventoryStock.InventoryAllocations import InventoryAllocationForm, StockAdjustmentActionForm
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
 from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
+from apps.ecommerce.models.ProductCatalog.Variants import ProductVariant
 from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 
 
@@ -90,9 +91,17 @@ def inventoryallocation_detail(request, pk):
 @login_required
 def inventoryallocation_create(request):
     initial_center_id = request.GET.get("center")
+    initial_variant_id = request.GET.get("variant")
     initial_data = {}
     if initial_center_id and initial_center_id.isdigit():
         initial_data["fulfillment_center"] = int(initial_center_id)
+    if initial_variant_id and initial_variant_id.isdigit():
+        try:
+            var = ecommerce_scope(ProductVariant.objects.select_related("product"), request).get(pk=int(initial_variant_id))
+            initial_data["variant"] = var.pk
+            initial_data["product"] = var.product_id
+        except ProductVariant.DoesNotExist:
+            pass
 
     if request.method == "POST":
         form = InventoryAllocationForm(request.POST, tenant=request.tenant)
@@ -168,24 +177,30 @@ def inventoryallocation_adjust(request, pk):
             adj_qty = form.cleaned_data["adjustment_quantity"]
             reason = form.cleaned_data["reason_notes"]
 
-            before_qty = alloc.quantity_on_hand
-            alloc.quantity_on_hand += adj_qty
-            alloc.last_counted_at = timezone.now()
-            alloc.save()
+            if alloc.quantity_on_hand + adj_qty < 0:
+                form.add_error(
+                    "adjustment_quantity",
+                    f"Adjustment of {adj_qty:+d} would result in negative on-hand quantity ({alloc.quantity_on_hand + adj_qty}). Current on-hand is {alloc.quantity_on_hand}.",
+                )
+            else:
+                before_qty = alloc.quantity_on_hand
+                alloc.quantity_on_hand += adj_qty
+                alloc.last_counted_at = timezone.now()
+                alloc.save()
 
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "UPDATE",
-                "InventoryAllocation",
-                alloc.pk,
-                f"Adjusted stock for {alloc.variant.sku} ({adj_type}): {before_qty} -> {alloc.quantity_on_hand} ({adj_qty:+d}). Reason: {reason}",
-            )
-            messages.success(
-                request,
-                f"Stock adjusted by {adj_qty:+d} units (New on-hand: {alloc.quantity_on_hand}).",
-            )
-            return redirect("ecommerce:inventoryallocation_detail", pk=alloc.pk)
+                write_audit_log(
+                    request.tenant,
+                    request.user,
+                    "UPDATE",
+                    "InventoryAllocation",
+                    alloc.pk,
+                    f"Adjusted stock for {alloc.variant.sku} ({adj_type}): {before_qty} -> {alloc.quantity_on_hand} ({adj_qty:+d}). Reason: {reason}",
+                )
+                messages.success(
+                    request,
+                    f"Stock adjusted by {adj_qty:+d} units (New on-hand: {alloc.quantity_on_hand}).",
+                )
+                return redirect("ecommerce:inventoryallocation_detail", pk=alloc.pk)
     else:
         form = StockAdjustmentActionForm()
 
