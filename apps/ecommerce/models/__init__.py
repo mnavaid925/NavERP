@@ -1,4 +1,8 @@
 from apps.ecommerce.models._base import TenantNumbered, TenantOwned
+from apps.ecommerce.models.CartCheckout.Carts import Cart, CartItem
+from apps.ecommerce.models.CartCheckout.CheckoutSessions import CheckoutSession
+from apps.ecommerce.models.CartCheckout.PaymentMethods import PaymentMethodConfig
+from apps.ecommerce.models.CartCheckout.ShippingMethods import ShippingMethodConfig
 from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPolicy
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
@@ -30,5 +34,11 @@ __all__ = [
     "CouponPromotion",
     "FlashSale",
     "CompetitorPriceMonitor",
+    # 9.4 Shopping Cart & Checkout
+    "Cart",
+    "CartItem",
+    "CheckoutSession",
+    "ShippingMethodConfig",
+    "PaymentMethodConfig",
 ]
 
