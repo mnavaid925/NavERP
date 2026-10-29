@@ -37,3 +37,10 @@ class PaymentMethodConfigForm(TenantModelForm):
             "instructions": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
             "supports_refunds": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
         }
+
+    def clean_supported_currencies(self):
+        val = self.cleaned_data.get("supported_currencies", "")
+        if val:
+            parts = [p.strip().upper() for p in val.split(",") if p.strip()]
+            return ",".join(parts)
+        return "USD"
