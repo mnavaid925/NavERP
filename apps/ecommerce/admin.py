@@ -212,6 +212,7 @@ class CustomerAccountProfileAdmin(admin.ModelAdmin):
     list_display = ["number", "customer", "user", "tier", "status", "auth_mode", "phone_number", "phone_verified", "total_spent", "order_count"]
     list_filter = ["tier", "status", "auth_mode", "phone_verified", "tenant"]
     search_fields = ["number", "customer__name", "user__username", "phone_number"]
+    list_select_related = ["customer", "user"]
     ordering = ["-created_at"]
 
 
@@ -220,6 +221,7 @@ class CustomerAddressPreferenceAdmin(admin.ModelAdmin):
     list_display = ["number", "customer", "label", "is_default_shipping", "is_default_billing", "preferred_delivery_window", "requires_signature"]
     list_filter = ["is_default_shipping", "is_default_billing", "preferred_delivery_window", "requires_signature", "tenant"]
     search_fields = ["number", "customer__name", "label", "recipient_name"]
+    list_select_related = ["customer", "address"]
     ordering = ["-created_at"]
 
 
@@ -234,6 +236,7 @@ class CustomerWishlistAdmin(admin.ModelAdmin):
     list_display = ["number", "name", "customer", "visibility", "is_default", "share_token"]
     list_filter = ["visibility", "is_default", "tenant"]
     search_fields = ["number", "name", "customer__name", "share_token"]
+    list_select_related = ["customer"]
     ordering = ["-created_at"]
     inlines = [CustomerWishlistItemInline]
 
@@ -243,6 +246,7 @@ class CustomerWishlistItemAdmin(admin.ModelAdmin):
     list_display = ["wishlist", "product", "variant", "desired_quantity", "priority"]
     list_filter = ["priority", "tenant"]
     search_fields = ["wishlist__name", "product__name", "comment"]
+    list_select_related = ["wishlist", "product", "variant"]
     ordering = ["-created_at"]
 
 
@@ -251,6 +255,7 @@ class CustomerPrivacyRequestAdmin(admin.ModelAdmin):
     list_display = ["number", "customer", "request_type", "status", "statutory_deadline", "completed_at", "requested_by_email"]
     list_filter = ["request_type", "status", "tenant"]
     search_fields = ["number", "customer__name", "requested_by_email", "resolution_notes"]
+    list_select_related = ["customer"]
     ordering = ["-created_at"]
 
 
