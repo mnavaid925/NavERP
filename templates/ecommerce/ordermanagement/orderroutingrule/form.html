@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit Routing Rule {{ rule.name }}{% else %}New Routing Rule{% endif %} · eCommerce · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-3xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:orderroutingrule_list' %}" class="hover:text-blue-600">Routing Rules</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}{{ rule.name }}{% else %}New{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Routing Rule{% else %}Create Order Routing Rule{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Configure automated warehouse fulfillment routing, geographic targets, and split order logic.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      {% if is_edit %}
+        <a href="{% url 'ecommerce:orderroutingrule_detail' pk=rule.pk %}" class="btn btn-outline">Cancel</a>
+      {% else %}
+        <a href="{% url 'ecommerce:orderroutingrule_list' %}" class="btn btn-outline">Cancel</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Form Body -->
+  <form method="post" class="card p-6 bg-white shadow-sm border border-slate-200 rounded-lg space-y-6">
+    {% csrf_token %}
+
+    {% if form.errors %}
+      <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+        <div class="font-bold mb-1">Please fix the errors below:</div>
+        <ul class="list-disc list-inside space-y-1">
+          {% for field, errors in form.errors.items %}
+            {% for error in errors %}
+              <li><strong>{{ field|title }}:</strong> {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="{{ form.name.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Rule Name <span class="text-red-500">*</span>
+        </label>
+        {{ form.name }}
+      </div>
+      <div>
+        <label for="{{ form.strategy.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Routing Strategy <span class="text-red-500">*</span>
+        </label>
+        {{ form.strategy }}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="{{ form.priority.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Execution Priority <span class="text-red-500">*</span>
+        </label>
+        {{ form.priority }}
+        <span class="text-xs text-slate-400">Lower numbers evaluate first (1 = highest priority)</span>
+      </div>
+      <div>
+        <label for="{{ form.preferred_fulfillment_center.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Preferred Fulfillment Center
+        </label>
+        {{ form.preferred_fulfillment_center }}
+        <span class="text-xs text-slate-400">Leave blank to evaluate across all active centers</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="{{ form.destination_country.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Destination Country Filter
+        </label>
+        {{ form.destination_country }}
+        <span class="text-xs text-slate-400">Leave empty for worldwide global matching</span>
+      </div>
+      <div>
+        <label for="{{ form.destination_region.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Destination Region / Zone
+        </label>
+        {{ form.destination_region }}
+        <span class="text-xs text-slate-400">e.g. West Coast, California, EMEA</span>
+      </div>
+    </div>
+
+    <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+      <div class="flex items-center gap-2">
+        {{ form.allow_split_shipment }}
+        <label for="{{ form.allow_split_shipment.id_for_label }}" class="text-sm font-medium text-slate-800">
+          Allow Split Shipments
+        </label>
+      </div>
+      <p class="text-xs text-slate-500 pl-6">
+        When enabled, orders can be fulfilled in multiple packages from separate fulfillment centers if one location lacks inventory for all items.
+      </p>
+
+      <div class="flex items-center gap-2 pt-2 border-t border-slate-200">
+        {{ form.enable_dropship }}
+        <label for="{{ form.enable_dropship.id_for_label }}" class="text-sm font-medium text-slate-800">
+          Enable Drop-Ship Sourcing
+        </label>
+      </div>
+      <p class="text-xs text-slate-500 pl-6">
+        Route directly to external vendor suppliers when local warehouse inventory is unavailable.
+      </p>
+
+      <div class="flex items-center gap-2 pt-2 border-t border-slate-200">
+        {{ form.is_active }}
+        <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-slate-800">
+          Rule Active
+        </label>
+      </div>
+    </div>
+
+    <div>
+      <label for="{{ form.description.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+        Policy Description & Operational Notes
+      </label>
+      {{ form.description }}
+    </div>
+
+    <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+      {% if is_edit %}
+        <a href="{% url 'ecommerce:orderroutingrule_detail' pk=rule.pk %}" class="btn btn-outline">Cancel</a>
+      {% else %}
+        <a href="{% url 'ecommerce:orderroutingrule_list' %}" class="btn btn-outline">Cancel</a>
+      {% endif %}
+      <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="check" class="w-4 h-4"></i>
+        <span>{% if is_edit %}Save Changes{% else %}Create Rule{% endif %}</span>
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
