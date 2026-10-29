@@ -47,7 +47,7 @@ def test_cartcheckout_cart_list_view(client_a, tenant_a, ecom_cart_a):
     resp = client_a.get(url)
     assert resp.status_code == 200
     assert "carts" in resp.context
-    assert "kpis" in resp.context
+    assert "status_choices" in resp.context
     assert len(resp.context["carts"]) >= 2
 
     # 2. Search query filter
@@ -139,7 +139,8 @@ def test_cartcheckout_checkout_session_list_view(client_a, tenant_a, ecom_checko
     resp = client_a.get(url)
     assert resp.status_code == 200
     assert "sessions" in resp.context
-    assert "kpis" in resp.context
+    assert "status_choices" in resp.context
+    assert "flow_choices" in resp.context
     assert len(resp.context["sessions"]) >= 1
 
     # Filter by flow_type
@@ -174,7 +175,11 @@ def test_cartcheckout_checkout_session_create_view(client_a, tenant_a, ecom_cart
         "shipping_postal_code": "98101",
         "shipping_country": "US",
         "billing_same_as_shipping": True,
+        "tax_rate": Decimal("0.0000"),
         "subtotal_amount": Decimal("100.00"),
+        "discount_amount": Decimal("0.00"),
+        "shipping_amount": Decimal("0.00"),
+        "tax_amount": Decimal("0.00"),
         "total_amount": Decimal("100.00"),
         "payment_status": "pending",
         "expires_at": (timezone.now() + timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M"),
@@ -213,7 +218,8 @@ def test_cartcheckout_shipping_method_list_view(client_a, tenant_a, ecom_shippin
     resp = client_a.get(url)
     assert resp.status_code == 200
     assert "methods" in resp.context
-    assert "kpis" in resp.context
+    assert "carrier_choices" in resp.context
+    assert "calc_type_choices" in resp.context
     assert len(resp.context["methods"]) >= 1
 
 
@@ -261,7 +267,8 @@ def test_cartcheckout_payment_method_list_view(client_a, tenant_a, ecom_payment_
     resp = client_a.get(url)
     assert resp.status_code == 200
     assert "methods" in resp.context
-    assert "kpis" in resp.context
+    assert "provider_choices" in resp.context
+    assert "category_choices" in resp.context
     assert len(resp.context["methods"]) >= 1
 
 
