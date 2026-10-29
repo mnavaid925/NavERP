@@ -106,7 +106,12 @@ def search_console(request):
     expanded_terms = [q] if q else []
     if q:
         norm_q = q.lower()
-        active_synonyms = SearchSynonym.objects.filter(tenant=tenant, is_active=True)
+        active_synonyms = SearchSynonym.objects.filter(
+            tenant=tenant, is_active=True
+        ).filter(
+            Q(root_term=norm_q) | Q(synonyms__icontains=norm_q)
+        )
+        matched_ids = []
         for syn in active_synonyms:
             syn_terms = syn.get_synonym_list()
             is_matched = False
@@ -126,10 +131,12 @@ def search_console(request):
 
             if is_matched:
                 applied_synonyms.append(syn)
-                # Increment hit count safely
-                SearchSynonym.objects.filter(pk=syn.pk).update(
-                    hit_count=models.F("hit_count") + 1
-                )
+                matched_ids.append(syn.pk)
+
+        if matched_ids:
+            SearchSynonym.objects.filter(id__in=matched_ids).update(
+                hit_count=F("hit_count") + 1
+            )
 
     # Deduplicate expanded terms
     expanded_terms = list(dict.fromkeys([t.strip().lower() for t in expanded_terms if t.strip()]))
