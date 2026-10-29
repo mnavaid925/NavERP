@@ -26,7 +26,7 @@ def search_console(request):
     tenant = request.tenant
     now = timezone.now()
 
-    q = request.GET.get("q", "").strip()
+    q = request.GET.get("q", "").strip()[:200]
     category_id = request.GET.get("category", "").strip()
     brand_filter = request.GET.get("brand", "").strip()
     price_min = request.GET.get("price_min", "").strip()
@@ -384,7 +384,7 @@ def search_console(request):
 @login_required
 def search_autocomplete(request):
     """Instant search-as-you-type endpoint returning top matching products & suggestions."""
-    q = request.GET.get("q", "").strip()
+    q = request.GET.get("q", "").strip()[:200]
     if not q or len(q) < 2:
         return JsonResponse({"products": [], "categories": [], "suggestions": []})
 
