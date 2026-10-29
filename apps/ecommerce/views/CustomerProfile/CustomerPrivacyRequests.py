@@ -96,12 +96,11 @@ def customerprivacyrequest_create(request):
             req.tenant = request.tenant
             req.save()
             write_audit_log(
+                request.user,
+                req,
+                "create",
+                changes={"number": req.number},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="CustomerPrivacyRequest",
-                object_id=str(req.pk),
-                object_repr=str(req),
             )
             messages.success(request, f"Privacy request {req.number} registered successfully.")
             return redirect("ecommerce:customerprivacyrequest_detail", pk=req.pk)
@@ -130,12 +129,11 @@ def customerprivacyrequest_edit(request, pk):
         if form.is_valid():
             privacy_request = form.save()
             write_audit_log(
+                request.user,
+                privacy_request,
+                "update",
+                changes={"number": privacy_request.number},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="CustomerPrivacyRequest",
-                object_id=str(privacy_request.pk),
-                object_repr=str(privacy_request),
             )
             messages.success(request, f"Privacy request {privacy_request.number} updated successfully.")
             return redirect("ecommerce:customerprivacyrequest_detail", pk=privacy_request.pk)
@@ -162,16 +160,14 @@ def customerprivacyrequest_edit(request, pk):
 def customerprivacyrequest_delete(request, pk):
     privacy_request = ecommerce_object(request, CustomerPrivacyRequest, pk)
     number = privacy_request.number
-    req_id = privacy_request.pk
-    privacy_request.delete()
     write_audit_log(
+        request.user,
+        privacy_request,
+        "delete",
+        changes={"number": number},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="CustomerPrivacyRequest",
-        object_id=str(req_id),
-        object_repr=f"CustomerPrivacyRequest {number}",
     )
+    privacy_request.delete()
     messages.success(request, f"Privacy request {number} deleted successfully.")
     return redirect("ecommerce:customerprivacyrequest_list")
 
@@ -231,12 +227,11 @@ def customerprivacyrequest_generate_export(request, pk):
     privacy_request.save()
 
     write_audit_log(
+        request.user,
+        privacy_request,
+        "export",
+        changes={"customer": customer.name, "action": "dsar_export"},
         tenant=request.tenant,
-        user=request.user,
-        action="dsar_export",
-        model_name="CustomerPrivacyRequest",
-        object_id=str(privacy_request.pk),
-        object_repr=f"DSAR export for {customer.name}",
     )
     messages.success(request, f"Data portability export payload generated for {privacy_request.number}.")
     return redirect("ecommerce:customerprivacyrequest_detail", pk=privacy_request.pk)
@@ -274,12 +269,11 @@ def customerprivacyrequest_anonymize(request, pk):
     privacy_request.save()
 
     write_audit_log(
+        request.user,
+        privacy_request,
+        "anonymize",
+        changes={"customer": customer.name, "action": "gdpr_erasure"},
         tenant=request.tenant,
-        user=request.user,
-        action="gdpr_erasure",
-        model_name="CustomerPrivacyRequest",
-        object_id=str(privacy_request.pk),
-        object_repr=f"GDPR Anonymization for {customer.name}",
     )
     messages.success(request, f"Customer PII anonymized successfully under {privacy_request.number}.")
     return redirect("ecommerce:customerprivacyrequest_detail", pk=privacy_request.pk)
