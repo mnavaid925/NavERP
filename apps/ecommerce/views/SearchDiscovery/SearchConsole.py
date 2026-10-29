@@ -311,9 +311,10 @@ def search_console(request):
     fallback_recommendations = []
     if total_results == 0 and q:
         fallback_recommendations = list(
-            CatalogProduct.objects.filter(tenant=tenant, status="active").order_by(
-                "-created_at"
-            )[:4]
+            CatalogProduct.objects.filter(tenant=tenant, status="active")
+            .select_related("item", "primary_category")
+            .prefetch_related("variants")
+            .order_by("-created_at")[:4]
         )
 
     # 8. Log Search Query Telemetry
