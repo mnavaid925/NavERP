@@ -404,17 +404,19 @@ def search_autocomplete(request):
             | Q(variants__sku__icontains=norm_q)
         )
         .select_related("item")
-        .prefetch_related("variants")
+        .only("id", "number", "name", "brand", "item__sku")
+        .annotate(min_price=Min("variants__price"))
         .distinct()[:5]
     )
     products = []
     for p in raw_products:
+        price_val = f"{p.min_price:.2f}" if getattr(p, "min_price", None) is not None else p.base_price
         products.append({
             "id": p.id,
             "number": p.number,
             "name": p.name,
             "sku": p.sku,
-            "base_price": p.base_price,
+            "base_price": price_val,
             "brand": p.brand,
         })
 
