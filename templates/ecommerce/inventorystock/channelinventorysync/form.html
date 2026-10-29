@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_create %}New Channel Sync{% else %}Edit Sync: {{ sync.channel_name }}{% endif %} | eCommerce{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex items-center justify-between">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-primary">eCommerce</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:inventory_operations' %}" class="hover:text-primary">Inventory & Stock</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:channelinventorysync_list' %}" class="hover:text-primary">Channel Syncs</a>
+        <span class="mx-2">/</span>
+        <span>{% if is_create %}New Sync{% else %}Edit{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_create %}Create Channel Sync Feed{% else %}Edit Sync Feed: {{ sync.channel_name }}{% endif %}
+      </h1>
+    </div>
+    <div class="page-actions">
+      <a href="{% if is_create %}{% url 'ecommerce:channelinventorysync_list' %}{% else %}{% url 'ecommerce:channelinventorysync_detail' sync.pk %}{% endif %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Cancel</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.errors %}
+      <div class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm">
+        <div class="font-semibold mb-1">Please correct the errors below:</div>
+        <ul class="list-disc list-inside">
+          {% for field, errors in form.errors.items %}
+            {% for error in errors %}
+              <li>{{ field }}: {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <div class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.channel_name.id_for_label }}">Channel Feed Name *</label>
+            {{ form.channel_name }}
+            <p class="text-xs text-slate-400 mt-1">e.g. US Amazon Prime, Downtown Retail POS</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.channel_type.id_for_label }}">Channel Platform Type *</label>
+            {{ form.channel_type }}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.variant.id_for_label }}">Product Variant (SKU) *</label>
+            {{ form.variant }}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.fulfillment_center.id_for_label }}">Dedicated Fulfillment Center (Optional)</label>
+            {{ form.fulfillment_center }}
+            <p class="text-xs text-slate-400 mt-1">Leave empty to sync from unified multi-warehouse stock pool</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.sync_mode.id_for_label }}">Sync Mode *</label>
+            {{ form.sync_mode }}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.allocation_buffer_pct.id_for_label }}">Withheld Buffer Pct (%) *</label>
+            {{ form.allocation_buffer_pct }}
+            <p class="text-xs text-slate-400 mt-1">e.g. 5.00% safety deduction</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.sync_status.id_for_label }}">Sync Feed Status *</label>
+            {{ form.sync_status }}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.error_message.id_for_label }}">Error Diagnostic / Logs</label>
+          {{ form.error_message }}
+        </div>
+      </div>
+
+      <!-- Submit Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t">
+        <a href="{% if is_create %}{% url 'ecommerce:channelinventorysync_list' %}{% else %}{% url 'ecommerce:channelinventorysync_detail' sync.pk %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary flex items-center gap-2">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if is_create %}Create Sync Feed{% else %}Save Changes{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
