@@ -4,7 +4,9 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
+
 
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
@@ -66,13 +68,16 @@ def channelinventorysync_detail(request, pk):
     )
     variant = sync.variant
     center = sync.fulfillment_center
+    allocations = variant.inventory_allocations.select_related("fulfillment_center").all()
 
     context = {
         "sync": sync,
         "variant": variant,
         "center": center,
+        "allocations": allocations,
     }
     return render(request, "ecommerce/inventorystock/channelinventorysync/detail.html", context)
+
 
 
 @login_required
@@ -170,9 +175,10 @@ def channelinventorysync_trigger(request, pk):
     messages.success(request, f"Broadcasted {new_qty} units to channel '{sync.channel_name}'.")
 
     next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")
-    if next_url:
+    if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
         return redirect(next_url)
     return redirect("ecommerce:channelinventorysync_detail", pk=sync.pk)
+
 
 
 @login_required
