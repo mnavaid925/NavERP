@@ -103,5 +103,9 @@ class AudienceSegment(TenantNumbered):
         if self.min_lifetime_spend < Decimal("0.00"):
             raise ValidationError({"min_lifetime_spend": "Minimum spend cannot be negative."})
 
+        # C3: Model-level tenant foreign key validation
+        if self.target_category_id and self.target_category and self.target_category.tenant_id != self.tenant_id:
+            raise ValidationError({"target_category": "Target category belongs to another workspace."})
+
     def __str__(self):
         return f"{self.name} ({self.number})"
