@@ -1129,6 +1129,9 @@ class Command(BaseCommand):
         # -----------------------------------------------------------------
         # 9.5 Order Management System (OMS)
         # -----------------------------------------------------------------
+        fc_chi = FulfillmentCenter.objects.filter(tenant=tenant, code="3PL-CHI").first()
+        fc_west = FulfillmentCenter.objects.filter(tenant=tenant, code="DC-WEST").first() or fc_chi
+
         usd, _ = Currency.objects.get_or_create(
             code="USD",
             defaults={"name": "US Dollar", "symbol": "$", "is_active": True},
