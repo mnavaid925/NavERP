@@ -1962,49 +1962,54 @@ PERSONALIZATION_MODEL_FIELDS = {
 PERSONALIZATION_CHOICES = {
     "AudienceSegment": {
         "lifecycle_stage": (
-            ("first_time", "First-Time Visitor"),
-            ("engaged_browser", "Engaged Browser"),
-            ("recent_buyer", "Recent Buyer"),
+            ("all", "All Lifecycle Stages"),
+            ("new_visitor", "New Visitor"),
+            ("first_time_buyer", "First-Time Buyer"),
+            ("active_repeat", "Active Repeat Customer"),
             ("high_value_vip", "High-Value VIP"),
-            ("churn_risk", "Churn / At-Risk"),
-            ("win_back", "Lapsed / Win-Back"),
+            ("at_risk", "At-Risk Customer"),
+            ("churned_lapsed", "Churned / Lapsed Shopper"),
         ),
     },
     "RecommendationStrategy": {
         "algorithm": (
-            ("collaborative_filtering", "Collaborative Filtering (Shoppers Also Viewed)"),
+            ("related_products", "Related Products (Content-Based)"),
             ("frequently_bought_together", "Frequently Bought Together (Co-occurrence)"),
-            ("related_products", "Similar / Category-Based Fallback"),
+            ("collaborative_filtering", "Shoppers Also Viewed / Bought"),
             ("trending_popular", "Trending & Popular Items"),
-            ("personalized_rfm", "Personalized RFM Segment Strategy"),
+            ("recently_viewed", "Recently Viewed (Shopper History)"),
+            ("replenishment", "Repurchase & Replenishment Reminder"),
+            ("hybrid", "Hybrid Multi-Factor Score"),
         ),
         "placement": (
-            ("home_featured", "Homepage Featured Carousel"),
-            ("pdp_related", "Product Detail Page (PDP) Recommendations"),
-            ("cart_upsell", "Cart Upsell / Cross-Sell"),
-            ("checkout_addons", "Checkout Drawer Add-ons"),
-            ("post_purchase", "Order Confirmation / Thank You Page"),
+            ("pdp_related", "Product Detail Page (PDP)"),
+            ("cart_cross_sell", "Cart Drawer / Cross-Sell"),
+            ("homepage_feed", "Homepage Recommendation Feed"),
+            ("category_trending", "Category Top Sellers / Trending"),
+            ("checkout_upsell", "Checkout Order Bump"),
+            ("email_block", "Email / Notification Block"),
         ),
     },
     "PersonalizedExperience": {
         "experience_type": (
-            ("banner_takeover", "Hero Banner Takeover"),
-            ("category_spotlight", "Category Spotlight Promo"),
-            ("cart_abandonment", "Cart Abandonment Recovery Popup"),
-            ("vip_welcome", "VIP Exclusive Header / Ribbon"),
-            ("countdown_timer", "Flash Urgency / Countdown Ribbon"),
+            ("home_hero", "Homepage Hero Banner"),
+            ("curated_collection", "Curated Category / Collection"),
+            ("cart_abandonment", "Cart Abandonment Trigger"),
+            ("browse_abandonment", "Browse Abandonment Trigger"),
+            ("replenishment_reminder", "Replenishment Reorder Trigger"),
+            ("win_back", "Win-Back Re-Engagement Trigger"),
         ),
     },
     "ShopperBehaviorEvent": {
         "event_type": (
             ("page_view", "Page View"),
             ("product_view", "Product Detail View"),
-            ("category_view", "Category Listing View"),
-            ("search_query", "Search Query Submitted"),
-            ("cart_add", "Product Added to Cart"),
-            ("cart_remove", "Product Removed from Cart"),
-            ("checkout_start", "Checkout Funnel Started"),
-            ("wishlist_add", "Product Added to Wishlist"),
+            ("category_view", "Category Browse"),
+            ("search_query", "Search Query"),
+            ("cart_add", "Add to Cart"),
+            ("wishlist_add", "Add to Wishlist"),
+            ("checkout_start", "Initiate Checkout"),
+            ("order_purchase", "Order Completed"),
         ),
     },
 }
@@ -2092,11 +2097,18 @@ def _personalization_strategy(tenant, name="Related PDP Items", code="pdp-relate
     return RecommendationStrategy.objects.create(**defaults)
 
 
-def _personalization_experience(tenant, name="Welcome Banner", experience_type="vip_welcome", **overrides):
+def _personalization_experience(tenant, name="Welcome Banner", experience_type="home_hero", target_segment=None, **overrides):
+    if target_segment is None and "target_segment" not in overrides:
+        target_segment = _personalization_segment(
+            tenant,
+            name=f"Cohort for {name}",
+            code=f"cohort-{tenant.id}-{name.lower().replace(' ', '-')}",
+        )
     defaults = {
         "tenant": tenant,
         "name": name,
         "experience_type": experience_type,
+        "target_segment": target_segment,
         "headline": "Exclusive VIP Welcome",
         "subheadline": "Enjoy 15% off your next purchase",
         "cta_label": "Shop Now",
