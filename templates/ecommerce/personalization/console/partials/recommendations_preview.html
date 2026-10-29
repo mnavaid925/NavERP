@@ -12,8 +12,8 @@
       <div class="p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-400 transition-colors flex flex-col justify-between text-left">
         <div>
           <div class="aspect-square bg-slate-100 rounded-md flex items-center justify-center mb-2 overflow-hidden">
-            {% if product.images.first %}
-              <img src="{{ product.images.first.image_url }}" alt="{{ product.name }}" class="w-full h-full object-cover">
+            {% if product.hero_image_url %}
+              <img src="{{ product.hero_image_url }}" alt="{{ product.name }}" class="w-full h-full object-cover">
             {% else %}
               <i data-lucide="package" class="w-8 h-8 text-slate-300"></i>
             {% endif %}
