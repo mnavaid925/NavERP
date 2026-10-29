@@ -14,7 +14,7 @@ def inventory_operations(request):
     centers = ecommerce_scope(FulfillmentCenter.objects.all(), request)
     allocations = ecommerce_scope(InventoryAllocation.objects.select_related("product", "variant", "fulfillment_center"), request)
     backorders = ecommerce_scope(BackorderPolicy.objects.select_related("variant", "variant__product"), request)
-    syncs = ecommerce_scope(ChannelInventorySync.objects.select_related("variant", "fulfillment_center"), request)
+    syncs = ecommerce_scope(ChannelInventorySync.objects.select_related("variant__product", "fulfillment_center"), request)
 
     # Aggregates
     totals = allocations.aggregate(
