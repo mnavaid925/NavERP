@@ -38,12 +38,14 @@ def compute_recommendations(tenant, anchor_product=None, strategy=None, max_item
 
     # 1. Frequently Bought Together (Co-occurrence in order lines)
     if algorithm == "frequently_bought_together" and anchor_product:
-        co_order_ids = EcommerceOrderLine.objects.filter(
-            product=anchor_product, order__tenant=tenant
-        ).values_list("order_id", flat=True)[:50]
+        co_order_ids = list(
+            EcommerceOrderLine.objects.filter(
+                product=anchor_product, order__tenant=tenant
+            ).values_list("order_id", flat=True)[:50]
+        )
 
         if co_order_ids:
-            co_product_ids = (
+            co_product_ids = list(
                 EcommerceOrderLine.objects.filter(order_id__in=co_order_ids)
                 .exclude(product=anchor_product)
                 .values("product")
@@ -55,12 +57,14 @@ def compute_recommendations(tenant, anchor_product=None, strategy=None, max_item
 
     # 2. Collaborative / Shoppers Also Viewed (Co-viewed in same session)
     elif algorithm == "collaborative_filtering" and anchor_product:
-        co_sessions = ShopperBehaviorEvent.objects.filter(
-            tenant=tenant, product=anchor_product
-        ).values_list("session_key", flat=True)[:100]
+        co_sessions = list(
+            ShopperBehaviorEvent.objects.filter(
+                tenant=tenant, product=anchor_product
+            ).values_list("session_key", flat=True)[:100]
+        )
 
         if co_sessions:
-            co_viewed_ids = (
+            co_viewed_ids = list(
                 ShopperBehaviorEvent.objects.filter(
                     tenant=tenant, session_key__in=co_sessions
                 )
@@ -81,7 +85,7 @@ def compute_recommendations(tenant, anchor_product=None, strategy=None, max_item
 
     # 4. Trending & Popular (Most clickstream events or recent created)
     elif algorithm == "trending_popular":
-        popular_ids = (
+        popular_ids = list(
             ShopperBehaviorEvent.objects.filter(tenant=tenant)
             .exclude(product__isnull=True)
             .values("product")
