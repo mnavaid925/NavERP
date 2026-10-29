@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit Return {{ rma.number }}{% else %}Initiate Return (RMA){% endif %} · eCommerce · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-3xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:returnmerchandiseauthorization_list' %}" class="hover:text-blue-600">Returns</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}{{ rma.number }}{% else %}New{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Return Authorization{% else %}Initiate Return Authorization (RMA){% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Configure reverse logistics, return reasons, restocking center, and refund settlements.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      {% if is_edit %}
+        <a href="{% url 'ecommerce:returnmerchandiseauthorization_detail' pk=rma.pk %}" class="btn btn-outline">Cancel</a>
+      {% else %}
+        <a href="{% url 'ecommerce:returnmerchandiseauthorization_list' %}" class="btn btn-outline">Cancel</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Form Body -->
+  <form method="post" class="card p-6 bg-white shadow-sm border border-slate-200 rounded-lg space-y-6">
+    {% csrf_token %}
+
+    {% if form.errors %}
+      <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+        <div class="font-bold mb-1">Please fix the errors below:</div>
+        <ul class="list-disc list-inside space-y-1">
+          {% for field, errors in form.errors.items %}
+            {% for error in errors %}
+              <li><strong>{{ field|title }}:</strong> {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="{{ form.order.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          eCommerce Order <span class="text-red-500">*</span>
+        </label>
+        {{ form.order }}
+      </div>
+      <div>
+        <label for="{{ form.customer.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Customer Account <span class="text-red-500">*</span>
+        </label>
+        {{ form.customer }}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label for="{{ form.return_type.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Return Resolution <span class="text-red-500">*</span>
+        </label>
+        {{ form.return_type }}
+      </div>
+      <div>
+        <label for="{{ form.status.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          RMA Status <span class="text-red-500">*</span>
+        </label>
+        {{ form.status }}
+      </div>
+      <div>
+        <label for="{{ form.reason.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Customer Reason <span class="text-red-500">*</span>
+        </label>
+        {{ form.reason }}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="{{ form.return_tracking_number.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Return Consignment Tracking #
+        </label>
+        {{ form.return_tracking_number }}
+      </div>
+      <div>
+        <label for="{{ form.return_shipping_label_url.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Return Label PDF / URL
+        </label>
+        {{ form.return_shipping_label_url }}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label for="{{ form.refund_amount.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Refund Amount ($)
+        </label>
+        {{ form.refund_amount }}
+      </div>
+      <div>
+        <label for="{{ form.restocking_fee.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Restocking Fee ($)
+        </label>
+        {{ form.restocking_fee }}
+      </div>
+      <div>
+        <label for="{{ form.refund_status.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Refund Settlement State
+        </label>
+        {{ form.refund_status }}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="{{ form.restocking_status.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Restocking Physical Status
+        </label>
+        {{ form.restocking_status }}
+      </div>
+      <div>
+        <label for="{{ form.restocking_center.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Receiving Fulfillment Center
+        </label>
+        {{ form.restocking_center }}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="{{ form.customer_notes.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Customer Return Comments
+        </label>
+        {{ form.customer_notes }}
+      </div>
+      <div>
+        <label for="{{ form.inspection_notes.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">
+          Warehouse Inspection Findings
+        </label>
+        {{ form.inspection_notes }}
+      </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+      {% if is_edit %}
+        <a href="{% url 'ecommerce:returnmerchandiseauthorization_detail' pk=rma.pk %}" class="btn btn-outline">Cancel</a>
+      {% else %}
+        <a href="{% url 'ecommerce:returnmerchandiseauthorization_list' %}" class="btn btn-outline">Cancel</a>
+      {% endif %}
+      <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="check" class="w-4 h-4"></i>
+        <span>{% if is_edit %}Save Changes{% else %}Initiate RMA{% endif %}</span>
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
