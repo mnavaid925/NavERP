@@ -8,6 +8,10 @@ from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPoli
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
 from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
+from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder, EcommerceOrderLine
+from apps.ecommerce.models.OrderManagement.OrderFulfillments import OrderFulfillment
+from apps.ecommerce.models.OrderManagement.OrderRoutingRules import OrderRoutingRule
+from apps.ecommerce.models.OrderManagement.ReturnMerchandiseAuthorizations import ReturnMerchandiseAuthorization
 from apps.ecommerce.models.PricingPromotion.CompetitorPriceMonitors import CompetitorPriceMonitor
 from apps.ecommerce.models.PricingPromotion.CouponPromotions import CouponPromotion
 from apps.ecommerce.models.PricingPromotion.DynamicPriceRules import DynamicPriceRule
@@ -158,5 +162,45 @@ class PaymentMethodConfigAdmin(admin.ModelAdmin):
     list_filter = ["provider", "method_category", "environment", "is_active", "tenant"]
     search_fields = ["name", "instructions"]
     ordering = ["display_order", "name"]
+
+
+class EcommerceOrderLineInline(admin.TabularInline):
+    model = EcommerceOrderLine
+    extra = 0
+    fields = ["product", "variant", "sku", "product_name", "quantity", "unit_price", "unit_discount", "line_total", "status"]
+
+
+@admin.register(EcommerceOrder)
+class EcommerceOrderAdmin(admin.ModelAdmin):
+    list_display = ["number", "customer", "currency", "status", "payment_status", "fulfillment_status", "total_amount", "fraud_risk_level", "created_at"]
+    list_filter = ["status", "payment_status", "fulfillment_status", "fraud_risk_level", "tenant"]
+    search_fields = ["number", "customer__name", "guest_email", "shipping_name"]
+    ordering = ["-created_at"]
+    inlines = [EcommerceOrderLineInline]
+
+
+@admin.register(OrderRoutingRule)
+class OrderRoutingRuleAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "strategy", "priority", "destination_country", "preferred_fulfillment_center", "allow_split_shipment", "is_active"]
+    list_filter = ["strategy", "allow_split_shipment", "enable_dropship", "is_active", "tenant"]
+    search_fields = ["number", "name", "destination_country", "destination_region"]
+    ordering = ["priority", "name"]
+
+
+@admin.register(OrderFulfillment)
+class OrderFulfillmentAdmin(admin.ModelAdmin):
+    list_display = ["number", "order", "fulfillment_center", "carrier_name", "tracking_number", "status", "shipping_cost", "shipped_at"]
+    list_filter = ["status", "carrier_name", "fulfillment_center", "tenant"]
+    search_fields = ["number", "order__number", "carrier_name", "tracking_number"]
+    ordering = ["-created_at"]
+
+
+@admin.register(ReturnMerchandiseAuthorization)
+class ReturnMerchandiseAuthorizationAdmin(admin.ModelAdmin):
+    list_display = ["number", "order", "customer", "return_type", "status", "reason", "refund_amount", "refund_status", "restocking_status"]
+    list_filter = ["return_type", "status", "reason", "refund_status", "restocking_status", "tenant"]
+    search_fields = ["number", "order__number", "customer__name", "return_tracking_number"]
+    ordering = ["-created_at"]
+
 
 
