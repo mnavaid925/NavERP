@@ -11,7 +11,6 @@ class CustomerPrivacyRequestForm(TenantUniqueMixin, TenantModelForm):
         fields = [
             "customer",
             "request_type",
-            "status",
             "requested_by_email",
             "verification_method",
             "statutory_deadline",
@@ -20,7 +19,6 @@ class CustomerPrivacyRequestForm(TenantUniqueMixin, TenantModelForm):
         widgets = {
             "customer": forms.Select(attrs={"class": "form-select"}),
             "request_type": forms.Select(attrs={"class": "form-select"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
             "requested_by_email": forms.EmailInput(attrs={"class": "form-input", "placeholder": "requester@example.com"}),
             "verification_method": forms.TextInput(attrs={"class": "form-input", "placeholder": "account_login, email_otp, id_document"}),
             "statutory_deadline": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
