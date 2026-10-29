@@ -2060,7 +2060,7 @@ PERSONALIZATION_URLS = {
     "shopperbehaviorevent_detail": "personalization/telemetry/<int:pk>/",
     "shopperbehaviorevent_delete": "personalization/telemetry/<int:pk>/delete/",
     "personalization_console": "personalization/console/",
-    "personalization_preview": "personalization/console/preview/",
+    "recommendation_simulate": "personalization/console/simulate/",
 }
 
 
