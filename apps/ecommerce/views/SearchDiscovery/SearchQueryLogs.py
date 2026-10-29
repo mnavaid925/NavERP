@@ -7,6 +7,7 @@ from django.views.decorators.http import require_POST
 
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
+from apps.ecommerce.forms.SearchDiscovery.SearchQueryLogs import SearchQueryLogFilterForm
 from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
 from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 
@@ -39,6 +40,8 @@ def searchquerylog_list(request):
     if sort_order:
         qs = qs.filter(sort_order=sort_order)
 
+    filter_form = SearchQueryLogFilterForm(request.GET)
+
     paginator = Paginator(qs, 25)
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
@@ -48,6 +51,7 @@ def searchquerylog_list(request):
         "logs": page_obj,
         "paginator": paginator,
         "is_paginated": page_obj.has_other_pages(),
+        "filter_form": filter_form,
         "q": search_query,
         "selected_zero_result": is_zero_result,
         "selected_sort": sort_order,
