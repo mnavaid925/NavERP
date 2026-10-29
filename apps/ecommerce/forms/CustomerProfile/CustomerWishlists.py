@@ -70,4 +70,8 @@ class CustomerWishlistItemForm(TenantUniqueMixin, TenantModelForm):
         cleaned = super().clean()
         if self.tenant is not None:
             reject_foreign(self, cleaned, ["wishlist", "product", "variant"])
+        product = cleaned.get("product")
+        variant = cleaned.get("variant")
+        if product and variant and getattr(variant, "product_id", None) != product.pk:
+            self.add_error("variant", "Selected variant does not belong to the chosen product.")
         return cleaned
