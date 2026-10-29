@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}{{ segment.name }} · Audience Segment · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:personalization_console' %}" class="hover:text-blue-600">Personalization</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:audiencesegment_list' %}" class="hover:text-blue-600">Audience Segments</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ segment.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ segment.name }}</h1>
+        {% if segment.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-slate">Inactive</span>
+        {% endif %}
+        <span class="badge badge-info">{{ segment.get_lifecycle_stage_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">Code: <code class="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">{{ segment.code }}</code></p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <form method="post" action="{% url 'ecommerce:audiencesegment_recalculate' segment.pk %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline inline-flex items-center gap-2 text-sm">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span>Recalculate Members</span>
+        </button>
+      </form>
+      <form method="post" action="{% url 'ecommerce:audiencesegment_toggle' segment.pk %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline text-sm">
+          {% if segment.is_active %}Deactivate{% else %}Activate{% endif %}
+        </button>
+      </form>
+      <a href="{% url 'ecommerce:audiencesegment_edit' segment.pk %}" class="btn btn-primary inline-flex items-center gap-2 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Segment</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Key Metrics Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Cached Members</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">{{ segment.cached_member_count }}</div>
+      <div class="text-[11px] text-slate-400 mt-1">
+        {% if segment.last_evaluated_at %}
+          Evaluated {{ segment.last_evaluated_at|date:"M d, Y H:i" }}
+        {% else %}
+          Never evaluated
+        {% endif %}
+      </div>
+    </div>
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Recency Window</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">
+        {% if segment.recency_days_max %}
+          &le; {{ segment.recency_days_max }} <span class="text-sm font-normal text-slate-500">days</span>
+        {% else %}
+          <span class="text-slate-400 font-normal text-base">Any time</span>
+        {% endif %}
+      </div>
+      <div class="text-[11px] text-slate-400 mt-1">Days since last order</div>
+    </div>
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Min Order Count</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">{{ segment.min_order_count }}</div>
+      <div class="text-[11px] text-slate-400 mt-1">Lifetime completed orders</div>
+    </div>
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Min Lifetime Spend</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">${{ segment.min_lifetime_spend }}</div>
+      <div class="text-[11px] text-slate-400 mt-1">Total revenue threshold</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Configuration Card -->
+    <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-6 lg:col-span-2 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3">Segment Configuration & Rules</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <span class="text-xs text-slate-500 block">Lifecycle Tier</span>
+          <span class="font-medium text-slate-800">{{ segment.get_lifecycle_stage_display }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Affinity Category</span>
+          {% if segment.target_category %}
+            <span class="badge badge-slate">{{ segment.target_category.name }}</span>
+          {% else %}
+            <span class="text-slate-500">None (General Catalog)</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Created At</span>
+          <span class="text-slate-700">{{ segment.created_at|date:"M d, Y H:i" }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Last Updated</span>
+          <span class="text-slate-700">{{ segment.updated_at|date:"M d, Y H:i" }}</span>
+        </div>
+      </div>
+      {% if segment.description %}
+        <div class="pt-3 border-t border-slate-100">
+          <span class="text-xs text-slate-500 block mb-1">Description & Strategy Notes</span>
+          <p class="text-sm text-slate-700 whitespace-pre-line">{{ segment.description }}</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Connected Experiences Card -->
+    <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-6 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 flex items-center justify-between">
+        <span>Targeted Experiences</span>
+        <span class="text-xs font-normal text-slate-500">{{ experiences|length }} active</span>
+      </h2>
+      <div class="space-y-3">
+        {% for exp in experiences %}
+          <div class="p-3 bg-slate-50 rounded border border-slate-200 text-xs space-y-1">
+            <div class="flex items-center justify-between">
+              <a href="{% url 'ecommerce:personalizedexperience_detail' exp.pk %}" class="font-semibold text-blue-600 hover:text-blue-800">
+                {{ exp.name }}
+              </a>
+              <span class="badge badge-info">{{ exp.get_experience_type_display }}</span>
+            </div>
+            <div class="text-slate-500">Priority: {{ exp.priority }} · Delay: {{ exp.trigger_delay_hours }}h</div>
+          </div>
+        {% empty %}
+          <div class="text-xs text-slate-400 py-4 text-center">
+            No personalization campaigns or triggers currently target this cohort.
+          </div>
+        {% endfor %}
+      </div>
+      <div class="pt-2">
+        <a href="{% url 'ecommerce:personalizedexperience_create' %}?target_segment={{ segment.pk }}" class="btn btn-outline w-full text-xs py-2 inline-flex items-center justify-center gap-1">
+          <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+          <span>Create Targeted Experience</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
