@@ -86,12 +86,11 @@ def customeraddresspreference_create(request):
             pref.tenant = request.tenant
             pref.save()
             write_audit_log(
+                request.user,
+                pref,
+                "create",
+                changes={"number": pref.number},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="CustomerAddressPreference",
-                object_id=str(pref.pk),
-                object_repr=str(pref),
             )
             messages.success(request, f"Address preference {pref.number} created successfully.")
             return redirect("ecommerce:customeraddresspreference_detail", pk=pref.pk)
@@ -122,12 +121,11 @@ def customeraddresspreference_edit(request, pk):
         if form.is_valid():
             preference = form.save()
             write_audit_log(
+                request.user,
+                preference,
+                "update",
+                changes={"number": preference.number},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="CustomerAddressPreference",
-                object_id=str(preference.pk),
-                object_repr=str(preference),
             )
             messages.success(request, f"Address preference {preference.number} updated successfully.")
             return redirect("ecommerce:customeraddresspreference_detail", pk=preference.pk)
@@ -156,15 +154,13 @@ def customeraddresspreference_edit(request, pk):
 def customeraddresspreference_delete(request, pk):
     preference = ecommerce_object(request, CustomerAddressPreference, pk)
     number = preference.number
-    pref_id = preference.pk
-    preference.delete()
     write_audit_log(
+        request.user,
+        preference,
+        "delete",
+        changes={"number": number},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="CustomerAddressPreference",
-        object_id=str(pref_id),
-        object_repr=f"CustomerAddressPreference {number}",
     )
+    preference.delete()
     messages.success(request, f"Address preference {number} deleted successfully.")
     return redirect("ecommerce:customeraddresspreference_list")
