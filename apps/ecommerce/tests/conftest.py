@@ -1933,25 +1933,29 @@ def ecom_query_log_b(tenant_b):
 PERSONALIZATION_MODEL_FIELDS = {
     "AudienceSegment": (
         "id", "tenant", "number", "name", "code", "lifecycle_stage",
-        "min_lifetime_spend", "max_lifetime_spend", "min_order_count",
-        "days_inactive", "target_category", "is_active", "description",
-        "created_at", "updated_at",
+        "recency_days_max", "min_order_count", "min_lifetime_spend",
+        "target_category", "cached_member_count", "last_evaluated_at",
+        "is_active", "description", "created_at", "updated_at",
     ),
     "RecommendationStrategy": (
         "id", "tenant", "number", "name", "code", "algorithm", "placement",
-        "target_segment", "target_category", "max_items", "min_rating",
-        "same_brand_only", "is_active", "description", "created_at", "updated_at",
+        "fallback_strategy", "max_items", "min_rating", "same_brand_only",
+        "only_in_stock", "target_category", "target_segment", "is_active",
+        "description", "created_at", "updated_at",
     ),
     "PersonalizedExperience": (
-        "id", "tenant", "number", "name", "code", "experience_type",
+        "id", "tenant", "number", "name", "experience_type",
         "target_segment", "target_category", "target_product", "headline",
-        "subheadline", "cta_label", "cta_url", "hero_image_url", "priority",
-        "is_active", "start_date", "end_date", "created_at", "updated_at",
+        "subheadline", "cta_label", "cta_url", "hero_image_url",
+        "trigger_delay_hours", "priority", "start_date", "end_date",
+        "is_active", "impression_count", "click_count", "conversion_count",
+        "created_at", "updated_at",
     ),
     "ShopperBehaviorEvent": (
-        "id", "tenant", "number", "event_type", "session_key", "user",
-        "customer_profile", "product", "category", "payload", "referrer_url",
-        "ip_address", "created_at", "updated_at",
+        "id", "tenant", "number", "session_key", "customer_profile", "party",
+        "user", "event_type", "product", "category", "intent_score_delta",
+        "referrer_url", "ip_address", "user_agent", "payload_json",
+        "created_at", "updated_at",
     ),
 }
 
@@ -2007,21 +2011,22 @@ PERSONALIZATION_CHOICES = {
 
 PERSONALIZATION_FORM_FIELDS = {
     "AudienceSegmentForm": (
-        "name", "code", "lifecycle_stage", "min_lifetime_spend", "max_lifetime_spend",
-        "min_order_count", "days_inactive", "target_category", "is_active", "description",
+        "name", "code", "lifecycle_stage", "recency_days_max", "min_order_count",
+        "min_lifetime_spend", "target_category", "is_active", "description",
     ),
     "RecommendationStrategyForm": (
-        "name", "code", "algorithm", "placement", "target_segment",
-        "target_category", "max_items", "min_rating", "same_brand_only", "is_active", "description",
+        "name", "code", "algorithm", "placement", "fallback_strategy",
+        "max_items", "min_rating", "same_brand_only", "only_in_stock",
+        "target_category", "target_segment", "is_active", "description",
     ),
     "PersonalizedExperienceForm": (
-        "name", "code", "experience_type", "target_segment", "target_category",
+        "name", "experience_type", "target_segment", "target_category",
         "target_product", "headline", "subheadline", "cta_label", "cta_url",
-        "hero_image_url", "priority", "start_date", "end_date", "is_active",
+        "hero_image_url", "trigger_delay_hours", "priority", "start_date",
+        "end_date", "is_active",
     ),
-    "ShopperBehaviorEventForm": (
-        "event_type", "session_key", "customer_profile", "product", "category",
-        "referrer_url", "payload",
+    "ShopperBehaviorEventFilterForm": (
+        "q", "event_type", "date_from", "date_to",
     ),
 }
 
@@ -2062,7 +2067,7 @@ def _personalization_segment(tenant, name="High-Value VIPs", code="vip-shoppers"
         "lifecycle_stage": lifecycle_stage,
         "min_lifetime_spend": Decimal("500.00"),
         "min_order_count": 3,
-        "days_inactive": 30,
+        "recency_days_max": 30,
         "is_active": True,
         "description": "VIP cohort fixture for automated tests",
     }
@@ -2087,11 +2092,10 @@ def _personalization_strategy(tenant, name="Related PDP Items", code="pdp-relate
     return RecommendationStrategy.objects.create(**defaults)
 
 
-def _personalization_experience(tenant, name="Welcome Banner", code="vip-welcome-banner", experience_type="vip_welcome", **overrides):
+def _personalization_experience(tenant, name="Welcome Banner", experience_type="vip_welcome", **overrides):
     defaults = {
         "tenant": tenant,
         "name": name,
-        "code": code,
         "experience_type": experience_type,
         "headline": "Exclusive VIP Welcome",
         "subheadline": "Enjoy 15% off your next purchase",
@@ -2111,7 +2115,7 @@ def _personalization_event(tenant, event_type="product_view", session_key="sess-
         "session_key": session_key,
         "referrer_url": "https://example.com/search",
         "ip_address": "127.0.0.1",
-        "payload": {"source": "test_runner"},
+        "payload_json": {"source": "test_runner"},
     }
     defaults.update(overrides)
     return ShopperBehaviorEvent.objects.create(**defaults)
@@ -2140,7 +2144,7 @@ def ecom_strategy_b(tenant_b, ecom_segment_b):
 @pytest.fixture
 def ecom_experience_a(tenant_a, ecom_segment_a, ecom_product_a):
     return _personalization_experience(
-        tenant_a, name="Experience A", code="exp-a",
+        tenant_a, name="Experience A",
         target_segment=ecom_segment_a, target_product=ecom_product_a,
     )
 
@@ -2148,7 +2152,7 @@ def ecom_experience_a(tenant_a, ecom_segment_a, ecom_product_a):
 @pytest.fixture
 def ecom_experience_b(tenant_b, ecom_segment_b, ecom_product_b):
     return _personalization_experience(
-        tenant_b, name="Experience B", code="exp-b",
+        tenant_b, name="Experience B",
         target_segment=ecom_segment_b, target_product=ecom_product_b,
     )
 
