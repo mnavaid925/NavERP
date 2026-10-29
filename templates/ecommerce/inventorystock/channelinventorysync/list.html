@@ -122,19 +122,19 @@
                 <form action="{% url 'ecommerce:channelinventorysync_trigger' sync.pk %}" method="post" class="inline">
                   {% csrf_token %}
                   <input type="hidden" name="next" value="{{ request.get_full_path }}" />
-                  <button type="submit" class="btn btn-icon btn-outline p-1 hover:text-primary" title="Trigger Instant Sync Push">
+                  <button type="submit" class="btn btn-icon btn-outline p-1 hover:text-primary" title="Trigger Instant Sync Push" aria-label="Trigger instant sync push for {{ sync.channel_name }}">
                     <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                   </button>
                 </form>
-                <a href="{% url 'ecommerce:channelinventorysync_detail' sync.pk %}" class="btn btn-icon btn-outline p-1" title="View details">
+                <a href="{% url 'ecommerce:channelinventorysync_detail' sync.pk %}" class="btn btn-icon btn-outline p-1" title="View details" aria-label="View details of {{ sync.channel_name }}">
                   <i data-lucide="eye" class="w-4 h-4 text-slate-600"></i>
                 </a>
-                <a href="{% url 'ecommerce:channelinventorysync_edit' sync.pk %}" class="btn btn-icon btn-outline p-1" title="Edit channel sync">
+                <a href="{% url 'ecommerce:channelinventorysync_edit' sync.pk %}" class="btn btn-icon btn-outline p-1" title="Edit channel sync" aria-label="Edit channel sync {{ sync.channel_name }}">
                   <i data-lucide="pencil" class="w-4 h-4 text-slate-600"></i>
                 </a>
                 <form action="{% url 'ecommerce:channelinventorysync_delete' sync.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to remove channel sync for {{ sync.channel_name }}?');">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-icon btn-outline p-1 hover:text-red-600" title="Delete channel sync">
+                  <button type="submit" class="btn btn-icon btn-outline p-1 hover:text-red-600" title="Delete channel sync" aria-label="Delete channel sync {{ sync.channel_name }}">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </form>
