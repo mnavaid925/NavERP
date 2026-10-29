@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}{{ preference.number }} · Address Preference · NavERP{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:customeraddresspreference_list' %}" class="hover:text-blue-600">Address Preferences</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ preference.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ preference.label }}</h1>
+        {% if preference.is_default_shipping %}
+          <span class="badge badge-green">Default Shipping</span>
+        {% endif %}
+        {% if preference.is_default_billing %}
+          <span class="badge badge-info">Default Billing</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">Preference #{{ preference.number }} for {{ preference.customer.name }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:customeraddresspreference_edit' preference.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Preference</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:customeraddresspreference_delete' preference.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete preference {{ preference.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger inline-flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Detail Card -->
+  <div class="card p-6 bg-white shadow-sm border border-slate-200 rounded-lg space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Address Details -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
+          <i data-lucide="map-pin" class="w-4 h-4 text-blue-600"></i>
+          <span>Physical Address Details</span>
+        </h2>
+        <dl class="space-y-2 text-sm">
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Customer</dt>
+            <dd class="text-slate-900 font-medium">{{ preference.customer.name }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Attention / Recipient</dt>
+            <dd class="text-slate-900">{% if preference.recipient_name %}{{ preference.recipient_name }}{% else %}<span class="text-slate-400">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Contact Phone</dt>
+            <dd class="text-slate-900">{% if preference.contact_phone %}{{ preference.contact_phone }}{% else %}<span class="text-slate-400">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Street Address</dt>
+            <dd class="text-slate-900">
+              {{ preference.address.line1 }}
+              {% if preference.address.line2 %}<br>{{ preference.address.line2 }}{% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">City, State, Postal Code</dt>
+            <dd class="text-slate-900">
+              {{ preference.address.city }}{% if preference.address.state %}, {{ preference.address.state }}{% endif %} {{ preference.address.postal_code }}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Country</dt>
+            <dd class="text-slate-900">{{ preference.address.country }}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <!-- Logistics & Delivery Window -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
+          <i data-lucide="truck" class="w-4 h-4 text-green-600"></i>
+          <span>Logistics & Courier Preferences</span>
+        </h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Preferred Delivery Window</dt>
+            <dd class="mt-0.5">
+              <span class="badge badge-slate">{{ preference.get_preferred_delivery_window_display }}</span>
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Signature Requirement</dt>
+            <dd class="mt-0.5">
+              {% if preference.requires_signature %}
+                <span class="badge badge-amber">Signature Required on Delivery</span>
+              {% else %}
+                <span class="text-slate-600">Standard Drop-off Permitted</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Courier Delivery Instructions</dt>
+            <dd class="mt-1">
+              {% if preference.delivery_instructions %}
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-700 whitespace-pre-line">
+                  {{ preference.delivery_instructions }}
+                </div>
+              {% else %}
+                <span class="text-slate-400">No delivery instructions provided.</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
