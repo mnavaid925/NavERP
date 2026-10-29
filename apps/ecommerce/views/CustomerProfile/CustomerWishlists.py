@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -17,7 +17,7 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 @login_required
 def customerwishlist_list(request):
     qs = ecommerce_scope(
-        CustomerWishlist.objects.select_related("customer").prefetch_related("items"),
+        CustomerWishlist.objects.select_related("customer").annotate(items_count=Count("items")),
         request,
     )
 
