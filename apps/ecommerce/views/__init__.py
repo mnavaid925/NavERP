@@ -1,4 +1,36 @@
 from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
+from apps.ecommerce.views.CartCheckout.Carts import (
+    cart_create,
+    cart_delete,
+    cart_detail,
+    cart_edit,
+    cart_list,
+    cart_recover,
+)
+from apps.ecommerce.views.CartCheckout.CheckoutSessions import (
+    checkoutsession_advance,
+    checkoutsession_create,
+    checkoutsession_delete,
+    checkoutsession_detail,
+    checkoutsession_edit,
+    checkoutsession_list,
+)
+from apps.ecommerce.views.CartCheckout.PaymentMethods import (
+    paymentmethodconfig_create,
+    paymentmethodconfig_delete,
+    paymentmethodconfig_detail,
+    paymentmethodconfig_edit,
+    paymentmethodconfig_list,
+    paymentmethodconfig_toggle,
+)
+from apps.ecommerce.views.CartCheckout.ShippingMethods import (
+    shippingmethodconfig_create,
+    shippingmethodconfig_delete,
+    shippingmethodconfig_detail,
+    shippingmethodconfig_edit,
+    shippingmethodconfig_list,
+    shippingmethodconfig_toggle,
+)
 from apps.ecommerce.views.InventoryStock.BackorderPolicies import (
     backorderpolicy_create,
     backorderpolicy_delete,
@@ -168,5 +200,30 @@ __all__ = [
     "competitorpricemonitor_edit",
     "competitorpricemonitor_delete",
     "competitorpricemonitor_sync",
+    # 9.4 Shopping Cart & Checkout
+    "cart_list",
+    "cart_detail",
+    "cart_create",
+    "cart_edit",
+    "cart_delete",
+    "cart_recover",
+    "checkoutsession_list",
+    "checkoutsession_detail",
+    "checkoutsession_create",
+    "checkoutsession_edit",
+    "checkoutsession_delete",
+    "checkoutsession_advance",
+    "shippingmethodconfig_list",
+    "shippingmethodconfig_detail",
+    "shippingmethodconfig_create",
+    "shippingmethodconfig_edit",
+    "shippingmethodconfig_delete",
+    "shippingmethodconfig_toggle",
+    "paymentmethodconfig_list",
+    "paymentmethodconfig_detail",
+    "paymentmethodconfig_create",
+    "paymentmethodconfig_edit",
+    "paymentmethodconfig_delete",
+    "paymentmethodconfig_toggle",
 ]
 
