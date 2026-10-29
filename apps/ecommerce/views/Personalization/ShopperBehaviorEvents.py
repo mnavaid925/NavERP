@@ -65,12 +65,11 @@ def shopperbehaviorevent_delete(request, pk):
     number = event.number
     event.delete()
     write_audit_log(
-        request.tenant,
         request.user,
+        event,
         "delete",
-        "ShopperBehaviorEvent",
-        pk,
-        f"Deleted shopper behavior event ({number})",
+        {"number": number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Behavior event '{number}' deleted.")
     return redirect("ecommerce:shopperbehaviorevent_list")
