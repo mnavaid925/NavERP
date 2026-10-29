@@ -1,0 +1,55 @@
+{% if products or categories or suggestions %}
+  <div class="absolute left-0 right-0 top-1 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden z-50 text-left divide-y divide-slate-100">
+    <!-- Suggestions / Synonyms -->
+    {% if suggestions %}
+      <div class="p-2 bg-slate-50 text-xs">
+        <span class="text-slate-400 font-semibold uppercase tracking-wider text-[10px] px-2 block mb-1">Suggested Terms</span>
+        <div class="flex flex-wrap gap-1.5 px-2">
+          {% for term in suggestions %}
+            <a
+              href="{% url 'ecommerce:search_console' %}?q={{ term }}"
+              class="px-2.5 py-1 rounded bg-white border border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-400 font-medium inline-block"
+            >
+              {{ term }}
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- Categories -->
+    {% if categories %}
+      <div class="p-2 text-xs">
+        <span class="text-slate-400 font-semibold uppercase tracking-wider text-[10px] px-2 block mb-1">Categories</span>
+        {% for cat in categories %}
+          <a
+            href="{% url 'ecommerce:search_console' %}?category={{ cat.id }}"
+            class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 text-slate-800 hover:text-blue-600"
+          >
+            <i data-lucide="folder" class="w-3.5 h-3.5 text-slate-400"></i>
+            <span>{{ cat.name }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- Matching Products -->
+    {% if products %}
+      <div class="p-2 text-xs">
+        <span class="text-slate-400 font-semibold uppercase tracking-wider text-[10px] px-2 block mb-1">Products</span>
+        {% for prod in products %}
+          <a
+            href="{% url 'ecommerce:catalogproduct_detail' prod.id %}"
+            class="flex items-center justify-between px-2 py-2 rounded hover:bg-blue-50 text-slate-800 transition-colors"
+          >
+            <div>
+              <div class="font-semibold text-slate-900">{{ prod.name }}</div>
+              <div class="text-[11px] text-slate-500 font-mono">{{ prod.sku }}{% if prod.brand %} &bull; {{ prod.brand }}{% endif %}</div>
+            </div>
+            <div class="font-bold text-slate-900">${{ prod.base_price }}</div>
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+{% endif %}
