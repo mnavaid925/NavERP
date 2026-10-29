@@ -124,4 +124,42 @@
   - **Description:** Action buttons (view, edit, delete, reset filter) provide `title="..."` but omit `aria-label="..."`.
   - **Suggested Fix:** Add `aria-label` matching `title` on icon-only buttons for accessibility.
 
+---
+
+## Pass 4: Performance Reviewer (`performance-reviewer`)
+
+### Critical
+- [ ] **[PERF-C1] N+1 Queries in `customerwishlist_list` Due to `w.items.count` in Template Loop**
+  - **Files:** `templates/ecommerce/customerprofile/customerwishlist/list.html:111`, `apps/ecommerce/views/CustomerProfile/CustomerWishlists.py:18-22`
+  - **Description:** `w.items.count` triggers a direct `COUNT(*)` query for each row in the 25-item page, bypassing prefetch.
+  - **Suggested Fix:** Annotate `items_count=Count("items")` in the view queryset and use `w.items_count` in template.
+
+### Important
+- [ ] **[PERF-I1] N+1 Query in `customeraccountprofile_detail` Due to `w.items.count`**
+  - **Files:** `templates/ecommerce/customerprofile/customeraccountprofile/detail.html:304`, `apps/ecommerce/views/CustomerProfile/CustomerAccountProfiles.py:91-94`
+  - **Description:** `{{ w.items.count }}` issues a direct count query per wishlist.
+  - **Suggested Fix:** Annotate `items_count=Count("items")` on wishlists query in `customeraccountprofile_detail`.
+
+- [ ] **[PERF-I2] Missing `select_related` in `customerprivacyrequest_generate_export`**
+  - **File:** `apps/ecommerce/views/CustomerProfile/CustomerPrivacyRequests.py:188-216`
+  - **Description:** Missing `select_related("address")` on address preferences, `select_related("preferred_currency")` on profile, and `w.items.count` in loop.
+  - **Suggested Fix:** Add `select_related` on address preferences and currency, and annotate items_count on wishlists in export.
+
+- [ ] **[PERF-I3] Redundant Queries in `customerwishlist_detail` View**
+  - **File:** `apps/ecommerce/views/CustomerProfile/CustomerWishlists.py:61-68`
+  - **Description:** Prefetched `items__product` and `items__variant` are discarded when `wishlist.items.all().select_related("product", "variant")` creates a new queryset.
+  - **Suggested Fix:** Change to `items = wishlist.items.all()`.
+
+- [ ] **[PERF-I4] Missing Database Indexes on Filtered Columns**
+  - **Files:** `apps/ecommerce/models/CustomerProfile/CustomerAccountProfiles.py`, `CustomerAddressPreferences.py`, `CustomerWishlists.py`
+  - **Description:** Missing composite indexes on `(tenant, auth_mode)`, `(tenant, preferred_delivery_window)`, `(tenant, visibility)`, and `(tenant, customer, is_default)`.
+  - **Suggested Fix:** Add `models.Index` on these composite fields and create migration.
+
+### Minor
+- [ ] **[PERF-M1] Missing `list_select_related` on Admin Changelists**
+  - **File:** `apps/ecommerce/admin.py:210-255`
+  - **Description:** Admin classes do not set `list_select_related` for related FKs.
+  - **Suggested Fix:** Add `list_select_related` on the 5 admin classes.
+
+
 
