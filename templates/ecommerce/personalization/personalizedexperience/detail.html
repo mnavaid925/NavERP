@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}{{ experience.name }} · Personalized Experience · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:personalization_console' %}" class="hover:text-blue-600">Personalization</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:personalizedexperience_list' %}" class="hover:text-blue-600">Personalized Experiences</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ experience.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ experience.name }}</h1>
+        {% if experience.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-slate">Inactive</span>
+        {% endif %}
+        <span class="badge badge-info">{{ experience.get_experience_type_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">Target Cohort: <a href="{% url 'ecommerce:audiencesegment_detail' experience.target_segment.pk %}" class="font-medium text-blue-600 hover:underline">{{ experience.target_segment.name }}</a></p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <form method="post" action="{% url 'ecommerce:personalizedexperience_toggle' experience.pk %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline text-sm">
+          {% if experience.is_active %}Deactivate{% else %}Activate{% endif %}
+        </button>
+      </form>
+      <a href="{% url 'ecommerce:personalizedexperience_edit' experience.pk %}" class="btn btn-primary inline-flex items-center gap-2 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Experience</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Performance Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Impressions</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">{{ experience.impression_count }}</div>
+      <div class="text-[11px] text-slate-400 mt-1">Total displays served</div>
+    </div>
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Clicks / Interacted</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">{{ experience.click_count }}</div>
+      <div class="text-[11px] text-slate-400 mt-1">Shoppers engaging with CTA</div>
+    </div>
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Conversions</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">{{ experience.conversion_count }}</div>
+      <div class="text-[11px] text-slate-400 mt-1">Attributed order purchases</div>
+    </div>
+  </div>
+
+  <!-- Live Experience Preview & Details -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-6 lg:col-span-2 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3">Creative & Display Preview</h2>
+      
+      <!-- Visual Card Preview -->
+      <div class="p-6 bg-slate-900 text-white rounded-xl shadow-md space-y-3 relative overflow-hidden">
+        <div class="text-xs uppercase tracking-wider font-semibold text-blue-400">
+          Personalized Campaign Preview · {{ experience.get_experience_type_display }}
+        </div>
+        <div class="text-xl font-bold text-white">
+          {% if experience.headline %}{{ experience.headline }}{% else %}Special Offer for You{% endif %}
+        </div>
+        {% if experience.subheadline %}
+          <p class="text-sm text-slate-300">{{ experience.subheadline }}</p>
+        {% endif %}
+        {% if experience.cta_label %}
+          <div class="pt-2">
+            <span class="inline-block bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-md">
+              {{ experience.cta_label }}
+            </span>
+          </div>
+        {% endif %}
+        {% if experience.hero_image_url %}
+          <div class="text-xs text-slate-400 mt-2 truncate">Image: {{ experience.hero_image_url }}</div>
+        {% endif %}
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm pt-4">
+        <div>
+          <span class="text-xs text-slate-500 block">Priority Rank</span>
+          <span class="font-semibold text-slate-800">{{ experience.priority }} (Higher takes precedence)</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Trigger Delay</span>
+          <span class="text-slate-700">{{ experience.trigger_delay_hours }} hour(s)</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Active Schedule</span>
+          <span class="text-slate-700">
+            {% if experience.start_date or experience.end_date %}
+              {{ experience.start_date|date:"M d, Y"|default:"Immediate" }} &ndash; {{ experience.end_date|date:"M d, Y"|default:"Indefinite" }}
+            {% else %}
+              Always active
+            {% endif %}
+          </span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Destination CTA URL</span>
+          <span class="text-slate-700 font-mono text-xs">{{ experience.cta_url|default:"Not specified" }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Targeting Context Card -->
+    <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-6 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3">Targeting & Links</h2>
+      <div class="space-y-3 text-sm">
+        <div>
+          <span class="text-xs text-slate-500 block">Audience Segment</span>
+          <a href="{% url 'ecommerce:audiencesegment_detail' experience.target_segment.pk %}" class="badge badge-info hover:underline">
+            {{ experience.target_segment.name }}
+          </a>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Target Category</span>
+          {% if experience.target_category %}
+            <span class="badge badge-slate">{{ experience.target_category.name }}</span>
+          {% else %}
+            <span class="text-slate-400 text-xs">None (Global)</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Featured Product</span>
+          {% if experience.target_product %}
+            <span class="font-medium text-slate-800 text-xs">{{ experience.target_product.name }}</span>
+          {% else %}
+            <span class="text-slate-400 text-xs">None</span>
+          {% endif %}
+        </div>
+        <div class="pt-3 border-t border-slate-100 text-xs text-slate-400 space-y-1">
+          <div>Created: {{ experience.created_at|date:"M d, Y H:i" }}</div>
+          <div>Updated: {{ experience.updated_at|date:"M d, Y H:i" }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
