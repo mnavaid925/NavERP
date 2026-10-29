@@ -152,6 +152,12 @@ def orderfulfillment_delete(request, pk):
 def orderfulfillment_ship(request, pk):
     fulfillment = ecommerce_object(request, OrderFulfillment, pk)
     fulfillment.mark_shipped()
+    order = fulfillment.order
+    all_shipped = not order.fulfillments.exclude(status__in=("shipped", "in_transit", "out_for_delivery", "delivered")).exists()
+    if all_shipped:
+        order.status = "fulfilled"
+        order.fulfillment_status = "fulfilled"
+        order.save(update_fields=["status", "fulfillment_status"])
     write_audit_log(
         request.user,
         fulfillment,
