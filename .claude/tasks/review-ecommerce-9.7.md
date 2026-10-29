@@ -80,3 +80,22 @@
 - [ ] **E-M2** — Nullable Unique Constraint on Global Facet Codes (`SearchFacetConfigs.py:92-95`).
 - [ ] **E-M3** — Synonym Trigger Limited to Exact Full-String Equality (`SearchConsole.py:98`).
 - [ ] **E-M4** — Unbound `SearchQueryLogFilterForm` in `searchquerylog_list` (`SearchQueryLogs.py:21-54`).
+
+
+---
+
+## Pass 3: `frontend-reviewer` Findings
+
+### Important
+- [ ] **FE-I1** — Dynamic Facet Checkbox UI State Retention Broken via Invalid `|dictsort` Usage (`templates/ecommerce/searchdiscovery/console/console.html:230`):
+  Checkbox `{% if active_filters|dictsort:fg.config.code %}checked{% endif %}` fails silently. Add `is_selected` boolean flag to item dictionaries in `facet_groups` in `SearchConsole.py`.
+- [ ] **FE-I2** — None-Safe Display (L10) for Nullable ForeignKey Fields (`templates/ecommerce/searchdiscovery/merchandisingrule/list.html:125, 147-155`, `detail.html:84`):
+  `rule.target_category.name` and `rule.boosted_product.name` are accessed directly without `{% if %}` or `|default:"—"` guards when null.
+
+### Minor
+- [ ] **FE-M1** — Missing Accessible Labels on Search & Price Inputs (`templates/ecommerce/searchdiscovery/console/console.html:48-57, 250-264`):
+  Add `aria-label` attributes to the workbench search box and price inputs.
+- [ ] **FE-M2** — Design System Alignment for KPI Cards (`templates/ecommerce/searchdiscovery/analytics/analytics.html:33-85`):
+  Adopt `.stat-card`, `.stat-value`, and `.stat-label` structure without hardcoding light-mode background classes over `.stat-icon.<color>`.
+- [ ] **FE-M3** — Missing `filter_logic` Select Dropdown in Facet Filter Form (`templates/ecommerce/searchdiscovery/facetconfig/list.html:34-75`):
+  Context provides `filter_logic_choices` and `selected_logic`, but form omits the dropdown.
