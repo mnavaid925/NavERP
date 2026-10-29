@@ -1695,6 +1695,9 @@ class Command(BaseCommand):
         # =========================================================================
         # 9.8 Personalization & Recommendation Engine
         # =========================================================================
+        apparel_cat = StoreCategory.objects.filter(tenant=tenant, slug="apparel-fashion").first() or StoreCategory.objects.filter(tenant=tenant).first()
+        electronics_cat = StoreCategory.objects.filter(tenant=tenant, slug="electronics").first() or apparel_cat
+
         # 1. Audience Segments
         vip_segment, _ = AudienceSegment.objects.get_or_create(
             tenant=tenant,
@@ -1749,7 +1752,7 @@ class Command(BaseCommand):
             defaults={
                 "name": "Apparel & Fashion Enthusiasts",
                 "lifecycle_stage": "all",
-                "target_category": apparel,
+                "target_category": apparel_cat,
                 "cached_member_count": 5,
                 "last_evaluated_at": timezone.now(),
                 "is_active": True,
@@ -1812,7 +1815,7 @@ class Command(BaseCommand):
             defaults={
                 "experience_type": "home_hero",
                 "target_segment": vip_segment,
-                "target_category": apparel,
+                "target_category": apparel_cat,
                 "headline": "VIP Exclusive: Early Access Winter Collection",
                 "subheadline": "Enjoy private access and an automatic 20% loyalty reward at checkout.",
                 "cta_label": "Shop VIP Collection",
@@ -1867,16 +1870,16 @@ class Command(BaseCommand):
         # 4. Behavioral Clickstream Events
         customer_profile = CustomerAccountProfile.objects.filter(tenant=tenant).first()
         behavior_events_data = [
-            ("page_view", "session_user_alpha", sample_prod, apparel, 1),
-            ("product_view", "session_user_alpha", sample_prod, apparel, 2),
-            ("category_view", "session_user_alpha", None, apparel, 1),
-            ("cart_add", "session_user_alpha", sample_prod, apparel, 5),
+            ("page_view", "session_user_alpha", sample_prod, apparel_cat, 1),
+            ("product_view", "session_user_alpha", sample_prod, apparel_cat, 2),
+            ("category_view", "session_user_alpha", None, apparel_cat, 1),
+            ("cart_add", "session_user_alpha", sample_prod, apparel_cat, 5),
             ("search_query", "session_user_alpha", None, None, 1),
-            ("page_view", "session_user_beta", None, electronics, 1),
-            ("product_view", "session_user_beta", sample_prod, electronics, 2),
+            ("page_view", "session_user_beta", None, electronics_cat, 1),
+            ("product_view", "session_user_beta", sample_prod, electronics_cat, 2),
             ("checkout_start", "session_user_beta", sample_prod, None, 7),
-            ("order_purchase", "session_user_beta", sample_prod, apparel, 10),
-            ("wishlist_add", "session_user_gamma", sample_prod, apparel, 3),
+            ("order_purchase", "session_user_beta", sample_prod, apparel_cat, 10),
+            ("wishlist_add", "session_user_gamma", sample_prod, apparel_cat, 3),
         ]
         for ev_type, sess_k, prd, cat, score in behavior_events_data:
             if not ShopperBehaviorEvent.objects.filter(
