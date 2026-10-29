@@ -1683,87 +1683,97 @@ def ecom_privacy_request_b(tenant_b, ecom_customer_b):
 
 SEARCHDISCOVERY_MODEL_FIELDS = {
     "SearchSynonym": (
-        "id", "tenant", "number", "root_term", "synonyms", "synonym_type",
-        "locale", "is_active", "hit_count", "notes", "created_at", "updated_at",
+        "id", "tenant", "number", "name", "synonym_type", "root_term",
+        "synonyms", "is_active", "hit_count", "notes", "created_at", "updated_at",
     ),
     "SearchFacetConfig": (
-        "id", "tenant", "number", "name", "code", "source_type", "attribute_name",
-        "category_scope", "widget_type", "filter_logic", "display_order",
-        "is_active", "is_collapsed_default", "max_values_shown",
-        "show_counts", "created_at", "updated_at",
+        "id", "tenant", "number", "name", "code", "source_type", "option_key",
+        "widget_type", "filter_logic", "display_order", "is_collapsed_by_default",
+        "max_values_shown", "is_searchable", "category_scope", "is_active",
+        "created_at", "updated_at",
     ),
     "SearchMerchandisingRule": (
-        "id", "tenant", "number", "name", "rule_type", "action_type",
-        "trigger_query", "target_category", "boost_multiplier",
-        "pin_position", "boosted_product", "banner_title", "banner_text",
-        "banner_link_url", "redirect_url", "priority", "is_active",
-        "start_date", "end_date", "notes", "created_at", "updated_at",
+        "id", "tenant", "number", "name", "rule_type", "trigger_query",
+        "match_type", "target_category", "action_type", "boosted_product",
+        "boost_weight", "pin_position", "redirect_url", "banner_title",
+        "banner_body", "banner_image_url", "banner_link_url", "priority",
+        "start_date", "end_date", "is_active", "created_at", "updated_at",
     ),
     "SearchQueryLog": (
         "id", "tenant", "number", "query_text", "normalized_query",
-        "result_count", "execution_time_ms", "applied_facets",
-        "applied_sort", "synonyms_expanded", "is_zero_result",
-        "clicked_product", "customer", "session_key", "ip_address",
-        "created_at",
+        "results_count", "is_zero_result", "execution_time_ms", "applied_filters",
+        "sort_order", "redirected_to", "clicked_product", "click_position",
+        "session_key", "customer", "ip_address", "created_at", "updated_at",
     ),
 }
 
 SEARCHDISCOVERY_CHOICES = {
     "SearchSynonym": {
         "synonym_type": (
-            ("one_way", "One-Way (Root -> Synonyms)"),
-            ("two_way", "Two-Way / Equivalent (Mutual)"),
+            ("two_way", "Two-Way Equivalent"),
+            ("one_way", "One-Way Directional"),
+            ("replacement", "Explicit Replacement"),
         ),
     },
     "SearchFacetConfig": {
         "source_type": (
+            ("category", "Category Hierarchy"),
             ("brand", "Product Brand"),
-            ("category", "Product Category"),
             ("price", "Price Range"),
             ("variant_option", "Variant Option / Attribute"),
-            ("in_stock", "In Stock Availability"),
+            ("availability", "Stock Availability"),
+            ("rating", "Customer Rating"),
+            ("tag", "Product Tag"),
         ),
         "widget_type": (
-            ("checkbox", "Checkboxes (Multi-select)"),
-            ("radio", "Radio Buttons (Single-select)"),
-            ("range_slider", "Numeric Range Slider"),
+            ("checkbox", "Checkboxes (Multi-Select)"),
             ("color_swatch", "Color Swatches"),
-            ("tag_cloud", "Tag Cloud"),
+            ("price_slider", "Price Range Slider"),
+            ("rating_stars", "Rating Star Filter"),
+            ("toggle", "Boolean Toggle"),
+            ("dropdown", "Single-Select Dropdown"),
         ),
         "filter_logic": (
-            ("disjunctive", "OR / Disjunctive (Within Facet)"),
-            ("conjunctive", "AND / Conjunctive (Within Facet)"),
+            ("disjunctive", "Disjunctive (OR)"),
+            ("conjunctive", "Conjunctive (AND)"),
         ),
     },
     "SearchMerchandisingRule": {
         "rule_type": (
             ("query", "Search Query Trigger"),
-            ("category", "Category Browsing Trigger"),
-            ("global", "Global / Storewide Merchandising"),
+            ("category", "Category Listing Trigger"),
+            ("global", "Global Catalog Rule"),
+        ),
+        "match_type": (
+            ("exact", "Exact Query Match"),
+            ("contains", "Contains Keyword"),
+            ("starts_with", "Starts With Keyword"),
         ),
         "action_type": (
-            ("boost", "Score Boost / Demote"),
-            ("pin", "Pin Product to Fixed Position"),
-            ("banner", "Promotional Banner Message"),
-            ("redirect", "URL Query Redirect"),
+            ("boost", "Boost Product Score"),
+            ("bury", "Bury Product Score"),
+            ("pin", "Pin Product to Slot"),
+            ("block", "Block / Exclude Product"),
+            ("redirect", "Query URL Redirect"),
+            ("banner", "Promotional Banner Injection"),
         ),
     },
 }
 
 SEARCHDISCOVERY_FORM_FIELDS = {
     "SearchSynonymForm": (
-        "root_term", "synonyms", "synonym_type", "locale", "is_active", "notes",
+        "name", "synonym_type", "root_term", "synonyms", "is_active", "notes",
     ),
     "SearchFacetConfigForm": (
-        "name", "code", "source_type", "attribute_name", "category_scope",
-        "widget_type", "filter_logic", "display_order", "is_active",
-        "is_collapsed_default", "max_values_shown", "show_counts",
+        "name", "code", "source_type", "option_key", "widget_type",
+        "filter_logic", "display_order", "is_collapsed_by_default",
+        "max_values_shown", "is_searchable", "category_scope", "is_active",
     ),
     "SearchMerchandisingRuleForm": (
-        "name", "rule_type", "action_type", "trigger_query", "target_category",
-        "boost_multiplier", "pin_position", "boosted_product", "banner_title",
-        "banner_text", "banner_link_url", "redirect_url", "priority",
-        "is_active", "start_date", "end_date", "notes",
+        "name", "rule_type", "trigger_query", "match_type", "target_category",
+        "action_type", "boosted_product", "boost_weight", "pin_position",
+        "redirect_url", "banner_title", "banner_body", "banner_image_url",
+        "banner_link_url", "priority", "start_date", "end_date", "is_active",
     ),
     "SearchQueryLogFilterForm": (
         "q", "is_zero_result", "sort_order",
@@ -1798,13 +1808,15 @@ SEARCHDISCOVERY_URLS = {
 }
 
 
-def _searchdiscovery_synonym(tenant, root_term="sneakers", synonyms="shoes, trainers, kicks", **overrides):
+def _searchdiscovery_synonym(tenant, root_term="sneakers", synonyms="shoes, trainers, kicks", name=None, **overrides):
+    if not name:
+        name = f"Synonym for {root_term}"
     defaults = {
         "tenant": tenant,
+        "name": name,
         "root_term": root_term,
         "synonyms": synonyms,
         "synonym_type": "two_way",
-        "locale": "en",
         "is_active": True,
         "hit_count": 0,
         "notes": "Test synonym mapping",
@@ -1823,9 +1835,9 @@ def _searchdiscovery_facet_config(tenant, name="Brand", code="brand", source_typ
         "filter_logic": "disjunctive",
         "display_order": 10,
         "is_active": True,
-        "is_collapsed_default": False,
+        "is_collapsed_by_default": False,
         "max_values_shown": 10,
-        "show_counts": True,
+        "is_searchable": False,
     }
     defaults.update(overrides)
     return SearchFacetConfig.objects.create(**defaults)
@@ -1838,7 +1850,8 @@ def _searchdiscovery_merchandising_rule(tenant, name="Boost Sneakers", rule_type
         "rule_type": rule_type,
         "action_type": action_type,
         "trigger_query": "sneakers",
-        "boost_multiplier": Decimal("2.50"),
+        "match_type": "exact",
+        "boost_weight": 25,
         "priority": 10,
         "is_active": True,
     }
@@ -1846,17 +1859,16 @@ def _searchdiscovery_merchandising_rule(tenant, name="Boost Sneakers", rule_type
     return SearchMerchandisingRule.objects.create(**defaults)
 
 
-def _searchdiscovery_query_log(tenant, query_text="sneakers", normalized_query="sneakers", result_count=5, **overrides):
+def _searchdiscovery_query_log(tenant, query_text="sneakers", normalized_query="sneakers", results_count=5, **overrides):
     defaults = {
         "tenant": tenant,
         "query_text": query_text,
         "normalized_query": normalized_query,
-        "result_count": result_count,
+        "results_count": results_count,
         "execution_time_ms": 14,
-        "applied_facets": {},
-        "applied_sort": "relevance",
-        "synonyms_expanded": False,
-        "is_zero_result": (result_count == 0),
+        "applied_filters": {},
+        "sort_order": "relevance",
+        "is_zero_result": (results_count == 0),
         "session_key": "testsession123",
         "ip_address": "127.0.0.1",
     }
@@ -1902,11 +1914,11 @@ def ecom_merchandising_rule_b(tenant_b, ecom_product_b):
 
 @pytest.fixture
 def ecom_query_log_a(tenant_a):
-    return _searchdiscovery_query_log(tenant_a, query_text="shoes", normalized_query="shoes", result_count=8)
+    return _searchdiscovery_query_log(tenant_a, query_text="shoes", normalized_query="shoes", results_count=8)
 
 
 @pytest.fixture
 def ecom_query_log_b(tenant_b):
-    return _searchdiscovery_query_log(tenant_b, query_text="boots", normalized_query="boots", result_count=2)
+    return _searchdiscovery_query_log(tenant_b, query_text="boots", normalized_query="boots", results_count=2)
 
 
