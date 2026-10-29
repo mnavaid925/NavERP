@@ -1,5 +1,9 @@
 from django.contrib import admin
 
+from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPolicy
+from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
+from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
+from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
 from apps.ecommerce.models.ProductCatalog.ProductRelationships import ProductRelationship
 from apps.ecommerce.models.ProductCatalog.ProductVariants import ProductVariant
@@ -43,3 +47,36 @@ class ProductRelationshipAdmin(admin.ModelAdmin):
     list_filter = ["relationship_type", "is_active", "tenant"]
     search_fields = ["number", "source_product__name", "target_product__name", "notes"]
     ordering = ["source_product", "sort_order"]
+
+
+@admin.register(FulfillmentCenter)
+class FulfillmentCenterAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "code", "center_type", "priority", "city", "state", "is_active"]
+    list_filter = ["center_type", "is_active", "tenant"]
+    search_fields = ["name", "code", "city", "state", "number"]
+    ordering = ["priority", "name"]
+
+
+@admin.register(InventoryAllocation)
+class InventoryAllocationAdmin(admin.ModelAdmin):
+    list_display = ["number", "variant", "fulfillment_center", "zone_bin", "quantity_on_hand", "quantity_allocated", "safety_stock_buffer", "available_to_promise", "is_low_stock_alert"]
+    list_filter = ["is_low_stock_alert", "fulfillment_center", "tenant"]
+    search_fields = ["number", "variant__sku", "variant__name", "fulfillment_center__name", "zone_bin"]
+    ordering = ["variant__sku", "fulfillment_center"]
+
+
+@admin.register(BackorderPolicy)
+class BackorderPolicyAdmin(admin.ModelAdmin):
+    list_display = ["number", "variant", "policy_type", "expected_availability_date", "current_backorder_count", "max_backorder_quantity", "is_active"]
+    list_filter = ["policy_type", "is_active", "tenant"]
+    search_fields = ["number", "variant__sku", "variant__name", "storefront_message"]
+    ordering = ["variant__sku"]
+
+
+@admin.register(ChannelInventorySync)
+class ChannelInventorySyncAdmin(admin.ModelAdmin):
+    list_display = ["number", "channel_name", "channel_type", "variant", "fulfillment_center", "last_synced_quantity", "sync_status", "last_synced_at"]
+    list_filter = ["channel_type", "sync_status", "sync_mode", "tenant"]
+    search_fields = ["number", "channel_name", "variant__sku", "variant__name"]
+    ordering = ["variant__sku", "channel_type"]
+
