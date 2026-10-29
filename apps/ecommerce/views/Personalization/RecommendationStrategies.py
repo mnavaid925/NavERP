@@ -81,12 +81,11 @@ def recommendationstrategy_create(request):
             strategy.tenant = request.tenant
             strategy.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                strategy,
                 "create",
-                "RecommendationStrategy",
-                strategy.pk,
-                f"Created recommendation strategy {strategy.name} ({strategy.number})",
+                {"name": strategy.name, "number": strategy.number},
+                tenant=request.tenant,
             )
             messages.success(request, f"Recommendation strategy '{strategy.name}' created.")
             return redirect("ecommerce:recommendationstrategy_detail", pk=strategy.pk)
@@ -109,12 +108,11 @@ def recommendationstrategy_edit(request, pk):
         if form.is_valid():
             strategy = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                strategy,
                 "update",
-                "RecommendationStrategy",
-                strategy.pk,
-                f"Updated recommendation strategy {strategy.name} ({strategy.number})",
+                {"name": strategy.name, "number": strategy.number},
+                tenant=request.tenant,
             )
             messages.success(request, f"Recommendation strategy '{strategy.name}' updated.")
             return redirect("ecommerce:recommendationstrategy_detail", pk=strategy.pk)
@@ -138,12 +136,11 @@ def recommendationstrategy_delete(request, pk):
     number = strategy.number
     strategy.delete()
     write_audit_log(
-        request.tenant,
         request.user,
+        strategy,
         "delete",
-        "RecommendationStrategy",
-        pk,
-        f"Deleted recommendation strategy {name} ({number})",
+        {"name": name, "number": number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Recommendation strategy '{name}' deleted.")
     return redirect("ecommerce:recommendationstrategy_list")
@@ -158,12 +155,11 @@ def recommendationstrategy_toggle(request, pk):
     strategy.save(update_fields=["is_active", "updated_at"])
     state = "activated" if strategy.is_active else "deactivated"
     write_audit_log(
-        request.tenant,
         request.user,
-        "toggle",
-        "RecommendationStrategy",
-        strategy.pk,
-        f"{state.capitalize()} recommendation strategy {strategy.name} ({strategy.number})",
+        strategy,
+        "update",
+        {"is_active": strategy.is_active, "number": strategy.number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Recommendation strategy '{strategy.name}' {state}.")
     return redirect("ecommerce:recommendationstrategy_detail", pk=strategy.pk)
