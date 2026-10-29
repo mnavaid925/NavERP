@@ -2,6 +2,8 @@
 from decimal import Decimal
 import pytest
 from django.utils import timezone
+from apps.accounting.models.GeneralLedger.Currencies import Currency
+from apps.core.models import Party
 from apps.ecommerce.models import (
     StoreCategory,
     CatalogProduct,
@@ -15,6 +17,11 @@ from apps.ecommerce.models import (
     CouponPromotion,
     FlashSale,
     CompetitorPriceMonitor,
+    EcommerceOrder,
+    EcommerceOrderLine,
+    OrderRoutingRule,
+    OrderFulfillment,
+    ReturnMerchandiseAuthorization,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -716,4 +723,391 @@ def ecom_monitor_a(tenant_a, ecom_variant_a):
 @pytest.fixture
 def ecom_monitor_b(tenant_b, ecom_variant_b):
     return _pricingpromotion_monitor(tenant_b, ecom_variant_b, competitor_name="MegaStore B")
+
+
+ORDERMANAGEMENT_PAGE_SIZE = 20
+
+ORDERMANAGEMENT_MODEL_FIELDS = {
+    "EcommerceOrder": (
+        "id", "tenant", "number", "customer", "guest_email", "currency",
+        "status", "payment_status", "fulfillment_status", "fraud_risk_level",
+        "fraud_score", "address_verification_status", "inventory_reservation_status",
+        "subtotal_amount", "discount_amount", "shipping_amount", "tax_amount",
+        "total_amount", "applied_coupon", "shipping_address", "shipping_name",
+        "shipping_address_line1", "shipping_city", "shipping_state",
+        "shipping_postal_code", "shipping_country", "billing_address",
+        "billing_name", "billing_address_line1", "billing_city", "billing_state",
+        "billing_postal_code", "billing_country", "cancellation_reason",
+        "cancelled_at", "customer_notes", "internal_notes", "created_at", "updated_at",
+    ),
+    "EcommerceOrderLine": (
+        "id", "tenant", "order", "product", "variant", "sku", "product_name",
+        "quantity", "fulfilled_quantity", "returned_quantity", "unit_price",
+        "unit_discount", "line_total", "status", "created_at", "updated_at",
+    ),
+    "OrderRoutingRule": (
+        "id", "tenant", "number", "name", "strategy", "priority",
+        "destination_country", "destination_region", "preferred_fulfillment_center",
+        "allow_split_shipment", "enable_dropship", "is_active", "description",
+        "created_at", "updated_at",
+    ),
+    "OrderFulfillment": (
+        "id", "tenant", "number", "order", "fulfillment_center", "carrier_name",
+        "tracking_number", "tracking_url", "status", "shipping_cost",
+        "shipped_at", "estimated_delivery_date", "actual_delivery_date",
+        "shipping_label_url", "notification_sent", "notes", "created_at", "updated_at",
+    ),
+    "ReturnMerchandiseAuthorization": (
+        "id", "tenant", "number", "order", "customer", "return_type", "status",
+        "reason", "return_shipping_label_url", "return_tracking_number",
+        "restocking_fee", "refund_amount", "refund_status", "restocking_status",
+        "restocking_center", "customer_notes", "inspection_notes",
+        "authorized_at", "completed_at", "created_at", "updated_at",
+    ),
+}
+
+ORDERMANAGEMENT_CHOICES = {
+    "EcommerceOrder": {
+        "status": (
+            ("draft", "Draft"),
+            ("pending_validation", "Pending Validation"),
+            ("validated", "Validated & Approved"),
+            ("processing", "Processing / In Fulfillment"),
+            ("partially_fulfilled", "Partially Fulfilled"),
+            ("fulfilled", "Fulfilled"),
+            ("cancelled", "Cancelled"),
+            ("closed", "Closed"),
+        ),
+        "payment_status": (
+            ("pending", "Pending Payment"),
+            ("authorized", "Payment Authorized"),
+            ("captured", "Payment Captured"),
+            ("partially_refunded", "Partially Refunded"),
+            ("refunded", "Fully Refunded"),
+            ("failed", "Payment Failed"),
+        ),
+        "fulfillment_status": (
+            ("unfulfilled", "Unfulfilled"),
+            ("partially_fulfilled", "Partially Fulfilled"),
+            ("fulfilled", "Fulfilled"),
+            ("returned", "Returned"),
+        ),
+        "fraud_risk_level": (
+            ("low", "Low Risk"),
+            ("medium", "Medium Risk"),
+            ("high", "High Risk"),
+            ("flagged", "Fraud Flagged"),
+        ),
+        "address_verification_status": (
+            ("unverified", "Unverified"),
+            ("passed", "Address Verified (Passed)"),
+            ("failed", "Verification Failed"),
+            ("corrected", "Address Corrected"),
+        ),
+        "inventory_reservation_status": (
+            ("none", "No Reservation"),
+            ("reserved", "Stock Reserved"),
+            ("allocated", "Stock Allocated to Node"),
+            ("released", "Reservation Released"),
+        ),
+    },
+    "EcommerceOrderLine": {
+        "status": (
+            ("pending", "Pending"),
+            ("reserved", "Stock Reserved"),
+            ("routing", "Routing to Fulfillment"),
+            ("fulfilled", "Fulfilled"),
+            ("cancelled", "Cancelled"),
+            ("returned", "Returned"),
+        ),
+    },
+    "OrderRoutingRule": {
+        "strategy": (
+            ("closest_location", "Closest Fulfillment Center"),
+            ("fewest_splits", "Fewest Split Shipments"),
+            ("highest_inventory", "Highest Stock Level"),
+            ("drop_ship_preferred", "Drop-Ship Preferred"),
+            ("manual", "Manual Assignment"),
+        ),
+    },
+    "OrderFulfillment": {
+        "status": (
+            ("draft", "Draft / Sourced"),
+            ("allocated", "Stock Allocated"),
+            ("picking", "Picking Items"),
+            ("packing", "Packing Package"),
+            ("shipped", "Shipped with Carrier"),
+            ("in_transit", "In Transit"),
+            ("out_for_delivery", "Out for Delivery"),
+            ("delivered", "Delivered to Customer"),
+            ("failed_delivery", "Delivery Attempt Failed"),
+        ),
+    },
+    "ReturnMerchandiseAuthorization": {
+        "return_type": (
+            ("refund", "Refund to Original Payment"),
+            ("exchange", "Exchange for Alternate Variant"),
+            ("store_credit", "Store Credit / Voucher"),
+        ),
+        "status": (
+            ("requested", "Return Requested"),
+            ("authorized", "Authorized & Label Issued"),
+            ("label_generated", "Return Label Generated"),
+            ("in_transit", "In Transit back to Center"),
+            ("received", "Received at Center"),
+            ("inspected", "Inspected & Evaluated"),
+            ("approved", "Approved for Settlement"),
+            ("rejected", "Rejected / Denied"),
+            ("completed", "Completed & Settled"),
+        ),
+        "reason": (
+            ("damaged_defective", "Damaged or Defective"),
+            ("wrong_item_sent", "Wrong Item Sent"),
+            ("size_fit_issue", "Size or Fit Issue"),
+            ("not_as_described", "Item Not as Described"),
+            ("changed_mind", "Customer Changed Mind"),
+            ("late_delivery", "Late Delivery Arrival"),
+            ("other", "Other Reason"),
+        ),
+        "refund_status": (
+            ("pending", "Pending Approval"),
+            ("processed", "Refund Processed"),
+            ("failed", "Refund Failed"),
+            ("waived", "Fee Waived / No Refund"),
+        ),
+        "restocking_status": (
+            ("pending", "Pending Restock Inspection"),
+            ("restocked", "Restocked to Active Inventory"),
+            ("scrapped", "Damaged / Scrapped"),
+            ("quarantined", "Quarantined for Review"),
+        ),
+    },
+}
+
+ORDERMANAGEMENT_FORM_FIELDS = {
+    "EcommerceOrderForm": (
+        "customer", "guest_email", "currency", "status", "payment_status",
+        "fulfillment_status", "fraud_risk_level", "fraud_score",
+        "address_verification_status", "inventory_reservation_status",
+        "discount_amount", "shipping_amount", "tax_amount", "applied_coupon",
+        "shipping_name", "shipping_address_line1", "shipping_city",
+        "shipping_state", "shipping_postal_code", "shipping_country",
+        "billing_name", "billing_address_line1", "billing_city",
+        "billing_state", "billing_postal_code", "billing_country",
+        "customer_notes", "internal_notes",
+    ),
+    "EcommerceOrderLineForm": (
+        "product", "variant", "sku", "product_name", "quantity",
+        "unit_price", "unit_discount", "status",
+    ),
+    "OrderRoutingRuleForm": (
+        "name", "strategy", "priority", "destination_country",
+        "destination_region", "preferred_fulfillment_center",
+        "allow_split_shipment", "enable_dropship", "is_active", "description",
+    ),
+    "OrderFulfillmentForm": (
+        "order", "fulfillment_center", "carrier_name", "tracking_number",
+        "tracking_url", "status", "shipping_cost", "estimated_delivery_date",
+        "shipping_label_url", "notification_sent", "notes",
+    ),
+    "ReturnMerchandiseAuthorizationForm": (
+        "order", "customer", "return_type", "status", "reason",
+        "return_shipping_label_url", "return_tracking_number",
+        "restocking_fee", "refund_amount", "refund_status",
+        "restocking_status", "restocking_center", "customer_notes",
+        "inspection_notes",
+    ),
+}
+
+ORDERMANAGEMENT_URLS = {
+    "ecommerceorder_list": "orders/",
+    "ecommerceorder_create": "orders/create/",
+    "ecommerceorder_detail": "orders/<int:pk>/",
+    "ecommerceorder_edit": "orders/<int:pk>/edit/",
+    "ecommerceorder_delete": "orders/<int:pk>/delete/",
+    "ecommerceorder_cancel": "orders/<int:pk>/cancel/",
+    "orderroutingrule_list": "routing-rules/",
+    "orderroutingrule_create": "routing-rules/create/",
+    "orderroutingrule_detail": "routing-rules/<int:pk>/",
+    "orderroutingrule_edit": "routing-rules/<int:pk>/edit/",
+    "orderroutingrule_delete": "routing-rules/<int:pk>/delete/",
+    "orderfulfillment_list": "fulfillments/",
+    "orderfulfillment_create": "fulfillments/create/",
+    "orderfulfillment_detail": "fulfillments/<int:pk>/",
+    "orderfulfillment_edit": "fulfillments/<int:pk>/edit/",
+    "orderfulfillment_delete": "fulfillments/<int:pk>/delete/",
+    "orderfulfillment_ship": "fulfillments/<int:pk>/ship/",
+    "returnmerchandiseauthorization_list": "returns/",
+    "returnmerchandiseauthorization_create": "returns/create/",
+    "returnmerchandiseauthorization_detail": "returns/<int:pk>/",
+    "returnmerchandiseauthorization_edit": "returns/<int:pk>/edit/",
+    "returnmerchandiseauthorization_delete": "returns/<int:pk>/delete/",
+    "returnmerchandiseauthorization_complete": "returns/<int:pk>/complete/",
+}
+
+
+def _ordermanagement_customer(tenant, name="Customer One"):
+    return Party.objects.create(tenant=tenant, name=name, kind="person")
+
+
+def _ordermanagement_currency():
+    curr, _ = Currency.objects.get_or_create(
+        code="USD",
+        defaults={"name": "US Dollar", "symbol": "$", "is_active": True},
+    )
+    return curr
+
+
+def _ordermanagement_order(tenant, customer=None, currency=None, **overrides):
+    if customer is None:
+        customer = _ordermanagement_customer(tenant)
+    if currency is None:
+        currency = _ordermanagement_currency()
+    defaults = {
+        "tenant": tenant,
+        "customer": customer,
+        "currency": currency,
+        "status": "pending_validation",
+        "payment_status": "pending",
+        "fulfillment_status": "unfulfilled",
+        "shipping_name": "John Doe",
+        "shipping_address_line1": "123 Main St",
+        "shipping_city": "Austin",
+        "shipping_state": "TX",
+        "shipping_postal_code": "78701",
+        "shipping_country": "USA",
+        "subtotal_amount": Decimal("100.00"),
+        "total_amount": Decimal("100.00"),
+    }
+    defaults.update(overrides)
+    return EcommerceOrder.objects.create(**defaults)
+
+
+def _ordermanagement_line(tenant, order, product, variant=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "order": order,
+        "product": product,
+        "variant": variant,
+        "sku": variant.sku if variant else "SKU-DEFAULT",
+        "product_name": product.name,
+        "quantity": 1,
+        "unit_price": Decimal("100.00"),
+        "line_total": Decimal("100.00"),
+        "status": "pending",
+    }
+    defaults.update(overrides)
+    return EcommerceOrderLine.objects.create(**defaults)
+
+
+def _ordermanagement_routing_rule(tenant, name="Rule Standard", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "strategy": "closest_location",
+        "priority": 10,
+        "allow_split_shipment": True,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return OrderRoutingRule.objects.create(**defaults)
+
+
+def _ordermanagement_fulfillment(tenant, order, fulfillment_center=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "order": order,
+        "fulfillment_center": fulfillment_center,
+        "carrier_name": "FedEx Ground",
+        "tracking_number": "1234567890",
+        "status": "allocated",
+        "shipping_cost": Decimal("15.00"),
+    }
+    defaults.update(overrides)
+    return OrderFulfillment.objects.create(**defaults)
+
+
+def _ordermanagement_rma(tenant, order, customer=None, **overrides):
+    if customer is None:
+        customer = order.customer
+    defaults = {
+        "tenant": tenant,
+        "order": order,
+        "customer": customer,
+        "return_type": "refund",
+        "status": "requested",
+        "reason": "changed_mind",
+        "refund_amount": Decimal("50.00"),
+        "restocking_fee": Decimal("5.00"),
+        "refund_status": "pending",
+        "restocking_status": "pending",
+    }
+    defaults.update(overrides)
+    return ReturnMerchandiseAuthorization.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_customer_a(tenant_a):
+    return _ordermanagement_customer(tenant_a, name="Acme Customer A")
+
+
+@pytest.fixture
+def ecom_customer_b(tenant_b):
+    return _ordermanagement_customer(tenant_b, name="Beta Customer B")
+
+
+@pytest.fixture
+def ecom_currency_usd():
+    return _ordermanagement_currency()
+
+
+@pytest.fixture
+def ecom_order_a(tenant_a, ecom_customer_a, ecom_currency_usd):
+    return _ordermanagement_order(tenant_a, customer=ecom_customer_a, currency=ecom_currency_usd)
+
+
+@pytest.fixture
+def ecom_order_b(tenant_b, ecom_customer_b, ecom_currency_usd):
+    return _ordermanagement_order(tenant_b, customer=ecom_customer_b, currency=ecom_currency_usd)
+
+
+@pytest.fixture
+def ecom_order_line_a(tenant_a, ecom_order_a, ecom_product_a, ecom_variant_a):
+    return _ordermanagement_line(tenant_a, ecom_order_a, ecom_product_a, ecom_variant_a)
+
+
+@pytest.fixture
+def ecom_order_line_b(tenant_b, ecom_order_b, ecom_product_b, ecom_variant_b):
+    return _ordermanagement_line(tenant_b, ecom_order_b, ecom_product_b, ecom_variant_b)
+
+
+@pytest.fixture
+def ecom_routing_rule_a(tenant_a, ecom_center_a):
+    return _ordermanagement_routing_rule(tenant_a, name="Acme Fast Route", preferred_fulfillment_center=ecom_center_a)
+
+
+@pytest.fixture
+def ecom_routing_rule_b(tenant_b, ecom_center_b):
+    return _ordermanagement_routing_rule(tenant_b, name="Beta Fast Route", preferred_fulfillment_center=ecom_center_b)
+
+
+@pytest.fixture
+def ecom_fulfillment_a(tenant_a, ecom_order_a, ecom_center_a):
+    return _ordermanagement_fulfillment(tenant_a, ecom_order_a, fulfillment_center=ecom_center_a)
+
+
+@pytest.fixture
+def ecom_fulfillment_b(tenant_b, ecom_order_b, ecom_center_b):
+    return _ordermanagement_fulfillment(tenant_b, ecom_order_b, fulfillment_center=ecom_center_b)
+
+
+@pytest.fixture
+def ecom_rma_a(tenant_a, ecom_order_a, ecom_customer_a, ecom_center_a):
+    return _ordermanagement_rma(tenant_a, ecom_order_a, customer=ecom_customer_a, restocking_center=ecom_center_a)
+
+
+@pytest.fixture
+def ecom_rma_b(tenant_b, ecom_order_b, ecom_customer_b, ecom_center_b):
+    return _ordermanagement_rma(tenant_b, ecom_order_b, customer=ecom_customer_b, restocking_center=ecom_center_b)
+
 
