@@ -81,8 +81,8 @@ class PersonalizedExperienceForm(TenantUniqueMixin, TenantModelForm):
                 tenant=self.tenant, is_active=True
             ).order_by("name")
             self.fields["target_product"].queryset = CatalogProduct.objects.filter(
-                tenant=self.tenant, is_active=True
-            ).order_by("name")
+                tenant=self.tenant
+            ).exclude(status="archived").order_by("name")
 
     def clean(self):
         cleaned = super().clean()
