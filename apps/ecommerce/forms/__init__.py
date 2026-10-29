@@ -18,6 +18,10 @@ from apps.ecommerce.forms.OrderManagement.EcommerceOrders import EcommerceOrderF
 from apps.ecommerce.forms.OrderManagement.OrderFulfillments import OrderFulfillmentForm
 from apps.ecommerce.forms.OrderManagement.OrderRoutingRules import OrderRoutingRuleForm
 from apps.ecommerce.forms.OrderManagement.ReturnMerchandiseAuthorizations import ReturnMerchandiseAuthorizationForm
+from apps.ecommerce.forms.Personalization.AudienceSegments import AudienceSegmentForm
+from apps.ecommerce.forms.Personalization.PersonalizedExperiences import PersonalizedExperienceForm
+from apps.ecommerce.forms.Personalization.RecommendationStrategies import RecommendationStrategyForm
+from apps.ecommerce.forms.Personalization.ShopperBehaviorEvents import ShopperBehaviorEventFilterForm
 from apps.ecommerce.forms.PricingPromotion.CompetitorPriceMonitors import CompetitorPriceMonitorForm
 from apps.ecommerce.forms.PricingPromotion.CouponPromotions import CouponPromotionForm
 from apps.ecommerce.forms.PricingPromotion.DynamicPriceRules import DynamicPriceRuleForm
@@ -81,5 +85,10 @@ __all__ = [
     "SearchMerchandisingRuleForm",
     "SearchQueryLogForm",
     "SearchQueryLogFilterForm",
+    # 9.8 Personalization & Recommendation Engine
+    "AudienceSegmentForm",
+    "RecommendationStrategyForm",
+    "PersonalizedExperienceForm",
+    "ShopperBehaviorEventFilterForm",
 ]
 
