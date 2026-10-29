@@ -47,7 +47,7 @@ pytestmark = pytest.mark.django_db
 
 def _cartcheckout_create_party_customer(tenant, name="Customer Tester"):
     party = Party.objects.create(tenant=tenant, name=name, kind="person")
-    PartyRole.objects.create(party=party, role="customer")
+    PartyRole.objects.create(tenant=tenant, party=party, role="customer")
     return party
 
 
