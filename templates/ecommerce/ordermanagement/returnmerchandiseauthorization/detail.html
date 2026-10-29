@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}RMA {{ rma.number }} · Returns · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:returnmerchandiseauthorization_list' %}" class="hover:text-blue-600">Returns</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium font-mono">{{ rma.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 font-mono">{{ rma.number }}</h1>
+        {% if rma.status == 'approved' or rma.status == 'completed' %}
+          <span class="badge badge-green">{{ rma.get_status_display }}</span>
+        {% elif rma.status == 'rejected' %}
+          <span class="badge badge-red">{{ rma.get_status_display }}</span>
+        {% elif rma.status == 'requested' %}
+          <span class="badge badge-amber">{{ rma.get_status_display }}</span>
+        {% else %}
+          <span class="badge badge-info">{{ rma.get_status_display }}</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Return for Order <a href="{% url 'ecommerce:ecommerceorder_detail' pk=rma.order.pk %}" class="font-mono font-medium text-blue-600 hover:underline">{{ rma.order.number }}</a>
+        by <span class="font-medium text-slate-700">{{ rma.customer.name }}</span>
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      {% if rma.status != 'completed' and rma.status != 'rejected' %}
+        <form method="post" action="{% url 'ecommerce:returnmerchandiseauthorization_complete' pk=rma.pk %}" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Complete Settlement</span>
+          </button>
+        </form>
+      {% endif %}
+      <a href="{% url 'ecommerce:returnmerchandiseauthorization_edit' pk=rma.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit RMA</span>
+      </a>
+      <form
+        method="post"
+        action="{% url 'ecommerce:returnmerchandiseauthorization_delete' pk=rma.pk %}"
+        onsubmit="return confirm('Delete return authorization {{ rma.number }}?');"
+        class="inline"
+      >
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+          Delete
+        </button>
+      </form>
+      <a href="{% url 'ecommerce:returnmerchandiseauthorization_list' %}" class="btn btn-outline">
+        Back
+      </a>
+    </div>
+  </div>
+
+  <!-- Detail Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- Return Policy & Sourcing -->
+    <div class="card p-6 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
+        <i data-lucide="rotate-ccw" class="w-5 h-5 text-amber-600"></i>
+        <h3 class="text-base font-semibold text-slate-800">Return Overview & Logistics</h3>
+      </div>
+      <dl class="space-y-3 text-sm">
+        <div>
+          <dt class="text-slate-500">Return Resolution Type:</dt>
+          <dd class="font-semibold text-slate-800 mt-0.5">
+            <span class="badge badge-info">{{ rma.get_return_type_display }}</span>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Customer Reason:</dt>
+          <dd class="font-medium text-slate-800 mt-0.5">{{ rma.get_reason_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Restocking Center Node:</dt>
+          <dd class="font-medium text-slate-800 mt-0.5">
+            {% if rma.restocking_center %}
+              {{ rma.restocking_center.name }} ({{ rma.restocking_center.code }})
+            {% else %}
+              <span class="text-slate-400">Default Return Center</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Return Tracking Number:</dt>
+          <dd class="font-mono font-medium text-slate-900 mt-0.5">
+            {{ rma.return_tracking_number|default:"Pending return label issue" }}
+          </dd>
+        </div>
+        {% if rma.return_shipping_label_url %}
+          <div>
+            <dt class="text-slate-500">Return Shipping Label:</dt>
+            <dd class="mt-0.5">
+              <a href="{{ rma.return_shipping_label_url }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline inline-flex items-center gap-1">
+                <span>Download Courier Label</span>
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+              </a>
+            </dd>
+          </div>
+        {% endif %}
+      </dl>
+    </div>
+
+    <!-- Financial Settlement -->
+    <div class="card p-6 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
+        <i data-lucide="dollar-sign" class="w-5 h-5 text-green-600"></i>
+        <h3 class="text-base font-semibold text-slate-800">Financial Settlement & Restock</h3>
+      </div>
+      <dl class="space-y-3 text-sm">
+        <div>
+          <dt class="text-slate-500">Net Refund / Credit Amount:</dt>
+          <dd class="text-2xl font-bold font-mono text-slate-900 mt-0.5">
+            ${{ rma.refund_amount|floatformat:2 }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Restocking Fee Deduction:</dt>
+          <dd class="font-mono text-slate-700 mt-0.5">${{ rma.restocking_fee|floatformat:2 }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Refund Settlement Status:</dt>
+          <dd class="mt-0.5">
+            {% if rma.refund_status == 'processed' %}
+              <span class="badge badge-green text-xs">Processed & Settled</span>
+            {% elif rma.refund_status == 'failed' %}
+              <span class="badge badge-red text-xs">Settlement Failed</span>
+            {% else %}
+              <span class="badge badge-amber text-xs">{{ rma.get_refund_status_display }}</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Restocking Physical Disposition:</dt>
+          <dd class="mt-0.5">
+            {% if rma.restocking_status == 'restocked' %}
+              <span class="badge badge-green text-xs">Restocked to Active Stock</span>
+            {% elif rma.restocking_status == 'scrapped' %}
+              <span class="badge badge-red text-xs">Scrapped / Damaged</span>
+            {% elif rma.restocking_status == 'quarantined' %}
+              <span class="badge badge-amber text-xs">Quarantined for QA</span>
+            {% else %}
+              <span class="badge badge-slate text-xs">Pending Inspection</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Settlement Finalized At:</dt>
+          <dd class="font-medium text-slate-700 mt-0.5">
+            {{ rma.completed_at|date:"M d, Y H:i"|default:"In Progress" }}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  <!-- Notes & Inspection Findings -->
+  {% if rma.customer_notes or rma.inspection_notes %}
+    <div class="card p-6 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+      <h3 class="text-base font-semibold text-slate-800">Inspection Findings & Customer Remarks</h3>
+      {% if rma.customer_notes %}
+        <div class="text-sm">
+          <span class="font-semibold text-slate-700">Customer Return Reason:</span>
+          <p class="text-slate-600 mt-1 italic">{{ rma.customer_notes }}</p>
+        </div>
+      {% endif %}
+      {% if rma.inspection_notes %}
+        <div class="text-sm pt-2 border-t border-slate-100">
+          <span class="font-semibold text-slate-700">Warehouse Staff Inspection Notes:</span>
+          <p class="text-slate-600 mt-1 whitespace-pre-line">{{ rma.inspection_notes }}</p>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
