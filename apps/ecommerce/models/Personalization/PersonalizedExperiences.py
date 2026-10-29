@@ -127,5 +127,28 @@ class PersonalizedExperience(TenantNumbered):
         if self.start_date and self.end_date and self.end_date <= self.start_date:
             raise ValidationError({"end_date": "Campaign end date must be after the start date."})
 
+        # C2: Safe URL scheme validation
+        if self.cta_url:
+            lowered_cta = self.cta_url.strip().lower()
+            if lowered_cta.startswith(("javascript:", "data:", "vbscript:")):
+                raise ValidationError({"cta_url": "Dangerous URL scheme not allowed."})
+            if not (lowered_cta.startswith(("/", "http://", "https://", "#"))):
+                raise ValidationError({"cta_url": "URL must begin with '/', 'http://', 'https://', or '#'."})
+
+        if self.hero_image_url:
+            lowered_img = self.hero_image_url.strip().lower()
+            if lowered_img.startswith(("javascript:", "data:", "vbscript:")):
+                raise ValidationError({"hero_image_url": "Dangerous image URL scheme not allowed."})
+            if not (lowered_img.startswith(("/", "http://", "https://"))):
+                raise ValidationError({"hero_image_url": "Image URL must begin with '/', 'http://', or 'https://'."})
+
+        # C3: Model-level tenant foreign key validation
+        if self.target_segment_id and self.target_segment and self.target_segment.tenant_id != self.tenant_id:
+            raise ValidationError({"target_segment": "Target segment belongs to another workspace."})
+        if self.target_category_id and self.target_category and self.target_category.tenant_id != self.tenant_id:
+            raise ValidationError({"target_category": "Target category belongs to another workspace."})
+        if self.target_product_id and self.target_product and self.target_product.tenant_id != self.tenant_id:
+            raise ValidationError({"target_product": "Target product belongs to another workspace."})
+
     def __str__(self):
         return f"{self.name} ({self.get_experience_type_display()})"
