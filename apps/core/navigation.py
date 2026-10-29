@@ -2718,6 +2718,19 @@ LIVE_LINKS = {
         "Query Logs": "ecommerce:searchquerylog_list",
         "Search Analytics": "ecommerce:search_analytics",
     },
+    "9.8": {
+        "Behavioral Tracking & Profiles": "ecommerce:shopperbehaviorevent_list",
+        "AI-Driven Product Recommendations": "ecommerce:recommendationstrategy_list",
+        "Personalized Homepages & Content": "ecommerce:personalizedexperience_list",
+        "Email & Push Personalization": "ecommerce:personalization_console",
+        "Segmentation & Audience Builder": "ecommerce:audiencesegment_list",
+        # Extra live leaves
+        "Personalization Workbench": "ecommerce:personalization_console",
+        "Audience Segments": "ecommerce:audiencesegment_list",
+        "Recommendation Strategies": "ecommerce:recommendationstrategy_list",
+        "Personalized Experiences": "ecommerce:personalizedexperience_list",
+        "Behavioral Telemetry": "ecommerce:shopperbehaviorevent_list",
+    },
 
 
 
