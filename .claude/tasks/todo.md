@@ -19279,3 +19279,228 @@ Nested folder structure per house convention. All templates extend `"base.html"`
   - Update `.claude/skills/ecommerce/SKILL.md`
   - Update `README.md`
   - Track any deferred features in `.claude/tasks/gaps-ecommerce-9.5.md`
+
+
+---
+
+# Sub-module 9.4 — Shopping Cart & Checkout (Module 9: eCommerce Management System, `ecommerce`) — plan from research-ecommerce-9.4.md (2026-10-29)
+
+## Models (from research — 4 models in `apps/ecommerce/models/CartCheckout/`)
+
+- [ ] `Cart` (`ECRT-`) & `CartItem` (`Carts.py`)
+  - **Serves:** Bullet 1 (Persistent & Guest Cart, cross-device persistence, and abandonment recovery).
+  - **Base:** `TenantNumbered`, `NUMBER_PREFIX = "ECRT"`.
+  - **Fields:**
+    - `tenant`: `ForeignKey('core.Tenant', on_delete=models.CASCADE, related_name='ecommerce_carts')`
+    - `number`: `CharField(max_length=32, editable=False)`
+    - `customer`: `ForeignKey('core.Party', on_delete=models.SET_NULL, null=True, blank=True, related_name='ecommerce_carts')`
+    - `session_key`: `CharField(max_length=64, blank=True, db_index=True)`
+    - `email`: `EmailField(blank=True)`
+    - `status`: `CharField(max_length=20, choices=[('active', 'Active'), ('locked', 'Locked (In Checkout)'), ('abandoned', 'Abandoned'), ('converted', 'Converted to Order'), ('expired', 'Expired')], default='active', db_index=True)`
+    - `currency`: `CharField(max_length=3, default='USD')`
+    - `subtotal`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))`
+    - `discount_total`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))`
+    - `tax_total`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))`
+    - `shipping_total`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))`
+    - `grand_total`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))`
+    - `coupon_code`: `CharField(max_length=50, blank=True)`
+    - `last_activity_at`: `DateTimeField(default=timezone.now)`
+    - `abandoned_at`: `DateTimeField(null=True, blank=True)`
+    - `recovery_token`: `CharField(max_length=64, blank=True, unique=True, null=True)`
+    - `recovery_sent_at`: `DateTimeField(null=True, blank=True)`
+    - `notes`: `TextField(blank=True)`
+  - **Child Model `CartItem`:**
+    - `cart`: `ForeignKey(Cart, on_delete=models.CASCADE, related_name='items')`
+    - `product`: `ForeignKey('ecommerce.CatalogProduct', on_delete=models.CASCADE, related_name='cart_items')`
+    - `variant`: `ForeignKey('ecommerce.ProductVariant', on_delete=models.SET_NULL, null=True, blank=True, related_name='cart_items')`
+    - `quantity`: `PositiveIntegerField(default=1)`
+    - `unit_price`: `DecimalField(max_digits=12, decimal_places=2)`
+    - `total_price`: `DecimalField(max_digits=12, decimal_places=2)`
+    - `custom_attributes`: `JSONField(default=dict, blank=True)`
+  - **Form Excludes:** `tenant`, `number`, `subtotal`, `discount_total`, `tax_total`, `shipping_total`, `grand_total`, `abandoned_at`, `recovery_token`, `recovery_sent_at`, `last_activity_at`.
+
+- [ ] `CheckoutSession` (`ECKS-`) (`CheckoutSessions.py`)
+  - **Serves:** Bullet 2 (One-Page & Multi-Step Checkout) & Bullet 4 (Tax Calculation & Compliance snapshot).
+  - **Base:** `TenantNumbered`, `NUMBER_PREFIX = "ECKS"`.
+  - **Fields:**
+    - `tenant`: `ForeignKey('core.Tenant', on_delete=models.CASCADE, related_name='ecommerce_checkout_sessions')`
+    - `number`: `CharField(max_length=32, editable=False)`
+    - `cart`: `ForeignKey('ecommerce.Cart', on_delete=models.CASCADE, related_name='checkout_sessions')`
+    - `customer`: `ForeignKey('core.Party', on_delete=models.SET_NULL, null=True, blank=True, related_name='ecommerce_checkout_sessions')`
+    - `email`: `EmailField()`
+    - `phone`: `CharField(max_length=30, blank=True)`
+    - `flow_type`: `CharField(max_length=20, choices=[('one_page', 'One-Page Checkout'), ('multi_step', 'Multi-Step Checkout')], default='one_page')`
+    - `current_step`: `CharField(max_length=20, choices=[('contact', 'Contact Details'), ('shipping_address', 'Shipping Address'), ('shipping_method', 'Shipping Method'), ('payment', 'Payment'), ('review', 'Review & Place Order'), ('completed', 'Completed')], default='contact')`
+    - `status`: `CharField(max_length=20, choices=[('in_progress', 'In Progress'), ('processing', 'Processing Payment'), ('completed', 'Completed'), ('expired', 'Expired'), ('abandoned', 'Abandoned')], default='in_progress', db_index=True)`
+    - `shipping_name`: `CharField(max_length=150, blank=True)`
+    - `shipping_address_line1`: `CharField(max_length=255, blank=True)`
+    - `shipping_address_line2`: `CharField(max_length=255, blank=True)`
+    - `shipping_city`: `CharField(max_length=100, blank=True)`
+    - `shipping_state`: `CharField(max_length=100, blank=True)`
+    - `shipping_postal_code`: `CharField(max_length=30, blank=True)`
+    - `shipping_country`: `CharField(max_length=2, default='US')`
+    - `billing_same_as_shipping`: `BooleanField(default=True)`
+    - `billing_name`: `CharField(max_length=150, blank=True)`
+    - `billing_address_line1`: `CharField(max_length=255, blank=True)`
+    - `billing_city`: `CharField(max_length=100, blank=True)`
+    - `billing_state`: `CharField(max_length=100, blank=True)`
+    - `billing_postal_code`: `CharField(max_length=30, blank=True)`
+    - `billing_country`: `CharField(max_length=2, default='US')`
+    - `shipping_method`: `ForeignKey('ecommerce.ShippingMethodConfig', on_delete=models.SET_NULL, null=True, blank=True, related_name='checkout_sessions')`
+    - `payment_method`: `ForeignKey('ecommerce.PaymentMethodConfig', on_delete=models.SET_NULL, null=True, blank=True, related_name='checkout_sessions')`
+    - `tax_code`: `ForeignKey('accounting.TaxCode', on_delete=models.SET_NULL, null=True, blank=True, related_name='ecommerce_checkouts')`
+    - `tax_jurisdiction`: `CharField(max_length=100, blank=True)`
+    - `tax_rate`: `DecimalField(max_digits=6, decimal_places=4, default=Decimal('0.0000'))`
+    - `is_tax_exempt`: `BooleanField(default=False)`
+    - `tax_exemption_number`: `CharField(max_length=50, blank=True)`
+    - `tax_breakdown`: `JSONField(default=dict, blank=True)`
+    - `subtotal_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))`
+    - `discount_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))`
+    - `shipping_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))`
+    - `tax_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))`
+    - `total_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))`
+    - `payment_status`: `CharField(max_length=20, choices=[('pending', 'Pending'), ('authorized', 'Authorized'), ('paid', 'Paid'), ('failed', 'Failed')], default='pending')`
+    - `payment_transaction_id`: `CharField(max_length=100, blank=True)`
+    - `order_reference`: `CharField(max_length=50, blank=True)`
+    - `expires_at`: `DateTimeField()`
+    - `completed_at`: `DateTimeField(null=True, blank=True)`
+  - **Form Excludes:** `tenant`, `number`, `cart`, `payment_transaction_id`, `order_reference`, `completed_at`.
+
+- [ ] `ShippingMethodConfig` (`ESHP-`) (`ShippingMethods.py`)
+  - **Serves:** Bullet 3 (Shipping Rate Calculation, carrier types, weight tiers, free-shipping threshold rules, pickup).
+  - **Base:** `TenantNumbered`, `NUMBER_PREFIX = "ESHP"`.
+  - **Fields:**
+    - `tenant`: `ForeignKey('core.Tenant', on_delete=models.CASCADE, related_name='ecommerce_shipping_methods')`
+    - `number`: `CharField(max_length=32, editable=False)`
+    - `name`: `CharField(max_length=100)`
+    - `code`: `CharField(max_length=50)`
+    - `carrier`: `CharField(max_length=20, choices=[('custom', 'Custom / Internal Fleet'), ('fedex', 'FedEx'), ('ups', 'UPS'), ('usps', 'USPS'), ('dhl', 'DHL')], default='custom')`
+    - `calculation_type`: `CharField(max_length=20, choices=[('flat_rate', 'Flat Rate'), ('weight_tiered', 'Weight-Based Tier'), ('free_threshold', 'Free Above Subtotal Threshold'), ('local_pickup', 'Local Store Pickup / Free')], default='flat_rate')`
+    - `base_rate`: `DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))`
+    - `cost_per_kg`: `DecimalField(max_digits=8, decimal_places=2, default=Decimal('0.00'))`
+    - `free_shipping_threshold`: `DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)`
+    - `estimated_days_min`: `PositiveSmallIntegerField(default=3)`
+    - `estimated_days_max`: `PositiveSmallIntegerField(default=5)`
+    - `destination_countries`: `CharField(max_length=255, default='US,CA')`
+    - `is_active`: `BooleanField(default=True, db_index=True)`
+    - `sort_order`: `PositiveSmallIntegerField(default=0)`
+    - `description`: `TextField(blank=True)`
+  - **Form Excludes:** `tenant`, `number`.
+
+- [ ] `PaymentMethodConfig` (`EPMC-`) (`PaymentMethods.py`)
+  - **Serves:** Bullet 5 (Payment Method Orchestration, credit cards, digital wallets, BNPL, bank transfers, COD).
+  - **Base:** `TenantNumbered`, `NUMBER_PREFIX = "EPMC"`.
+  - **Fields:**
+    - `tenant`: `ForeignKey('core.Tenant', on_delete=models.CASCADE, related_name='ecommerce_payment_methods')`
+    - `number`: `CharField(max_length=32, editable=False)`
+    - `name`: `CharField(max_length=100)`
+    - `provider`: `CharField(max_length=30, choices=[('stripe', 'Stripe Payments'), ('paypal', 'PayPal Express'), ('klarna', 'Klarna BNPL'), ('bank_transfer', 'Direct Bank Transfer / Wire'), ('cod', 'Cash on Delivery (COD)')], default='stripe')`
+    - `method_category`: `CharField(max_length=20, choices=[('credit_card', 'Credit / Debit Card'), ('wallet', 'Digital Wallet'), ('bnpl', 'Buy Now Pay Later'), ('bank_transfer', 'Bank Transfer'), ('cash_on_delivery', 'Cash on Delivery')], default='credit_card')`
+    - `environment`: `CharField(max_length=15, choices=[('sandbox', 'Sandbox / Test Mode'), ('production', 'Live / Production')], default='sandbox')`
+    - `is_active`: `BooleanField(default=True, db_index=True)`
+    - `display_order`: `PositiveSmallIntegerField(default=0)`
+    - `fee_type`: `CharField(max_length=15, choices=[('none', 'No Surcharge'), ('percentage', 'Percentage Surcharge'), ('fixed', 'Fixed Fee Surcharge')], default='none')`
+    - `fee_amount`: `DecimalField(max_digits=8, decimal_places=2, default=Decimal('0.00'))`
+    - `min_order_amount`: `DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)`
+    - `max_order_amount`: `DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)`
+    - `supported_currencies`: `CharField(max_length=100, default='USD,EUR,GBP')`
+    - `instructions`: `TextField(blank=True)`
+    - `supports_refunds`: `BooleanField(default=True)`
+  - **Form Excludes:** `tenant`, `number`.
+
+---
+
+## Backend Packages (`apps/ecommerce/{models,forms,views,urls}/CartCheckout/`)
+
+### Layer 1: Models (`apps/ecommerce/models/CartCheckout/`)
+- [ ] `apps/ecommerce/models/CartCheckout/__init__.py`
+- [ ] `apps/ecommerce/models/CartCheckout/Carts.py` (`Cart`, `CartItem`)
+- [ ] `apps/ecommerce/models/CartCheckout/CheckoutSessions.py` (`CheckoutSession`)
+- [ ] `apps/ecommerce/models/CartCheckout/ShippingMethods.py` (`ShippingMethodConfig`)
+- [ ] `apps/ecommerce/models/CartCheckout/PaymentMethods.py` (`PaymentMethodConfig`)
+- [ ] `models/__init__.py` - add 9.4 re-export block
+
+### Layer 2: Forms (`apps/ecommerce/forms/CartCheckout/`)
+- [ ] `apps/ecommerce/forms/CartCheckout/__init__.py`
+- [ ] `apps/ecommerce/forms/CartCheckout/Carts.py` (`CartForm`, `CartItemForm`)
+- [ ] `apps/ecommerce/forms/CartCheckout/CheckoutSessions.py` (`CheckoutSessionForm`)
+- [ ] `apps/ecommerce/forms/CartCheckout/ShippingMethods.py` (`ShippingMethodConfigForm`)
+- [ ] `apps/ecommerce/forms/CartCheckout/PaymentMethods.py` (`PaymentMethodConfigForm`)
+- [ ] `forms/__init__.py` - add 9.4 re-export block
+
+### Layer 3: Views (`apps/ecommerce/views/CartCheckout/`)
+- [ ] `apps/ecommerce/views/CartCheckout/__init__.py`
+- [ ] `apps/ecommerce/views/CartCheckout/Carts.py` (Full CRUD + Abandonment Recovery trigger)
+- [ ] `apps/ecommerce/views/CartCheckout/CheckoutSessions.py` (Full CRUD + Step advance action)
+- [ ] `apps/ecommerce/views/CartCheckout/ShippingMethods.py` (Full CRUD + toggle active action)
+- [ ] `apps/ecommerce/views/CartCheckout/PaymentMethods.py` (Full CRUD + toggle sandbox action)
+- [ ] `views/__init__.py` - add 9.4 re-export block
+
+### Layer 4: URLs (`apps/ecommerce/urls/CartCheckout/`)
+- [ ] `apps/ecommerce/urls/CartCheckout/__init__.py`
+- [ ] `apps/ecommerce/urls/CartCheckout/Carts.py`
+- [ ] `apps/ecommerce/urls/CartCheckout/CheckoutSessions.py`
+- [ ] `apps/ecommerce/urls/CartCheckout/ShippingMethods.py`
+- [ ] `apps/ecommerce/urls/CartCheckout/PaymentMethods.py`
+- [ ] `urls/__init__.py` - concatenate 9.4 urlpatterns into ecommerce routing
+
+### Layer 5: Admin & Seeder & Navigation
+- [ ] `apps/ecommerce/admin.py` - register all 4 models + CartItem inline
+- [ ] `apps/ecommerce/management/commands/seed_ecommerce.py` - extend with idempotent 9.4 demo data
+- [ ] `apps/core/navigation.py` - add `LIVE_LINKS["9.4"]` entry with all 5 NavERP.md bullets:
+  - "Persistent & Guest Cart": "ecommerce:cart_list"
+  - "One-Page & Multi-Step Checkout": "ecommerce:checkoutsession_list"
+  - "Shipping Rate Calculation": "ecommerce:shippingmethodconfig_list"
+  - "Tax Calculation & Compliance": "ecommerce:checkoutsession_list"
+  - "Payment Method Orchestration": "ecommerce:paymentmethodconfig_list"
+
+---
+
+## Templates (`templates/ecommerce/cartcheckout/`)
+
+- [ ] `templates/ecommerce/cartcheckout/cart/list.html`
+- [ ] `templates/ecommerce/cartcheckout/cart/detail.html`
+- [ ] `templates/ecommerce/cartcheckout/cart/form.html`
+- [ ] `templates/ecommerce/cartcheckout/checkoutsession/list.html`
+- [ ] `templates/ecommerce/cartcheckout/checkoutsession/detail.html`
+- [ ] `templates/ecommerce/cartcheckout/checkoutsession/form.html`
+- [ ] `templates/ecommerce/cartcheckout/shippingmethodconfig/list.html`
+- [ ] `templates/ecommerce/cartcheckout/shippingmethodconfig/detail.html`
+- [ ] `templates/ecommerce/cartcheckout/shippingmethodconfig/form.html`
+- [ ] `templates/ecommerce/cartcheckout/paymentmethodconfig/list.html`
+- [ ] `templates/ecommerce/cartcheckout/paymentmethodconfig/detail.html`
+- [ ] `templates/ecommerce/cartcheckout/paymentmethodconfig/form.html`
+
+---
+
+## Verification Steps
+- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1)
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency)
+- [ ] `venv\Scripts\python.exe manage.py check`
+- [ ] Smoke test script in `temp/smoke_ecommerce_9_4.py`:
+  - Login as `admin_acme`
+  - GET all new 9.4 URLs -> verify 200/302
+  - Check rendered HTML: no leaked comments (`{#`), proper title, seeded records visible
+  - Test cross-tenant isolation (IDOR -> 404)
+  - Test negative/non-numeric filter inputs (L11)
+  - Verify `LIVE_LINKS["9.4"]` sidebar navigation
+
+---
+
+## Close-Out Steps
+- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`
+- [ ] Append findings to `.claude/tasks/review-ecommerce-9.4.md`
+- [ ] Run Phase 5 `code-fixer` agent to burn down findings
+- [ ] Run Phase 6 automated test suite:
+  - Update `apps/ecommerce/tests/conftest.py`
+  - Author `test_cartcheckout_models.py`
+  - Author `test_cartcheckout_forms.py`
+  - Author `test_cartcheckout_views.py`
+  - Author `test_cartcheckout_security.py`
+  - Run full unfiltered suite `pytest apps/ecommerce/tests/`
+- [ ] Phase 7 documentation:
+  - Update `.claude/skills/ecommerce/SKILL.md`
+  - Update `README.md`
+  - Track any deferred features in `.claude/tasks/gaps-ecommerce-9.4.md`
