@@ -3,6 +3,10 @@ from apps.ecommerce.models.CartCheckout.Carts import Cart, CartItem
 from apps.ecommerce.models.CartCheckout.CheckoutSessions import CheckoutSession
 from apps.ecommerce.models.CartCheckout.PaymentMethods import PaymentMethodConfig
 from apps.ecommerce.models.CartCheckout.ShippingMethods import ShippingMethodConfig
+from apps.ecommerce.models.CustomerProfile.CustomerAccountProfiles import CustomerAccountProfile
+from apps.ecommerce.models.CustomerProfile.CustomerAddressPreferences import CustomerAddressPreference
+from apps.ecommerce.models.CustomerProfile.CustomerPrivacyRequests import CustomerPrivacyRequest
+from apps.ecommerce.models.CustomerProfile.CustomerWishlists import CustomerWishlist, CustomerWishlistItem
 from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPolicy
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
@@ -50,5 +54,11 @@ __all__ = [
     "OrderRoutingRule",
     "OrderFulfillment",
     "ReturnMerchandiseAuthorization",
+    # 9.6 Customer Account & Profile
+    "CustomerAccountProfile",
+    "CustomerAddressPreference",
+    "CustomerWishlist",
+    "CustomerWishlistItem",
+    "CustomerPrivacyRequest",
 ]
 
