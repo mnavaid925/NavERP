@@ -10,6 +10,10 @@ from apps.ecommerce.forms.InventoryStock.InventoryAllocations import (
     InventoryAllocationForm,
     StockAdjustmentActionForm,
 )
+from apps.ecommerce.forms.OrderManagement.EcommerceOrders import EcommerceOrderForm, EcommerceOrderLineForm
+from apps.ecommerce.forms.OrderManagement.OrderFulfillments import OrderFulfillmentForm
+from apps.ecommerce.forms.OrderManagement.OrderRoutingRules import OrderRoutingRuleForm
+from apps.ecommerce.forms.OrderManagement.ReturnMerchandiseAuthorizations import ReturnMerchandiseAuthorizationForm
 from apps.ecommerce.forms.PricingPromotion.CompetitorPriceMonitors import CompetitorPriceMonitorForm
 from apps.ecommerce.forms.PricingPromotion.CouponPromotions import CouponPromotionForm
 from apps.ecommerce.forms.PricingPromotion.DynamicPriceRules import DynamicPriceRuleForm
@@ -48,5 +52,11 @@ __all__ = [
     "CheckoutSessionForm",
     "ShippingMethodConfigForm",
     "PaymentMethodConfigForm",
+    # 9.5 Order Management System (OMS)
+    "EcommerceOrderForm",
+    "EcommerceOrderLineForm",
+    "OrderRoutingRuleForm",
+    "OrderFulfillmentForm",
+    "ReturnMerchandiseAuthorizationForm",
 ]
 
