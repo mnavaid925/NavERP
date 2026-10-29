@@ -70,9 +70,10 @@ def test_customerprofile_model_fields_contract():
 
 
 def test_customerprofile_choices_contract():
-    for field_name, expected_choices in CUSTOMERPROFILE_CHOICES["CustomerAccountProfile"].items():
-        actual = tuple(getattr(CustomerAccountProfile, f"{field_name.upper()}_CHOICES"))
-        assert actual == expected_choices, f"Choices mismatch on CustomerAccountProfile.{field_name}"
+    assert tuple(CustomerAccountProfile.TIER_CHOICES) == CUSTOMERPROFILE_CHOICES["CustomerAccountProfile"]["tier"]
+    assert tuple(CustomerAccountProfile.STATUS_CHOICES) == CUSTOMERPROFILE_CHOICES["CustomerAccountProfile"]["status"]
+    assert tuple(CustomerAccountProfile.AUTH_MODE_CHOICES) == CUSTOMERPROFILE_CHOICES["CustomerAccountProfile"]["auth_mode"]
+    assert tuple(CustomerAccountProfile.FREQUENCY_CHOICES) == CUSTOMERPROFILE_CHOICES["CustomerAccountProfile"]["notification_frequency"]
 
     assert tuple(CustomerAddressPreference.WINDOW_CHOICES) == CUSTOMERPROFILE_CHOICES["CustomerAddressPreference"]["preferred_delivery_window"]
     assert tuple(CustomerWishlist.VISIBILITY_CHOICES) == CUSTOMERPROFILE_CHOICES["CustomerWishlist"]["visibility"]
