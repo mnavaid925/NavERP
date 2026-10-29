@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Shopping Carts · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:cart_list' %}">Cart & Checkout</a>
+            <span>/</span>
+            <span>Carts</span>
+        </div>
+        <h1 class="page-title">Shopping Carts (Persistent & Guest)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:cart_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Cart
+        </a>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'ecommerce:cart_list' %}" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div class="form-group mb-0">
+                <label for="q" class="form-label">Search Carts</label>
+                <div class="relative">
+                    <input type="text" name="q" id="q" value="{{ current_q }}" class="form-input pl-10" placeholder="Search by number, email, session...">
+                    <i data-lucide="search" class="absolute left-3 top-2.5 text-slate-400 w-4 h-4"></i>
+                </div>
+            </div>
+
+            <div class="form-group mb-0">
+                <label for="status" class="form-label">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if current_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                <a href="{% url 'ecommerce:cart_list' %}" class="btn btn-outline">
+                    <i data-lucide="x"></i> Reset
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Cart Number</th>
+                    <th>Customer / Guest</th>
+                    <th>Status</th>
+                    <th>Items</th>
+                    <th>Subtotal</th>
+                    <th>Grand Total</th>
+                    <th>Last Active</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cart in carts %}
+                <tr>
+                    <td class="font-medium text-slate-900">
+                        <a href="{% url 'ecommerce:cart_detail' cart.pk %}" class="hover:text-blue-600">
+                            {{ cart.number }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if cart.customer %}
+                            <div class="font-medium">{{ cart.customer.name }}</div>
+                            <div class="text-xs text-slate-500">{{ cart.email|default:"Registered Customer" }}</div>
+                        {% else %}
+                            <div class="font-medium text-slate-700">Guest Visitor</div>
+                            <div class="text-xs text-slate-500">{{ cart.email|default:cart.session_key|truncatechars:16 }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if cart.status == "active" %}
+                            <span class="badge badge-green">Active</span>
+                        {% elif cart.status == "locked" %}
+                            <span class="badge badge-amber">Locked</span>
+                        {% elif cart.status == "abandoned" %}
+                            <span class="badge badge-red">Abandoned</span>
+                        {% elif cart.status == "converted" %}
+                            <span class="badge badge-info">Converted</span>
+                        {% else %}
+                            <span class="badge badge-slate">{{ cart.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ cart.item_count }} items</span>
+                    </td>
+                    <td>${{ cart.subtotal }}</td>
+                    <td class="font-semibold text-slate-900">${{ cart.grand_total }} {{ cart.currency }}</td>
+                    <td class="text-sm text-slate-500">{{ cart.last_activity_at|date:"M d, Y H:i" }}</td>
+                    <td class="table-actions text-right">
+                        <div class="flex items-center justify-end gap-2">
+                            <a href="{% url 'ecommerce:cart_detail' cart.pk %}" class="btn btn-icon btn-outline" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:cart_edit' cart.pk %}" class="btn btn-icon btn-outline" title="Edit Cart">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'ecommerce:cart_delete' cart.pk %}" onsubmit="return confirm('Delete cart {{ cart.number }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Cart">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="shopping-cart" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-900">No shopping carts found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Start by creating a new cart or wait for shoppers to add items.</p>
+                            <a href="{% url 'ecommerce:cart_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i> New Cart
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="text-sm text-slate-500">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} carts
+        </div>
+        <div class="flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if current_q %}&q={{ current_q }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-3 py-1 text-sm font-medium text-slate-700">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if current_q %}&q={{ current_q }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
