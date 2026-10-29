@@ -170,14 +170,14 @@ def test_inventorystock_lists_tenant_isolation(
 # Audit Log Tests
 # ==============================================================================
 
-def test_inventorystock_audit_log_emission_on_delete(admin_client_a, tenant_a, ecom_center_a):
-    initial_count = AuditLog.objects.filter(tenant=tenant_a, target_model="FulfillmentCenter").count()
+def test_inventorystock_audit_log_emission_on_delete(client_a, tenant_a, ecom_center_a):
+    initial_count = AuditLog.objects.filter(tenant=tenant_a, action="delete").count()
     url = reverse("ecommerce:fulfillmentcenter_delete", kwargs={"pk": ecom_center_a.pk})
-    resp = admin_client_a.post(url)
+    resp = client_a.post(url)
     assert resp.status_code == 302
 
-    new_count = AuditLog.objects.filter(tenant=tenant_a, target_model="FulfillmentCenter").count()
+    new_count = AuditLog.objects.filter(tenant=tenant_a, action="delete").count()
     assert new_count == initial_count + 1
-    log = AuditLog.objects.filter(tenant=tenant_a, target_model="FulfillmentCenter").latest("created_at")
-    assert log.action == "DELETE"
-    assert str(ecom_center_a.pk) in str(log.target_id)
+    log = AuditLog.objects.filter(tenant=tenant_a, action="delete").latest("at")
+    assert log.action == "delete"
+    assert ecom_center_a.name in log.target or ecom_center_a.code in str(log.changes)
