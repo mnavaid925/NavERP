@@ -81,12 +81,11 @@ def personalizedexperience_create(request):
             experience.tenant = request.tenant
             experience.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                experience,
                 "create",
-                "PersonalizedExperience",
-                experience.pk,
-                f"Created personalized experience {experience.name} ({experience.number})",
+                {"name": experience.name, "number": experience.number},
+                tenant=request.tenant,
             )
             messages.success(request, f"Personalized experience '{experience.name}' created.")
             return redirect("ecommerce:personalizedexperience_detail", pk=experience.pk)
@@ -109,12 +108,11 @@ def personalizedexperience_edit(request, pk):
         if form.is_valid():
             experience = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                experience,
                 "update",
-                "PersonalizedExperience",
-                experience.pk,
-                f"Updated personalized experience {experience.name} ({experience.number})",
+                {"name": experience.name, "number": experience.number},
+                tenant=request.tenant,
             )
             messages.success(request, f"Personalized experience '{experience.name}' updated.")
             return redirect("ecommerce:personalizedexperience_detail", pk=experience.pk)
@@ -138,12 +136,11 @@ def personalizedexperience_delete(request, pk):
     number = experience.number
     experience.delete()
     write_audit_log(
-        request.tenant,
         request.user,
+        experience,
         "delete",
-        "PersonalizedExperience",
-        pk,
-        f"Deleted personalized experience {name} ({number})",
+        {"name": name, "number": number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Personalized experience '{name}' deleted.")
     return redirect("ecommerce:personalizedexperience_list")
@@ -158,12 +155,11 @@ def personalizedexperience_toggle(request, pk):
     experience.save(update_fields=["is_active", "updated_at"])
     state = "activated" if experience.is_active else "deactivated"
     write_audit_log(
-        request.tenant,
         request.user,
-        "toggle",
-        "PersonalizedExperience",
-        experience.pk,
-        f"{state.capitalize()} personalized experience {experience.name} ({experience.number})",
+        experience,
+        "update",
+        {"is_active": experience.is_active, "number": experience.number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Personalized experience '{experience.name}' {state}.")
     return redirect("ecommerce:personalizedexperience_detail", pk=experience.pk)
