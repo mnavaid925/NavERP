@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -182,7 +182,9 @@ def customerprivacyrequest_generate_export(request, pk):
 
     # Assemble JSON export payload
     profile_data = {}
-    profile = CustomerAccountProfile.objects.filter(tenant=request.tenant, customer=customer).first()
+    profile = CustomerAccountProfile.objects.filter(
+        tenant=request.tenant, customer=customer
+    ).select_related("preferred_currency").first()
     if profile:
         profile_data = {
             "profile_number": profile.number,
@@ -196,7 +198,9 @@ def customerprivacyrequest_generate_export(request, pk):
         }
 
     address_data = []
-    for pref in CustomerAddressPreference.objects.filter(tenant=request.tenant, customer=customer):
+    for pref in CustomerAddressPreference.objects.filter(
+        tenant=request.tenant, customer=customer
+    ).select_related("address"):
         address_data.append({
             "label": pref.label,
             "line1": pref.address.line1 if pref.address else "",
@@ -207,10 +211,12 @@ def customerprivacyrequest_generate_export(request, pk):
         })
 
     wishlist_data = []
-    for w in CustomerWishlist.objects.filter(tenant=request.tenant, customer=customer):
+    for w in CustomerWishlist.objects.filter(
+        tenant=request.tenant, customer=customer
+    ).annotate(items_count=Count("items")):
         wishlist_data.append({
             "name": w.name,
-            "items_count": w.items.count(),
+            "items_count": w.items_count,
         })
 
     export_payload = {
