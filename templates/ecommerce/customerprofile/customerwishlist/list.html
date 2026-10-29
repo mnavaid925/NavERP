@@ -54,7 +54,7 @@
           <i data-lucide="filter" class="w-4 h-4"></i>
           <span>Filter</span>
         </button>
-        <a href="{% url 'ecommerce:customerwishlist_list' %}" class="btn btn-outline text-slate-600" title="Reset Filters">
+        <a href="{% url 'ecommerce:customerwishlist_list' %}" class="btn btn-outline text-slate-600" title="Reset Filters" aria-label="Reset Filters">
           <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
         </a>
       </div>
@@ -116,15 +116,15 @@
               </td>
               <td class="py-3 px-4 text-center">
                 <div class="table-actions flex items-center justify-center gap-2">
-                  <a href="{% url 'ecommerce:customerwishlist_detail' w.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View Wishlist">
+                  <a href="{% url 'ecommerce:customerwishlist_detail' w.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View Wishlist" aria-label="View Wishlist">
                     <i data-lucide="eye" class="w-4 h-4"></i>
                   </a>
-                  <a href="{% url 'ecommerce:customerwishlist_edit' w.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit Wishlist">
+                  <a href="{% url 'ecommerce:customerwishlist_edit' w.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit Wishlist" aria-label="Edit Wishlist">
                     <i data-lucide="pencil" class="w-4 h-4"></i>
                   </a>
                   <form method="post" action="{% url 'ecommerce:customerwishlist_delete' w.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete wishlist {{ w.name }}?');">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete Wishlist">
+                    <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete Wishlist" aria-label="Delete Wishlist">
                       <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>
                   </form>
