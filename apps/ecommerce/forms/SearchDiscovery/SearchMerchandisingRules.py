@@ -62,6 +62,13 @@ class SearchMerchandisingRuleForm(TenantUniqueMixin, TenantModelForm):
             self.fields["target_category"].empty_label = "-- Select Category (if Category Rule) --"
             self.fields["boosted_product"].empty_label = "-- Select Target Product (if Product Action) --"
 
+    def clean_redirect_url(self):
+        url = self.cleaned_data.get("redirect_url", "").strip()
+        if url:
+            if url.startswith("//") or url.lower().startswith(("javascript:", "data:", "vbscript:")):
+                raise forms.ValidationError("Unsafe URL scheme or protocol-relative URL is not permitted.")
+        return url
+
     def clean(self):
         cleaned = super().clean()
         if self.tenant is not None:
