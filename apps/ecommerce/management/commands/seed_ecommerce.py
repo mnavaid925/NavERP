@@ -5,7 +5,11 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from apps.core.models import Tenant
+from apps.core.models import Party, Tenant
+from apps.ecommerce.models.CartCheckout.Carts import Cart, CartItem
+from apps.ecommerce.models.CartCheckout.CheckoutSessions import CheckoutSession
+from apps.ecommerce.models.CartCheckout.PaymentMethods import PaymentMethodConfig
+from apps.ecommerce.models.CartCheckout.ShippingMethods import ShippingMethodConfig
 from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPolicy
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
@@ -813,5 +817,308 @@ class Command(BaseCommand):
                     "notes": "Competitor apparel tracking with 5% undercut rule.",
                 },
             )
+
+        # ----------------------------------------------------------------------
+        # 9.4 Shopping Cart & Checkout Seeding
+        # ----------------------------------------------------------------------
+        # 1. Shipping Methods
+        ship_ground, _ = ShippingMethodConfig.objects.get_or_create(
+            tenant=tenant,
+            code="GROUND",
+            defaults={
+                "name": "Standard Ground Delivery",
+                "carrier": "custom",
+                "calculation_type": "flat_rate",
+                "base_rate": Decimal("9.99"),
+                "estimated_days_min": 3,
+                "estimated_days_max": 5,
+                "destination_countries": "US,CA",
+                "is_active": True,
+                "sort_order": 1,
+                "description": "Standard door-to-door ground parcel delivery via local fleet.",
+            },
+        )
+
+        ship_express, _ = ShippingMethodConfig.objects.get_or_create(
+            tenant=tenant,
+            code="EXPRESS",
+            defaults={
+                "name": "Express 2-Day Air",
+                "carrier": "fedex",
+                "calculation_type": "weight_tiered",
+                "base_rate": Decimal("19.99"),
+                "cost_per_kg": Decimal("2.50"),
+                "estimated_days_min": 1,
+                "estimated_days_max": 2,
+                "destination_countries": "US,CA,GB,DE",
+                "is_active": True,
+                "sort_order": 2,
+                "description": "Expedited air cargo delivery via FedEx Priority.",
+            },
+        )
+
+        ship_free, _ = ShippingMethodConfig.objects.get_or_create(
+            tenant=tenant,
+            code="FREE_75",
+            defaults={
+                "name": "Free Economy Shipping ($75+)",
+                "carrier": "usps",
+                "calculation_type": "free_threshold",
+                "base_rate": Decimal("7.99"),
+                "free_shipping_threshold": Decimal("75.00"),
+                "estimated_days_min": 5,
+                "estimated_days_max": 8,
+                "destination_countries": "US",
+                "is_active": True,
+                "sort_order": 3,
+                "description": "Complimentary economy parcel post on orders exceeding $75.",
+            },
+        )
+
+        ship_pickup, _ = ShippingMethodConfig.objects.get_or_create(
+            tenant=tenant,
+            code="PICKUP",
+            defaults={
+                "name": "Local Warehouse Pickup",
+                "carrier": "custom",
+                "calculation_type": "local_pickup",
+                "base_rate": Decimal("0.00"),
+                "estimated_days_min": 1,
+                "estimated_days_max": 1,
+                "destination_countries": "ALL",
+                "is_active": True,
+                "sort_order": 4,
+                "description": "Customer self-service collection at central fulfillment depot.",
+            },
+        )
+
+        # 2. Payment Methods
+        pay_stripe, _ = PaymentMethodConfig.objects.get_or_create(
+            tenant=tenant,
+            name="Credit / Debit Card (Stripe)",
+            defaults={
+                "provider": "stripe",
+                "method_category": "credit_card",
+                "environment": "sandbox",
+                "is_active": True,
+                "display_order": 1,
+                "fee_type": "none",
+                "supported_currencies": "USD,EUR,GBP",
+                "instructions": "Enter card credentials securely through PCI SAQ-A compliant iframe.",
+                "supports_refunds": True,
+            },
+        )
+
+        pay_paypal, _ = PaymentMethodConfig.objects.get_or_create(
+            tenant=tenant,
+            name="PayPal Express Checkout",
+            defaults={
+                "provider": "paypal",
+                "method_category": "wallet",
+                "environment": "sandbox",
+                "is_active": True,
+                "display_order": 2,
+                "fee_type": "none",
+                "supported_currencies": "USD,EUR,GBP",
+                "instructions": "Log in to PayPal to complete one-touch checkout.",
+                "supports_refunds": True,
+            },
+        )
+
+        pay_klarna, _ = PaymentMethodConfig.objects.get_or_create(
+            tenant=tenant,
+            name="Klarna Buy Now Pay Later",
+            defaults={
+                "provider": "klarna",
+                "method_category": "bnpl",
+                "environment": "sandbox",
+                "is_active": True,
+                "display_order": 3,
+                "fee_type": "none",
+                "min_order_amount": Decimal("35.00"),
+                "max_order_amount": Decimal("1500.00"),
+                "supported_currencies": "USD,EUR",
+                "instructions": "Split purchase into 4 interest-free installments.",
+                "supports_refunds": True,
+            },
+        )
+
+        pay_wire, _ = PaymentMethodConfig.objects.get_or_create(
+            tenant=tenant,
+            name="Direct Bank Wire Transfer",
+            defaults={
+                "provider": "bank_transfer",
+                "method_category": "bank_transfer",
+                "environment": "production",
+                "is_active": True,
+                "display_order": 4,
+                "fee_type": "none",
+                "supported_currencies": "USD,EUR,GBP",
+                "instructions": "Wire remittance: Routing #021000021, Account #9876543210 (NavERP Corp).",
+                "supports_refunds": False,
+            },
+        )
+
+        pay_cod, _ = PaymentMethodConfig.objects.get_or_create(
+            tenant=tenant,
+            name="Cash on Delivery (COD)",
+            defaults={
+                "provider": "cod",
+                "method_category": "cash_on_delivery",
+                "environment": "production",
+                "is_active": True,
+                "display_order": 5,
+                "fee_type": "fixed",
+                "fee_amount": Decimal("5.00"),
+                "max_order_amount": Decimal("500.00"),
+                "supported_currencies": "USD",
+                "instructions": "Pay courier upon physical package delivery. Cash or cashier check.",
+                "supports_refunds": False,
+            },
+        )
+
+        # 3. Carts & Line Items
+        cust_party = Party.objects.filter(tenant=tenant).order_by("id").first()
+
+        cart_active, created = Cart.objects.get_or_create(
+            tenant=tenant,
+            session_key="sess_cust_active_demo",
+            defaults={
+                "customer": cust_party,
+                "email": "customer.active@example.com",
+                "status": "active",
+                "currency": "USD",
+                "subtotal": Decimal("598.00"),
+                "grand_total": Decimal("598.00"),
+                "notes": "VIP customer persistent desktop cart session.",
+            },
+        )
+        if created and v1 and prod_headphones:
+            CartItem.objects.create(
+                cart=cart_active,
+                product=prod_headphones,
+                variant=v1,
+                quantity=2,
+                unit_price=v1.price,
+                total_price=(v1.price * 2).quantize(Decimal("0.01")),
+            )
+            cart_active.recalculate_totals()
+
+        cart_abandoned, created_ab = Cart.objects.get_or_create(
+            tenant=tenant,
+            session_key="sess_guest_abandoned_abc123",
+            defaults={
+                "email": "guest.shopper@example.com",
+                "status": "abandoned",
+                "currency": "USD",
+                "subtotal": Decimal("25.00"),
+                "grand_total": Decimal("25.00"),
+                "abandoned_at": now - timedelta(hours=6),
+                "recovery_token": f"recov_token_demo_{tenant.pk}_{abs(hash(tenant.name)) % 100000}",
+                "recovery_sent_at": now - timedelta(hours=1),
+                "notes": "Anonymous guest dropped off at checkout step 2.",
+            },
+        )
+        if created_ab and v3 and prod_tshirt:
+            CartItem.objects.create(
+                cart=cart_abandoned,
+                product=prod_tshirt,
+                variant=v3,
+                quantity=1,
+                unit_price=v3.price,
+                total_price=v3.price,
+            )
+            cart_abandoned.recalculate_totals()
+
+        cart_checkout, created_ck = Cart.objects.get_or_create(
+            tenant=tenant,
+            session_key="sess_guest_checkout_999",
+            defaults={
+                "email": "checkout.shopper@example.com",
+                "status": "locked",
+                "currency": "USD",
+                "subtotal": Decimal("349.00"),
+                "grand_total": Decimal("358.99"),
+                "notes": "Active checkout session in progress.",
+            },
+        )
+        if created_ck and v1 and prod_headphones:
+            CartItem.objects.create(
+                cart=cart_checkout,
+                product=prod_headphones,
+                variant=v1,
+                quantity=1,
+                unit_price=v1.price,
+                total_price=v1.price,
+            )
+            if v3 and prod_tshirt:
+                CartItem.objects.create(
+                    cart=cart_checkout,
+                    product=prod_tshirt,
+                    variant=v3,
+                    quantity=2,
+                    unit_price=v3.price,
+                    total_price=(v3.price * 2).quantize(Decimal("0.01")),
+                )
+            cart_checkout.recalculate_totals()
+
+        # 4. Checkout Sessions
+        CheckoutSession.objects.get_or_create(
+            tenant=tenant,
+            cart=cart_checkout,
+            defaults={
+                "customer": cust_party,
+                "email": "checkout.shopper@example.com",
+                "phone": "+1-555-0199",
+                "flow_type": "one_page",
+                "current_step": "payment",
+                "status": "in_progress",
+                "shipping_name": "Jane Shopper",
+                "shipping_address_line1": "742 Evergreen Terrace",
+                "shipping_city": "Springfield",
+                "shipping_state": "IL",
+                "shipping_postal_code": "62704",
+                "shipping_country": "US",
+                "billing_same_as_shipping": True,
+                "shipping_method": ship_ground,
+                "payment_method": pay_stripe,
+                "subtotal_amount": cart_checkout.subtotal,
+                "shipping_amount": Decimal("9.99"),
+                "total_amount": cart_checkout.subtotal + Decimal("9.99"),
+                "payment_status": "pending",
+                "expires_at": now + timedelta(hours=20),
+            },
+        )
+
+        CheckoutSession.objects.get_or_create(
+            tenant=tenant,
+            cart=cart_active,
+            defaults={
+                "customer": cust_party,
+                "email": "customer.active@example.com",
+                "phone": "+1-555-0144",
+                "flow_type": "multi_step",
+                "current_step": "completed",
+                "status": "completed",
+                "shipping_name": "Alice Montgomery",
+                "shipping_address_line1": "100 Corporate Parkway",
+                "shipping_city": "Chicago",
+                "shipping_state": "IL",
+                "shipping_postal_code": "60601",
+                "shipping_country": "US",
+                "billing_same_as_shipping": True,
+                "shipping_method": ship_express,
+                "payment_method": pay_stripe,
+                "subtotal_amount": cart_active.subtotal,
+                "shipping_amount": Decimal("19.99"),
+                "total_amount": cart_active.subtotal + Decimal("19.99"),
+                "payment_status": "paid",
+                "payment_transaction_id": "ch_stripe_demo_94883",
+                "order_reference": "ORD-2026-94001",
+                "expires_at": now + timedelta(days=1),
+                "completed_at": now - timedelta(hours=1),
+            },
+        )
+
 
 
