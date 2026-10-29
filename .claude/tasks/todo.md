@@ -31,16 +31,16 @@
 ---
 
 ## 9.8-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO duplicate product or customer table** — Recommendations and clickstream link directly to `ecommerce.CatalogProduct` and `core.Party` / `ecommerce.CustomerAccountProfile`.
-- [ ] **NO external vector DB or SaaS dependency** — Algorithms execute cleanly within standard Django ORM (compatible with PostgreSQL/SQLite); external neural vector cluster sync (Pinecone/Qdrant) is deferred to enterprise integrations.
-- [ ] **NO full-page CMS builder** — Sibling Sub-module 9.9 owns multi-column WYSIWYG page builders; 9.8 provides dynamic personalized content cards and hero banners.
-- [ ] **NO outbound mass SMTP email delivery daemon** — Sibling Sub-module 9.10 owns bulk marketing email pipelines; 9.8 detects trigger eligibility and manages trigger lifecycle readiness.
+- [x] **NO duplicate product or customer table** — Recommendations and clickstream link directly to `ecommerce.CatalogProduct` and `core.Party` / `ecommerce.CustomerAccountProfile`.
+- [x] **NO external vector DB or SaaS dependency** — Algorithms execute cleanly within standard Django ORM (compatible with PostgreSQL/SQLite); external neural vector cluster sync (Pinecone/Qdrant) is deferred to enterprise integrations.
+- [x] **NO full-page CMS builder** — Sibling Sub-module 9.9 owns multi-column WYSIWYG page builders; 9.8 provides dynamic personalized content cards and hero banners.
+- [x] **NO outbound mass SMTP email delivery daemon** — Sibling Sub-module 9.10 owns bulk marketing email pipelines; 9.8 detects trigger eligibility and manages trigger lifecycle readiness.
 
 ---
 
 ## Models (4 models in `apps/ecommerce/models/Personalization/`)
 
-- [ ] **`AudienceSegment`** [Prefix: `ESEG-`] (`apps/ecommerce/models/Personalization/AudienceSegments.py`)
+- [x] **`AudienceSegment`** [Prefix: `ESEG-`] (`apps/ecommerce/models/Personalization/AudienceSegments.py`)
   - **Purpose**: Dynamic shopper cohorts defined by RFM metrics, lifecycle stages, category affinities, and spend thresholds.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -63,7 +63,7 @@
     - `Index(fields=["tenant", "is_active", "lifecycle_stage"], name="idx_eseg_ten_act_stage")`
   - **Form Exclusions**: `tenant`, `number`, `cached_member_count`, `last_evaluated_at`, `created_at`, `updated_at`.
 
-- [ ] **`RecommendationStrategy`** [Prefix: `EREC-`] (`apps/ecommerce/models/Personalization/RecommendationStrategies.py`)
+- [x] **`RecommendationStrategy`** [Prefix: `EREC-`] (`apps/ecommerce/models/Personalization/RecommendationStrategies.py`)
   - **Purpose**: Configures multi-algorithm recommendation logic, placements, ranking constraints, and fallback behavior.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -90,7 +90,7 @@
     - `Index(fields=["tenant", "is_active", "placement"], name="idx_erec_ten_act_place")`
   - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
 
-- [ ] **`PersonalizedExperience`** [Prefix: `EPEX-`] (`apps/ecommerce/models/Personalization/PersonalizedExperiences.py`)
+- [x] **`PersonalizedExperience`** [Prefix: `EPEX-`] (`apps/ecommerce/models/Personalization/PersonalizedExperiences.py`)
   - **Purpose**: Governs dynamic homepage hero banners, curated collections, and automated lifecycle triggers (abandoned cart, browse abandonment).
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -119,7 +119,7 @@
     - `Index(fields=["tenant", "is_active", "experience_type", "priority"], name="idx_epex_ten_act_type_prio")`
   - **Form Exclusions**: `tenant`, `number`, `impression_count`, `click_count`, `conversion_count`, `created_at`, `updated_at`.
 
-- [ ] **`ShopperBehaviorEvent`** [Prefix: `ESBE-`] (`apps/ecommerce/models/Personalization/ShopperBehaviorEvents.py`)
+- [x] **`ShopperBehaviorEvent`** [Prefix: `ESBE-`] (`apps/ecommerce/models/Personalization/ShopperBehaviorEvents.py`)
   - **Purpose**: Granular clickstream and telemetry capture tracking page views, product interactions, cart additions, and intent velocity.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -149,68 +149,68 @@
 ## Backend Packages & Files (Entity-by-Entity)
 
 ### 1. Models Package
-- [ ] `apps/ecommerce/models/Personalization/__init__.py`
-- [ ] `apps/ecommerce/models/Personalization/AudienceSegments.py`
-- [ ] `apps/ecommerce/models/Personalization/RecommendationStrategies.py`
-- [ ] `apps/ecommerce/models/Personalization/PersonalizedExperiences.py`
-- [ ] `apps/ecommerce/models/Personalization/ShopperBehaviorEvents.py`
+- [x] `apps/ecommerce/models/Personalization/__init__.py`
+- [x] `apps/ecommerce/models/Personalization/AudienceSegments.py`
+- [x] `apps/ecommerce/models/Personalization/RecommendationStrategies.py`
+- [x] `apps/ecommerce/models/Personalization/PersonalizedExperiences.py`
+- [x] `apps/ecommerce/models/Personalization/ShopperBehaviorEvents.py`
 
 ### 2. Forms Package
-- [ ] `apps/ecommerce/forms/Personalization/__init__.py`
-- [ ] `apps/ecommerce/forms/Personalization/AudienceSegments.py` (`AudienceSegmentForm`)
-- [ ] `apps/ecommerce/forms/Personalization/RecommendationStrategies.py` (`RecommendationStrategyForm`)
-- [ ] `apps/ecommerce/forms/Personalization/PersonalizedExperiences.py` (`PersonalizedExperienceForm`)
-- [ ] `apps/ecommerce/forms/Personalization/ShopperBehaviorEvents.py` (`ShopperBehaviorEventFilterForm`)
+- [x] `apps/ecommerce/forms/Personalization/__init__.py`
+- [x] `apps/ecommerce/forms/Personalization/AudienceSegments.py` (`AudienceSegmentForm`)
+- [x] `apps/ecommerce/forms/Personalization/RecommendationStrategies.py` (`RecommendationStrategyForm`)
+- [x] `apps/ecommerce/forms/Personalization/PersonalizedExperiences.py` (`PersonalizedExperienceForm`)
+- [x] `apps/ecommerce/forms/Personalization/ShopperBehaviorEvents.py` (`ShopperBehaviorEventFilterForm`)
 
 ### 3. Views Package (Function-Based Views, Tenant Scoped, Audit Log Instrumented)
-- [ ] `apps/ecommerce/views/Personalization/__init__.py`
-- [ ] `apps/ecommerce/views/Personalization/AudienceSegments.py` (list, detail, create, edit, delete, toggle, recalculate)
-- [ ] `apps/ecommerce/views/Personalization/RecommendationStrategies.py` (list, detail, create, edit, delete, toggle)
-- [ ] `apps/ecommerce/views/Personalization/PersonalizedExperiences.py` (list, detail, create, edit, delete, toggle)
-- [ ] `apps/ecommerce/views/Personalization/ShopperBehaviorEvents.py` (list, detail, delete)
-- [ ] `apps/ecommerce/views/Personalization/PersonalizationConsole.py` (workbench, simulate_recommendations HTMX, trigger_simulator)
+- [x] `apps/ecommerce/views/Personalization/__init__.py`
+- [x] `apps/ecommerce/views/Personalization/AudienceSegments.py` (list, detail, create, edit, delete, toggle, recalculate)
+- [x] `apps/ecommerce/views/Personalization/RecommendationStrategies.py` (list, detail, create, edit, delete, toggle)
+- [x] `apps/ecommerce/views/Personalization/PersonalizedExperiences.py` (list, detail, create, edit, delete, toggle)
+- [x] `apps/ecommerce/views/Personalization/ShopperBehaviorEvents.py` (list, detail, delete)
+- [x] `apps/ecommerce/views/Personalization/PersonalizationConsole.py` (workbench, simulate_recommendations HTMX, trigger_simulator)
 
 ### 4. URLs Package
-- [ ] `apps/ecommerce/urls/Personalization/__init__.py`
-- [ ] `apps/ecommerce/urls/Personalization/AudienceSegments.py`
-- [ ] `apps/ecommerce/urls/Personalization/RecommendationStrategies.py`
-- [ ] `apps/ecommerce/urls/Personalization/PersonalizedExperiences.py`
-- [ ] `apps/ecommerce/urls/Personalization/ShopperBehaviorEvents.py`
-- [ ] `apps/ecommerce/urls/Personalization/PersonalizationConsole.py`
+- [x] `apps/ecommerce/urls/Personalization/__init__.py`
+- [x] `apps/ecommerce/urls/Personalization/AudienceSegments.py`
+- [x] `apps/ecommerce/urls/Personalization/RecommendationStrategies.py`
+- [x] `apps/ecommerce/urls/Personalization/PersonalizedExperiences.py`
+- [x] `apps/ecommerce/urls/Personalization/ShopperBehaviorEvents.py`
+- [x] `apps/ecommerce/urls/Personalization/PersonalizationConsole.py`
 
 ### 5. Package Re-Exports & Integrations
-- [ ] Re-export models in `apps/ecommerce/models/__init__.py`
-- [ ] Re-export forms in `apps/ecommerce/forms/__init__.py`
-- [ ] Re-export views in `apps/ecommerce/views/__init__.py`
-- [ ] Wire URLs in `apps/ecommerce/urls/__init__.py`
-- [ ] Register models in `apps/ecommerce/admin.py`
-- [ ] Extend `apps/ecommerce/management/commands/seed_ecommerce.py` with 9.8 demo data
-- [ ] Wire `apps/core/navigation.py` `LIVE_LINKS["9.8"]`
-- [ ] Generate migration `0011` and apply
+- [x] Re-export models in `apps/ecommerce/models/__init__.py`
+- [x] Re-export forms in `apps/ecommerce/forms/__init__.py`
+- [x] Re-export views in `apps/ecommerce/views/__init__.py`
+- [x] Wire URLs in `apps/ecommerce/urls/__init__.py`
+- [x] Register models in `apps/ecommerce/admin.py`
+- [x] Extend `apps/ecommerce/management/commands/seed_ecommerce.py` with 9.8 demo data
+- [x] Wire `apps/core/navigation.py` `LIVE_LINKS["9.8"]`
+- [x] Generate migration `0011` and apply
 
 ---
 
 ## Templates
 
-- [ ] `templates/ecommerce/personalization/audiencesegment/list.html`
-- [ ] `templates/ecommerce/personalization/audiencesegment/detail.html`
-- [ ] `templates/ecommerce/personalization/audiencesegment/form.html`
-- [ ] `templates/ecommerce/personalization/recommendationstrategy/list.html`
-- [ ] `templates/ecommerce/personalization/recommendationstrategy/detail.html`
-- [ ] `templates/ecommerce/personalization/recommendationstrategy/form.html`
-- [ ] `templates/ecommerce/personalization/personalizedexperience/list.html`
-- [ ] `templates/ecommerce/personalization/personalizedexperience/detail.html`
-- [ ] `templates/ecommerce/personalization/personalizedexperience/form.html`
-- [ ] `templates/ecommerce/personalization/shopperbehaviorevent/list.html`
-- [ ] `templates/ecommerce/personalization/shopperbehaviorevent/detail.html`
-- [ ] `templates/ecommerce/personalization/console/workbench.html`
-- [ ] `templates/ecommerce/personalization/console/partials/recommendations_preview.html`
+- [x] `templates/ecommerce/personalization/audiencesegment/list.html`
+- [x] `templates/ecommerce/personalization/audiencesegment/detail.html`
+- [x] `templates/ecommerce/personalization/audiencesegment/form.html`
+- [x] `templates/ecommerce/personalization/recommendationstrategy/list.html`
+- [x] `templates/ecommerce/personalization/recommendationstrategy/detail.html`
+- [x] `templates/ecommerce/personalization/recommendationstrategy/form.html`
+- [x] `templates/ecommerce/personalization/personalizedexperience/list.html`
+- [x] `templates/ecommerce/personalization/personalizedexperience/detail.html`
+- [x] `templates/ecommerce/personalization/personalizedexperience/form.html`
+- [x] `templates/ecommerce/personalization/shopperbehaviorevent/list.html`
+- [x] `templates/ecommerce/personalization/shopperbehaviorevent/detail.html`
+- [x] `templates/ecommerce/personalization/console/workbench.html`
+- [x] `templates/ecommerce/personalization/console/partials/recommendations_preview.html`
 
 ---
 
 ## Wire-up
 
-- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["9.8"]`:
+- [x] `apps/core/navigation.py`: Add `LIVE_LINKS["9.8"]`:
   ```python
   "9.8": {
       "Behavioral Tracking & Profiles": "ecommerce:shopperbehaviorevent_list",
@@ -226,52 +226,77 @@
 ---
 
 ## Step 2d — Migrate + seed + verify
-- [ ] `makemigrations ecommerce` -> `0011`
-- [ ] `migrate`
-- [ ] `seed_ecommerce` (1st run)
-- [ ] `seed_ecommerce` (2nd run, assert idempotent)
-- [ ] `manage.py check` clean
+- [x] `makemigrations ecommerce` -> `0011`
+- [x] `migrate`
+- [x] `seed_ecommerce` (1st run)
+- [x] `seed_ecommerce` (2nd run, assert idempotent)
+- [x] `manage.py check` clean
 
 ---
 
 ## Step 3 — Smoke test
-- [ ] `qa-smoke-tester` verification script in `temp/` against `admin_acme`
-- [ ] Verify HTTP 200 on all list/detail/form/console routes
-- [ ] Verify IDOR 404 for cross-tenant access
+- [x] `qa-smoke-tester` verification script in `temp/` against `admin_acme`
+- [x] Verify HTTP 200 on all list/detail/form/console routes
+- [x] Verify IDOR 404 for cross-tenant access
 
 ---
 
 ## Step 4 — Review (6 passes)
-- [ ] Pass 1: `code-reviewer`
-- [ ] Pass 2: `explorer`
-- [ ] Pass 3: `frontend-reviewer`
-- [ ] Pass 4: `performance-reviewer`
-- [ ] Pass 5: `qa-smoke-tester`
-- [ ] Pass 6: `security-reviewer`
-- [ ] Consolidate, deduplicate and prioritize in `.claude/tasks/review-ecommerce-9.8.md`
+- [x] Pass 1: `code-reviewer`
+- [x] Pass 2: `explorer`
+- [x] Pass 3: `frontend-reviewer`
+- [x] Pass 4: `performance-reviewer`
+- [x] Pass 5: `qa-smoke-tester`
+- [x] Pass 6: `security-reviewer`
+- [x] Consolidate, deduplicate and prioritize in `.claude/tasks/review-ecommerce-9.8.md`
 
 ---
 
 ## Step 5 — Code Fixer
-- [ ] Fix all review findings in `.claude/tasks/review-ecommerce-9.8.md`
+- [x] Fix all review findings in `.claude/tasks/review-ecommerce-9.8.md`
 
 ---
 
 ## Step 6 — Tests
-- [ ] `tests/conftest.py` update with 9.8 fixtures
-- [ ] `tests/test_personalization_models.py`
-- [ ] `tests/test_personalization_forms.py`
-- [ ] `tests/test_personalization_views.py`
-- [ ] `tests/test_personalization_security.py`
-- [ ] Full unfiltered pytest green run
+- [x] `tests/conftest.py` update with 9.8 fixtures
+- [x] `tests/test_personalization_models.py`
+- [x] `tests/test_personalization_forms.py`
+- [x] `tests/test_personalization_views.py`
+- [x] `tests/test_personalization_security.py`
+- [x] Full unfiltered pytest green run
 
 ---
 
 ## Step 7 — Close-out
-- [ ] Document in `.claude/skills/ecommerce/SKILL.md`
-- [ ] Update `README.md`
-- [ ] Record gaps in `.agents/tasks/gaps-ecommerce-9.8.md` (or `.claude/tasks/gaps-ecommerce-9.8.md`)
-- [ ] Final tick-off in `todo.md`
+- [x] Document in `.claude/skills/ecommerce/SKILL.md`
+- [x] Update `README.md`
+- [x] Record gaps in `.agents/tasks/gaps-ecommerce-9.8.md` (or `.claude/tasks/gaps-ecommerce-9.8.md`)
+- [x] Final tick-off in `todo.md`
+
+---
+
+### eCommerce 9.8 — Personalization & Recommendation Engine (close-out 2026-10-30)
+
+- **Models**:
+  - `AudienceSegment` (`ESEG-`): Dynamic shopper cohorts defined by RFM metrics, lifecycle stages, category affinities, and spend thresholds.
+  - `RecommendationStrategy` (`EREC-`): Configures multi-algorithm recommendation logic, placements, ranking constraints, and fallback behavior.
+  - `PersonalizedExperience` (`EPEX-`): Governs dynamic homepage hero banners, curated collections, and automated lifecycle triggers with safe URI scheme protection.
+  - `ShopperBehaviorEvent` (`ESBE-`): Granular clickstream and telemetry capture tracking page views, product interactions, cart additions, and intent velocity.
+- **Workbench & Simulator**:
+  - `PersonalizationConsole` (`personalization_console`): Real-time metrics (VIP counts, at-risk segments, cart triggers, 24h event volume), live campaign previews, and recent telemetry feed.
+  - `recommendation_simulate`: Interactive algorithm simulator with anchor product and strategy controls rendering live product card recommendations via HTMX.
+- **Migration & Database**:
+  - Migration `0011_audiencesegment_personalizedexperience_and_more.py` applied cleanly.
+  - Extended `seed_ecommerce` command with 4 audience cohorts, 4 recommendation rules, 3 personalized experiences, and 10 behavioral clickstream events. Idempotency verified on double-run.
+- **Navigation**:
+  - Wired in `apps/core/navigation.py` under `LIVE_LINKS["9.8"]` mapping all 5 specification bullets plus Workbench Console.
+- **Quality & Review**:
+  - Six read-only review passes consolidated in `.claude/tasks/review-ecommerce-9.8.md`.
+  - Phase 5 burned down all 10 findings: C1 (image attribute fix), C2 (safe URI schemes), C3 (model-level multi-tenant FK validations), I1–I5 (query optimizations with `select_related`), M1–M2 (detail query and empty state simulator link).
+- **Test Coverage**:
+  - 4 serial test files authored: `test_personalization_models.py` (15 tests), `test_personalization_forms.py` (9 tests), `test_personalization_views.py` (13 tests), `test_personalization_security.py` (15 tests).
+  - 52 new tests added. Full unfiltered app test suite: **693 passed** (0 failures).
+- **Gaps**: None (recorded in `.claude/tasks/gaps-ecommerce-9.8.md` and `.agents/tasks/gaps-ecommerce-9.8.md`).
 
 ---
 
