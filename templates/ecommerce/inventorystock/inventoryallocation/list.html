@@ -117,18 +117,18 @@
             </td>
             <td class="text-right table-actions">
               <div class="flex items-center justify-end gap-2">
-                <a href="{% url 'ecommerce:inventoryallocation_detail' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="View details">
+                <a href="{% url 'ecommerce:inventoryallocation_detail' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="View details" aria-label="View details of {{ alloc.variant.sku }}">
                   <i data-lucide="eye" class="w-4 h-4 text-slate-600"></i>
                 </a>
-                <a href="{% url 'ecommerce:inventoryallocation_adjust' alloc.pk %}" class="btn btn-icon btn-outline p-1 hover:text-primary" title="Quick adjust stock">
+                <a href="{% url 'ecommerce:inventoryallocation_adjust' alloc.pk %}" class="btn btn-icon btn-outline p-1 hover:text-primary" title="Quick adjust stock" aria-label="Quick adjust stock for {{ alloc.variant.sku }}">
                   <i data-lucide="sliders" class="w-4 h-4"></i>
                 </a>
-                <a href="{% url 'ecommerce:inventoryallocation_edit' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="Edit allocation">
+                <a href="{% url 'ecommerce:inventoryallocation_edit' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="Edit allocation" aria-label="Edit allocation for {{ alloc.variant.sku }}">
                   <i data-lucide="pencil" class="w-4 h-4 text-slate-600"></i>
                 </a>
                 <form action="{% url 'ecommerce:inventoryallocation_delete' alloc.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to remove allocation for SKU {{ alloc.variant.sku }}?');">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-icon btn-outline p-1 hover:text-red-600" title="Delete allocation">
+                  <button type="submit" class="btn btn-icon btn-outline p-1 hover:text-red-600" title="Delete allocation" aria-label="Delete allocation for {{ alloc.variant.sku }}">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </form>
