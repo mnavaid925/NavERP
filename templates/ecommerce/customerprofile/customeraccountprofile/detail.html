@@ -17,7 +17,7 @@
       <div class="flex items-center gap-3">
         <h1 class="page-title text-2xl font-bold text-slate-900">{{ profile.customer.name }}</h1>
         {% if profile.tier == "vip" %}
-          <span class="badge badge-purple">{{ profile.get_tier_display }}</span>
+          <span class="badge badge-info">{{ profile.get_tier_display }}</span>
         {% elif profile.tier == "platinum" %}
           <span class="badge badge-info">{{ profile.get_tier_display }}</span>
         {% elif profile.tier == "gold" %}
