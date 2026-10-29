@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from apps.ecommerce.models._base import TenantNumbered
@@ -108,3 +109,7 @@ class SearchQueryLog(TenantNumbered):
             self.normalized_query = self.query_text.strip().lower()
         if self.results_count == 0:
             self.is_zero_result = True
+        if self.customer_id and self.tenant_id and self.customer.tenant_id != self.tenant_id:
+            raise ValidationError({"customer": "Customer party must belong to the same tenant."})
+        if self.clicked_product_id and self.tenant_id and self.clicked_product.tenant_id != self.tenant_id:
+            raise ValidationError({"clicked_product": "Clicked product must belong to the same tenant."})
