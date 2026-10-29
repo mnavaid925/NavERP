@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}{{ synonym.number }} · Search Synonyms · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+  <!-- Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:search_console' %}" class="hover:text-blue-600">Search & Discovery</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:searchsynonym_list' %}" class="hover:text-blue-600">Synonyms</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ synonym.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ synonym.name }}</h1>
+        {% if synonym.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-muted">Inactive</span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-slate-500 mt-1 font-mono">Reference: {{ synonym.number }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'ecommerce:searchsynonym_list' %}" class="btn btn-outline text-sm">
+        Back to List
+      </a>
+      <form method="post" action="{% url 'ecommerce:searchsynonym_toggle' synonym.pk %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline text-sm">
+          {% if synonym.is_active %}Deactivate{% else %}Activate{% endif %}
+        </button>
+      </form>
+      <a href="{% url 'ecommerce:searchsynonym_edit' synonym.pk %}" class="btn btn-primary text-sm inline-flex items-center gap-1">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Rule</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:searchsynonym_delete' synonym.pk %}" class="inline" onsubmit="return confirm('Delete synonym rule {{ synonym.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm inline-flex items-center gap-1">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main Card -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="md:col-span-2 space-y-6">
+      <div class="card bg-white p-6 shadow-sm border border-slate-200 rounded-lg">
+        <h2 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-100">
+          Rule Configuration & Mapping
+        </h2>
+
+        <div class="space-y-4">
+          <div>
+            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Synonym Type</span>
+            {% if synonym.synonym_type == "two_way" %}
+              <span class="badge badge-info">Two-Way Equivalent</span>
+              <p class="text-xs text-slate-500 mt-1">Queries for any synonym in this group return results for all other synonyms interchangeably.</p>
+            {% elif synonym.synonym_type == "one_way" %}
+              <span class="badge badge-amber">One-Way Directional</span>
+              <p class="text-xs text-slate-500 mt-1">Queries for the root term expand to include the synonyms, but not vice-versa.</p>
+            {% else %}
+              <span class="badge badge-slate">Explicit Replacement</span>
+              <p class="text-xs text-slate-500 mt-1">Typo correction or brand remapping: query for the root term is rewritten directly to the replacement term.</p>
+            {% endif %}
+          </div>
+
+          <div>
+            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Root Term / Anchor Keyword</span>
+            <div class="font-mono text-sm font-semibold text-slate-900 bg-slate-50 px-3 py-2 rounded border border-slate-200 inline-block">
+              {{ synonym.root_term }}
+            </div>
+          </div>
+
+          <div>
+            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-2">Expanded Synonym Words ({{ synonym_list|length }})</span>
+            <div class="flex flex-wrap gap-2">
+              {% for term in synonym_list %}
+                <span class="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-200">
+                  {{ term }}
+                </span>
+              {% empty %}
+                <span class="text-xs text-slate-400">No synonym terms configured</span>
+              {% endfor %}
+            </div>
+          </div>
+
+          {% if synonym.notes %}
+            <div class="pt-2">
+              <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Internal Notes</span>
+              <p class="text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-line">{{ synonym.notes }}</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar Stats -->
+    <div class="space-y-6">
+      <div class="card bg-white p-6 shadow-sm border border-slate-200 rounded-lg">
+        <h2 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-100">
+          Telemetry & Metadata
+        </h2>
+        <div class="space-y-3 text-sm">
+          <div class="flex justify-between items-center py-1">
+            <span class="text-slate-500 text-xs">Total Query Hits</span>
+            <span class="font-bold text-slate-900 text-base">{{ synonym.hit_count }}</span>
+          </div>
+          <div class="flex justify-between items-center py-1 border-t border-slate-100">
+            <span class="text-slate-500 text-xs">Created At</span>
+            <span class="text-slate-700 text-xs">{{ synonym.created_at|date:"M d, Y H:i" }}</span>
+          </div>
+          <div class="flex justify-between items-center py-1 border-t border-slate-100">
+            <span class="text-slate-500 text-xs">Last Updated</span>
+            <span class="text-slate-700 text-xs">{{ synonym.updated_at|date:"M d, Y H:i" }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card bg-blue-50 p-4 border border-blue-200 rounded-lg text-xs text-blue-800 space-y-2">
+        <div class="flex items-center gap-2 font-semibold">
+          <i data-lucide="info" class="w-4 h-4"></i>
+          <span>Workbench Verification</span>
+        </div>
+        <p>Test how this synonym rule impacts search rankings in real-time in the Discovery Workbench.</p>
+        <a href="{% url 'ecommerce:search_console' %}?q={{ synonym.root_term }}" class="text-blue-700 font-medium underline block pt-1">
+          Test '{{ synonym.root_term }}' in Workbench &rarr;
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
