@@ -54,7 +54,7 @@
           <i data-lucide="filter" class="w-4 h-4"></i>
           <span>Filter</span>
         </button>
-        <a href="{% url 'ecommerce:customeraddresspreference_list' %}" class="btn btn-outline text-slate-600" title="Reset Filters">
+        <a href="{% url 'ecommerce:customeraddresspreference_list' %}" class="btn btn-outline text-slate-600" title="Reset Filters" aria-label="Reset Filters">
           <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
         </a>
       </div>
@@ -120,15 +120,15 @@
               </td>
               <td class="py-3 px-4 text-center">
                 <div class="table-actions flex items-center justify-center gap-2">
-                  <a href="{% url 'ecommerce:customeraddresspreference_detail' pref.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View Preference">
+                  <a href="{% url 'ecommerce:customeraddresspreference_detail' pref.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View Preference" aria-label="View Preference">
                     <i data-lucide="eye" class="w-4 h-4"></i>
                   </a>
-                  <a href="{% url 'ecommerce:customeraddresspreference_edit' pref.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit Preference">
+                  <a href="{% url 'ecommerce:customeraddresspreference_edit' pref.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit Preference" aria-label="Edit Preference">
                     <i data-lucide="pencil" class="w-4 h-4"></i>
                   </a>
                   <form method="post" action="{% url 'ecommerce:customeraddresspreference_delete' pref.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete address preference {{ pref.number }}?');">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete Preference">
+                    <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete Preference" aria-label="Delete Preference">
                       <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>
                   </form>
