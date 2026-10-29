@@ -14,7 +14,9 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 
 @login_required
 def personalizedexperience_list(request):
-    qs = ecommerce_scope(PersonalizedExperience.objects.all(), request)
+    qs = ecommerce_scope(PersonalizedExperience.objects.all(), request).select_related(
+        "target_segment", "target_category", "target_product"
+    )
 
     search_query = request.GET.get("q", "").strip()
     experience_type = request.GET.get("experience_type", "").strip()
