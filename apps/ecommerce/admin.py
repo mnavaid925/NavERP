@@ -24,6 +24,10 @@ from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
 from apps.ecommerce.models.ProductCatalog.ProductRelationships import ProductRelationship
 from apps.ecommerce.models.ProductCatalog.ProductVariants import ProductVariant
 from apps.ecommerce.models.ProductCatalog.StoreCategories import StoreCategory
+from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacetConfig
+from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
+from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
+from apps.ecommerce.models.SearchDiscovery.SearchSynonyms import SearchSynonym
 
 
 @admin.register(StoreCategory)
@@ -257,6 +261,42 @@ class CustomerPrivacyRequestAdmin(admin.ModelAdmin):
     search_fields = ["number", "customer__name", "requested_by_email", "resolution_notes"]
     list_select_related = ["customer"]
     ordering = ["-created_at"]
+
+
+@admin.register(SearchSynonym)
+class SearchSynonymAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "synonym_type", "root_term", "hit_count", "is_active", "created_at"]
+    list_filter = ["synonym_type", "is_active", "tenant"]
+    search_fields = ["number", "name", "root_term", "synonyms", "notes"]
+    ordering = ["root_term", "-created_at"]
+
+
+@admin.register(SearchFacetConfig)
+class SearchFacetConfigAdmin(admin.ModelAdmin):
+    list_display = ["display_order", "name", "code", "source_type", "widget_type", "filter_logic", "category_scope", "is_active"]
+    list_filter = ["source_type", "widget_type", "filter_logic", "is_active", "tenant"]
+    search_fields = ["name", "code", "option_key", "category_scope__name"]
+    list_select_related = ["category_scope"]
+    ordering = ["display_order", "name"]
+
+
+@admin.register(SearchMerchandisingRule)
+class SearchMerchandisingRuleAdmin(admin.ModelAdmin):
+    list_display = ["priority", "name", "rule_type", "trigger_query", "action_type", "boosted_product", "is_active"]
+    list_filter = ["rule_type", "action_type", "match_type", "is_active", "tenant"]
+    search_fields = ["name", "trigger_query", "redirect_url", "banner_title", "boosted_product__name"]
+    list_select_related = ["target_category", "boosted_product"]
+    ordering = ["-priority", "-created_at"]
+
+
+@admin.register(SearchQueryLog)
+class SearchQueryLogAdmin(admin.ModelAdmin):
+    list_display = ["number", "query_text", "results_count", "execution_time_ms", "is_zero_result", "sort_order", "customer", "created_at"]
+    list_filter = ["is_zero_result", "sort_order", "tenant"]
+    search_fields = ["number", "query_text", "normalized_query", "redirected_to", "session_key", "customer__name"]
+    list_select_related = ["customer", "clicked_product"]
+    ordering = ["-created_at"]
+
 
 
 
