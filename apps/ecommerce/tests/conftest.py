@@ -11,6 +11,10 @@ from apps.ecommerce.models import (
     InventoryAllocation,
     BackorderPolicy,
     ChannelInventorySync,
+    DynamicPriceRule,
+    CouponPromotion,
+    FlashSale,
+    CompetitorPriceMonitor,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -447,3 +451,269 @@ def ecom_sync_a(tenant_a, ecom_variant_a, ecom_center_a):
 @pytest.fixture
 def ecom_sync_b(tenant_b, ecom_variant_b, ecom_center_b):
     return _inventorystock_sync(tenant_b, ecom_variant_b, ecom_center_b, channel_type="web_storefront")
+
+
+PRICINGPROMOTION_PAGE_SIZE = 20
+
+PRICINGPROMOTION_MODEL_FIELDS = {
+    "DynamicPriceRule": (
+        "id", "tenant", "number", "name", "rule_type", "adjustment_value",
+        "scope", "category", "product", "variant", "customer_segment",
+        "loyalty_tier", "min_quantity", "country_code", "currency_code",
+        "valid_from", "valid_to", "priority", "is_active", "description",
+        "created_at", "updated_at",
+    ),
+    "CouponPromotion": (
+        "id", "tenant", "number", "code", "name", "discount_type",
+        "discount_value", "min_spend", "max_discount_amount",
+        "usage_limit_total", "usage_limit_per_customer", "used_count",
+        "is_stackable", "loyalty_tier_required", "customer", "valid_from",
+        "valid_to", "is_active", "created_at", "updated_at",
+    ),
+    "FlashSale": (
+        "id", "tenant", "number", "title", "status", "product", "variant",
+        "category", "discount_percentage", "flash_price", "inventory_cap",
+        "units_sold", "max_units_per_order", "start_time", "end_time",
+        "badge_label", "banner_bg_color", "terms_and_conditions",
+        "created_at", "updated_at",
+    ),
+    "CompetitorPriceMonitor": (
+        "id", "tenant", "number", "competitor_name", "product", "variant",
+        "competitor_url", "competitor_price", "competitor_currency",
+        "is_in_stock", "last_scraped_at", "match_strategy", "beat_by_value",
+        "min_margin_pct", "floor_price", "status", "notes",
+        "created_at", "updated_at",
+    ),
+}
+
+PRICINGPROMOTION_CHOICES = {
+    "DynamicPriceRule": {
+        "rule_type": (
+            ("percentage_discount", "Percentage Discount"),
+            ("fixed_discount", "Fixed Discount Amount"),
+            ("fixed_price_override", "Fixed Price Override"),
+        ),
+        "scope": (
+            ("storewide", "Storewide"),
+            ("category", "Category"),
+            ("product", "Specific Product"),
+            ("variant", "Specific SKU Variant"),
+        ),
+        "customer_segment": (
+            ("all", "All Customers"),
+            ("retail", "Retail / Standard"),
+            ("wholesale", "Wholesale / B2B"),
+            ("vip", "VIP / Key Accounts"),
+        ),
+        "loyalty_tier": (
+            ("none", "No Loyalty Requirement"),
+            ("bronze", "Bronze Tier"),
+            ("silver", "Silver Tier"),
+            ("gold", "Gold Tier"),
+            ("platinum", "Platinum Tier"),
+        ),
+    },
+    "CouponPromotion": {
+        "discount_type": (
+            ("percentage", "Percentage Off Cart"),
+            ("fixed_cart", "Fixed Amount Off Cart"),
+            ("fixed_item", "Fixed Amount Off Item"),
+            ("free_shipping", "Free Shipping"),
+        ),
+        "loyalty_tier_required": (
+            ("none", "No Loyalty Requirement"),
+            ("bronze", "Bronze Tier"),
+            ("silver", "Silver Tier"),
+            ("gold", "Gold Tier"),
+            ("platinum", "Platinum Tier"),
+        ),
+    },
+    "FlashSale": {
+        "status": (
+            ("draft", "Draft"),
+            ("scheduled", "Scheduled"),
+            ("active", "Active"),
+            ("paused", "Paused"),
+            ("ended", "Ended"),
+        ),
+    },
+    "CompetitorPriceMonitor": {
+        "match_strategy": (
+            ("manual", "Manual Review Only"),
+            ("match_exact", "Match Competitor Exact Price"),
+            ("beat_by_fixed", "Beat Competitor by Fixed Amount"),
+            ("beat_by_percent", "Beat Competitor by Percentage"),
+        ),
+        "status": (
+            ("active", "Active Tracking"),
+            ("paused", "Paused"),
+            ("margin_suppressed", "Suppressed (Margin Risk)"),
+            ("out_of_stock", "Competitor Out of Stock"),
+        ),
+    },
+}
+
+PRICINGPROMOTION_FORM_FIELDS = {
+    "DynamicPriceRuleForm": (
+        "name", "rule_type", "adjustment_value", "scope", "category",
+        "product", "variant", "customer_segment", "loyalty_tier",
+        "min_quantity", "country_code", "currency_code", "valid_from",
+        "valid_to", "priority", "is_active", "description",
+    ),
+    "CouponPromotionForm": (
+        "code", "name", "discount_type", "discount_value", "min_spend",
+        "max_discount_amount", "usage_limit_total", "usage_limit_per_customer",
+        "is_stackable", "loyalty_tier_required", "customer", "valid_from",
+        "valid_to", "is_active",
+    ),
+    "FlashSaleForm": (
+        "title", "status", "product", "variant", "category",
+        "discount_percentage", "flash_price", "inventory_cap",
+        "max_units_per_order", "start_time", "end_time", "badge_label",
+        "banner_bg_color", "terms_and_conditions",
+    ),
+    "CompetitorPriceMonitorForm": (
+        "competitor_name", "product", "variant", "competitor_url",
+        "competitor_price", "competitor_currency", "is_in_stock",
+        "match_strategy", "beat_by_value", "min_margin_pct",
+        "floor_price", "status", "notes",
+    ),
+}
+
+PRICINGPROMOTION_URLS = {
+    "dynamicpricerule_list": "pricing/rules/",
+    "dynamicpricerule_create": "pricing/rules/create/",
+    "dynamicpricerule_detail": "pricing/rules/<int:pk>/",
+    "dynamicpricerule_edit": "pricing/rules/<int:pk>/edit/",
+    "dynamicpricerule_delete": "pricing/rules/<int:pk>/delete/",
+    "couponpromotion_list": "pricing/coupons/",
+    "couponpromotion_create": "pricing/coupons/create/",
+    "couponpromotion_detail": "pricing/coupons/<int:pk>/",
+    "couponpromotion_edit": "pricing/coupons/<int:pk>/edit/",
+    "couponpromotion_delete": "pricing/coupons/<int:pk>/delete/",
+    "flashsale_list": "pricing/flash-sales/",
+    "flashsale_create": "pricing/flash-sales/create/",
+    "flashsale_detail": "pricing/flash-sales/<int:pk>/",
+    "flashsale_edit": "pricing/flash-sales/<int:pk>/edit/",
+    "flashsale_delete": "pricing/flash-sales/<int:pk>/delete/",
+    "competitorpricemonitor_list": "pricing/competitors/",
+    "competitorpricemonitor_create": "pricing/competitors/create/",
+    "competitorpricemonitor_detail": "pricing/competitors/<int:pk>/",
+    "competitorpricemonitor_edit": "pricing/competitors/<int:pk>/edit/",
+    "competitorpricemonitor_delete": "pricing/competitors/<int:pk>/delete/",
+    "competitorpricemonitor_sync": "pricing/competitors/<int:pk>/sync/",
+}
+
+
+def _pricingpromotion_rule(tenant, name="Standard 10% Off", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "rule_type": "percentage_discount",
+        "adjustment_value": Decimal("10.0000"),
+        "scope": "storewide",
+        "customer_segment": "all",
+        "loyalty_tier": "none",
+        "min_quantity": 1,
+        "currency_code": "USD",
+        "priority": 10,
+        "is_active": True,
+        "valid_from": timezone.now(),
+    }
+    defaults.update(overrides)
+    return DynamicPriceRule.objects.create(**defaults)
+
+
+def _pricingpromotion_coupon(tenant, code="SAVE20", name="Save 20 Dollars", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "code": code.upper(),
+        "name": name,
+        "discount_type": "fixed_cart",
+        "discount_value": Decimal("20.0000"),
+        "min_spend": Decimal("50.0000"),
+        "usage_limit_total": 500,
+        "usage_limit_per_customer": 1,
+        "is_active": True,
+        "valid_from": timezone.now(),
+    }
+    defaults.update(overrides)
+    return CouponPromotion.objects.create(**defaults)
+
+
+def _pricingpromotion_flash_sale(tenant, title="Flash Midnight Deal", **overrides):
+    now = timezone.now()
+    defaults = {
+        "tenant": tenant,
+        "title": title,
+        "status": "active",
+        "discount_percentage": Decimal("25.00"),
+        "inventory_cap": 100,
+        "units_sold": 5,
+        "max_units_per_order": 2,
+        "start_time": now - timezone.timedelta(hours=1),
+        "end_time": now + timezone.timedelta(hours=23),
+        "badge_label": "FLASH DEAL",
+    }
+    defaults.update(overrides)
+    return FlashSale.objects.create(**defaults)
+
+
+def _pricingpromotion_monitor(tenant, variant, competitor_name="Competitor Retail", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "competitor_name": competitor_name,
+        "product": variant.product,
+        "variant": variant,
+        "competitor_url": "https://example-competitor.com/product/123",
+        "competitor_price": Decimal("899.0000"),
+        "competitor_currency": "USD",
+        "is_in_stock": True,
+        "match_strategy": "beat_by_fixed",
+        "beat_by_value": Decimal("10.0000"),
+        "min_margin_pct": Decimal("15.00"),
+        "status": "active",
+    }
+    defaults.update(overrides)
+    return CompetitorPriceMonitor.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_rule_a(tenant_a):
+    return _pricingpromotion_rule(tenant_a, name="Acme Storewide 10%")
+
+
+@pytest.fixture
+def ecom_rule_b(tenant_b):
+    return _pricingpromotion_rule(tenant_b, name="Beta Storewide 15%", adjustment_value=Decimal("15.0000"))
+
+
+@pytest.fixture
+def ecom_coupon_a(tenant_a):
+    return _pricingpromotion_coupon(tenant_a, code="ACMEPROMO")
+
+
+@pytest.fixture
+def ecom_coupon_b(tenant_b):
+    return _pricingpromotion_coupon(tenant_b, code="BETAPROMO")
+
+
+@pytest.fixture
+def ecom_flash_sale_a(tenant_a, ecom_variant_a):
+    return _pricingpromotion_flash_sale(tenant_a, title="Acme 24h Flash", variant=ecom_variant_a, product=ecom_variant_a.product)
+
+
+@pytest.fixture
+def ecom_flash_sale_b(tenant_b, ecom_variant_b):
+    return _pricingpromotion_flash_sale(tenant_b, title="Beta 24h Flash", variant=ecom_variant_b, product=ecom_variant_b.product)
+
+
+@pytest.fixture
+def ecom_monitor_a(tenant_a, ecom_variant_a):
+    return _pricingpromotion_monitor(tenant_a, ecom_variant_a, competitor_name="MegaStore A")
+
+
+@pytest.fixture
+def ecom_monitor_b(tenant_b, ecom_variant_b):
+    return _pricingpromotion_monitor(tenant_b, ecom_variant_b, competitor_name="MegaStore B")
+
