@@ -46,4 +46,8 @@ class CustomerAddressPreferenceForm(TenantUniqueMixin, TenantModelForm):
         cleaned = super().clean()
         if self.tenant is not None:
             reject_foreign(self, cleaned, ["customer", "address"])
+        customer = cleaned.get("customer")
+        address = cleaned.get("address")
+        if customer and address and getattr(address, "party_id", None) != customer.pk:
+            self.add_error("address", "The selected physical address does not belong to this customer.")
         return cleaned
