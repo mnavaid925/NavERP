@@ -29,17 +29,17 @@
 ---
 
 ## 9.7-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO duplicate product or variant index table** — Search operates directly on `ecommerce.CatalogProduct` and `ecommerce.ProductVariant`.
-- [ ] **NO external SaaS cluster requirement** — Fully operational on Django ORM (PostgreSQL/SQLite compatible); SaaS webhook sync (Algolia/Elasticsearch) is deferred to enterprise integrations.
-- [ ] **NO deep neural net binary inference in-process** — Multi-modal visual search is implemented via visual attribute/category/style heuristics; binary PyTorch/CLIP tensor extraction is deferred to external ML service.
-- [ ] **NO second customer or account table** — Telemetry links directly to `core.Party` and `accounts.User`.
-- [ ] **NO machine-learning collaborative filtering** — Sibling Sub-module 9.8 owns shopper recommendation vectors.
+- [x] **NO duplicate product or variant index table** — Search operates directly on `ecommerce.CatalogProduct` and `ecommerce.ProductVariant`.
+- [x] **NO external SaaS cluster requirement** — Fully operational on Django ORM (PostgreSQL/SQLite compatible); SaaS webhook sync (Algolia/Elasticsearch) is deferred to enterprise integrations.
+- [x] **NO deep neural net binary inference in-process** — Multi-modal visual search is implemented via visual attribute/category/style heuristics; binary PyTorch/CLIP tensor extraction is deferred to external ML service.
+- [x] **NO second customer or account table** — Telemetry links directly to `core.Party` and `accounts.User`.
+- [x] **NO machine-learning collaborative filtering** — Sibling Sub-module 9.8 owns shopper recommendation vectors.
 
 ---
 
 ## Models (4 models in `apps/ecommerce/models/SearchDiscovery/`)
 
-- [ ] **`SearchSynonym`** [Prefix: `ESYM-`] (`apps/ecommerce/models/SearchDiscovery/SearchSynonyms.py`)
+- [x] **`SearchSynonym`** [Prefix: `ESYM-`] (`apps/ecommerce/models/SearchDiscovery/SearchSynonyms.py`)
   - **Purpose**: Dictionary of query expansions, directional mappings, and typo replacements bridging vocabulary gaps between shopper search terms and catalog product attributes.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -62,7 +62,7 @@
     - `synonyms` stripped, split, and deduplicated.
     - If `synonym_type == "replacement"`, synonyms must contain exactly one replacement term.
 
-- [ ] **`SearchFacetConfig`** [Prefix: `ESFC-`] (`apps/ecommerce/models/SearchDiscovery/SearchFacetConfigs.py`)
+- [x] **`SearchFacetConfig`** [Prefix: `ESFC-`] (`apps/ecommerce/models/SearchDiscovery/SearchFacetConfigs.py`)
   - **Purpose**: Governs dynamic faceted navigation and sidebar filters across search result pages and category listings (attributes, visualization widgets, multi-select logic, category scoping).
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -91,7 +91,7 @@
     - `code` normalized to lowercase slug.
     - If `source_type == "variant_option"`, `option_key` is required.
 
-- [ ] **`SearchMerchandisingRule`** [Prefix: `ESMR-`] (`apps/ecommerce/models/SearchDiscovery/SearchMerchandisingRules.py`)
+- [x] **`SearchMerchandisingRule`** [Prefix: `ESMR-`] (`apps/ecommerce/models/SearchDiscovery/SearchMerchandisingRules.py`)
   - **Purpose**: Merchandising studio rules controlling catalog presentation on search results and category browse listings (pinning hero products, score boosting/burying, exclusions, query redirects, promotional banners).
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -131,7 +131,7 @@
     - If `action_type == "banner"`, `banner_title` is required.
     - If both `start_date` and `end_date` are set, `end_date >= start_date`.
 
-- [ ] **`SearchQueryLog`** [Prefix: `ESQL-`] (`apps/ecommerce/models/SearchDiscovery/SearchQueryLogs.py`)
+- [x] **`SearchQueryLog`** [Prefix: `ESQL-`] (`apps/ecommerce/models/SearchDiscovery/SearchQueryLogs.py`)
   - **Purpose**: Search analytics and discovery telemetry tracking executed shopper searches, hit counts, latency, zero-result flags, applied filters, and product click events.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Fields**:
@@ -160,66 +160,66 @@
 ## Backend Packages & Files (Entity-by-Entity)
 
 ### 1. Models Package
-- [ ] `apps/ecommerce/models/SearchDiscovery/__init__.py` (re-exports `SearchSynonym`, `SearchFacetConfig`, `SearchMerchandisingRule`, `SearchQueryLog`)
-- [ ] `apps/ecommerce/models/SearchDiscovery/SearchSynonyms.py` (`SearchSynonym`, prefix `ESYM`)
-- [ ] `apps/ecommerce/models/SearchDiscovery/SearchFacetConfigs.py` (`SearchFacetConfig`, prefix `ESFC`)
-- [ ] `apps/ecommerce/models/SearchDiscovery/SearchMerchandisingRules.py` (`SearchMerchandisingRule`, prefix `ESMR`)
-- [ ] `apps/ecommerce/models/SearchDiscovery/SearchQueryLogs.py` (`SearchQueryLog`, prefix `ESQL`)
+- [x] `apps/ecommerce/models/SearchDiscovery/__init__.py` (re-exports `SearchSynonym`, `SearchFacetConfig`, `SearchMerchandisingRule`, `SearchQueryLog`)
+- [x] `apps/ecommerce/models/SearchDiscovery/SearchSynonyms.py` (`SearchSynonym`, prefix `ESYM`)
+- [x] `apps/ecommerce/models/SearchDiscovery/SearchFacetConfigs.py` (`SearchFacetConfig`, prefix `ESFC`)
+- [x] `apps/ecommerce/models/SearchDiscovery/SearchMerchandisingRules.py` (`SearchMerchandisingRule`, prefix `ESMR`)
+- [x] `apps/ecommerce/models/SearchDiscovery/SearchQueryLogs.py` (`SearchQueryLog`, prefix `ESQL`)
 
 ### 2. Forms Package
-- [ ] `apps/ecommerce/forms/SearchDiscovery/__init__.py` (re-exports all forms)
-- [ ] `apps/ecommerce/forms/SearchDiscovery/SearchSynonyms.py` (`SearchSynonymForm` with `TenantUniqueMixin` & clean normalization)
-- [ ] `apps/ecommerce/forms/SearchDiscovery/SearchFacetConfigs.py` (`SearchFacetConfigForm` with `reject_foreign` for category_scope)
-- [ ] `apps/ecommerce/forms/SearchDiscovery/SearchMerchandisingRules.py` (`SearchMerchandisingRuleForm` with `reject_foreign` for target_category and boosted_product)
-- [ ] `apps/ecommerce/forms/SearchDiscovery/SearchQueryLogs.py` (`SearchQueryLogFilterForm` for analytics and search log review)
+- [x] `apps/ecommerce/forms/SearchDiscovery/__init__.py` (re-exports all forms)
+- [x] `apps/ecommerce/forms/SearchDiscovery/SearchSynonyms.py` (`SearchSynonymForm` with `TenantUniqueMixin` & clean normalization)
+- [x] `apps/ecommerce/forms/SearchDiscovery/SearchFacetConfigs.py` (`SearchFacetConfigForm` with `reject_foreign` for category_scope)
+- [x] `apps/ecommerce/forms/SearchDiscovery/SearchMerchandisingRules.py` (`SearchMerchandisingRuleForm` with `reject_foreign` for target_category and boosted_product)
+- [x] `apps/ecommerce/forms/SearchDiscovery/SearchQueryLogs.py` (`SearchQueryLogFilterForm` for analytics and search log review)
 
 ### 3. Views Package (Function-Based Views, Tenant Scoped, Audit Log Instrumented)
-- [ ] `apps/ecommerce/views/SearchDiscovery/__init__.py`
-- [ ] `apps/ecommerce/views/SearchDiscovery/SearchSynonyms.py`:
-  - [ ] `searchsynonym_list` (filters: `synonym_type`, `is_active`; search: `number`, `name`, `root_term`, `synonyms`; pagination)
-  - [ ] `searchsynonym_detail` (rule definition, expansions preview, usage hit count, notes)
-  - [ ] `searchsynonym_create`
-  - [ ] `searchsynonym_edit`
-  - [ ] `searchsynonym_delete` (POST)
-  - [ ] `searchsynonym_toggle` (POST action to toggle active status)
-- [ ] `apps/ecommerce/views/SearchDiscovery/SearchFacetConfigs.py`:
-  - [ ] `searchfacetconfig_list` (filters: `source_type`, `widget_type`, `filter_logic`, `is_active`; search: `name`, `code`; ordering by `display_order`)
-  - [ ] `searchfacetconfig_detail` (widget configuration, category scope, value preview)
-  - [ ] `searchfacetconfig_create`
-  - [ ] `searchfacetconfig_edit`
-  - [ ] `searchfacetconfig_delete` (POST)
-  - [ ] `searchfacetconfig_toggle` (POST action to toggle active status)
-- [ ] `apps/ecommerce/views/SearchDiscovery/SearchMerchandisingRules.py`:
-  - [ ] `searchmerchandisingrule_list` (filters: `rule_type`, `action_type`, `is_active`; search: `name`, `trigger_query`, `redirect_url`; ordering by priority)
-  - [ ] `searchmerchandisingrule_detail` (trigger criteria, consequence payload, preview banner card)
-  - [ ] `searchmerchandisingrule_create`
-  - [ ] `searchmerchandisingrule_edit`
-  - [ ] `searchmerchandisingrule_delete` (POST)
-  - [ ] `searchmerchandisingrule_toggle` (POST action to toggle active status)
-- [ ] `apps/ecommerce/views/SearchDiscovery/SearchQueryLogs.py`:
-  - [ ] `searchquerylog_list` (filters: `is_zero_result`, `sort_order`, date range; search: `query_text`, `normalized_query`; pagination)
-  - [ ] `searchquerylog_detail` (telemetry payload, applied facet JSON, execution latency, customer attribution, clicked product)
-  - [ ] `searchquerylog_delete` (POST)
-- [ ] `apps/ecommerce/views/SearchDiscovery/SearchConsole.py`:
-  - [ ] `search_console` (interactive search discovery workbench: query execution with synonym expansion, merchandising rule enforcement, dynamic facet calculation, visual similarity heuristic matching, and null-result fallback suggestions)
-  - [ ] `search_autocomplete` (JSON/HTMX endpoint: search-as-you-type returning top matching products, suggested query terms, and matching categories)
-  - [ ] `search_analytics` (discovery analytics dashboard: total searches, zero-result search rate %, top search queries table, null-result recovery opportunities)
+- [x] `apps/ecommerce/views/SearchDiscovery/__init__.py`
+- [x] `apps/ecommerce/views/SearchDiscovery/SearchSynonyms.py`:
+  - [x] `searchsynonym_list` (filters: `synonym_type`, `is_active`; search: `number`, `name`, `root_term`, `synonyms`; pagination)
+  - [x] `searchsynonym_detail` (rule definition, expansions preview, usage hit count, notes)
+  - [x] `searchsynonym_create`
+  - [x] `searchsynonym_edit`
+  - [x] `searchsynonym_delete` (POST)
+  - [x] `searchsynonym_toggle` (POST action to toggle active status)
+- [x] `apps/ecommerce/views/SearchDiscovery/SearchFacetConfigs.py`:
+  - [x] `searchfacetconfig_list` (filters: `source_type`, `widget_type`, `filter_logic`, `is_active`; search: `name`, `code`; ordering by `display_order`)
+  - [x] `searchfacetconfig_detail` (widget configuration, category scope, value preview)
+  - [x] `searchfacetconfig_create`
+  - [x] `searchfacetconfig_edit`
+  - [x] `searchfacetconfig_delete` (POST)
+  - [x] `searchfacetconfig_toggle` (POST action to toggle active status)
+- [x] `apps/ecommerce/views/SearchDiscovery/SearchMerchandisingRules.py`:
+  - [x] `searchmerchandisingrule_list` (filters: `rule_type`, `action_type`, `is_active`; search: `name`, `trigger_query`, `redirect_url`; ordering by priority)
+  - [x] `searchmerchandisingrule_detail` (trigger criteria, consequence payload, preview banner card)
+  - [x] `searchmerchandisingrule_create`
+  - [x] `searchmerchandisingrule_edit`
+  - [x] `searchmerchandisingrule_delete` (POST)
+  - [x] `searchmerchandisingrule_toggle` (POST action to toggle active status)
+- [x] `apps/ecommerce/views/SearchDiscovery/SearchQueryLogs.py`:
+  - [x] `searchquerylog_list` (filters: `is_zero_result`, `sort_order`, date range; search: `query_text`, `normalized_query`; pagination)
+  - [x] `searchquerylog_detail` (telemetry payload, applied facet JSON, execution latency, customer attribution, clicked product)
+  - [x] `searchquerylog_delete` (POST)
+- [x] `apps/ecommerce/views/SearchDiscovery/SearchConsole.py`:
+  - [x] `search_console` (interactive search discovery workbench: query execution with synonym expansion, merchandising rule enforcement, dynamic facet calculation, visual similarity heuristic matching, and null-result fallback suggestions)
+  - [x] `search_autocomplete` (JSON/HTMX endpoint: search-as-you-type returning top matching products, suggested query terms, and matching categories)
+  - [x] `search_analytics` (discovery analytics dashboard: total searches, zero-result search rate %, top search queries table, null-result recovery opportunities)
 
 ### 4. URLs Package
-- [ ] `apps/ecommerce/urls/SearchDiscovery/__init__.py`
-- [ ] `apps/ecommerce/urls/SearchDiscovery/SearchSynonyms.py` (`searchsynonym_list`, `searchsynonym_create`, `searchsynonym_detail`, `searchsynonym_edit`, `searchsynonym_delete`, `searchsynonym_toggle`)
-- [ ] `apps/ecommerce/urls/SearchDiscovery/SearchFacetConfigs.py` (`searchfacetconfig_list`, `searchfacetconfig_create`, `searchfacetconfig_detail`, `searchfacetconfig_edit`, `searchfacetconfig_delete`, `searchfacetconfig_toggle`)
-- [ ] `apps/ecommerce/urls/SearchDiscovery/SearchMerchandisingRules.py` (`searchmerchandisingrule_list`, `searchmerchandisingrule_create`, `searchmerchandisingrule_detail`, `searchmerchandisingrule_edit`, `searchmerchandisingrule_delete`, `searchmerchandisingrule_toggle`)
-- [ ] `apps/ecommerce/urls/SearchDiscovery/SearchQueryLogs.py` (`searchquerylog_list`, `searchquerylog_detail`, `searchquerylog_delete`)
-- [ ] `apps/ecommerce/urls/SearchDiscovery/SearchConsole.py` (`search_console`, `search_autocomplete`, `search_analytics`)
+- [x] `apps/ecommerce/urls/SearchDiscovery/__init__.py`
+- [x] `apps/ecommerce/urls/SearchDiscovery/SearchSynonyms.py` (`searchsynonym_list`, `searchsynonym_create`, `searchsynonym_detail`, `searchsynonym_edit`, `searchsynonym_delete`, `searchsynonym_toggle`)
+- [x] `apps/ecommerce/urls/SearchDiscovery/SearchFacetConfigs.py` (`searchfacetconfig_list`, `searchfacetconfig_create`, `searchfacetconfig_detail`, `searchfacetconfig_edit`, `searchfacetconfig_delete`, `searchfacetconfig_toggle`)
+- [x] `apps/ecommerce/urls/SearchDiscovery/SearchMerchandisingRules.py` (`searchmerchandisingrule_list`, `searchmerchandisingrule_create`, `searchmerchandisingrule_detail`, `searchmerchandisingrule_edit`, `searchmerchandisingrule_delete`, `searchmerchandisingrule_toggle`)
+- [x] `apps/ecommerce/urls/SearchDiscovery/SearchQueryLogs.py` (`searchquerylog_list`, `searchquerylog_detail`, `searchquerylog_delete`)
+- [x] `apps/ecommerce/urls/SearchDiscovery/SearchConsole.py` (`search_console`, `search_autocomplete`, `search_analytics`)
 
 ### 5. Package Re-Exports & Integrations
-- [ ] `apps/ecommerce/models/__init__.py`: Surgical re-export of `SearchSynonym`, `SearchFacetConfig`, `SearchMerchandisingRule`, `SearchQueryLog` + update `__all__`.
-- [ ] `apps/ecommerce/forms/__init__.py`: Surgical re-export of `SearchSynonymForm`, `SearchFacetConfigForm`, `SearchMerchandisingRuleForm`, `SearchQueryLogFilterForm` + update `__all__`.
-- [ ] `apps/ecommerce/views/__init__.py`: Surgical re-export of all 9.7 view functions + update `__all__`.
-- [ ] `apps/ecommerce/urls/__init__.py`: Wire `apps.ecommerce.urls.SearchDiscovery.urlpatterns` into `ecommerce` url patterns.
-- [ ] `apps/ecommerce/admin.py`: Register `SearchSynonymAdmin`, `SearchFacetConfigAdmin`, `SearchMerchandisingRuleAdmin`, and `SearchQueryLogAdmin`.
-- [ ] `apps/ecommerce/management/commands/seed_ecommerce.py`: Extend `_seed_tenant()` idempotently with:
+- [x] `apps/ecommerce/models/__init__.py`: Surgical re-export of `SearchSynonym`, `SearchFacetConfig`, `SearchMerchandisingRule`, `SearchQueryLog` + update `__all__`.
+- [x] `apps/ecommerce/forms/__init__.py`: Surgical re-export of `SearchSynonymForm`, `SearchFacetConfigForm`, `SearchMerchandisingRuleForm`, `SearchQueryLogFilterForm` + update `__all__`.
+- [x] `apps/ecommerce/views/__init__.py`: Surgical re-export of all 9.7 view functions + update `__all__`.
+- [x] `apps/ecommerce/urls/__init__.py`: Wire `apps.ecommerce.urls.SearchDiscovery.urlpatterns` into `ecommerce` url patterns.
+- [x] `apps/ecommerce/admin.py`: Register `SearchSynonymAdmin`, `SearchFacetConfigAdmin`, `SearchMerchandisingRuleAdmin`, and `SearchQueryLogAdmin`.
+- [x] `apps/ecommerce/management/commands/seed_ecommerce.py`: Extend `_seed_tenant()` idempotently with:
   - 3+ synonym rules (two-way "sneakers, trainers, kicks", one-way "audio -> headphones, speakers", replacement "sammsung -> samsung").
   - 5+ facet configurations (Category, Brand, Price Range, Variant Option Size/Color, Stock Availability).
   - 4+ merchandising rules (Pin hero product on "running shoes", Boost high-margin item, URL redirect for "customer service", Promotional banner on "black friday").
@@ -229,7 +229,7 @@
 
 ## Wire-up
 
-- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["9.7"]` mapping all 5 NavERP.md feature bullets:
+- [x] `apps/core/navigation.py`: Add `LIVE_LINKS["9.7"]` mapping all 5 NavERP.md feature bullets:
   ```python
   "9.7": {
       "Site Search & Autocomplete": "ecommerce:search_console",
@@ -250,84 +250,106 @@
 
 ## Templates Package
 
-- [ ] `templates/ecommerce/searchdiscovery/synonym/list.html` (filter bar for `synonym_type`, `is_active`; search; hit count badges; pagination; toggle switch)
-- [ ] `templates/ecommerce/searchdiscovery/synonym/detail.html` (rule summary, synonym chips, hit statistics, audit metadata)
-- [ ] `templates/ecommerce/searchdiscovery/synonym/form.html` (type selector, root term input, comma-separated synonyms textarea, active toggle)
+- [x] `templates/ecommerce/searchdiscovery/synonym/list.html` (filter bar for `synonym_type`, `is_active`; search; hit count badges; pagination; toggle switch)
+- [x] `templates/ecommerce/searchdiscovery/synonym/detail.html` (rule summary, synonym chips, hit statistics, audit metadata)
+- [x] `templates/ecommerce/searchdiscovery/synonym/form.html` (type selector, root term input, comma-separated synonyms textarea, active toggle)
 
-- [ ] `templates/ecommerce/searchdiscovery/facetconfig/list.html` (filter bar for `source_type`, `widget_type`, `filter_logic`, `is_active`; display order badges; search; pagination)
-- [ ] `templates/ecommerce/searchdiscovery/facetconfig/detail.html` (widget preview, source attribute mapping, category scope card, logic configuration)
-- [ ] `templates/ecommerce/searchdiscovery/facetconfig/form.html` (name, code slug, source type selector, widget type selector, category selector with `reject_foreign`)
+- [x] `templates/ecommerce/searchdiscovery/facetconfig/list.html` (filter bar for `source_type`, `widget_type`, `filter_logic`, `is_active`; display order badges; search; pagination)
+- [x] `templates/ecommerce/searchdiscovery/facetconfig/detail.html` (widget preview, source attribute mapping, category scope card, logic configuration)
+- [x] `templates/ecommerce/searchdiscovery/facetconfig/form.html` (name, code slug, source type selector, widget type selector, category selector with `reject_foreign`)
 
-- [ ] `templates/ecommerce/searchdiscovery/merchandisingrule/list.html` (filter bar for `rule_type`, `action_type`, `is_active`; priority badges; search; pagination)
-- [ ] `templates/ecommerce/searchdiscovery/merchandisingrule/detail.html` (trigger conditions, consequence card, banner preview, target product details)
-- [ ] `templates/ecommerce/searchdiscovery/merchandisingrule/form.html` (trigger query, rule type, action selector, product picker, weight slider, banner inputs)
+- [x] `templates/ecommerce/searchdiscovery/merchandisingrule/list.html` (filter bar for `rule_type`, `action_type`, `is_active`; priority badges; search; pagination)
+- [x] `templates/ecommerce/searchdiscovery/merchandisingrule/detail.html` (trigger conditions, consequence card, banner preview, target product details)
+- [x] `templates/ecommerce/searchdiscovery/merchandisingrule/form.html` (trigger query, rule type, action selector, product picker, weight slider, banner inputs)
 
-- [ ] `templates/ecommerce/searchdiscovery/querylog/list.html` (filter bar for `is_zero_result`, `sort_order`; search; execution latency badges; pagination)
-- [ ] `templates/ecommerce/searchdiscovery/querylog/detail.html` (query telemetry, results count, applied filter tags, customer attribution, clicked product)
+- [x] `templates/ecommerce/searchdiscovery/querylog/list.html` (filter bar for `is_zero_result`, `sort_order`; search; execution latency badges; pagination)
+- [x] `templates/ecommerce/searchdiscovery/querylog/detail.html` (query telemetry, results count, applied filter tags, customer attribution, clicked product)
 
-- [ ] `templates/ecommerce/searchdiscovery/console/console.html` (interactive search discovery workbench: search input with autocomplete trigger, dynamic facet sidebar, product result grid with boost/pin badges, visual style matching recommendations, zero-result fallback alerts)
-- [ ] `templates/ecommerce/searchdiscovery/console/autocomplete_results.html` (HTMX partial rendering instant suggestions, matching categories, and top product snippets)
+- [x] `templates/ecommerce/searchdiscovery/console/console.html` (interactive search discovery workbench: search input with autocomplete trigger, dynamic facet sidebar, product result grid with boost/pin badges, visual style matching recommendations, zero-result fallback alerts)
+- [x] `templates/ecommerce/searchdiscovery/console/autocomplete_results.html` (HTMX partial rendering instant suggestions, matching categories, and top product snippets)
 
-- [ ] `templates/ecommerce/searchdiscovery/analytics/analytics.html` (discovery analytics dashboard: KPI summary cards [total searches, null-result rate %, average latency ms], top search queries table, zero-result search recovery table)
+- [x] `templates/ecommerce/searchdiscovery/analytics/analytics.html` (discovery analytics dashboard: KPI summary cards [total searches, null-result rate %, average latency ms], top search queries table, zero-result search recovery table)
 
 ---
 
 ## Integration, Database & Migrations
 
-- [ ] Run `python manage.py makemigrations ecommerce` -> generates `0008_searchfacetconfig_searchmerchandisingrule_and_more.py`.
-- [ ] Run `python manage.py migrate ecommerce` -> applies migration `0008` cleanly.
-- [ ] Run `python manage.py seed_ecommerce` twice -> verifies idempotency with 0 errors.
-- [ ] Run `python manage.py check` -> 0 system check issues reported.
+- [x] Run `python manage.py makemigrations ecommerce` -> generates `0008_searchfacetconfig_searchmerchandisingrule_and_more.py`.
+- [x] Run `python manage.py migrate ecommerce` -> applies migration `0008` cleanly.
+- [x] Run `python manage.py seed_ecommerce` twice -> verifies idempotency with 0 errors.
+- [x] Run `python manage.py check` -> 0 system check issues reported.
 
 ---
 
 ## Phase 3.5 — Smoke Test Gate (`qa-smoke-tester` agent)
 
-- [ ] Verify HTTP 200 response for all new 9.7 routes under `admin_acme`.
-- [ ] Verify search console renders live query results, facet filters, and synonym expansions.
-- [ ] Verify cross-tenant isolation: Workspace A rules/synonyms never leak to Workspace B (assert 404 on foreign IDOR).
-- [ ] Verify empty search query, invalid filter params, and zero-result fallbacks handle gracefully without 500 errors.
+- [x] Verify HTTP 200 response for all new 9.7 routes under `admin_acme`.
+- [x] Verify search console renders live query results, facet filters, and synonym expansions.
+- [x] Verify cross-tenant isolation: Workspace A rules/synonyms never leak to Workspace B (assert 404 on foreign IDOR).
+- [x] Verify empty search query, invalid filter params, and zero-result fallbacks handle gracefully without 500 errors.
 
 ---
 
 ## Phase 4 — Six Serial Review Passes
 
-- [ ] Review Pass 1: `code-reviewer` (Django ORM, FBV standards, tenant filtering, clean() validation)
-- [ ] Review Pass 2: `explorer` (Contract adherence, model fields, context keys, URL reverse matches)
-- [ ] Review Pass 3: `frontend-reviewer` (Tailwind, color-named badges only, filter state preservation, responsive grid)
-- [ ] Review Pass 4: `performance-reviewer` (Select related, query count, index utilization, paginated queries)
-- [ ] Review Pass 5: `qa-smoke-tester` (Form submissions, validation errors, filter execution, HTMX autocomplete)
-- [ ] Review Pass 6: `security-reviewer` (Tenant isolation, IDOR prevention, XSS escaping, SQL injection safety)
-- [ ] Consolidate all findings into `.claude/tasks/review-ecommerce-9.7.md` with deterministic IDs (C1.., I1.., M1..).
+- [x] Review Pass 1: `code-reviewer` (Django ORM, FBV standards, tenant filtering, clean() validation)
+- [x] Review Pass 2: `explorer` (Contract adherence, model fields, context keys, URL reverse matches)
+- [x] Review Pass 3: `frontend-reviewer` (Tailwind, color-named badges only, filter state preservation, responsive grid)
+- [x] Review Pass 4: `performance-reviewer` (Select related, query count, index utilization, paginated queries)
+- [x] Review Pass 5: `qa-smoke-tester` (Form submissions, validation errors, filter execution, HTMX autocomplete)
+- [x] Review Pass 6: `security-reviewer` (Tenant isolation, IDOR prevention, XSS escaping, SQL injection safety)
+- [x] Consolidate all findings into `.claude/tasks/review-ecommerce-9.7.md` with deterministic IDs (C1.., I1.., M1..).
 
 ---
 
 ## Phase 5 — Finding Remediation (`code-fixer` agent)
 
-- [ ] Resolve all Critical findings one-by-one with immediate discrete git commits.
-- [ ] Resolve all Important findings one-by-one with immediate discrete git commits.
-- [ ] Resolve all Minor findings one-by-one with immediate discrete git commits.
-- [ ] Verify `python manage.py check` remains clean.
+- [x] Resolve all Critical findings one-by-one with immediate discrete git commits.
+- [x] Resolve all Important findings one-by-one with immediate discrete git commits.
+- [x] Resolve all Minor findings one-by-one with immediate discrete git commits.
+- [x] Verify `python manage.py check` remains clean.
 
 ---
 
 ## Phase 6 — Automated Test Suite
 
-- [ ] Authored `apps/ecommerce/tests/test_searchdiscovery_models.py` (model creation, validation, `clean()`, auto-numbering, constraints)
-- [ ] Authored `apps/ecommerce/tests/test_searchdiscovery_forms.py` (form validation, slug formatting, `reject_foreign`, clean logic)
-- [ ] Authored `apps/ecommerce/tests/test_searchdiscovery_views.py` (FBV endpoints, search console, autocomplete, filters, pagination, toggle actions)
-- [ ] Authored `apps/ecommerce/tests/test_searchdiscovery_security.py` (cross-tenant IDOR protection, unauthenticated redirection, audit log verification)
-- [ ] Update `apps/ecommerce/tests/conftest.py` with 9.7 test fixtures.
-- [ ] Run full unfiltered app test suite: `pytest apps/ecommerce/tests/` (100% green, 0 failures).
+- [x] Authored `apps/ecommerce/tests/test_searchdiscovery_models.py` (model creation, validation, `clean()`, auto-numbering, constraints)
+- [x] Authored `apps/ecommerce/tests/test_searchdiscovery_forms.py` (form validation, slug formatting, `reject_foreign`, clean logic)
+- [x] Authored `apps/ecommerce/tests/test_searchdiscovery_views.py` (FBV endpoints, search console, autocomplete, filters, pagination, toggle actions)
+- [x] Authored `apps/ecommerce/tests/test_searchdiscovery_security.py` (cross-tenant IDOR protection, unauthenticated redirection, audit log verification)
+- [x] Update `apps/ecommerce/tests/conftest.py` with 9.7 test fixtures.
+- [x] Run full unfiltered app test suite: `pytest apps/ecommerce/tests/` (100% green, 0 failures).
 
 ---
 
 ## Phase 7 — Close-out & Documentation
 
-- [ ] Author/update `.claude/skills/ecommerce/SKILL.md` with 9.7 models, routes, templates, and seeder entities.
-- [ ] Update `README.md` marking Sub-module 9.7 complete.
-- [ ] Create `.claude/tasks/gaps-ecommerce-9.7.md` (record any deferred AI/ML cluster webhooks or state `**Gaps**: None`).
-- [ ] Record close-out summary in `.claude/tasks/todo.md`.
+- [x] Author/update `.claude/skills/ecommerce/SKILL.md` with 9.7 models, routes, templates, and seeder entities.
+- [x] Update `README.md` marking Sub-module 9.7 complete.
+- [x] Create `.claude/tasks/gaps-ecommerce-9.7.md` (record any deferred AI/ML cluster webhooks or state `**Gaps**: None`).
+- [x] Record close-out summary in `.claude/tasks/todo.md`.
+
+---
+
+### Review & Close-Out — Sub-module 9.7: Search & Product Discovery (2026-10-30)
+
+- **Deliverables**:
+  - 4 Models (`SearchSynonym` [`ESYM-`], `SearchFacetConfig` [`ESFC-`], `SearchMerchandisingRule` [`ESMR-`], `SearchQueryLog` [`ESQL-`]) in `apps/ecommerce/models/SearchDiscovery/` inheriting `TenantNumbered`.
+  - 5 Forms in `apps/ecommerce/forms/SearchDiscovery/` implementing `TenantUniqueMixin`, `reject_foreign`, and input normalization.
+  - 23 Function-Based Views in `apps/ecommerce/views/SearchDiscovery/` implementing full tenant-scoped CRUD, Search Console workbench, instant autocomplete endpoint, and search analytics dashboard.
+  - 6 URL configuration modules in `apps/ecommerce/urls/SearchDiscovery/` integrated into `apps/ecommerce/urls/__init__.py`.
+  - 14 Templates in `templates/ecommerce/searchdiscovery/` styled with Tailwind, semantic layout, and color-named badges.
+  - Migrations `0008` (schema), `0009` (composite index `idx_esmr_ten_act_prio`), and `0010` (composite index `idx_esql_ten_zr_norm`) applied cleanly.
+  - Seeder `apps/ecommerce/management/commands/seed_ecommerce.py` extended with idempotent demo data and verified with 0 duplicates.
+  - Sidebar navigation integrated in `apps/core/navigation.py` under `LIVE_LINKS["9.7"]` covering all 5 NavERP.md feature bullets.
+- **Review Passes**: 6 serial passes completed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) resulting in 32 findings (C1–C7, I1–I13, M1–M12) documented in `.claude/tasks/review-ecommerce-9.7.md`.
+- **Remediation**: 100% of findings fixed by `code-fixer` in discrete commits.
+- **Test Suite**: 4 test modules (`test_searchdiscovery_models.py`, `test_searchdiscovery_forms.py`, `test_searchdiscovery_views.py`, `test_searchdiscovery_security.py`) achieving **53 passed, 0 failed (100% green)**.
+- **Integrity**: `manage.py check` verified with 0 issues.
+- **Documentation & Skills**: `.claude/skills/ecommerce/SKILL.md` and `README.md` updated.
+- **Gaps**: None. Recorded in `.agents/tasks/gaps-ecommerce-9.7.md`.
+
+---
 
 
 ---
