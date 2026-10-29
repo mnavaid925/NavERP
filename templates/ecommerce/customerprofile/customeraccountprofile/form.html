@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit {{ profile.number }}{% else %}New Customer Profile{% endif %} · eCommerce · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:customeraccountprofile_list' %}" class="hover:text-blue-600">Customer Profiles</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}Edit {{ profile.number }}{% else %}New Profile{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Customer Profile: {{ profile.number }}{% else %}Create Customer Profile{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Configure customer tier, authentication mode, marketing communication preferences, and phone verification.</p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <form method="post" class="card bg-white shadow-sm border border-slate-200 rounded-lg p-6 space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="p-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700 space-y-1">
+        {% for error in form.non_field_errors %}
+          <p>{{ error }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- Identity & Customer Spine -->
+    <div class="space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2">Customer & User Identity</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="id_customer" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Customer Party <span class="text-red-500">*</span>
+          </label>
+          {{ form.customer }}
+          {% if form.customer.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.customer.errors.0 }}</p>
+          {% endif %}
+          <span class="text-xs text-slate-500 mt-1 block">Customer record from Core Spine Party.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="id_user" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Linked User Account
+          </label>
+          {{ form.user }}
+          {% if form.user.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.user.errors.0 }}</p>
+          {% endif %}
+          <span class="text-xs text-slate-500 mt-1 block">Optional auth user credentials link.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tier & Status -->
+    <div class="space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2">Status & Loyalty Tier</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="form-group">
+          <label for="id_tier" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Loyalty Tier
+          </label>
+          {{ form.tier }}
+          {% if form.tier.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.tier.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="id_status" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Account Status
+          </label>
+          {{ form.status }}
+          {% if form.status.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.status.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="id_auth_mode" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Authentication Mode
+          </label>
+          {{ form.auth_mode }}
+          {% if form.auth_mode.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.auth_mode.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Contact & Localization -->
+    <div class="space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2">Contact & Preferences</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="id_phone_number" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Phone Number
+          </label>
+          {{ form.phone_number }}
+          {% if form.phone_number.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.phone_number.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group flex items-center pt-6">
+          <label class="flex items-center gap-2 cursor-pointer">
+            {{ form.phone_verified }}
+            <span class="text-sm font-medium text-slate-700">Phone Verified via SMS OTP</span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="id_preferred_currency" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Preferred Currency
+          </label>
+          {{ form.preferred_currency }}
+          {% if form.preferred_currency.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.preferred_currency.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="id_preferred_language" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Preferred Language Code
+          </label>
+          {{ form.preferred_language }}
+          {% if form.preferred_language.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.preferred_language.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Communication Consents -->
+    <div class="space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2">Communication & Marketing Consent</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="space-y-3">
+          <label class="flex items-center gap-2 cursor-pointer">
+            {{ form.email_marketing_opt_in }}
+            <span class="text-sm font-medium text-slate-700">Email Marketing Opt-In (GDPR Consent)</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            {{ form.sms_marketing_opt_in }}
+            <span class="text-sm font-medium text-slate-700">SMS Marketing Opt-In (TCPA Consent)</span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="id_notification_frequency" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Notification Frequency
+          </label>
+          {{ form.notification_frequency }}
+          {% if form.notification_frequency.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.notification_frequency.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Internal Notes -->
+    <div class="form-group">
+      <label for="id_internal_notes" class="form-label block text-sm font-medium text-slate-700 mb-1">
+        Internal CRM Notes
+      </label>
+      {{ form.internal_notes }}
+      {% if form.internal_notes.errors %}
+        <p class="form-error text-xs text-red-600 mt-1">{{ form.internal_notes.errors.0 }}</p>
+      {% endif %}
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+      <a href="{% if is_edit %}{% url 'ecommerce:customeraccountprofile_detail' profile.pk %}{% else %}{% url 'ecommerce:customeraccountprofile_list' %}{% endif %}" class="btn btn-outline">
+        Cancel
+      </a>
+      <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="check" class="w-4 h-4"></i>
+        <span>Save Customer Profile</span>
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
