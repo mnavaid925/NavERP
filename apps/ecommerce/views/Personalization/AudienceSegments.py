@@ -83,12 +83,11 @@ def audiencesegment_create(request):
             segment.tenant = request.tenant
             segment.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                segment,
                 "create",
-                "AudienceSegment",
-                segment.pk,
-                f"Created audience segment {segment.name} ({segment.number})",
+                {"name": segment.name, "number": segment.number},
+                tenant=request.tenant,
             )
             messages.success(request, f"Audience segment '{segment.name}' created.")
             return redirect("ecommerce:audiencesegment_detail", pk=segment.pk)
@@ -111,12 +110,11 @@ def audiencesegment_edit(request, pk):
         if form.is_valid():
             segment = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                segment,
                 "update",
-                "AudienceSegment",
-                segment.pk,
-                f"Updated audience segment {segment.name} ({segment.number})",
+                {"name": segment.name, "number": segment.number},
+                tenant=request.tenant,
             )
             messages.success(request, f"Audience segment '{segment.name}' updated.")
             return redirect("ecommerce:audiencesegment_detail", pk=segment.pk)
@@ -140,12 +138,11 @@ def audiencesegment_delete(request, pk):
     number = segment.number
     segment.delete()
     write_audit_log(
-        request.tenant,
         request.user,
+        segment,
         "delete",
-        "AudienceSegment",
-        pk,
-        f"Deleted audience segment {name} ({number})",
+        {"name": name, "number": number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Audience segment '{name}' deleted.")
     return redirect("ecommerce:audiencesegment_list")
@@ -160,12 +157,11 @@ def audiencesegment_toggle(request, pk):
     segment.save(update_fields=["is_active", "updated_at"])
     state = "activated" if segment.is_active else "deactivated"
     write_audit_log(
-        request.tenant,
         request.user,
-        "toggle",
-        "AudienceSegment",
-        segment.pk,
-        f"{state.capitalize()} audience segment {segment.name} ({segment.number})",
+        segment,
+        "update",
+        {"is_active": segment.is_active, "number": segment.number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Audience segment '{segment.name}' {state}.")
     return redirect("ecommerce:audiencesegment_detail", pk=segment.pk)
@@ -194,12 +190,11 @@ def audiencesegment_recalculate(request, pk):
     segment.save(update_fields=["cached_member_count", "last_evaluated_at", "updated_at"])
 
     write_audit_log(
-        request.tenant,
         request.user,
-        "recalculate",
-        "AudienceSegment",
-        segment.pk,
-        f"Recalculated audience segment {segment.name} ({segment.number}) member count: {count}",
+        segment,
+        "update",
+        {"cached_member_count": count, "number": segment.number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Audience segment '{segment.name}' recalculated: {count} matching profiles.")
     return redirect("ecommerce:audiencesegment_detail", pk=segment.pk)
