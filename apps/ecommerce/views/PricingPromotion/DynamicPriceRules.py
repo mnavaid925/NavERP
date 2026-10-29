@@ -101,12 +101,10 @@ def dynamicpricerule_create(request):
             rule.tenant = request.tenant
             rule.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "CREATE",
-                "DynamicPriceRule",
-                rule.pk,
-                f"Created dynamic price rule {rule.number} ({rule.name})",
+                rule,
+                "create",
+                {"name": rule.name, "rule_type": rule.rule_type},
             )
             messages.success(request, f"Dynamic price rule '{rule.name}' created successfully.")
             return redirect("ecommerce:dynamicpricerule_detail", pk=rule.pk)
@@ -133,12 +131,10 @@ def dynamicpricerule_edit(request, pk):
         if form.is_valid():
             rule = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "UPDATE",
-                "DynamicPriceRule",
-                rule.pk,
-                f"Updated dynamic price rule {rule.number} ({rule.name})",
+                rule,
+                "update",
+                {"name": rule.name, "rule_type": rule.rule_type},
             )
             messages.success(request, f"Dynamic price rule '{rule.name}' updated successfully.")
             return redirect("ecommerce:dynamicpricerule_detail", pk=rule.pk)
@@ -162,12 +158,10 @@ def dynamicpricerule_delete(request, pk):
     number = rule.number
     rule.delete()
     write_audit_log(
-        request.tenant,
         request.user,
-        "DELETE",
-        "DynamicPriceRule",
-        pk,
-        f"Deleted dynamic price rule {number} ({name})",
+        rule,
+        "delete",
+        {"name": name, "number": number},
     )
     messages.success(request, f"Dynamic price rule '{name}' ({number}) was deleted.")
     return redirect("ecommerce:dynamicpricerule_list")
