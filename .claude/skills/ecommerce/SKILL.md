@@ -1,11 +1,11 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog Management & 9.2 Inventory & Stock Management: store categories, catalog products, product variants, merchandising relationships, fulfillment centers, stock allocations, available-to-promise ATP, backorder & pre-order policies, multi-channel inventory sync). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1 or 9.2), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine: categories, products, variants, relationships, fulfillment centers, stock allocations, ATP, backorders, sync feeds, dynamic pricing rules, discount coupons, flash sales, competitor price monitoring). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, or 9.3), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog & 9.2 Inventory & Stock Management)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine)
 
-The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, and multi-channel inventory synchronization feeds. It integrates seamlessly with the NavERP core spine and physical supply chain:
+The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, and competitive repricing intelligence. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
 - **Physical Inventory Boundary**: Products, variants, and fulfillment centers link to `scm.Item` and `scm.Location` via string foreign keys. Module 9 does not duplicate inventory ledger balances or physical bin movements; physical warehouse stock and valuation remain anchored in `apps/scm` and `apps/inventory`, while eCommerce manages digital storefront availability, reservations, buffers, and channel broadcasting.
 - **App Path**: `apps/ecommerce/`
@@ -34,6 +34,11 @@ apps/ecommerce/
 │   │   ├── InventoryAllocations.py  # InventoryAllocation model (EAL-)
 │   │   ├── BackorderPolicies.py     # BackorderPolicy model (EBK-)
 │   │   └── ChannelInventorySyncs.py # ChannelInventorySync model (ESYN-)
+│   ├── PricingPromotion/
+│   │   ├── DynamicPriceRules.py     # DynamicPriceRule model (EDPR-)
+│   │   ├── CouponPromotions.py      # CouponPromotion model (ECPN-)
+│   │   ├── FlashSales.py            # FlashSale model (EFLS-)
+│   │   └── CompetitorPriceMonitors.py # CompetitorPriceMonitor model (ECPM-)
 │   └── __init__.py                  # Surgical re-exports of all models
 ├── forms/
 │   ├── _common.py                   # TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -48,6 +53,11 @@ apps/ecommerce/
 │   │   ├── InventoryAllocations.py  # InventoryAllocationForm, StockAdjustmentActionForm
 │   │   ├── BackorderPolicies.py     # BackorderPolicyForm
 │   │   └── ChannelInventorySyncs.py # ChannelInventorySyncForm
+│   ├── PricingPromotion/
+│   │   ├── DynamicPriceRules.py     # DynamicPriceRuleForm
+│   │   ├── CouponPromotions.py      # CouponPromotionForm
+│   │   ├── FlashSales.py            # FlashSaleForm
+│   │   └── CompetitorPriceMonitors.py # CompetitorPriceMonitorForm
 │   └── __init__.py                  # Re-exports of all forms
 ├── views/
 │   ├── _common.py                   # ecommerce_scope, ecommerce_object, csv_safe, write_audit_log
@@ -64,6 +74,11 @@ apps/ecommerce/
 │   │   ├── InventoryAllocations.py  # inventoryallocation CRUD + stock adjust
 │   │   ├── BackorderPolicies.py     # backorderpolicy CRUD
 │   │   └── ChannelInventorySyncs.py # channelinventorysync CRUD + broadcast trigger
+│   ├── PricingPromotion/
+│   │   ├── DynamicPriceRules.py     # dynamicpricerule CRUD
+│   │   ├── CouponPromotions.py      # couponpromotion CRUD
+│   │   ├── FlashSales.py            # flashsale CRUD
+│   │   └── CompetitorPriceMonitors.py # competitorpricemonitor CRUD + sync action
 │   └── __init__.py                  # Re-exports of all views
 ├── urls/
 │   ├── ProductCatalog/
@@ -79,6 +94,11 @@ apps/ecommerce/
 │   │   ├── InventoryAllocations.py  # inventory/allocations/ paths
 │   │   ├── BackorderPolicies.py     # inventory/backorders/ paths
 │   │   └── ChannelInventorySyncs.py # inventory/sync/ paths
+│   ├── PricingPromotion/
+│   │   ├── DynamicPriceRules.py     # pricing/rules/ paths
+│   │   ├── CouponPromotions.py      # pricing/coupons/ paths
+│   │   ├── FlashSales.py            # pricing/flash-sales/ paths
+│   │   └── CompetitorPriceMonitors.py # pricing/competitors/ paths
 │   └── __init__.py                  # Concatenates all urlpatterns with app_name="ecommerce"
 ├── admin.py                         # Django admin registrations
 ├── apps.py                          # EcommerceConfig
@@ -105,6 +125,14 @@ apps/ecommerce/
 | `InventoryAllocation` | `EAL-` | `quantity_on_hand`, `quantity_allocated`, `safety_stock_buffer`, `low_stock_threshold`, `zone_bin`, `last_counted_at` | `product`, `variant`, `fulfillment_center` | `available_to_promise` (`max(0, on_hand - allocated - safety_buffer)`), `is_low_stock_alert` |
 | `BackorderPolicy` | `EBK-` | `policy_type` (deny_when_empty, allow_backorder_with_notice, pre_order_only), `storefront_message`, `expected_availability_date`, `max_backorder_quantity`, `current_backorder_count`, `auto_notify_waitlist` | `variant` (OneToOne) | Unique per `(tenant, variant)` |
 | `ChannelInventorySync`| `ESYN-`| `channel_type`, `channel_name`, `sync_mode`, `allocation_buffer_pct`, `last_synced_quantity`, `sync_status`, `last_synced_at` | `variant`, `fulfillment_center` (optional) | `calculate_sync_quantity()` (applies buffer percentage to ATP) |
+
+### Sub-module 9.3: Pricing & Promotion Engine
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `DynamicPriceRule` | `EDPR-` | `name`, `rule_type`, `adjustment_value`, `scope`, `customer_segment`, `loyalty_tier`, `min_quantity`, `priority`, `is_active` | `category`, `product`, `variant` | `calculate_price(base_price)`, `is_currently_valid` |
+| `CouponPromotion` | `ECPN-` | `code`, `name`, `discount_type`, `discount_value`, `min_spend`, `max_discount_amount`, `usage_limit_total`, `is_active` | `customer` (`core.Party`) | `calculate_discount(cart_subtotal)`, `is_currently_valid`, `remaining_redemptions` |
+| `FlashSale` | `EFLS-` | `title`, `status`, `discount_percentage`, `flash_price`, `inventory_cap`, `units_sold`, `max_units_per_order`, `start_time`, `end_time` | `product`, `variant`, `category` | `calculate_effective_price(original_price)`, `is_live`, `remaining_units`, `sold_percentage` |
+| `CompetitorPriceMonitor` | `ECPM-` | `competitor_name`, `competitor_url`, `competitor_price`, `match_strategy`, `beat_by_value`, `min_margin_pct`, `floor_price`, `status` | `product`, `variant` | `margin_floor_price`, `suggested_price`, `is_margin_risk` |
 
 ---
 
@@ -168,6 +196,31 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 | `inventory/sync/<int:pk>/delete/` | `channelinventorysync_delete` | `channelinventorysync_delete` | Delete channel feed (POST, tenant admin) |
 | `inventory/sync/<int:pk>/trigger/` | `channelinventorysync_trigger` | `channelinventorysync_trigger` | On-demand instant stock broadcast push (POST) |
 
+### 9.3 Pricing & Promotion Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `pricing/rules/` | `dynamicpricerule_list` | `dynamicpricerule_list` | Rules list with type, scope, and segment filters |
+| `pricing/rules/create/` | `dynamicpricerule_create` | `dynamicpricerule_create` | Create dynamic pricing rule |
+| `pricing/rules/<int:pk>/` | `dynamicpricerule_detail` | `dynamicpricerule_detail` | Rule detail view with targeting scope and priority |
+| `pricing/rules/<int:pk>/edit/` | `dynamicpricerule_edit` | `dynamicpricerule_edit` | Edit pricing rule parameters |
+| `pricing/rules/<int:pk>/delete/` | `dynamicpricerule_delete` | `dynamicpricerule_delete` | Delete rule (POST, tenant admin) |
+| `pricing/coupons/` | `couponpromotion_list` | `couponpromotion_list` | Coupons list with type and status filters |
+| `pricing/coupons/create/` | `couponpromotion_create` | `couponpromotion_create` | Create coupon voucher code |
+| `pricing/coupons/<int:pk>/` | `couponpromotion_detail` | `couponpromotion_detail` | Coupon detail with redemption stats |
+| `pricing/coupons/<int:pk>/edit/` | `couponpromotion_edit` | `couponpromotion_edit` | Edit coupon limits, spend threshold, and dates |
+| `pricing/coupons/<int:pk>/delete/` | `couponpromotion_delete` | `couponpromotion_delete` | Delete coupon (POST, tenant admin) |
+| `pricing/flash-sales/` | `flashsale_list` | `flashsale_list` | Flash sales list with live status indicators |
+| `pricing/flash-sales/create/` | `flashsale_create` | `flashsale_create` | Schedule new lightning flash sale |
+| `pricing/flash-sales/<int:pk>/` | `flashsale_detail` | `flashsale_detail` | Flash sale detail with live progress bar and countdown |
+| `pricing/flash-sales/<int:pk>/edit/` | `flashsale_edit` | `flashsale_edit` | Edit flash sale pricing, cap, or timing |
+| `pricing/flash-sales/<int:pk>/delete/` | `flashsale_delete` | `flashsale_delete` | Delete flash sale (POST, tenant admin) |
+| `pricing/competitors/` | `competitorpricemonitor_list` | `competitorpricemonitor_list` | Competitor price tracking table with margin flags |
+| `pricing/competitors/create/` | `competitorpricemonitor_create` | `competitorpricemonitor_create` | Add competitor listing to monitor |
+| `pricing/competitors/<int:pk>/` | `competitorpricemonitor_detail` | `competitorpricemonitor_detail` | Monitor detail with suggested repricing and margin floor |
+| `pricing/competitors/<int:pk>/edit/` | `competitorpricemonitor_edit` | `competitorpricemonitor_edit` | Edit match strategy, undercut margins, and floor |
+| `pricing/competitors/<int:pk>/delete/` | `competitorpricemonitor_delete` | `competitorpricemonitor_delete` | Delete monitor (POST, tenant admin) |
+| `pricing/competitors/<int:pk>/sync/` | `competitorpricemonitor_sync` | `competitorpricemonitor_sync` | Trigger instant competitor price scrape check (POST) |
+
 ---
 
 ## 4. Templates & Design System
@@ -180,6 +233,11 @@ Templates are stored under `templates/ecommerce/`:
   - `inventoryallocation/` — `list.html` (with ATP highlights), `detail.html` (with ATP equation breakdown), `form.html`, `adjust.html` (cycle count / damage write-off workflow).
   - `backorderpolicy/` — `list.html`, `detail.html`, `form.html`.
   - `channelinventorysync/` — `list.html`, `detail.html`, `form.html`.
+- `pricingpromotion/`
+  - `dynamicpricerule/` — `list.html`, `detail.html`, `form.html`.
+  - `couponpromotion/` — `list.html`, `detail.html`, `form.html`.
+  - `flashsale/` — `list.html` (with active live badges), `detail.html` (with inventory sell-through progress bar), `form.html`.
+  - `competitorpricemonitor/` — `list.html` (with margin risk warnings and suggested repricing), `detail.html` (with margin floor breakdown and instant sync button), `form.html`.
 
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
@@ -204,6 +262,10 @@ The command provisions:
 - 10 Inventory Allocations with on-hand, allocated, safety stock, and bin locations.
 - 3 Backorder & Pre-Order Policies with waitlist tracking and customer storefront messages.
 - 4 Multi-Channel Sync Feeds covering Shopify, Amazon Prime, Walmart Marketplace, and In-Store POS with buffer percentages.
+- 4 Dynamic Pricing Rules: Storewide 10% Welcome, VIP 15% Audio, Wholesale Volume Tier (Min 5 units, 20% off), Laptop Flash Deal override.
+- 4 Coupon Codes: `WELCOME10` (10% off), `SAVE50` ($50 off $200 min spend), `VIPFREESHIP` (Free shipping), `BLACKFRIDAY` (25% off max $100 cap).
+- 3 Flash Sales: Midnight Audio Lightning Deal, Weekend Computing Blitz, Flash Clearance.
+- 4 Competitor Price Monitors: Amazon US, Walmart, Best Buy, and Newegg with beat-by-fixed, beat-by-percent, and margin floor protection.
 - All demo data is scoped to tenant `acme`.
 
 ---
@@ -226,6 +288,9 @@ The command provisions:
    - Always validate foreign key filter parameters before passing to ORM: `if param and param.isdigit():`.
 6. **Open Redirect Validation**:
    - Always validate `next` parameters with `url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()})`.
+7. **Pricing Engine Precedence & Margin Protection**:
+   - Flash sales take highest priority during active windows.
+   - Competitive repricing suggestions must never breach the `margin_floor_price` calculated from variant unit cost (`cost_price * (1 + min_margin_pct/100)`). If competitor undercuts below margin floor, monitor flags `is_margin_risk` and clamps suggested price to floor.
 
 ---
 
@@ -235,5 +300,12 @@ Mounted in `apps/core/navigation.py`:
 ```python
 LIVE_LINKS["9.1"] = ("ecommerce:catalog_overview", "9.1 Product Catalog", "ecommerce")
 LIVE_LINKS["9.2"] = ("ecommerce:inventory_operations", "9.2 Inventory & Stock", "ecommerce")
+LIVE_LINKS["9.3"] = {
+    "Dynamic Pricing Rules": "ecommerce:dynamicpricerule_list",
+    "Discount & Coupon Management": "ecommerce:couponpromotion_list",
+    "Flash Sales & Limited-Time Offers": "ecommerce:flashsale_list",
+    "Loyalty & Rewards Pricing": "ecommerce:couponpromotion_list",
+    "Price Matching & Competitive Monitoring": "ecommerce:competitorpricemonitor_list",
+}
 ```
 Appears under the eCommerce section of the primary navigation bar.
