@@ -301,7 +301,7 @@
                 <a href="{% url 'ecommerce:customerwishlist_detail' w.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
                   {{ w.name }}
                 </a>
-                <div class="text-xs text-slate-500 mt-0.5">{{ w.items.count }} item{{ w.items.count|pluralize }} · {{ w.get_visibility_display }}</div>
+                <div class="text-xs text-slate-500 mt-0.5">{{ w.items_count }} item{{ w.items_count|pluralize }} · {{ w.get_visibility_display }}</div>
               </div>
               <a href="{% url 'ecommerce:customerwishlist_detail' w.pk %}" class="text-blue-600 hover:underline text-xs">View</a>
             </div>
