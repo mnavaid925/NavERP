@@ -80,8 +80,10 @@ def search_console(request):
                 return redirect(redirect_url)
 
     # Base products queryset
-    base_qs = CatalogProduct.objects.filter(tenant=tenant, is_active=True).select_related(
-        "category"
+    base_qs = (
+        CatalogProduct.objects.filter(tenant=tenant, status="active")
+        .select_related("primary_category", "item")
+        .prefetch_related("variants")
     )
 
     # 1. Apply Synonym Expansions
@@ -122,16 +124,21 @@ def search_console(request):
         for term in expanded_terms:
             search_filter |= (
                 Q(name__icontains=term)
-                | Q(sku__icontains=term)
+                | Q(number__icontains=term)
+                | Q(item__sku__icontains=term)
+                | Q(variants__sku__icontains=term)
                 | Q(description__icontains=term)
-                | Q(category__name__icontains=term)
+                | Q(primary_category__name__icontains=term)
             )
-        base_qs = base_qs.filter(search_filter)
+        base_qs = base_qs.filter(search_filter).distinct()
 
     # 3. Dynamic Facet Filters
     active_filters = {}
     if category_id and category_id.isdigit():
-        base_qs = base_qs.filter(category_id=int(category_id))
+        base_qs = base_qs.filter(
+            Q(primary_category_id=int(category_id))
+            | Q(categories__id=int(category_id))
+        ).distinct()
         active_filters["category"] = category_id
 
     if brand_filter:
@@ -141,7 +148,7 @@ def search_console(request):
     if price_min:
         try:
             min_val = Decimal(price_min)
-            base_qs = base_qs.filter(base_price__gte=min_val)
+            base_qs = base_qs.filter(variants__price__gte=min_val).distinct()
             active_filters["price_min"] = price_min
         except (ValueError, ArithmeticError):
             pass
@@ -149,13 +156,13 @@ def search_console(request):
     if price_max:
         try:
             max_val = Decimal(price_max)
-            base_qs = base_qs.filter(base_price__lte=max_val)
+            base_qs = base_qs.filter(variants__price__lte=max_val).distinct()
             active_filters["price_max"] = price_max
         except (ValueError, ArithmeticError):
             pass
 
     if in_stock_only in ("1", "true"):
-        base_qs = base_qs.filter(inventory_tracking=True)
+        base_qs = base_qs.filter(is_digital=False)
         active_filters["in_stock"] = "1"
 
     # Compute Facet Groups for sidebar
@@ -171,13 +178,18 @@ def search_console(request):
         if fc.source_type == "category":
             cats = (
                 StoreCategory.objects.filter(tenant=tenant, is_active=True)
-                .annotate(prod_count=Count("products", filter=Q(products__is_active=True)))
+                .annotate(
+                    prod_count=Count(
+                        "primary_products",
+                        filter=Q(primary_products__status="active"),
+                    )
+                )
                 .filter(prod_count__gt=0)[: fc.max_values_shown]
             )
             group["items"] = [{"value": str(c.id), "label": c.name, "count": c.prod_count} for c in cats]
         elif fc.source_type == "brand":
             brands = (
-                CatalogProduct.objects.filter(tenant=tenant, is_active=True)
+                CatalogProduct.objects.filter(tenant=tenant, status="active")
                 .exclude(brand="")
                 .values("brand")
                 .annotate(prod_count=Count("id"))
@@ -238,14 +250,18 @@ def search_console(request):
 
     # 5. Sorting
     if sort_order == "price_asc":
-        product_list = list(base_qs.order_by("base_price")[:100])
+        product_list = list(
+            base_qs.order_by("variants__price").distinct()[:100]
+        )
     elif sort_order == "price_desc":
-        product_list = list(base_qs.order_by("-base_price")[:100])
+        product_list = list(
+            base_qs.order_by("-variants__price").distinct()[:100]
+        )
     elif sort_order == "newest":
-        product_list = list(base_qs.order_by("-created_at")[:100])
+        product_list = list(base_qs.order_by("-created_at").distinct()[:100])
     else:
         # Default relevance sorting with merchandising score adjustments
-        raw_products = list(base_qs[:100])
+        raw_products = list(base_qs.distinct()[:100])
         # Sort key: modified score descending
         product_list = sorted(
             raw_products,
@@ -271,7 +287,7 @@ def search_console(request):
     fallback_recommendations = []
     if total_results == 0 and q:
         fallback_recommendations = list(
-            CatalogProduct.objects.filter(tenant=tenant, is_active=True).order_by(
+            CatalogProduct.objects.filter(tenant=tenant, status="active").order_by(
                 "-created_at"
             )[:4]
         )
@@ -326,14 +342,31 @@ def search_autocomplete(request):
     norm_q = q.lower()
 
     # Search products
-    products = list(
+    raw_products = list(
         CatalogProduct.objects.filter(
             tenant=tenant,
-            is_active=True,
+            status="active",
         )
-        .filter(Q(name__icontains=norm_q) | Q(sku__icontains=norm_q))
-        .values("id", "number", "name", "sku", "base_price", "brand")[:5]
+        .filter(
+            Q(name__icontains=norm_q)
+            | Q(number__icontains=norm_q)
+            | Q(item__sku__icontains=norm_q)
+            | Q(variants__sku__icontains=norm_q)
+        )
+        .select_related("item")
+        .prefetch_related("variants")
+        .distinct()[:5]
     )
+    products = []
+    for p in raw_products:
+        products.append({
+            "id": p.id,
+            "number": p.number,
+            "name": p.name,
+            "sku": p.sku,
+            "base_price": p.base_price,
+            "brand": p.brand,
+        })
 
     # Search categories
     categories = list(
@@ -406,16 +439,21 @@ def search_analytics(request):
         .order_by("-query_count")[:10]
     )
 
-    top_clicked_products = (
+    top_clicked_products = list(
         logs_qs.filter(clicked_product__isnull=False)
         .values(
             "clicked_product__id",
             "clicked_product__name",
-            "clicked_product__sku",
+            "clicked_product__number",
+            "clicked_product__item__sku",
         )
         .annotate(click_count=Count("id"))
         .order_by("-click_count")[:10]
     )
+    for p in top_clicked_products:
+        p["clicked_product__sku"] = (
+            p.get("clicked_product__item__sku") or p["clicked_product__number"]
+        )
 
     context = {
         "total_searches": total_searches,
