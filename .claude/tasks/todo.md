@@ -19299,7 +19299,7 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 
 ## Models (from research — 4 models in `apps/ecommerce/models/CartCheckout/`)
 
-- [ ] `Cart` (`ECRT-`) & `CartItem` (`Carts.py`)
+- [x] `Cart` (`ECRT-`) & `CartItem` (`Carts.py`)
   - **Serves:** Bullet 1 (Persistent & Guest Cart, cross-device persistence, and abandonment recovery).
   - **Base:** `TenantNumbered`, `NUMBER_PREFIX = "ECRT"`.
   - **Fields:**
@@ -19331,7 +19331,7 @@ Nested folder structure per house convention. All templates extend `"base.html"`
     - `custom_attributes`: `JSONField(default=dict, blank=True)`
   - **Form Excludes:** `tenant`, `number`, `subtotal`, `discount_total`, `tax_total`, `shipping_total`, `grand_total`, `abandoned_at`, `recovery_token`, `recovery_sent_at`, `last_activity_at`.
 
-- [ ] `CheckoutSession` (`ECKS-`) (`CheckoutSessions.py`)
+- [x] `CheckoutSession` (`ECKS-`) (`CheckoutSessions.py`)
   - **Serves:** Bullet 2 (One-Page & Multi-Step Checkout) & Bullet 4 (Tax Calculation & Compliance snapshot).
   - **Base:** `TenantNumbered`, `NUMBER_PREFIX = "ECKS"`.
   - **Fields:**
@@ -19378,7 +19378,7 @@ Nested folder structure per house convention. All templates extend `"base.html"`
     - `completed_at`: `DateTimeField(null=True, blank=True)`
   - **Form Excludes:** `tenant`, `number`, `cart`, `payment_transaction_id`, `order_reference`, `completed_at`.
 
-- [ ] `ShippingMethodConfig` (`ESHP-`) (`ShippingMethods.py`)
+- [x] `ShippingMethodConfig` (`ESHP-`) (`ShippingMethods.py`)
   - **Serves:** Bullet 3 (Shipping Rate Calculation, carrier types, weight tiers, free-shipping threshold rules, pickup).
   - **Base:** `TenantNumbered`, `NUMBER_PREFIX = "ESHP"`.
   - **Fields:**
@@ -19399,7 +19399,7 @@ Nested folder structure per house convention. All templates extend `"base.html"`
     - `description`: `TextField(blank=True)`
   - **Form Excludes:** `tenant`, `number`.
 
-- [ ] `PaymentMethodConfig` (`EPMC-`) (`PaymentMethods.py`)
+- [x] `PaymentMethodConfig` (`EPMC-`) (`PaymentMethods.py`)
   - **Serves:** Bullet 5 (Payment Method Orchestration, credit cards, digital wallets, BNPL, bank transfers, COD).
   - **Base:** `TenantNumbered`, `NUMBER_PREFIX = "EPMC"`.
   - **Fields:**
@@ -19425,41 +19425,41 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 ## Backend Packages (`apps/ecommerce/{models,forms,views,urls}/CartCheckout/`)
 
 ### Layer 1: Models (`apps/ecommerce/models/CartCheckout/`)
-- [ ] `apps/ecommerce/models/CartCheckout/__init__.py`
-- [ ] `apps/ecommerce/models/CartCheckout/Carts.py` (`Cart`, `CartItem`)
-- [ ] `apps/ecommerce/models/CartCheckout/CheckoutSessions.py` (`CheckoutSession`)
-- [ ] `apps/ecommerce/models/CartCheckout/ShippingMethods.py` (`ShippingMethodConfig`)
-- [ ] `apps/ecommerce/models/CartCheckout/PaymentMethods.py` (`PaymentMethodConfig`)
-- [ ] `models/__init__.py` - add 9.4 re-export block
+- [x] `apps/ecommerce/models/CartCheckout/__init__.py`
+- [x] `apps/ecommerce/models/CartCheckout/Carts.py` (`Cart`, `CartItem`)
+- [x] `apps/ecommerce/models/CartCheckout/CheckoutSessions.py` (`CheckoutSession`)
+- [x] `apps/ecommerce/models/CartCheckout/ShippingMethods.py` (`ShippingMethodConfig`)
+- [x] `apps/ecommerce/models/CartCheckout/PaymentMethods.py` (`PaymentMethodConfig`)
+- [x] `models/__init__.py` - add 9.4 re-export block
 
 ### Layer 2: Forms (`apps/ecommerce/forms/CartCheckout/`)
-- [ ] `apps/ecommerce/forms/CartCheckout/__init__.py`
-- [ ] `apps/ecommerce/forms/CartCheckout/Carts.py` (`CartForm`, `CartItemForm`)
-- [ ] `apps/ecommerce/forms/CartCheckout/CheckoutSessions.py` (`CheckoutSessionForm`)
-- [ ] `apps/ecommerce/forms/CartCheckout/ShippingMethods.py` (`ShippingMethodConfigForm`)
-- [ ] `apps/ecommerce/forms/CartCheckout/PaymentMethods.py` (`PaymentMethodConfigForm`)
-- [ ] `forms/__init__.py` - add 9.4 re-export block
+- [x] `apps/ecommerce/forms/CartCheckout/__init__.py`
+- [x] `apps/ecommerce/forms/CartCheckout/Carts.py` (`CartForm`, `CartItemForm`)
+- [x] `apps/ecommerce/forms/CartCheckout/CheckoutSessions.py` (`CheckoutSessionForm`)
+- [x] `apps/ecommerce/forms/CartCheckout/ShippingMethods.py` (`ShippingMethodConfigForm`)
+- [x] `apps/ecommerce/forms/CartCheckout/PaymentMethods.py` (`PaymentMethodConfigForm`)
+- [x] `forms/__init__.py` - add 9.4 re-export block
 
 ### Layer 3: Views (`apps/ecommerce/views/CartCheckout/`)
-- [ ] `apps/ecommerce/views/CartCheckout/__init__.py`
-- [ ] `apps/ecommerce/views/CartCheckout/Carts.py` (Full CRUD + Abandonment Recovery trigger)
-- [ ] `apps/ecommerce/views/CartCheckout/CheckoutSessions.py` (Full CRUD + Step advance action)
-- [ ] `apps/ecommerce/views/CartCheckout/ShippingMethods.py` (Full CRUD + toggle active action)
-- [ ] `apps/ecommerce/views/CartCheckout/PaymentMethods.py` (Full CRUD + toggle sandbox action)
-- [ ] `views/__init__.py` - add 9.4 re-export block
+- [x] `apps/ecommerce/views/CartCheckout/__init__.py`
+- [x] `apps/ecommerce/views/CartCheckout/Carts.py` (Full CRUD + Abandonment Recovery trigger)
+- [x] `apps/ecommerce/views/CartCheckout/CheckoutSessions.py` (Full CRUD + Step advance action)
+- [x] `apps/ecommerce/views/CartCheckout/ShippingMethods.py` (Full CRUD + toggle active action)
+- [x] `apps/ecommerce/views/CartCheckout/PaymentMethods.py` (Full CRUD + toggle sandbox action)
+- [x] `views/__init__.py` - add 9.4 re-export block
 
 ### Layer 4: URLs (`apps/ecommerce/urls/CartCheckout/`)
-- [ ] `apps/ecommerce/urls/CartCheckout/__init__.py`
-- [ ] `apps/ecommerce/urls/CartCheckout/Carts.py`
-- [ ] `apps/ecommerce/urls/CartCheckout/CheckoutSessions.py`
-- [ ] `apps/ecommerce/urls/CartCheckout/ShippingMethods.py`
-- [ ] `apps/ecommerce/urls/CartCheckout/PaymentMethods.py`
-- [ ] `urls/__init__.py` - concatenate 9.4 urlpatterns into ecommerce routing
+- [x] `apps/ecommerce/urls/CartCheckout/__init__.py`
+- [x] `apps/ecommerce/urls/CartCheckout/Carts.py`
+- [x] `apps/ecommerce/urls/CartCheckout/CheckoutSessions.py`
+- [x] `apps/ecommerce/urls/CartCheckout/ShippingMethods.py`
+- [x] `apps/ecommerce/urls/CartCheckout/PaymentMethods.py`
+- [x] `urls/__init__.py` - concatenate 9.4 urlpatterns into ecommerce routing
 
 ### Layer 5: Admin & Seeder & Navigation
-- [ ] `apps/ecommerce/admin.py` - register all 4 models + CartItem inline
-- [ ] `apps/ecommerce/management/commands/seed_ecommerce.py` - extend with idempotent 9.4 demo data
-- [ ] `apps/core/navigation.py` - add `LIVE_LINKS["9.4"]` entry with all 5 NavERP.md bullets:
+- [x] `apps/ecommerce/admin.py` - register all 4 models + CartItem inline
+- [x] `apps/ecommerce/management/commands/seed_ecommerce.py` - extend with idempotent 9.4 demo data
+- [x] `apps/core/navigation.py` - add `LIVE_LINKS["9.4"]` entry with all 5 NavERP.md bullets:
   - "Persistent & Guest Cart": "ecommerce:cart_list"
   - "One-Page & Multi-Step Checkout": "ecommerce:checkoutsession_list"
   - "Shipping Rate Calculation": "ecommerce:shippingmethodconfig_list"
@@ -19470,28 +19470,28 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 
 ## Templates (`templates/ecommerce/cartcheckout/`)
 
-- [ ] `templates/ecommerce/cartcheckout/cart/list.html`
-- [ ] `templates/ecommerce/cartcheckout/cart/detail.html`
-- [ ] `templates/ecommerce/cartcheckout/cart/form.html`
-- [ ] `templates/ecommerce/cartcheckout/checkoutsession/list.html`
-- [ ] `templates/ecommerce/cartcheckout/checkoutsession/detail.html`
-- [ ] `templates/ecommerce/cartcheckout/checkoutsession/form.html`
-- [ ] `templates/ecommerce/cartcheckout/shippingmethodconfig/list.html`
-- [ ] `templates/ecommerce/cartcheckout/shippingmethodconfig/detail.html`
-- [ ] `templates/ecommerce/cartcheckout/shippingmethodconfig/form.html`
-- [ ] `templates/ecommerce/cartcheckout/paymentmethodconfig/list.html`
-- [ ] `templates/ecommerce/cartcheckout/paymentmethodconfig/detail.html`
-- [ ] `templates/ecommerce/cartcheckout/paymentmethodconfig/form.html`
+- [x] `templates/ecommerce/cartcheckout/cart/list.html`
+- [x] `templates/ecommerce/cartcheckout/cart/detail.html`
+- [x] `templates/ecommerce/cartcheckout/cart/form.html`
+- [x] `templates/ecommerce/cartcheckout/checkoutsession/list.html`
+- [x] `templates/ecommerce/cartcheckout/checkoutsession/detail.html`
+- [x] `templates/ecommerce/cartcheckout/checkoutsession/form.html`
+- [x] `templates/ecommerce/cartcheckout/shippingmethodconfig/list.html`
+- [x] `templates/ecommerce/cartcheckout/shippingmethodconfig/detail.html`
+- [x] `templates/ecommerce/cartcheckout/shippingmethodconfig/form.html`
+- [x] `templates/ecommerce/cartcheckout/paymentmethodconfig/list.html`
+- [x] `templates/ecommerce/cartcheckout/paymentmethodconfig/detail.html`
+- [x] `templates/ecommerce/cartcheckout/paymentmethodconfig/form.html`
 
 ---
 
 ## Verification Steps
-- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
-- [ ] `venv\Scripts\python.exe manage.py migrate`
-- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1)
-- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency)
-- [ ] `venv\Scripts\python.exe manage.py check`
-- [ ] Smoke test script in `temp/smoke_ecommerce_9_4.py`:
+- [x] `venv\Scripts\python.exe manage.py makemigrations ecommerce` (migration `0005`)
+- [x] `venv\Scripts\python.exe manage.py migrate`
+- [x] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1)
+- [x] `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency)
+- [x] `venv\Scripts\python.exe manage.py check` (0 issues)
+- [x] Smoke test script in `temp/smoke_ecommerce_9_4.py`:
   - Login as `admin_acme`
   - GET all new 9.4 URLs -> verify 200/302
   - Check rendered HTML: no leaked comments (`{#`), proper title, seeded records visible
@@ -19502,17 +19502,30 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 ---
 
 ## Close-Out Steps
-- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`
-- [ ] Append findings to `.claude/tasks/review-ecommerce-9.4.md`
-- [ ] Run Phase 5 `code-fixer` agent to burn down findings
-- [ ] Run Phase 6 automated test suite:
+- [x] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`
+- [x] Append findings to `.claude/tasks/review-ecommerce-9.4.md`
+- [x] Run Phase 5 `code-fixer` agent to burn down findings (all 7 findings fixed & verified)
+- [x] Run Phase 6 automated test suite:
   - Update `apps/ecommerce/tests/conftest.py`
   - Author `test_cartcheckout_models.py`
   - Author `test_cartcheckout_forms.py`
   - Author `test_cartcheckout_views.py`
   - Author `test_cartcheckout_security.py`
-  - Run full unfiltered suite `pytest apps/ecommerce/tests/`
-- [ ] Phase 7 documentation:
+  - Run full unfiltered suite `pytest apps/ecommerce/tests/` (524 passed, 100% green)
+- [x] Phase 7 documentation:
   - Update `.claude/skills/ecommerce/SKILL.md`
   - Update `README.md`
   - Track any deferred features in `.claude/tasks/gaps-ecommerce-9.4.md`
+
+---
+
+## Review & Completion Summary (2026-10-29)
+
+- **Deliverables**: Sub-Module 9.4 Shopping Cart & Checkout built, verified, and integrated.
+- **Models**: `Cart` (`ECRT-`), `CartItem`, `CheckoutSession` (`ECKS-`), `ShippingMethodConfig` (`ESHP-`), `PaymentMethodConfig` (`EPMC-`).
+- **Templates**: 12 responsive templates with color-named badge tokens and step funnel visualization.
+- **Navigation**: `LIVE_LINKS["9.4"]` registered covering all 5 NavERP.md feature bullets.
+- **Database & Seeder**: Migration `0005` applied; `seed_ecommerce` executed twice idempotently.
+- **Code Review**: 7 findings (2 Critical, 3 Important, 2 Minor) cataloged in `.claude/tasks/review-ecommerce-9.4.md` and 100% resolved by code-fixer.
+- **Test Coverage**: 53 dedicated 9.4 tests passing; full unfiltered `apps/ecommerce/tests/` suite: 524 passed, 0 failures, 100% green.
+- **Gaps**: Documented in `.claude/tasks/gaps-ecommerce-9.4.md` (`GAP-ECOM-9.4-01` external payment webhook transport, `GAP-ECOM-9.4-02` background cart abandonment cron).
