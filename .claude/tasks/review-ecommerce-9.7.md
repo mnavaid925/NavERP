@@ -4,141 +4,185 @@
 - **Module:** 9 eCommerce Management System
 - **App:** `apps/ecommerce`
 - **Date:** 2026-10-30
-- **Changeset:** `a9a5b9525739bf487ce81e8eb50a9792c910da1d` (BASE) ... `3544600773b938dffee78f62e998e826d48ae533` (HEAD)
+- **Changeset:** `a9a5b9525739bf487ce81e8eb50a9792c910da1d` (BASE) ... `HEAD`
+- **Review Passes:**
+  1. `code-reviewer` — Completed
+  2. `explorer` — Completed
+  3. `frontend-reviewer` — Completed
+  4. `performance-reviewer` — Completed
+  5. `qa-smoke-tester` — Completed (66/66 checks passed)
+  6. `security-reviewer` — Completed
 
 ---
 
-## Pass 1: `code-reviewer` Findings
+## Consolidated & Prioritized Findings for Phase 5 (`code-fixer`)
 
-### Critical
-- [ ] **C1** — Broken Facet Checkbox State in Search Console Template (`templates/ecommerce/searchdiscovery/console/console.html:230`):
-  `{% if active_filters|dictsort:fg.config.code %}checked{% endif %}` fails silently because `dictsort` expects a sequence of dictionaries, not a dictionary. Checkboxes for active facet filters never render checked.
-- [ ] **C2** — Invalid Model Attribute `product.category` in Search Console Grid (`templates/ecommerce/searchdiscovery/console/console.html:291-293`):
-  `CatalogProduct` has `primary_category` foreign key, not `category`. Product category tags in workbench grid evaluate to None.
-- [ ] **C3** — Database Duplication & PostgreSQL Incompatibility in Price Sorting (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:253-259`):
-  `.order_by("variants__price").distinct()` causes PostgreSQL error and SQL duplicate rows across products with multiple variants. Need annotation `Min("variants__price")`.
-- [ ] **C4** — Duplicate Search Query Logs Created on Redirects (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:67-77, 296-309`):
-  When a redirect rule is triggered in workbench view without auto_redirect, query log is created twice.
-- [ ] **C5** — Campaign Schedule (`start_date` / `end_date`) Ignored in Rule Evaluation (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:48-61, 213-246`):
-  Active date bounds (`start_date`, `end_date`) are omitted from merchandising rule queries, executing expired or future rules.
+### Critical Findings
 
-### Important
-- [ ] **I1** — Missing Model-Level Multi-Tenant Validation in `clean()` (`SearchFacetConfigs.py:107`, `SearchMerchandisingRules.py:142`, `SearchQueryLogs.py:105`):
-  Model `clean()` methods do not assert that foreign keys (`category_scope`, `target_category`, `boosted_product`, `customer`, `clicked_product`) match `self.tenant_id`.
-- [ ] **I2** — N+1 Query on Pinned Products in `search_console` (`SearchConsole.py:213-215, 241`):
-  `active_rules` lacks `select_related("boosted_product", "target_category")`.
-- [ ] **I3** — Silent Omission of `variant_option` Facet Values in Sidebar (`SearchConsole.py:173-206`):
-  No handler for `fc.source_type == "variant_option"` when computing facet groups.
-- [ ] **I4** — Missing HTML5 `datetime-local` Format in Merchandising Form (`SearchMerchandisingRules.py:48-49`):
-  `start_date` and `end_date` widgets lack `format="%Y-%m-%dT%H:%M"`, causing them to render blank on edit.
-- [ ] **I5** — Inactive / Archived Products Inserted via Pin Rules (`SearchConsole.py:272-282`):
-  `pinned_prod` is inserted into `product_list` without checking `pinned_prod.status == "active"`.
-- [ ] **I6** — Unscoped Customer Attribution on Search Query Logs (`SearchConsole.py:307`):
-  `request.user.party` is assigned without validating `party.tenant_id == tenant.id`.
+- [ ] **C1** — Broken Facet Checkbox State in Search Console Template
+  - **Location:** `templates/ecommerce/searchdiscovery/console/console.html:230` and `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:173-210`
+  - **Description:** `{% if active_filters|dictsort:fg.config.code %}checked{% endif %}` fails silently because `dictsort` expects a sequence of dictionaries, not a dictionary. Checkboxes for active facet filters never render checked.
+  - **Fix:** In `SearchConsole.py`, annotate each item in `facet_groups` with `"is_selected": (active_filters.get(fc.code) == str(itm["value"]))`. In `console.html:230`, change the condition to `{% if itm.is_selected %}checked{% endif %}`.
 
-### Minor
-- [ ] **M1** — Non-Standard Semantic Badges in Templates (`synonym/list.html`, `facetconfig/list.html`, etc.):
-  Verify badge classes against `theme.css`. Note: in `theme.css`, `.badge-info` and `.badge-muted` are valid color/theme classes in this repository, but standardize across all templates.
-- [ ] **M2** — Exact Full-String-Only Matching for Synonyms (`SearchConsole.py:98`):
-  Multi-word queries do not match token synonyms.
-- [ ] **M3** — Nullable `category_scope` Unique Constraint in `SearchFacetConfig` (`SearchFacetConfigs.py:92-95`):
-  Unique constraint allows duplicate global codes on databases where NULL!=NULL.
-- [ ] **M4** — Unbound Form `SearchQueryLogFilterForm` in `searchquerylog_list` (`SearchQueryLogs.py:50`).
+- [ ] **C2** — Invalid Attribute `product.category` in Search Console Grid
+  - **Location:** `templates/ecommerce/searchdiscovery/console/console.html:291-293`
+  - **Description:** `CatalogProduct` has `primary_category`, not `category`. Product category tags in workbench grid evaluate to None.
+  - **Fix:** In `console.html:291-293`, use `{{ product.primary_category.name }}` (with `{{ product.category.name }}` fallback).
 
+- [ ] **C3** — Database Duplication & PostgreSQL Incompatibility in Price Sorting
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:252-259`
+  - **Description:** Ordering `base_qs` via `order_by("variants__price").distinct()[:100]` performs an SQL `INNER JOIN` against reverse FK `ProductVariant`. Multi-variant products duplicate rows, and `SELECT DISTINCT` with `ORDER BY` on an unselected joined column fails on PostgreSQL.
+  - **Fix:** Annotate `base_qs = base_qs.annotate(min_price=Min("variants__price"))` before ordering by `min_price` (for `price_asc`) or `-min_price` (for `price_desc`).
 
----
+- [ ] **C4** — Duplicate Search Query Log Created on Redirect Intercepts
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:67-77, 296-309`
+  - **Description:** When a redirect rule is matched in workbench view without `auto_redirect=1`, a query log is created at line 77, and then another query log is created at line 309 for the same request.
+  - **Fix:** Add a flag or skip the second `SearchQueryLog.objects.create` if a log was already written for this search request.
 
-## Pass 2: `explorer` Findings
+- [ ] **C5** — Merchandising Campaign Schedules Ignored in Rule Evaluation
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:48-61, 213-246`
+  - **Description:** Active date bounds (`start_date`, `end_date`) are omitted from merchandising rule queries, executing expired or future campaign rules.
+  - **Fix:** Filter active rules with `(Q(start_date__isnull=True) | Q(start_date__lte=now)) & (Q(end_date__isnull=True) | Q(end_date__gte=now))`.
 
-### Critical
-- [ ] **E-C1** — Broken Facet Checkbox State in Search Console Template (`templates/ecommerce/searchdiscovery/console/console.html:230`):
-  `{% if active_filters|dictsort:fg.config.code %}checked{% endif %}` fails silently. In `search_console` view, annotate each item in `facet_groups` with `"is_selected": (active_filters.get(fc.code) == itm["value"])`, and in template use `{% if itm.is_selected %}checked{% endif %}`.
-- [ ] **E-C2** — Invalid Attribute `product.category` Causes Silent Blank (L7) (`templates/ecommerce/searchdiscovery/console/console.html:291-293`):
-  `CatalogProduct` has `primary_category`, not `category`.
-- [ ] **E-C3** — Duplicate Products & PostgreSQL Incompatibility in Price Sorting (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:253-259`):
-  Ordering by field across 1-to-many joined table causes duplicate products and breaks on Postgres. Annotate `min_price = Min("variants__price")`.
-- [ ] **E-C4** — Duplicate Search Query Log Created on Redirect Intercepts (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:67-77, 296-309`):
-  Double query log creation on redirect rules.
-- [ ] **E-C5** — Merchandising Campaign Schedules Ignored in Search Console (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:48-61, 213-220`):
-  Rules do not filter `start_date` and `end_date`.
+- [ ] **C6** — Open Redirect via Unvalidated Merchandising Query Forwarding
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:79-80`
+  - **Description:** When `auto_redirect=1` is passed, `search_console` performs an immediate redirect to `redirect_url` without verifying that the destination host and scheme are safe via `url_has_allowed_host_and_scheme`.
+  - **Fix:** Validate `redirect_url` with `url_has_allowed_host_and_scheme(url=redirect_url, allowed_hosts={request.get_host()}, require_https=request.is_secure())` before redirecting.
 
-### Important
-- [ ] **E-I1** — Contract Pinned `sort_choices` Omission in Search Console View (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:33-38`):
-  `('rating', 'Customer Rating')` missing from `sort_choices`.
-- [ ] **E-I2** — Missing Model-Level Cross-Tenant FK Validation in `clean()` (`SearchFacetConfigs.py:107`, `SearchMerchandisingRules.py:142`, `SearchQueryLogs.py:105`).
-- [ ] **E-I3** — Variant Option Facets Silently Excluded from Facet Groups (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:173-206`):
-  No handler for `fc.source_type == "variant_option"` in `facet_groups`.
-- [ ] **E-I4** — N+1 Queries on Boosted Products in Search Console Rule Loop (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:213-215, 241`):
-  `active_rules` lacks `select_related("boosted_product", "target_category")`.
-- [ ] **E-I5** — HTML5 `datetime-local` Format Missing on Edit Forms (`apps/ecommerce/forms/SearchDiscovery/SearchMerchandisingRules.py:48-49`):
-  Add `format="%Y-%m-%dT%H:%M"` to widgets.
-- [ ] **E-I6** — Inactive / Draft Products Injected via Fixed Slot Pin Rules (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:241, 273-282`).
-- [ ] **E-I7** — Unscoped Customer Attribution on Query Logs (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:307`).
-
-### Minor
-- [ ] **E-M1** — Unused `root` Query Parameter on `searchsynonym_create` (`apps/ecommerce/views/SearchDiscovery/SearchSynonyms.py:84`).
-- [ ] **E-M2** — Nullable Unique Constraint on Global Facet Codes (`SearchFacetConfigs.py:92-95`).
-- [ ] **E-M3** — Synonym Trigger Limited to Exact Full-String Equality (`SearchConsole.py:98`).
-- [ ] **E-M4** — Unbound `SearchQueryLogFilterForm` in `searchquerylog_list` (`SearchQueryLogs.py:21-54`).
-
+- [ ] **C7** — Stored XSS via Dangerous URI Schemes in Merchandising URLs
+  - **Location:** `apps/ecommerce/models/SearchDiscovery/SearchMerchandisingRules.py:157-162`
+  - **Description:** `redirect_url` and `banner_link_url` accept arbitrary string inputs without scheme validation, allowing `javascript:` URI payloads to be persisted and executed when clicked.
+  - **Fix:** In `SearchMerchandisingRule.clean()`, validate that URLs do not start with `javascript:`, `data:`, or `vbscript:` and only use HTTP, HTTPS, or relative paths.
 
 ---
 
-## Pass 3: `frontend-reviewer` Findings
+### Important Findings
 
-### Important
-- [ ] **FE-I1** — Dynamic Facet Checkbox UI State Retention Broken via Invalid `|dictsort` Usage (`templates/ecommerce/searchdiscovery/console/console.html:230`):
-  Checkbox `{% if active_filters|dictsort:fg.config.code %}checked{% endif %}` fails silently. Add `is_selected` boolean flag to item dictionaries in `facet_groups` in `SearchConsole.py`.
-- [ ] **FE-I2** — None-Safe Display (L10) for Nullable ForeignKey Fields (`templates/ecommerce/searchdiscovery/merchandisingrule/list.html:125, 147-155`, `detail.html:84`):
-  `rule.target_category.name` and `rule.boosted_product.name` are accessed directly without `{% if %}` or `|default:"—"` guards when null.
+- [ ] **I1** — Missing Multi-Tenant Foreign Key Scoping in Model `clean()` Methods
+  - **Location:** `apps/ecommerce/models/SearchDiscovery/SearchFacetConfigs.py:107-114`, `SearchMerchandisingRules.py:142-164`, `SearchQueryLogs.py:105-111`
+  - **Description:** Model `clean()` methods omit tenant validation for related foreign keys (`category_scope`, `target_category`, `boosted_product`, `customer`, `clicked_product`).
+  - **Fix:** Assert `self.category_scope.tenant_id == self.tenant_id`, `self.target_category.tenant_id == self.tenant_id`, `self.boosted_product.tenant_id == self.tenant_id`, `self.customer.tenant_id == self.tenant_id`, and `self.clicked_product.tenant_id == self.tenant_id`.
 
-### Minor
-- [ ] **FE-M1** — Missing Accessible Labels on Search & Price Inputs (`templates/ecommerce/searchdiscovery/console/console.html:48-57, 250-264`):
-  Add `aria-label` attributes to the workbench search box and price inputs.
-- [ ] **FE-M2** — Design System Alignment for KPI Cards (`templates/ecommerce/searchdiscovery/analytics/analytics.html:33-85`):
-  Adopt `.stat-card`, `.stat-value`, and `.stat-label` structure without hardcoding light-mode background classes over `.stat-icon.<color>`.
-- [ ] **FE-M3** — Missing `filter_logic` Select Dropdown in Facet Filter Form (`templates/ecommerce/searchdiscovery/facetconfig/list.html:34-75`):
-  Context provides `filter_logic_choices` and `selected_logic`, but form omits the dropdown.
+- [ ] **I2** — N+1 Queries on Pinned Merchandising Products in `search_console`
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:213-215, 241`
+  - **Description:** `active_rules` query does not select or prefetch related product details, triggering N+1 queries when accessing `sku` and `base_price` on pinned items.
+  - **Fix:** Add `.select_related("boosted_product__item", "boosted_product__primary_category").prefetch_related("boosted_product__variants")` to `active_rules`.
 
+- [ ] **I3** — N+1 Queries on Fallback Product Recommendations
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:288-294`
+  - **Description:** `fallback_recommendations` lacks prefetching on `item`, `primary_category`, and `variants`, causing up to 8 additional database queries on every zero-result search.
+  - **Fix:** Add `.select_related("item", "primary_category").prefetch_related("variants")` to `fallback_recommendations`.
+
+- [ ] **I4** — Variant Option Facets Silently Excluded from Facet Groups
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:173-206`
+  - **Description:** `facet_groups` logic only handles `category` and `brand`, silently skipping facet configs where `source_type == "variant_option"`.
+  - **Fix:** Extract variant option values/counts from `ProductVariant.options` for products matching the current query.
+
+- [ ] **I5** — Inactive / Archived Products Inserted via Pin Rules
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:272-282`
+  - **Description:** Pinned products are inserted into search results without validating `pinned_prod.status == "active"`.
+  - **Fix:** Check `if pinned_prod and pinned_prod.status == "active":` before inserting into `product_list`.
+
+- [ ] **I6** — Cross-Tenant Customer Party Leakage in Search Query Telemetry
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:307`
+  - **Description:** `getattr(request.user, "party", None)` is assigned without verifying `party.tenant_id == tenant.pk`.
+  - **Fix:** Check `customer_party = getattr(request.user, "party", None)` and ensure `customer_party.tenant_id == tenant.pk` before setting.
+
+- [ ] **I7** — Unhandled Special Decimal Literals (`NaN` / `Infinity`) in Price Filters
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:148-163`
+  - **Description:** `Decimal(price_min)` does not raise `ValueError` on `"NaN"` or `"Infinity"`, causing driver exceptions when querying.
+  - **Fix:** Verify `min_val.is_finite() and min_val >= Decimal("0")`.
+
+- [ ] **I8** — Full-Table Scan & Per-Item `UPDATE` Queries in Synonym Loop
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:93-117`
+  - **Description:** Active synonyms are scanned in Python and updated row-by-row in an unbatched loop.
+  - **Fix:** Filter active synonyms in SQL using `Q(root_term=norm_q) | Q(synonyms__icontains=norm_q)` and batch `hit_count` updates outside the loop with `.filter(id__in=matched_ids).update(hit_count=F("hit_count") + 1)`.
+
+- [ ] **I9** — Redundant Category Count Aggregation in Facet Loop Discarded by Template
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:178-206`
+  - **Description:** Template explicitly ignores category facet groups because categories are rendered independently, but the view executes an expensive category aggregation query anyway.
+  - **Fix:** Skip querying category counts in `facet_groups` if `fc.source_type == "category"`.
+
+- [ ] **I10** — Multiple Table Scans in `search_analytics` Dashboard
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:415-426`
+  - **Description:** `search_analytics` runs 3 distinct queries for total searches, zero-result searches, and avg latency.
+  - **Fix:** Consolidate into a single query using conditional aggregation: `logs_qs.aggregate(total=Count("id"), zero_results=Count("id", filter=Q(is_zero_result=True)), avg_latency=Avg("execution_time_ms"))`.
+
+- [ ] **I11** — Missing Contract-Pinned `sort_choices` Entry in Search Console
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:33-38`
+  - **Description:** Contract specifies `('rating', 'Customer Rating')` in `sort_choices`, but it is missing from `sort_choices` in the view.
+  - **Fix:** Add `("rating", "Customer Rating")` to `sort_choices`.
+
+- [ ] **I12** — HTML5 `datetime-local` Format Missing on Edit Forms
+  - **Location:** `apps/ecommerce/forms/SearchDiscovery/SearchMerchandisingRules.py:48-49`
+  - **Description:** `start_date` and `end_date` widgets lack `format="%Y-%m-%dT%H:%M"`, causing them to render blank when editing existing records.
+  - **Fix:** Add `format="%Y-%m-%dT%H:%M"` to both `DateTimeInput` widgets.
+
+- [ ] **I13** — None-Safe Display for Nullable Foreign Keys in Merchandising Templates
+  - **Location:** `templates/ecommerce/searchdiscovery/merchandisingrule/list.html:125, 147-155` and `detail.html:84`
+  - **Description:** `rule.target_category.name` and `rule.boosted_product.name` are accessed directly without `|default:"—"` when null.
+  - **Fix:** Add `|default:"—"` or `{% if %}` checks around nullable category and product names.
 
 ---
 
-## Pass 4: `performance-reviewer` Findings
+### Minor Findings
 
-### Critical
-- [ ] **PERF-C1** — Cartesian Explosion & DB Incompatibility on Price Sorting (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:252-259`):
-  Ordering `base_qs` via `order_by("variants__price").distinct()[:100]` creates an SQL join against reverse FK `ProductVariant`. Multi-variant products duplicate rows and `SELECT DISTINCT` with `ORDER BY` on joined column fails on PostgreSQL. Annotate `base_qs = base_qs.annotate(min_price=Min("variants__price"))` before ordering.
+- [ ] **M1** — Protocol-Relative URL Bypass in Merchandising Form
+  - **Location:** `apps/ecommerce/forms/SearchDiscovery/SearchMerchandisingRules.py:65-69`
+  - **Description:** `redirect_url` allows protocol-relative strings (`//evil.com`).
+  - **Fix:** Disallow URLs starting with `//` in `clean_redirect_url`.
 
-### Important
-- [ ] **PERF-I1** — N+1 Queries on Pinned Merchandising Products in `search_console` (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:213-215, 241`):
-  `active_rules` lacks `select_related("boosted_product__item", "boosted_product__primary_category")` and `prefetch_related("boosted_product__variants")`, firing individual queries per pinned rule when accessing `sku` and `base_price`.
-- [ ] **PERF-I2** — N+1 Queries on Fallback Product Recommendations (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:288-294`):
-  `fallback_recommendations` lacks `select_related("item", "primary_category")` and `prefetch_related("variants")`, firing up to 8 queries per zero-result search.
-- [ ] **PERF-I3** — Full-Table Scan & Per-Item `UPDATE` Queries in Synonym Loop (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:93-117`):
-  Pre-filter active synonyms in SQL by `Q(root_term=norm_q) | Q(synonyms__icontains=norm_q)` instead of iterating full table, and batch `hit_count` updates outside the loop.
-- [ ] **PERF-I4** — Redundant Category Count Aggregation in Facet Loop Discarded by Template (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:178-206`):
-  Template explicitly ignores category facet groups at line 217 because categories are rendered independently. Skip querying category counts in `facet_groups`.
-- [ ] **PERF-I5** — Multiple Table Scans in `search_analytics` Dashboard (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:415-426`):
-  Consolidate `count()`, zero-result count, and avg execution time into a single `aggregate()` query using conditional `Count("id", filter=Q(is_zero_result=True))`.
+- [ ] **M2** — Unbounded Search Query String Length
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:25, 337`
+  - **Description:** Unbounded query string lengths can cause high CPU/memory consumption.
+  - **Fix:** Cap search query length at 200 characters: `q = request.GET.get("q", "").strip()[:200]`.
 
-### Minor
-- [ ] **PERF-M1** — Missing Nested `select_related` on Product Item in Merchandising Rule Detail (`apps/ecommerce/views/SearchDiscovery/SearchMerchandisingRules.py:69-78`):
-  Add `boosted_product__item` to `select_related`.
-- [ ] **PERF-M2** — Missing Composite Index for Rule Priority Evaluation (`apps/ecommerce/models/SearchDiscovery/SearchMerchandisingRules.py:121-137`):
-  Add composite index `(tenant, is_active, -priority)` to `SearchMerchandisingRule.Meta.indexes`.
-- [ ] **PERF-M3** — Missing Composite Index for Zero-Result Query Aggregation (`apps/ecommerce/models/SearchDiscovery/SearchQueryLogs.py:87-100`):
-  Add composite index `(tenant, is_zero_result, normalized_query)` to `SearchQueryLog.Meta.indexes`.
-- [ ] **PERF-M4** — Unnecessary Full Model Hydration on Keystroke Autocomplete (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:345-370`):
-  Use `.only("id", "number", "name", "brand", "item__sku")` and annotate `Min("variants__price")`.
+- [ ] **M3** — Missing Nested `select_related` on Product Item in Merchandising Rule Detail
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchMerchandisingRules.py:69-78`
+  - **Description:** Detail view selects `boosted_product` but not `boosted_product__item`, causing extra query for `item.sku`.
+  - **Fix:** Add `boosted_product__item` to `select_related`.
 
+- [ ] **M4** — Composite Index on `SearchMerchandisingRule`
+  - **Location:** `apps/ecommerce/models/SearchDiscovery/SearchMerchandisingRules.py:121-137`
+  - **Description:** Missing composite index on `(tenant, is_active, -priority)`.
+  - **Fix:** Add `models.Index(fields=["tenant", "is_active", "-priority"], name="idx_esmr_ten_act_prio")`.
 
----
+- [ ] **M5** — Composite Index on `SearchQueryLog`
+  - **Location:** `apps/ecommerce/models/SearchDiscovery/SearchQueryLogs.py:87-100`
+  - **Description:** Missing composite index on `(tenant, is_zero_result, normalized_query)`.
+  - **Fix:** Add `models.Index(fields=["tenant", "is_zero_result", "normalized_query"], name="idx_esql_ten_zr_norm")`.
 
-## Pass 5: `qa-smoke-tester` Findings
+- [ ] **M6** — Optimize Model Hydration on Keystroke Autocomplete
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchConsole.py:345-370`
+  - **Description:** Rapid keystroke autocomplete loads full model instances with all fields.
+  - **Fix:** Use `.only("id", "number", "name", "brand", "item__sku")` and annotate `Min("variants__price")`.
 
-- **Total Verification Checks:** 66 / 66 passed.
-- **Critical (0):** None. Zero 500 errors, zero crashes on junk parameters or out-of-range pagination.
-- **Important (0):** None. Cross-tenant IDOR protection verified (404) across all detail, edit, delete, and toggle endpoints.
-- **Minor (0):** None. Zero template comment leaks (`{#` or `{% comment`) found in rendered output or template sources.
+- [ ] **M7** — Missing Accessible Labels on Search & Price Inputs
+  - **Location:** `templates/ecommerce/searchdiscovery/console/console.html:48-57, 250-264`
+  - **Description:** Search input and price filter inputs lack `aria-label` attributes.
+  - **Fix:** Add `aria-label="Search catalog"`, `aria-label="Minimum price"`, and `aria-label="Maximum price"`.
 
+- [ ] **M8** — Missing `filter_logic` Select Dropdown in Facet Filter Form
+  - **Location:** `templates/ecommerce/searchdiscovery/facetconfig/list.html:34-75`
+  - **Description:** View provides `filter_logic_choices` and `selected_logic`, but list template omits the dropdown.
+  - **Fix:** Add the `filter_logic` dropdown to the filter form.
 
+- [ ] **M9** — Design System Alignment for KPI Cards
+  - **Location:** `templates/ecommerce/searchdiscovery/analytics/analytics.html:33-85`
+  - **Description:** KPI stat cards should align with standard `.stat-card` styling.
+  - **Fix:** Clean up stat cards to use standard NavERP `.stat-card` and `.stat-value` patterns.
+
+- [ ] **M10** — Non-Standard Semantic Badges Standardization in Templates
+  - **Location:** `templates/ecommerce/searchdiscovery/synonym/list.html`, `facetconfig/list.html`
+  - **Description:** Ensure all badges use color-named classes (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`).
+  - **Fix:** Standardize all badges.
+
+- [ ] **M11** — Pre-populate `root` Query Parameter on `searchsynonym_create`
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchSynonyms.py:84`
+  - **Description:** If `?root=` is passed in query parameters, pre-populate `root_term` initial value.
+  - **Fix:** Add `initial={"root_term": request.GET.get("root", "")}` if root is provided.
+
+- [ ] **M12** — Bind `SearchQueryLogFilterForm` in `searchquerylog_list`
+  - **Location:** `apps/ecommerce/views/SearchDiscovery/SearchQueryLogs.py:50`
+  - **Description:** Form was initialized unbound (`SearchQueryLogFilterForm()`) instead of binding `request.GET`.
+  - **Fix:** Pass `request.GET` to bind the form: `filter_form = SearchQueryLogFilterForm(request.GET)`.
