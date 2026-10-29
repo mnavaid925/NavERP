@@ -135,7 +135,7 @@ def test_cartcheckout_checkout_session_form_valid(tenant_a, ecom_cart_a):
     cust_a = _cartcheckout_create_party_customer(tenant_a, name="Bob Builder")
     ship_a = _cartcheckout_shipping_method(tenant_a, name="Ground Express", code="EXP-01")
     pay_a = _cartcheckout_payment_method(tenant_a, name="Credit Card Stripe")
-    tax_a = _cartcheckout_create_tax_code(tenant_a, code="STATE-TX")
+    tax_a = _cartcheckout_create_tax_code(tenant_a, name="Tax STATE-TX")
 
     data = {
         "cart": ecom_cart_a.pk,
