@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit Merchandising Rule · {{ rule.name }}{% else %}New Merchandising Rule{% endif %} · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+      <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+      <span>/</span>
+      <a href="{% url 'ecommerce:search_console' %}" class="hover:text-blue-600">Search & Discovery</a>
+      <span>/</span>
+      <a href="{% url 'ecommerce:searchmerchandisingrule_list' %}" class="hover:text-blue-600">Merchandising Rules</a>
+      <span>/</span>
+      <span class="text-slate-800 font-medium">{% if is_edit %}Edit Rule{% else %}New Rule{% endif %}</span>
+    </div>
+    <h1 class="page-title text-2xl font-bold text-slate-900">
+      {% if is_edit %}Edit Merchandising Rule: {{ rule.name }}{% else %}New Merchandising Rule{% endif %}
+    </h1>
+    <p class="text-sm text-slate-500 mt-1">Configure search overrides, slot pinning, score boosting, exclusions, query redirects, or promotional banners.</p>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card bg-white p-6 shadow-sm border border-slate-200 rounded-lg">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div>
+        <label for="{{ form.name.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+          Rule Name / Label *
+        </label>
+        {{ form.name }}
+        {% if form.name.errors %}
+          <div class="text-xs text-red-600 mt-1">{{ form.name.errors.0 }}</div>
+        {% endif %}
+        <p class="text-xs text-slate-500 mt-1">Descriptive label (e.g. "Pin Hero Running Shoe on 'sneakers' query").</p>
+      </div>
+
+      <!-- Trigger Section -->
+      <div class="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-4">
+        <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Trigger Condition</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label for="{{ form.rule_type.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Trigger Scope *
+            </label>
+            {{ form.rule_type }}
+            {% if form.rule_type.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ form.rule_type.errors.0 }}</div>
+            {% endif %}
+          </div>
+
+          <div>
+            <label for="{{ form.trigger_query.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Trigger Search Query
+            </label>
+            {{ form.trigger_query }}
+            {% if form.trigger_query.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ form.trigger_query.errors.0 }}</div>
+            {% endif %}
+            <p class="text-xs text-slate-500 mt-1">Required if trigger scope is Query.</p>
+          </div>
+
+          <div>
+            <label for="{{ form.match_type.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Match Type
+            </label>
+            {{ form.match_type }}
+            {% if form.match_type.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ form.match_type.errors.0 }}</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div>
+          <label for="{{ form.target_category.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+            Target Category (for Category Listing Rules)
+          </label>
+          {{ form.target_category }}
+          {% if form.target_category.errors %}
+            <div class="text-xs text-red-600 mt-1">{{ form.target_category.errors.0 }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Action Section -->
+      <div class="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-4">
+        <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Action Consequence</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label for="{{ form.action_type.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Action Type *
+            </label>
+            {{ form.action_type }}
+            {% if form.action_type.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ form.action_type.errors.0 }}</div>
+            {% endif %}
+          </div>
+
+          <div>
+            <label for="{{ form.pin_position.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Pin Slot Position (1-50)
+            </label>
+            {{ form.pin_position }}
+            {% if form.pin_position.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ form.pin_position.errors.0 }}</div>
+            {% endif %}
+            <p class="text-xs text-slate-500 mt-1">1 = Rank 1, 2 = Rank 2, etc.</p>
+          </div>
+
+          <div>
+            <label for="{{ form.boost_weight.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Score Weight (-100 to +100)
+            </label>
+            {{ form.boost_weight }}
+            {% if form.boost_weight.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ form.boost_weight.errors.0 }}</div>
+            {% endif %}
+            <p class="text-xs text-slate-500 mt-1">Positive boosts; negative buries.</p>
+          </div>
+        </div>
+
+        <div>
+          <label for="{{ form.boosted_product.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+            Target Catalog Product
+          </label>
+          {{ form.boosted_product }}
+          {% if form.boosted_product.errors %}
+            <div class="text-xs text-red-600 mt-1">{{ form.boosted_product.errors.0 }}</div>
+          {% endif %}
+          <p class="text-xs text-slate-500 mt-1">Product to boost, bury, pin, or block.</p>
+        </div>
+
+        <div>
+          <label for="{{ form.redirect_url.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+            Redirect URL (for Redirect Action)
+          </label>
+          {{ form.redirect_url }}
+          {% if form.redirect_url.errors %}
+            <div class="text-xs text-red-600 mt-1">{{ form.redirect_url.errors.0 }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Banner Section -->
+      <div class="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-4">
+        <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Promotional In-Grid Banner (Optional)</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="{{ form.banner_title.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Banner Heading
+            </label>
+            {{ form.banner_title }}
+            {% if form.banner_title.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ form.banner_title.errors.0 }}</div>
+            {% endif %}
+          </div>
+
+          <div>
+            <label for="{{ form.banner_link_url.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Banner Destination URL
+            </label>
+            {{ form.banner_link_url }}
+            {% if form.banner_link_url.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ form.banner_link_url.errors.0 }}</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div>
+          <label for="{{ form.banner_body.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+            Banner Body Copy
+          </label>
+          {{ form.banner_body }}
+          {% if form.banner_body.errors %}
+            <div class="text-xs text-red-600 mt-1">{{ form.banner_body.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div>
+          <label for="{{ form.banner_image_url.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+            Banner Artwork Image URL
+          </label>
+          {{ form.banner_image_url }}
+          {% if form.banner_image_url.errors %}
+            <div class="text-xs text-red-600 mt-1">{{ form.banner_image_url.errors.0 }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Priority & Scheduling -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label for="{{ form.priority.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+            Priority (Higher Evaluated First)
+          </label>
+          {{ form.priority }}
+          {% if form.priority.errors %}
+            <div class="text-xs text-red-600 mt-1">{{ form.priority.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div>
+          <label for="{{ form.start_date.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+            Start Date (Optional)
+          </label>
+          {{ form.start_date }}
+          {% if form.start_date.errors %}
+            <div class="text-xs text-red-600 mt-1">{{ form.start_date.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div>
+          <label for="{{ form.end_date.id_for_label }}" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+            End Date (Optional)
+          </label>
+          {{ form.end_date }}
+          {% if form.end_date.errors %}
+            <div class="text-xs text-red-600 mt-1">{{ form.end_date.errors.0 }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 pt-2">
+        {{ form.is_active }}
+        <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-slate-700">
+          Active Rule (Evaluated in catalog queries)
+        </label>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        <a href="{% url 'ecommerce:searchmerchandisingrule_list' %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm">
+          {% if is_edit %}Save Changes{% else %}Create Merchandising Rule{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
