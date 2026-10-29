@@ -1,7 +1,8 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Q, Sum
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -16,7 +17,11 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 @login_required
 def cart_list(request):
     """List shopping carts with search and status filtering."""
-    qs = ecommerce_scope(Cart.objects.all(), request).select_related("customer")
+    qs = (
+        ecommerce_scope(Cart.objects.all(), request)
+        .select_related("customer")
+        .annotate(total_items=Coalesce(Sum("items__quantity"), 0))
+    )
 
     q = request.GET.get("q", "").strip()
     if q:
