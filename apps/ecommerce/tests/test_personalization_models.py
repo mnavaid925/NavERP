@@ -201,7 +201,7 @@ def test_personalization_strategy_cross_tenant_fk_rejected(tenant_a, tenant_b):
 # ==============================================================================
 
 def test_personalization_experience_creation_and_autonumber(tenant_a):
-    exp = _personalization_experience(tenant_a, name="Flash Promo", code="flash-promo")
+    exp = _personalization_experience(tenant_a, name="Flash Promo")
     assert exp.pk is not None
     assert exp.number.startswith("EPEX-")
     assert exp.experience_type == "vip_welcome"
@@ -215,7 +215,6 @@ def test_personalization_experience_date_validation(tenant_a):
     exp = PersonalizedExperience(
         tenant=tenant_a,
         name="Date Invariant",
-        code="date-invariant",
         start_date=now + timezone.timedelta(days=5),
         end_date=now + timezone.timedelta(days=1),
     )
@@ -230,7 +229,6 @@ def test_personalization_experience_url_scheme_security(tenant_a):
         exp = PersonalizedExperience(
             tenant=tenant_a,
             name="XSS Attempt",
-            code=f"xss-{dangerous[:4]}",
             cta_url=dangerous,
         )
         with pytest.raises(ValidationError) as exc_info:
@@ -241,7 +239,6 @@ def test_personalization_experience_url_scheme_security(tenant_a):
     exp_valid = PersonalizedExperience(
         tenant=tenant_a,
         name="Safe Experience",
-        code="safe-exp",
         cta_url="https://example.com/promo",
         hero_image_url="/static/images/banner.png",
     )
@@ -256,7 +253,6 @@ def test_personalization_experience_cross_tenant_fk_rejected(tenant_a, tenant_b)
     exp = PersonalizedExperience(
         tenant=tenant_a,
         name="Cross Tenant Experience",
-        code="cross-exp",
         target_segment=seg_b,
         target_category=cat_b,
         target_product=prod_b,
@@ -277,11 +273,11 @@ def test_personalization_event_creation_and_autonumber(tenant_a):
         tenant_a,
         event_type="cart_add",
         session_key="sess-cart-01",
-        payload={"cart_value": 89.99},
+        payload_json={"cart_value": 89.99},
     )
     assert event.pk is not None
     assert event.number.startswith("ESBE-")
     assert event.event_type == "cart_add"
     assert event.session_key == "sess-cart-01"
-    assert event.payload["cart_value"] == 89.99
+    assert event.payload_json["cart_value"] == 89.99
     assert event.get_event_type_display() in str(event)
