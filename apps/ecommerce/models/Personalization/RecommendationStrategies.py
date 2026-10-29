@@ -135,5 +135,11 @@ class RecommendationStrategy(TenantNumbered):
         if self.min_rating < Decimal("0.00") or self.min_rating > Decimal("5.00"):
             raise ValidationError({"min_rating": "Min rating must be between 0.00 and 5.00."})
 
+        # C3: Model-level tenant foreign key validation
+        if self.target_category_id and self.target_category and self.target_category.tenant_id != self.tenant_id:
+            raise ValidationError({"target_category": "Target category belongs to another workspace."})
+        if self.target_segment_id and self.target_segment and self.target_segment.tenant_id != self.tenant_id:
+            raise ValidationError({"target_segment": "Target segment belongs to another workspace."})
+
     def __str__(self):
         return f"{self.name} ({self.get_algorithm_display()})"
