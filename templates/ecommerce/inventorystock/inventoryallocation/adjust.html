@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Adjust Stock: {{ allocation.variant.sku }} | eCommerce{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex items-center justify-between">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-primary">eCommerce</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:inventory_operations' %}" class="hover:text-primary">Inventory & Stock</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:inventoryallocation_detail' allocation.pk %}" class="hover:text-primary">{{ allocation.variant.sku }}</a>
+        <span class="mx-2">/</span>
+        <span>Quick Adjust</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Adjust Physical Stock</h1>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'ecommerce:inventoryallocation_detail' allocation.pk %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Cancel</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- SKU & Center Reference Card -->
+  <div class="card p-4 bg-slate-50 border border-slate-200 flex items-center justify-between">
+    <div>
+      <div class="font-bold text-slate-900">{{ allocation.variant.name }}</div>
+      <div class="text-xs font-mono text-slate-600">{{ allocation.variant.sku }} &bull; {{ allocation.fulfillment_center.name }} ({{ allocation.fulfillment_center.code }})</div>
+    </div>
+    <div class="text-right">
+      <div class="text-xs text-slate-500">Current On Hand</div>
+      <div class="text-2xl font-extrabold text-slate-800">{{ allocation.quantity_on_hand }}</div>
+    </div>
+  </div>
+
+  <!-- Adjustment Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.errors %}
+      <div class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm">
+        <div class="font-semibold mb-1">Please correct the errors below:</div>
+        <ul class="list-disc list-inside">
+          {% for field, errors in form.errors.items %}
+            {% for error in errors %}
+              <li>{{ field }}: {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.adjustment_type.id_for_label }}">Adjustment Type / Reason Code *</label>
+        {{ form.adjustment_type }}
+        <p class="text-xs text-slate-400 mt-1">Select the operational event justifying the stock change</p>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.adjustment_quantity.id_for_label }}">Quantity Adjustment (+ / -) *</label>
+        {{ form.adjustment_quantity }}
+        <p class="text-xs text-slate-500 mt-1">Enter a positive number to add stock (e.g. +10) or negative to deduct stock (e.g. -5).</p>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.reason_notes.id_for_label }}">Audit Notes & Reference *</label>
+        {{ form.reason_notes }}
+        <p class="text-xs text-slate-400 mt-1">Document the specific cycle count discrepancy, damage incident, or inbound PO reference</p>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-4 border-t">
+        <a href="{% url 'ecommerce:inventoryallocation_detail' allocation.pk %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary flex items-center gap-2">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>Apply Stock Adjustment</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
