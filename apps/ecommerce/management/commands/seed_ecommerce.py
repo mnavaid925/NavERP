@@ -1677,21 +1677,20 @@ class Command(BaseCommand):
             ("unknown antique mechanical clockwork", 0, True, 9, {}),
         ]
         for q_text, r_count, is_zr, lat, flts in query_demos:
-            SearchQueryLog.objects.get_or_create(
-                tenant=tenant,
-                query_text=q_text,
-                defaults={
-                    "normalized_query": q_text.lower(),
-                    "results_count": r_count,
-                    "is_zero_result": is_zr,
-                    "execution_time_ms": lat,
-                    "applied_filters": flts,
-                    "sort_order": "relevance",
-                    "clicked_product": sample_prod if (not is_zr and sample_prod) else None,
-                    "click_position": 1 if (not is_zr and sample_prod) else None,
-                    "session_key": "demo_session_analytics_key",
-                },
-            )
+            if not SearchQueryLog.objects.filter(tenant=tenant, query_text=q_text).exists():
+                SearchQueryLog.objects.create(
+                    tenant=tenant,
+                    query_text=q_text,
+                    normalized_query=q_text.lower(),
+                    results_count=r_count,
+                    is_zero_result=is_zr,
+                    execution_time_ms=lat,
+                    applied_filters=flts,
+                    sort_order="relevance",
+                    clicked_product=sample_prod if (not is_zr and sample_prod) else None,
+                    click_position=1 if (not is_zr and sample_prod) else None,
+                    session_key="demo_session_analytics_key",
+                )
 
         # =========================================================================
         # 9.8 Personalization & Recommendation Engine
@@ -1880,19 +1879,20 @@ class Command(BaseCommand):
             ("wishlist_add", "session_user_gamma", sample_prod, apparel, 3),
         ]
         for ev_type, sess_k, prd, cat, score in behavior_events_data:
-            ShopperBehaviorEvent.objects.get_or_create(
-                tenant=tenant,
-                session_key=sess_k,
-                event_type=ev_type,
-                defaults={
-                    "customer_profile": customer_profile,
-                    "product": prd,
-                    "category": cat,
-                    "intent_score_delta": score,
-                    "referrer_url": "https://store.example.com/",
-                    "payload_json": {"source": "demo_seed"},
-                },
-            )
+            if not ShopperBehaviorEvent.objects.filter(
+                tenant=tenant, session_key=sess_k, event_type=ev_type, product=prd
+            ).exists():
+                ShopperBehaviorEvent.objects.create(
+                    tenant=tenant,
+                    session_key=sess_k,
+                    event_type=ev_type,
+                    customer_profile=customer_profile,
+                    product=prd,
+                    category=cat,
+                    intent_score_delta=score,
+                    referrer_url="https://store.example.com/",
+                    payload_json={"source": "demo_seed"},
+                )
 
 
 
