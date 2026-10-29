@@ -170,3 +170,9 @@ class SearchMerchandisingRule(TenantNumbered):
 
         if self.start_date and self.end_date and self.end_date < self.start_date:
             raise ValidationError({"end_date": "Campaign end date must be after the start date."})
+
+        if self.target_category_id and self.tenant_id and self.target_category.tenant_id != self.tenant_id:
+            raise ValidationError({"target_category": "Target category must belong to the same tenant."})
+
+        if self.boosted_product_id and self.tenant_id and self.boosted_product.tenant_id != self.tenant_id:
+            raise ValidationError({"boosted_product": "Target product must belong to the same tenant."})
