@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}{{ rule.name }} · Merchandising Rules · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+  <!-- Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:search_console' %}" class="hover:text-blue-600">Search & Discovery</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:searchmerchandisingrule_list' %}" class="hover:text-blue-600">Merchandising Rules</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ rule.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ rule.name }}</h1>
+        {% if rule.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-muted">Inactive</span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-slate-500 mt-1 font-mono">Reference: {{ rule.number }} · Evaluation Priority: <span class="text-slate-800 font-semibold">{{ rule.priority }}</span></p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'ecommerce:searchmerchandisingrule_list' %}" class="btn btn-outline text-sm">
+        Back to List
+      </a>
+      <form method="post" action="{% url 'ecommerce:searchmerchandisingrule_toggle' rule.pk %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline text-sm">
+          {% if rule.is_active %}Deactivate{% else %}Activate{% endif %}
+        </button>
+      </form>
+      <a href="{% url 'ecommerce:searchmerchandisingrule_edit' rule.pk %}" class="btn btn-primary text-sm inline-flex items-center gap-1">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Rule</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:searchmerchandisingrule_delete' rule.pk %}" class="inline" onsubmit="return confirm('Delete merchandising rule {{ rule.name }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm inline-flex items-center gap-1">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- Main Breakdown -->
+    <div class="md:col-span-2 space-y-6">
+      <!-- Trigger Card -->
+      <div class="card bg-white p-6 shadow-sm border border-slate-200 rounded-lg">
+        <h2 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-100">
+          Rule Trigger Condition
+        </h2>
+        <div class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Trigger Scope</span>
+              <span class="badge badge-slate">{{ rule.get_rule_type_display }}</span>
+            </div>
+            <div>
+              <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Match Type</span>
+              <span class="text-xs text-slate-700 font-medium">{{ rule.get_match_type_display }}</span>
+            </div>
+          </div>
+
+          {% if rule.rule_type == "query" %}
+            <div>
+              <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Trigger Search Query</span>
+              <div class="font-mono text-sm font-semibold text-slate-900 bg-slate-50 px-3 py-2 rounded border border-slate-200 inline-block">
+                "{{ rule.trigger_query }}"
+              </div>
+            </div>
+          {% elif rule.rule_type == "category" %}
+            <div>
+              <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Target Category</span>
+              <div class="text-sm font-semibold text-slate-900 bg-slate-50 px-3 py-2 rounded border border-slate-200 inline-block">
+                {{ rule.target_category.name }}
+              </div>
+            </div>
+          {% else %}
+            <div class="p-3 bg-slate-50 rounded border border-slate-200 text-xs text-slate-600">
+              Applies globally across all search queries and catalog listings.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Consequence Card -->
+      <div class="card bg-white p-6 shadow-sm border border-slate-200 rounded-lg">
+        <h2 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-100">
+          Action Consequence
+        </h2>
+
+        <div class="space-y-4">
+          <div>
+            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Action Type</span>
+            {% if rule.action_type == "boost" %}
+              <span class="badge badge-green">Score Boost (+{{ rule.boost_weight }} points)</span>
+            {% elif rule.action_type == "pin" %}
+              <span class="badge badge-info">Slot Pinning (Position Slot #{{ rule.pin_position }})</span>
+            {% elif rule.action_type == "bury" %}
+              <span class="badge badge-amber">Score Bury ({{ rule.boost_weight }} points)</span>
+            {% elif rule.action_type == "block" %}
+              <span class="badge badge-red">Block / Exclude Product</span>
+            {% elif rule.action_type == "redirect" %}
+              <span class="badge badge-slate">Query URL Redirect</span>
+            {% else %}
+              <span class="badge badge-amber">Promotional In-Grid Banner</span>
+            {% endif %}
+          </div>
+
+          {% if rule.boosted_product %}
+            <div>
+              <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Target Catalog Product</span>
+              <div class="flex items-center gap-3 p-3 bg-slate-50 rounded border border-slate-200">
+                <i data-lucide="package" class="w-5 h-5 text-blue-600"></i>
+                <div>
+                  <a href="{% url 'ecommerce:catalogproduct_detail' rule.boosted_product.pk %}" class="text-sm font-semibold text-blue-600 hover:underline">
+                    {{ rule.boosted_product.name }}
+                  </a>
+                  <div class="text-xs text-slate-500 font-mono">{{ rule.boosted_product.sku }} · {{ rule.boosted_product.number }}</div>
+                </div>
+              </div>
+            </div>
+          {% endif %}
+
+          {% if rule.action_type == "redirect" %}
+            <div>
+              <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Destination Redirect URL</span>
+              <code class="font-mono text-sm text-slate-800 bg-slate-50 px-3 py-2 rounded border border-slate-200 block">
+                {{ rule.redirect_url }}
+              </code>
+            </div>
+          {% endif %}
+
+          {% if rule.action_type == "banner" %}
+            <div class="space-y-2">
+              <span class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Banner Artwork & Copy</span>
+              <div class="p-4 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-sm space-y-1">
+                <h3 class="font-bold text-base">{{ rule.banner_title }}</h3>
+                {% if rule.banner_body %}
+                  <p class="text-xs text-blue-100">{{ rule.banner_body }}</p>
+                {% endif %}
+                {% if rule.banner_link_url %}
+                  <div class="pt-2">
+                    <span class="text-xs underline font-semibold">Learn More &rarr;</span>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar Stats -->
+    <div class="space-y-6">
+      <div class="card bg-white p-6 shadow-sm border border-slate-200 rounded-lg text-sm space-y-3">
+        <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider pb-2 border-b border-slate-100">
+          Campaign Schedule
+        </h2>
+        <div>
+          <span class="text-xs text-slate-500 block">Start Date:</span>
+          <span class="text-xs font-medium text-slate-800">
+            {% if rule.start_date %}{{ rule.start_date|date:"M d, Y H:i" }}{% else %}Immediate (No Start Limit){% endif %}
+          </span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">End Date:</span>
+          <span class="text-xs font-medium text-slate-800">
+            {% if rule.end_date %}{{ rule.end_date|date:"M d, Y H:i" }}{% else %}Perpetual (No End Limit){% endif %}
+          </span>
+        </div>
+      </div>
+
+      <div class="card bg-blue-50 p-4 border border-blue-200 rounded-lg text-xs text-blue-800 space-y-2">
+        <div class="flex items-center gap-2 font-semibold">
+          <i data-lucide="compass" class="w-4 h-4"></i>
+          <span>Live Verification</span>
+        </div>
+        <p>Verify this rule's effect in the Search Discovery Workbench.</p>
+        {% if rule.trigger_query %}
+          <a href="{% url 'ecommerce:search_console' %}?q={{ rule.trigger_query }}" class="text-blue-700 font-medium underline block pt-1">
+            Test "{{ rule.trigger_query }}" in Workbench &rarr;
+          </a>
+        {% else %}
+          <a href="{% url 'ecommerce:search_console' %}" class="text-blue-700 font-medium underline block pt-1">
+            Open Workbench &rarr;
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
