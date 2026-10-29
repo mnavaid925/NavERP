@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}{{ strategy.name }} · Recommendation Strategy · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:personalization_console' %}" class="hover:text-blue-600">Personalization</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:recommendationstrategy_list' %}" class="hover:text-blue-600">Recommendation Strategies</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ strategy.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ strategy.name }}</h1>
+        {% if strategy.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-slate">Inactive</span>
+        {% endif %}
+        <span class="badge badge-info">{{ strategy.get_algorithm_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">Code: <code class="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">{{ strategy.code }}</code> · Placement: <span class="font-medium text-slate-700">{{ strategy.get_placement_display }}</span></p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:personalization_console' %}" class="btn btn-outline inline-flex items-center gap-2 text-sm">
+        <i data-lucide="play" class="w-4 h-4"></i>
+        <span>Simulate Output</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:recommendationstrategy_toggle' strategy.pk %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline text-sm">
+          {% if strategy.is_active %}Deactivate{% else %}Activate{% endif %}
+        </button>
+      </form>
+      <a href="{% url 'ecommerce:recommendationstrategy_edit' strategy.pk %}" class="btn btn-primary inline-flex items-center gap-2 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Strategy</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Strategy Configuration -->
+    <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-6 lg:col-span-2 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3">Algorithm & Placement Parameters</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <span class="text-xs text-slate-500 block">Algorithm Engine</span>
+          <span class="font-semibold text-slate-800">{{ strategy.get_algorithm_display }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Storefront Placement</span>
+          <span class="badge badge-slate">{{ strategy.get_placement_display }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Max Items Returned</span>
+          <span class="font-semibold text-slate-900 text-lg">{{ strategy.max_items }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Fallback Strategy</span>
+          <span class="text-slate-700">{{ strategy.get_fallback_strategy_display }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Minimum Rating</span>
+          <span class="text-slate-800 font-medium">
+            {% if strategy.min_rating > 0 %}{{ strategy.min_rating }} ★{% else %}None (All Ratings){% endif %}
+          </span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Inventory Guardrail</span>
+          <span class="text-slate-800">
+            {% if strategy.only_in_stock %}In-Stock Only{% else %}Include Out-of-Stock{% endif %}
+          </span>
+        </div>
+      </div>
+
+      {% if strategy.description %}
+        <div class="pt-3 border-t border-slate-100">
+          <span class="text-xs text-slate-500 block mb-1">Operational Description</span>
+          <p class="text-sm text-slate-700 whitespace-pre-line">{{ strategy.description }}</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Targeting & Scope -->
+    <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-6 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3">Targeting & Guardrails</h2>
+      <div class="space-y-3 text-sm">
+        <div>
+          <span class="text-xs text-slate-500 block">Audience Segment</span>
+          {% if strategy.target_segment %}
+            <a href="{% url 'ecommerce:audiencesegment_detail' strategy.target_segment.pk %}" class="badge badge-info hover:underline">
+              {{ strategy.target_segment.name }}
+            </a>
+          {% else %}
+            <span class="text-slate-500">All Shoppers (Global)</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Category Constraint</span>
+          {% if strategy.target_category %}
+            <span class="badge badge-slate">{{ strategy.target_category.name }}</span>
+          {% else %}
+            <span class="text-slate-500">Unrestricted (Cross-Category)</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Brand Consistency</span>
+          <span class="text-slate-700">
+            {% if strategy.same_brand_only %}Restricted to target item brand{% else %}Cross-Brand Allowed{% endif %}
+          </span>
+        </div>
+        <div class="pt-3 border-t border-slate-100 text-xs text-slate-400 space-y-1">
+          <div>Created: {{ strategy.created_at|date:"M d, Y H:i" }}</div>
+          <div>Updated: {{ strategy.updated_at|date:"M d, Y H:i" }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
