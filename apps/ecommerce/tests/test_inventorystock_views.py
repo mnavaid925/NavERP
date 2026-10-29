@@ -141,9 +141,9 @@ def test_inventorystock_fulfillmentcenter_edit(client_a, tenant_a, ecom_center_a
     assert ecom_center_a.priority == 5
 
 
-def test_inventorystock_fulfillmentcenter_delete(admin_client_a, tenant_a, ecom_center_a):
+def test_inventorystock_fulfillmentcenter_delete(client_a, tenant_a, ecom_center_a):
     url = reverse("ecommerce:fulfillmentcenter_delete", kwargs={"pk": ecom_center_a.pk})
-    resp = admin_client_a.post(url)
+    resp = client_a.post(url)
     assert resp.status_code == 302
     assert not FulfillmentCenter.objects.filter(pk=ecom_center_a.pk).exists()
 
@@ -228,9 +228,9 @@ def test_inventorystock_inventoryallocation_adjust_workflow(client_a, tenant_a, 
     assert "adjustment_quantity" in resp_neg.context["form"].errors
 
 
-def test_inventorystock_inventoryallocation_delete(admin_client_a, tenant_a, ecom_allocation_a):
+def test_inventorystock_inventoryallocation_delete(client_a, tenant_a, ecom_allocation_a):
     url = reverse("ecommerce:inventoryallocation_delete", kwargs={"pk": ecom_allocation_a.pk})
-    resp = admin_client_a.post(url)
+    resp = client_a.post(url)
     assert resp.status_code == 302
     assert not InventoryAllocation.objects.filter(pk=ecom_allocation_a.pk).exists()
 
@@ -295,9 +295,9 @@ def test_inventorystock_backorderpolicy_edit(client_a, tenant_a, ecom_backorder_
     assert ecom_backorder_a.is_active is False
 
 
-def test_inventorystock_backorderpolicy_delete(admin_client_a, tenant_a, ecom_backorder_a):
+def test_inventorystock_backorderpolicy_delete(client_a, tenant_a, ecom_backorder_a):
     url = reverse("ecommerce:backorderpolicy_delete", kwargs={"pk": ecom_backorder_a.pk})
-    resp = admin_client_a.post(url)
+    resp = client_a.post(url)
     assert resp.status_code == 302
     assert not BackorderPolicy.objects.filter(pk=ecom_backorder_a.pk).exists()
 
@@ -322,17 +322,17 @@ def test_inventorystock_channelinventorysync_create(client_a, tenant_a, ecom_pro
 
     payload = {
         "variant": v2.pk,
-        "channel_type": "walmart",
+        "channel_type": "walmart_marketplace",
         "channel_name": "Walmart US Feed",
         "fulfillment_center": ecom_center_a.pk,
-        "sync_mode": "daily_scheduled",
+        "sync_mode": "scheduled_batch",
         "allocation_buffer_pct": "8.00",
         "sync_status": "pending",
     }
     resp_post = client_a.post(url, payload)
     assert resp_post.status_code == 302
     sync = ChannelInventorySync.objects.get(variant=v2, channel_name="Walmart US Feed", tenant=tenant_a)
-    assert sync.channel_type == "walmart"
+    assert sync.channel_type == "walmart_marketplace"
 
 
 def test_inventorystock_channelinventorysync_detail_preloads_allocations(client_a, tenant_a, ecom_sync_a):
@@ -359,8 +359,8 @@ def test_inventorystock_channelinventorysync_trigger_and_redirect_safety(client_
     assert reverse("ecommerce:channelinventorysync_detail", kwargs={"pk": ecom_sync_a.pk}) in resp_malicious.url
 
 
-def test_inventorystock_channelinventorysync_delete(admin_client_a, tenant_a, ecom_sync_a):
+def test_inventorystock_channelinventorysync_delete(client_a, tenant_a, ecom_sync_a):
     url = reverse("ecommerce:channelinventorysync_delete", kwargs={"pk": ecom_sync_a.pk})
-    resp = admin_client_a.post(url)
+    resp = client_a.post(url)
     assert resp.status_code == 302
     assert not ChannelInventorySync.objects.filter(pk=ecom_sync_a.pk).exists()
