@@ -263,32 +263,29 @@ INVENTORYSTOCK_CHOICES = {
     },
     "BackorderPolicy": {
         "policy_type": (
-            ("deny_when_empty", "Deny Orders (Strict Out of Stock)"),
-            ("allow_with_backorder_notice", "Allow Backorder with Estimated Dispatch Notice"),
-            ("pre_order_only", "Pre-Order Campaign (Launch Release Date)"),
+            ("deny_when_empty", "Deny When Out of Stock (Standard)"),
+            ("allow_backorder_with_notice", "Allow Backorders with Warning Notice"),
+            ("pre_order_only", "Pre-Order Mode (Advance Campaign)"),
         ),
     },
     "ChannelInventorySync": {
         "channel_type": (
-            ("shopify", "Shopify Storefront"),
-            ("amazon", "Amazon Marketplace"),
-            ("walmart", "Walmart Marketplace"),
-            ("ebay", "eBay Store"),
-            ("pos_retail", "In-Store POS System"),
-            ("b2b_portal", "B2B Wholesale Portal"),
-            ("custom_webhook", "Custom API Webhook"),
+            ("web_storefront", "Direct Web Storefront"),
+            ("amazon_marketplace", "Amazon Marketplace"),
+            ("walmart_marketplace", "Walmart Marketplace"),
+            ("pos_retail", "Retail POS Register"),
+            ("wholesale_b2b", "B2B Wholesale Portal"),
         ),
         "sync_mode": (
-            ("real_time_webhook", "Real-Time Push on Stock Change"),
-            ("hourly_batch", "Hourly Batch Synchronization"),
-            ("daily_scheduled", "Daily Scheduled Broadcast"),
-            ("manual_only", "Manual On-Demand Sync"),
+            ("real_time", "Real-Time Event Sync"),
+            ("scheduled_batch", "Scheduled Batch"),
+            ("manual", "Manual Push Only"),
         ),
         "sync_status": (
+            ("synced", "In Sync"),
             ("pending", "Sync Pending"),
-            ("synced", "Successfully Synchronized"),
-            ("sync_error", "Sync Error / Failed"),
-            ("paused", "Sync Feed Paused"),
+            ("sync_error", "Sync Error"),
+            ("disabled", "Disabled"),
         ),
     },
 }
@@ -381,7 +378,7 @@ def _inventorystock_allocation(tenant, variant, center, quantity_on_hand=100, **
     return InventoryAllocation.objects.create(**defaults)
 
 
-def _inventorystock_backorder(tenant, variant, policy_type="allow_with_backorder_notice", **overrides):
+def _inventorystock_backorder(tenant, variant, policy_type="allow_backorder_with_notice", **overrides):
     defaults = {
         "tenant": tenant,
         "variant": variant,
@@ -396,14 +393,14 @@ def _inventorystock_backorder(tenant, variant, policy_type="allow_with_backorder
     return BackorderPolicy.objects.create(**defaults)
 
 
-def _inventorystock_sync(tenant, variant, center=None, channel_type="amazon", **overrides):
+def _inventorystock_sync(tenant, variant, center=None, channel_type="amazon_marketplace", **overrides):
     defaults = {
         "tenant": tenant,
         "variant": variant,
         "channel_type": channel_type,
-        "channel_name": f"{channel_type.title()} US Feed",
+        "channel_name": f"{channel_type.replace('_', ' ').title()} Feed",
         "fulfillment_center": center,
-        "sync_mode": "real_time_webhook",
+        "sync_mode": "real_time",
         "allocation_buffer_pct": Decimal("10.00"),
         "last_synced_quantity": 75,
         "sync_status": "synced",
@@ -444,9 +441,9 @@ def ecom_backorder_b(tenant_b, ecom_variant_b):
 
 @pytest.fixture
 def ecom_sync_a(tenant_a, ecom_variant_a, ecom_center_a):
-    return _inventorystock_sync(tenant_a, ecom_variant_a, ecom_center_a, channel_type="amazon")
+    return _inventorystock_sync(tenant_a, ecom_variant_a, ecom_center_a, channel_type="amazon_marketplace")
 
 
 @pytest.fixture
 def ecom_sync_b(tenant_b, ecom_variant_b, ecom_center_b):
-    return _inventorystock_sync(tenant_b, ecom_variant_b, ecom_center_b, channel_type="shopify")
+    return _inventorystock_sync(tenant_b, ecom_variant_b, ecom_center_b, channel_type="web_storefront")
