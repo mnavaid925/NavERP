@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit {{ privacy_request.number }}{% else %}New Privacy Request{% endif %} · eCommerce · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:customerprivacyrequest_list' %}" class="hover:text-blue-600">Privacy Requests</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}Edit {{ privacy_request.number }}{% else %}New Request{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Privacy Request: {{ privacy_request.number }}{% else %}Register Data Privacy Request{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Record and track statutory customer data privacy and erasure requests.</p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <form method="post" class="card bg-white shadow-sm border border-slate-200 rounded-lg p-6 space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="p-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700 space-y-1">
+        {% for error in form.non_field_errors %}
+          <p>{{ error }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="id_customer" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Customer Subject <span class="text-red-500">*</span>
+          </label>
+          {{ form.customer }}
+          {% if form.customer.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.customer.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="id_request_type" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Request Type <span class="text-red-500">*</span>
+          </label>
+          {{ form.request_type }}
+          {% if form.request_type.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.request_type.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="id_status" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Fulfillment Status <span class="text-red-500">*</span>
+          </label>
+          {{ form.status }}
+          {% if form.status.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.status.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="id_statutory_deadline" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Statutory SLA Deadline
+          </label>
+          {{ form.statutory_deadline }}
+          {% if form.statutory_deadline.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.statutory_deadline.errors.0 }}</p>
+          {% endif %}
+          <span class="text-xs text-slate-500 mt-1 block">Defaults to 30 days from creation per GDPR statutory guidelines.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="id_requested_by_email" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Requester Contact Email
+          </label>
+          {{ form.requested_by_email }}
+          {% if form.requested_by_email.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.requested_by_email.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="id_verification_method" class="form-label block text-sm font-medium text-slate-700 mb-1">
+            Identity Verification Method
+          </label>
+          {{ form.verification_method }}
+          {% if form.verification_method.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.verification_method.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="id_resolution_notes" class="form-label block text-sm font-medium text-slate-700 mb-1">
+          Resolution Notes & Audit Trail
+        </label>
+        {{ form.resolution_notes }}
+        {% if form.resolution_notes.errors %}
+          <p class="form-error text-xs text-red-600 mt-1">{{ form.resolution_notes.errors.0 }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+      <a href="{% if is_edit %}{% url 'ecommerce:customerprivacyrequest_detail' privacy_request.pk %}{% else %}{% url 'ecommerce:customerprivacyrequest_list' %}{% endif %}" class="btn btn-outline">
+        Cancel
+      </a>
+      <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="check" class="w-4 h-4"></i>
+        <span>Save Privacy Request</span>
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
