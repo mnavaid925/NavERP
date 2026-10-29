@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Search Query Logs · Search & Discovery · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:search_console' %}" class="hover:text-blue-600">Search & Discovery</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Query Logs</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Search Query Logs</h1>
+      <p class="text-sm text-slate-500 mt-1">Audit executed search queries, execution latency, zero-result terms, and shopper click attribution.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:search_analytics' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="bar-chart-2" class="w-4 h-4"></i>
+        <span>Search Analytics Dashboard</span>
+      </a>
+      <a href="{% url 'ecommerce:search_console' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="compass" class="w-4 h-4"></i>
+        <span>Workbench</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ q }}"
+            placeholder="Log #, query, session..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-zr" class="block text-xs font-medium text-slate-600 mb-1">Result Outcome</label>
+        <select id="filter-zr" name="is_zero_result" class="form-select w-full text-sm">
+          <option value="">All Queries</option>
+          <option value="true" {% if selected_zero_result == "true" or selected_zero_result == "1" %}selected{% endif %}>Zero-Result Searches Only</option>
+          <option value="false" {% if selected_zero_result == "false" or selected_zero_result == "0" %}selected{% endif %}>Successful Searches (>0 Results)</option>
+        </select>
+      </div>
+      <div>
+        <label for="filter-sort" class="block text-xs font-medium text-slate-600 mb-1">Sort Order</label>
+        <input
+          type="text"
+          id="filter-sort"
+          name="sort_order"
+          value="{{ selected_sort }}"
+          placeholder="e.g. relevance, price_asc"
+          class="form-input w-full text-sm"
+        >
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-primary w-full text-sm py-2">
+          Filter
+        </button>
+        <a href="{% url 'ecommerce:searchquerylog_list' %}" class="btn btn-outline text-sm py-2 px-3" title="Reset Filters">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Query Logs Table -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            <th class="py-3 px-4">Timestamp</th>
+            <th class="py-3 px-4">Log #</th>
+            <th class="py-3 px-4">Search Query Term</th>
+            <th class="py-3 px-4 text-center">Results</th>
+            <th class="py-3 px-4 text-center">Latency</th>
+            <th class="py-3 px-4 text-center">Outcome</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200 text-sm">
+          {% for log in logs %}
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="py-3 px-4 text-xs text-slate-500 whitespace-nowrap">
+                {{ log.created_at|date:"M d, H:i:s" }}
+              </td>
+              <td class="py-3 px-4 font-mono text-xs">
+                <a href="{% url 'ecommerce:searchquerylog_detail' log.pk %}" class="font-medium text-blue-600 hover:underline">
+                  {{ log.number }}
+                </a>
+              </td>
+              <td class="py-3 px-4">
+                <span class="font-semibold text-slate-900 font-mono text-xs bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                  {{ log.query_text }}
+                </span>
+                {% if log.redirected_to %}
+                  <div class="text-xs text-slate-400 mt-0.5">&rarr; redirected to {{ log.redirected_to }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-center font-semibold text-slate-700">
+                {{ log.results_count }}
+              </td>
+              <td class="py-3 px-4 text-center">
+                {% if log.execution_time_ms < 50 %}
+                  <span class="badge badge-green">{{ log.execution_time_ms }} ms</span>
+                {% elif log.execution_time_ms < 150 %}
+                  <span class="badge badge-info">{{ log.execution_time_ms }} ms</span>
+                {% else %}
+                  <span class="badge badge-amber">{{ log.execution_time_ms }} ms</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-center">
+                {% if log.is_zero_result %}
+                  <span class="badge badge-red">Zero Results</span>
+                {% else %}
+                  <span class="badge badge-green">Results Returned</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="table-actions flex items-center justify-end gap-1">
+                  <a href="{% url 'ecommerce:searchquerylog_detail' log.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="View Details">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'ecommerce:searchquerylog_delete' log.pk %}" class="inline" onsubmit="return confirm('Delete query log {{ log.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-icon btn-outline text-red-600 hover:bg-red-50" title="Delete">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="py-12 text-center">
+                <div class="empty-state flex flex-col items-center justify-center">
+                  <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                    <i data-lucide="activity" class="w-6 h-6"></i>
+                  </div>
+                  <h3 class="text-sm font-semibold text-slate-800 mb-1">No Search Query Logs</h3>
+                  <p class="text-xs text-slate-500 max-w-sm mb-4">Search query events will automatically appear here as shoppers and administrators execute searches.</p>
+                  <a href="{% url 'ecommerce:search_console' %}" class="btn btn-primary text-xs">
+                    Execute a Search in Workbench
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50 text-xs text-slate-600">
+        <div>
+          Showing page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)
+        </div>
+        <div class="flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_zero_result %}&is_zero_result={{ selected_zero_result }}{% endif %}{% if selected_sort %}&sort_order={{ selected_sort }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">
+              Previous
+            </a>
+          {% else %}
+            <span class="btn btn-outline py-1 px-2 text-xs opacity-50 cursor-not-allowed">Previous</span>
+          {% endif %}
+
+          <span class="px-2 py-1 font-semibold text-slate-800">{{ page_obj.number }}</span>
+
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_zero_result %}&is_zero_result={{ selected_zero_result }}{% endif %}{% if selected_sort %}&sort_order={{ selected_sort }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">
+              Next
+            </a>
+          {% else %}
+            <span class="btn btn-outline py-1 px-2 text-xs opacity-50 cursor-not-allowed">Next</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
