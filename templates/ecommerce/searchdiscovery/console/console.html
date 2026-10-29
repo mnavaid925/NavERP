@@ -227,7 +227,7 @@
                           type="checkbox"
                           name="{{ fg.config.code }}"
                           value="{{ itm.value }}"
-                          {% if active_filters|dictsort:fg.config.code %}checked{% endif %}
+                          {% if itm.is_selected %}checked{% endif %}
                           onchange="this.form.submit()"
                           class="form-checkbox rounded text-primary text-xs"
                         >
