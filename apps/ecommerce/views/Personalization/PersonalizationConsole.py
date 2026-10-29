@@ -203,8 +203,8 @@ def personalization_console(request):
 @login_required
 def recommendation_simulate(request):
     tenant = request.tenant
-    product_id = request.GET.get("product_id")
-    strategy_id = request.GET.get("strategy_id")
+    product_id = request.GET.get("product_id") or request.POST.get("product_id")
+    strategy_id = request.GET.get("strategy_id") or request.POST.get("strategy_id")
 
     anchor_product = None
     if product_id:
