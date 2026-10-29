@@ -71,7 +71,7 @@ def searchmerchandisingrule_detail(request, pk):
         request,
         SearchMerchandisingRule,
         pk,
-        select_related=("target_category", "boosted_product"),
+        select_related=("target_category", "boosted_product", "boosted_product__item"),
     )
     context = {
         "rule": rule,
