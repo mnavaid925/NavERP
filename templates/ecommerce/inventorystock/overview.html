@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Inventory & Stock Operations Console | eCommerce{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-primary">eCommerce</a>
+        <span class="mx-2">/</span>
+        <span>Inventory & Stock Management</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Inventory & Fulfillment Operations</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-3">
+      <a href="{% url 'ecommerce:inventoryallocation_create' %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Allocate SKU</span>
+      </a>
+      <a href="{% url 'ecommerce:fulfillmentcenter_create' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="warehouse" class="w-4 h-4"></i>
+        <span>New Center</span>
+      </a>
+      <a href="{% url 'ecommerce:catalog_overview' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="shopping-bag" class="w-4 h-4"></i>
+        <span>Catalog Overview</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI Stat Cards -->
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+    <div class="stat-card card p-4">
+      <div class="text-xs uppercase font-medium text-slate-500 mb-1">Net ATP Available</div>
+      <div class="text-2xl font-extrabold text-blue-700">{{ kpis.total_atp }}</div>
+      <div class="text-xs text-slate-400 mt-1">Available to promise</div>
+    </div>
+    <div class="stat-card card p-4">
+      <div class="text-xs uppercase font-medium text-slate-500 mb-1">Physical On Hand</div>
+      <div class="text-2xl font-bold text-slate-800">{{ kpis.total_on_hand }}</div>
+      <div class="text-xs text-slate-400 mt-1">Across all centers</div>
+    </div>
+    <div class="stat-card card p-4">
+      <div class="text-xs uppercase font-medium text-slate-500 mb-1">Committed Orders</div>
+      <div class="text-2xl font-bold text-slate-700">{{ kpis.total_allocated }}</div>
+      <div class="text-xs text-slate-400 mt-1">Pending order reserve</div>
+    </div>
+    <div class="stat-card card p-4">
+      <div class="text-xs uppercase font-medium text-slate-500 mb-1">Low Stock Alerts</div>
+      <div class="text-2xl font-bold {% if kpis.low_stock_count > 0 %}text-red-600{% else %}text-slate-700{% endif %}">
+        {{ kpis.low_stock_count }}
+      </div>
+      <div class="text-xs text-slate-400 mt-1">&le; reorder threshold</div>
+    </div>
+    <div class="stat-card card p-4">
+      <div class="text-xs uppercase font-medium text-slate-500 mb-1">Active Backorders</div>
+      <div class="text-2xl font-bold text-amber-600">{{ kpis.active_backorders }}</div>
+      <div class="text-xs text-slate-400 mt-1">SKU policies live</div>
+    </div>
+    <div class="stat-card card p-4">
+      <div class="text-xs uppercase font-medium text-slate-500 mb-1">Fulfillment Nodes</div>
+      <div class="text-2xl font-bold text-slate-800">{{ kpis.active_centers }}</div>
+      <div class="text-xs text-slate-400 mt-1">Active warehouses/3PL</div>
+    </div>
+  </div>
+
+  <!-- Operational Shortcuts & SCM Integration Bridge -->
+  <div class="card p-4 bg-slate-50 border border-slate-200">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-900">Inter-Warehouse Movement & SCM Physical Ledgers</h3>
+        <p class="text-xs text-slate-500 mt-0.5">
+          Transfer stock between fulfillment centers, record physical shrinkage, or trigger channel sync broadcast.
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <a href="{% url 'ecommerce:inventoryallocation_list' %}?low_stock=1" class="btn btn-outline text-xs flex items-center gap-1.5">
+          <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-amber-600"></i>
+          <span>View Low Stock ({{ kpis.low_stock_count }})</span>
+        </a>
+        <a href="{% url 'ecommerce:channelinventorysync_list' %}" class="btn btn-outline text-xs flex items-center gap-1.5">
+          <i data-lucide="radio" class="w-3.5 h-3.5 text-blue-600"></i>
+          <span>Manage Channel Feeds</span>
+        </a>
+        <a href="{% url 'ecommerce:backorderpolicy_list' %}" class="btn btn-outline text-xs flex items-center gap-1.5">
+          <i data-lucide="calendar-clock" class="w-3.5 h-3.5 text-slate-600"></i>
+          <span>Backorder Rules</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Critical Low Stock Alerts -->
+    <div class="card">
+      <div class="card-header p-4 border-b flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-semibold text-slate-900">Critical Stock & Low-Threshold Alerts</h3>
+          <p class="text-xs text-slate-500">SKUs requiring immediate supplier replenishment</p>
+        </div>
+        <a href="{% url 'ecommerce:inventoryallocation_list' %}?low_stock=1" class="text-xs text-primary hover:underline">
+          View All &rarr;
+        </a>
+      </div>
+      <div class="table-wrap">
+        <table class="table w-full">
+          <thead>
+            <tr>
+              <th>SKU / Product</th>
+              <th>Center</th>
+              <th class="text-right">ATP</th>
+              <th class="text-right">Threshold</th>
+              <th class="text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for alloc in low_stock_allocations %}
+            <tr class="hover:bg-slate-50/50">
+              <td>
+                <div class="font-mono text-xs font-semibold text-slate-900">{{ alloc.variant.sku }}</div>
+                <div class="text-xs text-slate-500 truncate max-w-xs">{{ alloc.product.name }}</div>
+              </td>
+              <td>
+                <span class="text-xs font-medium text-slate-800">{{ alloc.fulfillment_center.code }}</span>
+              </td>
+              <td class="text-right">
+                <span class="font-bold text-sm {% if alloc.available_to_promise <= 0 %}text-red-600{% else %}text-amber-600{% endif %}">
+                  {{ alloc.available_to_promise }}
+                </span>
+              </td>
+              <td class="text-right text-xs text-slate-500">&le; {{ alloc.low_stock_threshold }}</td>
+              <td class="text-right table-actions">
+                <a href="{% url 'ecommerce:inventoryallocation_adjust' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="Adjust stock">
+                  <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+                </a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="text-center py-6 text-sm text-slate-500">
+                <i data-lucide="check-circle" class="w-6 h-6 text-green-500 mx-auto mb-1"></i>
+                All allocated SKUs are above safety stock thresholds.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Active Fulfillment Centers -->
+    <div class="card">
+      <div class="card-header p-4 border-b flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-semibold text-slate-900">Fulfillment Centers & 3PL Nodes</h3>
+          <p class="text-xs text-slate-500">Order dispatch priorities and routing nodes</p>
+        </div>
+        <a href="{% url 'ecommerce:fulfillmentcenter_list' %}" class="text-xs text-primary hover:underline">
+          View All &rarr;
+        </a>
+      </div>
+      <div class="table-wrap">
+        <table class="table w-full">
+          <thead>
+            <tr>
+              <th>Priority</th>
+              <th>Center Name</th>
+              <th>Type</th>
+              <th>Cutoff Time</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for center in centers %}
+            <tr class="hover:bg-slate-50/50">
+              <td>
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 text-xs font-bold text-slate-700">
+                  {{ center.priority }}
+                </span>
+              </td>
+              <td>
+                <a href="{% url 'ecommerce:fulfillmentcenter_detail' center.pk %}" class="font-medium text-slate-900 hover:text-primary">
+                  {{ center.name }}
+                </a>
+                <div class="text-xs text-slate-400 font-mono">{{ center.code }}</div>
+              </td>
+              <td>
+                <span class="badge {% if center.center_type == 'internal_warehouse' %}badge-info{% elif center.center_type == 'third_party_3pl' %}badge-amber{% else %}badge-muted{% endif %} text-xs">
+                  {{ center.get_center_type_display }}
+                </span>
+              </td>
+              <td class="text-xs font-mono text-slate-600">{{ center.daily_cutoff_time|default:"—" }}</td>
+              <td>
+                {% if center.is_active %}
+                <span class="badge badge-green">Active</span>
+                {% else %}
+                <span class="badge badge-slate">Inactive</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="text-center py-6 text-sm text-slate-500">
+                No fulfillment centers configured.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Channel Feeds & Backorder Queue -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Channel Feeds -->
+    <div class="card">
+      <div class="card-header p-4 border-b flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-semibold text-slate-900">Connected Channel Sync Feeds</h3>
+          <p class="text-xs text-slate-500">Real-time external channel inventory broadcasting</p>
+        </div>
+        <a href="{% url 'ecommerce:channelinventorysync_list' %}" class="text-xs text-primary hover:underline">
+          View All &rarr;
+        </a>
+      </div>
+      <div class="table-wrap">
+        <table class="table w-full">
+          <thead>
+            <tr>
+              <th>Channel</th>
+              <th>SKU</th>
+              <th class="text-right">Last Broadcast</th>
+              <th>Status</th>
+              <th class="text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sync in recent_syncs %}
+            <tr class="hover:bg-slate-50/50">
+              <td class="font-medium text-slate-900">
+                <a href="{% url 'ecommerce:channelinventorysync_detail' sync.pk %}" class="hover:text-primary">
+                  {{ sync.channel_name }}
+                </a>
+              </td>
+              <td class="font-mono text-xs text-slate-700">{{ sync.variant.sku }}</td>
+              <td class="text-right font-bold text-slate-900">{{ sync.last_synced_quantity }}</td>
+              <td>
+                <span class="badge {% if sync.sync_status == 'synced' %}badge-green{% elif sync.sync_status == 'pending' %}badge-amber{% elif sync.sync_status == 'sync_error' %}badge-red{% else %}badge-slate{% endif %}">
+                  {{ sync.get_sync_status_display }}
+                </span>
+              </td>
+              <td class="text-right table-actions">
+                <form action="{% url 'ecommerce:channelinventorysync_trigger' sync.pk %}" method="post" class="inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                  <button type="submit" class="btn btn-icon btn-outline p-1" title="Trigger Instant Sync">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="text-center py-6 text-sm text-slate-500">
+                No active multi-channel sync feeds configured.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Active Backorder & Pre-Order Rules -->
+    <div class="card">
+      <div class="card-header p-4 border-b flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-semibold text-slate-900">Active Pre-Order & Backorder Campaigns</h3>
+          <p class="text-xs text-slate-500">Customer waitlist commitments and launch dates</p>
+        </div>
+        <a href="{% url 'ecommerce:backorderpolicy_list' %}" class="text-xs text-primary hover:underline">
+          View All &rarr;
+        </a>
+      </div>
+      <div class="table-wrap">
+        <table class="table w-full">
+          <thead>
+            <tr>
+              <th>SKU / Product</th>
+              <th>Mode</th>
+              <th>Expected Release</th>
+              <th class="text-right">Committed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for bk in recent_backorders %}
+            <tr class="hover:bg-slate-50/50">
+              <td>
+                <a href="{% url 'ecommerce:backorderpolicy_detail' bk.pk %}" class="font-mono text-xs font-semibold text-slate-900 hover:text-primary">
+                  {{ bk.variant.sku }}
+                </a>
+                <div class="text-xs text-slate-500 truncate max-w-xs">{{ bk.variant.product.name }}</div>
+              </td>
+              <td>
+                <span class="badge {% if bk.policy_type == 'deny_when_empty' %}badge-slate{% elif bk.policy_type == 'pre_order_only' %}badge-info{% else %}badge-amber{% endif %}">
+                  {{ bk.get_policy_type_display }}
+                </span>
+              </td>
+              <td class="text-xs font-mono text-slate-700">{{ bk.expected_availability_date|default:"TBD" }}</td>
+              <td class="text-right font-bold text-slate-900">{{ bk.current_backorder_count }} units</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="4" class="text-center py-6 text-sm text-slate-500">
+                No active backorder or pre-order campaigns configured.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
