@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Profiles · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Customer Profiles</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Customer Profiles</h1>
+      <p class="text-sm text-slate-500 mt-1">Manage customer account profiles, loyalty tiers, authentication settings, and marketing consents.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:customeraccountprofile_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Customer Profile</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Profile #, customer, phone..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-tier" class="block text-xs font-medium text-slate-600 mb-1">Loyalty Tier</label>
+        <select id="filter-tier" name="tier" class="form-select w-full text-sm">
+          <option value="">All Tiers</option>
+          {% for val, label in tier_choices %}
+            <option value="{{ val }}" {% if current_tier == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Account Status</label>
+        <select id="filter-status" name="status" class="form-select w-full text-sm">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if current_status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-auth" class="block text-xs font-medium text-slate-600 mb-1">Auth Mode</label>
+        <select id="filter-auth" name="auth_mode" class="form-select w-full text-sm">
+          <option value="">All Auth Modes</option>
+          {% for val, label in auth_mode_choices %}
+            <option value="{{ val }}" {% if current_auth == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-primary w-full inline-flex items-center justify-center gap-2">
+          <i data-lucide="filter" class="w-4 h-4"></i>
+          <span>Filter</span>
+        </button>
+        <a href="{% url 'ecommerce:customeraccountprofile_list' %}" class="btn btn-outline text-slate-600" title="Reset Filters">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Profiles Table -->
+  <div class="card overflow-hidden bg-white shadow-sm border border-slate-200 rounded-lg">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse text-sm">
+        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs font-semibold uppercase">
+          <tr>
+            <th class="py-3 px-4">Profile #</th>
+            <th class="py-3 px-4">Customer</th>
+            <th class="py-3 px-4">Tier</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4">Auth Mode</th>
+            <th class="py-3 px-4">Phone</th>
+            <th class="py-3 px-4">Consent</th>
+            <th class="py-3 px-4 text-right">Spend / Orders</th>
+            <th class="py-3 px-4 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-slate-700">
+          {% for p in profiles %}
+            <tr class="hover:bg-slate-50/80 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-blue-600">
+                <a href="{% url 'ecommerce:customeraccountprofile_detail' p.pk %}" class="hover:underline">
+                  {{ p.number }}
+                </a>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-900">{{ p.customer.name }}</div>
+                {% if p.user %}
+                  <div class="text-xs text-slate-500 flex items-center gap-1">
+                    <i data-lucide="user" class="w-3 h-3"></i>
+                    <span>{{ p.user.username }}</span>
+                  </div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if p.tier == "vip" %}
+                  <span class="badge badge-purple">{{ p.get_tier_display }}</span>
+                {% elif p.tier == "platinum" %}
+                  <span class="badge badge-info">{{ p.get_tier_display }}</span>
+                {% elif p.tier == "gold" %}
+                  <span class="badge badge-amber">{{ p.get_tier_display }}</span>
+                {% elif p.tier == "silver" %}
+                  <span class="badge badge-slate">{{ p.get_tier_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ p.get_tier_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if p.status == "active" %}
+                  <span class="badge badge-green">{{ p.get_status_display }}</span>
+                {% elif p.status == "pending_verification" %}
+                  <span class="badge badge-amber">{{ p.get_status_display }}</span>
+                {% elif p.status == "suspended" or p.status == "locked" %}
+                  <span class="badge badge-red">{{ p.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ p.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-600">
+                {{ p.get_auth_mode_display }}
+              </td>
+              <td class="py-3 px-4 text-xs">
+                {% if p.phone_number %}
+                  <span class="text-slate-800">{{ p.phone_number }}</span>
+                  {% if p.phone_verified %}
+                    <span class="badge badge-green ml-1">Verified</span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-slate-400">—</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-xs">
+                {% if p.email_marketing_opt_in %}
+                  <span class="badge badge-green" title="Email Marketing Opt-In">Email</span>
+                {% endif %}
+                {% if p.sms_marketing_opt_in %}
+                  <span class="badge badge-info" title="SMS Marketing Opt-In">SMS</span>
+                {% endif %}
+                {% if not p.email_marketing_opt_in and not p.sms_marketing_opt_in %}
+                  <span class="badge badge-muted">None</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="font-semibold text-slate-900">${{ p.total_spent }}</div>
+                <div class="text-xs text-slate-500">{{ p.order_count }} order{{ p.order_count|pluralize }}</div>
+              </td>
+              <td class="py-3 px-4 text-center">
+                <div class="table-actions flex items-center justify-center gap-2">
+                  <a href="{% url 'ecommerce:customeraccountprofile_detail' p.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View Profile">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'ecommerce:customeraccountprofile_edit' p.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit Profile">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'ecommerce:customeraccountprofile_delete' p.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete customer profile {{ p.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete Profile">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9" class="py-12 text-center">
+                <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                  <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                    <i data-lucide="user-check" class="w-6 h-6"></i>
+                  </div>
+                  <h3 class="text-base font-semibold text-slate-800">No Customer Profiles Found</h3>
+                  <p class="text-sm text-slate-500 mt-1 mb-4">No customer profiles match your current search criteria.</p>
+                  <a href="{% url 'ecommerce:customeraccountprofile_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Create Profile</span>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+        <div>
+          Showing page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total profiles)
+        </div>
+        <div class="flex items-center gap-2">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tier %}&tier={{ current_tier }}{% endif %}{% if current_auth %}&auth_mode={{ current_auth }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Previous
+            </a>
+          {% endif %}
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tier %}&tier={{ current_tier }}{% endif %}{% if current_auth %}&auth_mode={{ current_auth }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
