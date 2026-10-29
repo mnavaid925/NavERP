@@ -198,9 +198,10 @@ def customerprivacyrequest_generate_export(request, pk):
     for pref in CustomerAddressPreference.objects.filter(tenant=request.tenant, customer=customer):
         address_data.append({
             "label": pref.label,
-            "line1": pref.address.line1,
-            "city": pref.address.city,
-            "postal_code": pref.address.postal_code,
+            "line1": pref.address.line1 if pref.address else "",
+            "city": pref.address.city if pref.address else "",
+            "country": pref.address.country if pref.address else "",
+            "postal_code": getattr(pref.address, "postal_code", "") if pref.address else "",
             "instructions": pref.delivery_instructions,
         })
 
