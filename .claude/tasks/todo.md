@@ -19538,3 +19538,282 @@ Nested folder structure per house convention. All templates extend `"base.html"`
 - **Code Review**: 7 findings (2 Critical, 3 Important, 2 Minor) cataloged in `.claude/tasks/review-ecommerce-9.4.md` and 100% resolved by code-fixer.
 - **Test Coverage**: 53 dedicated 9.4 tests passing; full unfiltered `apps/ecommerce/tests/` suite: 524 passed, 0 failures, 100% green.
 - **Gaps**: Documented in `.claude/tasks/gaps-ecommerce-9.4.md` (`GAP-ECOM-9.4-01` external payment webhook transport, `GAP-ECOM-9.4-02` background cart abandonment cron).
+
+
+---
+# Sub-module 9.6: Customer Account & Profile (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.6.md` (2026-10-29)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 (Product Catalog), 9.2 (Inventory & Stock), 9.3 (Pricing & Promotion), 9.4 (Shopping Cart & Checkout), and 9.5 (Order Management System). **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0005_cart_cartitem_ecommerceorder_ecommerceorderline_and_more.py`, so **9.6 claims `0006`**.
+> Package folder name: `CustomerProfile` across `models/`, `forms/`, `views/`, `urls/`, and template folder `templates/ecommerce/customerprofile/`.
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Customer Master Spine (L36/L37)**: Customers are `core.Party` records with role `customer` (`core.PartyRole`). `apps/accounts.User` provides authentication credentials (`User.party` -> `core.Party`). Sub-module 9.6 attaches eCommerce profile attributes, tiers, lifetime metrics, and consent directly to `core.Party`. Declaring a duplicate customer or shopper table is strictly forbidden.
+- **Physical Address Spine**: Delivery and billing addresses reside in `core.Address` (`apps/core/models/Address.py`). Sub-module 9.6 attaches delivery instructions, courier notes, time windows, and default shipping/billing flags via `CustomerAddressPreference` without duplicating address lines.
+- **Purchase History & Reorder Shortcuts**: Reuses `ecommerce.EcommerceOrder` (`EORD-`, 9.5) and `ecommerce.EcommerceOrderLine` (`EOLN-`, 9.5) for order timeline; reorders clone lines into active `ecommerce.Cart` (`ECRT-`, 9.4).
+- **Product Wishlists**: Saved items link directly to `ecommerce.CatalogProduct` (`EPRD-`) and optional `ecommerce.ProductVariant` (`PVR-`) from Sub-module 9.1.
+- **Data Privacy & GDPR**: Implements Data Subject Access Requests (DSAR), JSON data portability exports, and account anonymization/erasure workflows that sanitize customer PII while preserving financial/order records required by statutory commercial tax laws.
+- **Base Class**: All 4 main models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`), providing `tenant` FK, auto-number generation, and timestamps.
+- **Prefix Collision Sweep**: `ECAP`, `ECAD`, `EWSL`, `ECPR` verified 100% free across repo.
+
+---
+
+## Models (from research — 4 models + 1 child line model in `apps/ecommerce/models/CustomerProfile/`)
+
+- [ ] **`CustomerAccountProfile`** [Prefix: `ECAP-`] (`models/CustomerProfile/CustomerAccountProfiles.py`)
+  - **Purpose**: Central customer profile augmenting `core.Party` and `accounts.User` with customer tier, spend metrics, and communication consent.
+  - **Inherits**: `TenantNumbered`
+  - **Choices**:
+    - `TIER_CHOICES = [("bronze", "Bronze"), ("silver", "Silver"), ("gold", "Gold"), ("platinum", "Platinum"), ("vip", "VIP")]`
+    - `STATUS_CHOICES = [("active", "Active"), ("pending_verification", "Pending Verification"), ("suspended", "Suspended"), ("locked", "Locked"), ("anonymized", "Anonymized / GDPR Erased")]`
+    - `AUTH_MODE_CHOICES = [("password", "Email / Password"), ("passwordless_email", "Passwordless Email Magic Link"), ("phone_otp", "Phone SMS OTP"), ("sso_oauth", "Single Sign-On (SSO / OAuth)")]`
+    - `FREQUENCY_CHOICES = [("all", "All Communications"), ("weekly_digest", "Weekly Digest"), ("promotions_only", "Promotions & Offers Only")]`
+  - **Fields**:
+    - `customer`: `ForeignKey("core.Party", on_delete=models.PROTECT, related_name="ecommerce_profiles")` (verified spine `core.Party`)
+    - `user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="ecommerce_customer_profiles")`
+    - `tier`: `CharField(max_length=20, choices=TIER_CHOICES, default="bronze")`
+    - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="active")`
+    - `auth_mode`: `CharField(max_length=25, choices=AUTH_MODE_CHOICES, default="password")`
+    - `phone_number`: `CharField(max_length=50, blank=True)`
+    - `is_phone_verified`: `BooleanField(default=False)`
+    - `phone_verified_at`: `DateTimeField(null=True, blank=True)`
+    - `preferred_currency`: `ForeignKey("accounting.Currency", on_delete=models.PROTECT, null=True, blank=True, related_name="+")` (verified spine `accounting.Currency`)
+    - `preferred_language`: `CharField(max_length=10, default="en")`
+    - `marketing_email_opt_in`: `BooleanField(default=False)`
+    - `marketing_sms_opt_in`: `BooleanField(default=False)`
+    - `order_updates_sms_opt_in`: `BooleanField(default=True)`
+    - `communication_frequency`: `CharField(max_length=20, choices=FREQUENCY_CHOICES, default="all")`
+    - `unsubscribe_token`: `CharField(max_length=64, blank=True, db_index=True)`
+    - `double_opt_in_confirmed_at`: `DateTimeField(null=True, blank=True)`
+    - `total_orders_count`: `PositiveIntegerField(default=0)`
+    - `total_spend_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+    - `loyalty_points_balance`: `PositiveIntegerField(default=0)`
+    - `notes`: `TextField(blank=True)`
+  - **Form Exclusions**: `tenant`, `number`, `total_orders_count`, `total_spend_amount`, `loyalty_points_balance`, `unsubscribe_token`, `double_opt_in_confirmed_at`, `phone_verified_at`, `created_at`, `updated_at`.
+  - **Drivers**: Shopify Plus / Klaviyo customer consent, Yotpo tier progression, commercetools auth tracking.
+
+- [ ] **`CustomerAddressPreference`** [Prefix: `ECAD-`] (`models/CustomerProfile/CustomerAddressPreferences.py`)
+  - **Purpose**: Logistics delivery instructions and shipping/billing preferences overlay linking `core.Party` to `core.Address`.
+  - **Inherits**: `TenantNumbered`
+  - **Choices**:
+    - `LABEL_CHOICES = [("home", "Home"), ("work", "Work / Office"), ("warehouse", "Warehouse / Receiving Dock"), ("other", "Other")]`
+    - `WINDOW_CHOICES = [("anytime", "Anytime"), ("morning", "Morning (8am - 12pm)"), ("afternoon", "Afternoon (12pm - 5pm)"), ("evening", "Evening (5pm - 8pm)")]`
+  - **Fields**:
+    - `customer`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="ecommerce_address_preferences")` (verified spine `core.Party`)
+    - `address`: `ForeignKey("core.Address", on_delete=models.CASCADE, related_name="ecommerce_address_preferences")` (verified spine `core.Address`)
+    - `label`: `CharField(max_length=20, choices=LABEL_CHOICES, default="home")`
+    - `is_default_shipping`: `BooleanField(default=False)`
+    - `is_default_billing`: `BooleanField(default=False)`
+    - `recipient_name`: `CharField(max_length=255, blank=True)`
+    - `recipient_phone`: `CharField(max_length=50, blank=True)`
+    - `delivery_instructions`: `TextField(blank=True, help_text="Gate codes, porch drop-off, neighbor delivery notes")`
+    - `delivery_window`: `CharField(max_length=20, choices=WINDOW_CHOICES, default="anytime")`
+    - `requires_signature`: `BooleanField(default=False)`
+  - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
+  - **Drivers**: Amazon / Shopify Plus delivery instructions, Adobe Commerce multi-address defaults.
+
+- [ ] **`CustomerWishlist`** [Prefix: `EWSL-`] & **`CustomerWishlistItem`** (`models/CustomerProfile/CustomerWishlists.py`)
+  - **Purpose**: Multiple named product collections for saved items, shareable tokens, and cart replenishment.
+  - **Inherits**: `TenantNumbered` (`CustomerWishlist`)
+  - **Choices**:
+    - `VISIBILITY_CHOICES = [("private", "Private (Owner Only)"), ("shared", "Shared via Link"), ("public", "Public")]`
+    - `PRIORITY_CHOICES = [("low", "Low"), ("medium", "Medium"), ("high", "High")]`
+  - **Fields (`CustomerWishlist`)**:
+    - `customer`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="ecommerce_wishlists")` (verified spine `core.Party`)
+    - `name`: `CharField(max_length=255, default="My Wishlist")`
+    - `slug`: `SlugField(max_length=255, blank=True)`
+    - `visibility`: `CharField(max_length=20, choices=VISIBILITY_CHOICES, default="private")`
+    - `share_token`: `CharField(max_length=64, blank=True, db_index=True)`
+    - `is_default`: `BooleanField(default=False)`
+    - `item_count`: `PositiveIntegerField(default=0)`
+    - `notes`: `TextField(blank=True)`
+  - **Child Line Model (`CustomerWishlistItem`)**:
+    - `wishlist`: `ForeignKey(CustomerWishlist, on_delete=models.CASCADE, related_name="items")`
+    - `product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.CASCADE, related_name="wishlist_items")` (verified 9.1 `CatalogProduct`)
+    - `variant`: `ForeignKey("ecommerce.ProductVariant", on_delete=models.SET_NULL, null=True, blank=True, related_name="wishlist_items")` (verified 9.1 `ProductVariant`)
+    - `desired_quantity`: `PositiveIntegerField(default=1)`
+    - `added_price`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+    - `priority`: `CharField(max_length=20, choices=PRIORITY_CHOICES, default="medium")`
+    - `notes`: `CharField(max_length=255, blank=True)`
+    - `added_at`: `DateTimeField(auto_now_add=True)`
+  - **Form Exclusions**: `tenant`, `number`, `share_token`, `item_count`, `created_at`, `updated_at`.
+  - **Drivers**: BigCommerce Wishlists API, Salesforce B2C ProductList, Adobe Commerce Add-All-to-Cart.
+
+- [ ] **`CustomerPrivacyRequest`** [Prefix: `ECPR-`] (`models/CustomerProfile/CustomerPrivacyRequests.py`)
+  - **Purpose**: GDPR / CCPA Data Subject Access Requests (DSAR), data portability export generator, and statutory-compliant account erasure workflow.
+  - **Inherits**: `TenantNumbered`
+  - **Choices**:
+    - `REQUEST_TYPE_CHOICES = [("data_export", "Data Portability Export"), ("account_erasure", "Right to Erasure (Account Deletion)"), ("consent_withdrawal", "Withdrawal of Consent"), ("rectification", "Rectification of Personal Data")]`
+    - `STATUS_CHOICES = [("submitted", "Submitted"), ("identity_verified", "Identity Verified"), ("processing", "Processing"), ("completed", "Completed"), ("rejected", "Rejected")]`
+  - **Fields**:
+    - `customer`: `ForeignKey("core.Party", on_delete=models.PROTECT, related_name="ecommerce_privacy_requests")` (verified spine `core.Party`)
+    - `request_type`: `CharField(max_length=30, choices=REQUEST_TYPE_CHOICES, default="data_export")`
+    - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="submitted")`
+    - `verification_token`: `CharField(max_length=64, blank=True)`
+    - `verification_expires_at`: `DateTimeField(null=True, blank=True)`
+    - `verified_at`: `DateTimeField(null=True, blank=True)`
+    - `due_date`: `DateField(null=True, blank=True, help_text="Statutory 30-day compliance deadline")`
+    - `completed_at`: `DateTimeField(null=True, blank=True)`
+    - `rejected_at`: `DateTimeField(null=True, blank=True)`
+    - `rejection_reason`: `TextField(blank=True)`
+    - `anonymization_summary`: `JSONField(default=dict, blank=True)`
+    - `export_payload`: `JSONField(default=dict, blank=True, help_text="Generated machine-readable portability snapshot")`
+    - `request_ip`: `GenericIPAddressField(null=True, blank=True)`
+    - `resolution_notes`: `TextField(blank=True)`
+  - **Form Exclusions**: `tenant`, `number`, `verification_token`, `verification_expires_at`, `verified_at`, `due_date`, `completed_at`, `rejected_at`, `anonymization_summary`, `export_payload`, `request_ip`, `created_at`, `updated_at`.
+  - **Drivers**: OneTrust DSAR automation, GDPR Article 17 erasure with commercial accounting retention.
+
+---
+
+## Backend Packages (`apps/ecommerce/{models,forms,views,urls}/CustomerProfile/`)
+
+### 1. Models Package
+- [ ] `apps/ecommerce/models/CustomerProfile/__init__.py`
+- [ ] `apps/ecommerce/models/CustomerProfile/CustomerAccountProfiles.py`
+- [ ] `apps/ecommerce/models/CustomerProfile/CustomerAddressPreferences.py`
+- [ ] `apps/ecommerce/models/CustomerProfile/CustomerWishlists.py` (includes `CustomerWishlist` and `CustomerWishlistItem`)
+- [ ] `apps/ecommerce/models/CustomerProfile/CustomerPrivacyRequests.py`
+
+### 2. Forms Package
+- [ ] `apps/ecommerce/forms/CustomerProfile/__init__.py`
+- [ ] `apps/ecommerce/forms/CustomerProfile/CustomerAccountProfiles.py` (`CustomerAccountProfileForm`)
+- [ ] `apps/ecommerce/forms/CustomerProfile/CustomerAddressPreferences.py` (`CustomerAddressPreferenceForm`)
+- [ ] `apps/ecommerce/forms/CustomerProfile/CustomerWishlists.py` (`CustomerWishlistForm`, `CustomerWishlistItemForm`)
+- [ ] `apps/ecommerce/forms/CustomerProfile/CustomerPrivacyRequests.py` (`CustomerPrivacyRequestForm`, `CustomerPrivacyProcessForm`)
+
+### 3. Views Package (Function-Based Views, Tenant Scoped, Audit Log Instrumented)
+- [ ] `apps/ecommerce/views/CustomerProfile/__init__.py`
+- [ ] `apps/ecommerce/views/CustomerProfile/CustomerAccountProfiles.py`:
+  - `customeraccountprofile_list` (filters: `status`, `tier`, `auth_mode`, `is_phone_verified`, `marketing_email_opt_in`; search: code, party name, phone; pagination)
+  - `customeraccountprofile_detail` (metrics summary, addresses list, wishlists summary, order history preview)
+  - `customeraccountprofile_create`
+  - `customeraccountprofile_edit`
+  - `customeraccountprofile_delete`
+- [ ] `apps/ecommerce/views/CustomerProfile/CustomerAddressPreferences.py`:
+  - `customeraddresspreference_list` (filters: `label`, `delivery_window`, `is_default_shipping`, `is_default_billing`; search: recipient, code, customer; pagination)
+  - `customeraddresspreference_detail`
+  - `customeraddresspreference_create`
+  - `customeraddresspreference_edit`
+  - `customeraddresspreference_delete`
+- [ ] `apps/ecommerce/views/CustomerProfile/CustomerWishlists.py`:
+  - `customerwishlist_list` (filters: `visibility`, `is_default`; search: name, code, customer; pagination)
+  - `customerwishlist_detail` (renders wishlist items, add item form, total value)
+  - `customerwishlist_create`
+  - `customerwishlist_edit`
+  - `customerwishlist_delete`
+  - `customerwishlist_add_item` (HTMX / POST action to add product to wishlist)
+  - `customerwishlist_remove_item` (HTMX / POST action to delete item)
+- [ ] `apps/ecommerce/views/CustomerProfile/CustomerPrivacyRequests.py`:
+  - `customerprivacyrequest_list` (filters: `request_type`, `status`; search: code, customer, rejection reason; pagination)
+  - `customerprivacyrequest_detail` (status badge, audit trail, export viewer, anonymization summary)
+  - `customerprivacyrequest_create`
+  - `customerprivacyrequest_edit`
+  - `customerprivacyrequest_delete`
+  - `customerprivacyrequest_process` (action: executes data export compilation or customer PII anonymization)
+
+### 4. URLs Package
+- [ ] `apps/ecommerce/urls/CustomerProfile/__init__.py`
+- [ ] `apps/ecommerce/urls/CustomerProfile/CustomerAccountProfiles.py`
+- [ ] `apps/ecommerce/urls/CustomerProfile/CustomerAddressPreferences.py`
+- [ ] `apps/ecommerce/urls/CustomerProfile/CustomerWishlists.py`
+- [ ] `apps/ecommerce/urls/CustomerProfile/CustomerPrivacyRequests.py`
+
+### 5. Package Re-Exports & Integrations
+- [ ] `apps/ecommerce/models/__init__.py`: Surgical re-export of `CustomerAccountProfile`, `CustomerAddressPreference`, `CustomerWishlist`, `CustomerWishlistItem`, `CustomerPrivacyRequest` + update `__all__`.
+- [ ] `apps/ecommerce/forms/__init__.py`: Surgical re-export of `CustomerAccountProfileForm`, `CustomerAddressPreferenceForm`, `CustomerWishlistForm`, `CustomerWishlistItemForm`, `CustomerPrivacyRequestForm`, `CustomerPrivacyProcessForm` + update `__all__`.
+- [ ] `apps/ecommerce/views/__init__.py`: Surgical re-export of all 9.6 view functions + update `__all__`.
+- [ ] `apps/ecommerce/urls/__init__.py`: Wire `apps.ecommerce.urls.CustomerProfile.urlpatterns` into `ecommerce` url patterns.
+- [ ] `apps/ecommerce/admin.py`: Register `CustomerAccountProfileAdmin`, `CustomerAddressPreferenceAdmin`, `CustomerWishlistAdmin` (with tabular inline `CustomerWishlistItemInline`), and `CustomerPrivacyRequestAdmin`.
+- [ ] `apps/ecommerce/management/commands/seed_ecommerce.py`: Extend `_seed_tenant()` idempotently with customer profiles, address preferences with courier instructions, multi-item wishlists, and GDPR privacy requests.
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["9.6"]` mapping all 5 NavERP.md feature bullets to staff-facing management views:
+  ```python
+  "9.6": {
+      "Registration & Authentication": "ecommerce:customeraccountprofile_list",
+      "Account Dashboard & Order History": "ecommerce:customerwishlist_list",
+      "Address Book & Preferences": "ecommerce:customeraddresspreference_list",
+      "Communication Preferences": "ecommerce:customeraccountprofile_list",
+      "Account Security & Privacy": "ecommerce:customerprivacyrequest_list",
+      # Extra live leaves
+      "Customer Profiles": "ecommerce:customeraccountprofile_list",
+      "Address Preferences": "ecommerce:customeraddresspreference_list",
+      "Wishlists": "ecommerce:customerwishlist_list",
+      "Privacy Requests": "ecommerce:customerprivacyrequest_list",
+  },
+  ```
+
+---
+
+## Templates (`templates/ecommerce/customerprofile/`)
+
+Color-named badge tokens (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`) strictly used everywhere (no semantic `-success/-danger` classes, L33).
+
+- [ ] `templates/ecommerce/customerprofile/customeraccountprofile/list.html` (filter bar for status, tier, auth_mode, verified phone, opt-in; search; pagination; actions)
+- [ ] `templates/ecommerce/customerprofile/customeraccountprofile/detail.html` (profile stats, spend metrics, consent preferences, addresses, recent orders, wishlists)
+- [ ] `templates/ecommerce/customerprofile/customeraccountprofile/form.html` (tier, auth mode, phone, currency, consent toggles)
+
+- [ ] `templates/ecommerce/customerprofile/customeraddresspreference/list.html` (filter bar for label, delivery window, defaults; search; table; pagination)
+- [ ] `templates/ecommerce/customerprofile/customeraddresspreference/detail.html` (courier instructions, time window, address card)
+- [ ] `templates/ecommerce/customerprofile/customeraddresspreference/form.html` (label, defaults, delivery notes, window selector)
+
+- [ ] `templates/ecommerce/customerprofile/customerwishlist/list.html` (filter bar for visibility, default; search; item counts; share tokens)
+- [ ] `templates/ecommerce/customerprofile/customerwishlist/detail.html` (wishlist items table, desired quantity, priority badges, add item inline modal/form)
+- [ ] `templates/ecommerce/customerprofile/customerwishlist/form.html` (name, slug, visibility, notes)
+
+- [ ] `templates/ecommerce/customerprofile/customerprivacyrequest/list.html` (filter bar for request type, status; statutory countdown SLA badges; search; pagination)
+- [ ] `templates/ecommerce/customerprofile/customerprivacyrequest/detail.html` (request summary, 30-day compliance timeline, export JSON viewer, anonymization action)
+- [ ] `templates/ecommerce/customerprofile/customerprivacyrequest/form.html` (customer selector, request type, resolution notes)
+
+---
+
+## Verify
+
+- [ ] Run `venv\Scripts\python.exe manage.py makemigrations ecommerce` -> verify incremental migration `0006_...` generated.
+- [ ] Run `venv\Scripts\python.exe manage.py migrate`.
+- [ ] Run `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 1).
+- [ ] Run `venv\Scripts\python.exe manage.py seed_ecommerce` (Run 2: verify idempotency, zero duplicate errors).
+- [ ] Run `venv\Scripts\python.exe manage.py check` (0 issues reported).
+- [ ] Run smoke test script in `temp/smoke_ecommerce_9_6.py`:
+  - Authenticate as `admin_acme` / `password`.
+  - GET all new 9.6 URLs -> verify 200/302 responses.
+  - Assert HTML content: page titles, table headers, seeded customer profiles/wishlists, no leaked Django tags (`{#`).
+  - Test cross-tenant isolation (IDOR: accessing Acme objects as Megacorp returns 404).
+  - Test list filter combinations and negative/malformed filter query params (L11).
+  - Assert `apps/core/navigation.py` `LIVE_LINKS["9.6"]` resolves cleanly without `NoReverseMatch`.
+
+---
+
+## Close-Out Steps
+
+- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
+- [ ] Append findings to `.claude/tasks/review-ecommerce-9.6.md`.
+- [ ] Run Phase 5 `code-fixer` agent to resolve all findings in priority order.
+- [ ] Run Phase 6 automated test suite:
+  - Update `apps/ecommerce/tests/conftest.py` with 9.6 fixtures.
+  - Author `test_customerprofile_models.py`
+  - Author `test_customerprofile_forms.py`
+  - Author `test_customerprofile_views.py`
+  - Author `test_customerprofile_security.py`
+  - Run full unfiltered test suite: `venv\Scripts\pytest apps/ecommerce/tests/`.
+- [ ] Phase 7 documentation:
+  - Update `.claude/skills/ecommerce/SKILL.md` with 9.6 models, views, and routes.
+  - Update `README.md`.
+  - Record any deferred items or gaps in `.claude/tasks/gaps-ecommerce-9.6.md`.
+
+---
+
+## Later Passes / Deferred
+
+- **External SMS Gateway Dispatch**: SMS OTP sending via Twilio/Sinch deferred to external integration gateway; model fields track phone verification status and consent.
+- **Social Login OAuth (Google, Apple, Facebook)**: Relies on `django-allauth` or external IdP configuration; `auth_mode` stores authentication method.
+- **Hardware WebAuthn / Passkeys**: Browser and IdP level biometric credentials registration.
+- **Automated OneTrust Webhook Sync**: Outbound webhook syndication to external legal compliance software.
+
+---
+
+## Review Notes
+(To be populated during Phase 4-5 review and close-out)
