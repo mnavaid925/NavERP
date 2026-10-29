@@ -131,3 +131,14 @@
 - [ ] **PERF-M4** — Unnecessary Full Model Hydration on Keystroke Autocomplete (`apps/ecommerce/views/SearchDiscovery/SearchConsole.py:345-370`):
   Use `.only("id", "number", "name", "brand", "item__sku")` and annotate `Min("variants__price")`.
 
+
+---
+
+## Pass 5: `qa-smoke-tester` Findings
+
+- **Total Verification Checks:** 66 / 66 passed.
+- **Critical (0):** None. Zero 500 errors, zero crashes on junk parameters or out-of-range pagination.
+- **Important (0):** None. Cross-tenant IDOR protection verified (404) across all detail, edit, delete, and toggle endpoints.
+- **Minor (0):** None. Zero template comment leaks (`{#` or `{% comment`) found in rendered output or template sources.
+
+
