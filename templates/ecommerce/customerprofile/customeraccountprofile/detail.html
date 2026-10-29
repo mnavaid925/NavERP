@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile.number }} · Customer Profile · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:customeraccountprofile_list' %}" class="hover:text-blue-600">Customer Profiles</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ profile.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ profile.customer.name }}</h1>
+        {% if profile.tier == "vip" %}
+          <span class="badge badge-purple">{{ profile.get_tier_display }}</span>
+        {% elif profile.tier == "platinum" %}
+          <span class="badge badge-info">{{ profile.get_tier_display }}</span>
+        {% elif profile.tier == "gold" %}
+          <span class="badge badge-amber">{{ profile.get_tier_display }}</span>
+        {% elif profile.tier == "silver" %}
+          <span class="badge badge-slate">{{ profile.get_tier_display }}</span>
+        {% else %}
+          <span class="badge badge-muted">{{ profile.get_tier_display }}</span>
+        {% endif %}
+
+        {% if profile.status == "active" %}
+          <span class="badge badge-green">{{ profile.get_status_display }}</span>
+        {% elif profile.status == "pending_verification" %}
+          <span class="badge badge-amber">{{ profile.get_status_display }}</span>
+        {% elif profile.status == "suspended" or profile.status == "locked" %}
+          <span class="badge badge-red">{{ profile.get_status_display }}</span>
+        {% else %}
+          <span class="badge badge-slate">{{ profile.get_status_display }}</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">Profile #{{ profile.number }} · Registered {{ profile.created_at|date:"M d, Y" }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:customeraccountprofile_edit' profile.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Profile</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:customeraccountprofile_delete' profile.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete profile {{ profile.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger inline-flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Spend</div>
+          <div class="text-2xl font-bold text-slate-900 mt-1">${{ profile.total_spent }}</div>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+          <i data-lucide="dollar-sign" class="w-5 h-5"></i>
+        </div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-medium text-slate-500 uppercase tracking-wide">Orders Placed</div>
+          <div class="text-2xl font-bold text-slate-900 mt-1">{{ profile.order_count }}</div>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-green-50 text-green-600 flex items-center justify-center">
+          <i data-lucide="shopping-bag" class="w-5 h-5"></i>
+        </div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-medium text-slate-500 uppercase tracking-wide">Phone Status</div>
+          <div class="text-lg font-bold text-slate-900 mt-1">
+            {% if profile.phone_verified %}
+              <span class="text-green-600 flex items-center gap-1">
+                <i data-lucide="check-circle-2" class="w-4 h-4"></i> Verified
+              </span>
+            {% else %}
+              <span class="text-slate-500">Unverified</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
+          <i data-lucide="phone" class="w-5 h-5"></i>
+        </div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-medium text-slate-500 uppercase tracking-wide">Last Order</div>
+          <div class="text-sm font-semibold text-slate-900 mt-1">
+            {% if profile.last_order_at %}
+              {{ profile.last_order_at|date:"M d, Y" }}
+            {% else %}
+              <span class="text-slate-400">No orders yet</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center">
+          <i data-lucide="calendar" class="w-5 h-5"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Left Column: Profile & Consent -->
+    <div class="space-y-6">
+      <!-- Account Info -->
+      <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+        <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+          <i data-lucide="user" class="w-4 h-4 text-blue-600"></i>
+          <span>Account & Authentication</span>
+        </h2>
+        <dl class="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Customer Spine Party</dt>
+            <dd class="text-slate-900 font-medium mt-0.5">{{ profile.customer.name }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">User Account</dt>
+            <dd class="text-slate-900 font-medium mt-0.5">
+              {% if profile.user %}
+                {{ profile.user.username }} ({{ profile.user.email }})
+              {% else %}
+                <span class="text-slate-400">Guest / No Linked User</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Authentication Mode</dt>
+            <dd class="text-slate-900 mt-0.5">{{ profile.get_auth_mode_display }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Phone Number</dt>
+            <dd class="text-slate-900 mt-0.5">
+              {% if profile.phone_number %}{{ profile.phone_number }}{% else %}<span class="text-slate-400">—</span>{% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Preferred Currency</dt>
+            <dd class="text-slate-900 mt-0.5">
+              {% if profile.preferred_currency %}{{ profile.preferred_currency.code }} ({{ profile.preferred_currency.name }}){% else %}Default USD{% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Preferred Language</dt>
+            <dd class="text-slate-900 mt-0.5 uppercase">{{ profile.preferred_language }}</dd>
+          </div>
+        </dl>
+        {% if profile.internal_notes %}
+          <div class="pt-3 border-t border-slate-100">
+            <div class="text-xs font-medium text-slate-500 mb-1">Internal Notes</div>
+            <div class="text-xs text-slate-700 bg-slate-50 p-2.5 rounded border border-slate-200">
+              {{ profile.internal_notes }}
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Communication & Consent -->
+      <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+        <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+          <i data-lucide="mail-check" class="w-4 h-4 text-green-600"></i>
+          <span>Communication & Marketing Consent</span>
+        </h2>
+        <div class="space-y-3 text-sm">
+          <div class="flex items-center justify-between py-2 border-b border-slate-100">
+            <span class="text-slate-700">Email Marketing Opt-In</span>
+            {% if profile.email_marketing_opt_in %}
+              <span class="badge badge-green">Subscribed</span>
+            {% else %}
+              <span class="badge badge-muted">Unsubscribed</span>
+            {% endif %}
+          </div>
+          <div class="flex items-center justify-between py-2 border-b border-slate-100">
+            <span class="text-slate-700">SMS Marketing Opt-In</span>
+            {% if profile.sms_marketing_opt_in %}
+              <span class="badge badge-green">Subscribed</span>
+            {% else %}
+              <span class="badge badge-muted">Unsubscribed</span>
+            {% endif %}
+          </div>
+          <div class="flex items-center justify-between py-2 border-b border-slate-100">
+            <span class="text-slate-700">Notification Frequency</span>
+            <span class="font-medium text-slate-800">{{ profile.get_notification_frequency_display }}</span>
+          </div>
+          <div class="flex items-center justify-between py-2 border-b border-slate-100">
+            <span class="text-slate-700">Consent Recorded At</span>
+            <span class="text-slate-600">
+              {% if profile.marketing_consent_at %}{{ profile.marketing_consent_at|date:"M d, Y H:i" }}{% else %}<span class="text-slate-400">—</span>{% endif %}
+            </span>
+          </div>
+          <div class="flex items-center justify-between py-2">
+            <span class="text-slate-700">Unsubscribe Token</span>
+            <code class="text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-mono">
+              {{ profile.unsubscribe_token|truncatechars:20 }}
+            </code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Address Preferences -->
+      <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <i data-lucide="map-pin" class="w-4 h-4 text-orange-600"></i>
+            <span>Address Book & Preferences</span>
+          </h2>
+          <a href="{% url 'ecommerce:customeraddresspreference_create' %}" class="btn btn-outline py-1 px-2.5 text-xs inline-flex items-center gap-1">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>Add Address</span>
+          </a>
+        </div>
+        <div class="space-y-3">
+          {% for pref in address_preferences %}
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm flex items-start justify-between">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-slate-900">{{ pref.label }}</span>
+                  {% if pref.is_default_shipping %}<span class="badge badge-green text-[10px]">Default Shipping</span>{% endif %}
+                  {% if pref.is_default_billing %}<span class="badge badge-info text-[10px]">Default Billing</span>{% endif %}
+                </div>
+                <div class="text-xs text-slate-600 mt-1">
+                  {{ pref.address.line1 }}{% if pref.address.line2 %}, {{ pref.address.line2 }}{% endif %}, {{ pref.address.city }}
+                </div>
+                {% if pref.delivery_instructions %}
+                  <div class="text-xs text-slate-500 italic mt-1">"{{ pref.delivery_instructions }}"</div>
+                {% endif %}
+              </div>
+              <a href="{% url 'ecommerce:customeraddresspreference_detail' pref.pk %}" class="text-blue-600 hover:underline text-xs">View</a>
+            </div>
+          {% empty %}
+            <p class="text-xs text-slate-500 py-2">No address preferences recorded for this customer.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Recent Orders, Wishlists, Privacy Requests -->
+    <div class="space-y-6">
+      <!-- Recent Orders -->
+      <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <i data-lucide="shopping-bag" class="w-4 h-4 text-blue-600"></i>
+            <span>Recent Orders</span>
+          </h2>
+          <a href="{% url 'ecommerce:ecommerceorder_list' %}" class="text-xs text-blue-600 hover:underline">All Orders</a>
+        </div>
+        <div class="space-y-2">
+          {% for order in recent_orders %}
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm flex items-center justify-between">
+              <div>
+                <a href="{% url 'ecommerce:ecommerceorder_detail' order.pk %}" class="font-mono font-medium text-blue-600 hover:underline">
+                  {{ order.number }}
+                </a>
+                <div class="text-xs text-slate-500 mt-0.5">{{ order.created_at|date:"M d, Y" }} · {{ order.get_status_display }}</div>
+              </div>
+              <div class="text-right">
+                <div class="font-semibold text-slate-900">${{ order.total_amount }}</div>
+                <span class="badge badge-slate text-[10px]">{{ order.get_fulfillment_status_display }}</span>
+              </div>
+            </div>
+          {% empty %}
+            <p class="text-xs text-slate-500 py-2">No order history recorded.</p>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Wishlists -->
+      <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <i data-lucide="heart" class="w-4 h-4 text-pink-600"></i>
+            <span>Wishlists</span>
+          </h2>
+          <a href="{% url 'ecommerce:customerwishlist_create' %}" class="btn btn-outline py-1 px-2.5 text-xs inline-flex items-center gap-1">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>New Wishlist</span>
+          </a>
+        </div>
+        <div class="space-y-2">
+          {% for w in wishlists %}
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm flex items-center justify-between">
+              <div>
+                <a href="{% url 'ecommerce:customerwishlist_detail' w.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
+                  {{ w.name }}
+                </a>
+                <div class="text-xs text-slate-500 mt-0.5">{{ w.items.count }} item{{ w.items.count|pluralize }} · {{ w.get_visibility_display }}</div>
+              </div>
+              <a href="{% url 'ecommerce:customerwishlist_detail' w.pk %}" class="text-blue-600 hover:underline text-xs">View</a>
+            </div>
+          {% empty %}
+            <p class="text-xs text-slate-500 py-2">No active wishlists created.</p>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Privacy & GDPR Requests -->
+      <div class="card p-5 bg-white shadow-sm border border-slate-200 rounded-lg space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <i data-lucide="shield-check" class="w-4 h-4 text-purple-600"></i>
+            <span>Privacy & GDPR Requests</span>
+          </h2>
+          <a href="{% url 'ecommerce:customerprivacyrequest_create' %}" class="btn btn-outline py-1 px-2.5 text-xs inline-flex items-center gap-1">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>New Request</span>
+          </a>
+        </div>
+        <div class="space-y-2">
+          {% for req in privacy_requests %}
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm flex items-center justify-between">
+              <div>
+                <a href="{% url 'ecommerce:customerprivacyrequest_detail' req.pk %}" class="font-mono font-medium text-blue-600 hover:underline">
+                  {{ req.number }}
+                </a>
+                <div class="text-xs text-slate-500 mt-0.5">{{ req.get_request_type_display }}</div>
+              </div>
+              <div class="text-right">
+                {% if req.status == "completed" %}
+                  <span class="badge badge-green text-[10px]">Completed</span>
+                {% elif req.status == "processing" %}
+                  <span class="badge badge-amber text-[10px]">Processing</span>
+                {% else %}
+                  <span class="badge badge-slate text-[10px]">{{ req.get_status_display }}</span>
+                {% endif %}
+              </div>
+            </div>
+          {% empty %}
+            <p class="text-xs text-slate-500 py-2">No privacy or DSAR requests submitted.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
