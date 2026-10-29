@@ -8,6 +8,273 @@
 > Do not mass-tick the backlog.
 ---
 
+# Sub-module 9.8: Personalization & Recommendation Engine (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.8.md` (2026-10-30)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.7.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0010_searchquerylog_idx_esql_ten_zr_norm.py`, so **9.8 claims `0011`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.8.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/Personalization/`
+> Template folder name: `templates/ecommerce/personalization/{audiencesegment,recommendationstrategy,personalizedexperience,shopperbehaviorevent,console}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Catalog & Spine Integration (L36/L37)**: Recommendations and merchandising target canonical `ecommerce.CatalogProduct` (`EPRD-`, 9.1) and `ecommerce.ProductVariant` (`PVR-`, 9.1). Dynamic categories reuse `ecommerce.StoreCategory` (`ECAT-`, 9.1). Orders for RFM and association analysis reuse `ecommerce.SalesOrderCapture` (`ORD-`, 9.5). Abandoned cart triggers link to `ecommerce.CartSession` (`CART-`, 9.4). Customer profile links to `ecommerce.CustomerAccountProfile` (`ECAP-`, 9.6) and Core Spine `core.Party` / `accounts.User`.
+- **Clear Sibling Boundaries (9.7 vs. 9.8 vs. 9.9 vs. 9.10)**:
+  - 9.7 owns search queries, autocomplete, facets, and search-query merchandising rules.
+  - 9.8 owns clickstream behavioral capture, intent scoring, dynamic RFM audience cohorts, multi-algorithm product recommendations (collaborative, content-based, frequently bought together, trending, replenishment), and personalized campaign experiences (hero banners, browse/cart abandonment triggers).
+  - 9.9 (CMS) will own full-page blog articles, landing page layout grids, and static marketing page hierarchies.
+  - 9.10 (Marketing Campaigns) will own mass outbound email delivery queues and affiliate attribution.
+- **Multi-Tenancy & Isolation**: All behavioral logs, audience cohorts, recommendation strategies, and personalized campaigns are strictly partitioned by `tenant` (`core.Tenant`).
+- **Base Class & Prefix Discipline**: All 4 models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`), providing `tenant` FK (`on_delete=CASCADE`), thread-safe auto-number generation, and timestamps.
+- **Prefix Collision Sweep**: `ESEG`, `EREC`, `EPEX`, `ESBE` verified 100% free across repo.
+
+---
+
+## 9.8-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO duplicate product or customer table** — Recommendations and clickstream link directly to `ecommerce.CatalogProduct` and `core.Party` / `ecommerce.CustomerAccountProfile`.
+- [ ] **NO external vector DB or SaaS dependency** — Algorithms execute cleanly within standard Django ORM (compatible with PostgreSQL/SQLite); external neural vector cluster sync (Pinecone/Qdrant) is deferred to enterprise integrations.
+- [ ] **NO full-page CMS builder** — Sibling Sub-module 9.9 owns multi-column WYSIWYG page builders; 9.8 provides dynamic personalized content cards and hero banners.
+- [ ] **NO outbound mass SMTP email delivery daemon** — Sibling Sub-module 9.10 owns bulk marketing email pipelines; 9.8 detects trigger eligibility and manages trigger lifecycle readiness.
+
+---
+
+## Models (4 models in `apps/ecommerce/models/Personalization/`)
+
+- [ ] **`AudienceSegment`** [Prefix: `ESEG-`] (`apps/ecommerce/models/Personalization/AudienceSegments.py`)
+  - **Purpose**: Dynamic shopper cohorts defined by RFM metrics, lifecycle stages, category affinities, and spend thresholds.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `LIFECYCLE_STAGE_CHOICES = [("all", "All Lifecycle Stages"), ("new_visitor", "New Visitor"), ("first_time_buyer", "First-Time Buyer"), ("active_repeat", "Active Repeat Customer"), ("high_value_vip", "High-Value VIP"), ("at_risk", "At-Risk Customer"), ("churned_lapsed", "Churned / Lapsed Shopper")]`
+  - **Fields**:
+    - `name`: `CharField(max_length=120, help_text="Administrative label for this segment, e.g. 'VIP Champions', 'Lapsed Buyers'")`
+    - `code`: `CharField(max_length=60, help_text="Machine identifier slug, e.g. 'vip-champions', 'footwear-enthusiasts'")`
+    - `lifecycle_stage`: `CharField(max_length=30, choices=LIFECYCLE_STAGE_CHOICES, default="all")`
+    - `recency_days_max`: `PositiveIntegerField(null=True, blank=True, help_text="Max days since last purchase (e.g. <= 30 for active)")`
+    - `min_order_count`: `PositiveIntegerField(default=0, help_text="Minimum lifetime order count required")`
+    - `min_lifetime_spend`: `DecimalField(max_digits=12, decimal_places=2, default=0.00, help_text="Minimum lifetime monetary spend")`
+    - `target_category`: `ForeignKey("ecommerce.StoreCategory", on_delete=models.SET_NULL, null=True, blank=True, related_name="affinity_segments", help_text="Optional category affinity filter")`
+    - `cached_member_count`: `PositiveIntegerField(default=0, help_text="Cached count of matching shopper profiles")`
+    - `last_evaluated_at`: `DateTimeField(null=True, blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `description`: `TextField(blank=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_eseg_tenant_num_uniq")`
+    - `UniqueConstraint(fields=["tenant", "code"], name="ecommerce_eseg_code_uniq")`
+    - `Index(fields=["tenant", "is_active", "lifecycle_stage"], name="idx_eseg_ten_act_stage")`
+  - **Form Exclusions**: `tenant`, `number`, `cached_member_count`, `last_evaluated_at`, `created_at`, `updated_at`.
+
+- [ ] **`RecommendationStrategy`** [Prefix: `EREC-`] (`apps/ecommerce/models/Personalization/RecommendationStrategies.py`)
+  - **Purpose**: Configures multi-algorithm recommendation logic, placements, ranking constraints, and fallback behavior.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `ALGORITHM_CHOICES = [("related_products", "Related Products (Content-Based)"), ("frequently_bought_together", "Frequently Bought Together (Co-occurrence)"), ("collaborative_filtering", "Shoppers Also Viewed / Bought"), ("trending_popular", "Trending & Popular Items"), ("recently_viewed", "Recently Viewed (Shopper History)"), ("replenishment", "Repurchase & Replenishment Reminder"), ("hybrid", "Hybrid Multi-Factor Score")]`
+    - `PLACEMENT_CHOICES = [("pdp_related", "Product Detail Page (PDP)"), ("cart_cross_sell", "Cart Drawer / Cross-Sell"), ("homepage_feed", "Homepage Recommendation Feed"), ("category_trending", "Category Top Sellers / Trending"), ("checkout_upsell", "Checkout Order Bump"), ("email_block", "Email / Notification Block")]`
+    - `FALLBACK_CHOICES = [("trending_popular", "Site Trending & Best Sellers"), ("category_top", "Category Top Sellers"), ("new_arrivals", "New Arrivals"), ("none", "No Fallback (Hide Widget)")]`
+  - **Fields**:
+    - `name`: `CharField(max_length=120, help_text="Strategy name, e.g. 'PDP Similar Styles', 'Cart Cross-Sell'")`
+    - `code`: `CharField(max_length=60, help_text="Machine code identifier, e.g. 'pdp-similar', 'cart-upsell'")`
+    - `algorithm`: `CharField(max_length=30, choices=ALGORITHM_CHOICES, default="related_products")`
+    - `placement`: `CharField(max_length=30, choices=PLACEMENT_CHOICES, default="pdp_related")`
+    - `fallback_strategy`: `CharField(max_length=30, choices=FALLBACK_CHOICES, default="trending_popular")`
+    - `max_items`: `PositiveIntegerField(default=6, help_text="Max items returned in recommendation payload")`
+    - `min_rating`: `DecimalField(max_digits=3, decimal_places=2, default=0.00, help_text="Minimum average star rating required")`
+    - `same_brand_only`: `BooleanField(default=False, help_text="Restrict results to the same brand as target item")`
+    - `only_in_stock`: `BooleanField(default=True, help_text="Only recommend in-stock items")`
+    - `target_category`: `ForeignKey("ecommerce.StoreCategory", on_delete=models.SET_NULL, null=True, blank=True, related_name="recommendation_strategies", help_text="Category constraint")`
+    - `target_segment`: `ForeignKey("ecommerce.AudienceSegment", on_delete=models.SET_NULL, null=True, blank=True, related_name="recommendation_strategies", help_text="Optional shopper segment restriction")`
+    - `is_active`: `BooleanField(default=True)`
+    - `description`: `TextField(blank=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_erec_tenant_num_uniq")`
+    - `UniqueConstraint(fields=["tenant", "code"], name="ecommerce_erec_code_uniq")`
+    - `Index(fields=["tenant", "is_active", "placement"], name="idx_erec_ten_act_place")`
+  - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
+
+- [ ] **`PersonalizedExperience`** [Prefix: `EPEX-`] (`apps/ecommerce/models/Personalization/PersonalizedExperiences.py`)
+  - **Purpose**: Governs dynamic homepage hero banners, curated collections, and automated lifecycle triggers (abandoned cart, browse abandonment).
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `EXPERIENCE_TYPE_CHOICES = [("home_hero", "Homepage Hero Banner"), ("curated_collection", "Curated Category / Collection"), ("cart_abandonment", "Cart Abandonment Trigger"), ("browse_abandonment", "Browse Abandonment Trigger"), ("replenishment_reminder", "Replenishment Reorder Trigger"), ("win_back", "Win-Back Re-Engagement Trigger")]`
+  - **Fields**:
+    - `name`: `CharField(max_length=120, help_text="Campaign name, e.g. 'VIP Winter Hero', 'Cart Recovery 1hr'")`
+    - `experience_type`: `CharField(max_length=30, choices=EXPERIENCE_TYPE_CHOICES, default="home_hero")`
+    - `target_segment`: `ForeignKey("ecommerce.AudienceSegment", on_delete=models.CASCADE, related_name="experiences", help_text="Target audience cohort")`
+    - `target_category`: `ForeignKey("ecommerce.StoreCategory", on_delete=models.SET_NULL, null=True, blank=True, related_name="personalized_experiences", help_text="Target category for browse affinity")`
+    - `target_product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.SET_NULL, null=True, blank=True, related_name="personalized_experiences", help_text="Featured product for hero banner or trigger")`
+    - `headline`: `CharField(max_length=150, blank=True, help_text="Dynamic banner heading or email subject line")`
+    - `subheadline`: `TextField(blank=True, help_text="Promotional body copy or value proposition")`
+    - `cta_label`: `CharField(max_length=50, blank=True, help_text="Button text, e.g. 'Shop VIP Sale', 'Complete Your Order'")`
+    - `cta_url`: `CharField(max_length=255, blank=True, help_text="Click-through destination URL")`
+    - `hero_image_url`: `CharField(max_length=255, blank=True, help_text="Image asset URL")`
+    - `trigger_delay_hours`: `PositiveIntegerField(default=1, help_text="Delay in hours before triggering trigger campaigns")`
+    - `priority`: `PositiveIntegerField(default=10, help_text="Priority rank (higher number takes precedence)")`
+    - `start_date`: `DateTimeField(null=True, blank=True)`
+    - `end_date`: `DateTimeField(null=True, blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `impression_count`: `PositiveIntegerField(default=0)`
+    - `click_count`: `PositiveIntegerField(default=0)`
+    - `conversion_count`: `PositiveIntegerField(default=0)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_epex_tenant_num_uniq")`
+    - `Index(fields=["tenant", "is_active", "experience_type", "priority"], name="idx_epex_ten_act_type_prio")`
+  - **Form Exclusions**: `tenant`, `number`, `impression_count`, `click_count`, `conversion_count`, `created_at`, `updated_at`.
+
+- [ ] **`ShopperBehaviorEvent`** [Prefix: `ESBE-`] (`apps/ecommerce/models/Personalization/ShopperBehaviorEvents.py`)
+  - **Purpose**: Granular clickstream and telemetry capture tracking page views, product interactions, cart additions, and intent velocity.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `EVENT_TYPE_CHOICES = [("page_view", "Page View"), ("product_view", "Product Detail View"), ("category_view", "Category Browse"), ("search_query", "Search Query"), ("cart_add", "Add to Cart"), ("wishlist_add", "Add to Wishlist"), ("checkout_start", "Initiate Checkout"), ("order_purchase", "Order Completed")]`
+  - **Fields**:
+    - `session_key`: `CharField(max_length=64, db_index=True, help_text="Anonymous session identifier")`
+    - `customer_profile`: `ForeignKey("ecommerce.CustomerAccountProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="behavior_events", help_text="Shopper account profile")`
+    - `party`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="shopper_behavior_events", help_text="Core Party identity")`
+    - `user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="shopper_behavior_events", help_text="Django user")`
+    - `event_type`: `CharField(max_length=30, choices=EVENT_TYPE_CHOICES, default="page_view")`
+    - `product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.SET_NULL, null=True, blank=True, related_name="behavior_events", help_text="Interacted product")`
+    - `category`: `ForeignKey("ecommerce.StoreCategory", on_delete=models.SET_NULL, null=True, blank=True, related_name="behavior_events", help_text="Interacted category")`
+    - `intent_score_delta`: `IntegerField(default=1, help_text="Intent weight or engagement score delta")`
+    - `referrer_url`: `CharField(max_length=255, blank=True)`
+    - `ip_address`: `GenericIPAddressField(null=True, blank=True)`
+    - `user_agent`: `CharField(max_length=255, blank=True)`
+    - `payload_json`: `JSONField(default=dict, blank=True, help_text="Arbitrary telemetry attributes")`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_esbe_tenant_num_uniq")`
+    - `Index(fields=["tenant", "session_key", "event_type"], name="idx_esbe_ten_sess_type")`
+    - `Index(fields=["tenant", "event_type", "-created_at"], name="idx_esbe_ten_type_created")`
+    - `Index(fields=["tenant", "-created_at"], name="idx_esbe_ten_created")`
+  - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
+
+---
+
+## Backend Packages & Files (Entity-by-Entity)
+
+### 1. Models Package
+- [ ] `apps/ecommerce/models/Personalization/__init__.py`
+- [ ] `apps/ecommerce/models/Personalization/AudienceSegments.py`
+- [ ] `apps/ecommerce/models/Personalization/RecommendationStrategies.py`
+- [ ] `apps/ecommerce/models/Personalization/PersonalizedExperiences.py`
+- [ ] `apps/ecommerce/models/Personalization/ShopperBehaviorEvents.py`
+
+### 2. Forms Package
+- [ ] `apps/ecommerce/forms/Personalization/__init__.py`
+- [ ] `apps/ecommerce/forms/Personalization/AudienceSegments.py` (`AudienceSegmentForm`)
+- [ ] `apps/ecommerce/forms/Personalization/RecommendationStrategies.py` (`RecommendationStrategyForm`)
+- [ ] `apps/ecommerce/forms/Personalization/PersonalizedExperiences.py` (`PersonalizedExperienceForm`)
+- [ ] `apps/ecommerce/forms/Personalization/ShopperBehaviorEvents.py` (`ShopperBehaviorEventFilterForm`)
+
+### 3. Views Package (Function-Based Views, Tenant Scoped, Audit Log Instrumented)
+- [ ] `apps/ecommerce/views/Personalization/__init__.py`
+- [ ] `apps/ecommerce/views/Personalization/AudienceSegments.py` (list, detail, create, edit, delete, toggle, recalculate)
+- [ ] `apps/ecommerce/views/Personalization/RecommendationStrategies.py` (list, detail, create, edit, delete, toggle)
+- [ ] `apps/ecommerce/views/Personalization/PersonalizedExperiences.py` (list, detail, create, edit, delete, toggle)
+- [ ] `apps/ecommerce/views/Personalization/ShopperBehaviorEvents.py` (list, detail, delete)
+- [ ] `apps/ecommerce/views/Personalization/PersonalizationConsole.py` (workbench, simulate_recommendations HTMX, trigger_simulator)
+
+### 4. URLs Package
+- [ ] `apps/ecommerce/urls/Personalization/__init__.py`
+- [ ] `apps/ecommerce/urls/Personalization/AudienceSegments.py`
+- [ ] `apps/ecommerce/urls/Personalization/RecommendationStrategies.py`
+- [ ] `apps/ecommerce/urls/Personalization/PersonalizedExperiences.py`
+- [ ] `apps/ecommerce/urls/Personalization/ShopperBehaviorEvents.py`
+- [ ] `apps/ecommerce/urls/Personalization/PersonalizationConsole.py`
+
+### 5. Package Re-Exports & Integrations
+- [ ] Re-export models in `apps/ecommerce/models/__init__.py`
+- [ ] Re-export forms in `apps/ecommerce/forms/__init__.py`
+- [ ] Re-export views in `apps/ecommerce/views/__init__.py`
+- [ ] Wire URLs in `apps/ecommerce/urls/__init__.py`
+- [ ] Register models in `apps/ecommerce/admin.py`
+- [ ] Extend `apps/ecommerce/management/commands/seed_ecommerce.py` with 9.8 demo data
+- [ ] Wire `apps/core/navigation.py` `LIVE_LINKS["9.8"]`
+- [ ] Generate migration `0011` and apply
+
+---
+
+## Templates
+
+- [ ] `templates/ecommerce/personalization/audiencesegment/list.html`
+- [ ] `templates/ecommerce/personalization/audiencesegment/detail.html`
+- [ ] `templates/ecommerce/personalization/audiencesegment/form.html`
+- [ ] `templates/ecommerce/personalization/recommendationstrategy/list.html`
+- [ ] `templates/ecommerce/personalization/recommendationstrategy/detail.html`
+- [ ] `templates/ecommerce/personalization/recommendationstrategy/form.html`
+- [ ] `templates/ecommerce/personalization/personalizedexperience/list.html`
+- [ ] `templates/ecommerce/personalization/personalizedexperience/detail.html`
+- [ ] `templates/ecommerce/personalization/personalizedexperience/form.html`
+- [ ] `templates/ecommerce/personalization/shopperbehaviorevent/list.html`
+- [ ] `templates/ecommerce/personalization/shopperbehaviorevent/detail.html`
+- [ ] `templates/ecommerce/personalization/console/workbench.html`
+- [ ] `templates/ecommerce/personalization/console/partials/recommendations_preview.html`
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["9.8"]`:
+  ```python
+  "9.8": {
+      "Behavioral Tracking & Profiles": "ecommerce:shopperbehaviorevent_list",
+      "AI-Driven Product Recommendations": "ecommerce:recommendationstrategy_list",
+      "Personalized Homepages & Content": "ecommerce:personalizedexperience_list",
+      "Email & Push Personalization": "ecommerce:personalization_console",
+      "Segmentation & Audience Builder": "ecommerce:audiencesegment_list",
+      # Extra live leaves
+      "Personalization Workbench": "ecommerce:personalization_console",
+  },
+  ```
+
+---
+
+## Step 2d — Migrate + seed + verify
+- [ ] `makemigrations ecommerce` -> `0011`
+- [ ] `migrate`
+- [ ] `seed_ecommerce` (1st run)
+- [ ] `seed_ecommerce` (2nd run, assert idempotent)
+- [ ] `manage.py check` clean
+
+---
+
+## Step 3 — Smoke test
+- [ ] `qa-smoke-tester` verification script in `temp/` against `admin_acme`
+- [ ] Verify HTTP 200 on all list/detail/form/console routes
+- [ ] Verify IDOR 404 for cross-tenant access
+
+---
+
+## Step 4 — Review (6 passes)
+- [ ] Pass 1: `code-reviewer`
+- [ ] Pass 2: `explorer`
+- [ ] Pass 3: `frontend-reviewer`
+- [ ] Pass 4: `performance-reviewer`
+- [ ] Pass 5: `qa-smoke-tester`
+- [ ] Pass 6: `security-reviewer`
+- [ ] Consolidate, deduplicate and prioritize in `.claude/tasks/review-ecommerce-9.8.md`
+
+---
+
+## Step 5 — Code Fixer
+- [ ] Fix all review findings in `.claude/tasks/review-ecommerce-9.8.md`
+
+---
+
+## Step 6 — Tests
+- [ ] `tests/conftest.py` update with 9.8 fixtures
+- [ ] `tests/test_personalization_models.py`
+- [ ] `tests/test_personalization_forms.py`
+- [ ] `tests/test_personalization_views.py`
+- [ ] `tests/test_personalization_security.py`
+- [ ] Full unfiltered pytest green run
+
+---
+
+## Step 7 — Close-out
+- [ ] Document in `.claude/skills/ecommerce/SKILL.md`
+- [ ] Update `README.md`
+- [ ] Record gaps in `.agents/tasks/gaps-ecommerce-9.8.md` (or `.claude/tasks/gaps-ecommerce-9.8.md`)
+- [ ] Final tick-off in `todo.md`
+
+---
+
 # Sub-module 9.7: Search & Product Discovery (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.7.md` (2026-10-30)
 
 > **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 (Product Catalog), 9.2 (Inventory & Stock), 9.3 (Pricing & Promotion), 9.4 (Shopping Cart & Checkout), 9.5 (Order Management System), and 9.6 (Customer Account & Profile).
