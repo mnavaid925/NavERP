@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ center.name }} | Fulfillment Centers | eCommerce{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-primary">eCommerce</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:inventory_operations' %}" class="hover:text-primary">Inventory & Stock</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:fulfillmentcenter_list' %}" class="hover:text-primary">Fulfillment Centers</a>
+        <span class="mx-2">/</span>
+        <span>{{ center.code }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ center.name }}</h1>
+        <span class="badge {% if center.is_active %}badge-green{% else %}badge-slate{% endif %}">
+          {% if center.is_active %}Active{% else %}Inactive{% endif %}
+        </span>
+        <span class="badge {% if center.center_type == 'internal_warehouse' %}badge-info{% elif center.center_type == 'third_party_3pl' %}badge-amber{% else %}badge-muted{% endif %}">
+          {{ center.get_center_type_display }}
+        </span>
+      </div>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:fulfillmentcenter_edit' center.pk %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Center</span>
+      </a>
+      <a href="{% url 'ecommerce:fulfillmentcenter_list' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to Centers</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Center Overview Stats / Info -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="card p-5 space-y-4">
+      <h3 class="text-sm font-semibold text-slate-900 border-b pb-2">Operational Profile</h3>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between">
+          <span class="text-slate-500">Center Code:</span>
+          <span class="font-mono font-medium text-slate-800">{{ center.code }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Record Number:</span>
+          <span class="font-mono text-slate-700">{{ center.number }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Dispatch Priority:</span>
+          <span class="font-semibold text-slate-900">Level {{ center.priority }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Daily Order Cutoff:</span>
+          <span class="font-mono text-slate-700">{{ center.daily_cutoff_time|default:"No cutoff set" }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Pick-Pack-Ship:</span>
+          <span class="badge {% if center.supports_pick_pack_ship %}badge-green{% else %}badge-slate{% endif %}">
+            {% if center.supports_pick_pack_ship %}Supported{% else %}Disabled{% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Customer Pickup:</span>
+          <span class="badge {% if center.supports_customer_pickup %}badge-info{% else %}badge-muted{% endif %}">
+            {% if center.supports_customer_pickup %}Enabled{% else %}No Pickup{% endif %}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-5 space-y-4">
+      <h3 class="text-sm font-semibold text-slate-900 border-b pb-2">Physical Location & Facility</h3>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between">
+          <span class="text-slate-500">SCM Warehouse:</span>
+          <span class="font-medium text-slate-800">
+            {% if center.location %}
+            {{ center.location.name }} ({{ center.location.code }})
+            {% else %}
+            <span class="text-slate-400">Not linked to SCM node</span>
+            {% endif %}
+          </span>
+        </div>
+        <div>
+          <span class="text-slate-500 block mb-1">Physical Address:</span>
+          <p class="text-slate-800 bg-slate-50 p-2 rounded text-xs">
+            {% if center.full_address %}
+            {{ center.full_address }}
+            {% else %}
+            No physical address recorded
+            {% endif %}
+          </p>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Contact Email:</span>
+          <span class="text-slate-800">{{ center.contact_email|default:"—" }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Contact Phone:</span>
+          <span class="text-slate-800">{{ center.contact_phone|default:"—" }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-5 space-y-4">
+      <h3 class="text-sm font-semibold text-slate-900 border-b pb-2">Stock Summary</h3>
+      <div class="space-y-3">
+        <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg flex items-center justify-between">
+          <div>
+            <div class="text-xs text-blue-600 font-medium uppercase tracking-wider">Active SKU Allocations</div>
+            <div class="text-2xl font-bold text-blue-900">{{ allocations|length }}</div>
+          </div>
+          <i data-lucide="boxes" class="w-8 h-8 text-blue-400"></i>
+        </div>
+        <div class="bg-slate-50 border border-slate-200 p-3 rounded-lg flex items-center justify-between">
+          <div>
+            <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">Connected Sync Feeds</div>
+            <div class="text-2xl font-bold text-slate-800">{{ sync_channels|length }}</div>
+          </div>
+          <i data-lucide="refresh-cw" class="w-8 h-8 text-slate-400"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inventory Allocations in this center -->
+  <div class="card">
+    <div class="card-header flex items-center justify-between p-4 border-b">
+      <div>
+        <h3 class="text-base font-semibold text-slate-900">Inventory Stocked in this Center</h3>
+        <p class="text-xs text-slate-500">Assigned SKU allocations, safety stock buffers, and available-to-promise counts</p>
+      </div>
+      <a href="{% url 'ecommerce:inventoryallocation_create' %}?center={{ center.pk }}" class="btn btn-outline text-xs flex items-center gap-1">
+        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+        <span>Allocate SKU</span>
+      </a>
+    </div>
+    <div class="table-wrap">
+      <table class="table w-full">
+        <thead>
+          <tr>
+            <th>Product / Variant</th>
+            <th>Zone / Bin</th>
+            <th>On Hand</th>
+            <th>Allocated</th>
+            <th>Safety Buffer</th>
+            <th>Available to Promise</th>
+            <th>Status</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for alloc in allocations %}
+          <tr class="hover:bg-slate-50/50">
+            <td>
+              <div class="font-medium text-slate-900">
+                <a href="{% url 'ecommerce:inventoryallocation_detail' alloc.pk %}" class="hover:text-primary">
+                  {{ alloc.product.name }}
+                </a>
+              </div>
+              <div class="text-xs text-slate-500 font-mono">{{ alloc.variant.sku }} ({{ alloc.variant.name }})</div>
+            </td>
+            <td>
+              <span class="text-xs font-mono text-slate-700">{{ alloc.zone_bin|default:"—" }}</span>
+            </td>
+            <td><span class="font-semibold text-slate-800">{{ alloc.quantity_on_hand }}</span></td>
+            <td><span class="text-slate-600">{{ alloc.quantity_allocated }}</span></td>
+            <td><span class="text-slate-600">{{ alloc.safety_stock_buffer }}</span></td>
+            <td>
+              <span class="font-bold {% if alloc.available_to_promise <= 0 %}text-red-600{% elif alloc.available_to_promise <= alloc.low_stock_threshold %}text-amber-600{% else %}text-green-700{% endif %}">
+                {{ alloc.available_to_promise }}
+              </span>
+            </td>
+            <td>
+              {% if alloc.available_to_promise <= 0 %}
+              <span class="badge badge-red">Out of Stock</span>
+              {% elif alloc.is_low_stock_alert %}
+              <span class="badge badge-amber">Low Stock</span>
+              {% else %}
+              <span class="badge badge-green">Healthy</span>
+              {% endif %}
+            </td>
+            <td class="text-right table-actions">
+              <a href="{% url 'ecommerce:inventoryallocation_detail' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="View allocation">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </a>
+              <a href="{% url 'ecommerce:inventoryallocation_adjust' alloc.pk %}" class="btn btn-icon btn-outline p-1" title="Quick adjust stock">
+                <i data-lucide="sliders" class="w-4 h-4"></i>
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="8" class="text-center py-6 text-sm text-slate-500">
+              No inventory allocations currently configured for this fulfillment center.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
