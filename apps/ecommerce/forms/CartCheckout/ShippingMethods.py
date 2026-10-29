@@ -41,3 +41,10 @@ class ShippingMethodConfigForm(TenantModelForm):
     def clean_code(self):
         code = self.cleaned_data.get("code", "")
         return code.strip().upper()
+
+    def clean_destination_countries(self):
+        val = self.cleaned_data.get("destination_countries", "")
+        if val:
+            parts = [p.strip().upper() for p in val.split(",") if p.strip()]
+            return ",".join(parts)
+        return "ALL"
