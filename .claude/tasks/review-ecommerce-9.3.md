@@ -64,9 +64,9 @@ Sub-module 9.3 has been comprehensively implemented following all NavERP standar
 
 | ID | Severity | Area | Finding Description | Status |
 |---|---|---|---|---|
-| **I1** | Important | Forms | `CompetitorPriceMonitorForm` does not strip/uppercase `competitor_currency`. Should normalize currency code (e.g. `usd` -> `USD`). | `[ ] open` |
-| **M1** | Minor | Forms | `FlashSaleForm` should enforce `inventory_cap >= 1` in validation to prevent division by zero in `sold_percentage`. | `[ ] open` |
-| **M2** | Minor | Forms | `DynamicPriceRuleForm`: When `scope == 'variant'` and `variant` is selected, auto-set `product = variant.product` if left blank for convenience. | `[ ] open` |
+| **I1** | Important | Forms | `CompetitorPriceMonitorForm` does not strip/uppercase `competitor_currency`. Should normalize currency code (e.g. `usd` -> `USD`). | `[x] fixed` (c577d491) |
+| **M1** | Minor | Forms | `FlashSaleForm` should enforce `inventory_cap >= 1` in validation to prevent division by zero in `sold_percentage`. | `[x] fixed` (028fb5be) |
+| **M2** | Minor | Forms | `DynamicPriceRuleForm`: When `scope == 'variant'` and `variant` is selected, auto-set `product = variant.product` if left blank for convenience. | `[x] fixed` (90fa924a) |
 
 ---
 
