@@ -98,8 +98,11 @@ class DynamicPriceRuleForm(TenantUniqueMixin, TenantModelForm):
             self.add_error("category", "Please select a Store Category for this category-scoped rule.")
         elif scope == "product" and not product:
             self.add_error("product", "Please select a Catalog Product for this product-scoped rule.")
-        elif scope == "variant" and not variant:
-            self.add_error("variant", "Please select a Product Variant for this variant-scoped rule.")
+        elif scope == "variant":
+            if not variant:
+                self.add_error("variant", "Please select a Product Variant for this variant-scoped rule.")
+            elif not product and variant.product:
+                cleaned["product"] = variant.product
 
         valid_from = cleaned.get("valid_from")
         valid_to = cleaned.get("valid_to")
