@@ -34,6 +34,10 @@ from apps.ecommerce.models.ProductCatalog.ProductRelationships import (
 )
 from apps.ecommerce.models.ProductCatalog.ProductVariants import ProductVariant
 from apps.ecommerce.models.ProductCatalog.StoreCategories import StoreCategory
+from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacetConfig
+from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
+from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
+from apps.ecommerce.models.SearchDiscovery.SearchSynonyms import SearchSynonym
 from apps.scm.models.InventoryManagement.Items import Item
 from apps.scm.models.InventoryManagement.Locations import Location
 
@@ -1474,6 +1478,217 @@ class Command(BaseCommand):
                     "resolution_notes": "Statutory GDPR portability export package compiled and delivered via secure portal.",
                 },
             )
+
+        # -------------------------------------------------------------
+        # 9.7 Search & Product Discovery Seeding
+        # -------------------------------------------------------------
+        sample_prod = CatalogProduct.objects.filter(tenant=tenant).first()
+        sample_cat = StoreCategory.objects.filter(tenant=tenant).first()
+
+        # 1. Search Synonyms
+        SearchSynonym.objects.get_or_create(
+            tenant=tenant,
+            root_term="sneakers",
+            defaults={
+                "name": "Footwear & Running Shoes",
+                "synonym_type": "two_way",
+                "synonyms": "trainers, running shoes, kicks, athletic footwear",
+                "is_active": True,
+                "hit_count": 142,
+                "notes": "Standard omnichannel footwear equivalence rule.",
+            },
+        )
+        SearchSynonym.objects.get_or_create(
+            tenant=tenant,
+            root_term="audio",
+            defaults={
+                "name": "Home Audio & Sound Devices",
+                "synonym_type": "one_way",
+                "synonyms": "headphones, soundbar, speakers, wireless earbuds",
+                "is_active": True,
+                "hit_count": 89,
+                "notes": "Directional expansion from generic audio keyword.",
+            },
+        )
+        SearchSynonym.objects.get_or_create(
+            tenant=tenant,
+            root_term="sammsung",
+            defaults={
+                "name": "Samsung Typo Correction",
+                "synonym_type": "replacement",
+                "synonyms": "samsung",
+                "is_active": True,
+                "hit_count": 31,
+                "notes": "Explicit replacement for common brand misspelling.",
+            },
+        )
+
+        # 2. Search Facet Configurations
+        SearchFacetConfig.objects.get_or_create(
+            tenant=tenant,
+            code="brand",
+            category_scope=None,
+            defaults={
+                "name": "Brand",
+                "source_type": "brand",
+                "widget_type": "checkbox",
+                "filter_logic": "disjunctive",
+                "display_order": 1,
+                "is_searchable": True,
+                "max_values_shown": 10,
+                "is_active": True,
+            },
+        )
+        SearchFacetConfig.objects.get_or_create(
+            tenant=tenant,
+            code="category",
+            category_scope=None,
+            defaults={
+                "name": "Category Hierarchy",
+                "source_type": "category",
+                "widget_type": "checkbox",
+                "filter_logic": "disjunctive",
+                "display_order": 2,
+                "is_searchable": False,
+                "max_values_shown": 10,
+                "is_active": True,
+            },
+        )
+        SearchFacetConfig.objects.get_or_create(
+            tenant=tenant,
+            code="price",
+            category_scope=None,
+            defaults={
+                "name": "Price Range",
+                "source_type": "price",
+                "widget_type": "price_slider",
+                "filter_logic": "conjunctive",
+                "display_order": 3,
+                "is_searchable": False,
+                "max_values_shown": 5,
+                "is_active": True,
+            },
+        )
+        SearchFacetConfig.objects.get_or_create(
+            tenant=tenant,
+            code="in_stock",
+            category_scope=None,
+            defaults={
+                "name": "Availability",
+                "source_type": "availability",
+                "widget_type": "toggle",
+                "filter_logic": "conjunctive",
+                "display_order": 4,
+                "is_searchable": False,
+                "max_values_shown": 2,
+                "is_active": True,
+            },
+        )
+        SearchFacetConfig.objects.get_or_create(
+            tenant=tenant,
+            code="size",
+            category_scope=None,
+            defaults={
+                "name": "Apparel Size",
+                "source_type": "variant_option",
+                "option_key": "Size",
+                "widget_type": "checkbox",
+                "filter_logic": "disjunctive",
+                "display_order": 5,
+                "is_searchable": False,
+                "max_values_shown": 8,
+                "is_active": True,
+            },
+        )
+
+        # 3. Search Merchandising Rules
+        if sample_prod:
+            SearchMerchandisingRule.objects.get_or_create(
+                tenant=tenant,
+                name="Pin Hero Sneaker on Footwear Query",
+                defaults={
+                    "rule_type": "query",
+                    "trigger_query": "sneakers",
+                    "match_type": "contains",
+                    "action_type": "pin",
+                    "boosted_product": sample_prod,
+                    "pin_position": 1,
+                    "priority": 50,
+                    "is_active": True,
+                },
+            )
+            SearchMerchandisingRule.objects.get_or_create(
+                tenant=tenant,
+                name="Score Boost for Performance Running",
+                defaults={
+                    "rule_type": "query",
+                    "trigger_query": "running",
+                    "match_type": "contains",
+                    "action_type": "boost",
+                    "boosted_product": sample_prod,
+                    "boost_weight": 25,
+                    "priority": 30,
+                    "is_active": True,
+                },
+            )
+
+        SearchMerchandisingRule.objects.get_or_create(
+            tenant=tenant,
+            name="Redirect Customer Service Search to FAQ",
+            defaults={
+                "rule_type": "query",
+                "trigger_query": "customer service",
+                "match_type": "exact",
+                "action_type": "redirect",
+                "redirect_url": "/help/faq/",
+                "priority": 40,
+                "is_active": True,
+            },
+        )
+        SearchMerchandisingRule.objects.get_or_create(
+            tenant=tenant,
+            name="Seasonal Spring Sale In-Grid Banner",
+            defaults={
+                "rule_type": "query",
+                "trigger_query": "sale",
+                "match_type": "contains",
+                "action_type": "banner",
+                "banner_title": "Spring Sale: Extra 20% Off at Checkout",
+                "banner_body": "Use promotional discount code SPRING20 on all eligible footwear & apparel.",
+                "banner_link_url": "/catalog/promotions/",
+                "priority": 20,
+                "is_active": True,
+            },
+        )
+
+        # 4. Search Query Logs
+        query_demos = [
+            ("sneakers", 12, False, 18, {"category": "1"}),
+            ("running shoes", 8, False, 22, {}),
+            ("wireless noise cancelling headphones", 4, False, 31, {"brand": "Sony"}),
+            ("sammsung galaxy phone", 6, False, 15, {}),
+            ("qwerty non-existent product xyz", 0, True, 11, {}),
+            ("winter warm down parka jacket", 3, False, 24, {}),
+            ("clearance sale items", 15, False, 20, {}),
+            ("unknown antique mechanical clockwork", 0, True, 9, {}),
+        ]
+        for q_text, r_count, is_zr, lat, flts in query_demos:
+            SearchQueryLog.objects.get_or_create(
+                tenant=tenant,
+                query_text=q_text,
+                defaults={
+                    "normalized_query": q_text.lower(),
+                    "results_count": r_count,
+                    "is_zero_result": is_zr,
+                    "execution_time_ms": lat,
+                    "applied_filters": flts,
+                    "sort_order": "relevance",
+                    "clicked_product": sample_prod if (not is_zr and sample_prod) else None,
+                    "click_position": 1 if (not is_zr and sample_prod) else None,
+                    "session_key": "demo_session_analytics_key",
+                },
+            )
+
 
 
 
