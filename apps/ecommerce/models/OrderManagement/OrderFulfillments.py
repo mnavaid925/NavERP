@@ -107,6 +107,11 @@ class OrderFulfillment(TenantNumbered):
     def __str__(self):
         return f"{self.number} ({self.carrier_name}: {self.tracking_number or 'No Tracking'})"
 
+    def save(self, *args, **kwargs):
+        if self.status in ("shipped", "in_transit", "out_for_delivery", "delivered") and not self.shipped_at:
+            self.shipped_at = timezone.now()
+        super().save(*args, **kwargs)
+
     def mark_shipped(self):
         """Transition status to shipped, stamp shipped_at, and sync order status."""
         self.status = "shipped"
