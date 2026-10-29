@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sync: {{ sync.channel_name }} | Channel Sync | eCommerce{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-primary">eCommerce</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:inventory_operations' %}" class="hover:text-primary">Inventory & Stock</a>
+        <span class="mx-2">/</span>
+        <a href="{% url 'ecommerce:channelinventorysync_list' %}" class="hover:text-primary">Channel Syncs</a>
+        <span class="mx-2">/</span>
+        <span>{{ sync.channel_name }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ sync.channel_name }}</h1>
+        <span class="badge badge-info">{{ sync.get_channel_type_display }}</span>
+        <span class="badge {% if sync.sync_status == 'synced' %}badge-green{% elif sync.sync_status == 'pending' %}badge-amber{% elif sync.sync_status == 'sync_error' %}badge-red{% else %}badge-slate{% endif %}">
+          {{ sync.get_sync_status_display }}
+        </span>
+      </div>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <form action="{% url 'ecommerce:channelinventorysync_trigger' sync.pk %}" method="post" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline flex items-center gap-2 hover:text-primary">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span>Trigger Push</span>
+        </button>
+      </form>
+      <a href="{% url 'ecommerce:channelinventorysync_edit' sync.pk %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Feed</span>
+      </a>
+      <a href="{% url 'ecommerce:channelinventorysync_list' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to Syncs</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Channel Sync Profile -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="card p-5 space-y-4">
+      <h3 class="text-sm font-semibold text-slate-900 border-b pb-2">Target Channel Identity</h3>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between">
+          <span class="text-slate-500">Channel Name:</span>
+          <span class="font-semibold text-slate-800">{{ sync.channel_name }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Platform Type:</span>
+          <span class="badge badge-info">{{ sync.get_channel_type_display }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Record Number:</span>
+          <span class="font-mono text-slate-700">{{ sync.number }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Sync Mode:</span>
+          <span class="font-medium text-slate-800">{{ sync.get_sync_mode_display }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-5 space-y-4">
+      <h3 class="text-sm font-semibold text-slate-900 border-b pb-2">Stock Pool & Buffer Rules</h3>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between">
+          <span class="text-slate-500">Fulfillment Source:</span>
+          <span class="font-medium text-slate-800">
+            {% if center %}
+            {{ center.name }} ({{ center.code }})
+            {% else %}
+            <span class="text-blue-700">Unified Multi-Warehouse Pool</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Withheld Buffer Pct:</span>
+          <span class="font-mono font-bold text-slate-800">{{ sync.allocation_buffer_pct }}%</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Target Variant SKU:</span>
+          <span class="font-mono font-semibold text-slate-900">{{ variant.sku }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Product Name:</span>
+          <span class="text-slate-800 truncate max-w-xs">{{ variant.product.name }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-5 space-y-4">
+      <h3 class="text-sm font-semibold text-slate-900 border-b pb-2">Sync Telemetry</h3>
+      <div class="space-y-3">
+        <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg flex items-center justify-between">
+          <div>
+            <div class="text-xs text-blue-700 font-medium uppercase tracking-wider">Last Broadcasted Qty</div>
+            <div class="text-3xl font-extrabold text-blue-900">{{ sync.last_synced_quantity }} Units</div>
+          </div>
+          <i data-lucide="radio" class="w-8 h-8 text-blue-400"></i>
+        </div>
+        <div class="text-xs text-slate-500 flex justify-between">
+          <span>Last Sync Push:</span>
+          <span class="font-mono text-slate-800">{{ sync.last_synced_at|date:"Y-m-d H:i:s"|default:"Never Synced" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Diagnostics / Error Output -->
+  {% if sync.error_message %}
+  <div class="card p-5 border-l-4 border-l-red-500 bg-red-50/50">
+    <div class="flex items-start gap-3">
+      <i data-lucide="alert-circle" class="w-5 h-5 text-red-600 mt-0.5"></i>
+      <div>
+        <h3 class="text-sm font-semibold text-red-900">Sync Error Diagnostic</h3>
+        <p class="text-xs text-red-700 font-mono mt-1 whitespace-pre-wrap">{{ sync.error_message }}</p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Linked SKU Allocations -->
+  <div class="card">
+    <div class="card-header p-4 border-b">
+      <h3 class="text-base font-semibold text-slate-900">Underlying Stock Supporting this Feed</h3>
+      <p class="text-xs text-slate-500">Warehouse inventory levels backing the calculated feed quantity</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table w-full">
+        <thead>
+          <tr>
+            <th>Fulfillment Center</th>
+            <th>Bin</th>
+            <th class="text-right">On Hand</th>
+            <th class="text-right">Committed</th>
+            <th class="text-right">Safety Buffer</th>
+            <th class="text-right">ATP</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for alloc in variant.inventory_allocations.all %}
+          <tr class="hover:bg-slate-50/50">
+            <td class="font-medium text-slate-900">
+              <a href="{% url 'ecommerce:inventoryallocation_detail' alloc.pk %}" class="hover:text-primary">
+                {{ alloc.fulfillment_center.name }} ({{ alloc.fulfillment_center.code }})
+              </a>
+            </td>
+            <td><span class="text-xs font-mono text-slate-600">{{ alloc.zone_bin|default:"—" }}</span></td>
+            <td class="text-right">{{ alloc.quantity_on_hand }}</td>
+            <td class="text-right text-slate-600">{{ alloc.quantity_allocated }}</td>
+            <td class="text-right text-slate-600">{{ alloc.safety_stock_buffer }}</td>
+            <td class="text-right font-bold text-slate-900">{{ alloc.available_to_promise }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-6 text-sm text-slate-500">
+              No inventory allocations found for this variant.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
