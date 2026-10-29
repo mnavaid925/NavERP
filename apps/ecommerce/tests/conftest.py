@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from django.utils import timezone
 from apps.accounting.models.GeneralLedger.Currencies import Currency
-from apps.core.models import Party
+from apps.core.models import Address, Party
 from apps.ecommerce.models import (
     StoreCategory,
     CatalogProduct,
@@ -27,6 +27,11 @@ from apps.ecommerce.models import (
     OrderRoutingRule,
     OrderFulfillment,
     ReturnMerchandiseAuthorization,
+    CustomerAccountProfile,
+    CustomerAddressPreference,
+    CustomerWishlist,
+    CustomerWishlistItem,
+    CustomerPrivacyRequest,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -1417,3 +1422,253 @@ def ecom_checkout_session_a(tenant_a, ecom_cart_a):
 @pytest.fixture
 def ecom_checkout_session_b(tenant_b, ecom_cart_b):
     return _cartcheckout_checkout_session(tenant_b, ecom_cart_b)
+
+
+# ==============================================================================
+# 9.6 Customer Account & Profile Contract & Fixtures
+# ==============================================================================
+
+CUSTOMERPROFILE_PAGE_SIZE = 20
+
+CUSTOMERPROFILE_MODEL_FIELDS = {
+    "CustomerAccountProfile": (
+        "id", "tenant", "number", "customer", "user", "tier", "status",
+        "auth_mode", "phone_number", "phone_verified", "preferred_currency",
+        "preferred_language", "email_marketing_opt_in", "sms_marketing_opt_in",
+        "notification_frequency", "marketing_consent_at", "unsubscribe_token",
+        "total_spent", "order_count", "last_order_at", "internal_notes",
+        "created_at", "updated_at",
+    ),
+    "CustomerAddressPreference": (
+        "id", "tenant", "number", "customer", "address", "label",
+        "is_default_shipping", "is_default_billing", "recipient_name",
+        "contact_phone", "delivery_instructions", "preferred_delivery_window",
+        "requires_signature", "created_at", "updated_at",
+    ),
+    "CustomerWishlist": (
+        "id", "tenant", "number", "customer", "name", "slug", "visibility",
+        "is_default", "share_token", "notes", "created_at", "updated_at",
+    ),
+    "CustomerWishlistItem": (
+        "id", "tenant", "wishlist", "product", "variant", "desired_quantity",
+        "priority", "comment", "created_at", "updated_at",
+    ),
+    "CustomerPrivacyRequest": (
+        "id", "tenant", "number", "customer", "request_type", "status",
+        "statutory_deadline", "completed_at", "requested_by_email",
+        "verification_method", "data_export_payload", "resolution_notes",
+        "created_at", "updated_at",
+    ),
+}
+
+CUSTOMERPROFILE_CHOICES = {
+    "CustomerAccountProfile": {
+        "tier": (("bronze", "Bronze"), ("silver", "Silver"), ("gold", "Gold"), ("platinum", "Platinum"), ("vip", "VIP")),
+        "status": (("active", "Active"), ("pending_verification", "Pending Verification"), ("suspended", "Suspended"), ("locked", "Locked"), ("anonymized", "Anonymized / GDPR Erased")),
+        "auth_mode": (("password", "Email / Password"), ("passwordless_email", "Passwordless Email Magic Link"), ("phone_otp", "Phone SMS OTP"), ("sso_oauth", "Single Sign-On (SSO / OAuth)")),
+        "notification_frequency": (("all", "All Communications"), ("weekly_digest", "Weekly Digest"), ("promotions_only", "Promotions & Offers Only")),
+    },
+    "CustomerAddressPreference": {
+        "preferred_delivery_window": (("anytime", "Anytime (Standard)"), ("morning", "Morning (8 AM - 12 PM)"), ("afternoon", "Afternoon (12 PM - 5 PM)"), ("evening", "Evening (5 PM - 9 PM)"), ("weekend", "Weekend Only")),
+    },
+    "CustomerWishlist": {
+        "visibility": (("private", "Private (Only Me)"), ("shared", "Shared (Link Access)"), ("public", "Public (Searchable)")),
+    },
+    "CustomerWishlistItem": {
+        "priority": (("low", "Low"), ("medium", "Medium"), ("high", "High"), ("highest", "Must Have")),
+    },
+    "CustomerPrivacyRequest": {
+        "request_type": (("access_export", "Right of Access / Data Portability (JSON Export)"), ("rectification", "Right to Rectification (Correct Data)"), ("erasure_anonymize", "Right to Erasure (GDPR Account Anonymization)"), ("restriction", "Right to Restriction of Processing"), ("opt_out_sale", "Do Not Sell / Share My Data (CCPA)")),
+        "status": (("received", "Received / Awaiting Identity Verification"), ("identity_verified", "Identity Verified"), ("processing", "Processing Data Query / Erasure"), ("completed", "Completed & Delivered"), ("rejected", "Rejected / Legally Exempt")),
+    },
+}
+
+CUSTOMERPROFILE_FORM_FIELDS = {
+    "CustomerAccountProfileForm": (
+        "customer", "user", "tier", "status", "auth_mode", "phone_number",
+        "phone_verified", "preferred_currency", "preferred_language",
+        "email_marketing_opt_in", "sms_marketing_opt_in", "notification_frequency",
+        "internal_notes",
+    ),
+    "CustomerAddressPreferenceForm": (
+        "customer", "address", "label", "is_default_shipping", "is_default_billing",
+        "recipient_name", "contact_phone", "delivery_instructions",
+        "preferred_delivery_window", "requires_signature",
+    ),
+    "CustomerWishlistForm": ("customer", "name", "slug", "visibility", "is_default", "notes"),
+    "CustomerWishlistItemForm": ("wishlist", "product", "variant", "desired_quantity", "priority", "comment"),
+    "CustomerPrivacyRequestForm": (
+        "customer", "request_type", "requested_by_email",
+        "verification_method", "statutory_deadline", "resolution_notes",
+    ),
+}
+
+CUSTOMERPROFILE_URL_PATTERNS = {
+    "customeraccountprofile_list": "customer-profiles/",
+    "customeraccountprofile_detail": "customer-profiles/<int:pk>/",
+    "customeraccountprofile_create": "customer-profiles/create/",
+    "customeraccountprofile_edit": "customer-profiles/<int:pk>/edit/",
+    "customeraccountprofile_delete": "customer-profiles/<int:pk>/delete/",
+    "customeraddresspreference_list": "address-preferences/",
+    "customeraddresspreference_detail": "address-preferences/<int:pk>/",
+    "customeraddresspreference_create": "address-preferences/create/",
+    "customeraddresspreference_edit": "address-preferences/<int:pk>/edit/",
+    "customeraddresspreference_delete": "address-preferences/<int:pk>/delete/",
+    "customerwishlist_list": "wishlists/",
+    "customerwishlist_detail": "wishlists/<int:pk>/",
+    "customerwishlist_create": "wishlists/create/",
+    "customerwishlist_edit": "wishlists/<int:pk>/edit/",
+    "customerwishlist_delete": "wishlists/<int:pk>/delete/",
+    "customerwishlist_item_add": "wishlists/<int:pk>/items/add/",
+    "customerwishlist_item_delete": "wishlists/items/<int:item_pk>/delete/",
+    "customerprivacyrequest_list": "privacy-requests/",
+    "customerprivacyrequest_detail": "privacy-requests/<int:pk>/",
+    "customerprivacyrequest_create": "privacy-requests/create/",
+    "customerprivacyrequest_edit": "privacy-requests/<int:pk>/edit/",
+    "customerprivacyrequest_delete": "privacy-requests/<int:pk>/delete/",
+    "customerprivacyrequest_generate_export": "privacy-requests/<int:pk>/generate-export/",
+    "customerprivacyrequest_anonymize": "privacy-requests/<int:pk>/anonymize/",
+}
+
+
+def _customerprofile_address(tenant, party, line1="123 High St", city="London", country="GB", kind="shipping", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "party": party,
+        "line1": line1,
+        "city": city,
+        "country": country,
+        "kind": kind,
+    }
+    defaults.update(overrides)
+    return Address.objects.create(**defaults)
+
+
+def _customerprofile_account(tenant, customer, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "customer": customer,
+        "tier": "bronze",
+        "status": "active",
+        "auth_mode": "password",
+        "phone_number": "+1234567890",
+        "preferred_language": "en",
+        "total_spent": Decimal("0.00"),
+        "order_count": 0,
+    }
+    defaults.update(overrides)
+    return CustomerAccountProfile.objects.create(**defaults)
+
+
+def _customerprofile_address_preference(tenant, customer, address, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "customer": customer,
+        "address": address,
+        "label": "Home",
+        "is_default_shipping": True,
+        "is_default_billing": True,
+        "recipient_name": "Jane Doe",
+        "preferred_delivery_window": "anytime",
+    }
+    defaults.update(overrides)
+    return CustomerAddressPreference.objects.create(**defaults)
+
+
+def _customerprofile_wishlist(tenant, customer, name="My Wishlist", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "customer": customer,
+        "name": name,
+        "visibility": "private",
+        "is_default": True,
+    }
+    defaults.update(overrides)
+    return CustomerWishlist.objects.create(**defaults)
+
+
+def _customerprofile_wishlist_item(tenant, wishlist, product, variant=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "wishlist": wishlist,
+        "product": product,
+        "variant": variant,
+        "desired_quantity": 1,
+        "priority": "medium",
+    }
+    defaults.update(overrides)
+    return CustomerWishlistItem.objects.create(**defaults)
+
+
+def _customerprofile_privacy_request(tenant, customer, request_type="access_export", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "customer": customer,
+        "request_type": request_type,
+        "status": "received",
+        "requested_by_email": "privacy@example.com",
+        "verification_method": "account_login",
+    }
+    defaults.update(overrides)
+    return CustomerPrivacyRequest.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_address_a(tenant_a, ecom_customer_a):
+    return _customerprofile_address(tenant_a, ecom_customer_a, line1="100 Test St A", city="Austin", country="US")
+
+
+@pytest.fixture
+def ecom_address_b(tenant_b, ecom_customer_b):
+    return _customerprofile_address(tenant_b, ecom_customer_b, line1="200 Test Ave B", city="Dallas", country="US")
+
+
+@pytest.fixture
+def ecom_profile_a(tenant_a, ecom_customer_a):
+    return _customerprofile_account(tenant_a, ecom_customer_a)
+
+
+@pytest.fixture
+def ecom_profile_b(tenant_b, ecom_customer_b):
+    return _customerprofile_account(tenant_b, ecom_customer_b)
+
+
+@pytest.fixture
+def ecom_pref_a(tenant_a, ecom_customer_a, ecom_address_a):
+    return _customerprofile_address_preference(tenant_a, ecom_customer_a, ecom_address_a)
+
+
+@pytest.fixture
+def ecom_pref_b(tenant_b, ecom_customer_b, ecom_address_b):
+    return _customerprofile_address_preference(tenant_b, ecom_customer_b, ecom_address_b)
+
+
+@pytest.fixture
+def ecom_wishlist_a(tenant_a, ecom_customer_a):
+    return _customerprofile_wishlist(tenant_a, ecom_customer_a, name="Wishlist A")
+
+
+@pytest.fixture
+def ecom_wishlist_b(tenant_b, ecom_customer_b):
+    return _customerprofile_wishlist(tenant_b, ecom_customer_b, name="Wishlist B")
+
+
+@pytest.fixture
+def ecom_wishlist_item_a(tenant_a, ecom_wishlist_a, ecom_product_a):
+    return _customerprofile_wishlist_item(tenant_a, ecom_wishlist_a, ecom_product_a)
+
+
+@pytest.fixture
+def ecom_wishlist_item_b(tenant_b, ecom_wishlist_b, ecom_product_b):
+    return _customerprofile_wishlist_item(tenant_b, ecom_wishlist_b, ecom_product_b)
+
+
+@pytest.fixture
+def ecom_privacy_request_a(tenant_a, ecom_customer_a):
+    return _customerprofile_privacy_request(tenant_a, ecom_customer_a)
+
+
+@pytest.fixture
+def ecom_privacy_request_b(tenant_b, ecom_customer_b):
+    return _customerprofile_privacy_request(tenant_b, ecom_customer_b)
+
