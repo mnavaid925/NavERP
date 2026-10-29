@@ -102,7 +102,7 @@
                         {% endif %}
                     </td>
                     <td>
-                        <span class="badge badge-slate">{{ cart.item_count }} items</span>
+                        <span class="badge badge-slate">{{ cart.total_items|default:cart.item_count }} items</span>
                     </td>
                     <td>${{ cart.subtotal }}</td>
                     <td class="font-semibold text-slate-900">${{ cart.grand_total }} {{ cart.currency }}</td>
