@@ -112,3 +112,5 @@ class SearchFacetConfig(TenantNumbered):
             raise ValidationError(
                 {"option_key": "Option key (e.g. 'Size', 'Color') is required when source type is Variant Option."}
             )
+        if self.category_scope_id and self.tenant_id and self.category_scope.tenant_id != self.tenant_id:
+            raise ValidationError({"category_scope": "Category scope must belong to the same tenant."})
