@@ -5,7 +5,6 @@ from django.db.models import Count, Q
 from django.shortcuts import render
 from django.utils import timezone
 
-from apps.ecommerce.models.CartCheckout.CartSessions import CartSession
 from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrderLine
 from apps.ecommerce.models.Personalization.AudienceSegments import AudienceSegment
 from apps.ecommerce.models.Personalization.PersonalizedExperiences import PersonalizedExperience
