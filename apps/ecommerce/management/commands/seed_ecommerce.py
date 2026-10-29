@@ -5,6 +5,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from apps.accounting.models.GeneralLedger.Currencies import Currency
 from apps.core.models import Party, Tenant
 from apps.ecommerce.models.CartCheckout.Carts import Cart, CartItem
 from apps.ecommerce.models.CartCheckout.CheckoutSessions import CheckoutSession
@@ -14,6 +15,10 @@ from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPoli
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
 from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
+from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder, EcommerceOrderLine
+from apps.ecommerce.models.OrderManagement.OrderFulfillments import OrderFulfillment
+from apps.ecommerce.models.OrderManagement.OrderRoutingRules import OrderRoutingRule
+from apps.ecommerce.models.OrderManagement.ReturnMerchandiseAuthorizations import ReturnMerchandiseAuthorization
 from apps.ecommerce.models.PricingPromotion.CompetitorPriceMonitors import CompetitorPriceMonitor
 from apps.ecommerce.models.PricingPromotion.CouponPromotions import CouponPromotion
 from apps.ecommerce.models.PricingPromotion.DynamicPriceRules import DynamicPriceRule
@@ -568,6 +573,7 @@ class Command(BaseCommand):
         v2 = ProductVariant.objects.filter(tenant=tenant, sku="TSH-NAVY-M").first()
         v3 = ProductVariant.objects.filter(tenant=tenant, sku="TOT-NAT").first()
         prod_headphones = v1.product if v1 else None
+        prod_tshirt = v3.product if v3 else (v2.product if v2 else None)
 
         # 1. DynamicPriceRule
         DynamicPriceRule.objects.get_or_create(
@@ -1119,6 +1125,242 @@ class Command(BaseCommand):
                 "completed_at": now - timedelta(hours=1),
             },
         )
+
+        # -----------------------------------------------------------------
+        # 9.5 Order Management System (OMS)
+        # -----------------------------------------------------------------
+        usd, _ = Currency.objects.get_or_create(
+            code="USD",
+            defaults={"name": "US Dollar", "symbol": "$", "is_active": True},
+        )
+
+        # 1. Routing Rules
+        rr_domestic, _ = OrderRoutingRule.objects.get_or_create(
+            tenant=tenant,
+            name="Domestic Express Routing",
+            defaults={
+                "strategy": "closest_location",
+                "priority": 1,
+                "destination_country": "US",
+                "destination_region": "Midwest",
+                "preferred_fulfillment_center": fc_chi,
+                "allow_split_shipment": True,
+                "enable_dropship": False,
+                "is_active": True,
+                "description": "Primary fulfillment route for domestic US midwest orders via Chicago Hub.",
+            },
+        )
+
+        rr_west, _ = OrderRoutingRule.objects.get_or_create(
+            tenant=tenant,
+            name="West Coast Regional Sourcing",
+            defaults={
+                "strategy": "closest_location",
+                "priority": 2,
+                "destination_country": "US",
+                "destination_region": "West Coast",
+                "preferred_fulfillment_center": fc_west,
+                "allow_split_shipment": True,
+                "enable_dropship": True,
+                "is_active": True,
+                "description": "Dispatches Pacific and West coast orders from Oakland Distribution Hub.",
+            },
+        )
+
+        rr_intl, _ = OrderRoutingRule.objects.get_or_create(
+            tenant=tenant,
+            name="Global Single-Node Sourcing",
+            defaults={
+                "strategy": "fewest_splits",
+                "priority": 10,
+                "destination_country": "",
+                "destination_region": "",
+                "preferred_fulfillment_center": fc_chi,
+                "allow_split_shipment": False,
+                "enable_dropship": False,
+                "is_active": True,
+                "description": "Fallback rule to prevent international split shipments and consolidate packages.",
+            },
+        )
+
+        # 2. eCommerce Orders
+        order_cust = cust_party or Party.objects.filter(tenant=tenant).first()
+        prod_tshirt = CatalogProduct.objects.filter(tenant=tenant, slug="classic-crewneck-tshirt").first()
+        var_tshirt_m = ProductVariant.objects.filter(tenant=tenant, sku="TSH-NAVY-M").first()
+        var_hoodie = ProductVariant.objects.filter(tenant=tenant, sku="HDP-BLK").first()
+        prod_hoodie = CatalogProduct.objects.filter(tenant=tenant, slug="heavyweight-pullover-hoodie").first()
+        applied_promo = CouponPromotion.objects.filter(tenant=tenant).first()
+
+        order_processing = None
+        if order_cust:
+            order_processing, created = EcommerceOrder.objects.get_or_create(
+                tenant=tenant,
+                shipping_name="Alice Montgomery",
+                shipping_address_line1="100 Corporate Parkway",
+                defaults={
+                    "customer": order_cust,
+                    "guest_email": "alice.montgomery@example.com",
+                    "currency": usd,
+                    "status": "processing",
+                    "payment_status": "captured",
+                    "fulfillment_status": "partially_fulfilled",
+                    "fraud_risk_level": "low",
+                    "fraud_score": 12,
+                    "address_verification_status": "passed",
+                    "inventory_reservation_status": "allocated",
+                    "shipping_city": "Chicago",
+                    "shipping_state": "IL",
+                    "shipping_postal_code": "60601",
+                    "shipping_country": "US",
+                    "billing_name": "Alice Montgomery",
+                    "billing_address_line1": "100 Corporate Parkway",
+                    "billing_city": "Chicago",
+                    "billing_state": "IL",
+                    "billing_postal_code": "60601",
+                    "billing_country": "US",
+                    "discount_amount": Decimal("15.00"),
+                    "shipping_amount": Decimal("12.50"),
+                    "tax_amount": Decimal("8.20"),
+                    "applied_coupon": applied_promo,
+                    "customer_notes": "Please leave at front reception desk.",
+                    "internal_notes": "High priority corporate client.",
+                },
+            )
+            if created and prod_tshirt and var_tshirt_m:
+                EcommerceOrderLine.objects.create(
+                    tenant=tenant,
+                    order=order_processing,
+                    product=prod_tshirt,
+                    variant=var_tshirt_m,
+                    sku=var_tshirt_m.sku,
+                    product_name=prod_tshirt.name,
+                    quantity=3,
+                    fulfilled_quantity=2,
+                    unit_price=Decimal("38.00"),
+                    unit_discount=Decimal("5.00"),
+                    status="fulfilled",
+                )
+            if created and prod_hoodie and var_hoodie:
+                EcommerceOrderLine.objects.create(
+                    tenant=tenant,
+                    order=order_processing,
+                    product=prod_hoodie,
+                    variant=var_hoodie,
+                    sku=var_hoodie.sku,
+                    product_name=prod_hoodie.name,
+                    quantity=1,
+                    fulfilled_quantity=0,
+                    unit_price=Decimal("85.00"),
+                    unit_discount=Decimal("0.00"),
+                    status="routing",
+                )
+            if created:
+                order_processing.recalculate_totals()
+
+            order_delivered, created_del = EcommerceOrder.objects.get_or_create(
+                tenant=tenant,
+                shipping_name="Marcus Vance",
+                shipping_address_line1="456 Michigan Ave",
+                defaults={
+                    "customer": order_cust,
+                    "guest_email": "marcus.vance@example.com",
+                    "currency": usd,
+                    "status": "fulfilled",
+                    "payment_status": "captured",
+                    "fulfillment_status": "fulfilled",
+                    "fraud_risk_level": "low",
+                    "fraud_score": 5,
+                    "address_verification_status": "passed",
+                    "inventory_reservation_status": "allocated",
+                    "shipping_city": "Chicago",
+                    "shipping_state": "IL",
+                    "shipping_postal_code": "60611",
+                    "shipping_country": "US",
+                    "billing_name": "Marcus Vance",
+                    "billing_address_line1": "456 Michigan Ave",
+                    "billing_city": "Chicago",
+                    "billing_state": "IL",
+                    "billing_postal_code": "60611",
+                    "billing_country": "US",
+                    "shipping_amount": Decimal("9.99"),
+                    "tax_amount": Decimal("6.40"),
+                },
+            )
+            if created_del and prod_tshirt and var_tshirt_m:
+                EcommerceOrderLine.objects.create(
+                    tenant=tenant,
+                    order=order_delivered,
+                    product=prod_tshirt,
+                    variant=var_tshirt_m,
+                    sku=var_tshirt_m.sku,
+                    product_name=prod_tshirt.name,
+                    quantity=2,
+                    fulfilled_quantity=2,
+                    unit_price=Decimal("38.00"),
+                    status="fulfilled",
+                )
+                order_delivered.recalculate_totals()
+
+            # 3. Fulfillments
+            if order_processing:
+                OrderFulfillment.objects.get_or_create(
+                    tenant=tenant,
+                    order=order_processing,
+                    carrier_name="FedEx Ground",
+                    defaults={
+                        "fulfillment_center": fc_chi,
+                        "tracking_number": "781299887766",
+                        "tracking_url": "https://www.fedex.com/fedextrack/?trknbr=781299887766",
+                        "status": "in_transit",
+                        "shipping_cost": Decimal("11.80"),
+                        "shipped_at": now - timedelta(hours=6),
+                        "estimated_delivery_date": (now + timedelta(days=2)).date(),
+                        "notification_sent": True,
+                        "notes": "Package 1 of 2 for partial order fulfillment.",
+                    },
+                )
+
+            if order_delivered:
+                OrderFulfillment.objects.get_or_create(
+                    tenant=tenant,
+                    order=order_delivered,
+                    carrier_name="UPS Express",
+                    defaults={
+                        "fulfillment_center": fc_chi,
+                        "tracking_number": "1Z999AA10123456784",
+                        "tracking_url": "https://www.ups.com/track?tracknum=1Z999AA10123456784",
+                        "status": "delivered",
+                        "shipping_cost": Decimal("14.50"),
+                        "shipped_at": now - timedelta(days=3),
+                        "estimated_delivery_date": (now - timedelta(days=1)).date(),
+                        "actual_delivery_date": (now - timedelta(days=1)).date(),
+                        "notification_sent": True,
+                        "notes": "Delivered and signed at front porch.",
+                    },
+                )
+
+                # 4. Returns & Exchanges (RMA)
+                ReturnMerchandiseAuthorization.objects.get_or_create(
+                    tenant=tenant,
+                    order=order_delivered,
+                    customer=order_cust,
+                    defaults={
+                        "return_type": "refund",
+                        "status": "authorized",
+                        "reason": "size_fit_issue",
+                        "return_tracking_number": "1Z999RETURN8877665",
+                        "return_shipping_label_url": "https://labels.example.com/rma/ERMA-00001.pdf",
+                        "restocking_fee": Decimal("5.00"),
+                        "refund_amount": Decimal("38.00"),
+                        "refund_status": "pending",
+                        "restocking_status": "pending",
+                        "restocking_center": fc_chi,
+                        "customer_notes": "Fit was slightly too snug, requesting standard return.",
+                        "inspection_notes": "Pending receipt at Chicago facility.",
+                        "authorized_at": now - timedelta(hours=4),
+                    },
+                )
+
 
 
 
