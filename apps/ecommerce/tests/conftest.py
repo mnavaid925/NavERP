@@ -7,6 +7,10 @@ from apps.ecommerce.models import (
     CatalogProduct,
     ProductVariant,
     ProductRelationship,
+    FulfillmentCenter,
+    InventoryAllocation,
+    BackorderPolicy,
+    ChannelInventorySync,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -219,3 +223,230 @@ def ecom_relationship_a(tenant_a, ecom_product_a):
 def ecom_relationship_b(tenant_b, ecom_product_b):
     product2 = _productcatalog_product(tenant_b, name="Accessory B", slug="accessory-b")
     return _productcatalog_relationship(tenant_b, ecom_product_b, product2)
+
+
+INVENTORYSTOCK_PAGE_SIZE = 20
+
+INVENTORYSTOCK_MODEL_FIELDS = {
+    "FulfillmentCenter": (
+        "id", "tenant", "number", "name", "code", "center_type", "location",
+        "priority", "is_active", "supports_pick_pack_ship", "supports_customer_pickup",
+        "daily_cutoff_time", "address_line1", "city", "state", "postal_code",
+        "country", "contact_email", "contact_phone", "notes", "created_at", "updated_at",
+    ),
+    "InventoryAllocation": (
+        "id", "tenant", "number", "product", "variant", "fulfillment_center",
+        "zone_bin", "quantity_on_hand", "quantity_allocated", "safety_stock_buffer",
+        "low_stock_threshold", "restock_lead_time_days", "last_counted_at",
+        "notes", "created_at", "updated_at",
+    ),
+    "BackorderPolicy": (
+        "id", "tenant", "number", "variant", "policy_type", "storefront_message",
+        "expected_availability_date", "max_backorder_quantity", "current_backorder_count",
+        "auto_notify_waitlist", "is_active", "notes", "created_at", "updated_at",
+    ),
+    "ChannelInventorySync": (
+        "id", "tenant", "number", "variant", "channel_type", "channel_name",
+        "fulfillment_center", "sync_mode", "allocation_buffer_pct", "last_synced_quantity",
+        "sync_status", "last_synced_at", "error_message", "created_at", "updated_at",
+    ),
+}
+
+INVENTORYSTOCK_CHOICES = {
+    "FulfillmentCenter": {
+        "center_type": (
+            ("internal_warehouse", "Internal Distribution Center"),
+            ("third_party_3pl", "Third-Party Logistics (3PL) Partner"),
+            ("retail_store", "Retail Store Node"),
+            ("drop_shipper", "Direct Vendor Drop-Shipper"),
+        ),
+    },
+    "BackorderPolicy": {
+        "policy_type": (
+            ("deny_when_empty", "Deny Orders (Strict Out of Stock)"),
+            ("allow_with_backorder_notice", "Allow Backorder with Estimated Dispatch Notice"),
+            ("pre_order_only", "Pre-Order Campaign (Launch Release Date)"),
+        ),
+    },
+    "ChannelInventorySync": {
+        "channel_type": (
+            ("shopify", "Shopify Storefront"),
+            ("amazon", "Amazon Marketplace"),
+            ("walmart", "Walmart Marketplace"),
+            ("ebay", "eBay Store"),
+            ("pos_retail", "In-Store POS System"),
+            ("b2b_portal", "B2B Wholesale Portal"),
+            ("custom_webhook", "Custom API Webhook"),
+        ),
+        "sync_mode": (
+            ("real_time_webhook", "Real-Time Push on Stock Change"),
+            ("hourly_batch", "Hourly Batch Synchronization"),
+            ("daily_scheduled", "Daily Scheduled Broadcast"),
+            ("manual_only", "Manual On-Demand Sync"),
+        ),
+        "sync_status": (
+            ("pending", "Sync Pending"),
+            ("synced", "Successfully Synchronized"),
+            ("sync_error", "Sync Error / Failed"),
+            ("paused", "Sync Feed Paused"),
+        ),
+    },
+}
+
+INVENTORYSTOCK_FORM_FIELDS = {
+    "FulfillmentCenterForm": (
+        "name", "code", "center_type", "location", "priority", "is_active",
+        "supports_pick_pack_ship", "supports_customer_pickup", "daily_cutoff_time",
+        "address_line1", "city", "state", "postal_code", "country", "contact_email",
+        "contact_phone", "notes",
+    ),
+    "InventoryAllocationForm": (
+        "product", "variant", "fulfillment_center", "zone_bin", "quantity_on_hand",
+        "quantity_allocated", "safety_stock_buffer", "low_stock_threshold",
+        "restock_lead_time_days", "last_counted_at", "notes",
+    ),
+    "StockAdjustmentActionForm": (
+        "adjustment_type", "adjustment_quantity", "reason_notes",
+    ),
+    "BackorderPolicyForm": (
+        "variant", "policy_type", "storefront_message", "expected_availability_date",
+        "max_backorder_quantity", "auto_notify_waitlist", "is_active", "notes",
+    ),
+    "ChannelInventorySyncForm": (
+        "variant", "channel_type", "channel_name", "fulfillment_center",
+        "sync_mode", "allocation_buffer_pct", "sync_status", "error_message",
+    ),
+}
+
+INVENTORYSTOCK_URLS = {
+    "inventory_operations": "inventory/",
+    "fulfillmentcenter_list": "inventory/centers/",
+    "fulfillmentcenter_create": "inventory/centers/create/",
+    "fulfillmentcenter_detail": "inventory/centers/<int:pk>/",
+    "fulfillmentcenter_edit": "inventory/centers/<int:pk>/edit/",
+    "fulfillmentcenter_delete": "inventory/centers/<int:pk>/delete/",
+    "inventoryallocation_list": "inventory/allocations/",
+    "inventoryallocation_create": "inventory/allocations/create/",
+    "inventoryallocation_detail": "inventory/allocations/<int:pk>/",
+    "inventoryallocation_edit": "inventory/allocations/<int:pk>/edit/",
+    "inventoryallocation_delete": "inventory/allocations/<int:pk>/delete/",
+    "inventoryallocation_adjust": "inventory/allocations/<int:pk>/adjust/",
+    "backorderpolicy_list": "inventory/backorders/",
+    "backorderpolicy_create": "inventory/backorders/create/",
+    "backorderpolicy_detail": "inventory/backorders/<int:pk>/",
+    "backorderpolicy_edit": "inventory/backorders/<int:pk>/edit/",
+    "backorderpolicy_delete": "inventory/backorders/<int:pk>/delete/",
+    "channelinventorysync_list": "inventory/sync/",
+    "channelinventorysync_create": "inventory/sync/create/",
+    "channelinventorysync_detail": "inventory/sync/<int:pk>/",
+    "channelinventorysync_edit": "inventory/sync/<int:pk>/edit/",
+    "channelinventorysync_delete": "inventory/sync/<int:pk>/delete/",
+    "channelinventorysync_trigger": "inventory/sync/<int:pk>/trigger/",
+}
+
+
+def _inventorystock_center(tenant, name="West DC", code=None, **overrides):
+    if not code:
+        code = f"DC-{tenant.slug.upper()[:4]}-{name[:3].upper()}"
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "code": code,
+        "center_type": "internal_warehouse",
+        "priority": 1,
+        "is_active": True,
+        "supports_pick_pack_ship": True,
+        "supports_customer_pickup": False,
+        "city": "Seattle",
+        "country": "USA",
+    }
+    defaults.update(overrides)
+    return FulfillmentCenter.objects.create(**defaults)
+
+
+def _inventorystock_allocation(tenant, variant, center, quantity_on_hand=100, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "product": variant.product,
+        "variant": variant,
+        "fulfillment_center": center,
+        "zone_bin": "A1-B2",
+        "quantity_on_hand": quantity_on_hand,
+        "quantity_allocated": 10,
+        "safety_stock_buffer": 5,
+        "low_stock_threshold": 15,
+        "restock_lead_time_days": 7,
+    }
+    defaults.update(overrides)
+    return InventoryAllocation.objects.create(**defaults)
+
+
+def _inventorystock_backorder(tenant, variant, policy_type="allow_with_backorder_notice", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "variant": variant,
+        "policy_type": policy_type,
+        "storefront_message": "Available on backorder. Ships in 2 weeks.",
+        "max_backorder_quantity": 50,
+        "current_backorder_count": 0,
+        "auto_notify_waitlist": True,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return BackorderPolicy.objects.create(**defaults)
+
+
+def _inventorystock_sync(tenant, variant, center=None, channel_type="amazon", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "variant": variant,
+        "channel_type": channel_type,
+        "channel_name": f"{channel_type.title()} US Feed",
+        "fulfillment_center": center,
+        "sync_mode": "real_time_webhook",
+        "allocation_buffer_pct": Decimal("10.00"),
+        "last_synced_quantity": 75,
+        "sync_status": "synced",
+    }
+    defaults.update(overrides)
+    return ChannelInventorySync.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_center_a(tenant_a):
+    return _inventorystock_center(tenant_a, name="Seattle Hub A", code="SEA-A")
+
+
+@pytest.fixture
+def ecom_center_b(tenant_b):
+    return _inventorystock_center(tenant_b, name="Denver Hub B", code="DEN-B")
+
+
+@pytest.fixture
+def ecom_allocation_a(tenant_a, ecom_variant_a, ecom_center_a):
+    return _inventorystock_allocation(tenant_a, ecom_variant_a, ecom_center_a, quantity_on_hand=150)
+
+
+@pytest.fixture
+def ecom_allocation_b(tenant_b, ecom_variant_b, ecom_center_b):
+    return _inventorystock_allocation(tenant_b, ecom_variant_b, ecom_center_b, quantity_on_hand=80)
+
+
+@pytest.fixture
+def ecom_backorder_a(tenant_a, ecom_variant_a):
+    return _inventorystock_backorder(tenant_a, ecom_variant_a)
+
+
+@pytest.fixture
+def ecom_backorder_b(tenant_b, ecom_variant_b):
+    return _inventorystock_backorder(tenant_b, ecom_variant_b)
+
+
+@pytest.fixture
+def ecom_sync_a(tenant_a, ecom_variant_a, ecom_center_a):
+    return _inventorystock_sync(tenant_a, ecom_variant_a, ecom_center_a, channel_type="amazon")
+
+
+@pytest.fixture
+def ecom_sync_b(tenant_b, ecom_variant_b, ecom_center_b):
+    return _inventorystock_sync(tenant_b, ecom_variant_b, ecom_center_b, channel_type="shopify")
