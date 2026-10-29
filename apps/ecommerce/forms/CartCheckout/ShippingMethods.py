@@ -38,6 +38,10 @@ class ShippingMethodConfigForm(TenantModelForm):
             "description": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["destination_countries"].required = False
+
     def clean_code(self):
         code = self.cleaned_data.get("code", "")
         return code.strip().upper()
