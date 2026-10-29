@@ -91,12 +91,10 @@ def backorderpolicy_create(request):
             policy.tenant = request.tenant
             policy.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "CREATE",
-                "BackorderPolicy",
-                policy.pk,
-                f"Created backorder policy for {policy.variant.sku} ({policy.get_policy_type_display()})",
+                policy,
+                "create",
+                {"sku": policy.variant.sku, "policy_type": policy.policy_type},
             )
             messages.success(request, f"Backorder policy for '{policy.variant.sku}' created successfully.")
             return redirect("ecommerce:backorderpolicy_detail", pk=policy.pk)
@@ -123,12 +121,10 @@ def backorderpolicy_edit(request, pk):
         if form.is_valid():
             policy = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "UPDATE",
-                "BackorderPolicy",
-                policy.pk,
-                f"Updated backorder policy for {policy.variant.sku}",
+                policy,
+                "update",
+                {"sku": policy.variant.sku, "policy_type": policy.policy_type},
             )
             messages.success(request, f"Backorder policy for '{policy.variant.sku}' updated successfully.")
             return redirect("ecommerce:backorderpolicy_detail", pk=policy.pk)
@@ -151,12 +147,10 @@ def backorderpolicy_delete(request, pk):
     sku = policy.variant.sku
     policy.delete()
     write_audit_log(
-        request.tenant,
         request.user,
-        "DELETE",
-        "BackorderPolicy",
-        pk,
-        f"Deleted backorder policy for {sku}",
+        policy,
+        "delete",
+        {"sku": sku},
     )
     messages.success(request, f"Backorder policy for '{sku}' was deleted.")
     return redirect("ecommerce:backorderpolicy_list")
