@@ -76,12 +76,10 @@ def fulfillmentcenter_create(request):
             center.tenant = request.tenant
             center.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "CREATE",
-                "FulfillmentCenter",
-                center.pk,
-                f"Created fulfillment center {center.name} ({center.code})",
+                center,
+                "create",
+                {"name": center.name, "code": center.code},
             )
             messages.success(request, f"Fulfillment center '{center.name}' created successfully.")
             return redirect("ecommerce:fulfillmentcenter_detail", pk=center.pk)
@@ -103,12 +101,10 @@ def fulfillmentcenter_edit(request, pk):
         if form.is_valid():
             center = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "UPDATE",
-                "FulfillmentCenter",
-                center.pk,
-                f"Updated fulfillment center {center.name} ({center.code})",
+                center,
+                "update",
+                {"name": center.name, "code": center.code},
             )
             messages.success(request, f"Fulfillment center '{center.name}' updated successfully.")
             return redirect("ecommerce:fulfillmentcenter_detail", pk=center.pk)
@@ -129,14 +125,13 @@ def fulfillmentcenter_edit(request, pk):
 def fulfillmentcenter_delete(request, pk):
     center = ecommerce_object(request, FulfillmentCenter, pk)
     name = center.name
+    code = center.code
     center.delete()
     write_audit_log(
-        request.tenant,
         request.user,
-        "DELETE",
-        "FulfillmentCenter",
-        pk,
-        f"Deleted fulfillment center {name}",
+        center,
+        "delete",
+        {"name": name, "code": code},
     )
     messages.success(request, f"Fulfillment center '{name}' was deleted.")
     return redirect("ecommerce:fulfillmentcenter_list")
