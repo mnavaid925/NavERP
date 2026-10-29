@@ -288,7 +288,9 @@
                   {{ product.name }}
                 </a>
 
-                {% if product.category %}
+                {% if product.primary_category %}
+                  <div class="text-xs text-slate-500 mb-2">{{ product.primary_category.name }}</div>
+                {% elif product.category %}
                   <div class="text-xs text-slate-500 mb-2">{{ product.category.name }}</div>
                 {% endif %}
 
