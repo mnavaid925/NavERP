@@ -96,12 +96,10 @@ def channelinventorysync_create(request):
             sync.last_synced_at = timezone.now()
             sync.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "CREATE",
-                "ChannelInventorySync",
-                sync.pk,
-                f"Created inventory sync feed {sync.channel_name} for SKU {sync.variant.sku} (Qty: {sync.last_synced_quantity})",
+                sync,
+                "create",
+                {"channel": sync.channel_name, "sku": sync.variant.sku, "qty": sync.last_synced_quantity},
             )
             messages.success(request, f"Channel sync feed '{sync.channel_name}' created.")
             return redirect("ecommerce:channelinventorysync_detail", pk=sync.pk)
@@ -128,12 +126,10 @@ def channelinventorysync_edit(request, pk):
         if form.is_valid():
             sync = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "UPDATE",
-                "ChannelInventorySync",
-                sync.pk,
-                f"Updated sync feed {sync.channel_name} for SKU {sync.variant.sku}",
+                sync,
+                "update",
+                {"channel": sync.channel_name, "sku": sync.variant.sku},
             )
             messages.success(request, f"Channel sync feed '{sync.channel_name}' updated.")
             return redirect("ecommerce:channelinventorysync_detail", pk=sync.pk)
@@ -165,12 +161,10 @@ def channelinventorysync_trigger(request, pk):
     sync.save()
 
     write_audit_log(
-        request.tenant,
         request.user,
-        "UPDATE",
-        "ChannelInventorySync",
-        sync.pk,
-        f"Manually pushed stock sync for {sync.channel_name}: {new_qty} units broadcasted",
+        sync,
+        "update",
+        {"channel": sync.channel_name, "broadcast_qty": new_qty},
     )
     messages.success(request, f"Broadcasted {new_qty} units to channel '{sync.channel_name}'.")
 
@@ -190,12 +184,10 @@ def channelinventorysync_delete(request, pk):
     sku = sync.variant.sku
     sync.delete()
     write_audit_log(
-        request.tenant,
         request.user,
-        "DELETE",
-        "ChannelInventorySync",
-        pk,
-        f"Deleted channel sync {channel_name} for {sku}",
+        sync,
+        "delete",
+        {"channel": channel_name, "sku": sku},
     )
     messages.success(request, f"Channel sync '{channel_name}' was removed.")
     return redirect("ecommerce:channelinventorysync_list")
