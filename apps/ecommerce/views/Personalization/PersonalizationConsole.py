@@ -20,7 +20,7 @@ def compute_recommendations(tenant, anchor_product=None, strategy=None, max_item
     Supports related_products, frequently_bought_together, collaborative, and trending_popular.
     """
     recommended_products = []
-    base_qs = CatalogProduct.objects.filter(tenant=tenant, is_active=True)
+    base_qs = CatalogProduct.objects.filter(tenant=tenant).exclude(status="archived")
 
     if anchor_product:
         base_qs = base_qs.exclude(pk=anchor_product.pk)
@@ -126,7 +126,7 @@ def personalization_console(request):
     ).count()
 
     # Products for simulation dropdown
-    products = CatalogProduct.objects.filter(tenant=tenant, is_active=True).order_by("name")[:30]
+    products = CatalogProduct.objects.filter(tenant=tenant).exclude(status="archived").order_by("name")[:30]
 
     selected_product_id = request.GET.get("product_id")
     selected_strategy_id = request.GET.get("strategy_id")
