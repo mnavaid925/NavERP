@@ -164,16 +164,18 @@ def search_console(request):
     if price_min:
         try:
             min_val = Decimal(price_min)
-            base_qs = base_qs.filter(variants__price__gte=min_val).distinct()
-            active_filters["price_min"] = price_min
+            if min_val.is_finite() and min_val >= Decimal("0"):
+                base_qs = base_qs.filter(variants__price__gte=min_val).distinct()
+                active_filters["price_min"] = price_min
         except (ValueError, ArithmeticError):
             pass
 
     if price_max:
         try:
             max_val = Decimal(price_max)
-            base_qs = base_qs.filter(variants__price__lte=max_val).distinct()
-            active_filters["price_max"] = price_max
+            if max_val.is_finite() and max_val >= Decimal("0"):
+                base_qs = base_qs.filter(variants__price__lte=max_val).distinct()
+                active_filters["price_max"] = price_max
         except (ValueError, ArithmeticError):
             pass
 
