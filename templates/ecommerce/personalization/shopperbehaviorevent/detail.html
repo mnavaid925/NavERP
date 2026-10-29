@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Behavioral Event {{ event.number }} · Personalization · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:personalization_console' %}" class="hover:text-blue-600">Personalization</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:shopperbehaviorevent_list' %}" class="hover:text-blue-600">Behavioral Telemetry</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ event.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">Event {{ event.number }}</h1>
+        <span class="badge badge-info">{{ event.get_event_type_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">Logged: {{ event.created_at|date:"M d, Y H:i:s" }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <form method="post" action="{% url 'ecommerce:shopperbehaviorevent_delete' event.pk %}" class="inline" onsubmit="return confirm('Delete telemetry log {{ event.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700 text-sm">
+          Delete Event
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Event Details -->
+    <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-6 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3">Session & Intent Attribution</h2>
+      <div class="space-y-3 text-sm">
+        <div>
+          <span class="text-xs text-slate-500 block">Session Key</span>
+          <span class="font-mono text-xs text-slate-800 bg-slate-50 p-1.5 rounded block">{{ event.session_key }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Intent Score Delta</span>
+          <span class="font-bold text-green-700 text-base">+{{ event.intent_score_delta }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Customer Account</span>
+          {% if event.customer_profile %}
+            <a href="{% url 'ecommerce:customeraccountprofile_detail' event.customer_profile.pk %}" class="text-blue-600 hover:underline">
+              {{ event.customer_profile.number }}
+            </a>
+          {% else %}
+            <span class="text-slate-400">Anonymous Shopper</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Party / User</span>
+          {% if event.party %}
+            <span class="font-medium text-slate-800">{{ event.party.name }}</span>
+          {% elif event.user %}
+            <span class="font-medium text-slate-800">{{ event.user.username }}</span>
+          {% else %}
+            <span class="text-slate-400">Unauthenticated</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Client IP & Agent</span>
+          <span class="text-slate-700 text-xs">{{ event.ip_address|default:"Unknown IP" }}</span>
+          <div class="text-[11px] text-slate-400 truncate max-w-sm">{{ event.user_agent }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interacted Target & Payload -->
+    <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-6 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3">Interacted Target & Payload</h2>
+      <div class="space-y-3 text-sm">
+        <div>
+          <span class="text-xs text-slate-500 block">Target Catalog Product</span>
+          {% if event.product %}
+            <a href="{% url 'ecommerce:catalogproduct_detail' event.product.pk %}" class="font-semibold text-blue-600 hover:underline">
+              {{ event.product.name }} ({{ event.product.sku }})
+            </a>
+          {% else %}
+            <span class="text-slate-400">No Product Attached</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Target Category</span>
+          {% if event.category %}
+            <span class="badge badge-slate">{{ event.category.name }}</span>
+          {% else %}
+            <span class="text-slate-400">No Category Attached</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Referrer URL</span>
+          <span class="text-slate-700 font-mono text-xs break-all">{{ event.referrer_url|default:"Direct / None" }}</span>
+        </div>
+        <div class="pt-3 border-t border-slate-100">
+          <span class="text-xs text-slate-500 block mb-1">Payload JSON</span>
+          <pre class="bg-slate-900 text-slate-100 p-3 rounded-lg text-xs font-mono overflow-x-auto max-h-48">{{ event.payload_json }}</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
