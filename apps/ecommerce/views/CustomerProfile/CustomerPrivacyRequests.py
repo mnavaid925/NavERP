@@ -254,6 +254,11 @@ def customerprivacyrequest_anonymize(request, pk):
         # Anonymize Customer Profile
         profile = CustomerAccountProfile.objects.filter(tenant=request.tenant, customer=customer).first()
         if profile:
+            if profile.user:
+                auth_user = profile.user
+                auth_user.is_active = False
+                auth_user.email = f"erased_{auth_user.pk}@anonymized.local"
+                auth_user.save(update_fields=["is_active", "email"])
             profile.phone_number = ""
             profile.phone_verified = False
             profile.user = None
@@ -268,6 +273,14 @@ def customerprivacyrequest_anonymize(request, pk):
             recipient_name="GDPR Anonymized",
             contact_phone="",
             delivery_instructions="",
+        )
+
+        # Anonymize customer wishlists
+        CustomerWishlist.objects.filter(tenant=request.tenant, customer=customer).update(
+            name="Anonymized Wishlist",
+            visibility="private",
+            share_token="",
+            notes="",
         )
 
         privacy_request.status = "completed"
