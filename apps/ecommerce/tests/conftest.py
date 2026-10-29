@@ -17,6 +17,11 @@ from apps.ecommerce.models import (
     CouponPromotion,
     FlashSale,
     CompetitorPriceMonitor,
+    Cart,
+    CartItem,
+    CheckoutSession,
+    ShippingMethodConfig,
+    PaymentMethodConfig,
     EcommerceOrder,
     EcommerceOrderLine,
     OrderRoutingRule,
@@ -1111,3 +1116,304 @@ def ecom_rma_b(tenant_b, ecom_order_b, ecom_customer_b, ecom_center_b):
     return _ordermanagement_rma(tenant_b, ecom_order_b, customer=ecom_customer_b, restocking_center=ecom_center_b)
 
 
+
+
+# ==============================================================================
+# 9.4 Shopping Cart & Checkout Test Contract & Fixtures
+# ==============================================================================
+
+CARTCHECKOUT_PAGE_SIZE = 20
+
+CARTCHECKOUT_MODEL_FIELDS = {
+    "Cart": (
+        "id", "tenant", "number", "customer", "session_key", "email",
+        "status", "currency", "subtotal", "discount_total", "tax_total",
+        "shipping_total", "grand_total", "coupon_code", "last_activity_at",
+        "abandoned_at", "recovery_token", "recovery_sent_at", "notes",
+        "created_at", "updated_at",
+    ),
+    "CartItem": (
+        "id", "cart", "product", "variant", "quantity", "unit_price",
+        "total_price", "custom_attributes", "created_at", "updated_at",
+    ),
+    "CheckoutSession": (
+        "id", "tenant", "number", "cart", "customer", "email", "phone",
+        "flow_type", "current_step", "status", "shipping_name",
+        "shipping_address_line1", "shipping_address_line2", "shipping_city",
+        "shipping_state", "shipping_postal_code", "shipping_country",
+        "billing_same_as_shipping", "billing_name", "billing_address_line1",
+        "billing_city", "billing_state", "billing_postal_code", "billing_country",
+        "shipping_method", "payment_method", "tax_code", "tax_jurisdiction",
+        "tax_rate", "is_tax_exempt", "tax_exemption_number", "tax_breakdown",
+        "subtotal_amount", "discount_amount", "shipping_amount", "tax_amount",
+        "total_amount", "payment_status", "payment_transaction_id",
+        "order_reference", "expires_at", "completed_at", "created_at", "updated_at",
+    ),
+    "ShippingMethodConfig": (
+        "id", "tenant", "number", "name", "code", "carrier", "calculation_type",
+        "base_rate", "cost_per_kg", "free_shipping_threshold", "estimated_days_min",
+        "estimated_days_max", "destination_countries", "is_active", "sort_order",
+        "description", "created_at", "updated_at",
+    ),
+    "PaymentMethodConfig": (
+        "id", "tenant", "number", "name", "provider", "method_category",
+        "environment", "is_active", "display_order", "fee_type", "fee_amount",
+        "min_order_amount", "max_order_amount", "supported_currencies",
+        "instructions", "supports_refunds", "created_at", "updated_at",
+    ),
+}
+
+CARTCHECKOUT_CHOICES = {
+    "Cart": {
+        "status": (
+            ("active", "Active"),
+            ("locked", "Locked (In Checkout)"),
+            ("abandoned", "Abandoned"),
+            ("converted", "Converted to Order"),
+            ("expired", "Expired"),
+        ),
+    },
+    "CheckoutSession": {
+        "flow_type": (
+            ("one_page", "One-Page Checkout"),
+            ("multi_step", "Multi-Step Checkout"),
+        ),
+        "current_step": (
+            ("contact", "Contact Details"),
+            ("shipping_address", "Shipping Address"),
+            ("shipping_method", "Shipping Method"),
+            ("payment", "Payment"),
+            ("review", "Review & Place Order"),
+            ("completed", "Completed"),
+        ),
+        "status": (
+            ("in_progress", "In Progress"),
+            ("processing", "Processing Payment"),
+            ("completed", "Completed"),
+            ("expired", "Expired"),
+            ("abandoned", "Abandoned"),
+        ),
+        "payment_status": (
+            ("pending", "Pending"),
+            ("authorized", "Authorized"),
+            ("paid", "Paid"),
+            ("failed", "Failed"),
+        ),
+    },
+    "ShippingMethodConfig": {
+        "carrier": (
+            ("custom", "Custom / Internal Fleet"),
+            ("fedex", "FedEx"),
+            ("ups", "UPS"),
+            ("usps", "USPS"),
+            ("dhl", "DHL"),
+        ),
+        "calculation_type": (
+            ("flat_rate", "Flat Rate"),
+            ("weight_tiered", "Weight-Based Tier"),
+            ("free_threshold", "Free Above Subtotal Threshold"),
+            ("local_pickup", "Local Store Pickup / Free"),
+        ),
+    },
+    "PaymentMethodConfig": {
+        "provider": (
+            ("stripe", "Stripe Payments"),
+            ("paypal", "PayPal Express"),
+            ("klarna", "Klarna BNPL"),
+            ("bank_transfer", "Direct Bank Transfer / Wire"),
+            ("cod", "Cash on Delivery (COD)"),
+        ),
+        "method_category": (
+            ("credit_card", "Credit / Debit Card"),
+            ("wallet", "Digital Wallet"),
+            ("bnpl", "Buy Now Pay Later"),
+            ("bank_transfer", "Bank Transfer"),
+            ("cash_on_delivery", "Cash on Delivery"),
+        ),
+        "environment": (
+            ("sandbox", "Sandbox / Test Mode"),
+            ("production", "Live / Production"),
+        ),
+        "fee_type": (
+            ("none", "No Surcharge"),
+            ("percentage", "Percentage Surcharge"),
+            ("fixed", "Fixed Fee Surcharge"),
+        ),
+    },
+}
+
+CARTCHECKOUT_FORM_FIELDS = {
+    "CartForm": (
+        "customer", "session_key", "email", "status", "currency", "coupon_code", "notes",
+    ),
+    "CartItemForm": (
+        "product", "variant", "quantity", "unit_price", "total_price",
+    ),
+    "CheckoutSessionForm": (
+        "cart", "customer", "email", "phone", "flow_type", "current_step", "status",
+        "shipping_name", "shipping_address_line1", "shipping_address_line2",
+        "shipping_city", "shipping_state", "shipping_postal_code", "shipping_country",
+        "billing_same_as_shipping", "billing_name", "billing_address_line1",
+        "billing_city", "billing_state", "billing_postal_code", "billing_country",
+        "shipping_method", "payment_method", "tax_code", "tax_jurisdiction",
+        "tax_rate", "is_tax_exempt", "tax_exemption_number", "subtotal_amount",
+        "discount_amount", "shipping_amount", "tax_amount", "total_amount",
+        "payment_status", "expires_at",
+    ),
+    "ShippingMethodConfigForm": (
+        "name", "code", "carrier", "calculation_type", "base_rate", "cost_per_kg",
+        "free_shipping_threshold", "estimated_days_min", "estimated_days_max",
+        "destination_countries", "is_active", "sort_order", "description",
+    ),
+    "PaymentMethodConfigForm": (
+        "name", "provider", "method_category", "environment", "is_active",
+        "display_order", "fee_type", "fee_amount", "min_order_amount",
+        "max_order_amount", "supported_currencies", "instructions", "supports_refunds",
+    ),
+}
+
+CARTCHECKOUT_URLS = {
+    "cart_list": "cart-checkout/carts/",
+    "cart_create": "cart-checkout/carts/create/",
+    "cart_detail": "cart-checkout/carts/<int:pk>/",
+    "cart_edit": "cart-checkout/carts/<int:pk>/edit/",
+    "cart_delete": "cart-checkout/carts/<int:pk>/delete/",
+    "cart_recover": "cart-checkout/carts/<int:pk>/recover/",
+    "checkoutsession_list": "cart-checkout/sessions/",
+    "checkoutsession_create": "cart-checkout/sessions/create/",
+    "checkoutsession_detail": "cart-checkout/sessions/<int:pk>/",
+    "checkoutsession_edit": "cart-checkout/sessions/<int:pk>/edit/",
+    "checkoutsession_delete": "cart-checkout/sessions/<int:pk>/delete/",
+    "checkoutsession_advance": "cart-checkout/sessions/<int:pk>/advance/",
+    "shippingmethodconfig_list": "cart-checkout/shipping-methods/",
+    "shippingmethodconfig_create": "cart-checkout/shipping-methods/create/",
+    "shippingmethodconfig_detail": "cart-checkout/shipping-methods/<int:pk>/",
+    "shippingmethodconfig_edit": "cart-checkout/shipping-methods/<int:pk>/edit/",
+    "shippingmethodconfig_delete": "cart-checkout/shipping-methods/<int:pk>/delete/",
+    "shippingmethodconfig_toggle": "cart-checkout/shipping-methods/<int:pk>/toggle/",
+    "paymentmethodconfig_list": "cart-checkout/payment-methods/",
+    "paymentmethodconfig_create": "cart-checkout/payment-methods/create/",
+    "paymentmethodconfig_detail": "cart-checkout/payment-methods/<int:pk>/",
+    "paymentmethodconfig_edit": "cart-checkout/payment-methods/<int:pk>/edit/",
+    "paymentmethodconfig_delete": "cart-checkout/payment-methods/<int:pk>/delete/",
+    "paymentmethodconfig_toggle": "cart-checkout/payment-methods/<int:pk>/toggle/",
+}
+
+
+def _cartcheckout_cart(tenant, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "session_key": "sess_test_12345",
+        "email": "shopper@example.com",
+        "status": "active",
+        "currency": "USD",
+        "subtotal": Decimal("100.00"),
+        "grand_total": Decimal("100.00"),
+    }
+    defaults.update(overrides)
+    return Cart.objects.create(**defaults)
+
+
+def _cartcheckout_cart_item(cart, product, variant=None, **overrides):
+    defaults = {
+        "cart": cart,
+        "product": product,
+        "variant": variant,
+        "quantity": 1,
+        "unit_price": Decimal("50.00"),
+        "total_price": Decimal("50.00"),
+    }
+    defaults.update(overrides)
+    return CartItem.objects.create(**defaults)
+
+
+def _cartcheckout_shipping_method(tenant, name="Standard Ground", code="GROUND", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "code": code,
+        "carrier": "custom",
+        "calculation_type": "flat_rate",
+        "base_rate": Decimal("10.00"),
+        "estimated_days_min": 3,
+        "estimated_days_max": 5,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return ShippingMethodConfig.objects.create(**defaults)
+
+
+def _cartcheckout_payment_method(tenant, name="Stripe Credit Card", provider="stripe", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "provider": provider,
+        "method_category": "credit_card",
+        "environment": "sandbox",
+        "is_active": True,
+        "display_order": 1,
+    }
+    defaults.update(overrides)
+    return PaymentMethodConfig.objects.create(**defaults)
+
+
+def _cartcheckout_checkout_session(tenant, cart, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "cart": cart,
+        "email": "checkout@example.com",
+        "flow_type": "one_page",
+        "current_step": "contact",
+        "status": "in_progress",
+        "shipping_name": "Test Customer",
+        "shipping_address_line1": "123 Test St",
+        "shipping_city": "Chicago",
+        "shipping_state": "IL",
+        "shipping_postal_code": "60601",
+        "shipping_country": "US",
+        "subtotal_amount": Decimal("100.00"),
+        "total_amount": Decimal("100.00"),
+        "expires_at": timezone.now() + timezone.timedelta(hours=24),
+    }
+    defaults.update(overrides)
+    return CheckoutSession.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_cart_a(tenant_a):
+    return _cartcheckout_cart(tenant_a, session_key="cart_sess_a")
+
+
+@pytest.fixture
+def ecom_cart_b(tenant_b):
+    return _cartcheckout_cart(tenant_b, session_key="cart_sess_b")
+
+
+@pytest.fixture
+def ecom_shipping_method_a(tenant_a):
+    return _cartcheckout_shipping_method(tenant_a, name="Ground Shipping A", code="GRND_A")
+
+
+@pytest.fixture
+def ecom_shipping_method_b(tenant_b):
+    return _cartcheckout_shipping_method(tenant_b, name="Ground Shipping B", code="GRND_B")
+
+
+@pytest.fixture
+def ecom_payment_method_a(tenant_a):
+    return _cartcheckout_payment_method(tenant_a, name="Stripe A")
+
+
+@pytest.fixture
+def ecom_payment_method_b(tenant_b):
+    return _cartcheckout_payment_method(tenant_b, name="Stripe B")
+
+
+@pytest.fixture
+def ecom_checkout_session_a(tenant_a, ecom_cart_a):
+    return _cartcheckout_checkout_session(tenant_a, ecom_cart_a)
+
+
+@pytest.fixture
+def ecom_checkout_session_b(tenant_b, ecom_cart_b):
+    return _cartcheckout_checkout_session(tenant_b, ecom_cart_b)
