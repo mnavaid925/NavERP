@@ -48,6 +48,9 @@ class CustomerPrivacyRequest(TenantNumbered):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_ecpr_tenant_num_uniq"),
+        ]
         indexes = [
             models.Index(fields=["tenant", "customer"], name="idx_ecpr_ten_cust"),
             models.Index(fields=["tenant", "status"], name="idx_ecpr_ten_stat"),
