@@ -36,6 +36,10 @@ from apps.ecommerce.models import (
     SearchFacetConfig,
     SearchMerchandisingRule,
     SearchQueryLog,
+    AudienceSegment,
+    RecommendationStrategy,
+    PersonalizedExperience,
+    ShopperBehaviorEvent,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -1920,5 +1924,243 @@ def ecom_query_log_a(tenant_a):
 @pytest.fixture
 def ecom_query_log_b(tenant_b):
     return _searchdiscovery_query_log(tenant_b, query_text="boots", normalized_query="boots", results_count=2)
+
+
+# ============================================================================
+# 9.8 Personalization & Recommendation Engine
+# ============================================================================
+
+PERSONALIZATION_MODEL_FIELDS = {
+    "AudienceSegment": (
+        "id", "tenant", "number", "name", "code", "lifecycle_stage",
+        "min_lifetime_spend", "max_lifetime_spend", "min_order_count",
+        "days_inactive", "target_category", "is_active", "description",
+        "created_at", "updated_at",
+    ),
+    "RecommendationStrategy": (
+        "id", "tenant", "number", "name", "code", "algorithm", "placement",
+        "target_segment", "target_category", "max_items", "min_rating",
+        "same_brand_only", "is_active", "description", "created_at", "updated_at",
+    ),
+    "PersonalizedExperience": (
+        "id", "tenant", "number", "name", "code", "experience_type",
+        "target_segment", "target_category", "target_product", "headline",
+        "subheadline", "cta_label", "cta_url", "hero_image_url", "priority",
+        "is_active", "start_date", "end_date", "created_at", "updated_at",
+    ),
+    "ShopperBehaviorEvent": (
+        "id", "tenant", "number", "event_type", "session_key", "user",
+        "customer_profile", "product", "category", "payload", "referrer_url",
+        "ip_address", "created_at", "updated_at",
+    ),
+}
+
+PERSONALIZATION_CHOICES = {
+    "AudienceSegment": {
+        "lifecycle_stage": (
+            ("first_time", "First-Time Visitor"),
+            ("engaged_browser", "Engaged Browser"),
+            ("recent_buyer", "Recent Buyer"),
+            ("high_value_vip", "High-Value VIP"),
+            ("churn_risk", "Churn / At-Risk"),
+            ("win_back", "Lapsed / Win-Back"),
+        ),
+    },
+    "RecommendationStrategy": {
+        "algorithm": (
+            ("collaborative_filtering", "Collaborative Filtering (Shoppers Also Viewed)"),
+            ("frequently_bought_together", "Frequently Bought Together (Co-occurrence)"),
+            ("related_products", "Similar / Category-Based Fallback"),
+            ("trending_popular", "Trending & Popular Items"),
+            ("personalized_rfm", "Personalized RFM Segment Strategy"),
+        ),
+        "placement": (
+            ("home_featured", "Homepage Featured Carousel"),
+            ("pdp_related", "Product Detail Page (PDP) Recommendations"),
+            ("cart_upsell", "Cart Upsell / Cross-Sell"),
+            ("checkout_addons", "Checkout Drawer Add-ons"),
+            ("post_purchase", "Order Confirmation / Thank You Page"),
+        ),
+    },
+    "PersonalizedExperience": {
+        "experience_type": (
+            ("banner_takeover", "Hero Banner Takeover"),
+            ("category_spotlight", "Category Spotlight Promo"),
+            ("cart_abandonment", "Cart Abandonment Recovery Popup"),
+            ("vip_welcome", "VIP Exclusive Header / Ribbon"),
+            ("countdown_timer", "Flash Urgency / Countdown Ribbon"),
+        ),
+    },
+    "ShopperBehaviorEvent": {
+        "event_type": (
+            ("page_view", "Page View"),
+            ("product_view", "Product Detail View"),
+            ("category_view", "Category Listing View"),
+            ("search_query", "Search Query Submitted"),
+            ("cart_add", "Product Added to Cart"),
+            ("cart_remove", "Product Removed from Cart"),
+            ("checkout_start", "Checkout Funnel Started"),
+            ("wishlist_add", "Product Added to Wishlist"),
+        ),
+    },
+}
+
+PERSONALIZATION_FORM_FIELDS = {
+    "AudienceSegmentForm": (
+        "name", "code", "lifecycle_stage", "min_lifetime_spend", "max_lifetime_spend",
+        "min_order_count", "days_inactive", "target_category", "is_active", "description",
+    ),
+    "RecommendationStrategyForm": (
+        "name", "code", "algorithm", "placement", "target_segment",
+        "target_category", "max_items", "min_rating", "same_brand_only", "is_active", "description",
+    ),
+    "PersonalizedExperienceForm": (
+        "name", "code", "experience_type", "target_segment", "target_category",
+        "target_product", "headline", "subheadline", "cta_label", "cta_url",
+        "hero_image_url", "priority", "start_date", "end_date", "is_active",
+    ),
+    "ShopperBehaviorEventForm": (
+        "event_type", "session_key", "customer_profile", "product", "category",
+        "referrer_url", "payload",
+    ),
+}
+
+PERSONALIZATION_URLS = {
+    "audiencesegment_list": "personalization/segments/",
+    "audiencesegment_create": "personalization/segments/create/",
+    "audiencesegment_detail": "personalization/segments/<int:pk>/",
+    "audiencesegment_edit": "personalization/segments/<int:pk>/edit/",
+    "audiencesegment_delete": "personalization/segments/<int:pk>/delete/",
+    "audiencesegment_toggle": "personalization/segments/<int:pk>/toggle/",
+    "audiencesegment_recalculate": "personalization/segments/<int:pk>/recalculate/",
+    "recommendationstrategy_list": "personalization/strategies/",
+    "recommendationstrategy_create": "personalization/strategies/create/",
+    "recommendationstrategy_detail": "personalization/strategies/<int:pk>/",
+    "recommendationstrategy_edit": "personalization/strategies/<int:pk>/edit/",
+    "recommendationstrategy_delete": "personalization/strategies/<int:pk>/delete/",
+    "recommendationstrategy_toggle": "personalization/strategies/<int:pk>/toggle/",
+    "personalizedexperience_list": "personalization/experiences/",
+    "personalizedexperience_create": "personalization/experiences/create/",
+    "personalizedexperience_detail": "personalization/experiences/<int:pk>/",
+    "personalizedexperience_edit": "personalization/experiences/<int:pk>/edit/",
+    "personalizedexperience_delete": "personalization/experiences/<int:pk>/delete/",
+    "personalizedexperience_toggle": "personalization/experiences/<int:pk>/toggle/",
+    "shopperbehaviorevent_list": "personalization/telemetry/",
+    "shopperbehaviorevent_create": "personalization/telemetry/create/",
+    "shopperbehaviorevent_detail": "personalization/telemetry/<int:pk>/",
+    "shopperbehaviorevent_delete": "personalization/telemetry/<int:pk>/delete/",
+    "personalization_console": "personalization/console/",
+    "personalization_preview": "personalization/console/preview/",
+}
+
+
+def _personalization_segment(tenant, name="High-Value VIPs", code="vip-shoppers", lifecycle_stage="high_value_vip", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "code": code,
+        "lifecycle_stage": lifecycle_stage,
+        "min_lifetime_spend": Decimal("500.00"),
+        "min_order_count": 3,
+        "days_inactive": 30,
+        "is_active": True,
+        "description": "VIP cohort fixture for automated tests",
+    }
+    defaults.update(overrides)
+    return AudienceSegment.objects.create(**defaults)
+
+
+def _personalization_strategy(tenant, name="Related PDP Items", code="pdp-related", algorithm="related_products", placement="pdp_related", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "code": code,
+        "algorithm": algorithm,
+        "placement": placement,
+        "max_items": 6,
+        "min_rating": Decimal("3.50"),
+        "same_brand_only": False,
+        "is_active": True,
+        "description": "Recommendation strategy fixture",
+    }
+    defaults.update(overrides)
+    return RecommendationStrategy.objects.create(**defaults)
+
+
+def _personalization_experience(tenant, name="Welcome Banner", code="vip-welcome-banner", experience_type="vip_welcome", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "code": code,
+        "experience_type": experience_type,
+        "headline": "Exclusive VIP Welcome",
+        "subheadline": "Enjoy 15% off your next purchase",
+        "cta_label": "Shop Now",
+        "cta_url": "/shop/vip/",
+        "priority": 10,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return PersonalizedExperience.objects.create(**defaults)
+
+
+def _personalization_event(tenant, event_type="product_view", session_key="sess-test-fixture", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "event_type": event_type,
+        "session_key": session_key,
+        "referrer_url": "https://example.com/search",
+        "ip_address": "127.0.0.1",
+        "payload": {"source": "test_runner"},
+    }
+    defaults.update(overrides)
+    return ShopperBehaviorEvent.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_segment_a(tenant_a):
+    return _personalization_segment(tenant_a, name="Segment A", code="seg-a")
+
+
+@pytest.fixture
+def ecom_segment_b(tenant_b):
+    return _personalization_segment(tenant_b, name="Segment B", code="seg-b")
+
+
+@pytest.fixture
+def ecom_strategy_a(tenant_a, ecom_segment_a):
+    return _personalization_strategy(tenant_a, name="Strategy A", code="strat-a", target_segment=ecom_segment_a)
+
+
+@pytest.fixture
+def ecom_strategy_b(tenant_b, ecom_segment_b):
+    return _personalization_strategy(tenant_b, name="Strategy B", code="strat-b", target_segment=ecom_segment_b)
+
+
+@pytest.fixture
+def ecom_experience_a(tenant_a, ecom_segment_a, ecom_product_a):
+    return _personalization_experience(
+        tenant_a, name="Experience A", code="exp-a",
+        target_segment=ecom_segment_a, target_product=ecom_product_a,
+    )
+
+
+@pytest.fixture
+def ecom_experience_b(tenant_b, ecom_segment_b, ecom_product_b):
+    return _personalization_experience(
+        tenant_b, name="Experience B", code="exp-b",
+        target_segment=ecom_segment_b, target_product=ecom_product_b,
+    )
+
+
+@pytest.fixture
+def ecom_event_a(tenant_a, ecom_product_a):
+    return _personalization_event(tenant_a, event_type="product_view", product=ecom_product_a)
+
+
+@pytest.fixture
+def ecom_event_b(tenant_b, ecom_product_b):
+    return _personalization_event(tenant_b, event_type="product_view", product=ecom_product_b)
+
 
 
