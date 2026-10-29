@@ -110,12 +110,10 @@ def inventoryallocation_create(request):
             alloc.tenant = request.tenant
             alloc.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "CREATE",
-                "InventoryAllocation",
-                alloc.pk,
-                f"Allocated SKU {alloc.variant.sku} at center {alloc.fulfillment_center.code}",
+                alloc,
+                "create",
+                {"sku": alloc.variant.sku, "center": alloc.fulfillment_center.code},
             )
             messages.success(request, f"Inventory allocation for '{alloc.variant.sku}' created.")
             return redirect("ecommerce:inventoryallocation_detail", pk=alloc.pk)
@@ -142,12 +140,10 @@ def inventoryallocation_edit(request, pk):
         if form.is_valid():
             alloc = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "UPDATE",
-                "InventoryAllocation",
-                alloc.pk,
-                f"Updated allocation for SKU {alloc.variant.sku} at center {alloc.fulfillment_center.code}",
+                alloc,
+                "update",
+                {"sku": alloc.variant.sku, "center": alloc.fulfillment_center.code},
             )
             messages.success(request, f"Inventory allocation for '{alloc.variant.sku}' updated.")
             return redirect("ecommerce:inventoryallocation_detail", pk=alloc.pk)
@@ -189,12 +185,10 @@ def inventoryallocation_adjust(request, pk):
                 alloc.save()
 
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "UPDATE",
-                    "InventoryAllocation",
-                    alloc.pk,
-                    f"Adjusted stock for {alloc.variant.sku} ({adj_type}): {before_qty} -> {alloc.quantity_on_hand} ({adj_qty:+d}). Reason: {reason}",
+                    alloc,
+                    "update",
+                    {"sku": alloc.variant.sku, "before_qty": before_qty, "after_qty": alloc.quantity_on_hand, "adj_qty": adj_qty, "reason": reason},
                 )
                 messages.success(
                     request,
@@ -220,12 +214,10 @@ def inventoryallocation_delete(request, pk):
     center_code = alloc.fulfillment_center.code
     alloc.delete()
     write_audit_log(
-        request.tenant,
         request.user,
-        "DELETE",
-        "InventoryAllocation",
-        pk,
-        f"Deleted allocation for {sku} @ {center_code}",
+        alloc,
+        "delete",
+        {"sku": sku, "center": center_code},
     )
     messages.success(request, f"Allocation for '{sku}' at '{center_code}' was deleted.")
     return redirect("ecommerce:inventoryallocation_list")
