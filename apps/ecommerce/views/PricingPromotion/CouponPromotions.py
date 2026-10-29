@@ -89,12 +89,10 @@ def couponpromotion_create(request):
             coupon.tenant = request.tenant
             coupon.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "CREATE",
-                "CouponPromotion",
-                coupon.pk,
-                f"Created coupon {coupon.code} ({coupon.number})",
+                coupon,
+                "create",
+                {"code": coupon.code, "name": coupon.name},
             )
             messages.success(request, f"Coupon code '{coupon.code}' created successfully.")
             return redirect("ecommerce:couponpromotion_detail", pk=coupon.pk)
@@ -121,12 +119,10 @@ def couponpromotion_edit(request, pk):
         if form.is_valid():
             coupon = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "UPDATE",
-                "CouponPromotion",
-                coupon.pk,
-                f"Updated coupon {coupon.code} ({coupon.number})",
+                coupon,
+                "update",
+                {"code": coupon.code, "name": coupon.name},
             )
             messages.success(request, f"Coupon code '{coupon.code}' updated successfully.")
             return redirect("ecommerce:couponpromotion_detail", pk=coupon.pk)
@@ -150,12 +146,10 @@ def couponpromotion_delete(request, pk):
     number = coupon.number
     coupon.delete()
     write_audit_log(
-        request.tenant,
         request.user,
-        "DELETE",
-        "CouponPromotion",
-        pk,
-        f"Deleted coupon code {code} ({number})",
+        coupon,
+        "delete",
+        {"code": code, "number": number},
     )
     messages.success(request, f"Coupon '{code}' was deleted.")
     return redirect("ecommerce:couponpromotion_list")
