@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy & GDPR Requests · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Privacy Requests</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Customer Privacy & GDPR Requests</h1>
+      <p class="text-sm text-slate-500 mt-1">Manage Data Subject Access Requests (DSAR), JSON data portability exports, and GDPR right to erasure workflows.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:customerprivacyrequest_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Privacy Request</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Req #, customer, email..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-type" class="block text-xs font-medium text-slate-600 mb-1">Request Type</label>
+        <select id="filter-type" name="request_type" class="form-select w-full text-sm">
+          <option value="">All Request Types</option>
+          {% for val, label in type_choices %}
+            <option value="{{ val }}" {% if current_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Status</label>
+        <select id="filter-status" name="status" class="form-select w-full text-sm">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if current_status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2 md:col-span-2">
+        <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+          <i data-lucide="filter" class="w-4 h-4"></i>
+          <span>Filter</span>
+        </button>
+        <a href="{% url 'ecommerce:customerprivacyrequest_list' %}" class="btn btn-outline text-slate-600" title="Reset Filters">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Table -->
+  <div class="card overflow-hidden bg-white shadow-sm border border-slate-200 rounded-lg">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse text-sm">
+        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs font-semibold uppercase">
+          <tr>
+            <th class="py-3 px-4">Request #</th>
+            <th class="py-3 px-4">Customer</th>
+            <th class="py-3 px-4">Type</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4">Statutory Deadline</th>
+            <th class="py-3 px-4">Requester Email</th>
+            <th class="py-3 px-4 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-slate-700">
+          {% for req in requests %}
+            <tr class="hover:bg-slate-50/80 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-blue-600">
+                <a href="{% url 'ecommerce:customerprivacyrequest_detail' req.pk %}" class="hover:underline">
+                  {{ req.number }}
+                </a>
+              </td>
+              <td class="py-3 px-4 font-medium text-slate-900">
+                {{ req.customer.name }}
+              </td>
+              <td class="py-3 px-4 text-xs">
+                {% if req.request_type == "erasure_anonymize" %}
+                  <span class="badge badge-red">{{ req.get_request_type_display }}</span>
+                {% elif req.request_type == "access_export" %}
+                  <span class="badge badge-info">{{ req.get_request_type_display }}</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ req.get_request_type_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if req.status == "completed" %}
+                  <span class="badge badge-green">{{ req.get_status_display }}</span>
+                {% elif req.status == "processing" %}
+                  <span class="badge badge-amber">{{ req.get_status_display }}</span>
+                {% elif req.status == "identity_verified" %}
+                  <span class="badge badge-info">{{ req.get_status_display }}</span>
+                {% elif req.status == "rejected" %}
+                  <span class="badge badge-red">{{ req.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ req.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-xs font-medium text-slate-800">
+                {% if req.statutory_deadline %}
+                  {{ req.statutory_deadline|date:"M d, Y" }}
+                {% else %}
+                  <span class="text-slate-400">—</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-600">
+                {{ req.requested_by_email|default:"—" }}
+              </td>
+              <td class="py-3 px-4 text-center">
+                <div class="table-actions flex items-center justify-center gap-2">
+                  <a href="{% url 'ecommerce:customerprivacyrequest_detail' req.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View Request">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'ecommerce:customerprivacyrequest_edit' req.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit Request">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'ecommerce:customerprivacyrequest_delete' req.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete privacy request {{ req.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete Request">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="py-12 text-center">
+                <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                  <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                    <i data-lucide="shield-check" class="w-6 h-6"></i>
+                  </div>
+                  <h3 class="text-base font-semibold text-slate-800">No Privacy Requests Found</h3>
+                  <p class="text-sm text-slate-500 mt-1 mb-4">No data subject privacy requests submitted.</p>
+                  <a href="{% url 'ecommerce:customerprivacyrequest_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Create Request</span>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+        <div>
+          Showing page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total requests)
+        </div>
+        <div class="flex items-center gap-2">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_type %}&request_type={{ current_type }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Previous
+            </a>
+          {% endif %}
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_type %}&request_type={{ current_type }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
