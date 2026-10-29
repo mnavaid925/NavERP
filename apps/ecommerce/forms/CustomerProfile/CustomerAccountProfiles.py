@@ -47,9 +47,7 @@ class CustomerAccountProfileForm(TenantUniqueMixin, TenantModelForm):
         if self.tenant is not None:
             self.fields["customer"].queryset = Party.objects.filter(tenant=self.tenant)
             self.fields["user"].queryset = get_user_model().objects.filter(tenant=self.tenant)
-            self.fields["preferred_currency"].queryset = Currency.objects.filter(
-                models.Q(tenant=self.tenant) | models.Q(tenant__isnull=True)
-            )
+            self.fields["preferred_currency"].queryset = Currency.objects.filter(is_active=True)
 
     def clean(self):
         cleaned = super().clean()
