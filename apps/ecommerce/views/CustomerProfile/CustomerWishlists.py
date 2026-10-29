@@ -173,8 +173,16 @@ def customerwishlist_delete(request, pk):
 def customerwishlist_item_add(request, pk):
     wishlist = ecommerce_object(request, CustomerWishlist, pk)
     product_id = request.POST.get("product")
+    if not product_id or not str(product_id).isdigit():
+        messages.error(request, "Please select a valid product.")
+        return redirect("ecommerce:customerwishlist_detail", pk=wishlist.pk)
+
     variant_id = request.POST.get("variant") or None
-    desired_qty = int(request.POST.get("desired_quantity", 1))
+    try:
+        raw_qty = int(request.POST.get("desired_quantity", 1) or 1)
+        desired_qty = max(1, min(raw_qty, 9999))
+    except (ValueError, TypeError):
+        desired_qty = 1
     priority = request.POST.get("priority", "medium")
     comment = request.POST.get("comment", "").strip()
 
