@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Merchandising Rules · Search & Discovery · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:search_console' %}" class="hover:text-blue-600">Search & Discovery</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Merchandising Rules</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Merchandising Rules</h1>
+      <p class="text-sm text-slate-500 mt-1">Curate search and browse listings with visual pinning, score boosting, burying, exclusions, redirects, and in-grid banners.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:search_console' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="compass" class="w-4 h-4"></i>
+        <span>Search Workbench</span>
+      </a>
+      <a href="{% url 'ecommerce:searchmerchandisingrule_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Merchandising Rule</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ q }}"
+            placeholder="Name, trigger query, URL..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-rule" class="block text-xs font-medium text-slate-600 mb-1">Rule Trigger</label>
+        <select id="filter-rule" name="rule_type" class="form-select w-full text-sm">
+          <option value="">All Triggers</option>
+          {% for val, label in rule_type_choices %}
+            <option value="{{ val }}" {% if selected_rule_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-action" class="block text-xs font-medium text-slate-600 mb-1">Action Consequence</label>
+        <select id="filter-action" name="action_type" class="form-select w-full text-sm">
+          <option value="">All Actions</option>
+          {% for val, label in action_type_choices %}
+            <option value="{{ val }}" {% if selected_action_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Status</label>
+        <select id="filter-status" name="is_active" class="form-select w-full text-sm">
+          <option value="">All Statuses</option>
+          <option value="true" {% if selected_active == "true" or selected_active == "1" %}selected{% endif %}>Active</option>
+          <option value="false" {% if selected_active == "false" or selected_active == "0" %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-primary w-full text-sm py-2">
+          Filter
+        </button>
+        <a href="{% url 'ecommerce:searchmerchandisingrule_list' %}" class="btn btn-outline text-sm py-2 px-3" title="Reset Filters">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Merchandising Rules Table -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            <th class="py-3 px-4 w-16 text-center">Priority</th>
+            <th class="py-3 px-4">Rule Name / Number</th>
+            <th class="py-3 px-4">Trigger</th>
+            <th class="py-3 px-4">Action</th>
+            <th class="py-3 px-4">Target / Consequence</th>
+            <th class="py-3 px-4 text-center">Status</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200 text-sm">
+          {% for rule in rules %}
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="py-3 px-4 text-center font-mono font-bold text-slate-700">
+                {{ rule.priority }}
+              </td>
+              <td class="py-3 px-4">
+                <a href="{% url 'ecommerce:searchmerchandisingrule_detail' rule.pk %}" class="font-medium text-blue-600 hover:underline">
+                  {{ rule.name }}
+                </a>
+                <div class="text-xs text-slate-500 font-mono">{{ rule.number }}</div>
+              </td>
+              <td class="py-3 px-4">
+                {% if rule.rule_type == "query" %}
+                  <div class="flex items-center gap-1.5">
+                    <span class="badge badge-slate">Query</span>
+                    <span class="font-mono text-xs text-slate-800 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                      "{{ rule.trigger_query }}"
+                    </span>
+                  </div>
+                  <div class="text-xs text-slate-400 mt-0.5">{{ rule.get_match_type_display }}</div>
+                {% elif rule.rule_type == "category" %}
+                  <div class="flex items-center gap-1.5">
+                    <span class="badge badge-slate">Category</span>
+                    <span class="text-xs font-medium text-slate-700">{{ rule.target_category.name }}</span>
+                  </div>
+                {% else %}
+                  <span class="badge badge-slate">Global Catalog</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if rule.action_type == "boost" %}
+                  <span class="badge badge-green">Boost Product</span>
+                {% elif rule.action_type == "pin" %}
+                  <span class="badge badge-info">Pin to Slot</span>
+                {% elif rule.action_type == "bury" %}
+                  <span class="badge badge-amber">Bury Product</span>
+                {% elif rule.action_type == "block" %}
+                  <span class="badge badge-red">Block / Exclude</span>
+                {% elif rule.action_type == "redirect" %}
+                  <span class="badge badge-slate">URL Redirect</span>
+                {% else %}
+                  <span class="badge badge-amber">Banner Card</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-700">
+                {% if rule.action_type == "pin" %}
+                  <span class="font-semibold text-blue-700">Slot #{{ rule.pin_position }}:</span> {{ rule.boosted_product.name }}
+                {% elif rule.action_type == "boost" %}
+                  <span class="font-semibold text-green-700">+{{ rule.boost_weight }} pts:</span> {{ rule.boosted_product.name }}
+                {% elif rule.action_type == "bury" %}
+                  <span class="font-semibold text-amber-700">{{ rule.boost_weight }} pts:</span> {{ rule.boosted_product.name }}
+                {% elif rule.action_type == "block" %}
+                  <span class="font-semibold text-red-700">Excluded:</span> {{ rule.boosted_product.name }}
+                {% elif rule.action_type == "redirect" %}
+                  <span class="font-mono text-slate-600 truncate max-w-xs block" title="{{ rule.redirect_url }}">&rarr; {{ rule.redirect_url }}</span>
+                {% elif rule.action_type == "banner" %}
+                  <span class="font-semibold text-slate-800">Banner:</span> "{{ rule.banner_title }}"
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-center">
+                {% if rule.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-muted">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="table-actions flex items-center justify-end gap-1">
+                  <a href="{% url 'ecommerce:searchmerchandisingrule_detail' rule.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="View Details">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'ecommerce:searchmerchandisingrule_edit' rule.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="Edit">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'ecommerce:searchmerchandisingrule_delete' rule.pk %}" class="inline" onsubmit="return confirm('Delete merchandising rule {{ rule.name }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-icon btn-outline text-red-600 hover:bg-red-50" title="Delete">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="py-12 text-center">
+                <div class="empty-state flex flex-col items-center justify-center">
+                  <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                    <i data-lucide="sparkles" class="w-6 h-6"></i>
+                  </div>
+                  <h3 class="text-sm font-semibold text-slate-800 mb-1">No Merchandising Rules Found</h3>
+                  <p class="text-xs text-slate-500 max-w-sm mb-4">Create boost, bury, pin, redirect, and promotional banner rules to merchandise your catalog results.</p>
+                  <a href="{% url 'ecommerce:searchmerchandisingrule_create' %}" class="btn btn-primary text-xs">
+                    Create First Rule
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50 text-xs text-slate-600">
+        <div>
+          Showing page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)
+        </div>
+        <div class="flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_rule_type %}&rule_type={{ selected_rule_type }}{% endif %}{% if selected_action_type %}&action_type={{ selected_action_type }}{% endif %}{% if selected_active %}&is_active={{ selected_active }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">
+              Previous
+            </a>
+          {% else %}
+            <span class="btn btn-outline py-1 px-2 text-xs opacity-50 cursor-not-allowed">Previous</span>
+          {% endif %}
+
+          <span class="px-2 py-1 font-semibold text-slate-800">{{ page_obj.number }}</span>
+
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_rule_type %}&rule_type={{ selected_rule_type }}{% endif %}{% if selected_action_type %}&action_type={{ selected_action_type }}{% endif %}{% if selected_active %}&is_active={{ selected_active }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">
+              Next
+            </a>
+          {% else %}
+            <span class="btn btn-outline py-1 px-2 text-xs opacity-50 cursor-not-allowed">Next</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
