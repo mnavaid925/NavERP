@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Cart {{ cart.number }}{% else %}New Cart{% endif %} · eCommerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:cart_list' %}">Carts</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Cart{% else %}New Cart{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Cart {{ cart.number }}{% else %}Create New Cart{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                <strong>Please correct the errors below:</strong>
+                <ul class="list-disc ml-5 mt-2">
+                    {% for field in form %}
+                        {% for error in field.errors %}
+                            <li>{{ field.label }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                    {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label for="{{ form.customer.id_for_label }}" class="form-label">Customer (Optional)</label>
+                    {{ form.customer }}
+                    {% if form.customer.errors %}
+                        <div class="form-error">{{ form.customer.errors.0 }}</div>
+                    {% endif %}
+                    <p class="text-xs text-slate-500 mt-1">Leave blank for guest / anonymous visitors.</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.email.id_for_label }}" class="form-label">Contact Email</label>
+                    {{ form.email }}
+                    {% if form.email.errors %}
+                        <div class="form-error">{{ form.email.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.session_key.id_for_label }}" class="form-label">Session Key</label>
+                    {{ form.session_key }}
+                    {% if form.session_key.errors %}
+                        <div class="form-error">{{ form.session_key.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.status.id_for_label }}" class="form-label">Cart Status</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}
+                        <div class="form-error">{{ form.status.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.currency.id_for_label }}" class="form-label">Currency</label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}
+                        <div class="form-error">{{ form.currency.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.coupon_code.id_for_label }}" class="form-label">Applied Coupon Code</label>
+                    {{ form.coupon_code }}
+                    {% if form.coupon_code.errors %}
+                        <div class="form-error">{{ form.coupon_code.errors.0 }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.notes.id_for_label }}" class="form-label">Internal Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}
+                    <div class="form-error">{{ form.notes.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% url 'ecommerce:cart_list' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    {% if is_edit %}Save Changes{% else %}Create Cart{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
