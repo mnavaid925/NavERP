@@ -50,23 +50,23 @@
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Partner Display Name *</label>
+            <label for="{{ form.name.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Partner Display Name *</label>
             {{ form.name }}
             {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Unified Core Party Entity *</label>
+            <label for="{{ form.party.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Unified Core Party Entity *</label>
             {{ form.party }}
             {% if form.party.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.party.errors }}</div>{% endif %}
             <span class="text-xs text-slate-400">Reuses core.Party directory for supplier/contact master data.</span>
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Partner Archetype</label>
+            <label for="{{ form.partner_type.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Partner Archetype</label>
             {{ form.partner_type }}
             {% if form.partner_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.partner_type.errors }}</div>{% endif %}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Linked Shopper Profile (Optional)</label>
+            <label for="{{ form.customer_profile.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Linked Shopper Profile (Optional)</label>
             {{ form.customer_profile }}
             {% if form.customer_profile.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.customer_profile.errors }}</div>{% endif %}
             <span class="text-xs text-slate-400">Optional customer profile for customer advocates and ambassadors.</span>
@@ -82,27 +82,22 @@
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Referral / Coupon Code *</label>
+            <label for="{{ form.referral_code.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Referral / Coupon Code *</label>
             {{ form.referral_code }}
             {% if form.referral_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.referral_code.errors }}</div>{% endif %}
             <span class="text-xs text-slate-400">Unique promo code for coupon-based attribution, e.g. ALICE15</span>
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Referral Link URL Slug</label>
+            <label for="{{ form.referral_link_slug.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Referral Link URL Slug</label>
             {{ form.referral_link_slug }}
             {% if form.referral_link_slug.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.referral_link_slug.errors }}</div>{% endif %}
             <span class="text-xs text-slate-400">URL path, e.g. /ref/alice-smith. Auto-generated from name if blank.</span>
           </div>
-          <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Cookie Attribution Window (Days)</label>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.cookie_duration_days.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Cookie Attribution Window (Days)</label>
             {{ form.cookie_duration_days }}
             {% if form.cookie_duration_days.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.cookie_duration_days.errors }}</div>{% endif %}
             <span class="text-xs text-slate-400">Attribution lookback period after shopper clicks referral link.</span>
-          </div>
-          <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Partner Status</label>
-            {{ form.status }}
-            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
           </div>
         </div>
       </div>
@@ -115,22 +110,22 @@
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Commission Model</label>
+            <label for="{{ form.commission_type.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Commission Model</label>
             {{ form.commission_type }}
             {% if form.commission_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.commission_type.errors }}</div>{% endif %}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Commission Rate (% or $) *</label>
+            <label for="{{ form.commission_rate.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Commission Rate (% or $) *</label>
             {{ form.commission_rate }}
             {% if form.commission_rate.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.commission_rate.errors }}</div>{% endif %}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Payout Threshold ($)</label>
+            <label for="{{ form.payout_threshold.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Payout Threshold ($)</label>
             {{ form.payout_threshold }}
             {% if form.payout_threshold.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.payout_threshold.errors }}</div>{% endif %}
           </div>
           <div class="form-group md:col-span-3">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Payout Remittance Email</label>
+            <label for="{{ form.payment_email.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Payout Remittance Email</label>
             {{ form.payment_email }}
             {% if form.payment_email.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.payment_email.errors }}</div>{% endif %}
           </div>
