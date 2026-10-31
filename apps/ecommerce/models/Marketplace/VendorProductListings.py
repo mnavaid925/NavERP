@@ -192,4 +192,4 @@ class VendorProductListing(TenantNumbered):
             raise ValidationError({"variant": "Product variant belongs to another workspace."})
 
     def __str__(self):
-        return f"{self.product.title} [{self.seller_sku}] — {self.vendor.store_name} ({self.number})"
+        return f"{self.product.name} [{self.seller_sku}] — {self.vendor.store_name} ({self.number})"
