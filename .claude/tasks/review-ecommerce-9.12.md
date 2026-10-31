@@ -64,4 +64,37 @@ None.
 - [ ] `templates/ecommerce/subscriptioncommerce/portal/portal.html:129-186` — Deflection modal is nested directly inside `<td>` cell within an overflow table container.
   - **Fix**: Move modal container definitions outside the table wrap to avoid potential stacking context quirks on mobile.
 
+---
+
+## 4. Performance Reviewer Findings
+
+### Critical
+- [ ] `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:47-196` — Missing `@transaction.atomic` on mutating portal endpoints (`subscription_portal_skip`, `subscription_portal_pause`, `subscription_portal_deflect`). Multi-model updates risk inconsistent state if retention action creation fails.
+  - **Fix**: Wrap all three functions in `@transaction.atomic` (or `with transaction.atomic():`).
+- [ ] `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:23-33` — Python-side loop for Monthly Recurring Revenue (MRR) calculation and unbounded in-memory evaluation of `active_subscriptions`. Violates Rule 5 (balances/KPIs derived via aggregate, never Python loops).
+  - **Fix**: Aggregate MRR via database `aggregate(Sum(Case(When(...))))` and slice display querysets.
+
+### Important
+- [ ] `apps/ecommerce/views/SubscriptionCommerce/CustomerSubscriptions.py:18-20` — Missing `customer_profile__user` in `select_related` causes N+1 queries (25 extra queries) when rendering email in `customersubscription_list`.
+  - **Fix**: Add `"customer_profile__user"` to `select_related`.
+- [ ] `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:19-21` — Missing `customer_profile__customer` and `customer_profile__user` in `subs_qs.select_related` causes 3N queries across active and paused tables in `subscription_portal`.
+  - **Fix**: Add `"customer_profile__customer"` and `"customer_profile__user"` to `subs_qs.select_related`.
+- [ ] `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPlans.py:66` — Missing `customer_profile__customer` in `active_subscriptions.select_related` causes 20 extra queries on `subscriptionplan_detail`.
+  - **Fix**: Add `"customer_profile__customer"` to `select_related`.
+- [ ] `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:23-24` — Active and paused tables in `subscription_portal` evaluate unbounded without slicing or pagination.
+  - **Fix**: Slice display querysets to `[:25]`.
+
+### Minor
+- [ ] `apps/ecommerce/forms/SubscriptionCommerce/SubscriptionRetentionActions.py:48-50` — Chained N+1 query in `subscription` form dropdown options (`CustomerSubscription.__str__` evaluates `customer_profile.customer` and `product.name`).
+  - **Fix**: Add `.select_related("customer_profile__customer", "product")` to form's `subscription` queryset.
+- [ ] `apps/ecommerce/admin.py:367`, `385` — Missing chained relations in Django admin `list_select_related` (`CustomerSubscriptionAdmin` and `SubscriptionRetentionActionAdmin`).
+  - **Fix**: Update `list_select_related` to include chained relations (`customer_profile__customer`, etc.).
+- [ ] `apps/ecommerce/models/SubscriptionCommerce/CustomerSubscriptions.py:130-138` — Missing compound index on `(tenant, plan, status)` in `CustomerSubscription`.
+  - **Fix**: Add compound index `idx_esub_ten_plan_stat`.
+- [ ] `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:25-27` & `portal.html:57` — Calling `.count` on sliced `retention_actions[:10]` caps the stat card at 10 instead of total tenant count.
+  - **Fix**: Compute `total_retentions` via un-sliced count in view and pass to context.
+- [ ] Detail views omit `select_related` when fetching single objects via `ecommerce_object`.
+  - **Fix**: Pass `select_related` to `ecommerce_object` in detail views.
+
+
 
