@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}{{ rule.name }} · SEO Rules · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketing_dashboard' %}" class="hover:text-blue-600">Marketing & Campaigns</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:seometadatarule_list' %}" class="hover:text-blue-600">SEO Rules</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ rule.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ rule.name }}</h1>
+        {% if rule.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-muted">Inactive</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1 font-mono">
+        {{ rule.get_rule_type_display }} · Schema: {{ rule.json_ld_schema_type }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <form method="post" action="{% url 'ecommerce:seometadatarule_toggle' rule.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline inline-flex items-center gap-2">
+          <i data-lucide="power" class="w-4 h-4"></i>
+          <span>{% if rule.is_active %}Deactivate Rule{% else %}Activate Rule{% endif %}</span>
+        </button>
+      </form>
+      <a href="{% url 'ecommerce:seometadatarule_edit' rule.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Rule</span>
+      </a>
+      <a href="{% url 'ecommerce:seometadatarule_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to List</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- SERP Rank Stat Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon blue w-12 h-12 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+        <i data-lucide="search" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Target Focus Keyword</div>
+        <div class="text-lg font-bold text-slate-900 mt-0.5">{{ rule.target_keyword|default:"(None assigned)" }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">Primary ranking query</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon green w-12 h-12 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+        <i data-lucide="trending-up" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">SERP Rank Position</div>
+        <div class="text-xl font-bold {% if rule.tracked_rank_position and rule.tracked_rank_position <= 10 %}text-emerald-700{% else %}text-slate-900{% endif %} mt-0.5">
+          {% if rule.tracked_rank_position %}#{{ rule.tracked_rank_position }}{% else %}Unranked{% endif %}
+        </div>
+        <div class="text-xs text-slate-500 mt-0.5">Checked: {{ rule.rank_tracked_at|date:"M d, Y"|default:"Never" }}</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon purple w-12 h-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+        <i data-lucide="file-code" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Sitemap & Indexing</div>
+        <div class="text-xl font-bold text-slate-900 mt-0.5">
+          {% if rule.sitemap_included %}Priority {{ rule.sitemap_priority }}{% else %}Excluded{% endif %}
+        </div>
+        <div class="text-xs text-slate-500 mt-0.5">Directive: {{ rule.robots_directive }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Live SERP Snippet Preview -->
+    <div class="space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+        <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+          <h2 class="text-base font-semibold text-slate-900">Google SERP Snippet Preview</h2>
+        </div>
+        <div class="card-body p-5 space-y-3">
+          <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg font-sans">
+            <div class="flex items-center gap-1.5 text-xs text-slate-600 mb-1">
+              <span class="font-medium text-slate-800">store.navstore.com</span>
+              <span>›</span>
+              <span>products</span>
+            </div>
+            <div class="text-base text-blue-800 font-medium hover:underline cursor-pointer leading-snug">
+              {{ preview_title }}
+            </div>
+            <div class="text-xs text-slate-600 mt-1 leading-relaxed">
+              {{ preview_description }}
+            </div>
+          </div>
+
+          <div class="pt-3 border-t border-slate-100 text-xs text-slate-500">
+            <span class="font-medium text-slate-700">Configured Title Template:</span>
+            <div class="font-mono text-slate-800 mt-0.5 p-2 bg-slate-100 rounded">{{ rule.meta_title_template }}</div>
+          </div>
+
+          <div class="pt-2 text-xs text-slate-500">
+            <span class="font-medium text-slate-700">Configured Description Template:</span>
+            <div class="font-mono text-slate-800 mt-0.5 p-2 bg-slate-100 rounded">{{ rule.meta_description_template }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- OpenGraph Social Card Preview -->
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+        <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+          <h2 class="text-base font-semibold text-slate-900">OpenGraph & Social Sharing</h2>
+        </div>
+        <div class="card-body p-5 space-y-3 text-sm">
+          <div>
+            <div class="text-xs font-medium text-slate-500 uppercase">OG Title</div>
+            <div class="font-medium text-slate-800 mt-0.5">{{ rule.og_title|default:"Falls back to Meta Title" }}</div>
+          </div>
+          <div>
+            <div class="text-xs font-medium text-slate-500 uppercase">OG Description</div>
+            <div class="text-slate-700 mt-0.5">{{ rule.og_description|default:"Falls back to Meta Description" }}</div>
+          </div>
+          {% if rule.og_image_url %}
+            <div>
+              <div class="text-xs font-medium text-slate-500 uppercase">OG Image URL</div>
+              <div class="font-mono text-xs text-blue-600 mt-0.5">{{ rule.og_image_url }}</div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Technical Indexing & Schema Details -->
+    <div class="space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+        <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+          <h2 class="text-base font-semibold text-slate-900">Technical Crawl Settings</h2>
+        </div>
+        <div class="card-body p-5 space-y-4 text-sm">
+          <div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Rule Scope</div>
+            <div class="font-medium text-slate-800 mt-0.5">{{ rule.get_rule_type_display }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">
+              {% if rule.target_category %}
+                Category: {{ rule.target_category.name }}
+              {% elif rule.target_product %}
+                Product: {{ rule.target_product.name }}
+              {% elif rule.url_path_pattern %}
+                URL Pattern: {{ rule.url_path_pattern }}
+              {% else %}
+                All Storefront Pages
+              {% endif %}
+            </div>
+          </div>
+          <div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Robots Meta Directive</div>
+            <div class="font-mono text-xs text-slate-800 mt-0.5">{{ rule.get_robots_directive_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs font-medium text-slate-500 uppercase">XML Sitemap Rules</div>
+            <div class="text-slate-800 mt-0.5">
+              {% if rule.sitemap_included %}
+                Included with Priority <span class="font-mono font-medium">{{ rule.sitemap_priority }}</span> (Changefreq: <span class="font-mono font-medium">{{ rule.sitemap_changefreq }}</span>)
+              {% else %}
+                Excluded from sitemap.xml
+              {% endif %}
+            </div>
+          </div>
+          {% if rule.canonical_url_override %}
+            <div class="pt-2 border-t border-slate-100">
+              <div class="text-xs font-medium text-slate-500 uppercase">Canonical URL Override</div>
+              <div class="font-mono text-xs text-blue-600 mt-0.5">{{ rule.canonical_url_override }}</div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- JSON-LD Schema Snippet -->
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+        <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+          <h2 class="text-base font-semibold text-slate-900">Schema.org JSON-LD Output</h2>
+        </div>
+        <div class="card-body p-5">
+          <pre class="p-3 bg-slate-900 text-slate-100 rounded text-xs font-mono overflow-x-auto">{
+  "@context": "https://schema.org/",
+  "@type": "{{ rule.json_ld_schema_type }}",
+  "name": "{{ preview_title }}",
+  "description": "{{ preview_description }}"
+}</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
