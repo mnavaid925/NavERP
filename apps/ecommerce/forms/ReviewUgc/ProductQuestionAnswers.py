@@ -16,11 +16,6 @@ class ProductQuestionAnswerForm(TenantUniqueMixin, TenantModelForm):
             "author_email",
             "customer",
             "question_text",
-            "status",
-            "answer_text",
-            "answered_by_name",
-            "is_staff_answer",
-            "is_pinned",
         ]
         widgets = {
             "product": forms.Select(attrs={"class": "form-select"}),
@@ -34,15 +29,6 @@ class ProductQuestionAnswerForm(TenantUniqueMixin, TenantModelForm):
             "question_text": forms.Textarea(
                 attrs={"class": "form-textarea", "rows": 3, "placeholder": "What would you like to know about this item?"}
             ),
-            "status": forms.Select(attrs={"class": "form-select"}),
-            "answer_text": forms.Textarea(
-                attrs={"class": "form-textarea", "rows": 3, "placeholder": "Expert or merchant answer..."}
-            ),
-            "answered_by_name": forms.TextInput(
-                attrs={"class": "form-input", "placeholder": "e.g. NavERP Product Team"}
-            ),
-            "is_staff_answer": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
-            "is_pinned": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -51,7 +37,6 @@ class ProductQuestionAnswerForm(TenantUniqueMixin, TenantModelForm):
             self.fields["product"].queryset = CatalogProduct.objects.filter(tenant=self.tenant)
             self.fields["customer"].queryset = CustomerAccountProfile.objects.filter(tenant=self.tenant).select_related("customer")
         self.fields["customer"].required = False
-        self.fields["answer_text"].required = False
 
     def clean(self):
         cleaned = super().clean()
