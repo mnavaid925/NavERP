@@ -12,6 +12,10 @@ from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPoli
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
 from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
+from apps.ecommerce.models.MarketingCampaign.AffiliatePartners import AffiliatePartner
+from apps.ecommerce.models.MarketingCampaign.AffiliateReferralConversions import AffiliateReferralConversion
+from apps.ecommerce.models.MarketingCampaign.MarketingCampaigns import MarketingCampaign
+from apps.ecommerce.models.MarketingCampaign.SeoMetadataRules import SeoMetadataRule
 from apps.ecommerce.models.Marketplace.MarketplaceVendors import MarketplaceVendor
 from apps.ecommerce.models.Marketplace.VendorPayouts import VendorPayout
 from apps.ecommerce.models.Marketplace.VendorProductListings import VendorProductListing
@@ -421,6 +425,48 @@ class VendorPayoutAdmin(admin.ModelAdmin):
     search_fields = ["number", "vendor__store_name", "reference_code", "notes"]
     list_select_related = ["vendor", "approved_by"]
     ordering = ["-period_end"]
+
+
+# ---------------------------------------------------------------------------
+# 9.10 Marketing & Campaign Management
+# ---------------------------------------------------------------------------
+
+
+@admin.register(MarketingCampaign)
+class MarketingCampaignAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "channel", "campaign_type", "status", "scheduled_at", "recipient_count", "delivered_count", "revenue_attributed"]
+    list_filter = ["channel", "campaign_type", "status", "tenant"]
+    search_fields = ["number", "name", "code", "subject"]
+    list_select_related = ["target_segment", "target_product"]
+    ordering = ["-created_at"]
+
+
+@admin.register(AffiliatePartner)
+class AffiliatePartnerAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "partner_type", "referral_code", "status", "commission_type", "commission_rate", "total_orders_referred", "total_revenue_generated"]
+    list_filter = ["partner_type", "status", "commission_type", "tenant"]
+    search_fields = ["number", "name", "referral_code", "referral_link_slug", "party__name"]
+    list_select_related = ["party", "customer_profile"]
+    ordering = ["name"]
+
+
+@admin.register(AffiliateReferralConversion)
+class AffiliateReferralConversionAdmin(admin.ModelAdmin):
+    list_display = ["number", "affiliate", "order", "attribution_type", "order_amount", "commission_amount", "status", "paid_at"]
+    list_filter = ["status", "attribution_type", "tenant"]
+    search_fields = ["number", "affiliate__name", "order__number", "payout_reference"]
+    list_select_related = ["affiliate", "order", "referred_customer"]
+    ordering = ["-created_at"]
+
+
+@admin.register(SeoMetadataRule)
+class SeoMetadataRuleAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "rule_type", "json_ld_schema_type", "robots_directive", "sitemap_included", "target_keyword", "tracked_rank_position", "is_active"]
+    list_filter = ["rule_type", "json_ld_schema_type", "robots_directive", "sitemap_included", "is_active", "tenant"]
+    search_fields = ["number", "name", "target_keyword", "url_path_pattern"]
+    list_select_related = ["target_category", "target_product"]
+    ordering = ["-created_at"]
+
 
 
 
