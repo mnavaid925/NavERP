@@ -131,7 +131,7 @@
           <div class="text-slate-800 mt-0.5">
             {% if conversion.referred_customer %}
               <a href="{% url 'ecommerce:customeraccountprofile_detail' conversion.referred_customer.pk %}" class="text-blue-600 hover:underline">
-                {{ conversion.referred_customer.user.username }}
+                {{ conversion.referred_customer.user.username|default:conversion.referred_customer.customer.name }}
               </a>
             {% else %}
               <span class="text-slate-500 italic">Guest Checkout Shopper</span>
