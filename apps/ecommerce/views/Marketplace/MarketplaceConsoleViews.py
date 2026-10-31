@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import render
 
 from apps.ecommerce.models.Marketplace.MarketplaceVendors import MarketplaceVendor
@@ -18,8 +18,12 @@ def marketplace_console(request):
     suborders_qs = ecommerce_scope(VendorSubOrder.objects.all(), request)
     payouts_qs = ecommerce_scope(VendorPayout.objects.all(), request)
 
-    total_vendors = vendors_qs.count()
-    pending_kyc_count = vendors_qs.filter(kyc_status="pending").count()
+    vendor_stats = vendors_qs.aggregate(
+        total=Count("id"),
+        pending_kyc=Count("id", filter=Q(kyc_status="pending")),
+    )
+    total_vendors = vendor_stats["total"]
+    pending_kyc_count = vendor_stats["pending_kyc"]
     pending_moderation_count = listings_qs.filter(moderation_status="pending_review").count()
     open_disputes_count = suborders_qs.filter(
         dispute_status__in=["disputed", "under_investigation", "escalated_to_admin"]
@@ -40,7 +44,11 @@ def marketplace_console(request):
         "unpaid_payouts_sum": unpaid_payouts_sum,
     }
 
-    pending_kyc_vendors = vendors_qs.filter(kyc_status__in=["pending", "unsubmitted"]).order_by("-updated_at")[:5]
+    pending_kyc_vendors = (
+        vendors_qs.filter(kyc_status__in=["pending", "unsubmitted"])
+        .select_related("party")
+        .order_by("-updated_at")[:5]
+    )
     pending_listings = listings_qs.filter(moderation_status="pending_review").select_related("vendor", "product")[:5]
     sla_risk_suborders = (
         suborders_qs.filter(
