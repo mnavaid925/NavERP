@@ -28,8 +28,7 @@ Reviewers executed serially:
 - [x] **[I3]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPlans.py:137` — fixed — handled ProtectedError in subscriptionplan_delete and updated confirmation prompt in list template
 - [x] **[I4]** `templates/ecommerce/subscriptioncommerce/{subscriptionplan,customersubscription,subscriptionboxcuration,subscriptionretentionaction}/detail.html` — fixed — added POST-Delete forms with CSRF and confirm prompts to all 4 detail page action headers
 - [x] **[I5]** `apps/ecommerce/views/SubscriptionCommerce/CustomerSubscriptions.py:18-20`, `SubscriptionPortals.py:19-21`, `SubscriptionPlans.py:66` — fixed — added chained customer_profile relations to select_related across views
-- [ ] **[I6]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:23-24` — Active and paused tables in `subscription_portal` evaluate unbounded without slicing or pagination.
-  - **Fix**: Slice display querysets to `[:25]`.
+- [x] **[I6]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:23-24` — fixed — sliced active and paused subscription display querysets to [:25]
 - [ ] **[I7]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:46,83,118,138` — Missing `@tenant_admin_required` on mutating actions (`skip`, `pause`, `resume`, `deflect`). Any logged-in non-admin user can modify schedules, cancel contracts, or apply recurring discounts.
   - **Fix**: Apply `@tenant_admin_required` to mutating action endpoints in `SubscriptionPortals.py`.
 - [ ] **[I8]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:48,85,120,140` — Lack of prerequisite lifecycle state guards allows modifying or reviving cancelled/expired subscriptions.
