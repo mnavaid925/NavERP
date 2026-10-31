@@ -1,9 +1,9 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.11 Marketplace & Multi-Vendor: categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, or 9.11), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor: categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.10, or 9.11), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.11 Marketplace & Multi-Vendor)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor)
 
 The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, and an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising (boosting, burying, pinning, banner announcements, URL redirect forwarding), query performance and zero-result search telemetry analytics, instant search-as-you-type autocomplete, and an interactive Search Workbench Console. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
@@ -64,6 +64,11 @@ apps/ecommerce/
 │   │   ├── RecommendationStrategies.py # RecommendationStrategy model (EREC-)
 │   │   ├── PersonalizedExperiences.py # PersonalizedExperience model (EPEX-)
 │   │   └── ShopperBehaviorEvents.py # ShopperBehaviorEvent model (ESBE-)
+│   ├── MarketingCampaign/
+│   │   ├── MarketingCampaigns.py    # MarketingCampaign model (EMCP-)
+│   │   ├── AffiliatePartners.py     # AffiliatePartner model (EAFF-)
+│   │   ├── AffiliateReferralConversions.py # AffiliateReferralConversion model (EARC-)
+│   │   └── SeoMetadataRules.py      # SeoMetadataRule model (ESEO-)
 │   ├── Marketplace/
 │   │   ├── MarketplaceVendors.py    # MarketplaceVendor model (EMKV-)
 │   │   ├── VendorProductListings.py # VendorProductListing model (EVPL-)
@@ -219,6 +224,12 @@ apps/ecommerce/
 │   │   ├── PersonalizedExperiences.py # personalization/experiences/ paths
 │   │   ├── ShopperBehaviorEvents.py # personalization/telemetry/ paths
 │   │   └── PersonalizationConsole.py # personalization/console/ paths
+│   ├── MarketingCampaign/
+│   │   ├── MarketingDashboards.py   # marketing/dashboard/, feed/ paths
+│   │   ├── MarketingCampaigns.py    # marketing/campaigns/ paths
+│   │   ├── AffiliatePartners.py     # marketing/affiliates/ paths
+│   │   ├── AffiliateReferralConversions.py # marketing/conversions/ paths
+│   │   └── SeoMetadataRules.py      # marketing/seo-rules/ paths
 │   ├── Marketplace/
 │   │   ├── MarketplaceConsole.py    # marketplace/console/ path
 │   │   ├── MarketplaceVendors.py    # marketplace/vendors/ paths
@@ -307,6 +318,16 @@ apps/ecommerce/
 | `RecommendationStrategy` | `EREC-` | `name`, `code`, `algorithm`, `placement`, `fallback_strategy`, `max_items`, `min_rating`, `same_brand_only`, `only_in_stock`, `is_active` | `AudienceSegment` (`target_segment`), `StoreCategory` (`target_category`) | Bound validation (max_items 1-50, rating 0-5), multi-tenant FK assertion in `clean()` |
 | `PersonalizedExperience` | `EPEX-` | `name`, `experience_type`, `headline`, `subheadline`, `cta_label`, `cta_url`, `hero_image_url`, `trigger_delay_hours`, `priority`, `start_date`, `end_date`, `is_active`, metrics | `AudienceSegment` (`target_segment`), `StoreCategory` (`target_category`), `CatalogProduct` (`target_product`) | Safe URL scheme validation (rejects `javascript:`, `data:`, `vbscript:`), date boundary enforcement, multi-tenant FK assertion |
 | `ShopperBehaviorEvent` | `ESBE-` | `event_type`, `session_key`, `intent_score_delta`, `referrer_url`, `ip_address`, `user_agent`, `payload_json` | `CustomerAccountProfile` (`customer_profile`), `core.Party` (`party`), `auth.User` (`user`), `CatalogProduct` (`product`), `StoreCategory` (`category`) | Behavioral clickstream telemetry stream for collaborative filtering & intent tracking |
+
+---
+
+### Sub-module 9.10: Marketing & Campaign Management
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `MarketingCampaign` | `EMCP-` | `name`, `code`, `campaign_type`, `channel`, `status`, `subject`, `preview_text`, `content_body`, `sender_name`, `sender_address`, `scheduled_at`, `sent_at`, `send_throttle_window_hours`, `recipient_count`, `delivered_count`, `opened_count`, `clicked_count`, `bounced_count`, `revenue_attributed` | `AudienceSegment` (`target_segment`), `CatalogProduct` (`target_product`) | `open_rate`, `click_rate`, SMS length clean validation, Smart Sending throttle |
+| `AffiliatePartner` | `EAFF-` | `party`, `customer_profile`, `name`, `partner_type`, `referral_code`, `referral_link_slug`, `commission_type`, `commission_rate`, `cookie_duration_days`, `status`, `payout_threshold`, `payment_email`, `total_orders_referred`, `total_revenue_generated`, `total_commission_earned`, `total_commission_paid` | `core.Party` (`party`), `CustomerAccountProfile` (`customer_profile`) | `unpaid_commission`, `is_eligible_for_payout`, auto-slugifies code, case-normalizes code |
+| `AffiliateReferralConversion` | `EARC-` | `affiliate`, `order`, `referred_customer`, `attribution_type`, `order_amount`, `commission_rate_applied`, `commission_amount`, `status`, `payout_reference`, `paid_at`, `notes` | `AffiliatePartner` (`affiliate`), `EcommerceOrder` (`order`), `CustomerAccountProfile` (`referred_customer`) | `clean()` calculates commission amount, auto-inherits affiliate commission rate |
+| `SeoMetadataRule` | `ESEO-` | `name`, `rule_type`, `target_category`, `target_product`, `url_path_pattern`, `meta_title_template`, `meta_description_template`, `json_ld_schema_type`, `canonical_url_override`, `og_title`, `og_description`, `og_image_url`, `robots_directive`, `sitemap_included`, `sitemap_priority`, `sitemap_changefreq`, `target_keyword`, `tracked_rank_position`, `rank_tracked_at`, `is_active` | `StoreCategory` (`target_category`), `CatalogProduct` (`target_product`) | `render_title(context)`, `render_description(context)`, sitemap priority range enforcement (0.00-1.00) |
 
 ---
 
@@ -549,6 +570,39 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 
 ---
 
+### 9.10 Marketing & Campaign Management Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `marketing/dashboard/` | `marketing_dashboard` | `marketing_dashboard` | Omnichannel marketing KPI dashboard with tabs for overview, campaigns, affiliates, and SEO |
+| `marketing/feed/social-commerce/` | `social_commerce_feed` | `social_commerce_feed` | Syndicated product catalog JSON feed for Facebook/Instagram/Google Shopping feeds |
+| `marketing/campaigns/` | `marketingcampaign_list` | `marketingcampaign_list` | Campaign broadcast table with channel and status dropdown filters |
+| `marketing/campaigns/create/` | `marketingcampaign_create` | `marketingcampaign_create` | Create marketing broadcast/automation campaign |
+| `marketing/campaigns/<int:pk>/` | `marketingcampaign_detail` | `marketingcampaign_detail` | Campaign dossier with deliverability and engagement metrics |
+| `marketing/campaigns/<int:pk>/edit/` | `marketingcampaign_edit` | `marketingcampaign_edit` | Edit campaign targeting, content, and schedule |
+| `marketing/campaigns/<int:pk>/send/` | `marketingcampaign_send` | `marketingcampaign_send` | Dispatch campaign broadcast to audience segment (POST, tenant admin) |
+| `marketing/campaigns/<int:pk>/delete/` | `marketingcampaign_delete` | `marketingcampaign_delete` | Delete marketing campaign (POST only, tenant admin) |
+| `marketing/affiliates/` | `affiliatepartner_list` | `affiliatepartner_list` | Affiliate partner directory with type and status filters |
+| `marketing/affiliates/create/` | `affiliatepartner_create` | `affiliatepartner_create` | Onboard affiliate marketer, influencer, or advocate |
+| `marketing/affiliates/<int:pk>/` | `affiliatepartner_detail` | `affiliatepartner_detail` | Affiliate dossier with referral performance and conversion history |
+| `marketing/affiliates/<int:pk>/edit/` | `affiliatepartner_edit` | `affiliatepartner_edit` | Edit affiliate rates, cookie duration, and payout threshold |
+| `marketing/affiliates/<int:pk>/approve/` | `affiliatepartner_approve` | `affiliatepartner_approve` | Approve affiliate partner for active status (POST, tenant admin) |
+| `marketing/affiliates/<int:pk>/delete/` | `affiliatepartner_delete` | `affiliatepartner_delete` | Delete affiliate partner (POST only, tenant admin) |
+| `marketing/conversions/` | `affiliatereferralconversion_list` | `affiliatereferralconversion_list` | Referral conversion audit table with status & attribution filters |
+| `marketing/conversions/create/` | `affiliatereferralconversion_create` | `affiliatereferralconversion_create` | Log referral conversion against customer order |
+| `marketing/conversions/<int:pk>/` | `affiliatereferralconversion_detail` | `affiliatereferralconversion_detail` | Conversion record detail with commission breakdown |
+| `marketing/conversions/<int:pk>/edit/` | `affiliatereferralconversion_edit` | `affiliatereferralconversion_edit` | Edit conversion notes and rate applied |
+| `marketing/conversions/<int:pk>/approve/` | `affiliatereferralconversion_approve` | `affiliatereferralconversion_approve` | Approve conversion for payout and credit affiliate total (POST, tenant admin) |
+| `marketing/conversions/<int:pk>/void/` | `affiliatereferralconversion_void` | `affiliatereferralconversion_void` | Void refund/clawback conversion and adjust affiliate accumulator (POST, tenant admin) |
+| `marketing/conversions/<int:pk>/delete/` | `affiliatereferralconversion_delete` | `affiliatereferralconversion_delete` | Delete referral conversion (POST only, tenant admin) |
+| `marketing/seo-rules/` | `seometadatarule_list` | `seometadatarule_list` | SEO metadata rules table with rule type and schema filters |
+| `marketing/seo-rules/create/` | `seometadatarule_create` | `seometadatarule_create` | Create dynamic meta template or custom URL override |
+| `marketing/seo-rules/<int:pk>/` | `seometadatarule_detail` | `seometadatarule_detail` | SEO rule preview with live Google SERP snippet and JSON-LD schema visualizer |
+| `marketing/seo-rules/<int:pk>/edit/` | `seometadatarule_edit` | `seometadatarule_edit` | Edit SEO template tokens, OpenGraph tags, and sitemap settings |
+| `marketing/seo-rules/<int:pk>/toggle/` | `seometadatarule_toggle` | `seometadatarule_toggle` | Quick toggle rule active status (POST only, tenant admin) |
+| `marketing/seo-rules/<int:pk>/delete/` | `seometadatarule_delete` | `seometadatarule_delete` | Delete SEO metadata rule (POST only, tenant admin) |
+
+---
+
 ### 9.11 Marketplace Routes
 | URL Pattern | View Function | URL Name | Description |
 |---|---|---|---|
@@ -627,6 +681,13 @@ Templates are stored under `templates/ecommerce/`:
   - `shopperbehaviorevent/` — `list.html` (telemetry table with event type badges and simulator shortcut), `detail.html` (with JSON payload inspector).
   - `console/` — `workbench.html` (Personalization Console: VIP counts, cart triggers, 24h event volume, interactive recommendation simulator, and active campaign ribbon preview), `partials/recommendations_preview.html` (HTMX recommendation cards with artwork and rating stars).
 
+- `marketing_campaign/`
+  - `dashboard/` — `dashboard.html` (Omnichannel Marketing Hub: delivery counters, affiliate revenue, top partners, recent dispatches, SEO health).
+  - `campaign/` — `list.html` (campaign broadcasts, channel and status filters), `detail.html` (broadcast stats, deliverability rates, send action), `form.html`.
+  - `affiliate/` — `list.html` (partner directory, partner type and status filters), `detail.html` (partner dossier, commission totals, conversion records, approve action), `form.html`.
+  - `conversion/` — `list.html` (conversions table, attribution type and status filters), `detail.html` (order details, commission calculations, approve/void actions), `form.html`.
+  - `seo_rule/` — `list.html` (rules directory, rule type and schema filters), `detail.html` (Google SERP snippet preview card, Schema.org JSON-LD code block, active toggle), `form.html`.
+
 - `marketplace/`
   - `console/` — `dashboard.html` (Marketplace Console: active sellers, pending KYC queue, pending moderation listings, SLA breach alerts, active disputes, unpaid payout volume).
   - `marketplacevendor/` — `list.html` (seller directory, status/kyc/tier filter dropdowns), `detail.html` (vendor dossier, listings tab, sub-orders, payout history, customer disputes table), `form.html` (25 fields with explicit label-for associations).
@@ -684,6 +745,10 @@ The command provisions:
 - 4 Recommendation Strategies: PDP Related Products (Content-Based), Cart Cross-Sell Frequently Bought Together (Co-occurrence), Homepage Trending & Popular, and Category Best Sellers.
 - 3 Personalized Experiences: VIP Homepage Hero Takeover, Cart Abandonment Recovery Popup, and Audio Category Spotlight Ribbon.
 - 10 Shopper Behavior Events: Page views, PDP product inspections, cart additions, search queries, and category browses with realistic intent scores.
+- 4 Marketing Campaigns: Holiday VIP Early Access (Email), Weekend Flash Sale SMS Alert (SMS), Cart Abandonment Push Notification (Push), Omnichannel Product Launch (Omnichannel).
+- 4 Affiliate Partners: Sarah Tech Reviews (influencer), Fitness Gear Blog (affiliate), Audio Geek Community (brand ambassador), Super Fan Referral Program (customer advocate).
+- 4 Affiliate Referral Conversions: Approved and pending referral conversions linked to customer orders with commission calculations.
+- 4 SEO Metadata Rules: Global Storefront Default, Category Dynamic Template, Product Page Dynamic Rule, and Custom URL Landing Page override with Schema.org JSON-LD.
 - 4 Marketplace Vendors: Apex Tech Gear (verified/active), Bloom Organics (verified/active), Artisan Crafts (verified/active), and Nordic Living (pending KYC verification).
 - 8 Vendor Product Listings: New and refurbished variants with asking prices, seller SKUs, and inventory allocations.
 - 6 Vendor Sub-Orders: Consignment allocations with carrier dispatch tracking, SLA status tracking, customer ratings, and dispute simulation.
@@ -785,6 +850,15 @@ LIVE_LINKS["9.7"] = {
     "Faceted Search Configuration": "ecommerce:searchfacetconfig_list",
     "Visual Merchandising Rules": "ecommerce:searchmerchandisingrule_list",
     "Search Query Telemetry Logs": "ecommerce:searchquerylog_list",
+}
+LIVE_LINKS["9.10"] = {
+    "Marketing Dashboard": "ecommerce:marketing_dashboard",
+    "Email Marketing Automation": "ecommerce:marketingcampaign_list?channel=email",
+    "SMS & Push Notification": "ecommerce:marketingcampaign_list?channel=sms",
+    "Affiliate & Influencer Program": "ecommerce:affiliatepartner_list",
+    "Referral Conversion Tracking": "ecommerce:affiliatereferralconversion_list",
+    "Dynamic SEO & Metadata Rules": "ecommerce:seometadatarule_list",
+    "Social Commerce Integration": "ecommerce:marketing_dashboard?tab=social",
 }
 LIVE_LINKS["9.11"] = {
     "Marketplace Console": "ecommerce:marketplace_console",
