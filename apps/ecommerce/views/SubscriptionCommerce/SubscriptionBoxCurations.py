@@ -33,8 +33,8 @@ def subscriptionboxcuration_list(request):
             | Q(preference_tag__icontains=query)
         )
 
-    if plan_id:
-        qs = qs.filter(plan_id=plan_id)
+    if plan_id and plan_id.isdigit():
+        qs = qs.filter(plan_id=int(plan_id))
 
     if status in ("1", "true", "True", "active"):
         qs = qs.filter(is_active=True)
