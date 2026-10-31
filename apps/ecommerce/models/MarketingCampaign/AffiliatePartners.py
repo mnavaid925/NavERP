@@ -144,6 +144,14 @@ class AffiliatePartner(TenantNumbered):
                 fields=["tenant", "status", "partner_type"],
                 name="idx_eaff_ten_stat_type",
             ),
+            models.Index(
+                fields=["tenant", "party"],
+                name="idx_eaff_ten_party",
+            ),
+            models.Index(
+                fields=["tenant", "customer_profile"],
+                name="idx_eaff_ten_custprof",
+            ),
         ]
 
     def __str__(self):
