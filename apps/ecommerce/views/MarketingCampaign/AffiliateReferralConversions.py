@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -169,7 +169,9 @@ def affiliatereferralconversion_delete(request, pk):
 @require_POST
 def affiliatereferralconversion_approve(request, pk):
     with transaction.atomic():
-        conversion = ecommerce_object(request, AffiliateReferralConversion, pk)
+        conversion = get_object_or_404(
+            AffiliateReferralConversion.objects.select_for_update(), pk=pk, tenant=request.tenant
+        )
         if conversion.status == "approved":
             messages.info(request, f"Conversion '{conversion.number}' is already approved.")
             return redirect("ecommerce:affiliatereferralconversion_detail", pk=conversion.pk)
@@ -204,7 +206,9 @@ def affiliatereferralconversion_approve(request, pk):
 @require_POST
 def affiliatereferralconversion_void(request, pk):
     with transaction.atomic():
-        conversion = ecommerce_object(request, AffiliateReferralConversion, pk)
+        conversion = get_object_or_404(
+            AffiliateReferralConversion.objects.select_for_update(), pk=pk, tenant=request.tenant
+        )
         if conversion.status == "voided_refund":
             messages.info(request, f"Conversion '{conversion.number}' is already voided.")
             return redirect("ecommerce:affiliatereferralconversion_detail", pk=conversion.pk)
