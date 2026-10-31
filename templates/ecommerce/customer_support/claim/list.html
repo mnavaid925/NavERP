@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Order Issue Claims | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Customer Support</span>
+            <span>/</span>
+            <span>Issue Claims</span>
+        </div>
+        <h1 class="page-title">Order Inquiry & Issue Claims</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:orderissueclaim_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> File Claim
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label for="q" class="form-label">Search</label>
+                <input type="text" id="q" name="q" value="{{ query }}" placeholder="Claim #, order #, tracking #..." class="form-input">
+            </div>
+            <div class="form-group mb-0">
+                <label for="claim_type" class="form-label">Claim Type</label>
+                <select id="claim_type" name="claim_type" class="form-select">
+                    <option value="">All Claim Types</option>
+                    {% for val, label in claim_type_choices %}
+                    <option value="{{ val }}" {% if selected_claim_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="status" class="form-label">Status</label>
+                <select id="status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="resolution" class="form-label">Resolution Action</label>
+                <select id="resolution" name="resolution" class="form-select">
+                    <option value="">All Resolutions</option>
+                    {% for val, label in resolution_choices %}
+                    <option value="{{ val }}" {% if selected_resolution == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-4 flex justify-end gap-2">
+                <a href="{% url 'ecommerce:orderissueclaim_list' %}" class="btn btn-outline">Clear Filters</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Claims Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Claim #</th>
+                        <th>Order & Shopper</th>
+                        <th>Claim Type</th>
+                        <th>Claimed / Approved</th>
+                        <th>Status</th>
+                        <th>Resolution</th>
+                        <th>Filed Date</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for claim in claims %}
+                    <tr>
+                        <td class="font-mono text-sm">
+                            <a href="{% url 'ecommerce:orderissueclaim_detail' claim.pk %}" class="text-primary font-semibold hover:underline">
+                                {{ claim.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-semibold text-slate-900 font-mono">{{ claim.order.number }}</div>
+                            <div class="text-xs text-slate-500">
+                                {% if claim.customer %}
+                                {{ claim.customer }}
+                                {% elif claim.ticket %}
+                                {{ claim.ticket.customer_name }}
+                                {% else %}
+                                Guest
+                                {% endif %}
+                                {% if claim.carrier_tracking_number %}
+                                &bull; Trk: {{ claim.carrier_tracking_number }}
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="text-sm">
+                            <div class="font-medium text-slate-800">{{ claim.get_claim_type_display }}</div>
+                            {% if claim.ticket %}
+                            <div class="text-xs text-slate-500">Ticket: {{ claim.ticket.number }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="font-mono text-sm font-semibold text-slate-900">${{ claim.claimed_amount }}</div>
+                            {% if claim.approved_amount > 0 %}
+                            <div class="text-xs font-mono text-green-700 font-medium">Approved: ${{ claim.approved_amount }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if claim.status == 'submitted' %}
+                            <span class="badge badge-info">Submitted</span>
+                            {% elif claim.status == 'under_review' %}
+                            <span class="badge badge-amber">Under Review</span>
+                            {% elif claim.status == 'carrier_investigation' %}
+                            <span class="badge badge-info">Carrier Investigation</span>
+                            {% elif claim.status == 'approved' %}
+                            <span class="badge badge-green">Approved</span>
+                            {% elif claim.status == 'rejected' %}
+                            <span class="badge badge-red">Rejected</span>
+                            {% else %}
+                            <span class="badge badge-slate">Completed</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if claim.resolution_action == 'full_refund' or claim.resolution_action == 'partial_refund' %}
+                            <span class="badge badge-green">{{ claim.get_resolution_action_display }}</span>
+                            {% elif claim.resolution_action == 'replacement_reship' %}
+                            <span class="badge badge-info">Reship Replacement</span>
+                            {% elif claim.resolution_action == 'store_credit' %}
+                            <span class="badge badge-amber">Store Credit</span>
+                            {% elif claim.resolution_action == 'rejected' %}
+                            <span class="badge badge-red">Claim Denied</span>
+                            {% else %}
+                            <span class="badge badge-muted">Pending Review</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm text-slate-500">
+                            {{ claim.created_at|date:"M d, Y" }}
+                        </td>
+                        <td class="table-actions text-right">
+                            <a href="{% url 'ecommerce:orderissueclaim_detail' claim.pk %}" class="btn btn-icon" title="View Claim">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:orderissueclaim_edit' claim.pk %}" class="btn btn-icon" title="Edit Claim">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form action="{% url 'ecommerce:orderissueclaim_delete' claim.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete claim {{ claim.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Claim">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-8">
+                            <div class="empty-state">
+                                <i data-lucide="shield-alert" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
+                                <h3 class="text-base font-semibold text-slate-700">No issue claims found</h3>
+                                <p class="text-sm text-slate-500 mb-4">No damage or loss claims match the filter criteria.</p>
+                                <a href="{% url 'ecommerce:orderissueclaim_create' %}" class="btn btn-primary btn-sm">File First Claim</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} claims
+            </div>
+            <div class="flex gap-1">
+                <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}&q={{ query }}&claim_type={{ selected_claim_type }}&status={{ selected_status }}&resolution={{ selected_resolution }}"
+                   class="btn btn-outline btn-sm {% if not page_obj.has_previous %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Previous
+                </a>
+                <span class="btn btn-sm btn-outline active">{{ page_obj.number }} / {{ paginator.num_pages }}</span>
+                <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}&q={{ query }}&claim_type={{ selected_claim_type }}&status={{ selected_status }}&resolution={{ selected_resolution }}"
+                   class="btn btn-outline btn-sm {% if not page_obj.has_next %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Next
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
