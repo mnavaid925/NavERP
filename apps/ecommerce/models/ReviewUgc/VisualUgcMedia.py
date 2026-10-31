@@ -52,6 +52,7 @@ class VisualUgcMedia(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_eugc_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "media_type"], name="idx_eugc_ten_mtyp"),
             models.Index(fields=["tenant", "tagged_product", "is_published"], name="idx_eugc_ten_prod_pub"),
             models.Index(fields=["tenant", "rights_status"], name="idx_eugc_ten_rights"),
         ]
