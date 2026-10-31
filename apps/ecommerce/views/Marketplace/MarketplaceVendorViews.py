@@ -54,7 +54,6 @@ def marketplacevendor_list(request):
         "paginator": paginator,
         "is_paginated": page_obj.has_other_pages(),
         "query": query,
-        "search_query": query,
         "status_filter": status_filter,
         "kyc_filter": kyc_filter,
         "commission_filter": commission_filter,
@@ -169,7 +168,6 @@ def marketplacevendor_delete(request, pk):
         messages.error(request, f"Cannot delete vendor '{store_name}' because related sub-orders or listings exist.")
         return redirect("ecommerce:marketplacevendor_detail", pk=pk)
 
-    vendor.delete()
     write_audit_log(
         request.user,
         vendor,
@@ -177,6 +175,7 @@ def marketplacevendor_delete(request, pk):
         {"store_name": store_name, "number": number},
         tenant=request.tenant,
     )
+    vendor.delete()
     messages.success(request, f"Marketplace vendor '{store_name}' deleted.")
     return redirect("ecommerce:marketplacevendor_list")
 
