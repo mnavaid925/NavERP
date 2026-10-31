@@ -42,6 +42,10 @@ from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacet
 from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
 from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
 from apps.ecommerce.models.SearchDiscovery.SearchSynonyms import SearchSynonym
+from apps.ecommerce.models.SubscriptionCommerce.CustomerSubscriptions import CustomerSubscription
+from apps.ecommerce.models.SubscriptionCommerce.SubscriptionBoxCurations import SubscriptionBoxCuration
+from apps.ecommerce.models.SubscriptionCommerce.SubscriptionPlans import SubscriptionPlan
+from apps.ecommerce.models.SubscriptionCommerce.SubscriptionRetentionActions import SubscriptionRetentionAction
 from apps.scm.models.InventoryManagement.Items import Item
 from apps.scm.models.InventoryManagement.Locations import Location
 
@@ -1896,6 +1900,178 @@ class Command(BaseCommand):
                     referrer_url="https://store.example.com/",
                     payload_json={"source": "demo_seed"},
                 )
+
+        # -------------------------------------------------------------
+        # 9.12 Subscription & Recurring Commerce Seed Data
+        # -------------------------------------------------------------
+        catalog_sample_product = CatalogProduct.objects.filter(tenant=tenant).first()
+        product_sample_variant = ProductVariant.objects.filter(tenant=tenant).first()
+
+        plan_coffee, _ = SubscriptionPlan.objects.get_or_create(
+            tenant=tenant,
+            code="roasters-monthly-coffee",
+            defaults={
+                "name": "Roaster's Choice Monthly Coffee Club",
+                "plan_type": "subscribe_save",
+                "frequency": "monthly",
+                "interval_count": 1,
+                "discount_type": "percentage",
+                "discount_value": Decimal("15.00"),
+                "trial_period_days": 0,
+                "min_commitment_cycles": 2,
+                "allow_pause": True,
+                "allow_skip": True,
+                "allow_swap": True,
+                "max_pause_days": 90,
+                "target_product": catalog_sample_product,
+                "is_active": True,
+                "description": "Artisan fresh-roasted single-origin coffees delivered to your doorstep every month with 15% subscriber savings.",
+            },
+        )
+
+        plan_box, _ = SubscriptionPlan.objects.get_or_create(
+            tenant=tenant,
+            code="quarterly-artisan-box",
+            defaults={
+                "name": "Quarterly Gourmet Discovery Box",
+                "plan_type": "curated_box",
+                "frequency": "quarterly",
+                "interval_count": 1,
+                "discount_type": "percentage",
+                "discount_value": Decimal("10.00"),
+                "trial_period_days": 0,
+                "min_commitment_cycles": 1,
+                "allow_pause": True,
+                "allow_skip": True,
+                "allow_swap": True,
+                "max_pause_days": 90,
+                "target_product": catalog_sample_product,
+                "is_active": True,
+                "description": "Themed culinary and lifestyle discovery boxes curated by master artisans every season.",
+            },
+        )
+
+        plan_vip, _ = SubscriptionPlan.objects.get_or_create(
+            tenant=tenant,
+            code="annual-vip-pass",
+            defaults={
+                "name": "Annual VIP Executive Membership Pass",
+                "plan_type": "membership_club",
+                "frequency": "annual",
+                "interval_count": 1,
+                "discount_type": "percentage",
+                "discount_value": Decimal("20.00"),
+                "trial_period_days": 14,
+                "min_commitment_cycles": 1,
+                "allow_pause": False,
+                "allow_skip": False,
+                "allow_swap": False,
+                "max_pause_days": 30,
+                "target_product": catalog_sample_product,
+                "is_active": True,
+                "description": "Exclusive member club pass with 20% off all catalog items, free expedited shipping, and VIP support.",
+            },
+        )
+
+        if customer_profile and catalog_sample_product:
+            sub_active, _ = CustomerSubscription.objects.get_or_create(
+                tenant=tenant,
+                customer_profile=customer_profile,
+                plan=plan_coffee,
+                defaults={
+                    "product": catalog_sample_product,
+                    "variant": product_sample_variant,
+                    "status": "active",
+                    "quantity": 2,
+                    "unit_price": Decimal("24.00"),
+                    "recurring_discount_pct": Decimal("15.00"),
+                    "started_at": timezone.now() - timedelta(days=60),
+                    "next_billing_date": (timezone.now() + timedelta(days=12)).date(),
+                    "next_delivery_date": (timezone.now() + timedelta(days=15)).date(),
+                    "completed_cycles_count": 2,
+                    "consecutive_successful_cycles": 2,
+                    "failed_payment_count": 0,
+                    "shipping_address_line": "123 Market St, Suite 400, San Francisco, CA 94105",
+                    "payment_method_ref": "tok_visa_4242_ending_1234",
+                },
+            )
+
+            sub_paused, _ = CustomerSubscription.objects.get_or_create(
+                tenant=tenant,
+                customer_profile=customer_profile,
+                plan=plan_box,
+                defaults={
+                    "product": catalog_sample_product,
+                    "variant": product_sample_variant,
+                    "status": "paused",
+                    "quantity": 1,
+                    "unit_price": Decimal("65.00"),
+                    "recurring_discount_pct": Decimal("10.00"),
+                    "started_at": timezone.now() - timedelta(days=120),
+                    "next_billing_date": (timezone.now() + timedelta(days=45)).date(),
+                    "paused_until": (timezone.now() + timedelta(days=40)).date(),
+                    "completed_cycles_count": 1,
+                    "consecutive_successful_cycles": 1,
+                    "failed_payment_count": 0,
+                    "shipping_address_line": "123 Market St, Suite 400, San Francisco, CA 94105",
+                    "payment_method_ref": "tok_mastercard_5555",
+                },
+            )
+
+            # Box curations
+            SubscriptionBoxCuration.objects.get_or_create(
+                tenant=tenant,
+                plan=plan_box,
+                cycle_identifier="2026-11",
+                defaults={
+                    "name": "Autumn Harvest Artisan Roast Curation",
+                    "code": "autumn-harvest-2026-11",
+                    "theme_title": "Fireside Warmth & Spiced Notes",
+                    "curation_notes": "Featuring high-altitude Ethiopian Yirgacheffe and micro-batch maple glazed walnuts.",
+                    "primary_product": catalog_sample_product,
+                    "has_surprise_item": True,
+                    "surprise_item_description": "Limited Edition Copper Coffee Scoop",
+                    "preference_tag": "Medium-Dark Roast",
+                    "start_date": timezone.now().date() - timedelta(days=15),
+                    "end_date": timezone.now().date() + timedelta(days=45),
+                    "is_active": True,
+                },
+            )
+
+            SubscriptionBoxCuration.objects.get_or_create(
+                tenant=tenant,
+                plan=plan_box,
+                cycle_identifier="2026-12",
+                defaults={
+                    "name": "Holiday Reserve Winter Collection",
+                    "code": "holiday-reserve-2026-12",
+                    "theme_title": "Winter Solstice Elegance",
+                    "curation_notes": "A celebratory compilation of holiday reserve blends and cocoa dusted espresso truffles.",
+                    "primary_product": catalog_sample_product,
+                    "has_surprise_item": True,
+                    "surprise_item_description": "Handcrafted Ceramic Tasting Cup",
+                    "preference_tag": "Holiday Blend",
+                    "start_date": timezone.now().date() + timedelta(days=46),
+                    "end_date": timezone.now().date() + timedelta(days=105),
+                    "is_active": True,
+                },
+            )
+
+            # Retention actions
+            if not SubscriptionRetentionAction.objects.filter(tenant=tenant, subscription=sub_active).exists():
+                SubscriptionRetentionAction.objects.create(
+                    tenant=tenant,
+                    subscription=sub_active,
+                    customer_profile=customer_profile,
+                    trigger_type="cancel_intent",
+                    cancellation_reason="too_much_product",
+                    churn_risk_score=Decimal("45.50"),
+                    offered_action="free_skip",
+                    offer_discount_pct=Decimal("0.00"),
+                    outcome="deflected",
+                    notes="Customer had surplus inventory; accepted 1-cycle skip offer and retained subscription.",
+                )
+
 
 
 
