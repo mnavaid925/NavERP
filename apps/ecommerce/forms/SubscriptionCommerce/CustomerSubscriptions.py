@@ -81,4 +81,8 @@ class CustomerSubscriptionForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["customer_profile", "plan", "product", "variant"])
+        product = cleaned.get("product")
+        variant = cleaned.get("variant")
+        if product and variant and variant.product_id != product.pk:
+            self.add_error("variant", "Product variant does not belong to the selected catalog product.")
         return cleaned
