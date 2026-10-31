@@ -3,7 +3,7 @@
 - **Sub-module:** 9.11 Marketplace & Multi-Vendor • **Module:** 9 eCommerce Management System • **App:** `apps/ecommerce`
 - **Changeset:** `f373366542e10cdb8e6b08f6aa8ce4f758c5ad69...HEAD`
 - **Review Date:** 2026-10-31
-- **Status:** Review In Progress (Pass 1, Pass 2, & Pass 3 complete)
+- **Status:** Review In Progress (Pass 1, Pass 2, Pass 3, & Pass 4 complete)
 
 ---
 
@@ -161,3 +161,65 @@
   - `templates/ecommerce/marketplace/console/dashboard.html:122`
   - Description: Accessing `{{ v.party.name }}` triggers extra queries without `select_related("party")`.
   - Fix: Add `.select_related("party")` in `MarketplaceConsoleViews.py`.
+
+---
+
+## Pass 4: Performance Review (`performance-reviewer`)
+
+### Critical
+- [ ] **PERF-01**: Non-Atomic Multi-Step Financial & Settlement Mutations
+  - `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:155-176, 200-220`
+  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:243-270`
+  - Description: `vendorpayout_execute` and `vendorpayout_delete` mutate sub-orders and payouts across multiple steps without `@transaction.atomic`.
+  - Fix: Wrap multi-step financial mutations in `@transaction.atomic`.
+- [ ] **PERF-02**: Cascading N+1 Query Storm from Chained `__str__` Foreign Key Lookups in Form Choice Fields
+  - `apps/ecommerce/models/Marketplace/VendorPayouts.py:166-168`
+  - `apps/ecommerce/forms/Marketplace/VendorSubOrderForms.py:48-55`
+  - Description: Form `<select>` choices trigger N+1 queries when evaluating `str(order)` and `str(payout)` because querysets in form lack `select_related("customer")` and `select_related("vendor")`.
+  - Fix: Add `select_related("customer")` on `order` queryset and `select_related("vendor")` on `payout` queryset in form `__init__`.
+- [ ] **PERF-03**: N+1 Query in Marketplace Console Dashboard KYC Queue
+  - `apps/ecommerce/views/Marketplace/MarketplaceConsoleViews.py:43`
+  - `templates/ecommerce/marketplace/console/dashboard.html:116-123`
+  - Description: `v.party.name` accesses `core.Party` foreign key without `select_related("party")`.
+  - Fix: Add `.select_related("party")` to `pending_kyc_vendors`.
+
+### Important
+- [ ] **PERF-04**: Python In-Memory Rating Calculation Instead of SQL Aggregation
+  - `apps/ecommerce/models/Marketplace/MarketplaceVendors.py:255-267`
+  - Description: `update_rating` fetches all ratings into memory and calculates `len` and `sum` in Python.
+  - Fix: Use Django ORM `.aggregate(total=Count("customer_rating"), avg=Avg("customer_rating"))`.
+- [ ] **PERF-05**: Missing Multi-Tenant Composite Indexes for Filtered Fields
+  - `apps/ecommerce/models/Marketplace/VendorSubOrders.py:194-211`
+  - `apps/ecommerce/models/Marketplace/VendorPayouts.py:130-140`
+  - `apps/ecommerce/models/Marketplace/VendorProductListings.py:166-175`
+  - Description: Missing composite indexes for hot multi-tenant filter combinations: `("tenant", "fulfillment_status")`, `("tenant", "sla_status")`, `("tenant", "payout_status")`, and `("tenant", "compliance_status")`.
+  - Fix: Add these composite indexes to `Meta.indexes`.
+- [ ] **PERF-06**: Hidden Foreign Key Fetch in `VendorSubOrder.save()` and Audit Logging
+  - `apps/ecommerce/models/Marketplace/VendorSubOrders.py:232`
+  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:214, 244`
+  - Description: `calculate_financials` touches `self.vendor` and audit log touches `self.order.number`, triggering lazy fetches on action views.
+  - Fix: Fetch sub_order with `select_related("vendor", "order")` in action handlers.
+- [ ] **PERF-07**: Double Query: Uncached `.count` Followed by Iteration in Payout Detail
+  - `templates/ecommerce/marketplace/vendorpayout/detail.html:163, 178`
+  - Description: `settled_suborders.count` issues separate SQL `COUNT(*)` prior to loop iteration.
+  - Fix: Use `settled_suborders|length`.
+
+### Minor
+- [ ] **PERF-08**: Missing `select_related("product__primary_category")` in Listing Detail View
+  - `apps/ecommerce/views/Marketplace/VendorProductListingViews.py:80-86`
+  - Fix: Add `product__primary_category` to `select_related`.
+- [ ] **PERF-09**: Separate Consecutive `COUNT(*)` Queries in Dashboard Console
+  - `apps/ecommerce/views/Marketplace/MarketplaceConsoleViews.py:21-22`
+  - Fix: Combine counts using conditional aggregation.
+- [ ] **PERF-10**: Full Model Column Fetches for Dropdown Filters
+  - `apps/ecommerce/views/Marketplace/VendorProductListingViews.py:57`
+  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:61`
+  - `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:50`
+  - Fix: Add `.only("id", "store_name")` to vendor filter querysets.
+- [ ] **PERF-11**: Unused QuerySet in Vendor Detail View
+  - `apps/ecommerce/views/Marketplace/MarketplaceVendorViews.py:80, 96`
+  - Fix: Remove unused `disputes` queryset or render section.
+- [ ] **PERF-12**: SubOrder Detail Template Non-Existent Attribute Access
+  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:237`
+  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:90`
+  - Fix: Include `order__customer` in `select_related` in `vendorsuborder_detail` alongside field rename.
