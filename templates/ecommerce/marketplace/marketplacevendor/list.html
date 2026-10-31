@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Marketplace Vendors — Marketplace & Multi-Vendor — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketplace_console' %}" class="hover:text-blue-600">Marketplace</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Vendors</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Marketplace Vendors</h1>
+      <p class="text-sm text-slate-500 mt-1">Onboarded merchants, storefront profiles, KYC verification compliance, and commission agreements.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:marketplace_console' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>Marketplace Console</span>
+      </a>
+      <a href="{% url 'ecommerce:marketplacevendor_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Register New Vendor</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ query }}"
+            placeholder="Store, #, party, email..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Seller Status</label>
+        <select id="filter-status" name="status" class="form-select w-full text-sm">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-kyc" class="block text-xs font-medium text-slate-600 mb-1">KYC Status</label>
+        <select id="filter-kyc" name="kyc_status" class="form-select w-full text-sm">
+          <option value="">All Verification States</option>
+          {% for val, label in kyc_status_choices %}
+            <option value="{{ val }}" {% if kyc_filter == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-commission" class="block text-xs font-medium text-slate-600 mb-1">Commission Type</label>
+        <select id="filter-commission" name="commission_type" class="form-select w-full text-sm">
+          <option value="">All Commission Types</option>
+          {% for val, label in commission_type_choices %}
+            <option value="{{ val }}" {% if commission_filter == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-primary w-full text-sm">Filter</button>
+        <a href="{% url 'ecommerce:marketplacevendor_list' %}" class="btn btn-outline text-sm" title="Clear Filters">Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Vendors Table -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            <th class="py-3 px-4">Vendor / Store</th>
+            <th class="py-3 px-4">Legal Party</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4">KYC Compliance</th>
+            <th class="py-3 px-4">Commission</th>
+            <th class="py-3 px-4">Rating</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-sm text-slate-700">
+          {% for v in vendors %}
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="py-3 px-4">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 font-bold flex items-center justify-center text-sm border border-blue-200">
+                  {{ v.store_name|slice:":2"|upper }}
+                </div>
+                <div>
+                  <a href="{% url 'ecommerce:marketplacevendor_detail' v.pk %}" class="font-semibold text-slate-900 hover:text-blue-600">
+                    {{ v.store_name }}
+                  </a>
+                  <div class="text-xs text-slate-400 font-mono">{{ v.number }} • /{{ v.slug }}</div>
+                </div>
+              </div>
+            </td>
+            <td class="py-3 px-4">
+              <div class="font-medium text-slate-900">{{ v.party.name }}</div>
+              <div class="text-xs text-slate-400">{{ v.support_email|default:"No email" }}</div>
+            </td>
+            <td class="py-3 px-4">
+              {% if v.status == "active" %}
+                <span class="badge badge-green">Active Seller</span>
+              {% elif v.status == "approved" %}
+                <span class="badge badge-info">Approved</span>
+              {% elif v.status == "under_review" %}
+                <span class="badge badge-amber">Under Review</span>
+              {% elif v.status == "submitted" %}
+                <span class="badge badge-amber">Submitted</span>
+              {% elif v.status == "suspended" %}
+                <span class="badge badge-red">Suspended</span>
+              {% elif v.status == "terminated" %}
+                <span class="badge badge-slate">Terminated</span>
+              {% else %}
+                <span class="badge badge-muted">Draft</span>
+              {% endif %}
+            </td>
+            <td class="py-3 px-4">
+              {% if v.kyc_status == "verified" %}
+                <span class="badge badge-green flex items-center gap-1 w-fit">
+                  <i data-lucide="check-circle-2" class="w-3 h-3"></i>
+                  <span>Verified</span>
+                </span>
+              {% elif v.kyc_status == "pending" %}
+                <span class="badge badge-amber flex items-center gap-1 w-fit">
+                  <i data-lucide="clock" class="w-3 h-3"></i>
+                  <span>Pending</span>
+                </span>
+              {% elif v.kyc_status == "rejected" %}
+                <span class="badge badge-red flex items-center gap-1 w-fit">
+                  <i data-lucide="x-circle" class="w-3 h-3"></i>
+                  <span>Rejected</span>
+                </span>
+              {% else %}
+                <span class="badge badge-muted">Unsubmitted</span>
+              {% endif %}
+            </td>
+            <td class="py-3 px-4">
+              <div class="font-medium text-slate-900">{{ v.commission_rate }}%</div>
+              <div class="text-xs text-slate-400">{{ v.get_commission_type_display }}</div>
+            </td>
+            <td class="py-3 px-4">
+              <div class="flex items-center gap-1 text-slate-800">
+                <i data-lucide="star" class="w-4 h-4 text-amber-400 fill-amber-400"></i>
+                <span class="font-medium">{{ v.rating_average }}</span>
+                <span class="text-xs text-slate-400">({{ v.rating_count }})</span>
+              </div>
+            </td>
+            <td class="py-3 px-4 text-right">
+              <div class="table-actions flex items-center justify-end gap-2">
+                <a href="{% url 'ecommerce:marketplacevendor_detail' v.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="View Detail">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </a>
+                <a href="{% url 'ecommerce:marketplacevendor_edit' v.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit Vendor">
+                  <i data-lucide="pencil" class="w-4 h-4"></i>
+                </a>
+                <form method="post" action="{% url 'ecommerce:marketplacevendor_delete' v.pk %}" onsubmit="return confirm('Are you sure you want to delete vendor {{ v.store_name }}?');" class="inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete Vendor">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="py-12 text-center">
+              <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                  <i data-lucide="store" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-base font-semibold text-slate-800 mb-1">No Marketplace Vendors Found</h3>
+                <p class="text-xs text-slate-500 mb-4">No merchant accounts match your search filters or none have been onboarded yet.</p>
+                <a href="{% url 'ecommerce:marketplacevendor_create' %}" class="btn btn-primary text-sm inline-flex items-center gap-2">
+                  <i data-lucide="plus" class="w-4 h-4"></i>
+                  <span>Register First Vendor</span>
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+      <div>
+        Showing page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total vendors)
+      </div>
+      <div class="flex items-center gap-1">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}&q={{ query }}&status={{ status_filter }}&kyc_status={{ kyc_filter }}&commission_type={{ commission_filter }}" class="btn btn-outline text-xs">
+            Previous
+          </a>
+        {% endif %}
+        <span class="px-3 py-1 text-xs font-semibold text-slate-800 bg-slate-100 rounded">
+          {{ page_obj.number }}
+        </span>
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}&q={{ query }}&status={{ status_filter }}&kyc_status={{ kyc_filter }}&commission_type={{ commission_filter }}" class="btn btn-outline text-xs">
+            Next
+          </a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
