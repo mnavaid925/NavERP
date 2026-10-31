@@ -3,7 +3,7 @@
 - **Sub-module:** 9.11 Marketplace & Multi-Vendor • **Module:** 9 eCommerce Management System • **App:** `apps/ecommerce`
 - **Changeset:** `f373366542e10cdb8e6b08f6aa8ce4f758c5ad69...HEAD`
 - **Review Date:** 2026-10-31
-- **Status:** Review In Progress (Pass 1 & Pass 2 complete)
+- **Status:** Review In Progress (Pass 1, Pass 2, & Pass 3 complete)
 
 ---
 
@@ -107,3 +107,57 @@
   - `templates/ecommerce/marketplace/vendorsuborder/detail.html:226-255`
   - Description: View provides `order_lines` context, but the template does not display an items table for ordered lines.
   - Fix: Render `order_lines` table in the parent order section.
+
+---
+
+## Pass 3: Frontend Review (`frontend-reviewer`)
+
+### Critical
+- [ ] **FE-C1**: Model Field Mismatch on Parent Order in Sub-Order Detail
+  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:237-241`
+  - Description: Parent order references `sub_order.order.customer_party.name` (field is `customer.name`) and `sub_order.order.grand_total` (field is `total_amount`), resulting in fallback "Shopper" and blank "$". (Duplicate of I1 / EXP-I2).
+  - Fix: Update to `sub_order.order.customer.name` and `sub_order.order.total_amount`.
+
+### Important
+- [ ] **FE-I1**: Form Labels Missing `for` Attributes Across Forms and Modals
+  - `templates/ecommerce/marketplace/marketplacevendor/form.html:65-194`
+  - `templates/ecommerce/marketplace/vendorproductlisting/form.html:65-164`
+  - `templates/ecommerce/marketplace/vendorsuborder/form.html:65-175`
+  - `templates/ecommerce/marketplace/vendorpayout/form.html:65-137`
+  - `templates/ecommerce/marketplace/marketplacevendor/detail.html:149, 153, 157, 218`
+  - `templates/ecommerce/marketplace/vendorproductlisting/detail.html:134, 138, 142, 146`
+  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:128, 132, 136, 140, 169, 173, 177`
+  - `templates/ecommerce/marketplace/vendorpayout/detail.html:141`
+  - Description: Form labels render without `for="{{ form.<field>.id_for_label }}"` (or matching input IDs), breaking accessibility screen reader association.
+  - Fix: Add `for="{{ form.<field>.id_for_label }}"` to label tags and manual action input IDs.
+- [ ] **FE-I2**: Missing `aria-label` Attributes on Table Icon Action Buttons
+  - `templates/ecommerce/marketplace/marketplacevendor/list.html:168–179`
+  - `templates/ecommerce/marketplace/vendorproductlisting/list.html:168–179`
+  - `templates/ecommerce/marketplace/vendorsuborder/list.html:194–205`
+  - `templates/ecommerce/marketplace/vendorpayout/list.html:149–160`
+  - Description: Table row action buttons use `.btn-icon` with SVG icons and `title`, but lack `aria-label`.
+  - Fix: Add `aria-label="View Detail"`, `aria-label="Edit"`, `aria-label="Delete"` to `.btn-icon` elements.
+- [ ] **FE-I3**: Hardcoded `bg-white` and `border-slate-200` Overrides on `.card` Bypassing Dark Mode
+  - All 13 templates across `templates/ecommerce/marketplace/`
+  - Description: Hardcoded utility classes `bg-white border border-slate-200` override `.card` CSS custom properties, breaking dark mode rendering.
+  - Fix: Remove redundant `bg-white border border-slate-200` utilities where `.card` is present.
+
+### Minor
+- [ ] **FE-M1**: KPI Stat Cards Diverge from Theme Component Architecture
+  - `templates/ecommerce/marketplace/console/dashboard.html:39–100`
+  - `templates/ecommerce/marketplace/marketplacevendor/detail.html:71–106`
+  - `templates/ecommerce/marketplace/vendorproductlisting/detail.html:67–103`
+  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:67–99`
+  - Description: KPI summary cards use ad-hoc Tailwind classes instead of `.stat-grid`, `.stat-card`, `.stat-icon <color>`.
+  - Fix: Refactor KPI blocks to use theme design system `.stat-card` pattern.
+- [ ] **FE-M2**: Pagination Links Do Not URL-Encode Query Params and Emit Empty Filters
+  - `templates/ecommerce/marketplace/marketplacevendor/list.html:212, 220`
+  - `templates/ecommerce/marketplace/vendorproductlisting/list.html:212, 220`
+  - `templates/ecommerce/marketplace/vendorsuborder/list.html:238, 246`
+  - `templates/ecommerce/marketplace/vendorpayout/list.html:193, 201`
+  - Description: Raw pagination parameters can break on special characters and emit empty query string keys.
+  - Fix: Use `{{ query|urlencode }}` and filter empty parameters.
+- [ ] **FE-M3**: Potential N+1 Query in Console Dashboard
+  - `templates/ecommerce/marketplace/console/dashboard.html:122`
+  - Description: Accessing `{{ v.party.name }}` triggers extra queries without `select_related("party")`.
+  - Fix: Add `.select_related("party")` in `MarketplaceConsoleViews.py`.
