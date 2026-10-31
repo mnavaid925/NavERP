@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -58,7 +59,7 @@ def vendorsuborder_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    vendors = ecommerce_scope(MarketplaceVendor.objects.all(), request).order_by("store_name")
+    vendors = ecommerce_scope(MarketplaceVendor.objects.all(), request).only("id", "store_name").order_by("store_name")
 
     context = {
         "page_obj": page_obj,
@@ -87,7 +88,7 @@ def vendorsuborder_detail(request, pk):
         request,
         VendorSubOrder,
         pk,
-        select_related=("vendor", "order", "payout"),
+        select_related=("vendor", "order__customer", "payout"),
     )
 
     # Order line items from parent order
@@ -195,7 +196,6 @@ def vendorsuborder_delete(request, pk):
         messages.error(request, f"Cannot delete sub-order '{number}' because it is linked to a settled payout.")
         return redirect("ecommerce:vendorsuborder_detail", pk=pk)
 
-    sub_order.delete()
     write_audit_log(
         request.user,
         sub_order,
@@ -203,6 +203,8 @@ def vendorsuborder_delete(request, pk):
         {"number": number},
         tenant=request.tenant,
     )
+    sub_order.delete()
+
     messages.success(request, f"Vendor sub-order '{number}' deleted.")
     return redirect("ecommerce:vendorsuborder_list")
 
@@ -211,7 +213,12 @@ def vendorsuborder_delete(request, pk):
 @tenant_admin_required
 @require_POST
 def vendorsuborder_fulfill(request, pk):
-    sub_order = ecommerce_object(request, VendorSubOrder, pk)
+    sub_order = ecommerce_object(
+        request,
+        VendorSubOrder,
+        pk,
+        select_related=("vendor", "order"),
+    )
     form = SubOrderFulfillmentForm(request.POST)
     if form.is_valid():
         sub_order.fulfillment_status = form.cleaned_data["fulfillment_status"]
@@ -240,8 +247,14 @@ def vendorsuborder_fulfill(request, pk):
 @login_required
 @tenant_admin_required
 @require_POST
+@transaction.atomic
 def vendorsuborder_dispute(request, pk):
-    sub_order = ecommerce_object(request, VendorSubOrder, pk)
+    sub_order = ecommerce_object(
+        request,
+        VendorSubOrder,
+        pk,
+        select_related=("vendor", "order"),
+    )
     form = SubOrderDisputeForm(request.POST)
     if form.is_valid():
         sub_order.dispute_status = form.cleaned_data["dispute_status"]
@@ -259,7 +272,7 @@ def vendorsuborder_dispute(request, pk):
         write_audit_log(
             request.user,
             sub_order,
-            "dispute_update",
+            "dispute",
             {"dispute_status": sub_order.dispute_status, "payout_status": sub_order.payout_status},
             tenant=request.tenant,
         )
