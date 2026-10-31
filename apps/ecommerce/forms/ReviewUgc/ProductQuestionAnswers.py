@@ -65,3 +65,7 @@ class ProductQuestionAnswerResponseForm(TenantUniqueMixin, TenantModelForm):
             "is_staff_answer": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
             "is_pinned": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["answer_text"].required = True
