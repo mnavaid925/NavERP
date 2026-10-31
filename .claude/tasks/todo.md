@@ -8,6 +8,288 @@
 > Do not mass-tick the backlog.
 ---
 
+# Sub-module 9.10: Marketing & Campaign Management (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.10.md` (2026-10-31)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.8.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0011_audiencesegment_personalizedexperience_and_more.py`, so **9.10 claims `0012`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.10.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/MarketingCampaign/`
+> Template folder name: `templates/ecommerce/marketing_campaign/{campaign,affiliate,conversion,seo_rule,dashboard}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Spine & Entity Integration (L28/L29)**:
+  - Affiliate partner and shopper identity anchors strictly to canonical `core.Party` (`apps/core/models/Party.py:5`) and `accounts.User` (`apps/accounts/models.py:14`). No duplicate customer/partner tables.
+  - Campaign audience targeting directly reuses `ecommerce.AudienceSegment` (`ESEG-`, 9.8) — reusing RFM and behavioral cohorts.
+  - Promotional blasts, back-in-stock alerts, and SEO metadata rules target `ecommerce.CatalogProduct` (`EPRD-`, 9.1) and `ecommerce.ProductVariant` (`PVR-`, 9.1).
+  - Category-scoped SEO templates and campaign banners link to `ecommerce.StoreCategory` (`ECAT-`, 9.1).
+  - Transactional order alerts and affiliate commission conversions link directly to `ecommerce.EcommerceOrder` (`EORD-`, 9.5).
+  - Customer-advocate referral links associate with `ecommerce.CustomerAccountProfile` (`ECAP-`, 9.6).
+  - Financial ledger integrity: Commission payout records link to `apps/accounting/` (Module 2) via vendor bill or payment vouchers; no secondary financial ledger is created in ecommerce.
+- **Clear Sibling Boundaries (9.2 vs. 9.3 vs. 9.8 vs. 9.9 vs. 9.10 vs. 9.11 vs. 9.13 vs. 9.15)**:
+  - 9.2 (Inventory): Owns warehouse stock & inventory allocations; 9.10 handles restock alerts triggered by replenishment.
+  - 9.3 (Pricing & Promotions): Owns storefront promo codes (`ECPN-`); 9.10 handles outbound marketing campaign delivery of promo codes and tracks affiliate referral attribution.
+  - 9.8 (Personalization): Owns clickstream behavioral tracking (`ESBE-`) and RFM segments (`ESEG-`); 9.10 consumes `AudienceSegment` as campaign targets.
+  - 9.9 (CMS): Sibling sub-module owning page builder templates, editorial articles, and media library assets; 9.10 owns campaign message templates and automated SEO metadata/schema rules.
+  - 9.10 (This Pass): Owns omnichannel marketing campaigns, SMS/push alerts, affiliate & referral partner programs, affiliate order conversions/commissions, and automated SEO metadata/schema rules.
+  - 9.11 (Marketplace): Owns marketplace vendor onboarding and multi-vendor product splits; 9.10 owns marketing affiliate partners, brand ambassadors, and customer referrals.
+  - 9.13 (Reviews & UGC): Owns customer star ratings and review moderation.
+  - 9.15 (Analytics & BI): Owns multi-touch attribution modeling (first/last/linear/W-shaped) and blended CAC dashboards; 9.10 tracks campaign delivery metrics and direct affiliate order attribution.
+- **Multi-Tenancy & Data Isolation**: All marketing campaigns, affiliate agreements, referral conversions, and SEO metadata rules are strictly scoped by `tenant` (`core.Tenant`).
+- **Base Class & Prefix Discipline**: All 4 models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`), providing `tenant` FK (`on_delete=CASCADE`), thread-safe auto-number generation, and audit timestamps.
+- **Prefix Collision Sweep**: `EMCP`, `EAFF`, `EARC`, `ESEO` verified 100% free across repo.
+
+---
+
+## 9.10-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO duplicate party, user, or order table** — Campaigns and affiliates link directly to `core.Party`, `accounts.User`, and `ecommerce.EcommerceOrder`.
+- [ ] **NO proprietary external marketing SaaS dependency** — Omnichannel message orchestration, smart sending fatigue rules, affiliate tracking slugs, and SEO token engines execute natively in Django.
+- [ ] **NO outbound mass SMTP / SMS daemon running synchronously in web request-response cycle** — Delivery tracking is modeled in Django; physical network dispatchers are handled asynchronously.
+- [ ] **NO headless browser SERP scraper daemon required** — SEO rules configure dynamic tokens, schema JSON-LD, and SERP keyword rank positions directly.
+
+---
+
+## Models (4 models in `apps/ecommerce/models/MarketingCampaign/`)
+
+- [ ] **`MarketingCampaign`** [Prefix: `EMCP-`] (`apps/ecommerce/models/MarketingCampaign/MarketingCampaigns.py`)
+  - **Purpose**: Core omnichannel marketing campaign and automated flow entity. Orchestrates email newsletters, drip journeys, transactional alerts, SMS promotional blasts, push notifications, and back-in-stock alerts with audience segment targeting, smart sending fatigue controls, and deliverability performance tracking.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `CAMPAIGN_TYPE_CHOICES = [("newsletter_broadcast", "Newsletter Broadcast"), ("drip_sequence", "Automated Drip Sequence"), ("order_alert", "Transactional Order Alert"), ("back_in_stock", "Back in Stock Alert"), ("abandoned_cart", "Abandoned Cart Recovery"), ("geofenced_blast", "Geofenced Location Blast"), ("promotional_flash", "Promotional Flash Sale")]`
+    - `CHANNEL_CHOICES = [("email", "Email"), ("sms", "SMS"), ("push", "Web / Mobile Push"), ("omnichannel", "Omnichannel (Email + SMS + Push)")]`
+    - `STATUS_CHOICES = [("draft", "Draft"), ("scheduled", "Scheduled"), ("sending", "Sending / In Progress"), ("sent", "Sent / Completed"), ("paused", "Paused"), ("cancelled", "Cancelled")]`
+  - **Fields**:
+    - `name`: `CharField(max_length=150, help_text="Administrative campaign name, e.g. 'Black Friday VIP Early Access'")`
+    - `code`: `CharField(max_length=60, help_text="Machine identifier slug")`
+    - `campaign_type`: `CharField(max_length=30, choices=CAMPAIGN_TYPE_CHOICES, default="newsletter_broadcast")`
+    - `channel`: `CharField(max_length=20, choices=CHANNEL_CHOICES, default="email")`
+    - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft")`
+    - `target_segment`: `ForeignKey("ecommerce.AudienceSegment", on_delete=models.SET_NULL, null=True, blank=True, related_name="marketing_campaigns", help_text="Target audience cohort from 9.8 Personalization")`
+    - `target_product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.SET_NULL, null=True, blank=True, related_name="marketing_campaigns", help_text="Target product for back-in-stock alerts or single-product promo blasts")`
+    - `subject`: `CharField(max_length=200, blank=True, help_text="Email subject line / SMS headline / Push notification title")`
+    - `preview_text`: `CharField(max_length=255, blank=True, help_text="Email preheader preview text / Push short summary")`
+    - `content_body`: `TextField(help_text="Newsletter HTML markup / SMS text message / Push message copy")`
+    - `sender_name`: `CharField(max_length=100, blank=True, help_text="Brand or sender display name")`
+    - `sender_address`: `CharField(max_length=120, blank=True, help_text="From email address or SMS sender ID")`
+    - `scheduled_at`: `DateTimeField(null=True, blank=True, help_text="Scheduled broadcast dispatch time")`
+    - `sent_at`: `DateTimeField(null=True, blank=True, help_text="Timestamp when campaign dispatch completed")`
+    - `send_throttle_window_hours`: `PositiveIntegerField(default=16, help_text="Smart Sending cooldown window in hours to prevent recipient fatigue")`
+    - `geofence_latitude`: `DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, help_text="Target geographic latitude for geofenced push alerts")`
+    - `geofence_longitude`: `DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, help_text="Target geographic longitude for geofenced push alerts")`
+    - `geofence_radius_km`: `DecimalField(max_digits=6, decimal_places=2, null=True, blank=True, help_text="Target radius in km around geofence coordinate")`
+    - `recipient_count`: `PositiveIntegerField(default=0, help_text="Total targeted recipient profiles")`
+    - `delivered_count`: `PositiveIntegerField(default=0, help_text="Confirmed delivered messages")`
+    - `opened_count`: `PositiveIntegerField(default=0, help_text="Unique opens recorded")`
+    - `clicked_count`: `PositiveIntegerField(default=0, help_text="Unique link clicks recorded")`
+    - `bounced_count`: `PositiveIntegerField(default=0, help_text="Failed or bounced dispatches")`
+    - `unsubscribed_count`: `PositiveIntegerField(default=0, help_text="Unsubscribe opt-outs recorded")`
+    - `complaint_count`: `PositiveIntegerField(default=0, help_text="Spam complaints reported")`
+    - `revenue_attributed`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Total store revenue directly attributed to this campaign")`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_emcp_tenant_num_uniq")`
+    - `UniqueConstraint(fields=["tenant", "code"], name="ecommerce_emcp_code_uniq")`
+    - `Index(fields=["tenant", "status", "campaign_type"], name="idx_emcp_ten_stat_type")`
+    - `Index(fields=["tenant", "scheduled_at"], name="idx_emcp_ten_sched_at")`
+  - **Form Exclusions**: `tenant`, `number`, `sent_at`, `recipient_count`, `delivered_count`, `opened_count`, `clicked_count`, `bounced_count`, `unsubscribed_count`, `complaint_count`, `revenue_attributed`, `created_at`, `updated_at`.
+
+- [ ] **`AffiliatePartner`** [Prefix: `EAFF-`] (`apps/ecommerce/models/MarketingCampaign/AffiliatePartners.py`)
+  - **Purpose**: Master record for external affiliate partners, brand ambassadors, influencers, and customer referral advocates. Configures referral tracking slugs, unique coupon codes, commission rates, attribution cookie windows, and aggregates lifetime referred revenue.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `PARTNER_TYPE_CHOICES = [("affiliate", "Affiliate Marketer"), ("influencer", "Social Influencer"), ("brand_ambassador", "Brand Ambassador"), ("customer_advocate", "Customer Referral Advocate")]`
+    - `COMMISSION_TYPE_CHOICES = [("percentage_net_sales", "Percentage of Net Sales"), ("flat_per_order", "Flat Dollar per Order"), ("tiered", "Tiered Sales Volume")]`
+    - `STATUS_CHOICES = [("pending_approval", "Pending Approval"), ("active", "Active"), ("suspended", "Suspended"), ("inactive", "Inactive")]`
+  - **Fields**:
+    - `name`: `CharField(max_length=120, help_text="Partner display name or company name")`
+    - `party`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="affiliate_profiles", help_text="Unified Core Spine Party entity")`
+    - `customer_profile`: `ForeignKey("ecommerce.CustomerAccountProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="affiliate_partnerships", help_text="Optional shopper account profile for customer advocates")`
+    - `partner_type`: `CharField(max_length=25, choices=PARTNER_TYPE_CHOICES, default="affiliate")`
+    - `referral_code`: `CharField(max_length=50, help_text="Unique discount / promo tracking code, e.g. 'SUMMER25', 'ALICE10'")`
+    - `referral_link_slug`: `CharField(max_length=60, help_text="Unique tracking URL slug, e.g. 'alice-smith'")`
+    - `commission_type`: `CharField(max_length=25, choices=COMMISSION_TYPE_CHOICES, default="percentage_net_sales")`
+    - `commission_rate`: `DecimalField(max_digits=6, decimal_places=2, default=Decimal("10.00"), help_text="Commission rate percentage (e.g. 10.00%) or flat dollar amount ($10.00)")`
+    - `cookie_duration_days`: `PositiveIntegerField(default=30, help_text="Referral attribution window in days")`
+    - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="pending_approval")`
+    - `payout_threshold`: `DecimalField(max_digits=10, decimal_places=2, default=Decimal("50.00"), help_text="Minimum earnings required before payout batch generation")`
+    - `payment_email`: `EmailField(blank=True, help_text="Payout PayPal / remittance email address")`
+    - `total_orders_referred`: `PositiveIntegerField(default=0)`
+    - `total_revenue_generated`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+    - `total_commission_earned`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+    - `total_commission_paid`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_eaff_tenant_num_uniq")`
+    - `UniqueConstraint(fields=["tenant", "referral_code"], name="ecommerce_eaff_code_uniq")`
+    - `UniqueConstraint(fields=["tenant", "referral_link_slug"], name="ecommerce_eaff_slug_uniq")`
+    - `Index(fields=["tenant", "status", "partner_type"], name="idx_eaff_ten_stat_type")`
+  - **Form Exclusions**: `tenant`, `number`, `total_orders_referred`, `total_revenue_generated`, `total_commission_earned`, `total_commission_paid`, `created_at`, `updated_at`.
+
+- [ ] **`AffiliateReferralConversion`** [Prefix: `EARC-`] (`apps/ecommerce/models/MarketingCampaign/AffiliateReferralConversions.py`)
+  - **Purpose**: Granular transaction ledger recording referred store orders, attribution mechanics (link click vs coupon code), computed commissions, approval status, and automatic clawback handling upon order cancellation or return.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `ATTRIBUTION_TYPE_CHOICES = [("referral_link", "Referral Tracking Link"), ("coupon_code", "Affiliate Coupon Code"), ("manual_credit", "Manual Administrative Credit")]`
+    - `STATUS_CHOICES = [("pending_review", "Pending Review"), ("approved", "Approved for Payout"), ("paid", "Paid / Remitted"), ("voided_refund", "Voided / Refund Clawback")]`
+  - **Fields**:
+    - `affiliate`: `ForeignKey("ecommerce.AffiliatePartner", on_delete=models.CASCADE, related_name="conversions", help_text="Credited affiliate partner")`
+    - `order`: `ForeignKey("ecommerce.EcommerceOrder", on_delete=models.CASCADE, related_name="affiliate_conversions", help_text="Referred store order from 9.5 OMS")`
+    - `referred_customer`: `ForeignKey("ecommerce.CustomerAccountProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="affiliate_conversions", help_text="Referred shopper profile")`
+    - `attribution_type`: `CharField(max_length=25, choices=ATTRIBUTION_TYPE_CHOICES, default="referral_link")`
+    - `order_amount`: `DecimalField(max_digits=12, decimal_places=2, help_text="Eligible net merchandise order amount")`
+    - `commission_rate_applied`: `DecimalField(max_digits=6, decimal_places=2, help_text="Historical commission rate locked at conversion time")`
+    - `commission_amount`: `DecimalField(max_digits=10, decimal_places=2, help_text="Calculated partner commission")`
+    - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="pending_review")`
+    - `payout_reference`: `CharField(max_length=100, blank=True, help_text="Remittance reference or accounting payment batch voucher ID")`
+    - `paid_at`: `DateTimeField(null=True, blank=True, help_text="Timestamp of commission disbursement")`
+    - `notes`: `TextField(blank=True, help_text="Audit notes, reason for void/rejection, or clawback details")`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_earc_tenant_num_uniq")`
+    - `UniqueConstraint(fields=["tenant", "affiliate", "order"], name="ecommerce_earc_aff_order_uniq")`
+    - `Index(fields=["tenant", "status", "created_at"], name="idx_earc_ten_stat_created")`
+  - **Form Exclusions**: `tenant`, `number`, `commission_amount`, `paid_at`, `created_at`, `updated_at`.
+
+- [ ] **`SeoMetadataRule`** [Prefix: `ESEO-`] (`apps/ecommerce/models/MarketingCampaign/SeoMetadataRules.py`)
+  - **Purpose**: Technical SEO automation rule engine configuring dynamic meta titles, meta descriptions, Schema.org JSON-LD structured data, XML sitemap indexing controls, robots directives, and SERP focus keyword tracking across categories, products, or custom storefront pages.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `RULE_TYPE_CHOICES = [("global_default", "Global Storefront Default"), ("category_template", "Category Level Dynamic Template"), ("product_template", "Product Level Dynamic Template"), ("custom_url", "Custom URL Specific Override")]`
+    - `SCHEMA_TYPE_CHOICES = [("Product", "Product (Schema.org)"), ("BreadcrumbList", "BreadcrumbList (Schema.org)"), ("Organization", "Organization (Schema.org)"), ("WebSite", "WebSite (Schema.org)"), ("FAQPage", "FAQPage (Schema.org)"), ("None", "None / Disabled")]`
+    - `ROBOTS_CHOICES = [("index_follow", "index, follow"), ("noindex_follow", "noindex, follow"), ("noindex_nofollow", "noindex, nofollow"), ("index_nofollow", "index, nofollow")]`
+    - `CHANGEFREQ_CHOICES = [("always", "always"), ("hourly", "hourly"), ("daily", "daily"), ("weekly", "weekly"), ("monthly", "monthly"), ("yearly", "yearly"), ("never", "never")]`
+  - **Fields**:
+    - `name`: `CharField(max_length=120, help_text="Administrative label, e.g. 'Footwear Category Dynamic Meta Rule'")`
+    - `rule_type`: `CharField(max_length=25, choices=RULE_TYPE_CHOICES, default="product_template")`
+    - `target_category`: `ForeignKey("ecommerce.StoreCategory", on_delete=models.SET_NULL, null=True, blank=True, related_name="seo_rules", help_text="Target category scope for category rules")`
+    - `target_product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.SET_NULL, null=True, blank=True, related_name="seo_rules", help_text="Specific product override for custom product rules")`
+    - `url_path_pattern`: `CharField(max_length=255, blank=True, help_text="URL pattern for custom pages, e.g. '/promotions/summer-sale/'")`
+    - `meta_title_template`: `CharField(max_length=200, help_text="SEO Title template supporting tokens: {product_name}, {brand}, {category}, {price}, {site_name}")`
+    - `meta_description_template`: `TextField(help_text="Meta Description template supporting dynamic variable tokens")`
+    - `json_ld_schema_type`: `CharField(max_length=30, choices=SCHEMA_TYPE_CHOICES, default="Product")`
+    - `canonical_url_override`: `URLField(blank=True, help_text="Custom canonical URL if different from request URL")`
+    - `og_title`: `CharField(max_length=200, blank=True, help_text="OpenGraph title for social media sharing")`
+    - `og_description`: `TextField(blank=True, help_text="OpenGraph description for social snippets")`
+    - `og_image_url`: `URLField(blank=True, help_text="Social preview image link")`
+    - `robots_directive`: `CharField(max_length=30, choices=ROBOTS_CHOICES, default="index_follow")`
+    - `sitemap_included`: `BooleanField(default=True, help_text="Include matching pages in dynamic XML sitemap generation")`
+    - `sitemap_priority`: `DecimalField(max_digits=3, decimal_places=2, default=Decimal("0.80"), help_text="Sitemap crawl priority from 0.00 to 1.00")`
+    - `sitemap_changefreq`: `CharField(max_length=15, choices=CHANGEFREQ_CHOICES, default="weekly")`
+    - `target_keyword`: `CharField(max_length=100, blank=True, help_text="Primary focus keyword for organic rank monitoring")`
+    - `tracked_rank_position`: `PositiveIntegerField(null=True, blank=True, help_text="Monitored search engine SERP rank position")`
+    - `rank_tracked_at`: `DateTimeField(null=True, blank=True, help_text="Timestamp of latest SERP rank check")`
+    - `is_active`: `BooleanField(default=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_eseo_tenant_num_uniq")`
+    - `Index(fields=["tenant", "is_active", "rule_type"], name="idx_eseo_ten_act_type")`
+    - `Index(fields=["tenant", "target_keyword"], name="idx_eseo_ten_keyword")`
+  - **Form Exclusions**: `tenant`, `number`, `tracked_rank_position`, `rank_tracked_at`, `created_at`, `updated_at`.
+
+---
+
+## Backend (`apps/ecommerce/{models,forms,views,urls}/MarketingCampaign/`)
+- [ ] `models/MarketingCampaign/MarketingCampaigns.py`
+- [ ] `models/MarketingCampaign/AffiliatePartners.py`
+- [ ] `models/MarketingCampaign/AffiliateReferralConversions.py`
+- [ ] `models/MarketingCampaign/SeoMetadataRules.py`
+- [ ] `models/MarketingCampaign/__init__.py`
+- [ ] `models/__init__.py` re-export update (`MarketingCampaign`, `AffiliatePartner`, `AffiliateReferralConversion`, `SeoMetadataRule`)
+- [ ] `forms/MarketingCampaign/MarketingCampaigns.py` (`MarketingCampaignForm`)
+- [ ] `forms/MarketingCampaign/AffiliatePartners.py` (`AffiliatePartnerForm`)
+- [ ] `forms/MarketingCampaign/AffiliateReferralConversions.py` (`AffiliateReferralConversionForm`)
+- [ ] `forms/MarketingCampaign/SeoMetadataRules.py` (`SeoMetadataRuleForm`)
+- [ ] `forms/MarketingCampaign/__init__.py`
+- [ ] `forms/__init__.py` re-export update
+- [ ] `views/MarketingCampaign/MarketingCampaigns.py` (CRUD + dispatch/send action)
+- [ ] `views/MarketingCampaign/AffiliatePartners.py` (CRUD + approve action)
+- [ ] `views/MarketingCampaign/AffiliateReferralConversions.py` (CRUD + approve/void actions)
+- [ ] `views/MarketingCampaign/SeoMetadataRules.py` (CRUD + toggle/preview actions)
+- [ ] `views/MarketingCampaign/MarketingDashboards.py` (marketing overview hub + XML/JSON social catalog feed syndication)
+- [ ] `views/MarketingCampaign/__init__.py`
+- [ ] `views/__init__.py` re-export update
+- [ ] `urls/MarketingCampaign/MarketingCampaigns.py`
+- [ ] `urls/MarketingCampaign/AffiliatePartners.py`
+- [ ] `urls/MarketingCampaign/AffiliateReferralConversions.py`
+- [ ] `urls/MarketingCampaign/SeoMetadataRules.py`
+- [ ] `urls/MarketingCampaign/MarketingDashboards.py`
+- [ ] `urls/MarketingCampaign/__init__.py`
+- [ ] `urls/__init__.py` re-export update
+- [ ] `admin.py` model registrations for all 4 models
+- [ ] `migrations/0012_*.py`
+- [ ] `management/commands/seed_ecommerce.py` idempotent data expansion (campaigns, affiliates, conversions, SEO rules)
+
+---
+
+## Wire-up
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["9.10"]` entry:
+  - `"Email Marketing Automation"`: `"ecommerce:marketingcampaign_list?channel=email"`
+  - `"SMS & Push Notification"`: `"ecommerce:marketingcampaign_list?channel=sms"`
+  - `"Affiliate & Referral Programs"`: `"ecommerce:affiliatepartner_list"`
+  - `"Social Commerce Integration"`: `"ecommerce:marketing_dashboard?tab=social"`
+  - `"SEO & Organic Traffic Tools"`: `"ecommerce:seometadatarule_list"`
+  - Extra live leaves:
+    - `"Marketing Dashboard"`: `"ecommerce:marketing_dashboard"`
+    - `"Marketing Campaigns"`: `"ecommerce:marketingcampaign_list"`
+    - `"Affiliate Partners"`: `"ecommerce:affiliatepartner_list"`
+    - `"Referral Conversions"`: `"ecommerce:affiliatereferralconversion_list"`
+    - `"SEO Metadata Rules"`: `"ecommerce:seometadatarule_list"`
+    - `"Social Catalog Feed"`: `"ecommerce:social_commerce_feed"`
+
+---
+
+## Templates (`templates/ecommerce/marketing_campaign/`)
+- [ ] `templates/ecommerce/marketing_campaign/campaign/list.html` (filters: channel, status, campaign_type, search, badges, pagination)
+- [ ] `templates/ecommerce/marketing_campaign/campaign/detail.html` (campaign header, deliverability metrics, audience segment, product preview, dispatch actions)
+- [ ] `templates/ecommerce/marketing_campaign/campaign/form.html` (responsive form with token helpers, channel tabs, audience segment picker)
+- [ ] `templates/ecommerce/marketing_campaign/affiliate/list.html` (filters: partner_type, status, search, commission rate, referral codes)
+- [ ] `templates/ecommerce/marketing_campaign/affiliate/detail.html` (partner profile, Party info, referred revenue KPIs, active coupon link, conversions sub-table)
+- [ ] `templates/ecommerce/marketing_campaign/affiliate/form.html` (form for partner onboarding, party selection, commission configuration)
+- [ ] `templates/ecommerce/marketing_campaign/conversion/list.html` (filters: status, attribution_type, date range, search)
+- [ ] `templates/ecommerce/marketing_campaign/conversion/detail.html` (order details, commission calculations, payout reference, approval/void actions)
+- [ ] `templates/ecommerce/marketing_campaign/conversion/form.html` (form for manual attribution / commission adjustment)
+- [ ] `templates/ecommerce/marketing_campaign/seo_rule/list.html` (filters: rule_type, is_active, search)
+- [ ] `templates/ecommerce/marketing_campaign/seo_rule/detail.html` (dynamic token preview, JSON-LD schema snippet, robots & sitemap settings, SERP rank tracking)
+- [ ] `templates/ecommerce/marketing_campaign/seo_rule/form.html` (rule editor with token cheat-sheet, Schema.org selector, target category/product pickers)
+- [ ] `templates/ecommerce/marketing_campaign/dashboard/dashboard.html` (marketing hub: omnichannel campaign health, email/SMS open & click KPIs, affiliate revenue leaderboard, SEO indexation overview, social catalog feed sync widget)
+
+---
+
+## Verify
+- [ ] `makemigrations ecommerce` (generates `0012_*.py`)
+- [ ] `migrate`
+- [ ] `seed_ecommerce` run 1
+- [ ] `seed_ecommerce` run 2 (idempotency check)
+- [ ] `manage.py check` clean (0 issues)
+- [ ] `temp/smoke_9_10.py` test sweep as `admin_acme` / `password`:
+  - All new endpoints return 200/302
+  - No `{#` / `{% comment` syntax leaks
+  - Seeded records and page titles present
+  - Cross-tenant IDOR check returns 404
+- [ ] Sidebar 9.10 shows Live (all 5 NavERP.md bullets live)
+
+---
+
+## Close-out
+- [ ] Phase 4 Review agents (code-reviewer -> explorer -> frontend-reviewer -> performance-reviewer -> qa-smoke-tester -> security-reviewer)
+- [ ] Phase 5 Code-fixer agent
+- [ ] Phase 6 Tests (models, forms, views, security) green unfiltered
+- [ ] Phase 7 Update `.claude/skills/ecommerce/SKILL.md` + `README.md`
+
+---
+
+## Later passes / deferred
+- Outbound SMTP / SES / SendGrid transmission worker daemons
+- Cellular SMS gateway connectors (Twilio / Sinch / Telnyx)
+- Mobile push network daemons (WebSocket, APNs, FCM)
+- Live Meta Graph API & TikTok Shop bidirectional webhook sync (in-app checkout deferred to 9.11)
+- Automated headless browser SERP scraper crawler for live search rank position updates
+- Automated PayPal / Wise mass payout API integration (commissions recorded here, posted to Module 2 ledger)
+
+---
+
+## Review notes
+(filled in at the end)
+
+---
+
+
 # Sub-module 9.11: Marketplace & Multi-Vendor (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.11.md` (2026-10-31)
 
 > **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.8.
