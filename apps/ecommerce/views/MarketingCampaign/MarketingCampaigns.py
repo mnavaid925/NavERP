@@ -158,8 +158,8 @@ def marketingcampaign_send(request, pk):
         campaign = get_object_or_404(
             MarketingCampaign.objects.select_for_update(), pk=pk, tenant=request.tenant
         )
-        if campaign.status in ("sent", "sending"):
-            messages.warning(request, f"Campaign '{campaign.name}' has already been dispatched.")
+        if campaign.status not in ("draft", "scheduled"):
+            messages.warning(request, f"Campaign '{campaign.name}' cannot be dispatched from {campaign.get_status_display()} status.")
             return redirect("ecommerce:marketingcampaign_detail", pk=campaign.pk)
 
         # Compute audience dispatch numbers
