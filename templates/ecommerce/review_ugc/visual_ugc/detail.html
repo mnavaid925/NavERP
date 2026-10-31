@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}UGC Asset {{ media_item.number }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:visualugcmedia_list' %}">Visual UGC</a>
+            <span>/</span>
+            <span>{{ media_item.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ media_item.number }}</h1>
+            {% if media_item.rights_status == "approved" %}
+            <span class="badge badge-green">Rights Approved</span>
+            {% elif media_item.rights_status == "pending_request" %}
+            <span class="badge badge-amber">Rights Requested</span>
+            {% else %}
+            <span class="badge badge-red">Rights Rejected</span>
+            {% endif %}
+
+            {% if media_item.is_published %}
+            <span class="badge badge-green">Published</span>
+            {% else %}
+            <span class="badge badge-muted">Draft / Unpublished</span>
+            {% endif %}
+
+            {% if media_item.is_shoppable %}
+            <span class="badge badge-info">Shoppable Tagged</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'ecommerce:visualugcmedia_edit' media_item.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Asset
+        </a>
+        <form action="{% url 'ecommerce:visualugcmedia_delete' media_item.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete UGC asset {{ media_item.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Media Preview & Content -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card overflow-hidden">
+            <div class="bg-slate-900 flex items-center justify-center min-h-[350px] max-h-[500px] overflow-hidden">
+                {% if media_item.media_type == "video" %}
+                <video src="{{ media_item.media_url }}" poster="{{ media_item.thumbnail_url }}" controls class="max-h-[500px] w-auto mx-auto"></video>
+                {% else %}
+                <img src="{{ media_item.media_url }}" alt="{{ media_item.caption|default:media_item.tagged_product.name }}" class="max-h-[500px] w-auto object-contain mx-auto">
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if media_item.caption %}
+                <p class="text-slate-800 text-base leading-relaxed mb-4 font-medium">{{ media_item.caption }}</p>
+                {% endif %}
+                <div class="flex items-center gap-4 text-xs text-muted pt-3 border-t border-slate-100">
+                    <span>Source Type: <strong class="text-slate-700 capitalize">{{ media_item.get_media_type_display }}</strong></span>
+                    <span>Views: <strong class="text-slate-700">{{ media_item.views_count }}</strong></span>
+                    <span>Clicks: <strong class="text-slate-700">{{ media_item.clicks_count }}</strong></span>
+                    <span>Display Order: <strong class="text-slate-700">{{ media_item.display_order }}</strong></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Tagged Product & Uploader Info -->
+    <div class="space-y-6">
+        <!-- Tagged Product Context -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-bold text-slate-900">Tagged Catalog Product</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-muted block text-xs">Shoppable Product</span>
+                    <a href="{% url 'ecommerce:catalogproduct_detail' media_item.tagged_product.pk %}" class="font-semibold text-brand hover:underline">
+                        {{ media_item.tagged_product.name }}
+                    </a>
+                    <div class="text-xs text-muted font-mono mt-0.5">{{ media_item.tagged_product.number }}</div>
+                </div>
+
+                {% if media_item.tagged_variant %}
+                <div>
+                    <span class="text-muted block text-xs">Tagged Variant</span>
+                    <span class="font-medium text-slate-800">{{ media_item.tagged_variant.name }}</span>
+                    <span class="text-xs text-muted font-mono">({{ media_item.tagged_variant.sku }})</span>
+                </div>
+                {% endif %}
+
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-muted block text-xs">Direct Media Link</span>
+                    <a href="{{ media_item.media_url }}" target="_blank" rel="noopener noreferrer" class="text-xs text-brand hover:underline break-all">
+                        {{ media_item.media_url }}
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Uploader Context -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-bold text-slate-900">Uploader & Social Credit</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-muted block text-xs">Creator / Uploader</span>
+                    <span class="font-medium text-slate-800">{{ media_item.uploader_name|default:"Anonymous Customer" }}</span>
+                </div>
+                {% if media_item.uploader_handle %}
+                <div>
+                    <span class="text-muted block text-xs">Social Handle</span>
+                    <span class="font-medium text-brand font-mono">{{ media_item.uploader_handle }}</span>
+                </div>
+                {% endif %}
+                <div class="pt-2 border-t border-slate-100 flex justify-between text-xs text-muted">
+                    <span>Created: {{ media_item.created_at|date:"M d, Y" }}</span>
+                    <span>Updated: {{ media_item.updated_at|date:"M d, Y" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
