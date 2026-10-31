@@ -170,7 +170,7 @@
             <div>
               <div class="text-xs font-medium text-slate-500 uppercase">Target Catalog Product</div>
               <div class="font-medium text-slate-800 mt-0.5">
-                <a href="{% url 'ecommerce:product_detail' campaign.target_product.pk %}" class="text-blue-600 hover:underline inline-flex items-center gap-1">
+                <a href="{% url 'ecommerce:catalogproduct_detail' campaign.target_product.pk %}" class="text-blue-600 hover:underline inline-flex items-center gap-1">
                   <i data-lucide="package" class="w-3.5 h-3.5"></i>
                   {{ campaign.target_product.name }}
                 </a>
