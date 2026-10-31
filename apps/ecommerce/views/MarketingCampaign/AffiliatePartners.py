@@ -1,8 +1,9 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from apps.core.decorators import tenant_admin_required
@@ -150,15 +151,28 @@ def affiliatepartner_delete(request, pk):
 @tenant_admin_required
 @require_POST
 def affiliatepartner_approve(request, pk):
-    partner = ecommerce_object(request, AffiliatePartner, pk)
-    partner.status = "active"
-    partner.save()
-    write_audit_log(
-        request.user,
-        partner,
-        "approve",
-        changes={"number": partner.number, "name": partner.name},
-        tenant=request.tenant,
-    )
+    with transaction.atomic():
+        partner = get_object_or_404(
+            AffiliatePartner.objects.select_for_update(), pk=pk, tenant=request.tenant
+        )
+        if partner.status == "active":
+            messages.info(request, f"Affiliate partner '{partner.name}' is already active.")
+            return redirect("ecommerce:affiliatepartner_detail", pk=partner.pk)
+        if partner.status != "pending_approval":
+            messages.warning(
+                request,
+                f"Affiliate partner '{partner.name}' cannot be approved from status '{partner.get_status_display()}'.",
+            )
+            return redirect("ecommerce:affiliatepartner_detail", pk=partner.pk)
+
+        partner.status = "active"
+        partner.save()
+        write_audit_log(
+            request.user,
+            partner,
+            "approve",
+            changes={"number": partner.number, "name": partner.name},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Affiliate partner '{partner.name}' has been approved and activated.")
     return redirect("ecommerce:affiliatepartner_detail", pk=partner.pk)
