@@ -30,8 +30,7 @@ Reviewers executed serially:
 - [x] **[I5]** `apps/ecommerce/views/SubscriptionCommerce/CustomerSubscriptions.py:18-20`, `SubscriptionPortals.py:19-21`, `SubscriptionPlans.py:66` — fixed — added chained customer_profile relations to select_related across views
 - [x] **[I6]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:23-24` — fixed — sliced active and paused subscription display querysets to [:25]
 - [x] **[I7]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:46,83,118,138` — fixed — added tenant_admin_required to skip, pause, resume, and deflect portal actions
-- [ ] **[I8]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:48,85,120,140` — Lack of prerequisite lifecycle state guards allows modifying or reviving cancelled/expired subscriptions.
-  - **Fix**: Guard state transitions in views: `skip`, `pause`, and `deflect` require `status == 'active'`; `resume` requires `status == 'paused'`.
+- [x] **[I8]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:48,85,120,140` — fixed — guarded lifecycle state transitions (active required for skip/pause/deflect; paused required for resume)
 - [ ] **[I9]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:141-168` — Unvalidated `reason` (causes MariaDB `DataError` if > 50 chars) and unsafe default fallthrough on `action_choice`.
   - **Fix**: Validate `action_choice` in `{"discount_cycle", "pause_duration", "cancel_anyway"}` and validate `reason` against `SubscriptionRetentionAction.REASON_CHOICES`.
 - [ ] **[I10]** `apps/ecommerce/models/SubscriptionCommerce/CustomerSubscriptions.py:148` & `apps/ecommerce/forms/SubscriptionCommerce/CustomerSubscriptions.py:85` — Cross-record integrity: `variant` is not validated to belong to the selected `product`.
