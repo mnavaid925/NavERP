@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Sum
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -44,6 +45,7 @@ def subscription_portal(request):
 
 @login_required
 @require_POST
+@transaction.atomic
 def subscription_portal_skip(request, pk):
     subscription = ecommerce_object(request, CustomerSubscription, pk)
     if not subscription.plan.allow_skip:
@@ -81,6 +83,7 @@ def subscription_portal_skip(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def subscription_portal_pause(request, pk):
     subscription = ecommerce_object(request, CustomerSubscription, pk)
     if not subscription.plan.allow_pause:
@@ -116,6 +119,7 @@ def subscription_portal_pause(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def subscription_portal_resume(request, pk):
     subscription = ecommerce_object(request, CustomerSubscription, pk)
     subscription.status = "active"
@@ -136,6 +140,7 @@ def subscription_portal_resume(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def subscription_portal_deflect(request, pk):
     subscription = ecommerce_object(request, CustomerSubscription, pk)
     reason = request.POST.get("reason", "too_much_product")
