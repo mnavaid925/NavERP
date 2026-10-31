@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 from django import forms
 
 from apps.ecommerce.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -56,6 +58,22 @@ class VisualUgcMediaForm(TenantUniqueMixin, TenantModelForm):
             self.fields["tagged_product"].queryset = CatalogProduct.objects.filter(tenant=self.tenant)
             self.fields["tagged_variant"].queryset = ProductVariant.objects.filter(tenant=self.tenant)
         self.fields["tagged_variant"].required = False
+
+    def clean_media_url(self):
+        url = (self.cleaned_data.get("media_url") or "").strip()
+        if url:
+            scheme = urlparse(url).scheme.lower()
+            if scheme not in ("http", "https"):
+                raise forms.ValidationError("Only HTTP and HTTPS URL schemes are permitted.")
+        return url
+
+    def clean_thumbnail_url(self):
+        url = (self.cleaned_data.get("thumbnail_url") or "").strip()
+        if url:
+            scheme = urlparse(url).scheme.lower()
+            if scheme not in ("http", "https"):
+                raise forms.ValidationError("Only HTTP and HTTPS URL schemes are permitted.")
+        return url
 
     def clean(self):
         cleaned = super().clean()
