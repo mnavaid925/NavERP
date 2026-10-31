@@ -192,6 +192,14 @@ class MarketingCampaign(TenantNumbered):
                 fields=["tenant", "scheduled_at"],
                 name="idx_emcp_ten_sched_at",
             ),
+            models.Index(
+                fields=["tenant", "target_segment"],
+                name="idx_emcp_ten_segment",
+            ),
+            models.Index(
+                fields=["tenant", "target_product"],
+                name="idx_emcp_ten_product",
+            ),
         ]
 
     def __str__(self):
