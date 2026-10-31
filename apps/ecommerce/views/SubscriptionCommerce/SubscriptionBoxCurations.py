@@ -65,7 +65,7 @@ def subscriptionboxcuration_list(request):
 
 @login_required
 def subscriptionboxcuration_detail(request, pk):
-    curation = ecommerce_object(request, SubscriptionBoxCuration, pk)
+    curation = ecommerce_object(request, SubscriptionBoxCuration, pk, select_related=["plan", "primary_product"])
 
     context = {
         "curation": curation,
