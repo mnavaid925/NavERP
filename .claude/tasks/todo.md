@@ -8,6 +8,236 @@
 > Do not mass-tick the backlog.
 ---
 
+# Sub-module 9.12: Subscription & Recurring Commerce (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.12.md` (2026-10-31)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.8.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0011_audiencesegment_personalizedexperience_and_more.py`, so **9.12 claims `0012`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.12.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/SubscriptionCommerce/`
+> Template folder name: `templates/ecommerce/subscriptioncommerce/{subscriptionplan,customersubscription,subscriptionboxcuration,subscriptionretentionaction,portal}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Catalog & Spine Integration (L36/L37)**: Subscriptions attach directly to canonical `ecommerce.CatalogProduct` (`EPRD-`, 9.1) and `ecommerce.ProductVariant` (`PVR-`, 9.1). Customer subscriptions link to `ecommerce.CustomerAccountProfile` (`ECAP-`, 9.6) and Core Spine `core.Party` / `accounts.User`. Recurring order billing generates canonical `ecommerce.EcommerceOrder` (`EORD-`, 9.5). Financial postings link to `apps/accounting` (`accounting.Invoice`, `accounting.Payment`).
+- **Clear Sibling Boundaries (9.4 vs. 9.5 vs. 9.6 vs. 9.8 vs. 9.12)**:
+  - 9.4 owns one-off cart checkout and payment session tokens.
+  - 9.5 owns warehouse fulfillment, split shipping, and returns/RMAs.
+  - 9.6 owns customer address books and profile credentials.
+  - 9.8 owns behavioral tracking and product recommendations.
+  - 9.12 owns recurring billing schedules, frequency rules, subscriber self-service controls (pause/skip/swap), curated box assortments, and churn deflection interception.
+- **Multi-Tenancy & Isolation**: All subscription plans, customer contracts, box curations, and retention logs are strictly partitioned by `tenant` (`core.Tenant`).
+- **Base Class & Prefix Discipline**: All 4 models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`), providing `tenant` FK (`on_delete=CASCADE`), thread-safe auto-number generation, and timestamps.
+- **Prefix Collision Sweep**: `ESPL`, `ESUB`, `ESBX`, `ESRT` verified 100% free across repo.
+
+---
+
+## 9.12-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO duplicate product or order line table** — Subscriptions link to `ecommerce.CatalogProduct`, `ecommerce.ProductVariant`, and billing creates `ecommerce.EcommerceOrder`.
+- [ ] **NO raw credit card PAN / CVV persistence** — Card tokens and gateway payment references are stored as opaque string tokens (`payment_method_ref`).
+- [ ] **NO external proprietary SaaS subscription dependency** — All recurring cadence logic, pause/skip/swap, dunning counters, and deflection flows execute natively within Django.
+- [ ] **NO third-party machine learning server required** — Heuristic and rule-based churn scoring operates directly within standard ORM calculations.
+
+---
+
+## Models (4 models in `apps/ecommerce/models/SubscriptionCommerce/`)
+
+- [ ] **`SubscriptionPlan`** [Prefix: `ESPL-`] (`apps/ecommerce/models/SubscriptionCommerce/SubscriptionPlans.py`)
+  - **Purpose**: Defines reusable subscription rules, billing frequencies, discount incentives, trial periods, and commitment terms.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `PLAN_TYPE_CHOICES = [("subscribe_save", "Subscribe & Save (Consumable)"), ("curated_box", "Curated Assortment Box"), ("membership_club", "Membership Club")]`
+    - `FREQUENCY_CHOICES = [("weekly", "Weekly"), ("biweekly", "Bi-Weekly (Every 2 Weeks)"), ("monthly", "Monthly"), ("bimonthly", "Bi-Monthly (Every 2 Months)"), ("quarterly", "Quarterly (Every 3 Months)"), ("annual", "Annual")]`
+    - `DISCOUNT_TYPE_CHOICES = [("percentage", "Percentage Discount"), ("fixed_amount", "Fixed Price Discount"), ("none", "No Recurring Discount")]`
+  - **Fields**:
+    - `name`: `CharField(max_length=150, help_text="Plan administrative title")`
+    - `code`: `SlugField(max_length=60, help_text="Unique slug code identifier")`
+    - `plan_type`: `CharField(max_length=30, choices=PLAN_TYPE_CHOICES, default="subscribe_save")`
+    - `frequency`: `CharField(max_length=20, choices=FREQUENCY_CHOICES, default="monthly")`
+    - `interval_count`: `PositiveIntegerField(default=1, help_text="Cadence multiplier (e.g. every 2 weeks or 3 months)")`
+    - `discount_type`: `CharField(max_length=20, choices=DISCOUNT_TYPE_CHOICES, default="percentage")`
+    - `discount_value`: `DecimalField(max_digits=10, decimal_places=2, default=0.00)`
+    - `trial_period_days`: `PositiveIntegerField(default=0, help_text="Free trial duration in days")`
+    - `min_commitment_cycles`: `PositiveIntegerField(default=1, help_text="Minimum billing cycles before cancellation permitted")`
+    - `allow_pause`: `BooleanField(default=True)`
+    - `allow_skip`: `BooleanField(default=True)`
+    - `allow_swap`: `BooleanField(default=True)`
+    - `max_pause_days`: `PositiveIntegerField(default=90, help_text="Max allowed pause duration in days")`
+    - `target_product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.SET_NULL, null=True, blank=True, related_name="subscription_plans")`
+    - `is_active`: `BooleanField(default=True)`
+    - `description`: `TextField(blank=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_espl_tenant_num_uniq")`
+    - `UniqueConstraint(fields=["tenant", "code"], name="ecommerce_espl_code_uniq")`
+    - `Index(fields=["tenant", "is_active", "plan_type"], name="idx_espl_ten_act_type")`
+  - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
+
+- [ ] **`CustomerSubscription`** [Prefix: `ESUB-`] (`apps/ecommerce/models/SubscriptionCommerce/CustomerSubscriptions.py`)
+  - **Purpose**: Represents an active customer subscription contract, tracking lifecycle status, billing dates, and fulfillment cycles.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `STATUS_CHOICES = [("trialing", "Trialing"), ("active", "Active"), ("paused", "Paused"), ("past_due", "Past Due (In Dunning)"), ("pending_cancellation", "Pending Cancellation"), ("cancelled", "Cancelled"), ("expired", "Expired")]`
+  - **Fields**:
+    - `customer_profile`: `ForeignKey("ecommerce.CustomerAccountProfile", on_delete=models.CASCADE, related_name="subscriptions")`
+    - `plan`: `ForeignKey("ecommerce.SubscriptionPlan", on_delete=models.PROTECT, related_name="subscriptions")`
+    - `product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.PROTECT, related_name="subscriptions")`
+    - `variant`: `ForeignKey("ecommerce.ProductVariant", on_delete=models.SET_NULL, null=True, blank=True, related_name="subscriptions")`
+    - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="active")`
+    - `quantity`: `PositiveIntegerField(default=1)`
+    - `unit_price`: `DecimalField(max_digits=12, decimal_places=2, default=0.00)`
+    - `recurring_discount_pct`: `DecimalField(max_digits=5, decimal_places=2, default=0.00)`
+    - `started_at`: `DateTimeField(default=timezone.now)`
+    - `next_billing_date`: `DateField()`
+    - `next_delivery_date`: `DateField(null=True, blank=True)`
+    - `paused_until`: `DateField(null=True, blank=True)`
+    - `completed_cycles_count`: `PositiveIntegerField(default=0)`
+    - `consecutive_successful_cycles`: `PositiveIntegerField(default=0)`
+    - `failed_payment_count`: `PositiveIntegerField(default=0)`
+    - `shipping_address_line`: `CharField(max_length=255, blank=True)`
+    - `payment_method_ref`: `CharField(max_length=100, blank=True, help_text="Gateway token or card mask")`
+    - `cancellation_reason`: `CharField(max_length=255, blank=True)`
+    - `cancelled_at`: `DateTimeField(null=True, blank=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_esub_tenant_num_uniq")`
+    - `Index(fields=["tenant", "status", "next_billing_date"], name="idx_esub_ten_stat_nbill")`
+    - `Index(fields=["tenant", "customer_profile", "status"], name="idx_esub_ten_cust_stat")`
+  - **Form Exclusions**: `tenant`, `number`, `completed_cycles_count`, `consecutive_successful_cycles`, `failed_payment_count`, `cancelled_at`, `created_at`, `updated_at`.
+
+- [ ] **`SubscriptionBoxCuration`** [Prefix: `ESBX-`] (`apps/ecommerce/models/SubscriptionCommerce/SubscriptionBoxCurations.py`)
+  - **Purpose**: Manages curated box assortments, seasonal rotation themes, customer preference profiles, and mystery/surprise inclusions.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Fields**:
+    - `name`: `CharField(max_length=150, help_text="Box cycle title e.g. 'Autumn Roast Selection'")`
+    - `code`: `SlugField(max_length=60)`
+    - `plan`: `ForeignKey("ecommerce.SubscriptionPlan", on_delete=models.CASCADE, related_name="curations")`
+    - `cycle_identifier`: `CharField(max_length=50, help_text="Cadence tag e.g. 2026-11 or Q4-2026")`
+    - `theme_title`: `CharField(max_length=200, blank=True)`
+    - `curation_notes`: `TextField(blank=True)`
+    - `primary_product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.SET_NULL, null=True, blank=True, related_name="curation_primaries")`
+    - `has_surprise_item`: `BooleanField(default=False)`
+    - `surprise_item_description`: `CharField(max_length=255, blank=True)`
+    - `preference_tag`: `CharField(max_length=100, blank=True, help_text="Preference category e.g. Dark Roast, Vegan, Sensitive Skin")`
+    - `start_date`: `DateField()`
+    - `end_date`: `DateField()`
+    - `is_active`: `BooleanField(default=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_esbx_tenant_num_uniq")`
+    - `UniqueConstraint(fields=["tenant", "plan", "cycle_identifier"], name="ecommerce_esbx_plan_cycle_uniq")`
+    - `Index(fields=["tenant", "is_active", "start_date", "end_date"], name="idx_esbx_ten_act_dates")`
+  - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
+
+- [ ] **`SubscriptionRetentionAction`** [Prefix: `ESRT-`] (`apps/ecommerce/models/SubscriptionCommerce/SubscriptionRetentionActions.py`)
+  - **Purpose**: Records subscriber cancellation intent, churn risk evaluation, defensive deflection offers presented, and customer retention outcomes.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `TRIGGER_TYPE_CHOICES = [("cancel_intent", "Cancellation Intent Intercept"), ("pause_request", "Pause Request"), ("dunning_involuntary", "Involuntary Dunning Decline"), ("predicted_risk", "High Churn Risk Trigger")]`
+    - `REASON_CHOICES = [("too_expensive", "Too Expensive / Cost"), ("too_much_product", "Too Much Backlog / Product"), ("poor_quality", "Product Did Not Meet Expectations"), ("temporary_break", "Temporary Break / Traveling"), ("switching_competitor", "Switching to Competitor"), ("other", "Other Reason")]`
+    - `OFFER_CHOICES = [("discount_cycle", "Discount Next N Cycles"), ("free_skip", "Free Skip Next Cycle"), ("pause_duration", "Pause for 30/60 Days"), ("product_swap", "Swap to Alternate Item"), ("bonus_perk", "Free Gift / Bonus Item"), ("none", "No Offer Presented")]`
+    - `OUTCOME_CHOICES = [("deflected", "Deflected / Retained"), ("cancelled", "Cancelled Anyway"), ("paused", "Paused Instead"), ("accepted_swap", "Accepted Product Swap"), ("pending", "Pending / In Progress")]`
+  - **Fields**:
+    - `subscription`: `ForeignKey("ecommerce.CustomerSubscription", on_delete=models.CASCADE, related_name="retention_actions")`
+    - `customer_profile`: `ForeignKey("ecommerce.CustomerAccountProfile", on_delete=models.CASCADE, related_name="retention_actions")`
+    - `trigger_type`: `CharField(max_length=30, choices=TRIGGER_TYPE_CHOICES, default="cancel_intent")`
+    - `cancellation_reason`: `CharField(max_length=50, choices=REASON_CHOICES, default="too_much_product")`
+    - `churn_risk_score`: `DecimalField(max_digits=5, decimal_places=2, default=0.00, help_text="Calculated risk score 0.00 - 100.00")`
+    - `offered_action`: `CharField(max_length=30, choices=OFFER_CHOICES, default="discount_cycle")`
+    - `offer_discount_pct`: `DecimalField(max_digits=5, decimal_places=2, default=0.00)`
+    - `outcome`: `CharField(max_length=30, choices=OUTCOME_CHOICES, default="pending")`
+    - `notes`: `TextField(blank=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_esrt_tenant_num_uniq")`
+    - `Index(fields=["tenant", "outcome", "trigger_type"], name="idx_esrt_ten_outc_trig")`
+    - `Index(fields=["tenant", "subscription", "created_at"], name="idx_esrt_ten_sub_created")`
+  - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
+
+---
+
+## Backend (`apps/ecommerce/{models,forms,views,urls}/SubscriptionCommerce/`)
+- [ ] `models/SubscriptionCommerce/SubscriptionPlans.py`
+- [ ] `models/SubscriptionCommerce/CustomerSubscriptions.py`
+- [ ] `models/SubscriptionCommerce/SubscriptionBoxCurations.py`
+- [ ] `models/SubscriptionCommerce/SubscriptionRetentionActions.py`
+- [ ] `models/SubscriptionCommerce/__init__.py`
+- [ ] `models/__init__.py` re-export update
+- [ ] `forms/SubscriptionCommerce/SubscriptionPlans.py`
+- [ ] `forms/SubscriptionCommerce/CustomerSubscriptions.py`
+- [ ] `forms/SubscriptionCommerce/SubscriptionBoxCurations.py`
+- [ ] `forms/SubscriptionCommerce/SubscriptionRetentionActions.py`
+- [ ] `forms/SubscriptionCommerce/__init__.py`
+- [ ] `forms/__init__.py` re-export update
+- [ ] `views/SubscriptionCommerce/SubscriptionPlans.py`
+- [ ] `views/SubscriptionCommerce/CustomerSubscriptions.py`
+- [ ] `views/SubscriptionCommerce/SubscriptionBoxCurations.py`
+- [ ] `views/SubscriptionCommerce/SubscriptionRetentionActions.py`
+- [ ] `views/SubscriptionCommerce/SubscriptionPortals.py` (Self-Service Subscriber Portal & Deflection Flow)
+- [ ] `views/SubscriptionCommerce/__init__.py`
+- [ ] `views/__init__.py` re-export update
+- [ ] `urls/SubscriptionCommerce/SubscriptionPlans.py`
+- [ ] `urls/SubscriptionCommerce/CustomerSubscriptions.py`
+- [ ] `urls/SubscriptionCommerce/SubscriptionBoxCurations.py`
+- [ ] `urls/SubscriptionCommerce/SubscriptionRetentionActions.py`
+- [ ] `urls/SubscriptionCommerce/SubscriptionPortals.py`
+- [ ] `urls/SubscriptionCommerce/__init__.py`
+- [ ] `urls/__init__.py` re-export update
+- [ ] `admin.py` model registrations
+- [ ] `migrations/0012_*.py`
+- [ ] `management/commands/seed_ecommerce.py` idempotent data expansion
+
+---
+
+## Wire-up
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["9.12"]` entry:
+  - `"Subscription Plan Design"`: `"ecommerce:subscriptionplan_list"`
+  - `"Recurring Billing & Invoicing"`: `"ecommerce:customersubscription_list"`
+  - `"Subscription Self-Service Portal"`: `"ecommerce:subscription_portal"`
+  - `"Subscription Box & Curation"`: `"ecommerce:subscriptionboxcuration_list"`
+  - `"Churn Prediction & Retention"`: `"ecommerce:subscriptionretentionaction_list"`
+
+---
+
+## Templates (`templates/ecommerce/subscriptioncommerce/`)
+- [ ] `templates/ecommerce/subscriptioncommerce/subscriptionplan/{list,detail,form}.html`
+- [ ] `templates/ecommerce/subscriptioncommerce/customersubscription/{list,detail,form}.html`
+- [ ] `templates/ecommerce/subscriptioncommerce/subscriptionboxcuration/{list,detail,form}.html`
+- [ ] `templates/ecommerce/subscriptioncommerce/subscriptionretentionaction/{list,detail,form}.html`
+- [ ] `templates/ecommerce/subscriptioncommerce/portal/portal.html`
+
+---
+
+## Verify
+- [ ] `makemigrations ecommerce`
+- [ ] `migrate`
+- [ ] `seed_ecommerce` run 1
+- [ ] `seed_ecommerce` run 2 (idempotency check)
+- [ ] `manage.py check` clean
+- [ ] `temp/smoke_9_12.py` as admin_acme/password:
+  - All 13 new endpoints return 200/302
+  - No `{#` / `{% comment` syntax leaks
+  - Seeded records and page titles present
+  - Cross-tenant IDOR check returns 404
+- [ ] Sidebar 9.12 shows Live
+
+---
+
+## Close-out
+- [ ] Phase 4 Review agents (code-reviewer -> explorer -> frontend-reviewer -> performance-reviewer -> qa-smoke-tester -> security-reviewer)
+- [ ] Phase 5 Code-fixer agent
+- [ ] Phase 6 Tests (models, forms, views, security) green unfiltered
+- [ ] Phase 7 Update `.claude/skills/ecommerce/SKILL.md` + `README.md`
+
+---
+
+## Later passes / deferred
+- Machine-learning real-time churn prediction neural model
+- Automated Adyen/Stripe Account Updater webhooks
+- Physical barcode packing station integration for customized box builds
+
+---
+
+## Review notes
+(filled in at the end)
+
+---
+
 # Sub-module 9.8: Personalization & Recommendation Engine (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.8.md` (2026-10-30)
 
 > **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.7.
