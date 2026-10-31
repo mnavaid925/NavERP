@@ -60,7 +60,7 @@ class AffiliatePartnerForm(TenantUniqueMixin, TenantModelForm):
             self.fields["customer_profile"].queryset = (
                 CustomerAccountProfile.objects.filter(tenant=self.tenant)
                 .select_related("customer")
-                .order_by("user__username")
+                .order_by("customer__name")
             )
 
     def clean(self):
