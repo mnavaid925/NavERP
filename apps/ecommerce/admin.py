@@ -32,6 +32,10 @@ from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacet
 from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
 from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
 from apps.ecommerce.models.SearchDiscovery.SearchSynonyms import SearchSynonym
+from apps.ecommerce.models.SubscriptionCommerce.CustomerSubscriptions import CustomerSubscription
+from apps.ecommerce.models.SubscriptionCommerce.SubscriptionBoxCurations import SubscriptionBoxCuration
+from apps.ecommerce.models.SubscriptionCommerce.SubscriptionPlans import SubscriptionPlan
+from apps.ecommerce.models.SubscriptionCommerce.SubscriptionRetentionActions import SubscriptionRetentionAction
 
 
 @admin.register(StoreCategory)
@@ -336,6 +340,43 @@ class ShopperBehaviorEventAdmin(admin.ModelAdmin):
     search_fields = ["number", "session_key", "referrer_url", "product__name"]
     list_select_related = ["product", "category", "customer_profile", "party", "user"]
     ordering = ["-created_at"]
+
+
+@admin.register(SubscriptionPlan)
+class SubscriptionPlanAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "code", "plan_type", "frequency", "discount_type", "discount_value", "is_active"]
+    list_filter = ["plan_type", "frequency", "discount_type", "is_active", "tenant"]
+    search_fields = ["number", "name", "code", "description"]
+    list_select_related = ["target_product"]
+    ordering = ["name"]
+
+
+@admin.register(CustomerSubscription)
+class CustomerSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ["number", "customer_profile", "plan", "product", "status", "next_billing_date", "completed_cycles_count"]
+    list_filter = ["status", "plan", "tenant"]
+    search_fields = ["number", "customer_profile__customer_name", "customer_profile__email", "product__name"]
+    list_select_related = ["customer_profile", "plan", "product", "variant"]
+    ordering = ["-started_at"]
+
+
+@admin.register(SubscriptionBoxCuration)
+class SubscriptionBoxCurationAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "cycle_identifier", "plan", "primary_product", "has_surprise_item", "start_date", "end_date", "is_active"]
+    list_filter = ["is_active", "has_surprise_item", "plan", "tenant"]
+    search_fields = ["number", "name", "code", "cycle_identifier", "theme_title", "preference_tag"]
+    list_select_related = ["plan", "primary_product"]
+    ordering = ["-start_date"]
+
+
+@admin.register(SubscriptionRetentionAction)
+class SubscriptionRetentionActionAdmin(admin.ModelAdmin):
+    list_display = ["number", "subscription", "trigger_type", "cancellation_reason", "offered_action", "outcome", "churn_risk_score", "created_at"]
+    list_filter = ["trigger_type", "outcome", "cancellation_reason", "tenant"]
+    search_fields = ["number", "subscription__number", "customer_profile__email", "notes"]
+    list_select_related = ["subscription", "customer_profile"]
+    ordering = ["-created_at"]
+
 
 
 
