@@ -11,6 +11,10 @@ from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPoli
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
 from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
+from apps.ecommerce.models.Marketplace.MarketplaceVendors import MarketplaceVendor
+from apps.ecommerce.models.Marketplace.VendorPayouts import VendorPayout
+from apps.ecommerce.models.Marketplace.VendorProductListings import VendorProductListing
+from apps.ecommerce.models.Marketplace.VendorSubOrders import VendorSubOrder
 from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder, EcommerceOrderLine
 from apps.ecommerce.models.OrderManagement.OrderFulfillments import OrderFulfillment
 from apps.ecommerce.models.OrderManagement.OrderRoutingRules import OrderRoutingRule
@@ -82,6 +86,11 @@ __all__ = [
     "RecommendationStrategy",
     "PersonalizedExperience",
     "ShopperBehaviorEvent",
+    # 9.11 Marketplace & Multi-Vendor
+    "MarketplaceVendor",
+    "VendorProductListing",
+    "VendorSubOrder",
+    "VendorPayout",
     # 9.12 Subscription & Recurring Commerce
     "SubscriptionPlan",
     "CustomerSubscription",
