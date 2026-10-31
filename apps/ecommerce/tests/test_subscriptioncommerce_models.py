@@ -20,8 +20,9 @@ class TestSubscriptionCommerceModels:
             code="weekly-coffee",
             plan_type="subscribe_save",
             frequency="weekly",
-            billing_interval_days=7,
-            discount_percentage=Decimal("15.00"),
+            interval_count=1,
+            discount_type="percentage",
+            discount_value=Decimal("15.00"),
             target_product=ecom_product_a,
         )
         assert plan.number.startswith("ESPL-")
@@ -32,7 +33,8 @@ class TestSubscriptionCommerceModels:
         plan = SubscriptionPlan(
             tenant=tenant_a,
             name="Invalid Discount Plan",
-            discount_percentage=Decimal("150.00"),  # > 100
+            discount_type="percentage",
+            discount_value=Decimal("150.00"),  # > 100
         )
         with pytest.raises(ValidationError):
             plan.clean()
