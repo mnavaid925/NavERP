@@ -42,8 +42,7 @@ Reviewers executed serially:
 - [x] **[M2]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionBoxCurations.py:48` & `apps/ecommerce/forms/SubscriptionCommerce/SubscriptionBoxCurations.py:73` — fixed — filtered plan queryset in view and form to curated_box archetype per contract
 - [x] **[M3]** `templates/ecommerce/subscriptioncommerce/portal/portal.html:133, 140-141, 154` — fixed — added aria-label/title on close button, id/for label association, and replaced text-primary with text-blue-600
 - [x] **[M4]** `templates/ecommerce/subscriptioncommerce/portal/portal.html:129-186` — fixed — moved deflection modals outside table-wrap to prevent stacking context quirks
-- [ ] **[M5]** `apps/ecommerce/forms/SubscriptionCommerce/SubscriptionRetentionActions.py:48-50` — Chained N+1 query in `subscription` form dropdown options (`CustomerSubscription.__str__` evaluates `customer_profile.customer` and `product.name`).
-  - **Fix**: Add `.select_related("customer_profile__customer", "product")` to form's `subscription` queryset.
+- [x] **[M5]** `apps/ecommerce/forms/SubscriptionCommerce/SubscriptionRetentionActions.py:48-50` — fixed — added customer_profile__customer and product to select_related in form subscription queryset
 - [ ] **[M6]** `apps/ecommerce/admin.py:367`, `385` — Missing chained relations in Django admin `list_select_related` (`CustomerSubscriptionAdmin` and `SubscriptionRetentionActionAdmin`).
   - **Fix**: Update `list_select_related` to include chained relations (`customer_profile__customer`, etc.).
 - [ ] **[M7]** `apps/ecommerce/models/SubscriptionCommerce/CustomerSubscriptions.py:130-138` — Missing compound index on `(tenant, plan, status)` in `CustomerSubscription`.
