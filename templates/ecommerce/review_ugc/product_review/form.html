@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_moderation %}
+Moderate Review {{ review.number }}
+{% elif review %}
+Edit Review {{ review.number }}
+{% else %}
+Submit Product Review
+{% endif %}
+| NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:productreview_list' %}">Reviews</a>
+            <span>/</span>
+            <span>
+                {% if is_moderation %}
+                Moderate {{ review.number }}
+                {% elif review %}
+                Edit {{ review.number }}
+                {% else %}
+                New Review
+                {% endif %}
+            </span>
+        </div>
+        <h1 class="page-title">
+            {% if is_moderation %}
+            Moderate Review: {{ review.number }}
+            {% elif review %}
+            Edit Review: {{ review.number }}
+            {% else %}
+            Create Product Review
+            {% endif %}
+        </h1>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-3 mb-4 rounded bg-red-50 text-red text-sm">
+                    {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if is_moderation %}
+                <!-- Moderation Mode Fields -->
+                <div class="space-y-4">
+                    <div class="p-4 bg-slate-50 border rounded mb-4">
+                        <div class="text-sm font-semibold text-slate-800">{{ review.product.name }}</div>
+                        <div class="text-amber-500 my-1 font-bold">
+                            {% for _ in review.star_range %}★{% endfor %}{% for _ in review.empty_star_range %}☆{% endfor %}
+                            ({{ review.rating }} Stars) - {{ review.title }}
+                        </div>
+                        <p class="text-sm text-slate-700 italic">"{{ review.body }}"</p>
+                        <div class="text-xs text-muted mt-2">— {{ review.reviewer_name }} ({{ review.reviewer_email }})</div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="{{ form.status.id_for_label }}" class="form-label">Moderation Status *</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.sentiment.id_for_label }}" class="form-label">Sentiment Classification</label>
+                            {{ form.sentiment }}
+                            {% if form.sentiment.errors %}<div class="form-error">{{ form.sentiment.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.is_featured }}
+                            <span class="form-label mb-0">Feature Spotlight (Pin to top of PDP reviews)</span>
+                        </label>
+                        {% if form.is_featured.errors %}<div class="form-error">{{ form.is_featured.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.merchant_response.id_for_label }}" class="form-label">Merchant Official Reply</label>
+                        {{ form.merchant_response }}
+                        <span class="text-xs text-muted">Public response displayed to shoppers below this review.</span>
+                        {% if form.merchant_response.errors %}<div class="form-error">{{ form.merchant_response.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.moderation_note.id_for_label }}" class="form-label">Moderation Note</label>
+                        {{ form.moderation_note }}
+                        <span class="text-xs text-muted">Internal note explaining moderation decision.</span>
+                        {% if form.moderation_note.errors %}<div class="form-error">{{ form.moderation_note.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                {% else %}
+                <!-- Standard Create / Edit Mode -->
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="{{ form.product.id_for_label }}" class="form-label">Catalog Product *</label>
+                            {{ form.product }}
+                            {% if form.product.errors %}<div class="form-error">{{ form.product.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.variant.id_for_label }}" class="form-label">Product Variant (Optional)</label>
+                            {{ form.variant }}
+                            {% if form.variant.errors %}<div class="form-error">{{ form.variant.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="{{ form.reviewer_name.id_for_label }}" class="form-label">Reviewer Name *</label>
+                            {{ form.reviewer_name }}
+                            {% if form.reviewer_name.errors %}<div class="form-error">{{ form.reviewer_name.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.reviewer_email.id_for_label }}" class="form-label">Reviewer Email *</label>
+                            {{ form.reviewer_email }}
+                            {% if form.reviewer_email.errors %}<div class="form-error">{{ form.reviewer_email.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="{{ form.customer.id_for_label }}" class="form-label">Customer Profile (Optional)</label>
+                            {{ form.customer }}
+                            {% if form.customer.errors %}<div class="form-error">{{ form.customer.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.order.id_for_label }}" class="form-label">Verified Order (Optional)</label>
+                            {{ form.order }}
+                            {% if form.order.errors %}<div class="form-error">{{ form.order.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label for="{{ form.rating.id_for_label }}" class="form-label">Star Rating *</label>
+                            {{ form.rating }}
+                            {% if form.rating.errors %}<div class="form-error">{{ form.rating.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.status.id_for_label }}" class="form-label">Status *</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.sentiment.id_for_label }}" class="form-label">Sentiment</label>
+                            {{ form.sentiment }}
+                            {% if form.sentiment.errors %}<div class="form-error">{{ form.sentiment.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Headline / Title *</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.body.id_for_label }}" class="form-label">Detailed Review *</label>
+                        {{ form.body }}
+                        {% if form.body.errors %}<div class="form-error">{{ form.body.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.is_featured }}
+                            <span class="form-label mb-0">Feature Spotlight (Pin to top)</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.merchant_response.id_for_label }}" class="form-label">Merchant Official Reply</label>
+                        {{ form.merchant_response }}
+                        {% if form.merchant_response.errors %}<div class="form-error">{{ form.merchant_response.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.moderation_note.id_for_label }}" class="form-label">Moderation Note</label>
+                        {{ form.moderation_note }}
+                        {% if form.moderation_note.errors %}<div class="form-error">{{ form.moderation_note.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
+                    <a href="{% if review %}{% url 'ecommerce:productreview_detail' review.pk %}{% else %}{% url 'ecommerce:productreview_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i> Save Review
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
