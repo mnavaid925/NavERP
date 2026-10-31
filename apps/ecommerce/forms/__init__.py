@@ -14,6 +14,10 @@ from apps.ecommerce.forms.InventoryStock.InventoryAllocations import (
     InventoryAllocationForm,
     StockAdjustmentActionForm,
 )
+from apps.ecommerce.forms.MarketingCampaign.AffiliatePartners import AffiliatePartnerForm
+from apps.ecommerce.forms.MarketingCampaign.AffiliateReferralConversions import AffiliateReferralConversionForm
+from apps.ecommerce.forms.MarketingCampaign.MarketingCampaigns import MarketingCampaignForm
+from apps.ecommerce.forms.MarketingCampaign.SeoMetadataRules import SeoMetadataRuleForm
 from apps.ecommerce.forms.Marketplace.MarketplaceVendorForms import (
     MarketplaceVendorForm,
     VendorKycVerificationForm,
@@ -113,6 +117,11 @@ __all__ = [
     "RecommendationStrategyForm",
     "PersonalizedExperienceForm",
     "ShopperBehaviorEventFilterForm",
+    # 9.10 Marketing & Campaign Management
+    "MarketingCampaignForm",
+    "AffiliatePartnerForm",
+    "AffiliateReferralConversionForm",
+    "SeoMetadataRuleForm",
     # 9.11 Marketplace & Multi-Vendor
     "MarketplaceVendorForm",
     "VendorKycVerificationForm",
