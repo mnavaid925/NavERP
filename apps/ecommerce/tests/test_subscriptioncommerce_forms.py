@@ -20,6 +20,8 @@ class TestSubscriptionCommerceForms:
                 "interval_count": 1,
                 "discount_type": "percentage",
                 "discount_value": "10.00",
+                "trial_period_days": 0,
+                "min_commitment_cycles": 1,
                 "target_product": ecom_product_a.pk,
                 "allow_pause": True,
                 "max_pause_days": 60,
