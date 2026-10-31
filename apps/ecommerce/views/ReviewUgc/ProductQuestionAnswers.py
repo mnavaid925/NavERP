@@ -45,7 +45,7 @@ def productquestionanswer_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    products = CatalogProduct.objects.filter(tenant=request.tenant).order_by("name")
+    products = CatalogProduct.objects.filter(tenant=request.tenant).order_by("name").only("id", "name")
 
     context = {
         "questions": page_obj.object_list,
