@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit Subscription {{ subscription.number }}{% else %}Enroll Customer Subscription{% endif %} · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex items-center justify-between">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:customersubscription_list' %}" class="hover:text-blue-600">Subscriptions</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}Edit Subscription{% else %}Enroll Customer{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Subscription {{ subscription.number }}{% else %}Enroll Customer Subscription{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Configure customer profile, recurring item, plan cadence, unit price, and upcoming billing anchor date.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if is_edit %}{% url 'ecommerce:customersubscription_detail' subscription.pk %}{% else %}{% url 'ecommerce:customersubscription_list' %}{% endif %}" class="btn btn-outline">
+        Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.customer_profile.id_for_label }}">
+            Customer Profile <span class="text-red-500">*</span>
+          </label>
+          {{ form.customer_profile }}
+          {% if form.customer_profile.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.customer_profile.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.plan.id_for_label }}">
+            Subscription Plan <span class="text-red-500">*</span>
+          </label>
+          {{ form.plan }}
+          {% if form.plan.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.plan.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.product.id_for_label }}">
+            Catalog Product <span class="text-red-500">*</span>
+          </label>
+          {{ form.product }}
+          {% if form.product.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.product.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.variant.id_for_label }}">
+            Product Variant (Optional)
+          </label>
+          {{ form.variant }}
+          {% if form.variant.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.variant.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="border-t border-slate-200 pt-5">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Order Quantities & Pricing</h3>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.quantity.id_for_label }}">
+              Quantity
+            </label>
+            {{ form.quantity }}
+            {% if form.quantity.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.quantity.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.unit_price.id_for_label }}">
+              Unit Price ($)
+            </label>
+            {{ form.unit_price }}
+            {% if form.unit_price.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.unit_price.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.recurring_discount_pct.id_for_label }}">
+              Recurring Discount (%)
+            </label>
+            {{ form.recurring_discount_pct }}
+            {% if form.recurring_discount_pct.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.recurring_discount_pct.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.status.id_for_label }}">
+              Lifecycle Status
+            </label>
+            {{ form.status }}
+            {% if form.status.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.status.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-slate-200 pt-5">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Billing & Fulfillment Anchors</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.next_billing_date.id_for_label }}">
+              Next Billing Date <span class="text-red-500">*</span>
+            </label>
+            {{ form.next_billing_date }}
+            {% if form.next_billing_date.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.next_billing_date.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.next_delivery_date.id_for_label }}">
+              Est. Next Delivery Date
+            </label>
+            {{ form.next_delivery_date }}
+            {% if form.next_delivery_date.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.next_delivery_date.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.paused_until.id_for_label }}">
+              Paused Until Date (If Paused)
+            </label>
+            {{ form.paused_until }}
+            {% if form.paused_until.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.paused_until.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-slate-200 pt-5">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Shipping & Payment Token</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.shipping_address_line.id_for_label }}">
+              Shipping Address / Instructions
+            </label>
+            {{ form.shipping_address_line }}
+            {% if form.shipping_address_line.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.shipping_address_line.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.payment_method_ref.id_for_label }}">
+              Gateway Payment Reference / Token
+            </label>
+            {{ form.payment_method_ref }}
+            {% if form.payment_method_ref.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.payment_method_ref.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group border-t border-slate-200 pt-5">
+        <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.cancellation_reason.id_for_label }}">
+          Cancellation Reason (If Inactive)
+        </label>
+        {{ form.cancellation_reason }}
+        {% if form.cancellation_reason.errors %}
+          <p class="form-error text-xs text-red-600 mt-1">{{ form.cancellation_reason.errors.0 }}</p>
+        {% endif %}
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'ecommerce:customersubscription_detail' subscription.pk %}{% else %}{% url 'ecommerce:customersubscription_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          {% if is_edit %}Save Changes{% else %}Enroll Subscription{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
