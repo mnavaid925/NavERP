@@ -71,6 +71,10 @@ class ProductReviewForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["product", "variant", "customer", "order"])
+        product = cleaned.get("product")
+        variant = cleaned.get("variant")
+        if variant and product and variant.product_id != product.pk:
+            self.add_error("variant", "The selected variant does not belong to the selected product.")
         order = cleaned.get("order")
         product = cleaned.get("product")
         if order and product:
