@@ -65,6 +65,10 @@ def subscription_portal(request):
 @transaction.atomic
 def subscription_portal_skip(request, pk):
     subscription = ecommerce_object(request, CustomerSubscription, pk)
+    if subscription.status != "active":
+        messages.error(request, f"Subscription {subscription.number} cannot be skipped because it is {subscription.get_status_display().lower()}.")
+        return redirect("ecommerce:subscription_portal")
+
     if not subscription.plan.allow_skip:
         messages.error(request, f"Plan '{subscription.plan.name}' does not permit delivery skips.")
         return redirect("ecommerce:subscription_portal")
@@ -104,6 +108,10 @@ def subscription_portal_skip(request, pk):
 @transaction.atomic
 def subscription_portal_pause(request, pk):
     subscription = ecommerce_object(request, CustomerSubscription, pk)
+    if subscription.status != "active":
+        messages.error(request, f"Subscription {subscription.number} cannot be paused because it is {subscription.get_status_display().lower()}.")
+        return redirect("ecommerce:subscription_portal")
+
     if not subscription.plan.allow_pause:
         messages.error(request, f"Plan '{subscription.plan.name}' does not permit pausing.")
         return redirect("ecommerce:subscription_portal")
@@ -141,6 +149,10 @@ def subscription_portal_pause(request, pk):
 @transaction.atomic
 def subscription_portal_resume(request, pk):
     subscription = ecommerce_object(request, CustomerSubscription, pk)
+    if subscription.status != "paused":
+        messages.error(request, f"Subscription {subscription.number} cannot be resumed because it is {subscription.get_status_display().lower()}.")
+        return redirect("ecommerce:subscription_portal")
+
     subscription.status = "active"
     subscription.paused_until = None
     subscription.next_billing_date = timezone.now().date() + datetime.timedelta(days=7)
@@ -163,6 +175,10 @@ def subscription_portal_resume(request, pk):
 @transaction.atomic
 def subscription_portal_deflect(request, pk):
     subscription = ecommerce_object(request, CustomerSubscription, pk)
+    if subscription.status != "active":
+        messages.error(request, f"Subscription {subscription.number} cannot enter deflection because it is {subscription.get_status_display().lower()}.")
+        return redirect("ecommerce:subscription_portal")
+
     reason = request.POST.get("reason", "too_much_product")
     action_choice = request.POST.get("action_choice", "discount_cycle")
 
