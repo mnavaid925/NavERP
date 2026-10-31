@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.title }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Customer Support</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:knowledgebasearticle_list' %}">Knowledge Base</a>
+            <span>/</span>
+            <span>{{ article.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ article.title }}</h1>
+            {% if article.status == 'published' %}
+            <span class="badge badge-green">Published</span>
+            {% elif article.status == 'draft' %}
+            <span class="badge badge-amber">Draft</span>
+            {% else %}
+            <span class="badge badge-slate">Archived</span>
+            {% endif %}
+            {% if article.is_featured %}
+            <span class="badge badge-amber">Featured</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'ecommerce:knowledgebasearticle_edit' article.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Article
+        </a>
+        <form action="{% url 'ecommerce:knowledgebasearticle_delete' article.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete article {{ article.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Article Body & Content -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Summary Box -->
+        <div class="card bg-slate-50 border border-slate-200">
+            <div class="card-body">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Article Summary</h3>
+                <p class="text-sm text-slate-700 leading-relaxed font-medium">{{ article.summary }}</p>
+            </div>
+        </div>
+
+        <!-- Full Article Content -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title text-base font-semibold">Article Documentation</h3>
+                <span class="text-xs text-slate-400 font-mono">/{{ article.slug }}</span>
+            </div>
+            <div class="card-body prose max-w-none text-slate-800 leading-relaxed whitespace-pre-line">
+                {{ article.content }}
+            </div>
+        </div>
+
+        {% if article.keywords %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Indexed Keywords & Search Tags</h3>
+            </div>
+            <div class="card-body">
+                <div class="flex flex-wrap gap-2">
+                    <span class="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded font-mono">{{ article.keywords }}</span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Column: Metadata & Performance Metrics -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Article Details</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500 block text-xs">Article Number</span>
+                    <span class="font-mono font-medium text-slate-900">{{ article.number }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block text-xs">Category</span>
+                    <span class="font-medium text-slate-900">{{ article.get_category_display }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block text-xs">Target Audience</span>
+                    <span class="font-medium text-slate-900">{{ article.get_target_audience_display }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block text-xs">Author</span>
+                    <span class="font-medium text-slate-900">
+                        {% if article.author %}
+                        {{ article.author.get_full_name|default:article.author.username }}
+                        {% else %}
+                        <span class="text-slate-400 italic">Unassigned</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-slate-500 block text-xs">Last Updated</span>
+                    <span class="font-medium text-slate-900">{{ article.updated_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Self-Service Performance</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-slate-500">Total Customer Views</span>
+                    <span class="font-bold text-slate-900 font-mono">{{ article.view_count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-slate-500">Helpful Deflections</span>
+                    <span class="font-bold text-green-700 font-mono">{{ article.helpful_votes }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-slate-500">Unhelpful Feedback</span>
+                    <span class="font-bold text-slate-600 font-mono">{{ article.unhelpful_votes }}</span>
+                </div>
+                <div class="pt-2 border-t border-slate-100">
+                    <div class="flex justify-between text-xs text-slate-500 mb-1">
+                        <span>Deflection Ratio</span>
+                        <span class="font-bold text-slate-700">{{ article.helpfulness_ratio }}%</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-2">
+                        <div class="bg-green-600 h-2 rounded-full" style="width: {{ article.helpfulness_ratio }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
