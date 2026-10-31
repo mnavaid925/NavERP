@@ -39,8 +39,7 @@ Reviewers executed serially:
 ## Minor Findings
 
 - [x] **[M1]** `templates/ecommerce/subscriptioncommerce/subscriptionplan/list.html:114` & `detail.html:24` — fixed — added badge-amber styling for membership_club archetype across list and detail templates
-- [ ] **[M2]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionBoxCurations.py:48` & `apps/ecommerce/forms/SubscriptionCommerce/SubscriptionBoxCurations.py:73` — Curation plan queryset archetype filtering divergence: Contract Section 4.3 specifies `plans: Queryset of SubscriptionPlan (curated_box type)`. The view and form currently query all active plans regardless of `plan_type`.
-  - **Fix**: Filter `plans` in `subscriptionboxcuration_list` and `SubscriptionBoxCurationForm.__init__` with `.filter(plan_type="curated_box", is_active=True)`.
+- [x] **[M2]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionBoxCurations.py:48` & `apps/ecommerce/forms/SubscriptionCommerce/SubscriptionBoxCurations.py:73` — fixed — filtered plan queryset in view and form to curated_box archetype per contract
 - [ ] **[M3]** `templates/ecommerce/subscriptioncommerce/portal/portal.html:133, 140-141, 154` — Deflection modal accessibility issues (missing `aria-label`/`title` on close button, missing `id`/`for` label association, non-theme `text-primary` class on radio inputs).
   - **Fix**: Add `aria-label="Close modal"`, `id="cancel-reason-{{ sub.pk }}"`, and replace `text-primary` with `text-blue-600`.
 - [ ] **[M4]** `templates/ecommerce/subscriptioncommerce/portal/portal.html:129-186` — Deflection modal is nested directly inside `<td>` cell within an overflow table container.
