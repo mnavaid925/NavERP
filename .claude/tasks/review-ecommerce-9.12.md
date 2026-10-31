@@ -31,8 +31,7 @@ Reviewers executed serially:
 - [x] **[I6]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:23-24` — fixed — sliced active and paused subscription display querysets to [:25]
 - [x] **[I7]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:46,83,118,138` — fixed — added tenant_admin_required to skip, pause, resume, and deflect portal actions
 - [x] **[I8]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:48,85,120,140` — fixed — guarded lifecycle state transitions (active required for skip/pause/deflect; paused required for resume)
-- [ ] **[I9]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:141-168` — Unvalidated `reason` (causes MariaDB `DataError` if > 50 chars) and unsafe default fallthrough on `action_choice`.
-  - **Fix**: Validate `action_choice` in `{"discount_cycle", "pause_duration", "cancel_anyway"}` and validate `reason` against `SubscriptionRetentionAction.REASON_CHOICES`.
+- [x] **[I9]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:141-168` — fixed — validated action_choice against allowed set and clamped reason to REASON_CHOICES
 - [ ] **[I10]** `apps/ecommerce/models/SubscriptionCommerce/CustomerSubscriptions.py:148` & `apps/ecommerce/forms/SubscriptionCommerce/CustomerSubscriptions.py:85` — Cross-record integrity: `variant` is not validated to belong to the selected `product`.
   - **Fix**: Validate `if self.variant and self.product and self.variant.product_id != self.product_id: raise ValidationError(...)` in model `clean()` and form `clean()`.
 
