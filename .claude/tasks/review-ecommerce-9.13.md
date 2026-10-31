@@ -62,3 +62,22 @@ Reviewing changeset: `3fb041f95e45ff13427ac02c53583153e9d95fc2..e645586a1a7a5c11
 ### Minor
 1. `templates/ecommerce/review_ugc/visual_ugc/list.html:121-127` & `templates/ecommerce/review_ugc/visual_ugc/detail.html:19-25` — `rights_status` badge check uses `{% else %}` for "Rejected" rather than explicit check and neutral fallback with `{{ item.get_rights_status_display }}`. Fix: Add explicit branch for `rejected` and fallback with `badge-slate`.
 2. `templates/ecommerce/review_ugc/sentiment_summary/list.html:110` — Recalculate icon button missing accessible `title` and `aria-label` directly on the `<button>`. Fix: Add `title="Recalculate Metrics"` and `aria-label="Recalculate Metrics"` to the `<button>`.
+
+
+---
+
+## 4. Performance Review Findings
+
+### Critical
+*None.*
+
+### Important
+1. `apps/ecommerce/models/ReviewUgc/ReviewSentimentSummaries.py:54-82` — 9 separate `COUNT(*)` queries during scorecard recalculation. Fix: Replace multiple `.count()` calls with a single conditional `.aggregate()` query using `Count` and `Q(filter=...)`.
+2. `apps/ecommerce/forms/ReviewUgc/ProductReviews.py:65-66` — 2N Chained N+1 queries when populating `order` and `customer` dropdowns in `ProductReviewForm`. Fix: Add `select_related("customer")` to both querysets in `ProductReviewForm.__init__`.
+3. `apps/ecommerce/forms/ReviewUgc/ProductQuestionAnswers.py:52` — N+1 Chained queries when populating `customer` dropdown in `ProductQuestionAnswerForm`. Fix: Add `select_related("customer")` to `self.fields["customer"].queryset` in `ProductQuestionAnswerForm.__init__`.
+
+### Minor
+1. `apps/ecommerce/views/ReviewUgc/ProductReviews.py:78` & `apps/ecommerce/views/ReviewUgc/ProductQuestionAnswers.py:68` — Missing `customer__customer` in detail view `select_related`. Fix: Include `"customer__customer"` in `select_related`.
+2. `apps/ecommerce/models/ReviewUgc/ProductReviews.py:98-102` & `ProductQuestionAnswers.py:53-56` — Missing composite index on `(tenant, status)` for moderation queues. Fix: Add composite index on `(tenant, status)` in both models.
+3. `apps/ecommerce/models/ReviewUgc/VisualUgcMedia.py:54-57` — Missing index on `(tenant, media_type)`. Fix: Add composite index `(tenant, media_type)`.
+4. `apps/ecommerce/views/ReviewUgc/` (all 4 list views) — Over-fetching heavy TextFields for product filter dropdowns. Fix: Use `.only("id", "name")`.
