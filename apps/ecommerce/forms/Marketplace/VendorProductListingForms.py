@@ -1,7 +1,7 @@
 from django import forms
 
 from apps.core.forms import TenantModelForm
-from apps.ecommerce.forms._common import TenantUniqueMixin
+from apps.ecommerce.forms._common import TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.Marketplace.MarketplaceVendors import MarketplaceVendor
 from apps.ecommerce.models.Marketplace.VendorProductListings import VendorProductListing
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
@@ -14,6 +14,10 @@ class VendorProductListingForm(TenantUniqueMixin, TenantModelForm):
         exclude = [
             "tenant",
             "number",
+            "moderation_status",
+            "compliance_status",
+            "moderator_notes",
+            "rejection_reason",
             "reviewed_at",
             "reviewed_by",
             "created_at",
@@ -33,10 +37,6 @@ class VendorProductListingForm(TenantUniqueMixin, TenantModelForm):
             "available_quantity": forms.NumberInput(attrs={"class": "form-input"}),
             "low_stock_threshold": forms.NumberInput(attrs={"class": "form-input"}),
             "lead_time_days": forms.NumberInput(attrs={"class": "form-input"}),
-            "moderation_status": forms.Select(attrs={"class": "form-select"}),
-            "compliance_status": forms.Select(attrs={"class": "form-select"}),
-            "moderator_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 2}),
-            "rejection_reason": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. Missing copyright documentation"}),
             "submitted_at": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
         }
@@ -47,6 +47,15 @@ class VendorProductListingForm(TenantUniqueMixin, TenantModelForm):
             self.fields["vendor"].queryset = MarketplaceVendor.objects.filter(tenant=self.tenant).order_by("store_name")
             self.fields["product"].queryset = CatalogProduct.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["variant"].queryset = ProductVariant.objects.filter(tenant=self.tenant).order_by("name")
+
+    def clean(self):
+        cleaned_data = super().clean()
+        reject_foreign(self, cleaned_data, ["vendor", "product", "variant"])
+        product = cleaned_data.get("product")
+        variant = cleaned_data.get("variant")
+        if product and variant and variant.product_id != product.id:
+            self.add_error("variant", "The selected variant does not belong to the selected catalog product.")
+        return cleaned_data
 
 
 class ListingModerationForm(forms.Form):
