@@ -65,7 +65,7 @@ def affiliatereferralconversion_detail(request, pk):
         request,
         AffiliateReferralConversion,
         pk,
-        select_related=("affiliate", "order", "referred_customer"),
+        select_related=("affiliate", "order", "referred_customer__user"),
     )
     context = {
         "conversion": conversion,
