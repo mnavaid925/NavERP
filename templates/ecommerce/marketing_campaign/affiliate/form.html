@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if partner %}Edit Partner {{ partner.name }}{% else %}Onboard Affiliate Partner{% endif %} · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Header -->
+  <div class="page-header flex items-center justify-between">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketing_dashboard' %}" class="hover:text-blue-600">Marketing & Campaigns</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:affiliatepartner_list' %}" class="hover:text-blue-600">Affiliates</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if partner %}Edit{% else %}Create{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if partner %}Edit Partner: {{ partner.name }}{% else %}Onboard New Affiliate Partner{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Configure referral codes, unique attribution tracking slugs, commission rates, and remittance info.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if partner %}{% url 'ecommerce:affiliatepartner_detail' partner.pk %}{% else %}{% url 'ecommerce:affiliatepartner_list' %}{% endif %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Cancel</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section: Partner Identity -->
+      <div>
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="user-check" class="w-4 h-4 text-blue-600"></i>
+          <span>Partner Identity & Linking</span>
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Partner Display Name *</label>
+            {{ form.name }}
+            {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Unified Core Party Entity *</label>
+            {{ form.party }}
+            {% if form.party.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.party.errors }}</div>{% endif %}
+            <span class="text-xs text-slate-400">Reuses core.Party directory for supplier/contact master data.</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Partner Archetype</label>
+            {{ form.partner_type }}
+            {% if form.partner_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.partner_type.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Linked Shopper Profile (Optional)</label>
+            {{ form.customer_profile }}
+            {% if form.customer_profile.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.customer_profile.errors }}</div>{% endif %}
+            <span class="text-xs text-slate-400">Optional customer profile for customer advocates and ambassadors.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Attribution & Tracking -->
+      <div>
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="link" class="w-4 h-4 text-purple-600"></i>
+          <span>Tracking Code & Referral Link</span>
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Referral / Coupon Code *</label>
+            {{ form.referral_code }}
+            {% if form.referral_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.referral_code.errors }}</div>{% endif %}
+            <span class="text-xs text-slate-400">Unique promo code for coupon-based attribution, e.g. ALICE15</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Referral Link URL Slug</label>
+            {{ form.referral_link_slug }}
+            {% if form.referral_link_slug.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.referral_link_slug.errors }}</div>{% endif %}
+            <span class="text-xs text-slate-400">URL path, e.g. /ref/alice-smith. Auto-generated from name if blank.</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Cookie Attribution Window (Days)</label>
+            {{ form.cookie_duration_days }}
+            {% if form.cookie_duration_days.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.cookie_duration_days.errors }}</div>{% endif %}
+            <span class="text-xs text-slate-400">Attribution lookback period after shopper clicks referral link.</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Partner Status</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Commission & Remittance -->
+      <div>
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="dollar-sign" class="w-4 h-4 text-emerald-600"></i>
+          <span>Commission Remuneration & Payouts</span>
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Commission Model</label>
+            {{ form.commission_type }}
+            {% if form.commission_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.commission_type.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Commission Rate (% or $) *</label>
+            {{ form.commission_rate }}
+            {% if form.commission_rate.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.commission_rate.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Payout Threshold ($)</label>
+            {{ form.payout_threshold }}
+            {% if form.payout_threshold.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.payout_threshold.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-3">
+            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Payout Remittance Email</label>
+            {{ form.payment_email }}
+            {% if form.payment_email.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.payment_email.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+        <a href="{% if partner %}{% url 'ecommerce:affiliatepartner_detail' partner.pk %}{% else %}{% url 'ecommerce:affiliatepartner_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>Save Partner</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
