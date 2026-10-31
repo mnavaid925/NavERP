@@ -910,16 +910,16 @@
 ---
 
 ## 9.12-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO duplicate product or order line table** — Subscriptions link to `ecommerce.CatalogProduct`, `ecommerce.ProductVariant`, and billing creates `ecommerce.EcommerceOrder`.
-- [ ] **NO raw credit card PAN / CVV persistence** — Card tokens and gateway payment references are stored as opaque string tokens (`payment_method_ref`).
-- [ ] **NO external proprietary SaaS subscription dependency** — All recurring cadence logic, pause/skip/swap, dunning counters, and deflection flows execute natively within Django.
-- [ ] **NO third-party machine learning server required** — Heuristic and rule-based churn scoring operates directly within standard ORM calculations.
+- [x] **NO duplicate product or order line table** — Subscriptions link to `ecommerce.CatalogProduct`, `ecommerce.ProductVariant`, and billing creates `ecommerce.EcommerceOrder`.
+- [x] **NO raw credit card PAN / CVV persistence** — Card tokens and gateway payment references are stored as opaque string tokens (`payment_method_ref`).
+- [x] **NO external proprietary SaaS subscription dependency** — All recurring cadence logic, pause/skip/swap, dunning counters, and deflection flows execute natively within Django.
+- [x] **NO third-party machine learning server required** — Heuristic and rule-based churn scoring operates directly within standard ORM calculations.
 
 ---
 
 ## Models (4 models in `apps/ecommerce/models/SubscriptionCommerce/`)
 
-- [ ] **`SubscriptionPlan`** [Prefix: `ESPL-`] (`apps/ecommerce/models/SubscriptionCommerce/SubscriptionPlans.py`)
+- [x] **`SubscriptionPlan`** [Prefix: `ESPL-`] (`apps/ecommerce/models/SubscriptionCommerce/SubscriptionPlans.py`)
   - **Purpose**: Defines reusable subscription rules, billing frequencies, discount incentives, trial periods, and commitment terms.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -949,7 +949,7 @@
     - `Index(fields=["tenant", "is_active", "plan_type"], name="idx_espl_ten_act_type")`
   - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
 
-- [ ] **`CustomerSubscription`** [Prefix: `ESUB-`] (`apps/ecommerce/models/SubscriptionCommerce/CustomerSubscriptions.py`)
+- [x] **`CustomerSubscription`** [Prefix: `ESUB-`] (`apps/ecommerce/models/SubscriptionCommerce/CustomerSubscriptions.py`)
   - **Purpose**: Represents an active customer subscription contract, tracking lifecycle status, billing dates, and fulfillment cycles.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -980,7 +980,7 @@
     - `Index(fields=["tenant", "customer_profile", "status"], name="idx_esub_ten_cust_stat")`
   - **Form Exclusions**: `tenant`, `number`, `completed_cycles_count`, `consecutive_successful_cycles`, `failed_payment_count`, `cancelled_at`, `created_at`, `updated_at`.
 
-- [ ] **`SubscriptionBoxCuration`** [Prefix: `ESBX-`] (`apps/ecommerce/models/SubscriptionCommerce/SubscriptionBoxCurations.py`)
+- [x] **`SubscriptionBoxCuration`** [Prefix: `ESBX-`] (`apps/ecommerce/models/SubscriptionCommerce/SubscriptionBoxCurations.py`)
   - **Purpose**: Manages curated box assortments, seasonal rotation themes, customer preference profiles, and mystery/surprise inclusions.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Fields**:
@@ -1003,7 +1003,7 @@
     - `Index(fields=["tenant", "is_active", "start_date", "end_date"], name="idx_esbx_ten_act_dates")`
   - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
 
-- [ ] **`SubscriptionRetentionAction`** [Prefix: `ESRT-`] (`apps/ecommerce/models/SubscriptionCommerce/SubscriptionRetentionActions.py`)
+- [x] **`SubscriptionRetentionAction`** [Prefix: `ESRT-`] (`apps/ecommerce/models/SubscriptionCommerce/SubscriptionRetentionActions.py`)
   - **Purpose**: Records subscriber cancellation intent, churn risk evaluation, defensive deflection offers presented, and customer retention outcomes.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -1030,40 +1030,40 @@
 ---
 
 ## Backend (`apps/ecommerce/{models,forms,views,urls}/SubscriptionCommerce/`)
-- [ ] `models/SubscriptionCommerce/SubscriptionPlans.py`
-- [ ] `models/SubscriptionCommerce/CustomerSubscriptions.py`
-- [ ] `models/SubscriptionCommerce/SubscriptionBoxCurations.py`
-- [ ] `models/SubscriptionCommerce/SubscriptionRetentionActions.py`
-- [ ] `models/SubscriptionCommerce/__init__.py`
-- [ ] `models/__init__.py` re-export update
-- [ ] `forms/SubscriptionCommerce/SubscriptionPlans.py`
-- [ ] `forms/SubscriptionCommerce/CustomerSubscriptions.py`
-- [ ] `forms/SubscriptionCommerce/SubscriptionBoxCurations.py`
-- [ ] `forms/SubscriptionCommerce/SubscriptionRetentionActions.py`
-- [ ] `forms/SubscriptionCommerce/__init__.py`
-- [ ] `forms/__init__.py` re-export update
-- [ ] `views/SubscriptionCommerce/SubscriptionPlans.py`
-- [ ] `views/SubscriptionCommerce/CustomerSubscriptions.py`
-- [ ] `views/SubscriptionCommerce/SubscriptionBoxCurations.py`
-- [ ] `views/SubscriptionCommerce/SubscriptionRetentionActions.py`
-- [ ] `views/SubscriptionCommerce/SubscriptionPortals.py` (Self-Service Subscriber Portal & Deflection Flow)
-- [ ] `views/SubscriptionCommerce/__init__.py`
-- [ ] `views/__init__.py` re-export update
-- [ ] `urls/SubscriptionCommerce/SubscriptionPlans.py`
-- [ ] `urls/SubscriptionCommerce/CustomerSubscriptions.py`
-- [ ] `urls/SubscriptionCommerce/SubscriptionBoxCurations.py`
-- [ ] `urls/SubscriptionCommerce/SubscriptionRetentionActions.py`
-- [ ] `urls/SubscriptionCommerce/SubscriptionPortals.py`
-- [ ] `urls/SubscriptionCommerce/__init__.py`
-- [ ] `urls/__init__.py` re-export update
-- [ ] `admin.py` model registrations
-- [ ] `migrations/0012_*.py`
-- [ ] `management/commands/seed_ecommerce.py` idempotent data expansion
+- [x] `models/SubscriptionCommerce/SubscriptionPlans.py`
+- [x] `models/SubscriptionCommerce/CustomerSubscriptions.py`
+- [x] `models/SubscriptionCommerce/SubscriptionBoxCurations.py`
+- [x] `models/SubscriptionCommerce/SubscriptionRetentionActions.py`
+- [x] `models/SubscriptionCommerce/__init__.py`
+- [x] `models/__init__.py` re-export update
+- [x] `forms/SubscriptionCommerce/SubscriptionPlans.py`
+- [x] `forms/SubscriptionCommerce/CustomerSubscriptions.py`
+- [x] `forms/SubscriptionCommerce/SubscriptionBoxCurations.py`
+- [x] `forms/SubscriptionCommerce/SubscriptionRetentionActions.py`
+- [x] `forms/SubscriptionCommerce/__init__.py`
+- [x] `forms/__init__.py` re-export update
+- [x] `views/SubscriptionCommerce/SubscriptionPlans.py`
+- [x] `views/SubscriptionCommerce/CustomerSubscriptions.py`
+- [x] `views/SubscriptionCommerce/SubscriptionBoxCurations.py`
+- [x] `views/SubscriptionCommerce/SubscriptionRetentionActions.py`
+- [x] `views/SubscriptionCommerce/SubscriptionPortals.py` (Self-Service Subscriber Portal & Deflection Flow)
+- [x] `views/SubscriptionCommerce/__init__.py`
+- [x] `views/__init__.py` re-export update
+- [x] `urls/SubscriptionCommerce/SubscriptionPlans.py`
+- [x] `urls/SubscriptionCommerce/CustomerSubscriptions.py`
+- [x] `urls/SubscriptionCommerce/SubscriptionBoxCurations.py`
+- [x] `urls/SubscriptionCommerce/SubscriptionRetentionActions.py`
+- [x] `urls/SubscriptionCommerce/SubscriptionPortals.py`
+- [x] `urls/SubscriptionCommerce/__init__.py`
+- [x] `urls/__init__.py` re-export update
+- [x] `admin.py` model registrations
+- [x] `migrations/0012_*.py`
+- [x] `management/commands/seed_ecommerce.py` idempotent data expansion
 
 ---
 
 ## Wire-up
-- [ ] `apps/core/navigation.py` `LIVE_LINKS["9.12"]` entry:
+- [x] `apps/core/navigation.py` `LIVE_LINKS["9.12"]` entry:
   - `"Subscription Plan Design"`: `"ecommerce:subscriptionplan_list"`
   - `"Recurring Billing & Invoicing"`: `"ecommerce:customersubscription_list"`
   - `"Subscription Self-Service Portal"`: `"ecommerce:subscription_portal"`
@@ -1073,34 +1073,34 @@
 ---
 
 ## Templates (`templates/ecommerce/subscriptioncommerce/`)
-- [ ] `templates/ecommerce/subscriptioncommerce/subscriptionplan/{list,detail,form}.html`
-- [ ] `templates/ecommerce/subscriptioncommerce/customersubscription/{list,detail,form}.html`
-- [ ] `templates/ecommerce/subscriptioncommerce/subscriptionboxcuration/{list,detail,form}.html`
-- [ ] `templates/ecommerce/subscriptioncommerce/subscriptionretentionaction/{list,detail,form}.html`
-- [ ] `templates/ecommerce/subscriptioncommerce/portal/portal.html`
+- [x] `templates/ecommerce/subscriptioncommerce/subscriptionplan/{list,detail,form}.html`
+- [x] `templates/ecommerce/subscriptioncommerce/customersubscription/{list,detail,form}.html`
+- [x] `templates/ecommerce/subscriptioncommerce/subscriptionboxcuration/{list,detail,form}.html`
+- [x] `templates/ecommerce/subscriptioncommerce/subscriptionretentionaction/{list,detail,form}.html`
+- [x] `templates/ecommerce/subscriptioncommerce/portal/portal.html`
 
 ---
 
 ## Verify
-- [ ] `makemigrations ecommerce`
-- [ ] `migrate`
-- [ ] `seed_ecommerce` run 1
-- [ ] `seed_ecommerce` run 2 (idempotency check)
-- [ ] `manage.py check` clean
-- [ ] `temp/smoke_9_12.py` as admin_acme/password:
+- [x] `makemigrations ecommerce`
+- [x] `migrate`
+- [x] `seed_ecommerce` run 1
+- [x] `seed_ecommerce` run 2 (idempotency check)
+- [x] `manage.py check` clean
+- [x] `temp/smoke_9_12.py` as admin_acme/password:
   - All 13 new endpoints return 200/302
   - No `{#` / `{% comment` syntax leaks
   - Seeded records and page titles present
   - Cross-tenant IDOR check returns 404
-- [ ] Sidebar 9.12 shows Live
+- [x] Sidebar 9.12 shows Live
 
 ---
 
 ## Close-out
-- [ ] Phase 4 Review agents (code-reviewer -> explorer -> frontend-reviewer -> performance-reviewer -> qa-smoke-tester -> security-reviewer)
-- [ ] Phase 5 Code-fixer agent
-- [ ] Phase 6 Tests (models, forms, views, security) green unfiltered
-- [ ] Phase 7 Update `.claude/skills/ecommerce/SKILL.md` + `README.md`
+- [x] Phase 4 Review agents (code-reviewer -> explorer -> frontend-reviewer -> performance-reviewer -> qa-smoke-tester -> security-reviewer)
+- [x] Phase 5 Code-fixer agent
+- [x] Phase 6 Tests (models, forms, views, security) green unfiltered
+- [x] Phase 7 Update `.claude/skills/ecommerce/SKILL.md` + `README.md`
 
 ---
 
@@ -1111,8 +1111,30 @@
 
 ---
 
-## Review notes
-(filled in at the end)
+### Sub-module 9.12 Subscription & Recurring Commerce — Review & Close-Out (2026-10-31)
+- **Status**: Completed & Verified
+- **Scope**:
+  - 4 Models: `SubscriptionPlan` (ESPL-), `CustomerSubscription` (ESUB-), `SubscriptionBoxCuration` (ESBX-), `SubscriptionRetentionAction` (ESRT-) with composite indexes, clean validations, and strict multi-tenancy.
+  - 4 ModelForms + Self-Service Deflection / Management actions with `reject_foreign`, `clean()`, and workflow state mass-assignment protections.
+  - 5 View modules: `SubscriptionPlans` (CRUD), `CustomerSubscriptions` (CRUD + Status updates), `SubscriptionBoxCurations` (CRUD), `SubscriptionRetentionActions` (CRUD), and `SubscriptionPortals` (`subscription_portal` + pause, skip, swap, cancel deflection actions).
+  - 5 URL modules mounted with `app_name="ecommerce"`.
+  - 13 Templates across `templates/ecommerce/subscriptioncommerce/` with full dark mode support, label-for accessibility, deflection modals, and color-named badges.
+  - Idempotent Seeder: 4 subscription plans, 6 customer subscriptions, 3 box curations, 3 retention logs verified on double run.
+  - Sidebar Navigation: `LIVE_LINKS["9.12"]` active in `apps/core/navigation.py`.
+- **Review Passes (Phases 4 & 5)**:
+  - 6 serial review passes completed: `code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`.
+  - Findings: C1–C3, I1–I10, M1–M10 (23 total findings) — 100% resolved and individually committed in Phase 5.
+  - Consolidated findings: `.claude/tasks/review-ecommerce-9.12.md` marked All Findings Resolved `[x]`.
+- **Test Suite (Phase 6)**:
+  - `test_subscriptioncommerce_models.py` (7 passed)
+  - `test_subscriptioncommerce_forms.py` (7 passed)
+  - `test_subscriptioncommerce_views.py` (9 passed)
+  - `test_subscriptioncommerce_security.py` (6 passed)
+  - Sub-module suite: 29 passed. Full unfiltered `apps/ecommerce/` suite: 853 passed, 42 warnings in 110s, 100% green.
+- **Documentation (Phase 7)**:
+  - Updated `.claude/skills/ecommerce/SKILL.md` with complete 9.12 as-built models, routes, templates, conventions, and navigation.
+  - Updated `README.md` marking 9.12 complete in Module 9 roadmap.
+- **Gaps**: None. Registered in `.agents/tasks/gaps-ecommerce-9.12.md`.
 
 ---
 
