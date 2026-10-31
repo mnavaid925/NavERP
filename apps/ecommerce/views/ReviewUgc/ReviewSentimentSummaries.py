@@ -155,8 +155,8 @@ def reviewsentimentsummary_recalculate(request, pk):
     write_audit_log(
         request.user,
         summary,
-        "recalculate",
-        {"average_rating": str(summary.average_rating), "total_reviews": summary.total_reviews},
+        "recalc",
+        {"action": "recalculate", "average_rating": str(summary.average_rating), "total_reviews": summary.total_reviews},
         tenant=request.tenant,
     )
     messages.success(request, f"Scorecard metrics recalculated: {summary.average_rating}★ across {summary.total_reviews} reviews.")
