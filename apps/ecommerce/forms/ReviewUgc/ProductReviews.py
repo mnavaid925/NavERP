@@ -64,13 +64,18 @@ class ProductReviewForm(TenantUniqueMixin, TenantModelForm):
         if variant and product and variant.product_id != product.pk:
             self.add_error("variant", "The selected variant does not belong to the selected product.")
         order = cleaned.get("order")
-        product = cleaned.get("product")
+        customer = cleaned.get("customer")
+        if order and customer and order.customer_id != customer.customer_id:
+            self.add_error("order", "The selected order does not belong to the selected customer profile.")
+
         if order and product:
             # Check if order belongs to the same product to grant verified purchase
             if order.lines.filter(product=product).exists():
                 self.instance.is_verified_purchase = True
             else:
                 self.instance.is_verified_purchase = False
+        else:
+            self.instance.is_verified_purchase = False
         return cleaned
 
 
