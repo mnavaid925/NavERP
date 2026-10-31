@@ -20,7 +20,6 @@ class AffiliatePartnerForm(TenantUniqueMixin, TenantModelForm):
             "commission_type",
             "commission_rate",
             "cookie_duration_days",
-            "status",
             "payout_threshold",
             "payment_email",
         ]
@@ -44,7 +43,6 @@ class AffiliatePartnerForm(TenantUniqueMixin, TenantModelForm):
             "cookie_duration_days": forms.NumberInput(
                 attrs={"class": "form-input", "min": 1, "max": 365, "placeholder": "30"}
             ),
-            "status": forms.Select(attrs={"class": "form-select"}),
             "payout_threshold": forms.NumberInput(
                 attrs={"class": "form-input", "step": "0.01", "placeholder": "50.00"}
             ),
