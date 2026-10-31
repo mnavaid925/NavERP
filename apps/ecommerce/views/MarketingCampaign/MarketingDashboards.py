@@ -68,24 +68,26 @@ def social_commerce_feed(request):
     Returns JSON structured catalog item feed per tenant.
     """
     products = ecommerce_scope(CatalogProduct.objects.all(), request).filter(
-        is_active=True
-    ).select_related("category", "primary_brand")[:200]
+        status="active"
+    ).select_related("primary_category").prefetch_related("variants")[:200]
 
     items = []
     host = request.get_host()
     scheme = "https" if request.is_secure() else "http"
 
     for p in products:
+        first_variant = p.variants.first()
+        price_val = str(first_variant.price) if first_variant and first_variant.price else "0.00"
         item = {
-            "id": p.sku or p.number,
+            "id": (first_variant.sku if first_variant and first_variant.sku else p.number),
             "title": p.name,
-            "description": p.description or p.name,
+            "description": p.short_description or p.description or p.name,
             "availability": "in stock",
             "condition": "new",
-            "price": f"{p.base_price or '0.00'} USD",
+            "price": f"{price_val} USD",
             "link": f"{scheme}://{host}/products/{p.slug or p.pk}/",
-            "brand": p.primary_brand.name if p.primary_brand else "NavStore",
-            "google_product_category": p.category.name if p.category else "Apparel & Accessories",
+            "brand": p.brand or "NavStore",
+            "google_product_category": p.primary_category.name if p.primary_category else "Apparel & Accessories",
             "item_group_id": p.number,
         }
         items.append(item)
