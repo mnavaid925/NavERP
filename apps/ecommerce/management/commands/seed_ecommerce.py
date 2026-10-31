@@ -2087,22 +2087,22 @@ class Command(BaseCommand):
         vendor_party_1, _ = Party.objects.get_or_create(
             tenant=tenant,
             name="Apex Audio & Electronics LLC",
-            defaults={"party_type": "organization"},
+            defaults={"kind": "organization"},
         )
         vendor_party_2, _ = Party.objects.get_or_create(
             tenant=tenant,
             name="Artisan Woods & Leather Co",
-            defaults={"party_type": "organization"},
+            defaults={"kind": "organization"},
         )
         vendor_party_3, _ = Party.objects.get_or_create(
             tenant=tenant,
             name="Nordic Living Design Studio",
-            defaults={"party_type": "organization"},
+            defaults={"kind": "organization"},
         )
         vendor_party_4, _ = Party.objects.get_or_create(
             tenant=tenant,
             name="Summit Peak Mountain Gear",
-            defaults={"party_type": "organization"},
+            defaults={"kind": "organization"},
         )
 
         # 2. Marketplace Vendors
