@@ -2731,6 +2731,20 @@ LIVE_LINKS = {
         "Personalized Experiences": "ecommerce:personalizedexperience_list",
         "Behavioral Telemetry": "ecommerce:shopperbehaviorevent_list",
     },
+    "9.10": {
+        "Email Marketing Automation": "ecommerce:marketingcampaign_list",
+        "SMS & Push Notification": "ecommerce:marketingcampaign_list",
+        "Affiliate & Referral Programs": "ecommerce:affiliatepartner_list",
+        "Social Commerce Integration": "ecommerce:marketing_dashboard",
+        "SEO & Organic Traffic Tools": "ecommerce:seometadatarule_list",
+        # Extra live leaves
+        "Marketing Dashboard": "ecommerce:marketing_dashboard",
+        "Marketing Campaigns": "ecommerce:marketingcampaign_list",
+        "Affiliate Partners": "ecommerce:affiliatepartner_list",
+        "Referral Conversions": "ecommerce:affiliatereferralconversion_list",
+        "SEO Metadata Rules": "ecommerce:seometadatarule_list",
+        "Social Catalog Feed": "ecommerce:social_commerce_feed",
+    },
     "9.11": {
         "Vendor Onboarding & Verification": "ecommerce:marketplacevendor_list",
         "Vendor Product Management": "ecommerce:vendorproductlisting_list",
