@@ -8,6 +8,264 @@
 > Do not mass-tick the backlog.
 ---
 
+# Sub-module 9.14: Customer Service & Support (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.14.md` (2026-10-31)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.13.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0018_productquestionanswer_productreview_and_more.py`, so **9.14 claims `0019`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.14.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/CustomerSupport/`
+> Template folder name: `templates/ecommerce/customer_support/{ticket,article,claim,survey}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Spine & Entity Integration (L28/L29)**:
+  - Support tickets link directly to `ecommerce.EcommerceOrder` (`EORD-`, 9.5) and target products to `ecommerce.CatalogProduct` (`EPRD-`, 9.1).
+  - Customer identity anchors to `ecommerce.CustomerAccountProfile` (`ECAP-`, 9.6) and unified Core Spine `core.Party` / `accounts.User`. Unauthenticated guest inquiries capture verified email/phone lookups.
+  - Claims link directly to `ecommerce.EcommerceOrder` and optionally cross-reference authorized returns to `ecommerce.ReturnMerchandiseAuthorization` (`ERMA-`, 9.5).
+  - Financial adjustments and refunds are recorded as authorized resolution actions on claims; actual GL ledger postings are owned by Module 2 `accounting` (no duplicate financial ledgers, L29).
+- **Clear Sibling Boundaries (1.4 vs. 3.36 vs. 9.5 vs. 9.10 vs. 9.13 vs. 9.14)**:
+  - CRM 1.4 (`apps/crm/`): B2B CRM customer support (`Case`, `CASE-`) centered on corporate accounts and sales contracts. 9.14 is consumer eCommerce support centered on orders, shipments, carts, and merchandise claims.
+  - HRM 3.36 (`apps/hrm/`): Internal employee HR helpdesk (`HelpdeskTicket`, `TKT-`).
+  - 9.5 (Order Management): Owns order fulfillment, tracking status, and warehouse return processing (`ERMA`). 9.14 provides the support ticket interface, customer claims intake, and dispute resolution.
+  - 9.10 (Marketing Campaigns): Owns outbound marketing campaigns; 9.14 handles transactional support interactions and CSAT survey distribution.
+  - 9.13 (Reviews & UGC): Owns public on-page product reviews and ratings; 9.14 handles private 1-on-1 customer service inquiries and service feedback.
+- **Multi-Tenancy & Data Isolation**: All support tickets, knowledge base articles, order claims, and satisfaction surveys are strictly scoped by `tenant` (`core.Tenant`).
+- **Base Class & Prefix Discipline**: All 4 models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`), providing `tenant` FK (`on_delete=CASCADE`), thread-safe auto-number generation, and audit timestamps.
+- **Prefix Collision Sweep**: `ESTK`, `EKBA`, `ECLM`, `ECSF` verified 100% free across repo.
+
+---
+
+## 9.14-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO duplicate customer party or user table** — Tickets link directly to `core.Party`, `accounts.User`, and `ecommerce.CustomerAccountProfile`.
+- [ ] **NO real-time WebSockets / external chat server daemon** — Chat channels, session metadata, and bot handoffs are stored and managed via standard HTTP/HTMX views; WebSocket push runs in later platform phases.
+- [ ] **NO external carrier EDI claims integration** — Carrier tracking numbers and dispute reference IDs are modeled natively in Django; live EDI/carrier carrier claims APIs run later.
+- [ ] **NO duplicate financial transaction ledgers** — Refund authorizations on claims specify resolution amounts and hand off to `accounting` (Module 2).
+
+---
+
+## Models (4 models in `apps/ecommerce/models/CustomerSupport/`)
+
+- [ ] **`CustomerSupportTicket`** [Prefix: `ESTK-`] (`apps/ecommerce/models/CustomerSupport/CustomerSupportTickets.py`)
+  - **Purpose**: Omnichannel helpdesk ticket and conversational support case. Captures customer inquiries across channels (email, chat, web form, portal, marketplace, phone), order linkage for WISMO resolution, priority & SLA target countdowns, lifecycle status workflow, internal agent notes, and chatbot handoff tracking.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `CHANNEL_CHOICES = [("email", "Email"), ("chat", "Live Chat"), ("web_form", "Web Form"), ("portal", "Self-Service Portal"), ("marketplace", "Marketplace"), ("phone", "Phone / Voice")]`
+    - `CATEGORY_CHOICES = [("order_tracking_wismo", "Order Tracking / WISMO"), ("return_refund", "Return & Refund Request"), ("damaged_defective", "Damaged / Defective Item"), ("shipping_delivery", "Shipping & Delivery Issue"), ("product_inquiry", "Product & Sizing Inquiry"), ("payment_billing", "Payment & Billing"), ("account_access", "Account & Security"), ("general", "General Inquiry")]`
+    - `PRIORITY_CHOICES = [("low", "Low"), ("medium", "Medium"), ("high", "High"), ("urgent", "Urgent")]`
+    - `STATUS_CHOICES = [("new", "New"), ("open", "Open / Assigned"), ("pending_customer", "Pending Customer Response"), ("waiting_carrier", "Waiting on Carrier"), ("resolved", "Resolved"), ("closed", "Closed"), ("cancelled", "Cancelled")]`
+  - **Fields**:
+    - `customer`: `ForeignKey("ecommerce.CustomerAccountProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="support_tickets")`
+    - `order`: `ForeignKey("ecommerce.EcommerceOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="support_tickets")`
+    - `assigned_agent`: `ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_ecommerce_tickets")`
+    - `subject`: `CharField(max_length=255, help_text="Ticket subject or inquiry summary")`
+    - `customer_name`: `CharField(max_length=150, help_text="Shopper or guest display name")`
+    - `customer_email`: `EmailField(help_text="Contact email address")`
+    - `customer_phone`: `CharField(max_length=32, blank=True, help_text="Contact telephone number")`
+    - `channel`: `CharField(max_length=20, choices=CHANNEL_CHOICES, default="email")`
+    - `category`: `CharField(max_length=30, choices=CATEGORY_CHOICES, default="general")`
+    - `priority`: `CharField(max_length=15, choices=PRIORITY_CHOICES, default="medium")`
+    - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="new")`
+    - `initial_message`: `TextField(help_text="Initial customer inquiry text")`
+    - `resolution_summary`: `TextField(blank=True, help_text="Staff explanation of resolution")`
+    - `internal_notes`: `TextField(blank=True, help_text="Private internal staff notes")`
+    - `sla_first_response_due_at`: `DateTimeField(null=True, blank=True)`
+    - `sla_resolution_due_at`: `DateTimeField(null=True, blank=True)`
+    - `first_responded_at`: `DateTimeField(null=True, blank=True)`
+    - `resolved_at`: `DateTimeField(null=True, blank=True)`
+    - `is_sla_breached`: `BooleanField(default=False)`
+    - `is_bot_handled`: `BooleanField(default=False)`
+    - `bot_handoff_reason`: `CharField(max_length=100, blank=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_estk_tenant_num_uniq")`
+    - `Index(fields=["tenant", "status", "priority"], name="idx_estk_ten_stat_prio")`
+    - `Index(fields=["tenant", "customer_email"], name="idx_estk_ten_email")`
+    - `Index(fields=["tenant", "order"], name="idx_estk_ten_order")`
+  - **Form Exclusions**: `tenant`, `number`, `is_sla_breached`, `first_responded_at`, `resolved_at`, `created_at`, `updated_at`.
+
+- [ ] **`KnowledgeBaseArticle`** [Prefix: `EKBA-`] (`apps/ecommerce/models/CustomerSupport/KnowledgeBaseArticles.py`)
+  - **Purpose**: Self-service knowledge base, customer FAQ, return policy guide, and troubleshooting documentation repository. Supports category taxonomies, audience scoping (public, registered, wholesale), keyword search tagging, view counters, and customer helpfulness voting for deflection efficiency analysis.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `CATEGORY_CHOICES = [("shipping_delivery", "Shipping & Delivery"), ("returns_refunds", "Returns & Refunds"), ("ordering_payment", "Ordering & Payment"), ("product_sizing", "Product Specifications & Sizing"), ("account_security", "Account & Privacy"), ("troubleshooting", "Product Care & Troubleshooting"), ("promotions", "Coupons & Promotions")]`
+    - `STATUS_CHOICES = [("draft", "Draft"), ("published", "Published"), ("archived", "Archived")]`
+    - `AUDIENCE_CHOICES = [("all_visitors", "All Visitors / Public"), ("registered_customers", "Registered Shoppers Only"), ("b2b_wholesale", "B2B / Wholesale Clients")]`
+  - **Fields**:
+    - `title`: `CharField(max_length=255, help_text="Article headline or question")`
+    - `slug`: `SlugField(max_length=255, help_text="URL slug for help center")`
+    - `category`: `CharField(max_length=30, choices=CATEGORY_CHOICES, default="shipping_delivery")`
+    - `summary`: `TextField(max_length=500, help_text="Summary snippet for search results")`
+    - `content`: `TextField(help_text="Detailed article documentation or guide")`
+    - `status`: `CharField(max_length=15, choices=STATUS_CHOICES, default="draft")`
+    - `target_audience`: `CharField(max_length=25, choices=AUDIENCE_CHOICES, default="all_visitors")`
+    - `is_featured`: `BooleanField(default=False, help_text="Pin to help center homepage")`
+    - `view_count`: `PositiveIntegerField(default=0)`
+    - `helpful_votes`: `PositiveIntegerField(default=0)`
+    - `unhelpful_votes`: `PositiveIntegerField(default=0)`
+    - `keywords`: `CharField(max_length=255, blank=True, help_text="Comma-separated search keywords")`
+    - `author`: `ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="authored_ecommerce_articles")`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_ekba_tenant_num_uniq")`
+    - `Index(fields=["tenant", "category", "status"], name="idx_ekba_ten_cat_stat")`
+    - `Index(fields=["tenant", "slug"], name="idx_ekba_ten_slug")`
+    - `Index(fields=["tenant", "is_featured"], name="idx_ekba_ten_feat")`
+  - **Form Exclusions**: `tenant`, `number`, `view_count`, `helpful_votes`, `unhelpful_votes`, `created_at`, `updated_at`.
+
+- [ ] **`OrderIssueClaim`** [Prefix: `ECLM-`] (`apps/ecommerce/models/CustomerSupport/OrderIssueClaims.py`)
+  - **Purpose**: Order issue intake, damaged goods dispute adjudication, missing component investigations, and policy-governed refund/replacement authorization. Captures carrier tracking, photo evidence links, claimed vs. approved amounts, supervisor approvals, and resolution actions.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `CLAIM_TYPE_CHOICES = [("damaged_item", "Damaged Item in Transit"), ("lost_in_transit", "Lost in Transit / Never Arrived"), ("wrong_item", "Wrong Item Received"), ("missing_parts", "Missing Parts / Accessories"), ("defective_product", "Defective / Non-Functional Product"), ("late_delivery", "Significant Delivery Delay")]`
+    - `STATUS_CHOICES = [("submitted", "Submitted / New"), ("under_review", "Under Agent Review"), ("carrier_investigation", "Carrier Investigation Pending"), ("approved", "Approved"), ("rejected", "Rejected"), ("completed", "Resolution Completed")]`
+    - `RESOLUTION_CHOICES = [("pending", "Pending Adjudication"), ("replacement_reship", "Reship Replacement Order"), ("full_refund", "Full Refund"), ("partial_refund", "Partial Refund / Courtesy Credit"), ("store_credit", "Store Credit / Gift Card"), ("repair", "Repair / Send Replacement Part"), ("rejected", "No Compensation / Claim Denied")]`
+  - **Fields**:
+    - `order`: `ForeignKey("ecommerce.EcommerceOrder", on_delete=models.CASCADE, related_name="issue_claims")`
+    - `customer`: `ForeignKey("ecommerce.CustomerAccountProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="order_claims")`
+    - `ticket`: `ForeignKey("ecommerce.CustomerSupportTicket", on_delete=models.SET_NULL, null=True, blank=True, related_name="order_claims")`
+    - `claim_type`: `CharField(max_length=30, choices=CLAIM_TYPE_CHOICES, default="damaged_item")`
+    - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="submitted")`
+    - `claimed_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+    - `approved_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+    - `resolution_action`: `CharField(max_length=30, choices=RESOLUTION_CHOICES, default="pending")`
+    - `carrier_tracking_number`: `CharField(max_length=100, blank=True)`
+    - `photo_evidence_url`: `URLField(max_length=500, blank=True, help_text="Image evidence link")`
+    - `customer_notes`: `TextField(help_text="Customer description of the issue")`
+    - `decision_notes`: `TextField(blank=True, help_text="Staff adjudication and policy notes")`
+    - `reviewed_by`: `ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="reviewed_order_claims")`
+    - `resolved_at`: `DateTimeField(null=True, blank=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_eclm_tenant_num_uniq")`
+    - `Index(fields=["tenant", "order", "status"], name="idx_eclm_ten_ord_stat")`
+    - `Index(fields=["tenant", "claim_type"], name="idx_eclm_ten_type")`
+  - **Form Exclusions**: `tenant`, `number`, `resolved_at`, `created_at`, `updated_at`.
+
+- [ ] **`CustomerSatisfactionSurvey`** [Prefix: `ECSF-`] (`apps/ecommerce/models/CustomerSupport/CustomerSatisfactionSurveys.py`)
+  - **Purpose**: Customer feedback collection, post-ticket CSAT (1–5 stars), delivery satisfaction scoring, and store-wide Net Promoter Score (0–10 NPS). Features automated sentiment classification (promoter, passive, detractor) and closed-loop escalation tracking for negative feedback remediation.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `SURVEY_TYPE_CHOICES = [("ticket_csat", "Post-Ticket CSAT (1-5)"), ("order_delivery_csat", "Post-Delivery Experience (1-5)"), ("storefront_nps", "Storefront Net Promoter Score (0-10)")]`
+    - `SENTIMENT_CHOICES = [("positive", "Positive / Promoter"), ("neutral", "Neutral / Passive"), ("negative", "Negative / Detractor")]`
+    - `FOLLOW_UP_CHOICES = [("not_required", "No Follow-up Required"), ("pending_review", "Pending Supervisor Review"), ("contacted_customer", "Customer Contacted / Outreached"), ("resolved_closed_loop", "Resolved / Detractor Saved")]`
+  - **Fields**:
+    - `ticket`: `ForeignKey("ecommerce.CustomerSupportTicket", on_delete=models.SET_NULL, null=True, blank=True, related_name="satisfaction_surveys")`
+    - `order`: `ForeignKey("ecommerce.EcommerceOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="satisfaction_surveys")`
+    - `customer`: `ForeignKey("ecommerce.CustomerAccountProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="satisfaction_surveys")`
+    - `survey_type`: `CharField(max_length=25, choices=SURVEY_TYPE_CHOICES, default="ticket_csat")`
+    - `rating_score`: `PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(10)], default=5, help_text="Rating score (1-5 for CSAT, 0-10 for NPS)")`
+    - `sentiment`: `CharField(max_length=15, choices=SENTIMENT_CHOICES, default="neutral")`
+    - `feedback_comment`: `TextField(blank=True, help_text="Shopper qualitative feedback comments")`
+    - `agent_rated`: `ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="rated_support_surveys")`
+    - `follow_up_status`: `CharField(max_length=25, choices=FOLLOW_UP_CHOICES, default="not_required")`
+    - `follow_up_notes`: `TextField(blank=True, help_text="Supervisor intervention and closed-loop notes")`
+    - `reviewed_by`: `ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="reviewed_support_surveys")`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_ecsf_tenant_num_uniq")`
+    - `Index(fields=["tenant", "survey_type", "sentiment"], name="idx_ecsf_ten_type_snt")`
+    - `Index(fields=["tenant", "rating_score"], name="idx_ecsf_ten_score")`
+    - `Index(fields=["tenant", "follow_up_status"], name="idx_ecsf_ten_follow")`
+  - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
+
+---
+
+## Backend Packages (apps/ecommerce/{models,forms,views,urls}/CustomerSupport/)
+
+- [ ] **Models**:
+  - `apps/ecommerce/models/CustomerSupport/__init__.py`
+  - `apps/ecommerce/models/CustomerSupport/CustomerSupportTickets.py`
+  - `apps/ecommerce/models/CustomerSupport/KnowledgeBaseArticles.py`
+  - `apps/ecommerce/models/CustomerSupport/OrderIssueClaims.py`
+  - `apps/ecommerce/models/CustomerSupport/CustomerSatisfactionSurveys.py`
+  - `apps/ecommerce/models/__init__.py` re-export block
+- [ ] **Forms**:
+  - `apps/ecommerce/forms/CustomerSupport/__init__.py`
+  - `apps/ecommerce/forms/CustomerSupport/CustomerSupportTickets.py` (`CustomerSupportTicketForm`, `CustomerSupportTicketStatusForm`)
+  - `apps/ecommerce/forms/CustomerSupport/KnowledgeBaseArticles.py` (`KnowledgeBaseArticleForm`)
+  - `apps/ecommerce/forms/CustomerSupport/OrderIssueClaims.py` (`OrderIssueClaimForm`, `OrderIssueClaimDecisionForm`)
+  - `apps/ecommerce/forms/CustomerSupport/CustomerSatisfactionSurveys.py` (`CustomerSatisfactionSurveyForm`, `CustomerSatisfactionSurveyFollowUpForm`)
+  - `apps/ecommerce/forms/__init__.py` re-export block
+- [ ] **Views**:
+  - `apps/ecommerce/views/CustomerSupport/__init__.py`
+  - `apps/ecommerce/views/CustomerSupport/CustomerSupportTickets.py` (CRUD + quick status transition action)
+  - `apps/ecommerce/views/CustomerSupport/KnowledgeBaseArticles.py` (CRUD + helpful/unhelpful vote action)
+  - `apps/ecommerce/views/CustomerSupport/OrderIssueClaims.py` (CRUD + claim adjudication decision action)
+  - `apps/ecommerce/views/CustomerSupport/CustomerSatisfactionSurveys.py` (CRUD + supervisor follow-up action)
+  - `apps/ecommerce/views/__init__.py` re-export block
+- [ ] **URLs**:
+  - `apps/ecommerce/urls/CustomerSupport/__init__.py`
+  - `apps/ecommerce/urls/CustomerSupport/CustomerSupportTickets.py`
+  - `apps/ecommerce/urls/CustomerSupport/KnowledgeBaseArticles.py`
+  - `apps/ecommerce/urls/CustomerSupport/OrderIssueClaims.py`
+  - `apps/ecommerce/urls/CustomerSupport/CustomerSatisfactionSurveys.py`
+  - `apps/ecommerce/urls/__init__.py` concatenation block
+- [ ] **Admin Registration**:
+  - `apps/ecommerce/admin.py` register `CustomerSupportTicket`, `KnowledgeBaseArticle`, `OrderIssueClaim`, `CustomerSatisfactionSurvey`
+- [ ] **Navigation & Sidebar Wiring**:
+  - `apps/core/navigation.py` add `LIVE_LINKS["9.14"]`:
+    - `"Help Desk & Ticket Management": "ecommerce:customersupportticket_list"`
+    - `"Live Chat & Chatbot": "ecommerce:customersupportticket_list?channel=chat"`
+    - `"Self-Service Knowledge Base": "ecommerce:knowledgebasearticle_list"`
+    - `"Order Inquiry & Issue Resolution": "ecommerce:orderissueclaim_list"`
+    - `"Customer Feedback & NPS": "ecommerce:customersatisfactionsurvey_list"`
+- [ ] **Database Migration**:
+  - `makemigrations ecommerce` -> `0019_...`
+  - `migrate`
+- [ ] **Seeder Extension**:
+  - `apps/ecommerce/management/commands/seed_ecommerce.py` extend with realistic demo support tickets, knowledge articles, claims with photos, and CSAT/NPS survey rows.
+
+---
+
+## Templates (templates/ecommerce/customer_support/)
+
+- [ ] **CustomerSupportTicket** (`templates/ecommerce/customer_support/ticket/`):
+  - `list.html`: Search, status filter, priority filter, channel filter, SLA status badges, assigned agent, actions.
+  - `detail.html`: Full inquiry message, order linkage sidebar, carrier tracking status, SLA countdown, internal notes, resolution box, audit log.
+  - `form.html`: Ticket creation/edit form with order and customer selection.
+- [ ] **KnowledgeBaseArticle** (`templates/ecommerce/customer_support/article/`):
+  - `list.html`: Category filter, status filter, audience filter, view count, helpfulness score, featured badges.
+  - `detail.html`: Full markdown content preview, category metadata, helpfulness feedback buttons, author info.
+  - `form.html`: Article authoring form with markdown content and keyword tagging.
+- [ ] **OrderIssueClaim** (`templates/ecommerce/customer_support/claim/`):
+  - `list.html`: Order filter, claim type filter, adjudication status filter, claimed amount, actions.
+  - `detail.html`: Order summary, photo evidence lightbox/link, claimed vs approved amounts, resolution action, supervisor decision notes.
+  - `form.html`: Claim submission and review form.
+- [ ] **CustomerSatisfactionSurvey** (`templates/ecommerce/customer_support/survey/`):
+  - `list.html`: Survey type filter, sentiment filter, rating score badges (stars / NPS), follow-up status badges.
+  - `detail.html`: Full customer comment, rated ticket & order context, sentiment breakdown, supervisor follow-up action log.
+  - `form.html`: Survey recording and follow-up management form.
+
+---
+
+## Verification & Quality Gates
+- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 1)
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 2 — must be strictly idempotent)
+- [ ] `venv\Scripts\python.exe manage.py check`
+- [ ] `temp/smoke_customer_support.py` smoke test verifying all new URLs return HTTP 200/302, rendered content assertions, and IDOR isolation.
+
+---
+
+## Review & Tests & Close-Out (Phases 4–7)
+- [ ] Phase 4: Six Reviewers in strict serial sequence (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) appending to `.claude/tasks/review-ecommerce-9.14.md`
+- [ ] Phase 5: `code-fixer` agent burns down findings
+- [ ] Phase 6: Tests in serial order (`test_customersupport_models.py`, `test_customersupport_forms.py`, `test_customersupport_views.py`, `test_customersupport_security.py`)
+- [ ] Phase 7: Update `.claude/skills/ecommerce/SKILL.md` and `README.md`
+- [ ] Register gaps in `.agents/tasks/gaps-ecommerce-9.14.md`
+
+---
+
+## Later Passes / Deferred
+- Real-Time WebSockets Live Chat Engine (Django Channels / WebSocket broker for live agent messaging)
+- Third-Party Telephony & Voice IVR Integration (Twilio / Aircall recording & transcription logs)
+- Automated Carrier Claims API (Direct EDI / API claim filing with FedEx, UPS, DHL)
+- AI LLM Generative Ticket Drafting (Automated draft response generation via OpenAI/Anthropic API)
+
+---
+
+## Review notes
+(filled in at the end)
+
+---
+
 # Sub-module 9.13: Reviews & User-Generated Content (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.13.md` (2026-10-31)
 
 > **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.12.
