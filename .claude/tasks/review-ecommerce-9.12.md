@@ -22,3 +22,21 @@ Head: `eb8ee89239d6ed9f38850b3412fae3cd7cab6293`
 ### Minor
 - [ ] `templates/ecommerce/subscriptioncommerce/subscriptionplan/list.html:114` — Plan archetype badge logic explicitly tests `subscribe_save` and `curated_box`, falling through to `badge-slate` for `membership_club`.
   - **Fix**: Explicitly check `elif plan.plan_type == 'membership_club'` and assign `badge-amber` or `badge-info`.
+
+---
+
+## 2. Explorer Findings
+
+### Critical
+None.
+
+### Important
+- [ ] `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPlans.py:137` — Unhandled `ProtectedError` on subscription plan deletion: In `subscriptionplan_delete`, `plan.delete()` is called without catching `django.db.models.ProtectedError`. Because `CustomerSubscription.plan` is declared with `on_delete=models.PROTECT`, attempting to delete any plan with active or historical subscriptions crashes with HTTP 500. Additionally, the confirmation prompt in `templates/ecommerce/subscriptioncommerce/subscriptionplan/list.html:173` inaccurately claims "Existing subscriptions will remain".
+  - **Fix**: Wrap `plan.delete()` in `try...except ProtectedError:` in `subscriptionplan_delete`, notify user with `messages.error(request, f"Cannot delete plan '{name}' because subscriptions are currently assigned to it.")`, redirect safely to `ecommerce:subscriptionplan_detail`, and update the list template confirmation prompt.
+
+### Minor
+- [ ] `apps/ecommerce/views/SubscriptionCommerce/SubscriptionBoxCurations.py:48` & `apps/ecommerce/forms/SubscriptionCommerce/SubscriptionBoxCurations.py:73` — Curation plan queryset archetype filtering divergence: Contract Section 4.3 specifies `plans: Queryset of SubscriptionPlan (curated_box type)`. The view and form currently query all active plans regardless of `plan_type` (allowing non-box plans like `subscribe_save` to appear in the curation filter dropdown and form select).
+  - **Fix**: Filter `plans` in `subscriptionboxcuration_list` and `SubscriptionBoxCurationForm.__init__` with `.filter(plan_type="curated_box", is_active=True)`.
+- [ ] `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:19` & `SubscriptionPlans.py:66` — Missing nested `select_related` causing N+1 queries on customer details: `subscription_portal` and `subscriptionplan_detail` query `CustomerSubscription` selecting `customer_profile`, but templates access `sub.customer_profile.customer.name` and `sub.customer_profile.user.email`.
+  - **Fix**: Add `"customer_profile__customer"` and `"customer_profile__user"` to `select_related` in `subscription_portal` and `subscriptionplan_detail`.
+
