@@ -182,6 +182,15 @@ def subscription_portal_deflect(request, pk):
     reason = request.POST.get("reason", "too_much_product")
     action_choice = request.POST.get("action_choice", "discount_cycle")
 
+    valid_actions = {"discount_cycle", "pause_duration", "cancel_anyway"}
+    if action_choice not in valid_actions:
+        messages.error(request, f"Invalid deflection action choice '{action_choice}'.")
+        return redirect("ecommerce:subscription_portal")
+
+    valid_reasons = dict(SubscriptionRetentionAction.REASON_CHOICES)
+    if reason not in valid_reasons:
+        reason = "too_much_product"
+
     if action_choice == "discount_cycle":
         subscription.recurring_discount_pct = min(Decimal("50.00"), subscription.recurring_discount_pct + Decimal("15.00"))
         subscription.save(update_fields=["recurring_discount_pct", "updated_at"])
@@ -197,7 +206,7 @@ def subscription_portal_deflect(request, pk):
         offer = "pause_duration"
         discount_val = Decimal("0.00")
         msg = f"Subscription {subscription.number} paused for 60 days instead of cancelling."
-    else:
+    else:  # action_choice == "cancel_anyway"
         subscription.status = "cancelled"
         subscription.cancelled_at = timezone.now()
         subscription.cancellation_reason = reason
