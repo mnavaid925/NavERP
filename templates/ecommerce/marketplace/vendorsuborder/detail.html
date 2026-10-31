@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}Sub-Order {{ sub_order.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketplace_console' %}" class="hover:text-blue-600">Marketplace</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:vendorsuborder_list' %}" class="hover:text-blue-600">Sub-Orders</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium font-mono">{{ sub_order.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 font-mono">{{ sub_order.number }}</h1>
+        {% if sub_order.fulfillment_status == "delivered" %}
+          <span class="badge badge-green">Delivered</span>
+        {% elif sub_order.fulfillment_status == "shipped" %}
+          <span class="badge badge-info">Shipped</span>
+        {% elif sub_order.fulfillment_status == "cancelled" %}
+          <span class="badge badge-slate">Cancelled</span>
+        {% else %}
+          <span class="badge badge-amber">{{ sub_order.get_fulfillment_status_display }}</span>
+        {% endif %}
+
+        {% if sub_order.sla_status == "on_time" %}
+          <span class="badge badge-green">SLA On Time</span>
+        {% elif sub_order.sla_status == "near_breach" %}
+          <span class="badge badge-amber">SLA Approaching Deadline</span>
+        {% else %}
+          <span class="badge badge-red">SLA Breached</span>
+        {% endif %}
+
+        {% if sub_order.dispute_status != "none" %}
+          <span class="badge badge-red flex items-center gap-1">
+            <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
+            <span>{{ sub_order.get_dispute_status_display }}</span>
+          </span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Consignment for Parent Order
+        <span class="font-mono font-medium text-slate-800">{{ sub_order.order.number }}</span> • Vendor:
+        <a href="{% url 'ecommerce:marketplacevendor_detail' sub_order.vendor.pk %}" class="text-blue-600 hover:underline font-medium">
+          {{ sub_order.vendor.store_name }}
+        </a>
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:vendorsuborder_edit' sub_order.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Sub-Order</span>
+      </a>
+      <a href="{% url 'ecommerce:vendorsuborder_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to List</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI Stats Bar -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gross Items Subtotal</div>
+      <div class="mt-2 text-2xl font-bold text-slate-900">
+        ${{ sub_order.subtotal_amount }}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">+${{ sub_order.shipping_amount }} Shipping Fee</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Marketplace Fee</div>
+      <div class="mt-2 text-2xl font-bold text-red-600">
+        -${{ sub_order.commission_amount }}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">{{ sub_order.commission_rate }}% platform fee</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Net Vendor Payable</div>
+      <div class="mt-2 text-2xl font-bold text-emerald-600">
+        ${{ sub_order.net_vendor_amount }}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">Status: {{ sub_order.get_payout_status_display }}</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Dispatch Due Date</div>
+      <div class="mt-2 text-2xl font-bold text-slate-900">
+        {{ sub_order.promised_dispatch_date|date:"M d, Y"|default:"Not specified" }}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">SLA: {{ sub_order.get_sla_status_display }}</div>
+    </div>
+  </div>
+
+  <!-- Main Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Fulfillment & Carrier Controls -->
+    <div class="lg:col-span-1 space-y-6">
+      <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-5">
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2">
+          <i data-lucide="truck" class="w-5 h-5 text-blue-600"></i>
+          <span>Fulfillment & Dispatch</span>
+        </h2>
+        <div class="space-y-2 text-xs text-slate-600 mb-4 pb-3 border-b border-slate-100">
+          <div><span class="font-medium text-slate-800">Carrier:</span> {{ sub_order.carrier_name|default:"Not assigned" }}</div>
+          <div><span class="font-medium text-slate-800">Tracking #:</span> <span class="font-mono">{{ sub_order.tracking_number|default:"—" }}</span></div>
+          {% if sub_order.tracking_url %}
+            <div>
+              <a href="{{ sub_order.tracking_url }}" target="_blank" class="text-blue-600 hover:underline flex items-center gap-1 font-medium">
+                <span>View Carrier Tracking</span>
+                <i data-lucide="external-link" class="w-3 h-3"></i>
+              </a>
+            </div>
+          {% endif %}
+          <div><span class="font-medium text-slate-800">Dispatched:</span> {{ sub_order.dispatched_at|date:"M d, Y H:i"|default:"Pending" }}</div>
+          <div><span class="font-medium text-slate-800">Delivered:</span> {{ sub_order.delivered_at|date:"M d, Y H:i"|default:"Pending" }}</div>
+        </div>
+
+        <form method="post" action="{% url 'ecommerce:vendorsuborder_fulfill' sub_order.pk %}" class="space-y-3">
+          {% csrf_token %}
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Fulfillment Status</label>
+            {{ fulfillment_form.fulfillment_status }}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Shipping Carrier</label>
+            {{ fulfillment_form.carrier_name }}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Tracking Number</label>
+            {{ fulfillment_form.tracking_number }}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Tracking URL</label>
+            {{ fulfillment_form.tracking_url }}
+          </div>
+          <button type="submit" class="btn btn-primary w-full text-xs">Update Fulfillment</button>
+        </form>
+      </div>
+
+      <!-- Dispute Handling -->
+      <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-5">
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2">
+          <i data-lucide="alert-octagon" class="w-5 h-5 text-red-600"></i>
+          <span>Dispute Resolution</span>
+        </h2>
+        {% if sub_order.dispute_status != "none" %}
+          <div class="p-3 bg-red-50 text-red-800 rounded text-xs mb-3 border border-red-200">
+            <div class="font-bold">Active Dispute: {{ sub_order.get_dispute_status_display }}</div>
+            <div class="mt-1">Reason: {{ sub_order.dispute_reason|default:"No reason stated" }}</div>
+            {% if sub_order.dispute_notes %}
+              <div class="mt-1 text-slate-700 bg-white p-2 rounded border border-red-100">{{ sub_order.dispute_notes }}</div>
+            {% endif %}
+            {% if sub_order.dispute_resolved_at %}
+              <div class="mt-1 text-[10px] text-slate-500">Resolved at: {{ sub_order.dispute_resolved_at|date:"M d, Y H:i" }}</div>
+            {% endif %}
+          </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'ecommerce:vendorsuborder_dispute' sub_order.pk %}" class="space-y-3">
+          {% csrf_token %}
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Dispute State</label>
+            {{ dispute_form.dispute_status }}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Dispute Reason</label>
+            {{ dispute_form.dispute_reason }}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Investigation Remarks</label>
+            {{ dispute_form.dispute_notes }}
+          </div>
+          <button type="submit" class="btn btn-outline text-xs w-full text-slate-800 hover:bg-slate-50">
+            Save Dispute State
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Right Column: Customer Feedback and Parent Order -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Seller Feedback & Rating -->
+      <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-6 space-y-4">
+        <h2 class="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="star" class="w-5 h-5 text-amber-500 fill-amber-500"></i>
+            <span>Customer Rating & Fulfillment Feedback</span>
+          </div>
+          {% if sub_order.customer_rating %}
+            <div class="flex items-center gap-1 font-bold text-slate-900">
+              <span>{{ sub_order.customer_rating }} / 5 Stars</span>
+            </div>
+          {% endif %}
+        </h2>
+        {% if sub_order.customer_rating %}
+          <div class="space-y-3">
+            <div class="p-3 bg-amber-50 rounded border border-amber-200 text-sm">
+              <span class="text-xs font-semibold text-amber-900 block mb-1">Customer Review:</span>
+              <p class="text-slate-800 italic">"{{ sub_order.customer_feedback|default:"No written review provided." }}"</p>
+              {% if sub_order.rated_at %}
+                <span class="text-[10px] text-slate-500 block mt-1">Submitted on {{ sub_order.rated_at|date:"M d, Y" }}</span>
+              {% endif %}
+            </div>
+            {% if sub_order.seller_response %}
+              <div class="p-3 bg-slate-50 rounded border border-slate-200 text-sm ml-6">
+                <span class="text-xs font-semibold text-slate-800 block mb-1">Vendor Response:</span>
+                <p class="text-slate-700">{{ sub_order.seller_response }}</p>
+              </div>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="text-sm text-slate-500 italic py-2">
+            No customer fulfillment rating has been posted for this sub-order yet.
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Parent Order Information -->
+      <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-6 space-y-4">
+        <h2 class="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="shopping-bag" class="w-5 h-5 text-blue-600"></i>
+            <span>Parent eCommerce Order</span>
+          </div>
+          <span class="font-mono text-sm text-slate-700 font-bold">{{ sub_order.order.number }}</span>
+        </h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+          <div>
+            <span class="text-slate-500 block">Customer Name:</span>
+            <span class="font-medium text-slate-800">{{ sub_order.order.customer_party.name|default:"Shopper" }}</span>
+          </div>
+          <div>
+            <span class="text-slate-500 block">Total Order Value:</span>
+            <span class="font-medium text-slate-800 font-mono">${{ sub_order.order.grand_total }}</span>
+          </div>
+          <div>
+            <span class="text-slate-500 block">Order Status:</span>
+            <span class="font-medium text-slate-800">{{ sub_order.order.get_status_display }}</span>
+          </div>
+          <div>
+            <span class="text-slate-500 block">Placed Date:</span>
+            <span class="font-medium text-slate-800">{{ sub_order.order.created_at|date:"M d, Y H:i" }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
