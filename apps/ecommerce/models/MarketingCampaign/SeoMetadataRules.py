@@ -164,6 +164,14 @@ class SeoMetadataRule(TenantNumbered):
                 fields=["tenant", "target_keyword"],
                 name="idx_eseo_ten_keyword",
             ),
+            models.Index(
+                fields=["tenant", "target_category"],
+                name="idx_eseo_ten_category",
+            ),
+            models.Index(
+                fields=["tenant", "target_product"],
+                name="idx_eseo_ten_product",
+            ),
         ]
 
     def __str__(self):
