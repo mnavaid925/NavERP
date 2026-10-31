@@ -76,7 +76,8 @@ def social_commerce_feed(request):
     scheme = "https" if request.is_secure() else "http"
 
     for p in products:
-        first_variant = p.variants.first()
+        variants = list(p.variants.all())
+        first_variant = variants[0] if variants else None
         price_val = str(first_variant.price) if first_variant and first_variant.price else "0.00"
         item = {
             "id": (first_variant.sku if first_variant and first_variant.sku else p.number),
