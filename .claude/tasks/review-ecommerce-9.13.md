@@ -47,3 +47,18 @@ Reviewing changeset: `3fb041f95e45ff13427ac02c53583153e9d95fc2..e645586a1a7a5c11
 2. `apps/ecommerce/views/ReviewUgc/ProductQuestionAnswers.py:178` — Response action does not pre-select "approved" status for pending questions. Fix: Set `initial["status"] = "approved"` when question is currently pending.
 3. `templates/ecommerce/review_ugc/visual_ugc/detail.html:67` — `capitalize` filter distorts brand casing on media type display (e.g. TikTok Video). Fix: Remove `capitalize` filter.
 4. `apps/ecommerce/views/ReviewUgc/ProductReviews.py:14` — Unused imports (`ecommerce_scope` in `ProductReviews.py` and `get_object_or_404` in all four view modules). Fix: Remove unused imports.
+
+
+---
+
+## 3. Frontend Review Findings
+
+### Critical
+*None.*
+
+### Important
+1. `templates/ecommerce/review_ugc/sentiment_summary/detail.html:95, 103, 111, 119, 127` — Star distribution progress bars use raw integer count instead of proportional percentage (`style="width: {{ summary.rating_5_count|default:0 }}%"`). Fix: Use Django's built-in `{% widthratio summary.rating_5_count summary.total_reviews 100 %}%` (or model property `rating_5_pct`).
+
+### Minor
+1. `templates/ecommerce/review_ugc/visual_ugc/list.html:121-127` & `templates/ecommerce/review_ugc/visual_ugc/detail.html:19-25` — `rights_status` badge check uses `{% else %}` for "Rejected" rather than explicit check and neutral fallback with `{{ item.get_rights_status_display }}`. Fix: Add explicit branch for `rejected` and fallback with `badge-slate`.
+2. `templates/ecommerce/review_ugc/sentiment_summary/list.html:110` — Recalculate icon button missing accessible `title` and `aria-label` directly on the `<button>`. Fix: Add `title="Recalculate Metrics"` and `aria-label="Recalculate Metrics"` to the `<button>`.
