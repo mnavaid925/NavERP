@@ -40,3 +40,28 @@ None.
 - [ ] `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:19` & `SubscriptionPlans.py:66` — Missing nested `select_related` causing N+1 queries on customer details: `subscription_portal` and `subscriptionplan_detail` query `CustomerSubscription` selecting `customer_profile`, but templates access `sub.customer_profile.customer.name` and `sub.customer_profile.user.email`.
   - **Fix**: Add `"customer_profile__customer"` and `"customer_profile__user"` to `select_related` in `subscription_portal` and `subscriptionplan_detail`.
 
+---
+
+## 3. Frontend Reviewer Findings
+
+### Critical
+- [ ] `templates/ecommerce/subscriptioncommerce/customersubscription/form.html` — Missing required form field `started_at` in template causes silent validation failure upon submission.
+  - **Fix**: Add `started_at` field input block to `form.html` (or exclude it from form `Meta.fields` as noted by code-reviewer).
+
+### Important
+- [ ] `templates/ecommerce/subscriptioncommerce/{subscriptionplan,customersubscription,subscriptionboxcuration,subscriptionretentionaction}/detail.html` — All 4 detail templates omit POST-Delete action forms with CSRF and confirm prompts in their `.page-actions` headers (Rule 4 — CRUD Completeness).
+  - **Fix**: Add POST-Delete action forms in the `.page-actions` header of each detail page.
+
+### Minor
+- [ ] `templates/ecommerce/subscriptioncommerce/portal/portal.html:133` — Deflection modal close button has no `aria-label` or `title`.
+  - **Fix**: Add `aria-label="Close modal"` and `title="Close"`.
+- [ ] `templates/ecommerce/subscriptioncommerce/portal/portal.html:140-141` — Deflection reason `<select>` input has no `id` and `<label>` has no `for` attribute.
+  - **Fix**: Add `id="cancel-reason-{{ sub.pk }}"` and `for="cancel-reason-{{ sub.pk }}"`.
+- [ ] `templates/ecommerce/subscriptioncommerce/portal/portal.html:154, 161, 168` — Radio inputs use non-theme token `text-primary`.
+  - **Fix**: Replace `text-primary` with `text-blue-600`.
+- [ ] `templates/ecommerce/subscriptioncommerce/subscriptionplan/detail.html:24` — Plan Archetype badge is statically `badge-info`, differing from archetype-based coloring in `list.html`.
+  - **Fix**: Apply archetype conditional badge coloring consistent with `list.html`.
+- [ ] `templates/ecommerce/subscriptioncommerce/portal/portal.html:129-186` — Deflection modal is nested directly inside `<td>` cell within an overflow table container.
+  - **Fix**: Move modal container definitions outside the table wrap to avoid potential stacking context quirks on mobile.
+
+
