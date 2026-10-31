@@ -25,7 +25,7 @@
         {% elif conversion.status == 'paid' %}
           <span class="badge badge-info">Paid</span>
         {% else %}
-          <span class="badge badge-red">Voided / Refund</span>
+          <span class="badge badge-red">{{ conversion.get_status_display }}</span>
         {% endif %}
       </div>
       <p class="text-sm text-slate-500 mt-1 font-mono">
