@@ -31,7 +31,7 @@
 
   <!-- Filters & Search -->
   <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
-    <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-7 gap-3 items-end">
       <div>
         <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
         <div class="relative">
@@ -70,6 +70,15 @@
           <option value="">All SLA States</option>
           {% for val, label in sla_status_choices %}
             <option value="{{ val }}" {% if sla_filter == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-payout" class="block text-xs font-medium text-slate-600 mb-1">Payout Status</label>
+        <select id="filter-payout" name="payout_status" class="form-select w-full text-sm">
+          <option value="">All Settlement</option>
+          {% for val, label in payout_status_choices %}
+            <option value="{{ val }}" {% if payout_filter == val %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>
@@ -191,15 +200,15 @@
             </td>
             <td class="py-3 px-4 text-right">
               <div class="table-actions flex items-center justify-end gap-2">
-                <a href="{% url 'ecommerce:vendorsuborder_detail' so.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="View Sub-Order">
+                <a href="{% url 'ecommerce:vendorsuborder_detail' so.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="View Sub-Order" aria-label="View Sub-Order">
                   <i data-lucide="eye" class="w-4 h-4"></i>
                 </a>
-                <a href="{% url 'ecommerce:vendorsuborder_edit' so.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit Sub-Order">
+                <a href="{% url 'ecommerce:vendorsuborder_edit' so.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit Sub-Order" aria-label="Edit Sub-Order">
                   <i data-lucide="pencil" class="w-4 h-4"></i>
                 </a>
-                <form method="post" action="{% url 'ecommerce:vendorsuborder_delete' so.pk %}" onsubmit="return confirm('Are you sure you want to delete sub-order {{ so.number }}?');" class="inline">
+                <form method="post" action="{% url 'ecommerce:vendorsuborder_delete' so.pk %}" onsubmit="return confirm('Are you sure you want to delete sub-order {{ so.number|escapejs }}?');" class="inline">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete Sub-Order">
+                  <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete Sub-Order" aria-label="Delete Sub-Order">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </form>
@@ -235,7 +244,7 @@
       </div>
       <div class="flex items-center gap-1">
         {% if page_obj.has_previous %}
-          <a href="?page={{ page_obj.previous_page_number }}&q={{ query }}&vendor={{ vendor_filter }}&fulfillment_status={{ fulfillment_filter }}&sla_status={{ sla_filter }}&dispute_status={{ dispute_filter }}" class="btn btn-outline text-xs">
+          <a href="?page={{ page_obj.previous_page_number }}&q={{ query|urlencode }}&vendor={{ vendor_filter }}&fulfillment_status={{ fulfillment_filter }}&sla_status={{ sla_filter }}&payout_status={{ payout_filter }}&dispute_status={{ dispute_filter }}" class="btn btn-outline text-xs">
             Previous
           </a>
         {% endif %}
@@ -243,7 +252,7 @@
           {{ page_obj.number }}
         </span>
         {% if page_obj.has_next %}
-          <a href="?page={{ page_obj.next_page_number }}&q={{ query }}&vendor={{ vendor_filter }}&fulfillment_status={{ fulfillment_filter }}&sla_status={{ sla_filter }}&dispute_status={{ dispute_filter }}" class="btn btn-outline text-xs">
+          <a href="?page={{ page_obj.next_page_number }}&q={{ query|urlencode }}&vendor={{ vendor_filter }}&fulfillment_status={{ fulfillment_filter }}&sla_status={{ sla_filter }}&payout_status={{ payout_filter }}&dispute_status={{ dispute_filter }}" class="btn btn-outline text-xs">
             Next
           </a>
         {% endif %}
