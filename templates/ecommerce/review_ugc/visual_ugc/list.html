@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Visual UGC & Social Proof | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Reviews & UGC</span>
+            <span>/</span>
+            <span>Visual UGC</span>
+        </div>
+        <h1 class="page-title">Visual UGC & Social Proof Galleries</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:visualugcmedia_create' %}" class="btn btn-primary">
+            <i data-lucide="image-plus"></i> Add UGC Asset
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="form-group mb-0">
+                <label for="q" class="form-label">Search</label>
+                <input type="text" id="q" name="q" value="{{ query }}" placeholder="Caption, handle, uploader..." class="form-input">
+            </div>
+            <div class="form-group mb-0">
+                <label for="media_type" class="form-label">Media Type</label>
+                <select id="media_type" name="media_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in media_type_choices %}
+                    <option value="{{ val }}" {% if selected_media_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="rights_status" class="form-label">Rights Status</label>
+                <select id="rights_status" name="rights_status" class="form-select">
+                    <option value="">All Rights</option>
+                    {% for val, label in rights_status_choices %}
+                    <option value="{{ val }}" {% if selected_rights == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="product" class="form-label">Tagged Product</label>
+                <select id="product" name="product" class="form-select">
+                    <option value="">All Products</option>
+                    {% for prod in products %}
+                    <option value="{{ prod.pk }}" {% if selected_product == prod.pk|stringformat:"d" %}selected{% endif %}>{{ prod.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <a href="{% url 'ecommerce:visualugcmedia_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Visual Cards Grid -->
+<div class="card">
+    <div class="card-body">
+        {% if media_items %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {% for item in media_items %}
+            <div class="border border-slate-200 rounded-lg overflow-hidden flex flex-col hover:shadow-md transition">
+                <div class="relative h-48 bg-slate-100 overflow-hidden">
+                    {% if item.media_type == "video" %}
+                    <div class="absolute inset-0 flex items-center justify-center bg-black/40 text-white z-10">
+                        <i data-lucide="play-circle" class="w-12 h-12"></i>
+                    </div>
+                    {% endif %}
+                    <img src="{{ item.thumbnail_url|default:item.media_url }}" alt="{{ item.caption|default:item.tagged_product.name }}" class="w-full h-full object-cover">
+                    <div class="absolute top-2 left-2 z-20">
+                        {% if item.media_type == "photo" %}
+                        <span class="badge badge-info text-xs">Photo</span>
+                        {% elif item.media_type == "video" %}
+                        <span class="badge badge-green text-xs">Video</span>
+                        {% elif item.media_type == "instagram" %}
+                        <span class="badge badge-amber text-xs">Instagram</span>
+                        {% else %}
+                        <span class="badge badge-slate text-xs">TikTok</span>
+                        {% endif %}
+                    </div>
+                    <div class="absolute top-2 right-2 z-20">
+                        {% if item.is_published %}
+                        <span class="badge badge-green text-xs">Published</span>
+                        {% else %}
+                        <span class="badge badge-muted text-xs">Draft</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="p-4 flex-1 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between text-xs text-muted mb-1">
+                            <span class="font-mono">{{ item.number }}</span>
+                            {% if item.uploader_handle %}
+                            <span class="text-brand font-medium">{{ item.uploader_handle }}</span>
+                            {% endif %}
+                        </div>
+                        <h4 class="font-semibold text-slate-800 text-sm mb-1 truncate">
+                            {{ item.tagged_product.name }}
+                        </h4>
+                        {% if item.caption %}
+                        <p class="text-xs text-slate-600 line-clamp-2 mb-2">{{ item.caption }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <div>
+                            {% if item.rights_status == "approved" %}
+                            <span class="badge badge-green text-xs">Rights Approved</span>
+                            {% elif item.rights_status == "pending_request" %}
+                            <span class="badge badge-amber text-xs">Pending Rights</span>
+                            {% else %}
+                            <span class="badge badge-red text-xs">Rejected</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <a href="{% url 'ecommerce:visualugcmedia_detail' item.pk %}" class="btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:visualugcmedia_edit' item.pk %}" class="btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form action="{% url 'ecommerce:visualugcmedia_delete' item.pk %}" method="post" class="inline" onsubmit="return confirm('Delete UGC asset {{ item.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-red hover:text-red" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% else %}
+        <div class="empty-state py-12">
+            <i data-lucide="camera" class="w-12 h-12 text-muted mx-auto mb-3"></i>
+            <div class="font-medium text-slate-800 text-lg">No Visual UGC Assets Found</div>
+            <div class="text-sm text-muted max-w-sm mx-auto mt-1">Upload customer unboxing photos, review images, or social proof embeds to showcase on storefronts.</div>
+            <div class="mt-4">
+                <a href="{% url 'ecommerce:visualugcmedia_create' %}" class="btn btn-primary">
+                    <i data-lucide="plus"></i> Add First Visual Asset
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer flex justify-between items-center">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} UGC assets
+        </div>
+        <div class="pagination">
+            <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}&q={{ query }}&media_type={{ selected_media_type }}&rights_status={{ selected_rights }}&product={{ selected_product }}" class="btn btn-outline btn-sm {% if not page_obj.has_previous %}disabled{% endif %}">
+                Previous
+            </a>
+            <span class="px-3 py-1 text-sm font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}&q={{ query }}&media_type={{ selected_media_type }}&rights_status={{ selected_rights }}&product={{ selected_product }}" class="btn btn-outline btn-sm {% if not page_obj.has_next %}disabled{% endif %}">
+                Next
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
