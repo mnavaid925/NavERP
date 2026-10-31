@@ -48,6 +48,13 @@
         <i data-lucide="pencil" class="w-4 h-4"></i>
         <span>Edit Campaign</span>
       </a>
+      <form method="post" action="{% url 'ecommerce:marketingcampaign_delete' campaign.pk %}" onsubmit="return confirm('Delete campaign {{ campaign.number }}?');" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger inline-flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
       <a href="{% url 'ecommerce:marketingcampaign_list' %}" class="btn btn-outline inline-flex items-center gap-2">
         <i data-lucide="arrow-left" class="w-4 h-4"></i>
         <span>Back to List</span>
