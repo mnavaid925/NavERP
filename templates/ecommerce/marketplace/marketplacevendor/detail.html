@@ -1,0 +1,415 @@
+{% extends "base.html" %}
+
+{% block title %}{{ vendor.store_name }} — Marketplace Vendor — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketplace_console' %}" class="hover:text-blue-600">Marketplace</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketplacevendor_list' %}" class="hover:text-blue-600">Vendors</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ vendor.store_name }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ vendor.store_name }}</h1>
+        {% if vendor.status == "active" %}
+          <span class="badge badge-green">Active Seller</span>
+        {% elif vendor.status == "approved" %}
+          <span class="badge badge-info">Approved</span>
+        {% elif vendor.status == "under_review" %}
+          <span class="badge badge-amber">Under Review</span>
+        {% elif vendor.status == "submitted" %}
+          <span class="badge badge-amber">Submitted</span>
+        {% elif vendor.status == "suspended" %}
+          <span class="badge badge-red">Suspended</span>
+        {% elif vendor.status == "terminated" %}
+          <span class="badge badge-slate">Terminated</span>
+        {% else %}
+          <span class="badge badge-muted">Draft</span>
+        {% endif %}
+
+        {% if vendor.kyc_status == "verified" %}
+          <span class="badge badge-green flex items-center gap-1">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+            <span>KYC Verified</span>
+          </span>
+        {% elif vendor.kyc_status == "pending" %}
+          <span class="badge badge-amber flex items-center gap-1">
+            <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+            <span>KYC Pending</span>
+          </span>
+        {% elif vendor.kyc_status == "rejected" %}
+          <span class="badge badge-red flex items-center gap-1">
+            <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
+            <span>KYC Rejected</span>
+          </span>
+        {% else %}
+          <span class="badge badge-muted">KYC Unsubmitted</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1 font-mono">{{ vendor.number }} • slug: /vendors/{{ vendor.slug }}/ • Legal Party: {{ vendor.party.name }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:marketplacevendor_edit' vendor.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Profile</span>
+      </a>
+      <a href="{% url 'ecommerce:marketplacevendor_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to List</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI Stats Bar -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Customer Rating</div>
+      <div class="mt-2 flex items-baseline gap-2">
+        <div class="text-2xl font-bold text-slate-900 flex items-center gap-1">
+          <i data-lucide="star" class="w-5 h-5 text-amber-400 fill-amber-400"></i>
+          <span>{{ vendor.rating_average }}</span>
+        </div>
+        <span class="text-xs text-slate-500">from {{ vendor.rating_count }} ratings</span>
+      </div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Commission Structure</div>
+      <div class="mt-2 text-2xl font-bold text-slate-900">
+        {{ vendor.commission_rate }}%
+      </div>
+      <div class="text-xs text-slate-500 mt-1">{{ vendor.get_commission_type_display }} {% if vendor.fixed_fee_per_order > 0 %}(+${{ vendor.fixed_fee_per_order }}/order){% endif %}</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Payout Threshold</div>
+      <div class="mt-2 text-2xl font-bold text-slate-900">
+        ${{ vendor.min_payout_amount }}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">{{ vendor.get_payout_method_display }}</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Dispatch SLA</div>
+      <div class="mt-2 text-2xl font-bold text-slate-900">
+        {{ vendor.shipping_lead_time_days }} days
+      </div>
+      <div class="text-xs text-slate-500 mt-1">Lead time promise</div>
+    </div>
+  </div>
+
+  <!-- Main Content Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Store Details & Verification -->
+    <div class="lg:col-span-1 space-y-6">
+      <!-- KYC Verification Card -->
+      <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-5">
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2">
+          <i data-lucide="shield-check" class="w-5 h-5 text-blue-600"></i>
+          <span>KYC & Legal Verification</span>
+        </h2>
+        <div class="space-y-3 text-sm">
+          <div>
+            <span class="text-xs text-slate-500 block">Status:</span>
+            <span class="font-medium text-slate-900">{{ vendor.get_kyc_status_display }}</span>
+          </div>
+          {% if vendor.kyc_document_type %}
+          <div>
+            <span class="text-xs text-slate-500 block">Document Provided:</span>
+            <span class="font-medium text-slate-900">{{ vendor.kyc_document_type }}</span>
+          </div>
+          {% endif %}
+          {% if vendor.kyc_verified_at %}
+          <div>
+            <span class="text-xs text-slate-500 block">Verified Date:</span>
+            <span class="font-medium text-slate-900">{{ vendor.kyc_verified_at|date:"M d, Y H:i" }}</span>
+          </div>
+          {% endif %}
+          {% if vendor.kyc_notes %}
+          <div>
+            <span class="text-xs text-slate-500 block">Compliance Remarks:</span>
+            <p class="text-xs text-slate-600 bg-slate-50 p-2 rounded mt-1 border border-slate-100">{{ vendor.kyc_notes }}</p>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Verification Action Form -->
+        <div class="mt-4 pt-4 border-t border-slate-100">
+          <h3 class="text-xs font-semibold text-slate-700 uppercase mb-2">Update KYC State</h3>
+          <form method="post" action="{% url 'ecommerce:marketplacevendor_verify_kyc' vendor.pk %}" class="space-y-3">
+            {% csrf_token %}
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Verification Status</label>
+              {{ kyc_form.kyc_status }}
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Document Type</label>
+              {{ kyc_form.kyc_document_type }}
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Compliance Notes</label>
+              {{ kyc_form.kyc_notes }}
+            </div>
+            <button type="submit" class="btn btn-primary w-full text-xs">Save KYC Decision</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Store & Banking Profile -->
+      <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-5 space-y-3 text-sm">
+        <h2 class="text-base font-bold text-slate-900 mb-2 flex items-center gap-2">
+          <i data-lucide="store" class="w-5 h-5 text-indigo-600"></i>
+          <span>Storefront Profile</span>
+        </h2>
+        <div>
+          <span class="text-xs text-slate-500 block">Headline:</span>
+          <span class="text-slate-800">{{ vendor.headline|default:"—" }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Contact Info:</span>
+          <span class="text-slate-800">{{ vendor.support_email|default:"No email" }} • {{ vendor.support_phone|default:"No phone" }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Primary Account Owner:</span>
+          <span class="text-slate-800 font-medium">{% if vendor.owner_user %}{{ vendor.owner_user.username }}{% else %}—{% endif %}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Tax Registration:</span>
+          <span class="font-mono text-xs text-slate-800">{{ vendor.tax_id|default:"None on file" }}</span>
+          <span class="block text-xs text-slate-400 mt-0.5">Form: {{ vendor.get_tax_form_status_display }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block">Disbursement Account:</span>
+          <span class="font-mono text-xs text-slate-800">{{ vendor.payout_account_identifier|default:"Not configured" }}</span>
+        </div>
+      </div>
+
+      <!-- Suspension Controls -->
+      <div class="card bg-white border border-slate-200 rounded-lg shadow-sm p-5">
+        <h2 class="text-base font-bold text-slate-900 mb-2 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-5 h-5 text-red-500"></i>
+          <span>Account Suspension</span>
+        </h2>
+        {% if vendor.status == "suspended" %}
+          <div class="bg-red-50 border border-red-200 p-3 rounded text-xs text-red-800 mb-3">
+            <span class="font-bold">Account is Suspended.</span>
+            <p class="mt-1">{{ vendor.suspension_reason }}</p>
+            <span class="block text-red-600 text-[10px] mt-1">Suspended at {{ vendor.suspended_at|date:"M d, Y H:i" }}</span>
+          </div>
+          <form method="post" action="{% url 'ecommerce:marketplacevendor_suspend' vendor.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reinstate">
+            <button type="submit" class="btn btn-outline text-xs w-full text-green-700 hover:bg-green-50">
+              Reinstate Vendor to Active
+            </button>
+          </form>
+        {% else %}
+          <form method="post" action="{% url 'ecommerce:marketplacevendor_suspend' vendor.pk %}" class="space-y-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="suspend">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Reason for Suspension</label>
+              {{ suspend_form.suspension_reason }}
+            </div>
+            <button type="submit" class="btn btn-danger w-full text-xs" onclick="return confirm('Are you sure you want to suspend this vendor? Listings will be disabled.');">
+              Suspend Vendor
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Right Column: Tabs for Listings, Sub-Orders, Payouts, Disputes -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Active Product Listings -->
+      <div class="card bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <i data-lucide="package" class="w-5 h-5 text-blue-600"></i>
+            <span>Catalog Product Listings</span>
+          </h2>
+          <a href="{% url 'ecommerce:vendorproductlisting_create' %}" class="btn btn-outline text-xs">
+            + New Listing
+          </a>
+        </div>
+        <div class="table-wrap overflow-x-auto">
+          <table class="table w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-xs font-semibold text-slate-600 border-b border-slate-200">
+                <th class="py-2.5 px-4">Product / SKU</th>
+                <th class="py-2.5 px-4">Condition</th>
+                <th class="py-2.5 px-4">Price</th>
+                <th class="py-2.5 px-4">Stock</th>
+                <th class="py-2.5 px-4">Moderation</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 text-slate-700">
+              {% for l in listings %}
+              <tr>
+                <td class="py-2.5 px-4">
+                  <a href="{% url 'ecommerce:vendorproductlisting_detail' l.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
+                    {{ l.product.title }}
+                  </a>
+                  <div class="text-xs text-slate-400 font-mono">{{ l.seller_sku }}</div>
+                </td>
+                <td class="py-2.5 px-4 text-xs">{{ l.get_condition_display }}</td>
+                <td class="py-2.5 px-4 font-semibold text-slate-900">${{ l.asking_price }}</td>
+                <td class="py-2.5 px-4">{{ l.available_quantity }}</td>
+                <td class="py-2.5 px-4">
+                  {% if l.moderation_status == "approved" %}
+                    <span class="badge badge-green">Approved</span>
+                  {% elif l.moderation_status == "pending_review" %}
+                    <span class="badge badge-amber">Pending</span>
+                  {% elif l.moderation_status == "rejected" %}
+                    <span class="badge badge-red">Rejected</span>
+                  {% else %}
+                    <span class="badge badge-muted">{{ l.get_moderation_status_display }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="5" class="py-6 text-center text-xs text-slate-400">No product listings submitted yet.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Recent Sub-Orders -->
+      <div class="card bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <i data-lucide="truck" class="w-5 h-5 text-indigo-600"></i>
+            <span>Recent Consignment Sub-Orders</span>
+          </h2>
+          <a href="{% url 'ecommerce:vendorsuborder_list' %}?vendor={{ vendor.pk }}" class="text-xs text-blue-600 hover:underline">
+            View All Sub-Orders
+          </a>
+        </div>
+        <div class="table-wrap overflow-x-auto">
+          <table class="table w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-xs font-semibold text-slate-600 border-b border-slate-200">
+                <th class="py-2.5 px-4">Sub-Order #</th>
+                <th class="py-2.5 px-4">Fulfillment</th>
+                <th class="py-2.5 px-4">SLA</th>
+                <th class="py-2.5 px-4">Net Payout</th>
+                <th class="py-2.5 px-4">Dispute</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 text-slate-700">
+              {% for so in sub_orders %}
+              <tr>
+                <td class="py-2.5 px-4">
+                  <a href="{% url 'ecommerce:vendorsuborder_detail' so.pk %}" class="font-medium text-slate-900 hover:text-blue-600 font-mono">
+                    {{ so.number }}
+                  </a>
+                </td>
+                <td class="py-2.5 px-4">
+                  {% if so.fulfillment_status == "delivered" %}
+                    <span class="badge badge-green">Delivered</span>
+                  {% elif so.fulfillment_status == "shipped" %}
+                    <span class="badge badge-info">Shipped</span>
+                  {% elif so.fulfillment_status == "cancelled" %}
+                    <span class="badge badge-red">Cancelled</span>
+                  {% else %}
+                    <span class="badge badge-amber">{{ so.get_fulfillment_status_display }}</span>
+                  {% endif %}
+                </td>
+                <td class="py-2.5 px-4">
+                  {% if so.sla_status == "on_time" %}
+                    <span class="badge badge-green">On Time</span>
+                  {% elif so.sla_status == "near_breach" %}
+                    <span class="badge badge-amber">Near Deadline</span>
+                  {% else %}
+                    <span class="badge badge-red">Breached</span>
+                  {% endif %}
+                </td>
+                <td class="py-2.5 px-4 font-semibold text-slate-900">${{ so.net_vendor_amount }}</td>
+                <td class="py-2.5 px-4">
+                  {% if so.dispute_status != "none" %}
+                    <span class="badge badge-red">{{ so.get_dispute_status_display }}</span>
+                  {% else %}
+                    <span class="text-xs text-slate-400">None</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="5" class="py-6 text-center text-xs text-slate-400">No sub-orders recorded for this vendor.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Settlement Payouts -->
+      <div class="card bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <i data-lucide="badge-dollar-sign" class="w-5 h-5 text-emerald-600"></i>
+            <span>Disbursement Settlement History</span>
+          </h2>
+          <a href="{% url 'ecommerce:vendorpayout_create' %}" class="btn btn-outline text-xs">
+            + New Payout
+          </a>
+        </div>
+        <div class="table-wrap overflow-x-auto">
+          <table class="table w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-xs font-semibold text-slate-600 border-b border-slate-200">
+                <th class="py-2.5 px-4">Batch #</th>
+                <th class="py-2.5 px-4">Period</th>
+                <th class="py-2.5 px-4">Gross Sales</th>
+                <th class="py-2.5 px-4">Commission</th>
+                <th class="py-2.5 px-4">Net Disbursed</th>
+                <th class="py-2.5 px-4">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 text-slate-700">
+              {% for p in payouts %}
+              <tr>
+                <td class="py-2.5 px-4">
+                  <a href="{% url 'ecommerce:vendorpayout_detail' p.pk %}" class="font-medium text-slate-900 hover:text-blue-600 font-mono">
+                    {{ p.number }}
+                  </a>
+                </td>
+                <td class="py-2.5 px-4 text-xs">{{ p.period_start|date:"M d" }} – {{ p.period_end|date:"M d, Y" }}</td>
+                <td class="py-2.5 px-4">${{ p.gross_sales_amount }}</td>
+                <td class="py-2.5 px-4 text-red-600">-${{ p.commission_deducted }}</td>
+                <td class="py-2.5 px-4 font-bold text-emerald-600">${{ p.net_payout_amount }}</td>
+                <td class="py-2.5 px-4">
+                  {% if p.payout_status == "completed" %}
+                    <span class="badge badge-green">Completed</span>
+                  {% elif p.payout_status == "processing" %}
+                    <span class="badge badge-info">Processing</span>
+                  {% elif p.payout_status == "failed" %}
+                    <span class="badge badge-red">Failed</span>
+                  {% else %}
+                    <span class="badge badge-amber">{{ p.get_payout_status_display }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="6" class="py-6 text-center text-xs text-slate-400">No payout settlement batches generated yet.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
