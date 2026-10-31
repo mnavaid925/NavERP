@@ -45,7 +45,9 @@ def subscriptionboxcuration_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    plans = ecommerce_scope(SubscriptionPlan.objects.all(), request).order_by("name")
+    plans = ecommerce_scope(SubscriptionPlan.objects.all(), request).filter(
+        plan_type="curated_box", is_active=True
+    ).order_by("name")
 
     context = {
         "curations": page_obj,
