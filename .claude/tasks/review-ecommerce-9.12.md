@@ -26,8 +26,7 @@ Reviewers executed serially:
 - [x] **[I1]** `apps/ecommerce/admin.py:366`, `384` — fixed — corrected admin search_fields to customer_profile__customer__name and customer_profile__user__email
 - [x] **[I2]** `apps/ecommerce/views/SubscriptionCommerce/CustomerSubscriptions.py:38` & `SubscriptionBoxCurations.py:36` — fixed — guarded plan GET filter with plan_id.isdigit()
 - [x] **[I3]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPlans.py:137` — fixed — handled ProtectedError in subscriptionplan_delete and updated confirmation prompt in list template
-- [ ] **[I4]** `templates/ecommerce/subscriptioncommerce/{subscriptionplan,customersubscription,subscriptionboxcuration,subscriptionretentionaction}/detail.html` — All 4 detail templates omit POST-Delete action forms with CSRF and confirm prompts in their `.page-actions` headers (Rule 4 — CRUD Completeness).
-  - **Fix**: Add POST-Delete action forms in the `.page-actions` header of each detail page.
+- [x] **[I4]** `templates/ecommerce/subscriptioncommerce/{subscriptionplan,customersubscription,subscriptionboxcuration,subscriptionretentionaction}/detail.html` — fixed — added POST-Delete forms with CSRF and confirm prompts to all 4 detail page action headers
 - [ ] **[I5]** `apps/ecommerce/views/SubscriptionCommerce/CustomerSubscriptions.py:18-20`, `SubscriptionPortals.py:19-21`, `SubscriptionPlans.py:66` — Missing chained relations in `select_related` causes N+1 query storms (`customer_profile__user` in `customersubscription_list`, `customer_profile__customer` and `customer_profile__user` in `subscription_portal`, `customer_profile__customer` in `subscriptionplan_detail`).
   - **Fix**: Add chained FK relations (`customer_profile__customer`, `customer_profile__user`) to `select_related` in these views.
 - [ ] **[I6]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:23-24` — Active and paused tables in `subscription_portal` evaluate unbounded without slicing or pagination.
