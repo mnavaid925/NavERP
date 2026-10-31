@@ -97,3 +97,23 @@ class ReviewSentimentSummary(TenantNumbered):
         if self.total_reviews > 0:
             return round((count / self.total_reviews) * 100, 1)
         return 0.0
+
+    @property
+    def rating_5_pct(self):
+        return self.get_rating_pct(self.rating_5_count)
+
+    @property
+    def rating_4_pct(self):
+        return self.get_rating_pct(self.rating_4_count)
+
+    @property
+    def rating_3_pct(self):
+        return self.get_rating_pct(self.rating_3_count)
+
+    @property
+    def rating_2_pct(self):
+        return self.get_rating_pct(self.rating_2_count)
+
+    @property
+    def rating_1_pct(self):
+        return self.get_rating_pct(self.rating_1_count)
