@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Sub-Order {{ sub_order.number }}{% else %}New Sub-Order{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketplace_console' %}" class="hover:text-blue-600">Marketplace</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:vendorsuborder_list' %}" class="hover:text-blue-600">Sub-Orders</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}Edit {{ sub_order.number }}{% else %}New Sub-Order{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Sub-Order: {{ sub_order.number }}{% else %}Create Vendor Fulfillment Sub-Order{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Allocate order consignments to marketplace merchants, set promised dispatch SLAs, and record carrier tracking.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      {% if is_edit %}
+        <a href="{% url 'ecommerce:vendorsuborder_detail' sub_order.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+          <i data-lucide="x" class="w-4 h-4"></i>
+          <span>Cancel</span>
+        </a>
+      {% else %}
+        <a href="{% url 'ecommerce:vendorsuborder_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+          <i data-lucide="x" class="w-4 h-4"></i>
+          <span>Cancel</span>
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6 bg-white border border-slate-200 rounded-lg shadow-sm">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.errors %}
+      <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+        <div class="font-semibold mb-1">Please correct the following errors:</div>
+        <ul class="list-disc list-inside space-y-1">
+          {% for field, errors in form.errors.items %}
+            {% for error in errors %}
+              <li><strong>{{ field|title }}:</strong> {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <!-- Section: Order & Vendor Binding -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="link" class="w-4 h-4 text-blue-600"></i>
+          <span>1. Parent Order & Marketplace Merchant</span>
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Parent Order *</label>
+            {{ form.order }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Marketplace Vendor *</label>
+            {{ form.vendor }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Payout Batch (Optional)</label>
+            {{ form.payout }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Financials & Statuses -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="badge-dollar-sign" class="w-4 h-4 text-blue-600"></i>
+          <span>2. Financials & Status Tracking</span>
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Consignment Subtotal ($)</label>
+            {{ form.subtotal_amount }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Allocated Shipping ($)</label>
+            {{ form.shipping_amount }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Commission Rate (%)</label>
+            {{ form.commission_rate }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Fulfillment Status</label>
+            {{ form.fulfillment_status }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">SLA Status</label>
+            {{ form.sla_status }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Payout Status</label>
+            {{ form.payout_status }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Carrier & Delivery Timestamps -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="truck" class="w-4 h-4 text-blue-600"></i>
+          <span>3. Logistical Dispatch & Delivery</span>
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Carrier Name</label>
+            {{ form.carrier_name }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Tracking Number</label>
+            {{ form.tracking_number }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Tracking URL</label>
+            {{ form.tracking_url }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Promised Dispatch Date</label>
+            {{ form.promised_dispatch_date }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Dispatched Timestamp</label>
+            {{ form.dispatched_at }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Delivered Timestamp</label>
+            {{ form.delivered_at }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Customer Feedback & Dispute -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="star" class="w-4 h-4 text-blue-600"></i>
+          <span>4. Ratings, Feedback & Disputes</span>
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Customer Rating (1-5)</label>
+            {{ form.customer_rating }}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Customer Feedback</label>
+            {{ form.customer_feedback }}
+          </div>
+          <div class="form-group md:col-span-3">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Seller Public Response</label>
+            {{ form.seller_response }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Dispute Status</label>
+            {{ form.dispute_status }}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Dispute Reason</label>
+            {{ form.dispute_reason }}
+          </div>
+          <div class="form-group md:col-span-3">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Dispute Notes</label>
+            {{ form.dispute_notes }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-200">
+        {% if is_edit %}
+          <a href="{% url 'ecommerce:vendorsuborder_detail' sub_order.pk %}" class="btn btn-outline">Cancel</a>
+          <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span>Update Sub-Order</span>
+          </button>
+        {% else %}
+          <a href="{% url 'ecommerce:vendorsuborder_list' %}" class="btn btn-outline">Cancel</a>
+          <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Create Sub-Order</span>
+          </button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
