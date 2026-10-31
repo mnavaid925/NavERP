@@ -193,6 +193,14 @@ class VendorSubOrder(TenantNumbered):
         ]
         indexes = [
             models.Index(
+                fields=["tenant", "fulfillment_status"],
+                name="idx_evso_ten_ful",
+            ),
+            models.Index(
+                fields=["tenant", "sla_status"],
+                name="idx_evso_ten_sla",
+            ),
+            models.Index(
                 fields=["tenant", "vendor", "fulfillment_status"],
                 name="idx_evso_ten_ven_ful",
             ),
@@ -212,12 +220,16 @@ class VendorSubOrder(TenantNumbered):
 
     def clean(self):
         super().clean()
-        if self.subtotal_amount < Decimal("0.00"):
+        if self.subtotal_amount is not None and self.subtotal_amount < Decimal("0.00"):
             raise ValidationError({"subtotal_amount": "Subtotal amount cannot be negative."})
-        if self.shipping_amount < Decimal("0.00"):
+        if self.shipping_amount is not None and self.shipping_amount < Decimal("0.00"):
             raise ValidationError({"shipping_amount": "Shipping amount cannot be negative."})
         if self.customer_rating is not None and (self.customer_rating < 1 or self.customer_rating > 5):
             raise ValidationError({"customer_rating": "Customer rating must be between 1 and 5 stars."})
+
+        # Cross-record vendor-payout alignment
+        if self.payout_id and self.vendor_id and self.payout.vendor_id != self.vendor_id:
+            raise ValidationError({"payout": "The selected payout batch belongs to a different marketplace vendor."})
 
         # Tenant boundary check
         if self.vendor_id and hasattr(self, "tenant_id") and self.vendor.tenant_id != self.tenant_id:
@@ -228,18 +240,32 @@ class VendorSubOrder(TenantNumbered):
             raise ValidationError({"payout": "Payout batch belongs to another workspace."})
 
     def calculate_financials(self):
-        """Calculates platform commission and net vendor payout amount."""
-        fixed_fee = getattr(self.vendor, "fixed_fee_per_order", Decimal("0.00")) or Decimal("0.00")
-        rate = self.commission_rate or Decimal("15.00")
-        pct_fee = (self.subtotal_amount * rate) / Decimal("100.00")
+        """Calculates platform commission and net vendor payout amount based on vendor commission type."""
+        commission_type = getattr(self.vendor, "commission_type", "percentage") if self.vendor_id else "percentage"
+        fixed_fee_cfg = getattr(self.vendor, "fixed_fee_per_order", Decimal("0.00")) or Decimal("0.00")
+        rate = self.commission_rate if self.commission_rate is not None else Decimal("15.00")
+        subtotal = self.subtotal_amount or Decimal("0.00")
+        shipping = self.shipping_amount or Decimal("0.00")
+
+        if commission_type == "fixed":
+            pct_fee = Decimal("0.00")
+            fixed_fee = fixed_fee_cfg
+        elif commission_type == "combined":
+            pct_fee = (subtotal * rate) / Decimal("100.00")
+            fixed_fee = fixed_fee_cfg
+        else:  # percentage
+            pct_fee = (subtotal * rate) / Decimal("100.00")
+            fixed_fee = Decimal("0.00")
+
         self.commission_amount = Decimal(round(pct_fee + fixed_fee, 2))
-        self.net_vendor_amount = Decimal(round((self.subtotal_amount + self.shipping_amount) - self.commission_amount, 2))
+        self.net_vendor_amount = Decimal(round((subtotal + shipping) - self.commission_amount, 2))
 
     def evaluate_sla(self):
         """Evaluates dispatch deadline vs SLA."""
         if self.fulfillment_status in ("shipped", "delivered"):
             if self.promised_dispatch_date and self.dispatched_at:
-                if self.dispatched_at.date() > self.promised_dispatch_date:
+                dispatched_date = timezone.localdate(self.dispatched_at)
+                if dispatched_date > self.promised_dispatch_date:
                     self.sla_status = "breached"
                 else:
                     self.sla_status = "on_time"
@@ -258,6 +284,8 @@ class VendorSubOrder(TenantNumbered):
         self.calculate_financials()
         self.evaluate_sla()
         super().save(*args, **kwargs)
+        if self.vendor_id and self.customer_rating is not None:
+            self.vendor.update_rating()
 
     def __str__(self):
         return f"{self.number} (Order {self.order.number} • {self.vendor.store_name})"
