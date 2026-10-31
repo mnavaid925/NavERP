@@ -106,6 +106,18 @@ class AffiliateReferralConversion(TenantNumbered):
                 fields=["tenant", "status", "created_at"],
                 name="idx_earc_ten_stat_created",
             ),
+            models.Index(
+                fields=["tenant", "affiliate"],
+                name="idx_earc_ten_affiliate",
+            ),
+            models.Index(
+                fields=["tenant", "order"],
+                name="idx_earc_ten_order",
+            ),
+            models.Index(
+                fields=["tenant", "referred_customer"],
+                name="idx_earc_ten_refcust",
+            ),
         ]
 
     def __str__(self):
