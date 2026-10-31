@@ -75,7 +75,7 @@ def productreview_detail(request, pk):
         request,
         ProductReview,
         pk,
-        select_related=("product", "variant", "customer", "order", "moderated_by"),
+        select_related=("product", "variant", "customer__customer", "order", "moderated_by"),
     )
     return render(request, "ecommerce/review_ugc/product_review/detail.html", {"review": review})
 
