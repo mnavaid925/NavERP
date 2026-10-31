@@ -74,7 +74,7 @@ class SubscriptionBoxCurationForm(TenantUniqueMixin, TenantModelForm):
                 tenant=self.tenant, is_active=True
             ).order_by("name")
             self.fields["primary_product"].queryset = CatalogProduct.objects.filter(
-                tenant=self.tenant, is_active=True
+                tenant=self.tenant, status="active"
             ).order_by("name")
 
     def clean_code(self):
