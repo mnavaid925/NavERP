@@ -148,22 +148,10 @@ Submit Product Review
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div class="form-group">
-                            <label for="{{ form.rating.id_for_label }}" class="form-label">Star Rating *</label>
-                            {{ form.rating }}
-                            {% if form.rating.errors %}<div class="form-error">{{ form.rating.errors.0 }}</div>{% endif %}
-                        </div>
-                        <div class="form-group">
-                            <label for="{{ form.status.id_for_label }}" class="form-label">Status *</label>
-                            {{ form.status }}
-                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
-                        </div>
-                        <div class="form-group">
-                            <label for="{{ form.sentiment.id_for_label }}" class="form-label">Sentiment</label>
-                            {{ form.sentiment }}
-                            {% if form.sentiment.errors %}<div class="form-error">{{ form.sentiment.errors.0 }}</div>{% endif %}
-                        </div>
+                    <div class="form-group">
+                        <label for="{{ form.rating.id_for_label }}" class="form-label">Star Rating *</label>
+                        {{ form.rating }}
+                        {% if form.rating.errors %}<div class="form-error">{{ form.rating.errors.0 }}</div>{% endif %}
                     </div>
 
                     <div class="form-group">
@@ -183,18 +171,6 @@ Submit Product Review
                             {{ form.is_featured }}
                             <span class="form-label mb-0">Feature Spotlight (Pin to top)</span>
                         </label>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="{{ form.merchant_response.id_for_label }}" class="form-label">Merchant Official Reply</label>
-                        {{ form.merchant_response }}
-                        {% if form.merchant_response.errors %}<div class="form-error">{{ form.merchant_response.errors.0 }}</div>{% endif %}
-                    </div>
-
-                    <div class="form-group">
-                        <label for="{{ form.moderation_note.id_for_label }}" class="form-label">Moderation Note</label>
-                        {{ form.moderation_note }}
-                        {% if form.moderation_note.errors %}<div class="form-error">{{ form.moderation_note.errors.0 }}</div>{% endif %}
                     </div>
                 </div>
                 {% endif %}
