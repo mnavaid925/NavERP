@@ -110,7 +110,7 @@
           <tr class="hover:bg-slate-50 transition-colors">
             <td class="py-3 px-4">
               <a href="{% url 'ecommerce:vendorproductlisting_detail' l.pk %}" class="font-semibold text-slate-900 hover:text-blue-600 block">
-                {{ l.product.title }}
+                {{ l.product.name }}
               </a>
               <div class="text-xs text-slate-400 font-mono">
                 SKU: {{ l.seller_sku }} {% if l.variant %}• Var: {{ l.variant.name }}{% endif %}
