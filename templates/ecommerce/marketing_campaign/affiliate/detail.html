@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}{{ partner.name }} · Affiliate Partners · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketing_dashboard' %}" class="hover:text-blue-600">Marketing & Campaigns</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:affiliatepartner_list' %}" class="hover:text-blue-600">Affiliates</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ partner.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ partner.name }}</h1>
+        {% if partner.status == 'active' %}
+          <span class="badge badge-green">Active</span>
+        {% elif partner.status == 'pending_approval' %}
+          <span class="badge badge-amber">Pending Approval</span>
+        {% elif partner.status == 'suspended' %}
+          <span class="badge badge-red">Suspended</span>
+        {% else %}
+          <span class="badge badge-muted">Inactive</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1 font-mono">
+        Code: {{ partner.referral_code }} · Slug: /ref/{{ partner.referral_link_slug }} · Party: {{ partner.party.name }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      {% if partner.status == 'pending_approval' %}
+        <form method="post" action="{% url 'ecommerce:affiliatepartner_approve' partner.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Approve Partner</span>
+          </button>
+        </form>
+      {% endif %}
+      <a href="{% url 'ecommerce:affiliatepartner_edit' partner.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Partner</span>
+      </a>
+      <a href="{% url 'ecommerce:affiliatepartner_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to List</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Metric Stat Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon blue w-12 h-12 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+        <i data-lucide="shopping-bag" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Orders Referred</div>
+        <div class="text-xl font-bold text-slate-900 mt-0.5">{{ partner.total_orders_referred }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">Lifetime converted orders</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon green w-12 h-12 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+        <i data-lucide="trending-up" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Revenue Generated</div>
+        <div class="text-xl font-bold text-emerald-700 mt-0.5">${{ partner.total_revenue_generated }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">Attributed sales volume</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon purple w-12 h-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+        <i data-lucide="dollar-sign" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Total Earned</div>
+        <div class="text-xl font-bold text-slate-900 mt-0.5">${{ partner.total_commission_earned }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">${{ partner.total_commission_paid }} paid to date</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon orange w-12 h-12 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+        <i data-lucide="wallet" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Unpaid Balance</div>
+        <div class="text-xl font-bold {% if partner.is_eligible_for_payout %}text-emerald-700{% else %}text-slate-900{% endif %} mt-0.5">
+          ${{ partner.unpaid_commission }}
+        </div>
+        <div class="text-xs text-slate-500 mt-0.5">Threshold: ${{ partner.payout_threshold }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Partner Info & Terms -->
+    <div class="space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+        <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+          <h2 class="text-base font-semibold text-slate-900">Partner Details & Terms</h2>
+        </div>
+        <div class="card-body p-5 space-y-4 text-sm">
+          <div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Partner Archetype</div>
+            <div class="font-medium text-slate-800 mt-0.5">{{ partner.get_partner_type_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Commission Structure</div>
+            <div class="font-medium text-slate-800 mt-0.5">
+              {% if partner.commission_type == 'percentage_net_sales' %}
+                {{ partner.commission_rate }}% of Net Merchandise Sales
+              {% else %}
+                ${{ partner.commission_rate }} Flat per Order
+              {% endif %}
+            </div>
+            <div class="text-xs text-slate-500 mt-0.5">{{ partner.get_commission_type_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Cookie Attribution Window</div>
+            <div class="font-medium text-slate-800 mt-0.5">{{ partner.cookie_duration_days }} Days</div>
+          </div>
+          <div class="pt-2 border-t border-slate-100">
+            <div class="text-xs font-medium text-slate-500 uppercase">Remittance Payout Email</div>
+            <div class="font-mono text-xs text-slate-700 mt-0.5">{{ partner.payment_email|default:"Not specified" }}</div>
+          </div>
+          <div class="pt-2 border-t border-slate-100">
+            <div class="text-xs font-medium text-slate-500 uppercase">Linked Shopper Account</div>
+            <div class="text-xs text-slate-700 mt-0.5">
+              {% if partner.customer_profile %}
+                <a href="{% url 'ecommerce:customerprofile_detail' partner.customer_profile.pk %}" class="text-blue-600 hover:underline">
+                  {{ partner.customer_profile.user.username }}
+                </a>
+              {% else %}
+                <span class="text-slate-400 italic">None (External Affiliate)</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conversions Ledger -->
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+        <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <h2 class="text-base font-semibold text-slate-900">Recent Referred Conversions</h2>
+          <a href="{% url 'ecommerce:affiliatereferralconversion_create' %}" class="btn btn-outline text-xs inline-flex items-center gap-1.5">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>Log Conversion</span>
+          </a>
+        </div>
+        <div class="table-wrap overflow-x-auto">
+          <table class="table w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                <th class="py-2.5 px-4">Conversion #</th>
+                <th class="py-2.5 px-4">Order</th>
+                <th class="py-2.5 px-4">Attribution</th>
+                <th class="py-2.5 px-4 text-right">Order Amt</th>
+                <th class="py-2.5 px-4 text-right">Commission</th>
+                <th class="py-2.5 px-4">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 text-sm">
+              {% for conv in conversions %}
+                <tr class="hover:bg-slate-50/80">
+                  <td class="py-2.5 px-4 font-mono text-xs">
+                    <a href="{% url 'ecommerce:affiliatereferralconversion_detail' conv.pk %}" class="text-blue-600 hover:underline">
+                      {{ conv.number }}
+                    </a>
+                  </td>
+                  <td class="py-2.5 px-4 text-xs font-mono text-slate-800">
+                    {{ conv.order.number }}
+                  </td>
+                  <td class="py-2.5 px-4 text-xs text-slate-600">
+                    {{ conv.get_attribution_type_display }}
+                  </td>
+                  <td class="py-2.5 px-4 text-right text-xs font-medium text-slate-800">
+                    ${{ conv.order_amount }}
+                  </td>
+                  <td class="py-2.5 px-4 text-right text-xs font-bold text-emerald-700">
+                    ${{ conv.commission_amount }}
+                  </td>
+                  <td class="py-2.5 px-4">
+                    {% if conv.status == 'approved' %}
+                      <span class="badge badge-green text-xs">Approved</span>
+                    {% elif conv.status == 'pending_review' %}
+                      <span class="badge badge-amber text-xs">Pending</span>
+                    {% elif conv.status == 'paid' %}
+                      <span class="badge badge-info text-xs">Paid</span>
+                    {% else %}
+                      <span class="badge badge-red text-xs">Voided</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="6" class="py-8 text-center text-sm text-slate-500">
+                    No order conversions recorded for this affiliate partner yet.
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
