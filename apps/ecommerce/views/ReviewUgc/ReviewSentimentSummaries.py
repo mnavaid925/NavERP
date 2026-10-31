@@ -82,12 +82,11 @@ def reviewsentimentsummary_create(request):
             summary.save()
             summary.recalculate()
             write_audit_log(
+                request.user,
+                summary,
+                "create",
+                {"number": summary.number, "product": summary.product.name},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="ReviewSentimentSummary",
-                object_id=summary.pk,
-                changes={"number": summary.number, "product": summary.product.name},
             )
             messages.success(request, f"Review scorecard for {summary.product.name} initialized.")
             return redirect("ecommerce:reviewsentimentsummary_detail", pk=summary.pk)
@@ -109,12 +108,11 @@ def reviewsentimentsummary_edit(request, pk):
         if form.is_valid():
             summary = form.save()
             write_audit_log(
+                request.user,
+                summary,
+                "update",
+                {"improvement_recommendation": summary.improvement_recommendation[:100]},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="ReviewSentimentSummary",
-                object_id=summary.pk,
-                changes={"improvement_recommendation": summary.improvement_recommendation[:100]},
             )
             messages.success(request, f"Review scorecard {summary.number} updated.")
             return redirect("ecommerce:reviewsentimentsummary_detail", pk=summary.pk)
@@ -136,12 +134,11 @@ def reviewsentimentsummary_delete(request, pk):
     pk_val = summary.pk
     summary.delete()
     write_audit_log(
+        request.user,
+        summary,
+        "delete",
+        {"number": number},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="ReviewSentimentSummary",
-        object_id=pk_val,
-        changes={"number": number},
     )
     messages.success(request, f"Review scorecard {number} deleted.")
     return redirect("ecommerce:reviewsentimentsummary_list")
@@ -153,12 +150,11 @@ def reviewsentimentsummary_recalculate(request, pk):
     summary = ecommerce_object(request, ReviewSentimentSummary, pk)
     summary.recalculate()
     write_audit_log(
+        request.user,
+        summary,
+        "recalculate",
+        {"average_rating": str(summary.average_rating), "total_reviews": summary.total_reviews},
         tenant=request.tenant,
-        user=request.user,
-        action="recalculate",
-        model_name="ReviewSentimentSummary",
-        object_id=summary.pk,
-        changes={"average_rating": str(summary.average_rating), "total_reviews": summary.total_reviews},
     )
     messages.success(request, f"Scorecard metrics recalculated: {summary.average_rating}★ across {summary.total_reviews} reviews.")
     return redirect("ecommerce:reviewsentimentsummary_detail", pk=summary.pk)
