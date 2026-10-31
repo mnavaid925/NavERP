@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}Support Tickets | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Customer Support</span>
+            <span>/</span>
+            <span>Tickets</span>
+        </div>
+        <h1 class="page-title">Help Desk & Support Tickets</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:customersupportticket_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Open Ticket
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div class="form-group mb-0">
+                <label for="q" class="form-label">Search</label>
+                <input type="text" id="q" name="q" value="{{ query }}" placeholder="Subject, ticket #, customer..." class="form-input">
+            </div>
+            <div class="form-group mb-0">
+                <label for="status" class="form-label">Status</label>
+                <select id="status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="priority" class="form-label">Priority</label>
+                <select id="priority" name="priority" class="form-select">
+                    <option value="">All Priorities</option>
+                    {% for val, label in priority_choices %}
+                    <option value="{{ val }}" {% if selected_priority == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="channel" class="form-label">Channel</label>
+                <select id="channel" name="channel" class="form-select">
+                    <option value="">All Channels</option>
+                    {% for val, label in channel_choices %}
+                    <option value="{{ val }}" {% if selected_channel == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="category" class="form-label">Category</label>
+                <select id="category" name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if selected_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="agent" class="form-label">Assigned Agent</label>
+                <select id="agent" name="agent" class="form-select">
+                    <option value="">All Agents</option>
+                    {% for ag in agents %}
+                    <option value="{{ ag.pk }}" {% if selected_agent == ag.pk|stringformat:"d" %}selected{% endif %}>{{ ag.get_full_name|default:ag.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-6 flex justify-end gap-2">
+                <a href="{% url 'ecommerce:customersupportticket_list' %}" class="btn btn-outline">Clear Filters</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Ticket List Card -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Ticket #</th>
+                        <th>Subject & Shopper</th>
+                        <th>Channel / Category</th>
+                        <th>Priority</th>
+                        <th>Status</th>
+                        <th>Assigned To</th>
+                        <th>Created</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ticket in tickets %}
+                    <tr>
+                        <td class="font-mono text-sm">
+                            <a href="{% url 'ecommerce:customersupportticket_detail' ticket.pk %}" class="text-primary font-semibold hover:underline">
+                                {{ ticket.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-semibold text-slate-900">{{ ticket.subject }}</div>
+                            <div class="text-xs text-slate-500">
+                                {{ ticket.customer_name }} &bull; {{ ticket.customer_email }}
+                                {% if ticket.order %}
+                                &bull; <span class="font-mono">{{ ticket.order.number }}</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="text-sm font-medium">{{ ticket.get_channel_display }}</div>
+                            <div class="text-xs text-slate-500">{{ ticket.get_category_display }}</div>
+                        </td>
+                        <td>
+                            {% if ticket.priority == 'urgent' %}
+                            <span class="badge badge-red">Urgent</span>
+                            {% elif ticket.priority == 'high' %}
+                            <span class="badge badge-amber">High</span>
+                            {% elif ticket.priority == 'medium' %}
+                            <span class="badge badge-info">Medium</span>
+                            {% else %}
+                            <span class="badge badge-muted">Low</span>
+                            {% endif %}
+                            {% if ticket.is_sla_breached %}
+                            <span class="badge badge-red ml-1">SLA Breached</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if ticket.status == 'new' %}
+                            <span class="badge badge-info">New</span>
+                            {% elif ticket.status == 'open' %}
+                            <span class="badge badge-green">Open</span>
+                            {% elif ticket.status == 'pending_customer' %}
+                            <span class="badge badge-amber">Pending Customer</span>
+                            {% elif ticket.status == 'waiting_carrier' %}
+                            <span class="badge badge-info">Waiting Carrier</span>
+                            {% elif ticket.status == 'resolved' %}
+                            <span class="badge badge-green">Resolved</span>
+                            {% elif ticket.status == 'closed' %}
+                            <span class="badge badge-slate">Closed</span>
+                            {% else %}
+                            <span class="badge badge-red">Cancelled</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm text-slate-600">
+                            {% if ticket.assigned_agent %}
+                            {{ ticket.assigned_agent.get_full_name|default:ticket.assigned_agent.username }}
+                            {% else %}
+                            <span class="text-slate-400 italic">Unassigned</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm text-slate-500">
+                            {{ ticket.created_at|date:"M d, Y H:i" }}
+                        </td>
+                        <td class="table-actions text-right">
+                            <a href="{% url 'ecommerce:customersupportticket_detail' ticket.pk %}" class="btn btn-icon" title="View Ticket">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:customersupportticket_edit' ticket.pk %}" class="btn btn-icon" title="Edit Ticket">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form action="{% url 'ecommerce:customersupportticket_delete' ticket.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete ticket {{ ticket.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Ticket">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-8">
+                            <div class="empty-state">
+                                <i data-lucide="life-buoy" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
+                                <h3 class="text-base font-semibold text-slate-700">No support tickets found</h3>
+                                <p class="text-sm text-slate-500 mb-4">No support tickets match the current filter query.</p>
+                                <a href="{% url 'ecommerce:customersupportticket_create' %}" class="btn btn-primary btn-sm">Open First Ticket</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} tickets
+            </div>
+            <div class="flex gap-1">
+                <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}&q={{ query }}&status={{ selected_status }}&priority={{ selected_priority }}&channel={{ selected_channel }}&category={{ selected_category }}&agent={{ selected_agent }}"
+                   class="btn btn-outline btn-sm {% if not page_obj.has_previous %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Previous
+                </a>
+                <span class="btn btn-sm btn-outline active">{{ page_obj.number }} / {{ paginator.num_pages }}</span>
+                <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}&q={{ query }}&status={{ selected_status }}&priority={{ selected_priority }}&channel={{ selected_channel }}&category={{ selected_category }}&agent={{ selected_agent }}"
+                   class="btn btn-outline btn-sm {% if not page_obj.has_next %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Next
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
