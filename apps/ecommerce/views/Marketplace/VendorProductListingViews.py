@@ -34,7 +34,7 @@ def vendorproductlisting_list(request):
             Q(number__icontains=query)
             | Q(seller_sku__icontains=query)
             | Q(barcode__icontains=query)
-            | Q(product__title__icontains=query)
+            | Q(product__name__icontains=query)
             | Q(vendor__store_name__icontains=query)
         )
 
@@ -115,10 +115,10 @@ def vendorproductlisting_create(request):
                 request.user,
                 listing,
                 "create",
-                {"seller_sku": listing.seller_sku, "product": listing.product.title, "number": listing.number},
+                {"seller_sku": listing.seller_sku, "product": listing.product.name, "number": listing.number},
                 tenant=request.tenant,
             )
-            messages.success(request, f"Vendor listing for '{listing.product.title}' created.")
+            messages.success(request, f"Vendor listing for '{listing.product.name}' created.")
             return redirect("ecommerce:vendorproductlisting_detail", pk=listing.pk)
     else:
         form = VendorProductListingForm(tenant=request.tenant)
