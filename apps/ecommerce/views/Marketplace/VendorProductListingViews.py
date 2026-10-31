@@ -54,7 +54,7 @@ def vendorproductlisting_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    vendors = ecommerce_scope(MarketplaceVendor.objects.all(), request).order_by("store_name")
+    vendors = ecommerce_scope(MarketplaceVendor.objects.all(), request).only("id", "store_name").order_by("store_name")
 
     context = {
         "page_obj": page_obj,
@@ -81,7 +81,7 @@ def vendorproductlisting_detail(request, pk):
         request,
         VendorProductListing,
         pk,
-        select_related=("vendor", "product", "variant", "reviewed_by"),
+        select_related=("vendor", "product__primary_category", "variant", "reviewed_by"),
     )
 
     moderation_form = ListingModerationForm(
@@ -166,7 +166,6 @@ def vendorproductlisting_delete(request, pk):
     seller_sku = listing.seller_sku
     number = listing.number
 
-    listing.delete()
     write_audit_log(
         request.user,
         listing,
@@ -174,6 +173,7 @@ def vendorproductlisting_delete(request, pk):
         {"seller_sku": seller_sku, "number": number},
         tenant=request.tenant,
     )
+    listing.delete()
     messages.success(request, f"Vendor listing '{seller_sku}' deleted.")
     return redirect("ecommerce:vendorproductlisting_list")
 
