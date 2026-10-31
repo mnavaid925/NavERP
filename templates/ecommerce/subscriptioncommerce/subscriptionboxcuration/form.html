@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit Curation {{ curation.name }}{% else %}New Box Curation{% endif %} · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex items-center justify-between">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:subscriptionboxcuration_list' %}" class="hover:text-blue-600">Box Curations</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}Edit Curation{% else %}Schedule Curation{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Box Curation: {{ curation.name }}{% else %}Schedule Box Curation{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Configure themed assortment rotation cycles, featured items, customer preference tags, and surprise bonus perks.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if is_edit %}{% url 'ecommerce:subscriptionboxcuration_detail' curation.pk %}{% else %}{% url 'ecommerce:subscriptionboxcuration_list' %}{% endif %}" class="btn btn-outline">
+        Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.name.id_for_label }}">
+            Curation Title <span class="text-red-500">*</span>
+          </label>
+          {{ form.name }}
+          {% if form.name.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.name.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.code.id_for_label }}">
+            Machine Identifier / Slug <span class="text-red-500">*</span>
+          </label>
+          {{ form.code }}
+          {% if form.code.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.code.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.plan.id_for_label }}">
+            Curated Box Plan <span class="text-red-500">*</span>
+          </label>
+          {{ form.plan }}
+          {% if form.plan.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.plan.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.cycle_identifier.id_for_label }}">
+            Cycle Identifier <span class="text-red-500">*</span>
+          </label>
+          {{ form.cycle_identifier }}
+          {% if form.cycle_identifier.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.cycle_identifier.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.theme_title.id_for_label }}">
+            Marketing Theme Title
+          </label>
+          {{ form.theme_title }}
+          {% if form.theme_title.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.theme_title.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="border-t border-slate-200 pt-5">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Assortment & Schedule</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.primary_product.id_for_label }}">
+              Primary Featured Product
+            </label>
+            {{ form.primary_product }}
+            {% if form.primary_product.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.primary_product.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.start_date.id_for_label }}">
+              Schedule Start Date <span class="text-red-500">*</span>
+            </label>
+            {{ form.start_date }}
+            {% if form.start_date.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.start_date.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.end_date.id_for_label }}">
+              Schedule End Date <span class="text-red-500">*</span>
+            </label>
+            {{ form.end_date }}
+            {% if form.end_date.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.end_date.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-slate-200 pt-5">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Preferences & Surprise Item</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.preference_tag.id_for_label }}">
+              Preference Filter Tag
+            </label>
+            {{ form.preference_tag }}
+            {% if form.preference_tag.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.preference_tag.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.surprise_item_description.id_for_label }}">
+              Surprise Item Description
+            </label>
+            {{ form.surprise_item_description }}
+            {% if form.surprise_item_description.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.surprise_item_description.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="flex items-center gap-6 mt-4">
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            {{ form.has_surprise_item }}
+            <span class="text-sm font-medium text-slate-700">Include Mystery Bonus Perk</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            {{ form.is_active }}
+            <span class="text-sm font-medium text-slate-700">Curation Is Active</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group border-t border-slate-200 pt-5">
+        <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.curation_notes.id_for_label }}">
+          Tasting Notes, Artisan Bio & Unboxing Story
+        </label>
+        {{ form.curation_notes }}
+        {% if form.curation_notes.errors %}
+          <p class="form-error text-xs text-red-600 mt-1">{{ form.curation_notes.errors.0 }}</p>
+        {% endif %}
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'ecommerce:subscriptionboxcuration_detail' curation.pk %}{% else %}{% url 'ecommerce:subscriptionboxcuration_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          {% if is_edit %}Save Changes{% else %}Schedule Curation{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
