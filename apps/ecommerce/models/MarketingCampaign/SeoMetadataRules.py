@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from apps.ecommerce.models._base import TenantNumbered
@@ -117,6 +118,7 @@ class SeoMetadataRule(TenantNumbered):
         max_digits=3,
         decimal_places=2,
         default=Decimal("0.80"),
+        validators=[MinValueValidator(Decimal("0.00")), MaxValueValidator(Decimal("1.00"))],
         help_text="Sitemap crawl priority from 0.00 to 1.00",
     )
     sitemap_changefreq = models.CharField(
