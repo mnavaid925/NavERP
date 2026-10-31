@@ -27,3 +27,23 @@ Reviewing changeset: `3fb041f95e45ff13427ac02c53583153e9d95fc2..e645586a1a7a5c11
 2. `apps/ecommerce/views/ReviewUgc/ProductReviews.py:5` — Unused imports `get_object_or_404` and `ecommerce_scope` (line 14) are present; also unused `get_object_or_404` in `ProductQuestionAnswers.py:5`, `VisualUgcMedia.py:5`, and `ReviewSentimentSummaries.py:5`. Fix: Remove unused imports from all four view modules.
 3. `apps/ecommerce/forms/ReviewUgc/ProductReviews.py:76` — `clean()` fails to reset `is_verified_purchase = False` when an order is unlinked on review edit. Fix: Add `else: self.instance.is_verified_purchase = False` when order is empty.
 4. `apps/ecommerce/models/ReviewUgc/ReviewSentimentSummaries.py:76` — `recalculate()` only tallies `positive`, `neutral`, and `negative`, omitting `mixed` reviews from percentages and causing sentiment breakdown bars to total under 100%. Fix: Group `mixed` reviews into neutral or calculate a separate `mixed_sentiment_pct`.
+
+
+---
+
+## 2. Explorer Review Findings
+
+### Critical
+*None.*
+
+### Important
+1. `templates/ecommerce/review_ugc/product_review/detail.html:197` & `templates/ecommerce/review_ugc/product_question/detail.html:128` — Missing `display_name` on `CustomerAccountProfile` causes silent blank rendering (` (ECAP-00001)`). Fix: Update templates to use `{{ review.customer.customer.name|default:review.customer.number }}` or add `@property def display_name` on `CustomerAccountProfile`. Also add `"customer__customer"` to `select_related` in `productreview_detail` and `productquestionanswer_detail` views.
+2. `apps/ecommerce/forms/ReviewUgc/ProductQuestionAnswers.py:62` — `ProductQuestionAnswerResponseForm` allows submitting empty answers when template labels it `Official Answer *`. Fix: In `ProductQuestionAnswerResponseForm.__init__`, set `self.fields["answer_text"].required = True`.
+3. `apps/ecommerce/views/ReviewUgc/ProductQuestionAnswers.py:110` — `productquestionanswer_edit` does not record answer timestamp or respondent when an answer is provided or edited. Fix: In `productquestionanswer_edit`, populate `answered_at` and `answered_by_user` if `question.answer_text` is set and `answered_at` is empty.
+4. `apps/ecommerce/forms/ReviewUgc/ReviewSentimentSummaries.py:27` — `ReviewSentimentSummaryForm` allows selecting already-summarized products on create, leading to database `IntegrityError` or validation error on the OneToOne relation. Fix: Filter out products with existing summaries on create (`self.fields["product"].queryset = self.fields["product"].queryset.filter(review_summary__isnull=True)`).
+
+### Minor
+1. `apps/ecommerce/views/ReviewUgc/ProductReviews.py:165` — `merchant_response_at` not cleared when reply is erased. Fix: Set `review.merchant_response_at = None` if `review.merchant_response` is empty.
+2. `apps/ecommerce/views/ReviewUgc/ProductQuestionAnswers.py:178` — Response action does not pre-select "approved" status for pending questions. Fix: Set `initial["status"] = "approved"` when question is currently pending.
+3. `templates/ecommerce/review_ugc/visual_ugc/detail.html:67` — `capitalize` filter distorts brand casing on media type display (e.g. TikTok Video). Fix: Remove `capitalize` filter.
+4. `apps/ecommerce/views/ReviewUgc/ProductReviews.py:14` — Unused imports (`ecommerce_scope` in `ProductReviews.py` and `get_object_or_404` in all four view modules). Fix: Remove unused imports.
