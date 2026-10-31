@@ -72,9 +72,24 @@ def social_commerce_feed(request):
     Syndicated Social Commerce Catalog Feed for Meta (Instagram/Facebook) & TikTok Shops.
     Returns JSON structured catalog item feed per tenant.
     """
-    products = ecommerce_scope(CatalogProduct.objects.all(), request).filter(
-        status="active"
-    ).select_related("primary_category").prefetch_related("variants")[:200]
+    products = (
+        ecommerce_scope(CatalogProduct.objects.all(), request)
+        .filter(status="active")
+        .select_related("primary_category")
+        .prefetch_related("variants")
+        .only(
+            "id",
+            "tenant",
+            "number",
+            "name",
+            "short_description",
+            "description",
+            "slug",
+            "brand",
+            "primary_category__id",
+            "primary_category__name",
+        )[:200]
+    )
 
     items = []
     host = request.get_host()
