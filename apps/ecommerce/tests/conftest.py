@@ -44,6 +44,10 @@ from apps.ecommerce.models import (
     VendorProductListing,
     VendorSubOrder,
     VendorPayout,
+    MarketingCampaign,
+    AffiliatePartner,
+    AffiliateReferralConversion,
+    SeoMetadataRule,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -2440,6 +2444,217 @@ def ecom_payout_a(tenant_a, ecom_vendor_a):
 @pytest.fixture
 def ecom_payout_b(tenant_b, ecom_vendor_b):
     return _marketplace_payout(tenant_b, vendor=ecom_vendor_b)
+
+
+# ---------------------------------------------------------------------------
+# 9.10 Marketing & Campaign Management Contract & Fixtures
+# ---------------------------------------------------------------------------
+
+MARKETINGCAMPAIGN_PAGE_SIZE = 15
+
+MARKETINGCAMPAIGN_MODEL_FIELDS = {
+    "MarketingCampaign": (
+        "id", "tenant", "created_at", "updated_at", "number", "name", "code",
+        "campaign_type", "channel", "status", "target_segment", "target_product",
+        "subject", "preview_text", "content_body", "sender_name", "sender_address",
+        "scheduled_at", "sent_at", "send_throttle_window_hours", "geofence_latitude",
+        "geofence_longitude", "geofence_radius_km", "recipient_count", "delivered_count",
+        "opened_count", "clicked_count", "bounced_count", "unsubscribed_count",
+        "complaint_count", "revenue_attributed",
+    ),
+    "AffiliatePartner": (
+        "id", "tenant", "created_at", "updated_at", "number", "name", "party",
+        "customer_profile", "partner_type", "referral_code", "referral_link_slug",
+        "commission_type", "commission_rate", "cookie_duration_days", "status",
+        "payout_threshold", "payment_email", "total_orders_referred",
+        "total_revenue_generated", "total_commission_earned", "total_commission_paid",
+    ),
+    "AffiliateReferralConversion": (
+        "id", "tenant", "created_at", "updated_at", "number", "affiliate", "order",
+        "referred_customer", "attribution_type", "order_amount", "commission_rate_applied",
+        "commission_amount", "status", "payout_reference", "paid_at", "notes",
+    ),
+    "SeoMetadataRule": (
+        "id", "tenant", "created_at", "updated_at", "number", "name", "rule_type",
+        "target_category", "target_product", "url_path_pattern", "meta_title_template",
+        "meta_description_template", "json_ld_schema_type", "canonical_url_override",
+        "og_title", "og_description", "og_image_url", "robots_directive",
+        "sitemap_included", "sitemap_priority", "sitemap_changefreq", "target_keyword",
+        "tracked_rank_position", "rank_tracked_at", "is_active",
+    ),
+}
+
+MARKETINGCAMPAIGN_CHOICES = {
+    "MarketingCampaign": {
+        "channel": [("email", "Email"), ("sms", "SMS"), ("push", "Web / Mobile Push"), ("omnichannel", "Omnichannel (Email + SMS + Push)")],
+        "campaign_type": [("newsletter_broadcast", "Newsletter Broadcast"), ("drip_sequence", "Automated Drip Sequence"), ("order_alert", "Transactional Order Alert"), ("back_in_stock", "Back in Stock Alert"), ("abandoned_cart", "Abandoned Cart Recovery"), ("geofenced_blast", "Geofenced Location Blast"), ("promotional_flash", "Promotional Flash Sale")],
+        "status": [("draft", "Draft"), ("scheduled", "Scheduled"), ("sending", "Sending / In Progress"), ("sent", "Sent / Completed"), ("paused", "Paused"), ("cancelled", "Cancelled")],
+    },
+    "AffiliatePartner": {
+        "partner_type": [("affiliate", "Affiliate Marketer"), ("influencer", "Social Influencer"), ("brand_ambassador", "Brand Ambassador"), ("customer_advocate", "Customer Referral Advocate")],
+        "commission_type": [("percentage_net_sales", "Percentage of Net Sales"), ("flat_per_order", "Flat Dollar per Order"), ("tiered", "Tiered Sales Volume")],
+        "status": [("pending_approval", "Pending Approval"), ("active", "Active"), ("suspended", "Suspended"), ("inactive", "Inactive")],
+    },
+    "AffiliateReferralConversion": {
+        "attribution_type": [("referral_link", "Referral Tracking Link"), ("coupon_code", "Affiliate Coupon Code"), ("manual_credit", "Manual Administrative Credit")],
+        "status": [("pending_review", "Pending Review"), ("approved", "Approved for Payout"), ("paid", "Paid / Remitted"), ("voided_refund", "Voided / Refund Clawback")],
+    },
+    "SeoMetadataRule": {
+        "rule_type": [("global_default", "Global Storefront Default"), ("category_template", "Category Level Dynamic Template"), ("product_template", "Product Level Dynamic Template"), ("custom_url", "Custom URL Specific Override")],
+        "json_ld_schema_type": [("Product", "Product (Schema.org)"), ("BreadcrumbList", "BreadcrumbList (Schema.org)"), ("Organization", "Organization (Schema.org)"), ("WebSite", "WebSite (Schema.org)"), ("FAQPage", "FAQPage (Schema.org)"), ("None", "None / Disabled")],
+        "robots_directive": [("index_follow", "index, follow"), ("noindex_follow", "noindex, follow"), ("noindex_nofollow", "noindex, nofollow"), ("index_nofollow", "index, nofollow")],
+        "sitemap_changefreq": [("always", "always"), ("hourly", "hourly"), ("daily", "daily"), ("weekly", "weekly"), ("monthly", "monthly"), ("yearly", "yearly"), ("never", "never")],
+    },
+}
+
+MARKETINGCAMPAIGN_FORM_FIELDS = {
+    "MarketingCampaignForm": [
+        "name", "code", "campaign_type", "channel", "target_segment", "target_product",
+        "subject", "preview_text", "content_body", "sender_name", "sender_address",
+        "scheduled_at", "send_throttle_window_hours", "geofence_latitude",
+        "geofence_longitude", "geofence_radius_km",
+    ],
+    "AffiliatePartnerForm": [
+        "name", "party", "customer_profile", "partner_type", "referral_code",
+        "referral_link_slug", "commission_type", "commission_rate",
+        "cookie_duration_days", "payout_threshold", "payment_email",
+    ],
+    "AffiliateReferralConversionForm": [
+        "affiliate", "order", "referred_customer", "attribution_type",
+        "order_amount", "commission_rate_applied", "notes",
+    ],
+    "SeoMetadataRuleForm": [
+        "name", "rule_type", "target_category", "target_product", "url_path_pattern",
+        "meta_title_template", "meta_description_template", "json_ld_schema_type",
+        "canonical_url_override", "og_title", "og_description", "og_image_url",
+        "robots_directive", "sitemap_included", "sitemap_priority",
+        "sitemap_changefreq", "target_keyword", "is_active",
+    ],
+}
+
+
+def _marketing_campaign(tenant, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": f"Test Campaign {timezone.now().timestamp()}",
+        "code": f"CAMP-{timezone.now().microsecond}",
+        "channel": "email",
+        "campaign_type": "newsletter_broadcast",
+        "status": "draft",
+        "subject": "Weekly Deals",
+        "preview_text": "Exclusive savings inside",
+        "content_body": "<p>Hello shopper!</p>",
+        "sender_name": "Store Marketing",
+        "sender_address": "news@store.example.com",
+    }
+    defaults.update(overrides)
+    return MarketingCampaign.objects.create(**defaults)
+
+
+def _affiliate_partner(tenant, party=None, **overrides):
+    if party is None and "party" not in overrides:
+        party = Party.objects.create(tenant=tenant, name="Affiliate Partner Party", kind="person")
+    defaults = {
+        "tenant": tenant,
+        "name": f"Partner {timezone.now().timestamp()}",
+        "party": party,
+        "partner_type": "affiliate",
+        "referral_code": f"REF{timezone.now().microsecond}",
+        "referral_link_slug": f"partner-{timezone.now().microsecond}",
+        "commission_type": "percentage_net_sales",
+        "commission_rate": Decimal("10.00"),
+        "cookie_duration_days": 30,
+        "status": "pending_approval",
+        "payout_threshold": Decimal("50.00"),
+        "payment_email": "partner@example.com",
+    }
+    defaults.update(overrides)
+    return AffiliatePartner.objects.create(**defaults)
+
+
+def _affiliate_conversion(tenant, affiliate=None, order=None, **overrides):
+    if affiliate is None and "affiliate" not in overrides:
+        affiliate = _affiliate_partner(tenant)
+    if order is None and "order" not in overrides:
+        party = Party.objects.create(tenant=tenant, name="Customer Order Party", kind="person")
+        order = EcommerceOrder.objects.create(
+            tenant=tenant,
+            customer=party,
+            customer_email="cust@example.com",
+            total_amount=Decimal("120.00"),
+            currency="USD",
+        )
+    defaults = {
+        "tenant": tenant,
+        "affiliate": affiliate,
+        "order": order,
+        "attribution_type": "referral_link",
+        "order_amount": Decimal("120.00"),
+        "commission_rate_applied": Decimal("10.00"),
+        "commission_amount": Decimal("12.00"),
+        "status": "pending_review",
+    }
+    defaults.update(overrides)
+    return AffiliateReferralConversion.objects.create(**defaults)
+
+
+def _seo_rule(tenant, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": f"SEO Rule {timezone.now().timestamp()}",
+        "rule_type": "global_default",
+        "meta_title_template": "{title} | Store",
+        "meta_description_template": "Buy {title} online.",
+        "json_ld_schema_type": "WebSite",
+        "robots_directive": "index_follow",
+        "sitemap_included": True,
+        "sitemap_priority": Decimal("0.80"),
+        "sitemap_changefreq": "daily",
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return SeoMetadataRule.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_campaign_a(tenant_a):
+    return _marketing_campaign(tenant_a, name="Acme Campaign A")
+
+
+@pytest.fixture
+def ecom_campaign_b(tenant_b):
+    return _marketing_campaign(tenant_b, name="Globex Campaign B")
+
+
+@pytest.fixture
+def ecom_affiliate_a(tenant_a):
+    return _affiliate_partner(tenant_a, name="Acme Partner A")
+
+
+@pytest.fixture
+def ecom_affiliate_b(tenant_b):
+    return _affiliate_partner(tenant_b, name="Globex Partner B")
+
+
+@pytest.fixture
+def ecom_conversion_a(tenant_a, ecom_affiliate_a):
+    return _affiliate_conversion(tenant_a, affiliate=ecom_affiliate_a)
+
+
+@pytest.fixture
+def ecom_conversion_b(tenant_b, ecom_affiliate_b):
+    return _affiliate_conversion(tenant_b, affiliate=ecom_affiliate_b)
+
+
+@pytest.fixture
+def ecom_seo_rule_a(tenant_a):
+    return _seo_rule(tenant_a, name="Acme SEO Rule A")
+
+
+@pytest.fixture
+def ecom_seo_rule_b(tenant_b):
+    return _seo_rule(tenant_b, name="Globex SEO Rule B")
+
 
 
 
