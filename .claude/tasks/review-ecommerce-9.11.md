@@ -3,7 +3,7 @@
 - **Sub-module:** 9.11 Marketplace & Multi-Vendor • **Module:** 9 eCommerce Management System • **App:** `apps/ecommerce`
 - **Changeset:** `f373366542e10cdb8e6b08f6aa8ce4f758c5ad69...HEAD`
 - **Review Date:** 2026-10-31
-- **Status:** Review In Progress (Pass 1 complete)
+- **Status:** Review In Progress (Pass 1 & Pass 2 complete)
 
 ---
 
@@ -72,3 +72,38 @@
 - [ ] **M5**: Missing non-negative amount validations in `VendorPayout.clean`
   - `apps/ecommerce/models/Marketplace/VendorPayouts.py:141`
   - Fix: Add non-negative validations for monetary line fields.
+
+---
+
+## Pass 2: Explorer Review (`explorer`)
+
+### Important
+- [ ] **EXP-I1**: Broken Attribute Lookups on `listing.product` in Listing Detail Template
+  - `templates/ecommerce/marketplace/vendorproductlisting/detail.html:207, 211`
+  - Description: Line 207 uses `{{ listing.product.category.name }}` (`CatalogProduct` FK is `primary_category`), rendering `"Uncategorized"`. Line 211 uses `listing.product.is_active` (`CatalogProduct` has `status` with choices draft/active/archived, no `is_active` boolean), rendering `"Inactive"`.
+  - Fix: Use `listing.product.primary_category.name` and `listing.product.status == "active"`.
+- [ ] **EXP-I2**: Broken Attribute Lookups on `sub_order.order` in Sub-Order Detail Template
+  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:237, 241`
+  - Description: Line 237 references `sub_order.order.customer_party.name` (`EcommerceOrder` FK is `customer`), rendering fallback `"Shopper"`. Line 241 references `${{ sub_order.order.grand_total }}` (`EcommerceOrder` field is `total_amount`), rendering blank `$`.
+  - Fix: Use `sub_order.order.customer.name` and `sub_order.order.total_amount`.
+- [ ] **EXP-I3**: Missing `payout_status` Filter Dropdown in Sub-Orders List Template
+  - `templates/ecommerce/marketplace/vendorsuborder/list.html:34-90`
+  - Description: View parses `payout_status` and passes `payout_status_choices` and `payout_filter`, but filter form lacks the dropdown and pagination links drop the parameter.
+  - Fix: Add `<select name="payout_status">` with `payout_status_choices` to the filter form and append to pagination query.
+- [ ] **EXP-I4**: `TypeError` on `None` Comparison in Model `clean()` Methods
+  - `apps/ecommerce/models/Marketplace/MarketplaceVendors.py:244-249`
+  - `apps/ecommerce/models/Marketplace/VendorProductListings.py:179`
+  - `apps/ecommerce/models/Marketplace/VendorSubOrders.py:215, 217`
+  - Description: Direct `< Decimal("0.00")` comparisons without guarding for `None` raise unhandled `TypeError` if fields are unpopulated before validation.
+  - Fix: Add `if self.<field> is not None and self.<field> < Decimal("0.00"):` guards.
+
+### Minor
+- [ ] **EXP-M1**: `VendorSubOrder.save()` Does Not Update Vendor Aggregate Rating
+  - `apps/ecommerce/models/Marketplace/VendorSubOrders.py:257-260`
+  - `apps/ecommerce/models/Marketplace/MarketplaceVendors.py:255-266`
+  - Description: Vendor rating aggregates remain `0.00` because saving sub-orders with customer ratings never calls `vendor.update_rating()`.
+  - Fix: Invoke `self.vendor.update_rating()` on sub-order save when rated.
+- [ ] **EXP-M2**: Unrendered `order_lines` in Sub-Order Detail View
+  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:226-255`
+  - Description: View provides `order_lines` context, but the template does not display an items table for ordered lines.
+  - Fix: Render `order_lines` table in the parent order section.
