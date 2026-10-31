@@ -81,3 +81,14 @@ Reviewing changeset: `3fb041f95e45ff13427ac02c53583153e9d95fc2..e645586a1a7a5c11
 2. `apps/ecommerce/models/ReviewUgc/ProductReviews.py:98-102` & `ProductQuestionAnswers.py:53-56` — Missing composite index on `(tenant, status)` for moderation queues. Fix: Add composite index on `(tenant, status)` in both models.
 3. `apps/ecommerce/models/ReviewUgc/VisualUgcMedia.py:54-57` — Missing index on `(tenant, media_type)`. Fix: Add composite index `(tenant, media_type)`.
 4. `apps/ecommerce/views/ReviewUgc/` (all 4 list views) — Over-fetching heavy TextFields for product filter dropdowns. Fix: Use `.only("id", "name")`.
+
+
+---
+
+## 5. QA Smoke Tester Findings
+
+### Critical
+1. `apps/ecommerce/views/ReviewUgc/*.py` (all 4 view modules: `ProductReviews.py:91,118,145,168`, `ProductQuestionAnswers.py:89,117,143,167`, `VisualUgcMedia.py:87,114,141`, `ReviewSentimentSummaries.py:84,112,141,155`) — `write_audit_log()` signature mismatch (`TypeError: write_audit_log() got an unexpected keyword argument 'model_name'`) crashes all 15 POST actions across all 4 ReviewUgc views with HTTP 500. Fix: Change call signature to `write_audit_log(request.user, obj, action, changes, tenant=request.tenant)`.
+
+### Important
+1. `apps/ecommerce/views/ReviewUgc/ReviewSentimentSummaries.py:155` — Action verb `"recalculate"` (11 chars) exceeds `AuditLog.action` varchar(10) column limit. Fix: Change action verb to `"recalc"`.
