@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Subscriptions · Subscription Commerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:subscription_portal' %}" class="hover:text-blue-600">Subscriptions</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Customer Subscriptions</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Customer Subscriptions</h1>
+      <p class="text-sm text-slate-500 mt-1">Manage active subscriber contracts, upcoming billing cycles, fulfillment schedules, and dunning statuses.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:subscription_portal' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>Subscription Portal</span>
+      </a>
+      <a href="{% url 'ecommerce:customersubscription_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Enroll Subscription</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ query }}"
+            placeholder="Sub #, customer, product..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Lifecycle Status</label>
+        <select id="filter-status" name="status" class="form-select w-full text-sm">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if selected_status == val or request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-plan" class="block text-xs font-medium text-slate-600 mb-1">Plan</label>
+        <select id="filter-plan" name="plan" class="form-select w-full text-sm">
+          <option value="">All Plans</option>
+          {% for p in plans %}
+            <option value="{{ p.pk }}" {% if selected_plan == p.pk|stringformat:"d" or request.GET.plan == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-primary w-full text-sm py-2">
+          Filter
+        </button>
+        <a href="{% url 'ecommerce:customersubscription_list' %}" class="btn btn-outline text-sm py-2 px-3" title="Reset Filters">
+          Reset
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Table Card -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            <th class="py-3 px-4">Subscription</th>
+            <th class="py-3 px-4">Customer</th>
+            <th class="py-3 px-4">Plan & Product</th>
+            <th class="py-3 px-4 text-right">Recurring Amount</th>
+            <th class="py-3 px-4">Next Billing Date</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-sm">
+          {% for sub in subscriptions %}
+            <tr class="hover:bg-slate-50/75 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-blue-600">
+                <a href="{% url 'ecommerce:customersubscription_detail' sub.pk %}" class="hover:underline">
+                  {{ sub.number }}
+                </a>
+                <div class="text-[11px] text-slate-400 font-sans mt-0.5">Cycles: {{ sub.completed_cycles_count }}</div>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-800">
+                  {{ sub.customer_profile.customer_name|default:sub.customer_profile.email }}
+                </div>
+                <div class="text-xs text-slate-400">{{ sub.customer_profile.email }}</div>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-800">{{ sub.product.name }}</div>
+                <div class="text-xs text-slate-500">Plan: {{ sub.plan.name }}</div>
+                {% if sub.variant %}
+                  <div class="text-[11px] text-slate-400">SKU: {{ sub.variant.sku }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right font-semibold text-slate-900">
+                ${{ sub.recurring_total }}
+                <div class="text-[11px] font-normal text-slate-400">Qty: {{ sub.quantity }}</div>
+              </td>
+              <td class="py-3 px-4 text-slate-700">
+                <div>{{ sub.next_billing_date }}</div>
+                {% if sub.status == 'paused' and sub.paused_until %}
+                  <div class="text-[11px] text-amber-600">Paused until {{ sub.paused_until }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if sub.status == 'active' %}
+                  <span class="badge badge-green">Active</span>
+                {% elif sub.status == 'trialing' %}
+                  <span class="badge badge-info">Trialing</span>
+                {% elif sub.status == 'paused' %}
+                  <span class="badge badge-amber">Paused</span>
+                {% elif sub.status == 'past_due' %}
+                  <span class="badge badge-red">Past Due</span>
+                {% elif sub.status == 'cancelled' %}
+                  <span class="badge badge-red">Cancelled</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ sub.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="table-actions flex items-center justify-end gap-1">
+                  <a
+                    href="{% url 'ecommerce:customersubscription_detail' sub.pk %}"
+                    class="btn btn-icon p-1.5 text-slate-500 hover:text-blue-600 rounded"
+                    title="View Subscription"
+                  >
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a
+                    href="{% url 'ecommerce:customersubscription_edit' sub.pk %}"
+                    class="btn btn-icon p-1.5 text-slate-500 hover:text-amber-600 rounded"
+                    title="Edit Subscription"
+                  >
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form
+                    method="post"
+                    action="{% url 'ecommerce:customersubscription_delete' sub.pk %}"
+                    class="inline-block"
+                    onsubmit="return confirm('Delete customer subscription {{ sub.number }}?');"
+                  >
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="btn btn-icon p-1.5 text-slate-500 hover:text-red-600 rounded"
+                      title="Delete Subscription"
+                    >
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="py-8 text-center text-slate-500">
+                <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                  <i data-lucide="calendar-clock" class="w-10 h-10 text-slate-300 mb-2"></i>
+                  <p class="font-medium text-slate-700">No customer subscriptions found</p>
+                  <p class="text-xs text-slate-400 mt-1">Enroll customers in recurring subscriptions or test the self-service subscriber portal.</p>
+                  <a href="{% url 'ecommerce:customersubscription_create' %}" class="btn btn-primary text-xs mt-3">
+                    Enroll First Subscription
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+        <div>
+          Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} subscriptions
+        </div>
+        <div class="flex items-center gap-2">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_plan %}&plan={{ selected_plan }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Previous
+            </a>
+          {% endif %}
+          <span class="text-xs font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_plan %}&plan={{ selected_plan }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
