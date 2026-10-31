@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Question {{ question.number }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:productquestionanswer_list' %}">Product Q&A</a>
+            <span>/</span>
+            <span>{{ question.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Question {{ question.number }}</h1>
+            {% if question.status == "approved" %}
+            <span class="badge badge-green">Approved</span>
+            {% elif question.status == "rejected" %}
+            <span class="badge badge-red">Rejected</span>
+            {% else %}
+            <span class="badge badge-amber">Pending Moderation</span>
+            {% endif %}
+
+            {% if question.is_pinned %}
+            <span class="badge badge-amber">Pinned FAQ</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'ecommerce:productquestionanswer_respond' question.pk %}" class="btn btn-primary">
+            <i data-lucide="message-circle"></i> Respond / Answer
+        </a>
+        <a href="{% url 'ecommerce:productquestionanswer_edit' question.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        <form action="{% url 'ecommerce:productquestionanswer_delete' question.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete question {{ question.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Question & Answer Cards -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Inquiry Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-bold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="help-circle" class="w-5 h-5 text-brand"></i> Customer Inquiry
+                </h3>
+                <span class="text-xs text-muted">Submitted {{ question.created_at|date:"M d, Y H:i" }}</span>
+            </div>
+            <div class="card-body space-y-4">
+                <p class="text-slate-800 text-lg leading-relaxed font-medium">{{ question.question_text }}</p>
+                <div class="flex items-center gap-4 text-xs text-muted pt-2 border-t border-slate-100">
+                    <span>Asked by: <strong class="text-slate-700">{{ question.author_name }}</strong></span>
+                    {% if question.author_email %}
+                    <span>Email: <a href="mailto:{{ question.author_email }}" class="text-brand hover:underline">{{ question.author_email }}</a></span>
+                    {% endif %}
+                    <span>Helpful upvotes: <strong class="text-slate-700">{{ question.helpful_votes }}</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Official Answer Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <h3 class="font-bold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="message-square" class="w-5 h-5 text-green-600"></i> Published Response
+                    </h3>
+                    {% if question.is_staff_answer %}
+                    <span class="badge badge-info text-xs">Official Staff Answer</span>
+                    {% endif %}
+                </div>
+                {% if question.answered_at %}
+                <span class="text-xs text-muted">Answered on {{ question.answered_at|date:"M d, Y H:i" }}</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if question.answer_text %}
+                <div class="p-4 bg-slate-50 border-l-4 border-green-500 rounded-r text-slate-800">
+                    <div class="font-semibold text-sm text-slate-900 mb-1">
+                        Answered by {{ question.answered_by_name|default:"NavERP Team" }}:
+                    </div>
+                    <p class="whitespace-pre-line text-sm leading-relaxed">{{ question.answer_text }}</p>
+                </div>
+                {% else %}
+                <div class="empty-state py-6">
+                    <i data-lucide="clock" class="w-8 h-8 text-amber-500 mx-auto mb-2"></i>
+                    <p class="text-sm text-muted">This question has not been answered yet.</p>
+                    <div class="mt-3">
+                        <a href="{% url 'ecommerce:productquestionanswer_respond' question.pk %}" class="btn btn-primary btn-sm">
+                            <i data-lucide="reply"></i> Provide Answer
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Product Context -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-bold text-slate-900">Associated Product</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-muted block text-xs">Catalog Product</span>
+                    <a href="{% url 'ecommerce:catalogproduct_detail' question.product.pk %}" class="font-semibold text-brand hover:underline">
+                        {{ question.product.name }}
+                    </a>
+                    <div class="text-xs text-muted font-mono mt-0.5">{{ question.product.number }}</div>
+                </div>
+
+                {% if question.customer %}
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-muted block text-xs">Customer Profile</span>
+                    <a href="{% url 'ecommerce:customeraccountprofile_detail' question.customer.pk %}" class="font-medium text-brand hover:underline">
+                        {{ question.customer.display_name }} ({{ question.customer.number }})
+                    </a>
+                </div>
+                {% endif %}
+
+                {% if question.answered_by_user %}
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-muted block text-xs">Staff Respondent</span>
+                    <span class="font-medium text-slate-800">
+                        {{ question.answered_by_user.get_full_name|default:question.answered_by_user.username }}
+                    </span>
+                </div>
+                {% endif %}
+
+                <div class="pt-2 border-t border-slate-100 flex justify-between text-xs text-muted">
+                    <span>Created: {{ question.created_at|date:"M d, Y" }}</span>
+                    <span>Updated: {{ question.updated_at|date:"M d, Y" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
