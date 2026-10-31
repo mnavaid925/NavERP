@@ -33,6 +33,13 @@
         <i data-lucide="pencil" class="w-4 h-4"></i>
         <span>Edit Curation</span>
       </a>
+      <form method="post" action="{% url 'ecommerce:subscriptionboxcuration_delete' curation.pk %}" class="inline" onsubmit="return confirm('Delete box curation {{ curation.name }}? This action cannot be undone.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger inline-flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
       <a href="{% url 'ecommerce:subscriptionboxcuration_list' %}" class="btn btn-outline">
         Back to Curations
       </a>
