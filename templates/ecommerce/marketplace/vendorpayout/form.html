@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Batch {{ payout.number }}{% else %}New Payout Batch{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketplace_console' %}" class="hover:text-blue-600">Marketplace</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:vendorpayout_list' %}" class="hover:text-blue-600">Payouts</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}Edit {{ payout.number }}{% else %}New Batch{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Payout Batch: {{ payout.number }}{% else %}Create Vendor Payout Settlement Batch{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Configure settlement earnings period, commission withholdings, and disbursement parameters.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      {% if is_edit %}
+        <a href="{% url 'ecommerce:vendorpayout_detail' payout.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+          <i data-lucide="x" class="w-4 h-4"></i>
+          <span>Cancel</span>
+        </a>
+      {% else %}
+        <a href="{% url 'ecommerce:vendorpayout_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+          <i data-lucide="x" class="w-4 h-4"></i>
+          <span>Cancel</span>
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6 bg-white border border-slate-200 rounded-lg shadow-sm">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.errors %}
+      <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+        <div class="font-semibold mb-1">Please correct the following errors:</div>
+        <ul class="list-disc list-inside space-y-1">
+          {% for field, errors in form.errors.items %}
+            {% for error in errors %}
+              <li><strong>{{ field|title }}:</strong> {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <!-- Section: Vendor & Settlement Period -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="calendar" class="w-4 h-4 text-blue-600"></i>
+          <span>1. Vendor & Settlement Period</span>
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Marketplace Vendor *</label>
+            {{ form.vendor }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Period Start Date *</label>
+            {{ form.period_start }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Period End Date *</label>
+            {{ form.period_end }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Settlement Calculations -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="calculator" class="w-4 h-4 text-blue-600"></i>
+          <span>2. Settlement Line Amounts</span>
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Gross Sales Amount ($) *</label>
+            {{ form.gross_sales_amount }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Commission Deducted ($)</label>
+            {{ form.commission_deducted }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Gateway Fees Deducted ($)</label>
+            {{ form.fees_deducted }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Refunds & Clawbacks ($)</label>
+            {{ form.refunds_deducted }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Withholding Tax ($)</label>
+            {{ form.tax_withholding_amount }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Disbursement Method & Status -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="landmark" class="w-4 h-4 text-blue-600"></i>
+          <span>3. Transfer Method & Compliance</span>
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Payout Method</label>
+            {{ form.payout_method }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Payout Status</label>
+            {{ form.payout_status }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Transfer Reference Code</label>
+            {{ form.reference_code }}
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">1099 Tax Year</label>
+            {{ form.tax_year }}
+          </div>
+          <div class="form-group md:col-span-2 flex items-center gap-2 pt-5">
+            {{ form.is_1099_reported }}
+            <label class="text-sm text-slate-700 font-medium">1099-K filing has been generated and reported for this batch</label>
+          </div>
+          <div class="form-group md:col-span-3">
+            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Disbursement Remarks / Notes</label>
+            {{ form.notes }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-200">
+        {% if is_edit %}
+          <a href="{% url 'ecommerce:vendorpayout_detail' payout.pk %}" class="btn btn-outline">Cancel</a>
+          <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span>Update Payout Batch</span>
+          </button>
+        {% else %}
+          <a href="{% url 'ecommerce:vendorpayout_list' %}" class="btn btn-outline">Cancel</a>
+          <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Create Payout Batch</span>
+          </button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
