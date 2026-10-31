@@ -31,7 +31,7 @@
         {% endif %}
       </div>
       <p class="text-sm text-slate-500 mt-1">
-        Subscriber: <span class="font-medium text-slate-800">{{ subscription.customer_profile.customer_name|default:subscription.customer_profile.email }}</span>
+        Subscriber: <span class="font-medium text-slate-800">{{ subscription.customer_profile.customer.name|default:subscription.customer_profile.number }}</span>
         · Started: {{ subscription.started_at|date:"M d, Y" }}
       </p>
     </div>
