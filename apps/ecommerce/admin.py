@@ -496,7 +496,7 @@ class SeoMetadataRuleAdmin(admin.ModelAdmin):
     readonly_fields = [
         "number",
         "tracked_rank_position",
-        "last_serp_checked_at",
+        "rank_tracked_at",
         "created_at",
         "updated_at",
     ]
