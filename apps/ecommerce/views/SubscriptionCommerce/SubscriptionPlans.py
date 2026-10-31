@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import ProtectedError, Q
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
@@ -138,7 +138,15 @@ def subscriptionplan_delete(request, pk):
     plan = ecommerce_object(request, SubscriptionPlan, pk)
     name = plan.name
     number = plan.number
-    plan.delete()
+    try:
+        plan.delete()
+    except ProtectedError:
+        messages.error(
+            request,
+            f"Cannot delete plan '{name}' ({number}) because existing subscriptions are currently assigned to it.",
+        )
+        return redirect("ecommerce:subscriptionplan_detail", pk=pk)
+
     write_audit_log(
         request.user,
         plan,
