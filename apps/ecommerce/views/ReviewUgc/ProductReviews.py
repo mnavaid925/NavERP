@@ -161,8 +161,11 @@ def productreview_moderate(request, pk):
         if form.is_valid():
             review = form.save(commit=False)
             review.moderated_by = request.user
-            if review.merchant_response and not review.merchant_response_at:
-                review.merchant_response_at = timezone.now()
+            if review.merchant_response:
+                if not review.merchant_response_at:
+                    review.merchant_response_at = timezone.now()
+            else:
+                review.merchant_response_at = None
             review.save()
             write_audit_log(
                 request.user,
