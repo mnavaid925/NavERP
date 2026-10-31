@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -47,7 +48,7 @@ def vendorpayout_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    vendors = ecommerce_scope(MarketplaceVendor.objects.all(), request).order_by("store_name")
+    vendors = ecommerce_scope(MarketplaceVendor.objects.all(), request).only("id", "store_name").order_by("store_name")
 
     context = {
         "page_obj": page_obj,
@@ -152,6 +153,7 @@ def vendorpayout_edit(request, pk):
 @login_required
 @tenant_admin_required
 @require_POST
+@transaction.atomic
 def vendorpayout_delete(request, pk):
     payout = ecommerce_object(request, VendorPayout, pk)
     number = payout.number
@@ -160,9 +162,9 @@ def vendorpayout_delete(request, pk):
         messages.error(request, f"Cannot delete payout batch '{number}' because it has already been disbursed.")
         return redirect("ecommerce:vendorpayout_detail", pk=pk)
 
-    # Detach linked sub-orders
-    payout.sub_orders.update(payout=None, payout_status="accrued")
-    payout.delete()
+    # Detach linked sub-orders without resetting withheld or refunded consignments
+    payout.sub_orders.exclude(payout_status__in=["withheld_dispute", "refunded"]).update(payout=None, payout_status="accrued")
+    payout.sub_orders.filter(payout_status__in=["withheld_dispute", "refunded"]).update(payout=None)
 
     write_audit_log(
         request.user,
@@ -171,6 +173,8 @@ def vendorpayout_delete(request, pk):
         {"number": number},
         tenant=request.tenant,
     )
+    payout.delete()
+
     messages.success(request, f"Payout batch '{number}' deleted.")
     return redirect("ecommerce:vendorpayout_list")
 
@@ -178,6 +182,7 @@ def vendorpayout_delete(request, pk):
 @login_required
 @tenant_admin_required
 @require_POST
+@transaction.atomic
 def vendorpayout_approve(request, pk):
     payout = ecommerce_object(request, VendorPayout, pk)
     payout.payout_status = "processing"
@@ -197,6 +202,7 @@ def vendorpayout_approve(request, pk):
 @login_required
 @tenant_admin_required
 @require_POST
+@transaction.atomic
 def vendorpayout_execute(request, pk):
     payout = ecommerce_object(request, VendorPayout, pk)
     reference = request.POST.get("reference_code", "").strip() or payout.reference_code
@@ -205,13 +211,13 @@ def vendorpayout_execute(request, pk):
     payout.processed_at = timezone.now()
     payout.save(update_fields=["payout_status", "reference_code", "processed_at"])
 
-    # Update all linked sub-orders to paid status
-    payout.sub_orders.update(payout_status="paid")
+    # Update eligible linked sub-orders to paid status (excluding withheld or refunded consignments)
+    payout.sub_orders.exclude(payout_status__in=["withheld_dispute", "refunded"]).update(payout_status="paid")
 
     write_audit_log(
         request.user,
         payout,
-        "execute_disbursement",
+        "execute",
         {"status": "completed", "reference_code": reference, "processed_at": str(payout.processed_at)},
         tenant=request.tenant,
     )
