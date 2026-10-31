@@ -15,7 +15,7 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 @login_required
 def subscriptionretentionaction_list(request):
     qs = ecommerce_scope(SubscriptionRetentionAction.objects.all(), request).select_related(
-        "subscription", "customer_profile"
+        "subscription", "customer_profile__customer"
     )
 
     query = request.GET.get("q", "").strip()
@@ -26,8 +26,8 @@ def subscriptionretentionaction_list(request):
         qs = qs.filter(
             Q(number__icontains=query)
             | Q(subscription__number__icontains=query)
-            | Q(customer_profile__customer_name__icontains=query)
-            | Q(customer_profile__email__icontains=query)
+            | Q(customer_profile__customer__name__icontains=query)
+            | Q(customer_profile__number__icontains=query)
             | Q(notes__icontains=query)
         )
 
