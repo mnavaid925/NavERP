@@ -35,8 +35,8 @@ def customersubscription_list(request):
     if status:
         qs = qs.filter(status=status)
 
-    if plan_id:
-        qs = qs.filter(plan_id=plan_id)
+    if plan_id and plan_id.isdigit():
+        qs = qs.filter(plan_id=int(plan_id))
 
     paginator = Paginator(qs, 25)
     page_number = request.GET.get("page", 1)
