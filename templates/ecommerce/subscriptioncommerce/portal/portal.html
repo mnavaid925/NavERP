@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block title %}Subscription Self-Service & Retention Portal · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Subscription Portal</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Subscription & Retention Portal</h1>
+      <p class="text-sm text-slate-500 mt-1">Self-service subscriber controls: skip delivery, pause schedule, swap products, and smart cancellation deflection offers.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:subscriptionplan_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="layers" class="w-4 h-4"></i>
+        <span>Plans</span>
+      </a>
+      <a href="{% url 'ecommerce:customersubscription_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="users" class="w-4 h-4"></i>
+        <span>All Subscriptions</span>
+      </a>
+      <a href="{% url 'ecommerce:subscriptionboxcuration_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="package-search" class="w-4 h-4"></i>
+        <span>Box Curations</span>
+      </a>
+      <a href="{% url 'ecommerce:subscriptionretentionaction_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="shield-alert" class="w-4 h-4"></i>
+        <span>Retention Logs</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Active Subscribers</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">{{ total_subscribers }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Recurring active accounts</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Estimated MRR</div>
+      <div class="text-2xl font-bold text-emerald-600 mt-1">${{ monthly_recurring_revenue }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Monthly recurring revenue</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Paused Subscriptions</div>
+      <div class="text-2xl font-bold text-amber-600 mt-1">{{ paused_subscriptions.count }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Deflected from cancelling</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Retention Interceptions</div>
+      <div class="text-2xl font-bold text-blue-600 mt-1">{{ retention_actions.count }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Recent defensive events</div>
+    </div>
+  </div>
+
+  <!-- Active Subscriptions with Portal Controls -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="card-header p-4 border-b border-slate-200 flex items-center justify-between">
+      <div>
+        <h2 class="text-base font-semibold text-slate-900">Active Subscriptions (Self-Service Controls)</h2>
+        <p class="text-xs text-slate-500 mt-0.5">Test subscriber portal actions: skip next shipment, pause delivery, or simulate cancellation deflection interception.</p>
+      </div>
+      <a href="{% url 'ecommerce:customersubscription_create' %}" class="btn btn-primary text-xs py-1 px-3">
+        + New Subscription
+      </a>
+    </div>
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse text-sm">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+            <th class="py-3 px-4">Subscription</th>
+            <th class="py-3 px-4">Customer</th>
+            <th class="py-3 px-4">Item & Plan</th>
+            <th class="py-3 px-4">Next Billing Date</th>
+            <th class="py-3 px-4 text-right">Self-Service Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for sub in active_subscriptions %}
+            <tr class="hover:bg-slate-50/75">
+              <td class="py-3 px-4 font-mono font-medium text-blue-600">
+                <a href="{% url 'ecommerce:customersubscription_detail' sub.pk %}">{{ sub.number }}</a>
+                <div class="text-xs text-slate-400 font-sans mt-0.5">${{ sub.recurring_total }} / cycle</div>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-800">{{ sub.customer_profile.customer_name|default:sub.customer_profile.email }}</div>
+                <div class="text-xs text-slate-400">{{ sub.customer_profile.email }}</div>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-800">{{ sub.product.name }}</div>
+                <div class="text-xs text-slate-500">{{ sub.plan.name }} ({{ sub.plan.get_frequency_display }})</div>
+              </td>
+              <td class="py-3 px-4 text-slate-700">
+                <span class="font-semibold">{{ sub.next_billing_date }}</span>
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="flex items-center justify-end gap-2">
+                  <!-- Skip Cycle Form -->
+                  <form method="post" action="{% url 'ecommerce:subscription_portal_skip' sub.pk %}" class="inline-block" onsubmit="return confirm('Skip upcoming cycle for {{ sub.number }}? Next billing will be moved by 30 days.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline py-1 px-2.5 text-xs inline-flex items-center gap-1" title="Skip next delivery">
+                      <i data-lucide="skip-forward" class="w-3.5 h-3.5"></i>
+                      <span>Skip Cycle</span>
+                    </button>
+                  </form>
+
+                  <!-- Pause Form -->
+                  <form method="post" action="{% url 'ecommerce:subscription_portal_pause' sub.pk %}" class="inline-block" onsubmit="return confirm('Pause subscription {{ sub.number }} for 60 days?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline py-1 px-2.5 text-xs inline-flex items-center gap-1 text-amber-700 hover:text-amber-900" title="Pause deliveries">
+                      <i data-lucide="pause-circle" class="w-3.5 h-3.5"></i>
+                      <span>Pause</span>
+                    </button>
+                  </form>
+
+                  <!-- Cancel / Deflection Trigger -->
+                  <button type="button" onclick="document.getElementById('deflect-modal-{{ sub.pk }}').classList.remove('hidden');" class="btn btn-outline py-1 px-2.5 text-xs text-red-600 hover:text-red-800 inline-flex items-center gap-1">
+                    <i data-lucide="x-circle" class="w-3.5 h-3.5"></i>
+                    <span>Cancel...</span>
+                  </button>
+
+                  <!-- Deflection Modal -->
+                  <div id="deflect-modal-{{ sub.pk }}" class="hidden fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+                    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6 text-left">
+                      <div class="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+                        <h3 class="text-base font-bold text-slate-900">Before you cancel subscription {{ sub.number }}...</h3>
+                        <button type="button" onclick="document.getElementById('deflect-modal-{{ sub.pk }}').classList.add('hidden');" class="text-slate-400 hover:text-slate-600">
+                          <i data-lucide="x" class="w-5 h-5"></i>
+                        </button>
+                      </div>
+                      <form method="post" action="{% url 'ecommerce:subscription_portal_deflect' sub.pk %}" class="space-y-4">
+                        {% csrf_token %}
+                        <div>
+                          <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Why are you considering cancelling?</label>
+                          <select name="reason" class="form-select w-full text-sm">
+                            <option value="too_much_product">I have too much backlog / product</option>
+                            <option value="too_expensive">It is too expensive / budget reasons</option>
+                            <option value="poor_quality">Product did not meet expectations</option>
+                            <option value="temporary_break">Traveling or taking a temporary break</option>
+                            <option value="switching_competitor">Switching to another provider</option>
+                            <option value="other">Other reason</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Choose a retention deflection offer:</label>
+                          <div class="space-y-2 text-sm text-slate-700">
+                            <label class="flex items-start gap-2 p-2 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer">
+                              <input type="radio" name="action_choice" value="discount_cycle" checked class="mt-1 text-primary">
+                              <div>
+                                <div class="font-semibold text-emerald-700">Keep subscription with an extra 15% discount</div>
+                                <div class="text-xs text-slate-500">Apply a 15% discount for upcoming recurring deliveries</div>
+                              </div>
+                            </label>
+                            <label class="flex items-start gap-2 p-2 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer">
+                              <input type="radio" name="action_choice" value="pause_duration" class="mt-1 text-primary">
+                              <div>
+                                <div class="font-semibold text-amber-700">Pause for 60 days instead</div>
+                                <div class="text-xs text-slate-500">Take a 2-month breather and automatically resume later</div>
+                              </div>
+                            </label>
+                            <label class="flex items-start gap-2 p-2 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer">
+                              <input type="radio" name="action_choice" value="cancel_anyway" class="mt-1 text-primary">
+                              <div>
+                                <div class="font-semibold text-red-600">No thanks, finalize cancellation</div>
+                                <div class="text-xs text-slate-500">Cancel recurring orders immediately</div>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+                        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                          <button type="button" onclick="document.getElementById('deflect-modal-{{ sub.pk }}').classList.add('hidden');" class="btn btn-outline text-xs">
+                            Keep Active
+                          </button>
+                          <button type="submit" class="btn btn-primary text-xs">
+                            Confirm Selection
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" class="py-6 text-center text-slate-400 text-xs">
+                No active subscriptions currently enrolled.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Paused Subscriptions Resume Section -->
+  {% if paused_subscriptions %}
+    <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header p-4 border-b border-slate-200 flex items-center justify-between bg-amber-50/50">
+        <h2 class="text-base font-semibold text-amber-900">Paused Subscriptions (Awaiting Resume)</h2>
+        <span class="badge badge-amber">{{ paused_subscriptions.count }} Paused</span>
+      </div>
+      <div class="table-wrap overflow-x-auto">
+        <table class="table w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+              <th class="py-2.5 px-4">Subscription</th>
+              <th class="py-2.5 px-4">Customer</th>
+              <th class="py-2.5 px-4">Product</th>
+              <th class="py-2.5 px-4">Paused Until</th>
+              <th class="py-2.5 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for psub in paused_subscriptions %}
+              <tr class="hover:bg-slate-50/75">
+                <td class="py-2.5 px-4 font-mono font-medium text-blue-600">
+                  <a href="{% url 'ecommerce:customersubscription_detail' psub.pk %}">{{ psub.number }}</a>
+                </td>
+                <td class="py-2.5 px-4">{{ psub.customer_profile.customer_name|default:psub.customer_profile.email }}</td>
+                <td class="py-2.5 px-4">{{ psub.product.name }}</td>
+                <td class="py-2.5 px-4 text-amber-700 font-medium">{{ psub.paused_until|default:"Indefinite hold" }}</td>
+                <td class="py-2.5 px-4 text-right">
+                  <form method="post" action="{% url 'ecommerce:subscription_portal_resume' psub.pk %}" class="inline-block" onsubmit="return confirm('Reactivate subscription {{ psub.number }} now?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary py-1 px-3 text-xs inline-flex items-center gap-1">
+                      <i data-lucide="play-circle" class="w-3.5 h-3.5"></i>
+                      <span>Resume Subscription</span>
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Recent Retention Actions Audit -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="card-header p-4 border-b border-slate-200 flex items-center justify-between">
+      <h2 class="text-base font-semibold text-slate-900">Recent Retention & Deflection Events</h2>
+      <a href="{% url 'ecommerce:subscriptionretentionaction_list' %}" class="text-xs text-blue-600 hover:text-blue-800 font-medium">
+        View All Records &rarr;
+      </a>
+    </div>
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse text-sm">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+            <th class="py-2.5 px-4">Date</th>
+            <th class="py-2.5 px-4">Record</th>
+            <th class="py-2.5 px-4">Subscription</th>
+            <th class="py-2.5 px-4">Trigger & Reason</th>
+            <th class="py-2.5 px-4">Offer Presented</th>
+            <th class="py-2.5 px-4">Outcome</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for ret in retention_actions %}
+            <tr class="hover:bg-slate-50/75">
+              <td class="py-2.5 px-4 text-xs text-slate-500">{{ ret.created_at|date:"M d, H:i" }}</td>
+              <td class="py-2.5 px-4 font-mono font-medium text-blue-600">
+                <a href="{% url 'ecommerce:subscriptionretentionaction_detail' ret.pk %}">{{ ret.number }}</a>
+              </td>
+              <td class="py-2.5 px-4 font-mono text-slate-800">
+                <a href="{% url 'ecommerce:customersubscription_detail' ret.subscription.pk %}">{{ ret.subscription.number }}</a>
+              </td>
+              <td class="py-2.5 px-4">
+                <div class="text-xs font-medium text-slate-800">{{ ret.get_trigger_type_display }}</div>
+                <div class="text-[11px] text-slate-500">{{ ret.get_cancellation_reason_display }}</div>
+              </td>
+              <td class="py-2.5 px-4 text-xs text-slate-700">
+                {{ ret.get_offered_action_display }}
+                {% if ret.offer_discount_pct > 0 %}
+                  <span class="text-emerald-700 font-semibold">({{ ret.offer_discount_pct }}%)</span>
+                {% endif %}
+              </td>
+              <td class="py-2.5 px-4">
+                {% if ret.outcome == 'deflected' %}
+                  <span class="badge badge-green">Deflected</span>
+                {% elif ret.outcome == 'paused' %}
+                  <span class="badge badge-amber">Paused</span>
+                {% elif ret.outcome == 'cancelled' %}
+                  <span class="badge badge-red">Cancelled</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ ret.get_outcome_display }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6" class="py-4 text-center text-slate-400 text-xs">
+                No recent retention events recorded.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
