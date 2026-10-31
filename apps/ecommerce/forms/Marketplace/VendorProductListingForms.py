@@ -45,7 +45,7 @@ class VendorProductListingForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["vendor"].queryset = MarketplaceVendor.objects.filter(tenant=self.tenant).order_by("store_name")
-            self.fields["product"].queryset = CatalogProduct.objects.filter(tenant=self.tenant).order_by("title")
+            self.fields["product"].queryset = CatalogProduct.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["variant"].queryset = ProductVariant.objects.filter(tenant=self.tenant).order_by("name")
 
 
