@@ -50,6 +50,10 @@ from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacet
 from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
 from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
 from apps.ecommerce.models.SearchDiscovery.SearchSynonyms import SearchSynonym
+from apps.ecommerce.models.ReviewUgc.ProductQuestionAnswers import ProductQuestionAnswer
+from apps.ecommerce.models.ReviewUgc.ProductReviews import ProductReview
+from apps.ecommerce.models.ReviewUgc.ReviewSentimentSummaries import ReviewSentimentSummary
+from apps.ecommerce.models.ReviewUgc.VisualUgcMedia import VisualUgcMedia
 from apps.ecommerce.models.SubscriptionCommerce.CustomerSubscriptions import CustomerSubscription
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionBoxCurations import SubscriptionBoxCuration
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionPlans import SubscriptionPlan
@@ -2593,6 +2597,212 @@ class Command(BaseCommand):
                 "is_active": True,
             },
         )
+
+        # ------------------------------------------------------------------
+        # 9.13 Reviews & User-Generated Content
+        # ------------------------------------------------------------------
+        prod_review_target = CatalogProduct.objects.filter(tenant=tenant).order_by("pk").first()
+        prod_review_second = (
+            CatalogProduct.objects.filter(tenant=tenant)
+            .exclude(pk=getattr(prod_review_target, "pk", 0))
+            .order_by("pk")
+            .first()
+            or prod_review_target
+        )
+        order_review = EcommerceOrder.objects.filter(tenant=tenant).order_by("pk").first()
+
+        if prod_review_target:
+            # 1. Product Reviews
+            ProductReview.objects.get_or_create(
+                tenant=tenant,
+                product=prod_review_target,
+                reviewer_email="customer.jane@example.com",
+                defaults={
+                    "reviewer_name": "Jane Robertson",
+                    "rating": 5,
+                    "title": "Exceptional Quality and Fast Delivery",
+                    "body": "The build quality exceeded my expectations. Soft premium fabric, flawless stitching, and arrived two days ahead of schedule. Highly recommended!",
+                    "status": "approved",
+                    "sentiment": "positive",
+                    "sentiment_score": Decimal("0.85"),
+                    "is_verified_purchase": True,
+                    "is_featured": True,
+                    "order": order_review,
+                    "helpful_votes": 28,
+                    "unhelpful_votes": 1,
+                    "merchant_response": "Thank you for the fantastic review, Jane! We take immense pride in our craftsmanship.",
+                    "merchant_response_at": timezone.now() - timedelta(days=5),
+                    "media_urls": [
+                        "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800",
+                        "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=800",
+                    ],
+                },
+            )
+
+            ProductReview.objects.get_or_create(
+                tenant=tenant,
+                product=prod_review_target,
+                reviewer_email="mark.smith@example.com",
+                defaults={
+                    "reviewer_name": "Mark S.",
+                    "rating": 4,
+                    "title": "Great Product, Slightly Snug Fit",
+                    "body": "Really happy with the item overall. Material feels durable and looks great. Note that it runs slightly slim, so consider sizing up if between sizes.",
+                    "status": "approved",
+                    "sentiment": "positive",
+                    "sentiment_score": Decimal("0.55"),
+                    "is_verified_purchase": True,
+                    "is_featured": False,
+                    "helpful_votes": 14,
+                    "unhelpful_votes": 0,
+                },
+            )
+
+            ProductReview.objects.get_or_create(
+                tenant=tenant,
+                product=prod_review_target,
+                reviewer_email="anonymous.shopper@example.com",
+                defaults={
+                    "reviewer_name": "Anonymous Buyer",
+                    "rating": 5,
+                    "title": "Must-have staple for everyday use",
+                    "body": "Third time purchasing from this store. Consistency and quality are top notch.",
+                    "status": "pending",
+                    "sentiment": "positive",
+                    "sentiment_score": Decimal("0.90"),
+                    "is_verified_purchase": False,
+                    "helpful_votes": 3,
+                },
+            )
+
+            if prod_review_second:
+                ProductReview.objects.get_or_create(
+                    tenant=tenant,
+                    product=prod_review_second,
+                    reviewer_email="david.miller@example.com",
+                    defaults={
+                        "reviewer_name": "David Miller",
+                        "rating": 2,
+                        "title": "Color differed slightly from online photos",
+                        "body": "The item is well made, but the dye hue appeared more navy online than in daylight. Customer support was helpful with an exchange.",
+                        "status": "approved",
+                        "sentiment": "mixed",
+                        "sentiment_score": Decimal("-0.20"),
+                        "is_verified_purchase": True,
+                        "merchant_response": "We appreciate the honest feedback, David. We are updating our studio lighting photography to reflect true sunlight tones.",
+                        "merchant_response_at": timezone.now() - timedelta(days=2),
+                        "helpful_votes": 7,
+                        "unhelpful_votes": 2,
+                    },
+                )
+
+            # 2. Product Q&A
+            ProductQuestionAnswer.objects.get_or_create(
+                tenant=tenant,
+                product=prod_review_target,
+                question_text="Is this product machine washable, and will it shrink in tumble dry?",
+                defaults={
+                    "author_name": "Claire Vance",
+                    "author_email": "claire.v@example.com",
+                    "status": "approved",
+                    "answer_text": "Yes, it is pre-shrunk cotton! Machine wash cold with like colors and tumble dry low for best longevity.",
+                    "answered_by_name": "NavERP Product Specialist",
+                    "is_staff_answer": True,
+                    "answered_at": timezone.now() - timedelta(days=12),
+                    "helpful_votes": 35,
+                    "is_pinned": True,
+                },
+            )
+
+            ProductQuestionAnswer.objects.get_or_create(
+                tenant=tenant,
+                product=prod_review_target,
+                question_text="Does this item come with international manufacturer warranty?",
+                defaults={
+                    "author_name": "Liam Bennett",
+                    "author_email": "liam.b@example.com",
+                    "status": "approved",
+                    "answer_text": "All items include a standard 1-year limited global warranty against manufacturing defects.",
+                    "answered_by_name": "NavERP Support",
+                    "is_staff_answer": True,
+                    "answered_at": timezone.now() - timedelta(days=4),
+                    "helpful_votes": 12,
+                    "is_pinned": False,
+                },
+            )
+
+            ProductQuestionAnswer.objects.get_or_create(
+                tenant=tenant,
+                product=prod_review_target,
+                question_text="Will the out-of-stock colorways be restocked before the holidays?",
+                defaults={
+                    "author_name": "Sophia Gomez",
+                    "status": "pending",
+                    "helpful_votes": 2,
+                },
+            )
+
+            # 3. Visual UGC Media
+            VisualUgcMedia.objects.get_or_create(
+                tenant=tenant,
+                tagged_product=prod_review_target,
+                uploader_handle="@style_with_claire",
+                defaults={
+                    "media_type": "photo",
+                    "media_url": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800",
+                    "thumbnail_url": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=300",
+                    "caption": "Styling my new favorite piece for weekend brunch. The silhouette is perfect!",
+                    "uploader_name": "Claire Vance",
+                    "rights_status": "approved",
+                    "is_shoppable": True,
+                    "is_published": True,
+                    "display_order": 1,
+                    "views_count": 420,
+                    "clicks_count": 58,
+                },
+            )
+
+            VisualUgcMedia.objects.get_or_create(
+                tenant=tenant,
+                tagged_product=prod_review_target,
+                uploader_handle="@unboxing_daily",
+                defaults={
+                    "media_type": "instagram",
+                    "media_url": "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=800",
+                    "caption": "Unboxing the premium edition package. Everything arrived immaculate.",
+                    "uploader_name": "Marcus Kane",
+                    "rights_status": "approved",
+                    "is_shoppable": True,
+                    "is_published": True,
+                    "display_order": 2,
+                    "views_count": 890,
+                    "clicks_count": 112,
+                },
+            )
+
+            # 4. Review Sentiment Summary
+            summary_1, _ = ReviewSentimentSummary.objects.get_or_create(
+                tenant=tenant,
+                product=prod_review_target,
+                defaults={
+                    "top_positive_keywords": ["durable fabric", "fast shipping", "flawless stitching", "comfortable"],
+                    "top_negative_keywords": ["runs slightly slim"],
+                    "improvement_recommendation": "Consider adding explicit fit guidance on product detail page indicating slim tailoring.",
+                },
+            )
+            summary_1.recalculate()
+
+            if prod_review_second:
+                summary_2, _ = ReviewSentimentSummary.objects.get_or_create(
+                    tenant=tenant,
+                    product=prod_review_second,
+                    defaults={
+                        "top_positive_keywords": ["great craftsmanship", "responsive support"],
+                        "top_negative_keywords": ["color tone difference"],
+                        "improvement_recommendation": "Update studio lighting photography to accurately capture dye tone under daylight.",
+                    },
+                )
+                summary_2.recalculate()
 
 
 
