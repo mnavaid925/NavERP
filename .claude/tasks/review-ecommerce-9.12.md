@@ -44,8 +44,7 @@ Reviewers executed serially:
 - [x] **[M4]** `templates/ecommerce/subscriptioncommerce/portal/portal.html:129-186` — fixed — moved deflection modals outside table-wrap to prevent stacking context quirks
 - [x] **[M5]** `apps/ecommerce/forms/SubscriptionCommerce/SubscriptionRetentionActions.py:48-50` — fixed — added customer_profile__customer and product to select_related in form subscription queryset
 - [x] **[M6]** `apps/ecommerce/admin.py:367`, `385` — fixed — updated admin list_select_related to include chained profile and subscription relations
-- [ ] **[M7]** `apps/ecommerce/models/SubscriptionCommerce/CustomerSubscriptions.py:130-138` — Missing compound index on `(tenant, plan, status)` in `CustomerSubscription`.
-  - **Fix**: Add compound index `idx_esub_ten_plan_stat` in `Meta.indexes`.
+- [x] **[M7]** `apps/ecommerce/models/SubscriptionCommerce/CustomerSubscriptions.py:130-138` — fixed — added compound index idx_esub_ten_plan_stat and ran migration 0014
 - [ ] **[M8]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:25-27` & `portal.html:57` — Calling `.count` on sliced `retention_actions[:10]` caps the stat card at 10 instead of total tenant count.
   - **Fix**: Compute `total_retentions` via un-sliced count in view and pass to context.
 - [ ] **[M9]** Detail views omit `select_related` when fetching single objects via `ecommerce_object`.
