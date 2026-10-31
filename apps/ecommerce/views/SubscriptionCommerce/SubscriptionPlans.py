@@ -63,7 +63,9 @@ def subscriptionplan_list(request):
 @login_required
 def subscriptionplan_detail(request, pk):
     plan = ecommerce_object(request, SubscriptionPlan, pk)
-    active_subscriptions = plan.subscriptions.filter(status="active").select_related("customer_profile", "product")[:20]
+    active_subscriptions = plan.subscriptions.filter(status="active").select_related(
+        "customer_profile__customer", "customer_profile__user", "product"
+    )[:20]
     active_curations = plan.curations.filter(is_active=True).select_related("primary_product")[:10]
 
     context = {
