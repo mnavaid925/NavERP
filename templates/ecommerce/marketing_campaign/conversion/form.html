@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if conversion %}Edit Conversion {{ conversion.number }}{% else %}Record Referral Conversion{% endif %} · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <!-- Header -->
+  <div class="page-header flex items-center justify-between">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketing_dashboard' %}" class="hover:text-blue-600">Marketing & Campaigns</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:affiliatereferralconversion_list' %}" class="hover:text-blue-600">Conversions</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if conversion %}Edit{% else %}Create{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if conversion %}Edit Referral Conversion: {{ conversion.number }}{% else %}Record Referral Conversion{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Associate an eligible completed store order with an affiliate partner and calculate commission.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if conversion %}{% url 'ecommerce:affiliatereferralconversion_detail' conversion.pk %}{% else %}{% url 'ecommerce:affiliatereferralconversion_list' %}{% endif %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Cancel</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label block text-xs font-medium text-slate-700 mb-1">Affiliate Partner *</label>
+          {{ form.affiliate }}
+          {% if form.affiliate.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.affiliate.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label block text-xs font-medium text-slate-700 mb-1">Referred Store Order *</label>
+          {{ form.order }}
+          {% if form.order.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.order.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label block text-xs font-medium text-slate-700 mb-1">Referred Shopper Profile</label>
+          {{ form.referred_customer }}
+          {% if form.referred_customer.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.referred_customer.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label block text-xs font-medium text-slate-700 mb-1">Attribution Mechanism</label>
+          {{ form.attribution_type }}
+          {% if form.attribution_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.attribution_type.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label block text-xs font-medium text-slate-700 mb-1">Eligible Merchandise Amount ($) *</label>
+          {{ form.order_amount }}
+          {% if form.order_amount.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.order_amount.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label block text-xs font-medium text-slate-700 mb-1">Commission Rate Applied (%) *</label>
+          {{ form.commission_rate_applied }}
+          {% if form.commission_rate_applied.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.commission_rate_applied.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label block text-xs font-medium text-slate-700 mb-1">Remittance Status</label>
+          {{ form.status }}
+          {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label block text-xs font-medium text-slate-700 mb-1">Payout Voucher Reference</label>
+          {{ form.payout_reference }}
+          {% if form.payout_reference.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.payout_reference.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group md:col-span-2">
+          <label class="form-label block text-xs font-medium text-slate-700 mb-1">Audit Notes</label>
+          {{ form.notes }}
+          {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+        <a href="{% if conversion %}{% url 'ecommerce:affiliatereferralconversion_detail' conversion.pk %}{% else %}{% url 'ecommerce:affiliatereferralconversion_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>Save Conversion</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
