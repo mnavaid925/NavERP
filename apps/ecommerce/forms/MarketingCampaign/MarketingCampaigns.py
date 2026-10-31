@@ -15,7 +15,6 @@ class MarketingCampaignForm(TenantUniqueMixin, TenantModelForm):
             "code",
             "campaign_type",
             "channel",
-            "status",
             "target_segment",
             "target_product",
             "subject",
@@ -38,7 +37,6 @@ class MarketingCampaignForm(TenantUniqueMixin, TenantModelForm):
             ),
             "campaign_type": forms.Select(attrs={"class": "form-select"}),
             "channel": forms.Select(attrs={"class": "form-select"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
             "target_segment": forms.Select(attrs={"class": "form-select"}),
             "target_product": forms.Select(attrs={"class": "form-select"}),
             "subject": forms.TextInput(
