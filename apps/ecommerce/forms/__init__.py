@@ -63,6 +63,20 @@ from apps.ecommerce.forms.SearchDiscovery.SearchQueryLogs import (
     SearchQueryLogForm,
 )
 from apps.ecommerce.forms.SearchDiscovery.SearchSynonyms import SearchSynonymForm
+from apps.ecommerce.forms.ReviewUgc.ProductQuestionAnswers import (
+    ProductQuestionAnswerForm,
+    ProductQuestionAnswerResponseForm,
+)
+from apps.ecommerce.forms.ReviewUgc.ProductReviews import (
+    ProductReviewForm,
+    ProductReviewModerationForm,
+)
+from apps.ecommerce.forms.ReviewUgc.ReviewSentimentSummaries import (
+    ReviewSentimentSummaryForm,
+)
+from apps.ecommerce.forms.ReviewUgc.VisualUgcMedia import (
+    VisualUgcMediaForm,
+)
 from apps.ecommerce.forms.SubscriptionCommerce.CustomerSubscriptions import CustomerSubscriptionForm
 from apps.ecommerce.forms.SubscriptionCommerce.SubscriptionBoxCurations import SubscriptionBoxCurationForm
 from apps.ecommerce.forms.SubscriptionCommerce.SubscriptionPlans import SubscriptionPlanForm
@@ -139,4 +153,11 @@ __all__ = [
     "CustomerSubscriptionForm",
     "SubscriptionBoxCurationForm",
     "SubscriptionRetentionActionForm",
+    # 9.13 Reviews & User-Generated Content
+    "ProductReviewForm",
+    "ProductReviewModerationForm",
+    "ProductQuestionAnswerForm",
+    "ProductQuestionAnswerResponseForm",
+    "VisualUgcMediaForm",
+    "ReviewSentimentSummaryForm",
 ]
