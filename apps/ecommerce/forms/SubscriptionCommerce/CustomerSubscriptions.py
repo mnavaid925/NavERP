@@ -71,7 +71,7 @@ class CustomerSubscriptionForm(TenantUniqueMixin, TenantModelForm):
         if self.tenant is not None:
             self.fields["customer_profile"].queryset = CustomerAccountProfile.objects.filter(
                 tenant=self.tenant
-            ).order_by("email")
+            ).select_related("customer").order_by("customer__name")
             self.fields["plan"].queryset = SubscriptionPlan.objects.filter(
                 tenant=self.tenant, is_active=True
             ).order_by("name")
