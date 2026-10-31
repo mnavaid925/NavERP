@@ -4,7 +4,8 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Case, DecimalField, F, Sum, Value, When
+from django.db.models.functions import Coalesce
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -28,10 +29,24 @@ def subscription_portal(request):
     ).order_by("-created_at")[:10]
 
     total_subscribers = subs_qs.filter(status="active").count()
-    mrr_cents = 0
-    for sub in active_subscriptions:
-        mrr_cents += int(sub.recurring_total * 100)
-    monthly_recurring_revenue = Decimal(mrr_cents) / Decimal("100.00")
+    mrr_multiplier = Case(
+        When(plan__frequency="weekly", then=Value(Decimal("4.3333"))),
+        When(plan__frequency="biweekly", then=Value(Decimal("2.1667"))),
+        When(plan__frequency="monthly", then=Value(Decimal("1.0000"))),
+        When(plan__frequency="bimonthly", then=Value(Decimal("0.5000"))),
+        When(plan__frequency="quarterly", then=Value(Decimal("0.3333"))),
+        When(plan__frequency="annual", then=Value(Decimal("0.0833"))),
+        default=Value(Decimal("1.0000")),
+        output_field=DecimalField(max_digits=12, decimal_places=4),
+    )
+    cycle_net = F("unit_price") * F("quantity") * (Value(Decimal("1.0000")) - F("recurring_discount_pct") / Value(Decimal("100.0000")))
+    mrr_agg = subs_qs.filter(status="active").aggregate(
+        total_mrr=Coalesce(
+            Sum(cycle_net * mrr_multiplier, output_field=DecimalField(max_digits=14, decimal_places=2)),
+            Value(Decimal("0.00"), output_field=DecimalField(max_digits=14, decimal_places=2)),
+        )
+    )
+    monthly_recurring_revenue = (mrr_agg["total_mrr"] or Decimal("0.00")).quantize(Decimal("0.01"))
 
     context = {
         "active_subscriptions": active_subscriptions,
