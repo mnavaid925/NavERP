@@ -1,7 +1,7 @@
 from django import forms
 
 from apps.core.forms import TenantModelForm
-from apps.ecommerce.forms._common import TenantUniqueMixin
+from apps.ecommerce.forms._common import TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.Marketplace.MarketplaceVendors import MarketplaceVendor
 from apps.ecommerce.models.Marketplace.VendorPayouts import VendorPayout
 
@@ -12,6 +12,7 @@ class VendorPayoutForm(TenantUniqueMixin, TenantModelForm):
         exclude = [
             "tenant",
             "number",
+            "payout_status",
             "net_payout_amount",
             "processed_at",
             "approved_by",
@@ -28,7 +29,6 @@ class VendorPayoutForm(TenantUniqueMixin, TenantModelForm):
             "refunds_deducted": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
             "tax_withholding_amount": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
             "payout_method": forms.Select(attrs={"class": "form-select"}),
-            "payout_status": forms.Select(attrs={"class": "form-select"}),
             "reference_code": forms.TextInput(attrs={"class": "form-input", "placeholder": "Transfer ref or check #"}),
             "tax_year": forms.NumberInput(attrs={"class": "form-input", "placeholder": "2026"}),
             "is_1099_reported": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
@@ -39,6 +39,11 @@ class VendorPayoutForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["vendor"].queryset = MarketplaceVendor.objects.filter(tenant=self.tenant).order_by("store_name")
+
+    def clean(self):
+        cleaned_data = super().clean()
+        reject_foreign(self, cleaned_data, ["vendor"])
+        return cleaned_data
 
 
 class PayoutApprovalForm(forms.Form):
