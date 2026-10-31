@@ -126,6 +126,9 @@ class SubscriptionRetentionAction(TenantNumbered):
             raise ValidationError({"subscription": "Subscription belongs to another workspace."})
         if self.customer_profile_id and self.customer_profile and self.customer_profile.tenant_id != self.tenant_id:
             raise ValidationError({"customer_profile": "Customer profile belongs to another workspace."})
+        if self.subscription_id and self.customer_profile_id and self.subscription:
+            if self.subscription.customer_profile_id != self.customer_profile_id:
+                raise ValidationError({"customer_profile": "Customer profile does not match the subscription owner."})
 
     def __str__(self):
         return f"{self.number} - {self.get_trigger_type_display()} [{self.get_outcome_display()}]"
