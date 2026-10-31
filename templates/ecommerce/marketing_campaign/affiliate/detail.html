@@ -142,7 +142,7 @@
             <div class="text-xs text-slate-700 mt-0.5">
               {% if partner.customer_profile %}
                 <a href="{% url 'ecommerce:customeraccountprofile_detail' partner.customer_profile.pk %}" class="text-blue-600 hover:underline">
-                  {{ partner.customer_profile.user.username }}
+                  {{ partner.customer_profile.user.username|default:partner.customer_profile.customer.name }}
                 </a>
               {% else %}
                 <span class="text-slate-400 italic">None (External Affiliate)</span>
