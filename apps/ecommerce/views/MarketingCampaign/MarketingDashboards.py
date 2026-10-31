@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from django.http import JsonResponse
 from django.shortcuts import render
 
@@ -22,16 +22,21 @@ def marketing_dashboard(request):
     conversions_qs = ecommerce_scope(AffiliateReferralConversion.objects.all(), request)
     seo_qs = ecommerce_scope(SeoMetadataRule.objects.all(), request)
 
-    total_campaigns = campaigns_qs.count()
     campaign_metrics = campaigns_qs.aggregate(
+        total_count=Count("id"),
         total_delivered=Sum("delivered_count"),
         total_revenue=Sum("revenue_attributed"),
     )
+    total_campaigns = campaign_metrics.get("total_count") or 0
     total_delivered = campaign_metrics.get("total_delivered") or 0
     total_revenue_attributed = campaign_metrics.get("total_revenue") or Decimal("0.00")
 
-    total_affiliates = affiliates_qs.count()
-    affiliate_revenue = affiliates_qs.aggregate(total_rev=Sum("total_revenue_generated")).get("total_rev") or Decimal("0.00")
+    affiliate_metrics = affiliates_qs.aggregate(
+        total_count=Count("id"),
+        total_revenue=Sum("total_revenue_generated"),
+    )
+    total_affiliates = affiliate_metrics.get("total_count") or 0
+    affiliate_revenue = affiliate_metrics.get("total_revenue") or Decimal("0.00")
     active_seo_rules = seo_qs.filter(is_active=True).count()
 
     kpis = {
