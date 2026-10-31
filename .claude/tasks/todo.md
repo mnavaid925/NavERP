@@ -8,6 +8,329 @@
 > Do not mass-tick the backlog.
 ---
 
+# Sub-module 9.11: Marketplace & Multi-Vendor (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.11.md` (2026-10-31)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.8.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0011_audiencesegment_personalizedexperience_and_more.py`, so **9.11 claims `0012`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.11.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/Marketplace/`
+> Template folder name: `templates/ecommerce/marketplace/{marketplacevendor,vendorproductlisting,vendorsuborder,vendorpayout,console}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Catalog & Core Spine Integration (L36/L37)**:
+  - Marketplace sellers anchor to Core Spine: `core.Party` (with `core.PartyRole(role='vendor')`) and user owner `accounts.User`.
+  - AP ledger integration: Links seamlessly with `accounting.VendorProfile` and `accounting.GLAccount` for commission clearing and vendor liabilities.
+  - Catalog anchoring: `VendorProductListing` maps seller offers to canonical `ecommerce.CatalogProduct` (`EPRD-`, 9.1) and `ecommerce.ProductVariant` (`PVR-`, 9.1).
+  - OMS order decomposition: `VendorSubOrder` bridges parent orders `ecommerce.EcommerceOrder` (`EORD-`, 9.5) and customer lines `ecommerce.EcommerceOrderLine` into vendor-specific logistical consignments.
+- **Clear Sibling Boundaries (9.5 vs. 9.11 vs. 9.13 vs. 9.17 vs. Procurement 6.1)**:
+  - 9.5 (OMS) owns parent order capture, payment authorization, master fulfillment, and centralized RMA returns.
+  - 9.11 owns seller onboarding, KYC verification, vendor storefront profiles, listing pre-moderation, multi-vendor order routing, vendor dispatch SLA tracking, commission split calculation, batch payout disbursements, 1099 tax tracking, verified seller ratings, order disputes, and vendor account suspension.
+  - 9.13 (Reviews & UGC, sibling) owns general consumer product reviews, customer photo/video media uploads, product Q&A, and sentiment analysis. 9.11 owns transaction-anchored seller fulfillment feedback, ratings, and order dispute resolution.
+  - 9.17 (B2B Commerce, sibling) owns buyer company credit lines, corporate approval hierarchies, and wholesale price tiers. 9.11 provides the supply-side merchant infrastructure.
+  - Procurement Module 6 owns internal corporate purchasing and RFQs; 9.11 owns consumer-facing multi-vendor marketplace sellers.
+- **Multi-Tenancy & Data Isolation**: All vendor profiles, product listings, sub-orders, and payout disbursement batches are strictly partitioned by `tenant` (`core.Tenant`).
+- **Base Class & Prefix Discipline**: All 4 models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`), providing `tenant` FK (`on_delete=CASCADE`), thread-safe auto-number generation, and timestamps.
+- **Prefix Collision Sweep**: `EMKV`, `EVPL`, `EVSO`, `EVPO` verified 100% free across repo.
+
+---
+
+## 9.11-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO direct external payment gateway API calls or PSP webhooks** — Live Stripe Connect / PayPal Payouts API calls are deferred to Sub-module 9.19 (Integration & API Ecosystem); state transitions, batch references, and payout codes are tracked natively in Django ORM.
+- [ ] **NO automated ML / computer-vision counterfeit scanning** — Policy compliance uses structured compliance states (`COMPLIANCE_STATUS_CHOICES`) and administrative moderation queues; deep neural scanning is deferred to enterprise integrations.
+- [ ] **NO third-party subdomain multitenancy** — Vendor mini-storefronts are served via clean URL routes (`/marketplace/vendor/<slug>/`) within standard tenant storefront rather than provisioning DNS subdomains.
+- [ ] **NO general consumer product UGC** — Product star ratings, photo reviews, and community Q&A forums belong to sibling Sub-module 9.13; 9.11 cleanly restricts itself to verified-purchase seller fulfillment ratings and order dispute resolution.
+- [ ] **NO duplicate product or order line tables** — Listings link to `ecommerce.CatalogProduct`, sub-orders link to `ecommerce.EcommerceOrder`.
+
+---
+
+## Models (4 models in `apps/ecommerce/models/Marketplace/`)
+
+- [ ] **`MarketplaceVendor`** [Prefix: `EMKV-`] (`apps/ecommerce/models/Marketplace/MarketplaceVendors.py`)
+  - **Purpose**: Primary merchant entity in the marketplace. Governs legal onboarding, KYC verification, storefront branding, commission agreements, aggregate seller reputation scorecards, and account suspension workflows.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Core Spine FKs**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+    - `party`: `ForeignKey("core.Party", on_delete=models.PROTECT, related_name="marketplace_vendors", help_text="Unified legal party (person or organization)")`
+    - `owner_user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="owned_marketplace_vendors", help_text="Primary login user managing this vendor")`
+    - `suspended_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="suspended_vendors")`
+  - **Choices**:
+    - `STATUS_CHOICES = [("draft", "Draft Application"), ("submitted", "Application Submitted"), ("under_review", "Compliance Review"), ("approved", "Approved"), ("active", "Active Seller"), ("suspended", "Suspended (Policy/SLA Breach)"), ("terminated", "Terminated")]`
+    - `KYC_STATUS_CHOICES = [("unsubmitted", "Unsubmitted"), ("pending", "Under Verification"), ("verified", "Identity Verified"), ("rejected", "Verification Rejected")]`
+    - `COMMISSION_TYPE_CHOICES = [("percentage", "Percentage Only"), ("fixed", "Flat Fee Only"), ("combined", "Percentage + Flat Fee")]`
+    - `PAYOUT_METHOD_CHOICES = [("stripe_connect", "Stripe Connect"), ("bank_transfer", "Direct Bank Transfer / ACH"), ("paypal", "PayPal Payouts"), ("manual_check", "Manual Check / Wire")]`
+    - `TAX_FORM_CHOICES = [("not_required", "Not Required"), ("w9_pending", "W-9 Pending"), ("w9_received", "W-9 Received"), ("w8ben_received", "W-8BEN Received"), ("1099_eligible", "1099-K Eligible")]`
+  - **Fields**:
+    - `store_name`: `CharField(max_length=150, help_text="Public vendor store name")`
+    - `slug`: `SlugField(max_length=160, help_text="URL slug for public storefront, e.g. /vendors/acme-crafts/")`
+    - `headline`: `CharField(max_length=255, blank=True, help_text="Short tagline or slogan")`
+    - `description`: `TextField(blank=True, help_text="Storefront about text and company profile")`
+    - `logo_url`: `URLField(blank=True, help_text="Store logo graphic URL")`
+    - `banner_url`: `URLField(blank=True, help_text="Storefront hero banner image URL")`
+    - `support_email`: `EmailField(blank=True, help_text="Customer support email address")`
+    - `support_phone`: `CharField(max_length=50, blank=True, help_text="Customer support phone number")`
+    - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="draft", db_index=True)`
+    - `kyc_status`: `CharField(max_length=25, choices=KYC_STATUS_CHOICES, default="unsubmitted")`
+    - `kyc_document_type`: `CharField(max_length=100, blank=True, help_text="Document submitted (e.g. Business License, Passport, Utility Bill)")`
+    - `kyc_notes`: `TextField(blank=True, help_text="Compliance officer notes regarding KYC verification")`
+    - `kyc_verified_at`: `DateTimeField(null=True, blank=True)`
+    - `commission_type`: `CharField(max_length=20, choices=COMMISSION_TYPE_CHOICES, default="percentage")`
+    - `commission_rate`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("15.00"), help_text="Percentage fee deducted from gross sales (e.g. 15.00%)")`
+    - `fixed_fee_per_order`: `DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"), help_text="Flat fee deducted per sub-order (e.g. $1.50)")`
+    - `payout_method`: `CharField(max_length=25, choices=PAYOUT_METHOD_CHOICES, default="bank_transfer")`
+    - `payout_account_identifier`: `CharField(max_length=120, blank=True, help_text="Connected account ID, IBAN, or recipient address")`
+    - `min_payout_amount`: `DecimalField(max_digits=10, decimal_places=2, default=Decimal("50.00"), help_text="Minimum accumulated balance required for payout release")`
+    - `tax_id`: `CharField(max_length=64, blank=True, help_text="EIN, SSN, or VAT tax registration number")`
+    - `tax_form_status`: `CharField(max_length=25, choices=TAX_FORM_CHOICES, default="not_required")`
+    - `shipping_lead_time_days`: `PositiveIntegerField(default=2, help_text="Standard promised dispatch SLA in business days")`
+    - `return_policy`: `TextField(blank=True, help_text="Vendor-specific return policy terms")`
+    - `rating_average`: `DecimalField(max_digits=3, decimal_places=2, default=Decimal("0.00"), help_text="Aggregate customer satisfaction score (0.00 to 5.00)")`
+    - `rating_count`: `PositiveIntegerField(default=0, help_text="Total number of customer ratings received")`
+    - `is_featured`: `BooleanField(default=False, help_text="Highlight in marketplace seller directory and homepage")`
+    - `suspension_reason`: `TextField(blank=True, help_text="Formal reason if vendor account is suspended")`
+    - `suspended_at`: `DateTimeField(null=True, blank=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_emkv_tenant_num_uniq")`
+    - `UniqueConstraint(fields=["tenant", "slug"], name="ecommerce_emkv_tenant_slug_uniq")`
+    - `Index(fields=["tenant", "status"], name="idx_emkv_ten_status")`
+    - `Index(fields=["tenant", "kyc_status"], name="idx_emkv_ten_kyc")`
+  - **Form Exclusions**: `tenant`, `number`, `rating_average`, `rating_count`, `kyc_verified_at`, `suspended_at`, `suspended_by`, `created_at`, `updated_at`.
+
+- [ ] **`VendorProductListing`** [Prefix: `EVPL-`] (`apps/ecommerce/models/Marketplace/VendorProductListings.py`)
+  - **Purpose**: Bridges a vendor with the canonical catalog product. Manages seller catalog offers, moderation queues, policy compliance verification, seller-specific pricing, and inventory.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Core Spine FKs**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+    - `vendor`: `ForeignKey("ecommerce.MarketplaceVendor", on_delete=models.CASCADE, related_name="product_listings", help_text="Marketplace vendor offering this item")`
+    - `product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.CASCADE, related_name="vendor_listings", help_text="Canonical catalog product master")`
+    - `variant`: `ForeignKey("ecommerce.ProductVariant", on_delete=models.SET_NULL, null=True, blank=True, related_name="vendor_listings", help_text="Specific variant or SKU")`
+    - `reviewed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="reviewed_listings")`
+  - **Choices**:
+    - `CONDITION_CHOICES = [("new", "Brand New"), ("refurbished", "Certified Refurbished"), ("used_like_new", "Used - Like New"), ("used_good", "Used - Good"), ("used_fair", "Used - Fair")]`
+    - `MODERATION_STATUS_CHOICES = [("draft", "Draft"), ("pending_review", "Pending Moderation Review"), ("approved", "Approved & Live"), ("rejected", "Rejected"), ("changes_requested", "Changes Requested")]`
+    - `COMPLIANCE_STATUS_CHOICES = [("pending", "Compliance Pending"), ("compliant", "Policy Compliant"), ("flagged_prohibited", "Prohibited Item Flag"), ("counterfeit_suspect", "Counterfeit Suspect"), ("ip_infringement", "Trademark / IP Violation")]`
+  - **Fields**:
+    - `seller_sku`: `CharField(max_length=80, help_text="Vendor internal SKU code")`
+    - `barcode`: `CharField(max_length=60, blank=True, help_text="UPC, EAN, or ISBN barcode")`
+    - `condition`: `CharField(max_length=20, choices=CONDITION_CHOICES, default="new")`
+    - `condition_notes`: `CharField(max_length=255, blank=True, help_text="Details on packaging or cosmetic state")`
+    - `asking_price`: `DecimalField(max_digits=12, decimal_places=2, help_text="Seller listing price offered to shoppers")`
+    - `compare_at_price`: `DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Original retail or MSRP strikethrough price")`
+    - `cost_price`: `DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Vendor wholesale cost basis")`
+    - `available_quantity`: `PositiveIntegerField(default=0, help_text="Real-time stock units available for purchase")`
+    - `low_stock_threshold`: `PositiveIntegerField(default=5, help_text="Alert vendor when stock falls below this level")`
+    - `lead_time_days`: `PositiveIntegerField(default=2, help_text="Custom dispatch lead time in business days for this item")`
+    - `moderation_status`: `CharField(max_length=25, choices=MODERATION_STATUS_CHOICES, default="pending_review", db_index=True)`
+    - `compliance_status`: `CharField(max_length=25, choices=COMPLIANCE_STATUS_CHOICES, default="pending", db_index=True)`
+    - `moderator_notes`: `TextField(blank=True, help_text="Internal review notes visible to vendor and admin")`
+    - `rejection_reason`: `CharField(max_length=255, blank=True, help_text="Reason code if listing was rejected")`
+    - `submitted_at`: `DateTimeField(null=True, blank=True)`
+    - `reviewed_at`: `DateTimeField(null=True, blank=True)`
+    - `is_active`: `BooleanField(default=True, help_text="Whether this listing is published and purchasable")`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_evpl_tenant_num_uniq")`
+    - `UniqueConstraint(fields=["tenant", "vendor", "seller_sku"], name="ecommerce_evpl_ven_sku_uniq")`
+    - `Index(fields=["tenant", "moderation_status", "is_active"], name="idx_evpl_ten_mod_act")`
+    - `Index(fields=["tenant", "product", "asking_price"], name="idx_evpl_ten_prd_price")`
+  - **Form Exclusions**: `tenant`, `number`, `reviewed_at`, `reviewed_by`, `created_at`, `updated_at`.
+
+- [ ] **`VendorSubOrder`** [Prefix: `EVSO-`] (`apps/ecommerce/models/Marketplace/VendorSubOrders.py`)
+  - **Purpose**: Decomposes parent customer orders into vendor-specific consignments. Manages vendor fulfillment workflow, SLA dispatch tracking, carrier details, commission deduction snapshotting, order-anchored customer ratings, and dispute resolution.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Core Spine FKs**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+    - `vendor`: `ForeignKey("ecommerce.MarketplaceVendor", on_delete=models.PROTECT, related_name="sub_orders", help_text="Vendor responsible for fulfilling this sub-order")`
+    - `order`: `ForeignKey("ecommerce.EcommerceOrder", on_delete=models.CASCADE, related_name="vendor_sub_orders", help_text="Parent eCommerce order")`
+    - `payout`: `ForeignKey("ecommerce.VendorPayout", on_delete=models.SET_NULL, null=True, blank=True, related_name="sub_orders", help_text="Payout batch that settled this sub-order")`
+  - **Choices**:
+    - `FULFILLMENT_STATUS_CHOICES = [("unfulfilled", "Unfulfilled"), ("allocated", "Stock Allocated"), ("picking", "Picking Items"), ("packed", "Package Packed"), ("shipped", "Shipped with Carrier"), ("delivered", "Delivered to Customer"), ("cancelled", "Cancelled")]`
+    - `SLA_STATUS_CHOICES = [("on_time", "On Time (Within SLA)"), ("near_breach", "Approaching SLA Deadline"), ("breached", "SLA Breached (Late Dispatch)")]`
+    - `PAYOUT_STATUS_CHOICES = [("accrued", "Accrued / Pending Settlement"), ("in_payout_batch", "Assigned to Payout Batch"), ("paid", "Disbursed to Vendor"), ("withheld_dispute", "Withheld (Open Dispute)"), ("refunded", "Refunded / Cancelled")]`
+    - `DISPUTE_STATUS_CHOICES = [("none", "No Dispute"), ("disputed", "Customer Dispute Opened"), ("under_investigation", "Under Investigation"), ("resolved_merchant", "Resolved in Seller Favor"), ("resolved_customer", "Resolved in Buyer Favor (Refund Issued)"), ("escalated_to_admin", "Escalated to Operator Admin")]`
+  - **Fields**:
+    - `fulfillment_status`: `CharField(max_length=25, choices=FULFILLMENT_STATUS_CHOICES, default="unfulfilled", db_index=True)`
+    - `sla_status`: `CharField(max_length=20, choices=SLA_STATUS_CHOICES, default="on_time")`
+    - `payout_status`: `CharField(max_length=25, choices=PAYOUT_STATUS_CHOICES, default="accrued", db_index=True)`
+    - `subtotal_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Gross items subtotal for this vendor")`
+    - `shipping_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Shipping fee allocated to this vendor")`
+    - `commission_rate`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("15.00"), help_text="Snapshot of commission percentage applied")`
+    - `commission_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Total commission retained by platform")`
+    - `net_vendor_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Net amount payable to vendor (Subtotal + Shipping - Commission)")`
+    - `carrier_name`: `CharField(max_length=80, blank=True, help_text="Shipping carrier name (e.g. FedEx, DHL, USPS)")`
+    - `tracking_number`: `CharField(max_length=100, blank=True, help_text="Shipment tracking number")`
+    - `tracking_url`: `URLField(blank=True, help_text="Direct parcel tracking URL")`
+    - `promised_dispatch_date`: `DateField(null=True, blank=True, help_text="Deadline date for vendor dispatch based on SLA")`
+    - `dispatched_at`: `DateTimeField(null=True, blank=True, help_text="Actual timestamp when carrier accepted package")`
+    - `delivered_at`: `DateTimeField(null=True, blank=True, help_text="Timestamp when carrier confirmed delivery")`
+    - `customer_rating`: `PositiveSmallIntegerField(null=True, blank=True, help_text="Customer satisfaction score (1 to 5 stars)")`
+    - `customer_feedback`: `TextField(blank=True, help_text="Customer review comments regarding this seller's fulfillment")`
+    - `seller_response`: `TextField(blank=True, help_text="Vendor public reply to customer review")`
+    - `rated_at`: `DateTimeField(null=True, blank=True)`
+    - `dispute_status`: `CharField(max_length=25, choices=DISPUTE_STATUS_CHOICES, default="none", db_index=True)`
+    - `dispute_reason`: `CharField(max_length=150, blank=True, help_text="Dispute reason (e.g. Item Not Received, Damaged, SNAD)")`
+    - `dispute_notes`: `TextField(blank=True, help_text="Customer dispute details and investigation evidence")`
+    - `dispute_resolved_at`: `DateTimeField(null=True, blank=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_evso_tenant_num_uniq")`
+    - `Index(fields=["tenant", "vendor", "fulfillment_status"], name="idx_evso_ten_ven_ful")`
+    - `Index(fields=["tenant", "order"], name="idx_evso_ten_order")`
+    - `Index(fields=["tenant", "payout_status"], name="idx_evso_ten_payout")`
+    - `Index(fields=["tenant", "dispute_status"], name="idx_evso_ten_dispute")`
+  - **Form Exclusions**: `tenant`, `number`, `commission_amount`, `net_vendor_amount`, `rated_at`, `dispute_resolved_at`, `created_at`, `updated_at`.
+
+- [ ] **`VendorPayout`** [Prefix: `EVPO-`] (`apps/ecommerce/models/Marketplace/VendorPayouts.py`)
+  - **Purpose**: Batch settlement reconciliation and disbursement execution. Aggregates delivered sub-orders, deducts platform commissions, tracks payment gateway reference transactions, and monitors annual 1099 tax reporting.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Core Spine FKs**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+    - `vendor`: `ForeignKey("ecommerce.MarketplaceVendor", on_delete=models.PROTECT, related_name="payouts", help_text="Vendor receiving this payout disbursement")`
+    - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_payouts")`
+  - **Choices**:
+    - `PAYOUT_STATUS_CHOICES = [("draft", "Draft Batch"), ("pending_approval", "Pending Finance Approval"), ("processing", "Processing with Bank / Gateway"), ("completed", "Completed & Disbursed"), ("failed", "Disbursement Failed"), ("cancelled", "Cancelled")]`
+    - `PAYOUT_METHOD_CHOICES = [("stripe_connect", "Stripe Connect Transfer"), ("bank_transfer", "Bank Wire / ACH"), ("paypal", "PayPal Payout"), ("manual_check", "Manual Check / Voucher")]`
+  - **Fields**:
+    - `period_start`: `DateField(help_text="Start date of earning period covered")`
+    - `period_end`: `DateField(help_text="End date of earning period covered")`
+    - `gross_sales_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Gross sales volume from fulfilled sub-orders")`
+    - `commission_deducted`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Total marketplace commission retained")`
+    - `fees_deducted`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Payment processing or platform gateway fees deducted")`
+    - `refunds_deducted`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Customer returns and refund adjustments deducted")`
+    - `tax_withholding_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Statutory withholding tax deducted")`
+    - `net_payout_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Final disbursed amount transferred to vendor")`
+    - `payout_method`: `CharField(max_length=25, choices=PAYOUT_METHOD_CHOICES, default="bank_transfer")`
+    - `payout_status`: `CharField(max_length=25, choices=PAYOUT_STATUS_CHOICES, default="draft", db_index=True)`
+    - `reference_code`: `CharField(max_length=100, blank=True, help_text="Gateway transfer ID (e.g. tr_12345) or bank transaction confirmation number")`
+    - `tax_year`: `PositiveIntegerField(null=True, blank=True, help_text="Tax year for 1099-K filing, e.g. 2026")`
+    - `is_1099_reported`: `BooleanField(default=False, help_text="Flag indicating annual 1099 form has been generated and filed")`
+    - `notes`: `TextField(blank=True, help_text="Disbursement notes or failure error message")`
+    - `processed_at`: `DateTimeField(null=True, blank=True, help_text="Timestamp when funds transfer was executed")`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_evpo_tenant_num_uniq")`
+    - `Index(fields=["tenant", "vendor", "payout_status"], name="idx_evpo_ten_ven_stat")`
+    - `Index(fields=["tenant", "period_end"], name="idx_evpo_ten_period")`
+  - **Form Exclusions**: `tenant`, `number`, `net_payout_amount`, `processed_at`, `approved_by`, `created_at`, `updated_at`.
+
+---
+
+## Backend (`apps/ecommerce/{models,forms,views,urls}/Marketplace/`)
+- [ ] `models/Marketplace/MarketplaceVendors.py`
+- [ ] `models/Marketplace/VendorProductListings.py`
+- [ ] `models/Marketplace/VendorSubOrders.py`
+- [ ] `models/Marketplace/VendorPayouts.py`
+- [ ] `models/Marketplace/__init__.py`
+- [ ] `models/__init__.py` re-export update (`MarketplaceVendor`, `VendorProductListing`, `VendorSubOrder`, `VendorPayout`)
+- [ ] `forms/Marketplace/MarketplaceVendorForms.py` (`MarketplaceVendorForm`, `VendorKycVerificationForm`, `VendorSuspensionForm`)
+- [ ] `forms/Marketplace/VendorProductListingForms.py` (`VendorProductListingForm`, `ListingModerationForm`)
+- [ ] `forms/Marketplace/VendorSubOrderForms.py` (`VendorSubOrderForm`, `SubOrderFulfillmentForm`, `SubOrderDisputeForm`, `SubOrderReviewForm`)
+- [ ] `forms/Marketplace/VendorPayoutForms.py` (`VendorPayoutForm`, `PayoutApprovalForm`)
+- [ ] `forms/Marketplace/__init__.py`
+- [ ] `forms/__init__.py` re-export update
+- [ ] `views/Marketplace/MarketplaceConsoleViews.py` (Operational dashboard: KYC queue, moderation queue, dispatch SLAs, active disputes, payout liabilities)
+- [ ] `views/Marketplace/MarketplaceVendorViews.py` (Full CRUD + `verify_kyc`, `suspend_vendor` actions)
+- [ ] `views/Marketplace/VendorProductListingViews.py` (Full CRUD + `moderate_listing` action)
+- [ ] `views/Marketplace/VendorSubOrderViews.py` (Full CRUD + `fulfill`, `dispute`, `rate` actions)
+- [ ] `views/Marketplace/VendorPayoutViews.py` (Full CRUD + `approve_payout`, `execute_payout` actions)
+- [ ] `views/Marketplace/__init__.py`
+- [ ] `views/__init__.py` re-export update
+- [ ] `urls/Marketplace/MarketplaceVendors.py`
+- [ ] `urls/Marketplace/VendorProductListings.py`
+- [ ] `urls/Marketplace/VendorSubOrders.py`
+- [ ] `urls/Marketplace/VendorPayouts.py`
+- [ ] `urls/Marketplace/MarketplaceConsole.py`
+- [ ] `urls/Marketplace/__init__.py`
+- [ ] `urls/__init__.py` re-export update
+- [ ] `admin.py` model registrations (`MarketplaceVendor`, `VendorProductListing`, `VendorSubOrder`, `VendorPayout`)
+- [ ] `migrations/0012_*.py`
+- [ ] `management/commands/seed_ecommerce.py` idempotent data expansion (4 vendor parties + party roles, 4 marketplace vendors across statuses, 8 product listings, 4 sub-orders with SLA and dispute states, 2 payout settlement batches)
+
+---
+
+## Wire-up
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["9.11"]` entry:
+  - `"Vendor Onboarding & Verification"`: `"ecommerce:marketplacevendor_list"`
+  - `"Vendor Product Management"`: `"ecommerce:vendorproductlisting_list"`
+  - `"Vendor Order Fulfillment"`: `"ecommerce:vendorsuborder_list"`
+  - `"Vendor Commission & Payouts"`: `"ecommerce:vendorpayout_list"`
+  - `"Vendor Ratings & Reviews"`: `"ecommerce:marketplace_console"`
+  - Extra live leaves:
+    - `"Marketplace Console"`: `"ecommerce:marketplace_console"`
+    - `"Marketplace Vendors"`: `"ecommerce:marketplacevendor_list"`
+    - `"Product Listings & Moderation"`: `"ecommerce:vendorproductlisting_list"`
+    - `"Vendor Sub-Orders"`: `"ecommerce:vendorsuborder_list"`
+    - `"Commission Payouts"`: `"ecommerce:vendorpayout_list"`
+
+---
+
+## Templates (`templates/ecommerce/marketplace/`)
+- [ ] `templates/ecommerce/marketplace/console/dashboard.html` (Marketplace metrics KPI bar, pending KYC verification queue, catalog listing moderation queue, late dispatch SLA alert card, active customer dispute resolution table)
+- [ ] `templates/ecommerce/marketplace/marketplacevendor/list.html` (Filterable table: `status`, `kyc_status`, `commission_type`, `search`)
+- [ ] `templates/ecommerce/marketplace/marketplacevendor/detail.html` (Storefront summary, KYC verification badges, owner info, financial terms, active listings tab, sub-orders tab, payout history tab, dispute ledger, verify KYC modal / suspend vendor modal)
+- [ ] `templates/ecommerce/marketplace/marketplacevendor/form.html` (Tailwind crispy form: store details, party selection, commission configuration, payout method, return policy)
+- [ ] `templates/ecommerce/marketplace/vendorproductlisting/list.html` (Filterable table: `moderation_status`, `compliance_status`, `condition`, `vendor`, `search`)
+- [ ] `templates/ecommerce/marketplace/vendorproductlisting/detail.html` (Product specifications, vendor price comparison, stock counters, compliance status badge, moderation decision action panel: Approve / Reject / Request Changes)
+- [ ] `templates/ecommerce/marketplace/vendorproductlisting/form.html` (Listing creation & pricing/stock editor: product picker, SKU, price, condition, dispatch lead time)
+- [ ] `templates/ecommerce/marketplace/vendorsuborder/list.html` (Filterable table: `fulfillment_status`, `sla_status`, `payout_status`, `dispute_status`, `vendor`, `search`)
+- [ ] `templates/ecommerce/marketplace/vendorsuborder/detail.html` (Parent order overview, vendor item line breakdown, carrier tracking assignment, SLA countdown badge, customer review card, dispute resolution modal)
+- [ ] `templates/ecommerce/marketplace/vendorsuborder/form.html` (Sub-order fulfillment editor: carrier name, tracking number, promised dispatch date, fulfillment status)
+- [ ] `templates/ecommerce/marketplace/vendorpayout/list.html` (Filterable table: `payout_status`, `payout_method`, `vendor`, `search`)
+- [ ] `templates/ecommerce/marketplace/vendorpayout/detail.html` (Settlement reconciliation statement, sub-orders breakdown, gross sales, platform commission retained, net payable, 1099 filing badge, approval and payout execution actions)
+- [ ] `templates/ecommerce/marketplace/vendorpayout/form.html` (Payout batch creation & adjustment form: period dates, gross calculation, fee deductions)
+
+---
+
+## Verify
+- [ ] `makemigrations ecommerce` claims `0012`
+- [ ] `migrate`
+- [ ] `seed_ecommerce` run 1
+- [ ] `seed_ecommerce` run 2 (idempotency check: 0 duplicate key errors, exact object count match)
+- [ ] `manage.py check` clean (0 errors, 0 warnings)
+- [ ] `temp/smoke_9_11.py` as `admin_acme` / `password`:
+  - Marketplace console dashboard (`/ecommerce/marketplace/console/`) returns 200 with all KPI widgets rendered
+  - All 4 list views (`marketplacevendor_list`, `vendorproductlisting_list`, `vendorsuborder_list`, `vendorpayout_list`) return 200 with seeded records and working filters
+  - All 4 detail views return 200 with complete context bindings
+  - All 4 form create/update views return 200/302
+  - Action views (`verify_kyc`, `suspend_vendor`, `moderate_listing`, `fulfill_suborder`, `dispute_suborder`, `approve_payout`, `execute_payout`) execute and transition statuses cleanly
+  - No `{#` / `{% comment` syntax leaks
+  - Cross-tenant IDOR check: accessing Acme records as tenant Beta user returns 404
+- [ ] Sidebar 9.11 shows Live with all 5 NavERP.md feature bullets active
+
+---
+
+## Close-out
+- [ ] Phase 4 Review agents run serially:
+  - 1. `code-reviewer`
+  - 2. `explorer`
+  - 3. `frontend-reviewer`
+  - 4. `performance-reviewer`
+  - 5. `qa-smoke-tester`
+  - 6. `security-reviewer`
+- [ ] Phase 5 `code-fixer` agent burns down findings in `.claude/tasks/review-ecommerce-9.11.md`
+- [ ] Phase 6 Tests:
+  - `tests/test_marketplace_models.py`
+  - `tests/test_marketplace_forms.py`
+  - `tests/test_marketplace_views.py`
+  - `tests/test_marketplace_security.py`
+  - Full unfiltered `pytest apps/ecommerce/` green
+- [ ] Phase 7 Documentation:
+  - Author/update `.claude/skills/ecommerce/SKILL.md` with 9.11 models, routes, templates, and seeder entities
+  - Mark Sub-module 9.11 complete in `README.md`
+  - Link any deferred gaps in `.agents/tasks/gaps-ecommerce-9.11.md` (or declare `Gaps: None`)
+
+---
+
+## Later passes / deferred
+- Direct external payment gateway API calls (Stripe Connect webhooks, PayPal Payouts API) — deferred to 9.19
+- Automated ML counterfeit image scanning — deferred to enterprise integrations
+- Third-party subdomain multitenancy for vendors — mini-stores served on `/marketplace/vendor/<slug>/`
+- General consumer product UGC (product star reviews, buyer photo uploads, community Q&A) — owned by sibling Sub-module 9.13
+
+---
+
+## Review notes
+(filled in at the end)
+
+---
+
 # Sub-module 9.12: Subscription & Recurring Commerce (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.12.md` (2026-10-31)
 
 > **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.8.
