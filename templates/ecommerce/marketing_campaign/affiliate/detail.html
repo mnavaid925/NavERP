@@ -25,7 +25,7 @@
         {% elif partner.status == 'suspended' %}
           <span class="badge badge-red">Suspended</span>
         {% else %}
-          <span class="badge badge-muted">Inactive</span>
+          <span class="badge badge-muted">{{ partner.get_status_display }}</span>
         {% endif %}
       </div>
       <p class="text-sm text-slate-500 mt-1 font-mono">
