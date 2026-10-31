@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Claim {{ claim.number }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Customer Support</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:orderissueclaim_list' %}">Claims</a>
+            <span>/</span>
+            <span>{{ claim.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ claim.number }}: {{ claim.get_claim_type_display }}</h1>
+            {% if claim.status == 'submitted' %}
+            <span class="badge badge-info">Submitted</span>
+            {% elif claim.status == 'under_review' %}
+            <span class="badge badge-amber">Under Review</span>
+            {% elif claim.status == 'carrier_investigation' %}
+            <span class="badge badge-info">Carrier Investigation</span>
+            {% elif claim.status == 'approved' %}
+            <span class="badge badge-green">Approved</span>
+            {% elif claim.status == 'rejected' %}
+            <span class="badge badge-red">Rejected</span>
+            {% else %}
+            <span class="badge badge-slate">Completed</span>
+            {% endif %}
+
+            {% if claim.resolution_action == 'full_refund' or claim.resolution_action == 'partial_refund' %}
+            <span class="badge badge-green">{{ claim.get_resolution_action_display }}</span>
+            {% elif claim.resolution_action == 'replacement_reship' %}
+            <span class="badge badge-info">Reship Replacement</span>
+            {% elif claim.resolution_action == 'store_credit' %}
+            <span class="badge badge-amber">Store Credit</span>
+            {% elif claim.resolution_action == 'rejected' %}
+            <span class="badge badge-red">Claim Denied</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'ecommerce:orderissueclaim_edit' claim.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Claim
+        </a>
+        <form action="{% url 'ecommerce:orderissueclaim_delete' claim.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete claim {{ claim.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Customer Description, Photographic Evidence & Staff Review -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Customer Statement -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Customer Claim Statement</h3>
+            </div>
+            <div class="card-body">
+                <p class="whitespace-pre-line text-slate-800 leading-relaxed">{{ claim.customer_notes }}</p>
+            </div>
+        </div>
+
+        <!-- Photographic Evidence -->
+        {% if claim.photo_evidence_url %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Photographic & Damage Evidence</h3>
+            </div>
+            <div class="card-body">
+                <div class="rounded border border-slate-200 overflow-hidden max-w-md">
+                    <img src="{{ claim.photo_evidence_url }}" alt="Damage Evidence" class="w-full h-auto object-cover max-h-80" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'p-4 bg-slate-50 text-slate-500 text-xs\'>Evidence URL: <a href=\'{{ claim.photo_evidence_url }}\' target=\'_blank\' class=\'text-primary underline font-mono\'>{{ claim.photo_evidence_url }}</a> (Preview could not be embedded)</div>';">
+                </div>
+                <div class="mt-2 text-xs text-slate-500">
+                    Direct Link: <a href="{{ claim.photo_evidence_url }}" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline font-mono">{{ claim.photo_evidence_url }}</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Staff Review & Decision -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Staff Review & Disposition Rationale</h3>
+            </div>
+            <div class="card-body">
+                {% if claim.decision_notes %}
+                <p class="whitespace-pre-line text-slate-800 bg-slate-50 p-4 rounded border border-slate-200 text-sm leading-relaxed">{{ claim.decision_notes }}</p>
+                {% else %}
+                <p class="text-sm text-slate-400 italic">No staff decision notes logged yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Order Context, Financials, Carrier Info -->
+    <div class="space-y-6">
+        <!-- Financial Assessment -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Claim Settlement Summary</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-slate-500">Claimed Amount</span>
+                    <span class="font-bold text-slate-900 font-mono text-base">${{ claim.claimed_amount }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-100">
+                    <span class="text-slate-500">Authorized / Approved</span>
+                    <span class="font-bold text-green-700 font-mono text-base">${{ claim.approved_amount }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-100">
+                    <span class="text-slate-500">Resolution Action</span>
+                    <span class="font-semibold text-slate-800">{{ claim.get_resolution_action_display }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Order & Shipment Context -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Order & Delivery Information</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500 block text-xs">Target Order</span>
+                    <a href="{% url 'ecommerce:ecommerceorder_detail' claim.order.pk %}" class="text-primary hover:underline font-mono font-bold">
+                        {{ claim.order.number }}
+                    </a>
+                    <span class="text-xs text-slate-500 block">Total: ${{ claim.order.grand_total }} &bull; {{ claim.order.get_status_display }}</span>
+                </div>
+                {% if claim.carrier_tracking_number %}
+                <div>
+                    <span class="text-slate-500 block text-xs">Carrier Tracking Number</span>
+                    <span class="font-mono font-medium text-slate-900">{{ claim.carrier_tracking_number }}</span>
+                </div>
+                {% endif %}
+                {% if claim.customer %}
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-slate-500 block text-xs">Shopper Profile</span>
+                    <a href="{% url 'ecommerce:customeraccountprofile_detail' claim.customer.pk %}" class="text-primary hover:underline font-medium">
+                        {{ claim.customer.number }} - {{ claim.customer }}
+                    </a>
+                </div>
+                {% endif %}
+                {% if claim.ticket %}
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-slate-500 block text-xs">Linked Support Ticket</span>
+                    <a href="{% url 'ecommerce:customersupportticket_detail' claim.ticket.pk %}" class="text-primary hover:underline font-mono font-medium">
+                        {{ claim.ticket.number }}
+                    </a>
+                    <span class="text-xs text-slate-500 block">{{ claim.ticket.subject }}</span>
+                </div>
+                {% endif %}
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-slate-500 block text-xs">Reviewing Staff Member</span>
+                    <span class="font-medium text-slate-900">
+                        {% if claim.reviewed_by %}
+                        {{ claim.reviewed_by.get_full_name|default:claim.reviewed_by.username }}
+                        {% else %}
+                        <span class="text-slate-400 italic">Under review</span>
+                        {% endif %}
+                    </span>
+                </div>
+                {% if claim.resolved_at %}
+                <div>
+                    <span class="text-slate-500 block text-xs">Resolved At</span>
+                    <span class="font-medium text-slate-900">{{ claim.resolved_at|date:"M d, Y H:i" }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
