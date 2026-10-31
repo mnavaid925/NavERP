@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}{{ curation.name }} · Box Curations · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:subscriptionboxcuration_list' %}" class="hover:text-blue-600">Box Curations</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ curation.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ curation.name }}</h1>
+        {% if curation.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-slate">Inactive</span>
+        {% endif %}
+        <span class="badge badge-info">{{ curation.cycle_identifier }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Plan: <a href="{% url 'ecommerce:subscriptionplan_detail' curation.plan.pk %}" class="text-blue-600 hover:underline">{{ curation.plan.name }}</a>
+        · Active Window: {{ curation.start_date }} to {{ curation.end_date }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'ecommerce:subscriptionboxcuration_edit' curation.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Curation</span>
+      </a>
+      <a href="{% url 'ecommerce:subscriptionboxcuration_list' %}" class="btn btn-outline">
+        Back to Curations
+      </a>
+    </div>
+  </div>
+
+  <!-- Detail Stat Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Cycle Identifier</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">{{ curation.cycle_identifier }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Slug: {{ curation.code }}</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Schedule Window</div>
+      <div class="text-sm font-bold text-slate-900 mt-1">{{ curation.start_date }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Expires {{ curation.end_date }}</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Preference Filter</div>
+      <div class="text-lg font-bold text-slate-900 mt-1">
+        {% if curation.preference_tag %}
+          {{ curation.preference_tag }}
+        {% else %}
+          Universal (All)
+        {% endif %}
+      </div>
+      <div class="text-xs text-slate-500 mt-0.5">Applies to matching subscribers</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Surprise Bonus Item</div>
+      <div class="text-sm font-bold text-amber-700 mt-1">
+        {% if curation.has_surprise_item %}
+          Yes · Included
+        {% else %}
+          Standard Box
+        {% endif %}
+      </div>
+      <div class="text-xs text-slate-500 mt-0.5 truncate">{{ curation.surprise_item_description|default:"No surprise perk" }}</div>
+    </div>
+  </div>
+
+  <!-- Main Body -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="md:col-span-2 space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-5">
+        <h2 class="text-base font-semibold text-slate-900 mb-3">Theme Title & Unboxing Notes</h2>
+        {% if curation.theme_title %}
+          <div class="text-base font-medium text-slate-800 mb-2">{{ curation.theme_title }}</div>
+        {% endif %}
+        {% if curation.curation_notes %}
+          <div class="text-sm text-slate-700 whitespace-pre-line leading-relaxed">{{ curation.curation_notes }}</div>
+        {% else %}
+          <p class="text-sm text-slate-400 italic">No tasting or curation notes recorded for this cycle.</p>
+        {% endif %}
+      </div>
+
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-5">
+        <h2 class="text-base font-semibold text-slate-900 mb-3">Lead Product & Assortment Details</h2>
+        <div class="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+          <div>
+            <div class="text-xs text-slate-400 font-semibold uppercase">Lead Feature SKU</div>
+            <div class="text-base font-bold text-slate-900 mt-0.5">
+              {{ curation.primary_product.name|default:"Assorted Multi-Item Selection" }}
+            </div>
+            {% if curation.primary_product %}
+              <div class="text-xs text-slate-500 mt-0.5 font-mono">Product #: {{ curation.primary_product.number }}</div>
+            {% endif %}
+          </div>
+          {% if curation.has_surprise_item %}
+            <div class="text-right">
+              <span class="badge badge-amber">Mystery Inclusion</span>
+              <div class="text-xs text-slate-600 mt-1">{{ curation.surprise_item_description }}</div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Metadata Sidebar -->
+    <div class="space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-5">
+        <h2 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Curation Metadata</h2>
+        <dl class="divide-y divide-slate-100 text-sm">
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Record Number</dt>
+            <dd class="font-mono text-slate-800">{{ curation.number }}</dd>
+          </div>
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Plan</dt>
+            <dd class="text-slate-800 font-medium">{{ curation.plan.name }}</dd>
+          </div>
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Created</dt>
+            <dd class="text-slate-800">{{ curation.created_at|date:"M d, Y H:i" }}</dd>
+          </div>
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Last Updated</dt>
+            <dd class="text-slate-800">{{ curation.updated_at|date:"M d, Y H:i" }}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
