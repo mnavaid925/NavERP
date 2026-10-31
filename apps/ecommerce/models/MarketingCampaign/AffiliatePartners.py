@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.text import slugify
 
@@ -72,6 +73,7 @@ class AffiliatePartner(TenantNumbered):
         max_digits=6,
         decimal_places=2,
         default=Decimal("10.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
         help_text="Commission rate percentage (e.g. 10.00%) or flat dollar amount ($10.00)",
     )
     cookie_duration_days = models.PositiveIntegerField(
@@ -88,6 +90,7 @@ class AffiliatePartner(TenantNumbered):
         max_digits=10,
         decimal_places=2,
         default=Decimal("50.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
         help_text="Minimum earnings required before payout batch generation",
     )
     payment_email = models.EmailField(
@@ -102,18 +105,21 @@ class AffiliatePartner(TenantNumbered):
         max_digits=12,
         decimal_places=2,
         default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
         help_text="Total store revenue generated through this partner",
     )
     total_commission_earned = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
         help_text="Total commissions earned historically",
     )
     total_commission_paid = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
         help_text="Total commissions disbursed",
     )
 
