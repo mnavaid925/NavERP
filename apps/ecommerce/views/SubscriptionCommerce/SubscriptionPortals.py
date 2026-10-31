@@ -19,13 +19,13 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 @login_required
 def subscription_portal(request):
     subs_qs = ecommerce_scope(CustomerSubscription.objects.all(), request).select_related(
-        "customer_profile", "plan", "product", "variant"
+        "customer_profile__customer", "customer_profile__user", "plan", "product", "variant"
     )
 
     active_subscriptions = subs_qs.filter(status="active").order_by("next_billing_date")
     paused_subscriptions = subs_qs.filter(status="paused").order_by("-updated_at")
     retention_actions = ecommerce_scope(SubscriptionRetentionAction.objects.all(), request).select_related(
-        "subscription", "customer_profile"
+        "subscription", "customer_profile__customer", "customer_profile__user"
     ).order_by("-created_at")[:10]
 
     total_subscribers = subs_qs.filter(status="active").count()
