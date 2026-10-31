@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ listing.product.title }} ({{ listing.seller_sku }}) — Vendor Listing — NavERP{% endblock %}
+{% block title %}{{ listing.product.name }} ({{ listing.seller_sku }}) — Vendor Listing — NavERP{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
@@ -17,7 +17,7 @@
         <span class="text-slate-800 font-medium">{{ listing.seller_sku }}</span>
       </div>
       <div class="flex items-center gap-3">
-        <h1 class="page-title text-2xl font-bold text-slate-900">{{ listing.product.title }}</h1>
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ listing.product.name }}</h1>
         {% if listing.moderation_status == "approved" %}
           <span class="badge badge-green">Approved & Live</span>
         {% elif listing.moderation_status == "pending_review" %}
@@ -186,7 +186,7 @@
         </h2>
         <div>
           <span class="text-xs text-slate-500 block">Product Master Title:</span>
-          <span class="text-base font-semibold text-slate-900">{{ listing.product.title }}</span>
+          <span class="text-base font-semibold text-slate-900">{{ listing.product.name }}</span>
           <span class="text-xs text-slate-400 font-mono block">{{ listing.product.number }} • Slug: {{ listing.product.slug }}</span>
         </div>
         {% if listing.variant %}
