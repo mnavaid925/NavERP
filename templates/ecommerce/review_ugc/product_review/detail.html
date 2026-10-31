@@ -194,7 +194,7 @@
                 <div>
                     <span class="text-muted block text-xs">Linked Customer Profile</span>
                     <a href="{% url 'ecommerce:customeraccountprofile_detail' review.customer.pk %}" class="font-medium text-brand hover:underline">
-                        {{ review.customer.display_name }} ({{ review.customer.number }})
+                        {{ review.customer.customer.name|default:review.customer.number }}{% if review.customer.customer.name %} ({{ review.customer.number }}){% endif %}
                     </a>
                 </div>
                 {% endif %}
