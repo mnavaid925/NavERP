@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Marketing Hub · Marketing & Campaign Management · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Marketing & Campaigns</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">eCommerce Marketing Hub</h1>
+      <p class="text-sm text-slate-500 mt-1">Unified console for omnichannel broadcasts, affiliate partnerships, SEO automation, and social commerce syndication.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:social_commerce_feed' %}" target="_blank" class="btn btn-outline inline-flex items-center gap-2" title="View syndicated product catalog feed">
+        <i data-lucide="rss" class="w-4 h-4 text-amber-600"></i>
+        <span>Social Catalog Feed</span>
+      </a>
+      <a href="{% url 'ecommerce:marketingcampaign_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Campaign</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Metric Stat Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon blue w-12 h-12 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+        <i data-lucide="megaphone" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Campaigns & Dispatches</div>
+        <div class="text-xl font-bold text-slate-900 mt-0.5">{{ kpis.total_campaigns }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">{{ kpis.total_delivered }} delivered messages</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon green w-12 h-12 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+        <i data-lucide="dollar-sign" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Campaign Revenue</div>
+        <div class="text-xl font-bold text-emerald-700 mt-0.5">${{ kpis.total_revenue_attributed }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">Attributed directly</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon purple w-12 h-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+        <i data-lucide="users" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Affiliate Partners</div>
+        <div class="text-xl font-bold text-slate-900 mt-0.5">{{ kpis.total_affiliates }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">${{ kpis.total_affiliate_revenue }} referred sales</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon orange w-12 h-12 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+        <i data-lucide="search" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Active SEO Rules</div>
+        <div class="text-xl font-bold text-slate-900 mt-0.5">{{ kpis.active_seo_rules }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">Automated Schema & Meta</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Grid: Recent Campaigns & Affiliates -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Recent Campaigns -->
+    <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-900">Recent Marketing Campaigns</h2>
+        <a href="{% url 'ecommerce:marketingcampaign_list' %}" class="text-xs font-medium text-blue-600 hover:underline">
+          View all campaigns →
+        </a>
+      </div>
+      <div class="divide-y divide-slate-100">
+        {% for camp in recent_campaigns %}
+          <div class="p-4 hover:bg-slate-50/80 transition-colors flex items-center justify-between gap-4">
+            <div>
+              <a href="{% url 'ecommerce:marketingcampaign_detail' camp.pk %}" class="font-medium text-slate-900 hover:text-blue-600 text-sm">
+                {{ camp.name }}
+              </a>
+              <div class="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                <span class="font-mono">{{ camp.number }}</span>
+                <span>·</span>
+                <span class="capitalize">{{ camp.channel }}</span>
+                <span>·</span>
+                <span>{{ camp.get_campaign_type_display }}</span>
+              </div>
+            </div>
+            <div class="text-right">
+              {% if camp.status == 'sent' %}
+                <span class="badge badge-green text-xs">Sent</span>
+              {% elif camp.status == 'scheduled' %}
+                <span class="badge badge-info text-xs">Scheduled</span>
+              {% elif camp.status == 'draft' %}
+                <span class="badge badge-slate text-xs">Draft</span>
+              {% else %}
+                <span class="badge badge-amber text-xs">{{ camp.get_status_display }}</span>
+              {% endif %}
+              <div class="text-xs text-slate-500 mt-1 font-medium">{{ camp.open_rate }}% opens</div>
+            </div>
+          </div>
+        {% empty %}
+          <div class="p-6 text-center text-sm text-slate-500">
+            No marketing campaigns created yet.
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Top Affiliates -->
+    <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-900">Top Performing Affiliates</h2>
+        <a href="{% url 'ecommerce:affiliatepartner_list' %}" class="text-xs font-medium text-blue-600 hover:underline">
+          View partner directory →
+        </a>
+      </div>
+      <div class="divide-y divide-slate-100">
+        {% for aff in top_affiliates %}
+          <div class="p-4 hover:bg-slate-50/80 transition-colors flex items-center justify-between gap-4">
+            <div>
+              <a href="{% url 'ecommerce:affiliatepartner_detail' aff.pk %}" class="font-medium text-slate-900 hover:text-blue-600 text-sm">
+                {{ aff.name }}
+              </a>
+              <div class="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                <span class="font-mono bg-slate-100 px-1.5 py-0.2 rounded text-slate-700">{{ aff.referral_code }}</span>
+                <span>·</span>
+                <span>{{ aff.get_partner_type_display }}</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-bold text-emerald-700">${{ aff.total_revenue_generated }}</div>
+              <div class="text-xs text-slate-500 mt-0.5">{{ aff.total_orders_referred }} orders referred</div>
+            </div>
+          </div>
+        {% empty %}
+          <div class="p-6 text-center text-sm text-slate-500">
+            No active affiliate partners onboarded yet.
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Grid: Recent Conversions & SEO Rules -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Recent Referral Conversions -->
+    <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-900">Recent Referral Conversions</h2>
+        <a href="{% url 'ecommerce:affiliatereferralconversion_list' %}" class="text-xs font-medium text-blue-600 hover:underline">
+          View all conversions →
+        </a>
+      </div>
+      <div class="divide-y divide-slate-100">
+        {% for conv in recent_conversions %}
+          <div class="p-4 hover:bg-slate-50/80 transition-colors flex items-center justify-between gap-4">
+            <div>
+              <a href="{% url 'ecommerce:affiliatereferralconversion_detail' conv.pk %}" class="font-medium text-slate-900 hover:text-blue-600 text-sm">
+                {{ conv.affiliate.name }}
+              </a>
+              <div class="text-xs text-slate-500 mt-0.5">
+                Order <span class="font-mono">{{ conv.order.number }}</span> (${{ conv.order_amount }})
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-bold text-emerald-700">+${{ conv.commission_amount }}</div>
+              <div class="text-xs text-slate-500 mt-0.5 capitalize">{{ conv.get_status_display }}</div>
+            </div>
+          </div>
+        {% empty %}
+          <div class="p-6 text-center text-sm text-slate-500">
+            No affiliate conversions logged yet.
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Active SEO Rules & Organic Search -->
+    <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-900">Active SEO Automation Rules</h2>
+        <a href="{% url 'ecommerce:seometadatarule_list' %}" class="text-xs font-medium text-blue-600 hover:underline">
+          Configure rules →
+        </a>
+      </div>
+      <div class="divide-y divide-slate-100">
+        {% for rule in seo_rules %}
+          <div class="p-4 hover:bg-slate-50/80 transition-colors flex items-center justify-between gap-4">
+            <div>
+              <a href="{% url 'ecommerce:seometadatarule_detail' rule.pk %}" class="font-medium text-slate-900 hover:text-blue-600 text-sm">
+                {{ rule.name }}
+              </a>
+              <div class="text-xs text-slate-500 mt-0.5">
+                <span>{{ rule.get_rule_type_display }}</span>
+                <span>·</span>
+                <span class="font-mono">{{ rule.json_ld_schema_type }}</span>
+              </div>
+            </div>
+            <div class="text-right">
+              {% if rule.target_keyword %}
+                <span class="badge badge-info text-xs">{{ rule.target_keyword }}</span>
+              {% else %}
+                <span class="badge badge-slate text-xs">Dynamic Tokens</span>
+              {% endif %}
+            </div>
+          </div>
+        {% empty %}
+          <div class="p-6 text-center text-sm text-slate-500">
+            No active SEO rules configured yet.
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
