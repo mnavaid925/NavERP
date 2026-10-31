@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Box Curations · Subscription Commerce · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:subscription_portal' %}" class="hover:text-blue-600">Subscriptions</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Box Curations</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Subscription Box Curations</h1>
+      <p class="text-sm text-slate-500 mt-1">Schedule seasonal rotation assortments, curate lead products, configure preference tags, and set surprise bonus items.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:subscription_portal' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>Subscription Portal</span>
+      </a>
+      <a href="{% url 'ecommerce:subscriptionboxcuration_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Curation</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ query }}"
+            placeholder="Name, cycle, preference..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-plan" class="block text-xs font-medium text-slate-600 mb-1">Plan</label>
+        <select id="filter-plan" name="plan" class="form-select w-full text-sm">
+          <option value="">All Plans</option>
+          {% for p in plans %}
+            <option value="{{ p.pk }}" {% if selected_plan == p.pk|stringformat:"d" or request.GET.plan == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Status</label>
+        <select id="filter-status" name="status" class="form-select w-full text-sm">
+          <option value="">All Statuses</option>
+          <option value="active" {% if selected_status == "active" or selected_status == "true" or selected_status == "1" %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if selected_status == "inactive" or selected_status == "false" or selected_status == "0" %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-primary w-full text-sm py-2">
+          Filter
+        </button>
+        <a href="{% url 'ecommerce:subscriptionboxcuration_list' %}" class="btn btn-outline text-sm py-2 px-3" title="Reset Filters">
+          Reset
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Table Card -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            <th class="py-3 px-4">Cycle & Box Title</th>
+            <th class="py-3 px-4">Governing Plan</th>
+            <th class="py-3 px-4">Lead Product</th>
+            <th class="py-3 px-4">Rotation Schedule</th>
+            <th class="py-3 px-4">Preference / Surprise</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-sm">
+          {% for cur in curations %}
+            <tr class="hover:bg-slate-50/75 transition-colors">
+              <td class="py-3 px-4">
+                <a href="{% url 'ecommerce:subscriptionboxcuration_detail' cur.pk %}" class="font-medium text-blue-600 hover:text-blue-800">
+                  {{ cur.name }}
+                </a>
+                <div class="text-xs text-slate-400 font-mono mt-0.5">{{ cur.number }} · {{ cur.cycle_identifier }}</div>
+                {% if cur.theme_title %}
+                  <div class="text-xs text-slate-600 italic mt-0.5">Theme: {{ cur.theme_title }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                <a href="{% url 'ecommerce:subscriptionplan_detail' cur.plan.pk %}" class="text-slate-800 hover:underline">
+                  {{ cur.plan.name }}
+                </a>
+              </td>
+              <td class="py-3 px-4">
+                {% if cur.primary_product %}
+                  <span class="font-medium text-slate-800">{{ cur.primary_product.name }}</span>
+                {% else %}
+                  <span class="text-xs text-slate-400">Assorted / Custom</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-600">
+                <div>{{ cur.start_date }}</div>
+                <div class="text-slate-400">to {{ cur.end_date }}</div>
+              </td>
+              <td class="py-3 px-4 text-xs space-y-1">
+                {% if cur.preference_tag %}
+                  <span class="badge badge-info">{{ cur.preference_tag }}</span>
+                {% endif %}
+                {% if cur.has_surprise_item %}
+                  <div><span class="badge badge-amber">Surprise Bonus</span></div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if cur.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-slate">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="table-actions flex items-center justify-end gap-1">
+                  <a
+                    href="{% url 'ecommerce:subscriptionboxcuration_detail' cur.pk %}"
+                    class="btn btn-icon p-1.5 text-slate-500 hover:text-blue-600 rounded"
+                    title="View Curation"
+                  >
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a
+                    href="{% url 'ecommerce:subscriptionboxcuration_edit' cur.pk %}"
+                    class="btn btn-icon p-1.5 text-slate-500 hover:text-amber-600 rounded"
+                    title="Edit Curation"
+                  >
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form
+                    method="post"
+                    action="{% url 'ecommerce:subscriptionboxcuration_delete' cur.pk %}"
+                    class="inline-block"
+                    onsubmit="return confirm('Delete box curation {{ cur.name }}?');"
+                  >
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="btn btn-icon p-1.5 text-slate-500 hover:text-red-600 rounded"
+                      title="Delete Curation"
+                    >
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="py-8 text-center text-slate-500">
+                <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                  <i data-lucide="package-search" class="w-10 h-10 text-slate-300 mb-2"></i>
+                  <p class="font-medium text-slate-700">No box curations scheduled</p>
+                  <p class="text-xs text-slate-400 mt-1">Define seasonal theme rotations, tasting sets, or mystery product curations.</p>
+                  <a href="{% url 'ecommerce:subscriptionboxcuration_create' %}" class="btn btn-primary text-xs mt-3">
+                    Schedule First Curation
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+        <div>
+          Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} curations
+        </div>
+        <div class="flex items-center gap-2">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_plan %}&plan={{ selected_plan }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Previous
+            </a>
+          {% endif %}
+          <span class="text-xs font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_plan %}&plan={{ selected_plan }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
