@@ -66,7 +66,7 @@
                 <p class="text-slate-800 text-base leading-relaxed mb-4 font-medium">{{ media_item.caption }}</p>
                 {% endif %}
                 <div class="flex items-center gap-4 text-xs text-muted pt-3 border-t border-slate-100">
-                    <span>Source Type: <strong class="text-slate-700 capitalize">{{ media_item.get_media_type_display }}</strong></span>
+                    <span>Source Type: <strong class="text-slate-700">{{ media_item.get_media_type_display }}</strong></span>
                     <span>Views: <strong class="text-slate-700">{{ media_item.views_count }}</strong></span>
                     <span>Clicks: <strong class="text-slate-700">{{ media_item.clicks_count }}</strong></span>
                     <span>Display Order: <strong class="text-slate-700">{{ media_item.display_order }}</strong></span>
