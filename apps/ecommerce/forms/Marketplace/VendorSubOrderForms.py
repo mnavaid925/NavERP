@@ -1,9 +1,8 @@
 from django import forms
 
 from apps.core.forms import TenantModelForm
-from apps.ecommerce.forms._common import TenantUniqueMixin
+from apps.ecommerce.forms._common import TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.Marketplace.MarketplaceVendors import MarketplaceVendor
-from apps.ecommerce.models.Marketplace.VendorPayouts import VendorPayout
 from apps.ecommerce.models.Marketplace.VendorSubOrders import VendorSubOrder
 from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder
 
@@ -14,6 +13,8 @@ class VendorSubOrderForm(TenantUniqueMixin, TenantModelForm):
         exclude = [
             "tenant",
             "number",
+            "payout",
+            "payout_status",
             "commission_amount",
             "net_vendor_amount",
             "rated_at",
@@ -24,10 +25,8 @@ class VendorSubOrderForm(TenantUniqueMixin, TenantModelForm):
         widgets = {
             "vendor": forms.Select(attrs={"class": "form-select"}),
             "order": forms.Select(attrs={"class": "form-select"}),
-            "payout": forms.Select(attrs={"class": "form-select"}),
             "fulfillment_status": forms.Select(attrs={"class": "form-select"}),
             "sla_status": forms.Select(attrs={"class": "form-select"}),
-            "payout_status": forms.Select(attrs={"class": "form-select"}),
             "subtotal_amount": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
             "shipping_amount": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
             "commission_rate": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
@@ -49,8 +48,16 @@ class VendorSubOrderForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["vendor"].queryset = MarketplaceVendor.objects.filter(tenant=self.tenant).order_by("store_name")
-            self.fields["order"].queryset = EcommerceOrder.objects.filter(tenant=self.tenant).order_by("-created_at")
-            self.fields["payout"].queryset = VendorPayout.objects.filter(tenant=self.tenant).order_by("-period_end")
+            self.fields["order"].queryset = (
+                EcommerceOrder.objects.filter(tenant=self.tenant)
+                .select_related("customer")
+                .order_by("-created_at")
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        reject_foreign(self, cleaned_data, ["vendor", "order"])
+        return cleaned_data
 
 
 class SubOrderFulfillmentForm(forms.Form):
