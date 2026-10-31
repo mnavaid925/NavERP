@@ -404,7 +404,7 @@ class MarketplaceVendorAdmin(admin.ModelAdmin):
 class VendorProductListingAdmin(admin.ModelAdmin):
     list_display = ["number", "product", "vendor", "seller_sku", "asking_price", "available_quantity", "moderation_status", "compliance_status", "is_active"]
     list_filter = ["moderation_status", "compliance_status", "condition", "is_active", "tenant"]
-    search_fields = ["number", "seller_sku", "barcode", "product__title", "vendor__store_name"]
+    search_fields = ["number", "seller_sku", "barcode", "product__name", "vendor__store_name"]
     list_select_related = ["product", "variant", "vendor", "reviewed_by"]
     ordering = ["-created_at"]
 
