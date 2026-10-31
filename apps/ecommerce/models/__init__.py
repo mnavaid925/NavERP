@@ -31,6 +31,10 @@ from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacet
 from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
 from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
 from apps.ecommerce.models.SearchDiscovery.SearchSynonyms import SearchSynonym
+from apps.ecommerce.models.SubscriptionCommerce.CustomerSubscriptions import CustomerSubscription
+from apps.ecommerce.models.SubscriptionCommerce.SubscriptionBoxCurations import SubscriptionBoxCuration
+from apps.ecommerce.models.SubscriptionCommerce.SubscriptionPlans import SubscriptionPlan
+from apps.ecommerce.models.SubscriptionCommerce.SubscriptionRetentionActions import SubscriptionRetentionAction
 
 __all__ = [
     "TenantOwned",
@@ -78,5 +82,9 @@ __all__ = [
     "RecommendationStrategy",
     "PersonalizedExperience",
     "ShopperBehaviorEvent",
+    # 9.12 Subscription & Recurring Commerce
+    "SubscriptionPlan",
+    "CustomerSubscription",
+    "SubscriptionBoxCuration",
+    "SubscriptionRetentionAction",
 ]
-
