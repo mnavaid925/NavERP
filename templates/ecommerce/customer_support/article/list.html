@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Knowledge Base & FAQs | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Customer Support</span>
+            <span>/</span>
+            <span>Knowledge Base</span>
+        </div>
+        <h1 class="page-title">Self-Service Knowledge Base & FAQs</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:knowledgebasearticle_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Article
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label for="q" class="form-label">Search</label>
+                <input type="text" id="q" name="q" value="{{ query }}" placeholder="Title, keywords, content..." class="form-input">
+            </div>
+            <div class="form-group mb-0">
+                <label for="category" class="form-label">Category</label>
+                <select id="category" name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if selected_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="status" class="form-label">Status</label>
+                <select id="status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="audience" class="form-label">Target Audience</label>
+                <select id="audience" name="audience" class="form-select">
+                    <option value="">All Audiences</option>
+                    {% for val, label in audience_choices %}
+                    <option value="{{ val }}" {% if selected_audience == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-4 flex justify-end gap-2">
+                <a href="{% url 'ecommerce:knowledgebasearticle_list' %}" class="btn btn-outline">Clear Filters</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Article Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Article #</th>
+                        <th>Title & Category</th>
+                        <th>Audience</th>
+                        <th>Status</th>
+                        <th>Views</th>
+                        <th>Helpful Ratio</th>
+                        <th>Author</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for article in articles %}
+                    <tr>
+                        <td class="font-mono text-sm">
+                            <a href="{% url 'ecommerce:knowledgebasearticle_detail' article.pk %}" class="text-primary font-semibold hover:underline">
+                                {{ article.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="flex items-center gap-2">
+                                <span class="font-semibold text-slate-900">{{ article.title }}</span>
+                                {% if article.is_featured %}
+                                <span class="badge badge-amber text-xs">Featured</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-xs text-slate-500">
+                                {{ article.get_category_display }} &bull; /{{ article.slug }}
+                            </div>
+                        </td>
+                        <td class="text-sm text-slate-600">
+                            {{ article.get_target_audience_display }}
+                        </td>
+                        <td>
+                            {% if article.status == 'published' %}
+                            <span class="badge badge-green">Published</span>
+                            {% elif article.status == 'draft' %}
+                            <span class="badge badge-amber">Draft</span>
+                            {% else %}
+                            <span class="badge badge-slate">Archived</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm text-slate-600 font-mono">
+                            {{ article.view_count }}
+                        </td>
+                        <td class="text-sm">
+                            <div class="flex items-center gap-1">
+                                <i data-lucide="thumbs-up" class="w-3.5 h-3.5 text-green-600"></i>
+                                <span class="font-medium text-slate-700">{{ article.helpful_votes }}</span>
+                                <span class="text-slate-400">/</span>
+                                <i data-lucide="thumbs-down" class="w-3.5 h-3.5 text-slate-400"></i>
+                                <span class="text-slate-500">{{ article.unhelpful_votes }}</span>
+                            </div>
+                        </td>
+                        <td class="text-sm text-slate-500">
+                            {% if article.author %}
+                            {{ article.author.get_full_name|default:article.author.username }}
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="table-actions text-right">
+                            <a href="{% url 'ecommerce:knowledgebasearticle_detail' article.pk %}" class="btn btn-icon" title="View Article">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:knowledgebasearticle_edit' article.pk %}" class="btn btn-icon" title="Edit Article">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form action="{% url 'ecommerce:knowledgebasearticle_delete' article.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete article {{ article.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Article">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-8">
+                            <div class="empty-state">
+                                <i data-lucide="book-open" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
+                                <h3 class="text-base font-semibold text-slate-700">No knowledge base articles found</h3>
+                                <p class="text-sm text-slate-500 mb-4">No articles match your query.</p>
+                                <a href="{% url 'ecommerce:knowledgebasearticle_create' %}" class="btn btn-primary btn-sm">Create First Article</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} articles
+            </div>
+            <div class="flex gap-1">
+                <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}&q={{ query }}&category={{ selected_category }}&status={{ selected_status }}&audience={{ selected_audience }}"
+                   class="btn btn-outline btn-sm {% if not page_obj.has_previous %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Previous
+                </a>
+                <span class="btn btn-sm btn-outline active">{{ page_obj.number }} / {{ paginator.num_pages }}</span>
+                <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}&q={{ query }}&category={{ selected_category }}&status={{ selected_status }}&audience={{ selected_audience }}"
+                   class="btn btn-outline btn-sm {% if not page_obj.has_next %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Next
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
