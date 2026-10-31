@@ -124,66 +124,6 @@
                     <i data-lucide="x-circle" class="w-3.5 h-3.5"></i>
                     <span>Cancel...</span>
                   </button>
-
-                  <!-- Deflection Modal -->
-                  <div id="deflect-modal-{{ sub.pk }}" class="hidden fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
-                    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6 text-left">
-                      <div class="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
-                        <h3 class="text-base font-bold text-slate-900">Before you cancel subscription {{ sub.number }}...</h3>
-                        <button type="button" onclick="document.getElementById('deflect-modal-{{ sub.pk }}').classList.add('hidden');" class="text-slate-400 hover:text-slate-600">
-                          <i data-lucide="x" class="w-5 h-5"></i>
-                        </button>
-                      </div>
-                      <form method="post" action="{% url 'ecommerce:subscription_portal_deflect' sub.pk %}" class="space-y-4">
-                        {% csrf_token %}
-                        <div>
-                          <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Why are you considering cancelling?</label>
-                          <select name="reason" class="form-select w-full text-sm">
-                            <option value="too_much_product">I have too much backlog / product</option>
-                            <option value="too_expensive">It is too expensive / budget reasons</option>
-                            <option value="poor_quality">Product did not meet expectations</option>
-                            <option value="temporary_break">Traveling or taking a temporary break</option>
-                            <option value="switching_competitor">Switching to another provider</option>
-                            <option value="other">Other reason</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Choose a retention deflection offer:</label>
-                          <div class="space-y-2 text-sm text-slate-700">
-                            <label class="flex items-start gap-2 p-2 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer">
-                              <input type="radio" name="action_choice" value="discount_cycle" checked class="mt-1 text-primary">
-                              <div>
-                                <div class="font-semibold text-emerald-700">Keep subscription with an extra 15% discount</div>
-                                <div class="text-xs text-slate-500">Apply a 15% discount for upcoming recurring deliveries</div>
-                              </div>
-                            </label>
-                            <label class="flex items-start gap-2 p-2 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer">
-                              <input type="radio" name="action_choice" value="pause_duration" class="mt-1 text-primary">
-                              <div>
-                                <div class="font-semibold text-amber-700">Pause for 60 days instead</div>
-                                <div class="text-xs text-slate-500">Take a 2-month breather and automatically resume later</div>
-                              </div>
-                            </label>
-                            <label class="flex items-start gap-2 p-2 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer">
-                              <input type="radio" name="action_choice" value="cancel_anyway" class="mt-1 text-primary">
-                              <div>
-                                <div class="font-semibold text-red-600">No thanks, finalize cancellation</div>
-                                <div class="text-xs text-slate-500">Cancel recurring orders immediately</div>
-                              </div>
-                            </label>
-                          </div>
-                        </div>
-                        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
-                          <button type="button" onclick="document.getElementById('deflect-modal-{{ sub.pk }}').classList.add('hidden');" class="btn btn-outline text-xs">
-                            Keep Active
-                          </button>
-                          <button type="submit" class="btn btn-primary text-xs">
-                            Confirm Selection
-                          </button>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
                 </div>
               </td>
             </tr>
@@ -197,6 +137,68 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Deflection Modals (Rendered outside table-wrap to prevent stacking context quirks) -->
+    {% for sub in active_subscriptions %}
+      <div id="deflect-modal-{{ sub.pk }}" class="hidden fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6 text-left">
+          <div class="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+            <h3 class="text-base font-bold text-slate-900">Before you cancel subscription {{ sub.number }}...</h3>
+            <button type="button" onclick="document.getElementById('deflect-modal-{{ sub.pk }}').classList.add('hidden');" class="text-slate-400 hover:text-slate-600" aria-label="Close modal" title="Close modal">
+              <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+          </div>
+          <form method="post" action="{% url 'ecommerce:subscription_portal_deflect' sub.pk %}" class="space-y-4">
+            {% csrf_token %}
+            <div>
+              <label for="cancel-reason-{{ sub.pk }}" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Why are you considering cancelling?</label>
+              <select id="cancel-reason-{{ sub.pk }}" name="reason" class="form-select w-full text-sm">
+                <option value="too_much_product">I have too much backlog / product</option>
+                <option value="too_expensive">It is too expensive / budget reasons</option>
+                <option value="poor_quality">Product did not meet expectations</option>
+                <option value="temporary_break">Traveling or taking a temporary break</option>
+                <option value="switching_competitor">Switching to another provider</option>
+                <option value="other">Other reason</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Choose a retention deflection offer:</label>
+              <div class="space-y-2 text-sm text-slate-700">
+                <label class="flex items-start gap-2 p-2 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer">
+                  <input type="radio" name="action_choice" value="discount_cycle" checked class="mt-1 text-blue-600">
+                  <div>
+                    <div class="font-semibold text-emerald-700">Keep subscription with an extra 15% discount</div>
+                    <div class="text-xs text-slate-500">Apply a 15% discount for upcoming recurring deliveries</div>
+                  </div>
+                </label>
+                <label class="flex items-start gap-2 p-2 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer">
+                  <input type="radio" name="action_choice" value="pause_duration" class="mt-1 text-blue-600">
+                  <div>
+                    <div class="font-semibold text-amber-700">Pause for 60 days instead</div>
+                    <div class="text-xs text-slate-500">Take a 2-month breather and automatically resume later</div>
+                  </div>
+                </label>
+                <label class="flex items-start gap-2 p-2 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer">
+                  <input type="radio" name="action_choice" value="cancel_anyway" class="mt-1 text-blue-600">
+                  <div>
+                    <div class="font-semibold text-red-600">No thanks, finalize cancellation</div>
+                    <div class="text-xs text-slate-500">Cancel recurring orders immediately</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+              <button type="button" onclick="document.getElementById('deflect-modal-{{ sub.pk }}').classList.add('hidden');" class="btn btn-outline text-xs">
+                Keep Active
+              </button>
+              <button type="submit" class="btn btn-primary text-xs">
+                Confirm Selection
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
   </div>
 
   <!-- Paused Subscriptions Resume Section -->
