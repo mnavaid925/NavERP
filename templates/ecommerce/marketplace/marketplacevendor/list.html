@@ -165,15 +165,15 @@
             </td>
             <td class="py-3 px-4 text-right">
               <div class="table-actions flex items-center justify-end gap-2">
-                <a href="{% url 'ecommerce:marketplacevendor_detail' v.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="View Detail">
+                <a href="{% url 'ecommerce:marketplacevendor_detail' v.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="View Detail" aria-label="View Detail">
                   <i data-lucide="eye" class="w-4 h-4"></i>
                 </a>
-                <a href="{% url 'ecommerce:marketplacevendor_edit' v.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit Vendor">
+                <a href="{% url 'ecommerce:marketplacevendor_edit' v.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit Vendor" aria-label="Edit Vendor">
                   <i data-lucide="pencil" class="w-4 h-4"></i>
                 </a>
-                <form method="post" action="{% url 'ecommerce:marketplacevendor_delete' v.pk %}" onsubmit="return confirm('Are you sure you want to delete vendor {{ v.store_name }}?');" class="inline">
+                <form method="post" action="{% url 'ecommerce:marketplacevendor_delete' v.pk %}" onsubmit="return confirm('Are you sure you want to delete vendor {{ v.store_name|escapejs }}?');" class="inline">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete Vendor">
+                  <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete Vendor" aria-label="Delete Vendor">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </form>
