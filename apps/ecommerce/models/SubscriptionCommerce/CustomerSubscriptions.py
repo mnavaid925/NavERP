@@ -135,6 +135,10 @@ class CustomerSubscription(TenantNumbered):
                 fields=["tenant", "customer_profile", "status"],
                 name="idx_esub_ten_cust_stat",
             ),
+            models.Index(
+                fields=["tenant", "plan", "status"],
+                name="idx_esub_ten_plan_stat",
+            ),
         ]
 
     @property
