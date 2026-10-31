@@ -60,18 +60,14 @@
           <i data-lucide="link" class="w-4 h-4 text-blue-600"></i>
           <span>1. Parent Order & Marketplace Merchant</span>
         </h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Parent Order *</label>
+            <label for="{{ form.order.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Parent Order *</label>
             {{ form.order }}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Marketplace Vendor *</label>
+            <label for="{{ form.vendor.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Marketplace Vendor *</label>
             {{ form.vendor }}
-          </div>
-          <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Payout Batch (Optional)</label>
-            {{ form.payout }}
           </div>
         </div>
       </div>
@@ -84,28 +80,24 @@
         </h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Consignment Subtotal ($)</label>
+            <label for="{{ form.subtotal_amount.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Consignment Subtotal ($)</label>
             {{ form.subtotal_amount }}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Allocated Shipping ($)</label>
+            <label for="{{ form.shipping_amount.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Allocated Shipping ($)</label>
             {{ form.shipping_amount }}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Commission Rate (%)</label>
+            <label for="{{ form.commission_rate.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Commission Rate (%)</label>
             {{ form.commission_rate }}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Fulfillment Status</label>
+            <label for="{{ form.fulfillment_status.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Fulfillment Status</label>
             {{ form.fulfillment_status }}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">SLA Status</label>
+            <label for="{{ form.sla_status.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">SLA Status</label>
             {{ form.sla_status }}
-          </div>
-          <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Payout Status</label>
-            {{ form.payout_status }}
           </div>
         </div>
       </div>
@@ -118,27 +110,27 @@
         </h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Carrier Name</label>
+            <label for="{{ form.carrier_name.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Carrier Name</label>
             {{ form.carrier_name }}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Tracking Number</label>
+            <label for="{{ form.tracking_number.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Tracking Number</label>
             {{ form.tracking_number }}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Tracking URL</label>
+            <label for="{{ form.tracking_url.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Tracking URL</label>
             {{ form.tracking_url }}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Promised Dispatch Date</label>
+            <label for="{{ form.promised_dispatch_date.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Promised Dispatch Date</label>
             {{ form.promised_dispatch_date }}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Dispatched Timestamp</label>
+            <label for="{{ form.dispatched_at.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Dispatched Timestamp</label>
             {{ form.dispatched_at }}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Delivered Timestamp</label>
+            <label for="{{ form.delivered_at.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Delivered Timestamp</label>
             {{ form.delivered_at }}
           </div>
         </div>
@@ -152,27 +144,27 @@
         </h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Customer Rating (1-5)</label>
+            <label for="{{ form.customer_rating.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Customer Rating (1-5)</label>
             {{ form.customer_rating }}
           </div>
           <div class="form-group md:col-span-2">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Customer Feedback</label>
+            <label for="{{ form.customer_feedback.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Customer Feedback</label>
             {{ form.customer_feedback }}
           </div>
           <div class="form-group md:col-span-3">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Seller Public Response</label>
+            <label for="{{ form.seller_response.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Seller Public Response</label>
             {{ form.seller_response }}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Dispute Status</label>
+            <label for="{{ form.dispute_status.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Dispute Status</label>
             {{ form.dispute_status }}
           </div>
           <div class="form-group md:col-span-2">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Dispute Reason</label>
+            <label for="{{ form.dispute_reason.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Dispute Reason</label>
             {{ form.dispute_reason }}
           </div>
           <div class="form-group md:col-span-3">
-            <label class="form-label block text-xs font-semibold text-slate-700 mb-1">Dispute Notes</label>
+            <label for="{{ form.dispute_notes.id_for_label }}" class="form-label block text-xs font-semibold text-slate-700 mb-1">Dispute Notes</label>
             {{ form.dispute_notes }}
           </div>
         </div>
