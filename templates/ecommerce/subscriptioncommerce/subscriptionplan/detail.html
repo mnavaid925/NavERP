@@ -109,7 +109,7 @@
                     <a href="{% url 'ecommerce:customersubscription_detail' sub.pk %}">{{ sub.number }}</a>
                   </td>
                   <td class="py-2.5 px-4">
-                    {{ sub.customer_profile.customer_name|default:sub.customer_profile.email }}
+                    {{ sub.customer_profile.customer.name|default:sub.customer_profile.number }}
                   </td>
                   <td class="py-2.5 px-4">{{ sub.product.name }}</td>
                   <td class="py-2.5 px-4">{{ sub.next_billing_date }}</td>
