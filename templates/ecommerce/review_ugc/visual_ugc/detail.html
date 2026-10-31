@@ -20,8 +20,10 @@
             <span class="badge badge-green">Rights Approved</span>
             {% elif media_item.rights_status == "pending_request" %}
             <span class="badge badge-amber">Rights Requested</span>
-            {% else %}
+            {% elif media_item.rights_status == "rejected" %}
             <span class="badge badge-red">Rights Rejected</span>
+            {% else %}
+            <span class="badge badge-slate">{{ media_item.get_rights_status_display }}</span>
             {% endif %}
 
             {% if media_item.is_published %}
