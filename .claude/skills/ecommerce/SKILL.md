@@ -1,9 +1,9 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine: categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, or 9.8), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.11 Marketplace & Multi-Vendor: categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, or 9.11), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.11 Marketplace & Multi-Vendor)
 
 The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, and an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising (boosting, burying, pinning, banner announcements, URL redirect forwarding), query performance and zero-result search telemetry analytics, instant search-as-you-type autocomplete, and an interactive Search Workbench Console. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
@@ -64,6 +64,11 @@ apps/ecommerce/
 │   │   ├── RecommendationStrategies.py # RecommendationStrategy model (EREC-)
 │   │   ├── PersonalizedExperiences.py # PersonalizedExperience model (EPEX-)
 │   │   └── ShopperBehaviorEvents.py # ShopperBehaviorEvent model (ESBE-)
+│   ├── Marketplace/
+│   │   ├── MarketplaceVendors.py    # MarketplaceVendor model (EMKV-)
+│   │   ├── VendorProductListings.py # VendorProductListing model (EVPL-)
+│   │   ├── VendorSubOrders.py       # VendorSubOrder model (EVSO-)
+│   │   └── VendorPayouts.py         # VendorPayout model (EVPO-)
 │   └── __init__.py                  # Surgical re-exports of all models
 ├── forms/
 │   ├── _common.py                   # TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -108,6 +113,11 @@ apps/ecommerce/
 │   │   ├── RecommendationStrategies.py # RecommendationStrategyForm
 │   │   ├── PersonalizedExperiences.py # PersonalizedExperienceForm
 │   │   └── ShopperBehaviorEvents.py # ShopperBehaviorEventFilterForm
+│   ├── Marketplace/
+│   │   ├── MarketplaceVendorForms.py # MarketplaceVendorForm, KYC, Suspension
+│   │   ├── VendorProductListingForms.py # VendorProductListingForm, Moderation
+│   │   ├── VendorSubOrderForms.py   # VendorSubOrderForm, Fulfillment, Dispute
+│   │   └── VendorPayoutForms.py     # VendorPayoutForm, PayoutApproval
 │   └── __init__.py                  # Re-exports of all forms
 ├── views/
 │   ├── _common.py                   # ecommerce_scope, ecommerce_object, csv_safe, write_audit_log
@@ -156,6 +166,12 @@ apps/ecommerce/
 │   │   ├── PersonalizedExperiences.py # personalizedexperience CRUD + toggle
 │   │   ├── ShopperBehaviorEvents.py # shopperbehaviorevent list, detail, delete
 │   │   └── PersonalizationConsole.py # personalization_console, recommendation_simulate
+│   ├── Marketplace/
+│   │   ├── MarketplaceConsoleViews.py # marketplace_console
+│   │   ├── MarketplaceVendorViews.py # marketplacevendor CRUD + kyc, suspend
+│   │   ├── VendorProductListingViews.py # vendorproductlisting CRUD + moderate
+│   │   ├── VendorSubOrderViews.py   # vendorsuborder CRUD + fulfill, dispute
+│   │   └── VendorPayoutViews.py     # vendorpayout CRUD + execute
 │   └── __init__.py                  # Re-exports of all views
 ├── urls/
 │   ├── ProductCatalog/
@@ -203,6 +219,12 @@ apps/ecommerce/
 │   │   ├── PersonalizedExperiences.py # personalization/experiences/ paths
 │   │   ├── ShopperBehaviorEvents.py # personalization/telemetry/ paths
 │   │   └── PersonalizationConsole.py # personalization/console/ paths
+│   ├── Marketplace/
+│   │   ├── MarketplaceConsole.py    # marketplace/console/ path
+│   │   ├── MarketplaceVendors.py    # marketplace/vendors/ paths
+│   │   ├── VendorProductListings.py # marketplace/listings/ paths
+│   │   ├── VendorSubOrders.py       # marketplace/sub-orders/ paths
+│   │   └── VendorPayouts.py         # marketplace/payouts/ paths
 │   └── __init__.py                  # Concatenates all urlpatterns with app_name="ecommerce"
 ├── admin.py                         # Django admin registrations
 ├── apps.py                          # EcommerceConfig
@@ -285,6 +307,16 @@ apps/ecommerce/
 | `RecommendationStrategy` | `EREC-` | `name`, `code`, `algorithm`, `placement`, `fallback_strategy`, `max_items`, `min_rating`, `same_brand_only`, `only_in_stock`, `is_active` | `AudienceSegment` (`target_segment`), `StoreCategory` (`target_category`) | Bound validation (max_items 1-50, rating 0-5), multi-tenant FK assertion in `clean()` |
 | `PersonalizedExperience` | `EPEX-` | `name`, `experience_type`, `headline`, `subheadline`, `cta_label`, `cta_url`, `hero_image_url`, `trigger_delay_hours`, `priority`, `start_date`, `end_date`, `is_active`, metrics | `AudienceSegment` (`target_segment`), `StoreCategory` (`target_category`), `CatalogProduct` (`target_product`) | Safe URL scheme validation (rejects `javascript:`, `data:`, `vbscript:`), date boundary enforcement, multi-tenant FK assertion |
 | `ShopperBehaviorEvent` | `ESBE-` | `event_type`, `session_key`, `intent_score_delta`, `referrer_url`, `ip_address`, `user_agent`, `payload_json` | `CustomerAccountProfile` (`customer_profile`), `core.Party` (`party`), `auth.User` (`user`), `CatalogProduct` (`product`), `StoreCategory` (`category`) | Behavioral clickstream telemetry stream for collaborative filtering & intent tracking |
+
+---
+
+### Sub-module 9.11: Marketplace & Multi-Vendor
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `MarketplaceVendor` | `EMKV-` | `party`, `owner_user`, `store_name`, `slug`, `status`, `kyc_status`, `commission_type`, `commission_rate`, `fixed_fee_per_order`, `payout_method`, `payout_account_identifier`, `min_payout_amount`, `tax_id`, `tax_form_status`, `shipping_lead_time_days`, `return_policy`, `rating_average`, `rating_count`, `is_featured`, `suspension_reason` | `core.Party` (`party`), `auth.User` (`owner_user`) | `update_rating()`, `is_active_seller`, tenant isolation |
+| `VendorProductListing` | `EVPL-` | `vendor`, `product`, `variant`, `seller_sku`, `barcode`, `condition`, `condition_notes`, `asking_price`, `compare_at_price`, `cost_price`, `available_quantity`, `low_stock_threshold`, `lead_time_days`, `moderation_status`, `compliance_status`, `moderator_notes`, `rejection_reason`, `reviewed_by`, `is_active` | `MarketplaceVendor`, `CatalogProduct`, `ProductVariant`, `auth.User` (`reviewed_by`) | Cross-record variant/product match validation, non-negative pricing validation |
+| `VendorSubOrder` | `EVSO-` | `vendor`, `order`, `payout`, `fulfillment_status`, `sla_status`, `payout_status`, `subtotal_amount`, `shipping_amount`, `commission_rate`, `commission_amount`, `net_vendor_amount`, `carrier_name`, `tracking_number`, `tracking_url`, `promised_dispatch_date`, `dispatched_at`, `delivered_at`, `customer_rating`, `customer_feedback`, `dispute_status`, `dispute_reason` | `MarketplaceVendor`, `EcommerceOrder`, `VendorPayout` | `calculate_financials()`, `evaluate_sla()`, auto-triggers vendor rating recalculation |
+| `VendorPayout` | `EVPO-` | `vendor`, `period_start`, `period_end`, `gross_sales_amount`, `commission_deducted`, `fees_deducted`, `refunds_deducted`, `tax_withholding_amount`, `net_payout_amount`, `payout_method`, `payout_status`, `reference_code`, `tax_year`, `is_1099_reported`, `notes` | `MarketplaceVendor`, `auth.User` (`created_by`, `approved_by`) | `calculate_net()`, auto tax year assignment, atomic execution with suborder settlement |
 
 ---
 
@@ -517,6 +549,39 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 
 ---
 
+### 9.11 Marketplace Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `marketplace/console/` | `marketplace_console` | `marketplace_console` | Multi-vendor operational console & KPI queue |
+| `marketplace/vendors/` | `marketplacevendor_list` | `marketplacevendor_list` | Vendor seller directory & filter table |
+| `marketplace/vendors/create/` | `marketplacevendor_create` | `marketplacevendor_create` | Register new marketplace seller |
+| `marketplace/vendors/<int:pk>/` | `marketplacevendor_detail` | `marketplacevendor_detail` | Vendor dossier & related listings/orders/payouts |
+| `marketplace/vendors/<int:pk>/edit/` | `marketplacevendor_edit` | `marketplacevendor_edit` | Edit vendor commissions, terms & settings |
+| `marketplace/vendors/<int:pk>/delete/` | `marketplacevendor_delete` | `marketplacevendor_delete` | Terminate & remove vendor account |
+| `marketplace/vendors/<int:pk>/verify-kyc/` | `marketplacevendor_verify_kyc` | `marketplacevendor_verify_kyc` | KYC compliance verification approval action |
+| `marketplace/vendors/<int:pk>/suspend/` | `marketplacevendor_suspend` | `marketplacevendor_suspend` | Suspend vendor account with reason |
+| `marketplace/listings/` | `vendorproductlisting_list` | `vendorproductlisting_list` | Multi-vendor catalog listings & moderation filter |
+| `marketplace/listings/create/` | `vendorproductlisting_create` | `vendorproductlisting_create` | Create seller product listing |
+| `marketplace/listings/<int:pk>/` | `vendorproductlisting_detail` | `vendorproductlisting_detail` | Listing detail & compliance view |
+| `marketplace/listings/<int:pk>/edit/` | `vendorproductlisting_edit` | `vendorproductlisting_edit` | Edit pricing, stock & condition |
+| `marketplace/listings/<int:pk>/delete/` | `vendorproductlisting_delete` | `vendorproductlisting_delete` | Delete seller listing |
+| `marketplace/listings/<int:pk>/moderate/` | `vendorproductlisting_moderate` | `vendorproductlisting_moderate` | Approve, reject, or request changes on listing |
+| `marketplace/sub-orders/` | `vendorsuborder_list` | `vendorsuborder_list` | Consignment sub-orders fulfillment & SLA table |
+| `marketplace/sub-orders/create/` | `vendorsuborder_create` | `vendorsuborder_create` | Manual consignment sub-order creation |
+| `marketplace/sub-orders/<int:pk>/` | `vendorsuborder_detail` | `vendorsuborder_detail` | Sub-order consignment detail & order lines |
+| `marketplace/sub-orders/<int:pk>/edit/` | `vendorsuborder_edit` | `vendorsuborder_edit` | Update sub-order details |
+| `marketplace/sub-orders/<int:pk>/delete/` | `vendorsuborder_delete` | `vendorsuborder_delete` | Delete consignment sub-order |
+| `marketplace/sub-orders/<int:pk>/fulfill/` | `vendorsuborder_fulfill` | `vendorsuborder_fulfill` | Update tracking & mark dispatched |
+| `marketplace/sub-orders/<int:pk>/dispute/` | `vendorsuborder_dispute` | `vendorsuborder_dispute` | Record buyer dispute & withhold settlement |
+| `marketplace/payouts/` | `vendorpayout_list` | `vendorpayout_list` | Disbursement payout batches table |
+| `marketplace/payouts/create/` | `vendorpayout_create` | `vendorpayout_create` | Create new payout batch settlement |
+| `marketplace/payouts/<int:pk>/` | `vendorpayout_detail` | `vendorpayout_detail` | Payout breakdown & settled sub-orders |
+| `marketplace/payouts/<int:pk>/edit/` | `vendorpayout_edit` | `vendorpayout_edit` | Edit payout deductions & details |
+| `marketplace/payouts/<int:pk>/delete/` | `vendorpayout_delete` | `vendorpayout_delete` | Delete draft payout batch & reset sub-orders |
+| `marketplace/payouts/<int:pk>/execute/` | `vendorpayout_execute` | `vendorpayout_execute` | Execute disbursement & mark sub-orders paid |
+
+---
+
 ## 4. Templates & Design System
 
 Templates are stored under `templates/ecommerce/`:
@@ -561,6 +626,13 @@ Templates are stored under `templates/ecommerce/`:
   - `personalizedexperience/` — `list.html` (with campaign type badges and CTR meters), `detail.html` (with hero artwork preview, audience cohort link, and conversion counters), `form.html`.
   - `shopperbehaviorevent/` — `list.html` (telemetry table with event type badges and simulator shortcut), `detail.html` (with JSON payload inspector).
   - `console/` — `workbench.html` (Personalization Console: VIP counts, cart triggers, 24h event volume, interactive recommendation simulator, and active campaign ribbon preview), `partials/recommendations_preview.html` (HTMX recommendation cards with artwork and rating stars).
+
+- `marketplace/`
+  - `console/` — `dashboard.html` (Marketplace Console: active sellers, pending KYC queue, pending moderation listings, SLA breach alerts, active disputes, unpaid payout volume).
+  - `marketplacevendor/` — `list.html` (seller directory, status/kyc/tier filter dropdowns), `detail.html` (vendor dossier, listings tab, sub-orders, payout history, customer disputes table), `form.html` (25 fields with explicit label-for associations).
+  - `vendorproductlisting/` — `list.html` (listing cards & filter table, condition/moderation filters), `detail.html` (pricing breakdown, condition badges, catalog product link, moderation action modal), `form.html`.
+  - `vendorsuborder/` — `list.html` (consignment orders, SLA status badges, fulfillment badges, payout status dropdown filter), `detail.html` (order summary, customer card, order lines table, carrier fulfillment action, dispute resolution modal), `form.html`.
+  - `vendorpayout/` — `list.html` (payout batches, gateway methods, disbursement status badges), `detail.html` (financial volume, commission retained, net payout calculation, settled sub-orders table, execute disbursement modal), `form.html`.
 
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
@@ -612,6 +684,10 @@ The command provisions:
 - 4 Recommendation Strategies: PDP Related Products (Content-Based), Cart Cross-Sell Frequently Bought Together (Co-occurrence), Homepage Trending & Popular, and Category Best Sellers.
 - 3 Personalized Experiences: VIP Homepage Hero Takeover, Cart Abandonment Recovery Popup, and Audio Category Spotlight Ribbon.
 - 10 Shopper Behavior Events: Page views, PDP product inspections, cart additions, search queries, and category browses with realistic intent scores.
+- 4 Marketplace Vendors: Apex Tech Gear (verified/active), Bloom Organics (verified/active), Artisan Crafts (verified/active), and Nordic Living (pending KYC verification).
+- 8 Vendor Product Listings: New and refurbished variants with asking prices, seller SKUs, and inventory allocations.
+- 6 Vendor Sub-Orders: Consignment allocations with carrier dispatch tracking, SLA status tracking, customer ratings, and dispute simulation.
+- 3 Vendor Payout Batches: Settled earnings periods covering volume, platform commissions, gateway fees, and net disbursements.
 - All demo data is scoped to tenant `acme`.
 
 ---
@@ -645,6 +721,15 @@ The command provisions:
     - Right-to-erasure workflows de-identify personal customer profiles, revoke marketing consents, deactivate associated authentication users (`user.is_active = False`), and privatize public wishlists in atomic transactions.
 11. **Search Discovery Merchandising & Deduplication**:
     - Reverse FK price sorting (`variants__price`) must be annotated via `Min("variants__price")` before ordering to avoid row duplication and PostgreSQL `SELECT DISTINCT` ordering exceptions. Pinned products in merchandising rules verify `status == "active"` before insertion into rank slots.
+
+---
+
+12. **Cross-Record Marketplace Alignment**:
+    - In `VendorSubOrder`, `payout.vendor_id` must match `vendor_id`. In `VendorProductListing`, `variant.product_id` must match `product_id`. Workflow status fields (`payout_status`, `moderation_status`, `compliance_status`) are excluded from CRUD forms to enforce authorized action transitions.
+13. **Atomic Financial Settlements & Dispute Safeguards**:
+    - `vendorpayout_execute`, `vendorpayout_delete`, and `vendorsuborder_dispute` are wrapped in `@transaction.atomic`. Payout execution excludes `withheld_dispute` and `refunded` sub-orders to prevent accidental disbursements.
+14. **AuditLog Verb Length Limit**:
+    - Audit log action strings must not exceed 10 characters (e.g. use 'dispute', 'execute', 'moderate', 'suspend'). Full details are passed in the changes payload dictionary.
 
 ---
 
@@ -700,6 +785,13 @@ LIVE_LINKS["9.7"] = {
     "Faceted Search Configuration": "ecommerce:searchfacetconfig_list",
     "Visual Merchandising Rules": "ecommerce:searchmerchandisingrule_list",
     "Search Query Telemetry Logs": "ecommerce:searchquerylog_list",
+}
+LIVE_LINKS["9.11"] = {
+    "Marketplace Console": "ecommerce:marketplace_console",
+    "Seller Directory": "ecommerce:marketplacevendor_list",
+    "Vendor Listings": "ecommerce:vendorproductlisting_list",
+    "Consignment Orders": "ecommerce:vendorsuborder_list",
+    "Vendor Payouts": "ecommerce:vendorpayout_list",
 }
 ```
 Appears under the eCommerce section of the primary navigation bar.
