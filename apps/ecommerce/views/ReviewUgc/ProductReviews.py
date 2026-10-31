@@ -89,12 +89,11 @@ def productreview_create(request):
             review.tenant = request.tenant
             review.save()
             write_audit_log(
+                request.user,
+                review,
+                "create",
+                {"number": review.number, "product": review.product.name, "rating": review.rating},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="ProductReview",
-                object_id=review.pk,
-                changes={"number": review.number, "product": review.product.name, "rating": review.rating},
             )
             messages.success(request, f"Review {review.number} submitted successfully.")
             return redirect("ecommerce:productreview_detail", pk=review.pk)
@@ -116,12 +115,11 @@ def productreview_edit(request, pk):
         if form.is_valid():
             review = form.save()
             write_audit_log(
+                request.user,
+                review,
+                "update",
+                {"status": review.status, "rating": review.rating},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="ProductReview",
-                object_id=review.pk,
-                changes={"status": review.status, "rating": review.rating},
             )
             messages.success(request, f"Review {review.number} updated successfully.")
             return redirect("ecommerce:productreview_detail", pk=review.pk)
@@ -143,12 +141,11 @@ def productreview_delete(request, pk):
     review_pk = review.pk
     review.delete()
     write_audit_log(
+        request.user,
+        review,
+        "delete",
+        {"number": number},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="ProductReview",
-        object_id=review_pk,
-        changes={"number": number},
     )
     messages.success(request, f"Review {number} deleted.")
     return redirect("ecommerce:productreview_list")
@@ -166,12 +163,11 @@ def productreview_moderate(request, pk):
                 review.merchant_response_at = timezone.now()
             review.save()
             write_audit_log(
+                request.user,
+                review,
+                "moderate",
+                {"status": review.status, "moderation_note": review.moderation_note},
                 tenant=request.tenant,
-                user=request.user,
-                action="moderate",
-                model_name="ProductReview",
-                object_id=review.pk,
-                changes={"status": review.status, "moderation_note": review.moderation_note},
             )
             messages.success(request, f"Review {review.number} moderation status updated.")
             return redirect("ecommerce:productreview_detail", pk=review.pk)
