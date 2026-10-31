@@ -66,7 +66,7 @@ def productquestionanswer_detail(request, pk):
         request,
         ProductQuestionAnswer,
         pk,
-        select_related=("product", "customer", "answered_by_user"),
+        select_related=("product", "customer__customer", "answered_by_user"),
     )
     return render(
         request,
