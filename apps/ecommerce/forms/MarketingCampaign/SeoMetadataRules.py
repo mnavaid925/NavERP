@@ -91,4 +91,9 @@ class SeoMetadataRuleForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["target_category", "target_product"])
+
+        priority = cleaned_data.get("sitemap_priority")
+        if priority is not None and (priority < 0 or priority > 1):
+            self.add_error("sitemap_priority", "Sitemap priority must be between 0.00 and 1.00.")
+
         return cleaned_data
