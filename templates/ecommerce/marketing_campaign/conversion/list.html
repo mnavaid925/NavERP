@@ -131,7 +131,7 @@
                 {% elif item.status == 'paid' %}
                   <span class="badge badge-info">Paid</span>
                 {% else %}
-                  <span class="badge badge-red">Voided / Refund</span>
+                  <span class="badge badge-red">{{ item.get_status_display }}</span>
                 {% endif %}
               </td>
               <td class="py-3 px-4 text-center">
