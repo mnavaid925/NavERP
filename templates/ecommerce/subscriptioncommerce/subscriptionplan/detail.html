@@ -21,7 +21,15 @@
         {% else %}
           <span class="badge badge-slate">Inactive</span>
         {% endif %}
-        <span class="badge badge-info">{{ plan.get_plan_type_display }}</span>
+        {% if plan.plan_type == 'subscribe_save' %}
+          <span class="badge badge-info">{{ plan.get_plan_type_display }}</span>
+        {% elif plan.plan_type == 'curated_box' %}
+          <span class="badge badge-green">{{ plan.get_plan_type_display }}</span>
+        {% elif plan.plan_type == 'membership_club' %}
+          <span class="badge badge-amber">{{ plan.get_plan_type_display }}</span>
+        {% else %}
+          <span class="badge badge-slate">{{ plan.get_plan_type_display }}</span>
+        {% endif %}
       </div>
       <p class="text-sm text-slate-500 font-mono mt-1">Code: {{ plan.code }} · Number: {{ plan.number }}</p>
     </div>
