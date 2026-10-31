@@ -121,7 +121,7 @@ class AffiliateReferralConversion(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"Conversion {self.number or 'draft'} ({self.affiliate.name} - Order {self.order.number})"
+        return f"Conversion {self.number or 'draft'}"
 
     def clean(self):
         super().clean()
