@@ -134,6 +134,7 @@ def productreview_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def productreview_delete(request, pk):
     review = ecommerce_object(request, ProductReview, pk)
@@ -152,6 +153,7 @@ def productreview_delete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def productreview_moderate(request, pk):
     review = ecommerce_object(request, ProductReview, pk)
     if request.method == "POST":
