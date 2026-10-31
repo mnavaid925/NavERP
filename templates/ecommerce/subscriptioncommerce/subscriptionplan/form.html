@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit {{ plan.name }}{% else %}New Subscription Plan{% endif %} · NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex items-center justify-between">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:subscriptionplan_list' %}" class="hover:text-blue-600">Subscription Plans</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{% if is_edit %}Edit Plan{% else %}New Plan{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">
+        {% if is_edit %}Edit Subscription Plan: {{ plan.name }}{% else %}Create Subscription Plan{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Configure recurring intervals, discounts, free trial duration, and customer self-service permissions.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if is_edit %}{% url 'ecommerce:subscriptionplan_detail' plan.pk %}{% else %}{% url 'ecommerce:subscriptionplan_list' %}{% endif %}" class="btn btn-outline">
+        Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.name.id_for_label }}">
+            Plan Name <span class="text-red-500">*</span>
+          </label>
+          {{ form.name }}
+          {% if form.name.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.name.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.code.id_for_label }}">
+            Machine Identifier / Slug <span class="text-red-500">*</span>
+          </label>
+          {{ form.code }}
+          {% if form.code.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.code.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.plan_type.id_for_label }}">
+            Plan Archetype
+          </label>
+          {{ form.plan_type }}
+          {% if form.plan_type.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.plan_type.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.frequency.id_for_label }}">
+            Cadence Frequency
+          </label>
+          {{ form.frequency }}
+          {% if form.frequency.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.frequency.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.interval_count.id_for_label }}">
+            Interval Multiplier
+          </label>
+          {{ form.interval_count }}
+          {% if form.interval_count.errors %}
+            <p class="form-error text-xs text-red-600 mt-1">{{ form.interval_count.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="border-t border-slate-200 pt-5">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Incentive Discount & Pricing</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.discount_type.id_for_label }}">
+              Discount Type
+            </label>
+            {{ form.discount_type }}
+            {% if form.discount_type.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.discount_type.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.discount_value.id_for_label }}">
+              Discount Value (% or $)
+            </label>
+            {{ form.discount_value }}
+            {% if form.discount_value.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.discount_value.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-slate-200 pt-5">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Trial & Commitment Rules</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.trial_period_days.id_for_label }}">
+              Free Trial Duration (Days)
+            </label>
+            {{ form.trial_period_days }}
+            {% if form.trial_period_days.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.trial_period_days.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.min_commitment_cycles.id_for_label }}">
+              Minimum Commitment Cycles
+            </label>
+            {{ form.min_commitment_cycles }}
+            {% if form.min_commitment_cycles.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.min_commitment_cycles.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-slate-200 pt-5">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Self-Service Permissions & Default Product</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.target_product.id_for_label }}">
+              Target Catalog Product (Optional)
+            </label>
+            {{ form.target_product }}
+            {% if form.target_product.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.target_product.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.max_pause_days.id_for_label }}">
+              Max Allowed Consecutive Pause Days
+            </label>
+            {{ form.max_pause_days }}
+            {% if form.max_pause_days.errors %}
+              <p class="form-error text-xs text-red-600 mt-1">{{ form.max_pause_days.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-6 mt-4">
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            {{ form.allow_pause }}
+            <span class="text-sm font-medium text-slate-700">Allow Customer to Pause</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            {{ form.allow_skip }}
+            <span class="text-sm font-medium text-slate-700">Allow Customer to Skip Cycle</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            {{ form.allow_swap }}
+            <span class="text-sm font-medium text-slate-700">Allow Product / Variant Swap</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            {{ form.is_active }}
+            <span class="text-sm font-medium text-slate-700">Plan Is Active</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group border-t border-slate-200 pt-5">
+        <label class="form-label block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1" for="{{ form.description.id_for_label }}">
+          Operational & Customer Notes
+        </label>
+        {{ form.description }}
+        {% if form.description.errors %}
+          <p class="form-error text-xs text-red-600 mt-1">{{ form.description.errors.0 }}</p>
+        {% endif %}
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'ecommerce:subscriptionplan_detail' plan.pk %}{% else %}{% url 'ecommerce:subscriptionplan_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          {% if is_edit %}Save Changes{% else %}Create Plan{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
