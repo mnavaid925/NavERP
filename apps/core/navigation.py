@@ -2771,6 +2771,18 @@ LIVE_LINKS = {
         "Box Curations": "ecommerce:subscriptionboxcuration_list",
         "Retention Actions": "ecommerce:subscriptionretentionaction_list",
     },
+    "9.13": {
+        "Review Collection & Moderation": "ecommerce:productreview_list",
+        "Rating Aggregation & Display": "ecommerce:reviewsentimentsummary_list",
+        "Q&A & Community Forums": "ecommerce:productquestionanswer_list",
+        "Visual UGC & Social Proof": "ecommerce:visualugcmedia_list",
+        "Review Analytics & Sentiment": "ecommerce:reviewsentimentsummary_list",
+        # Extra live leaves
+        "Product Reviews": "ecommerce:productreview_list",
+        "Product Q&A": "ecommerce:productquestionanswer_list",
+        "Visual UGC": "ecommerce:visualugcmedia_list",
+        "Sentiment Analytics": "ecommerce:reviewsentimentsummary_list",
+    },
 
 
 
