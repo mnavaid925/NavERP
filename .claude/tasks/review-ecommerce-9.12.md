@@ -16,8 +16,7 @@ Reviewers executed serially:
 ## Critical Findings
 
 - [x] **[C1]** `apps/ecommerce/forms/SubscriptionCommerce/CustomerSubscriptions.py:23` — fixed — excluded started_at from CustomerSubscriptionForm fields
-- [ ] **[C2]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:47-196` — Missing `@transaction.atomic` on mutating portal endpoints (`subscription_portal_skip`, `subscription_portal_pause`, `subscription_portal_deflect`). Multi-model writes risk inconsistent state if retention action creation fails.
-  - **Fix**: Wrap mutations with `@transaction.atomic`.
+- [x] **[C2]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:47-196` — fixed — wrapped mutating portal endpoints in atomic transactions
 - [ ] **[C3]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:23-33` — Python-side loop for Monthly Recurring Revenue (MRR) calculation and unbounded in-memory evaluation of `active_subscriptions`. Violates Rule 5 (derived balances/KPIs via DB aggregate, never Python loops).
   - **Fix**: Aggregate MRR via database `aggregate(Sum(Case(When(...))))`.
 
