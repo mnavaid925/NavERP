@@ -89,8 +89,8 @@
                 <div class="text-xs text-slate-400 font-sans mt-0.5">${{ sub.recurring_total }} / cycle</div>
               </td>
               <td class="py-3 px-4">
-                <div class="font-medium text-slate-800">{{ sub.customer_profile.customer_name|default:sub.customer_profile.email }}</div>
-                <div class="text-xs text-slate-400">{{ sub.customer_profile.email }}</div>
+                <div class="font-medium text-slate-800">{{ sub.customer_profile.customer.name|default:sub.customer_profile.number }}</div>
+                <div class="text-xs text-slate-400">{{ sub.customer_profile.user.email|default:sub.customer_profile.number }}</div>
               </td>
               <td class="py-3 px-4">
                 <div class="font-medium text-slate-800">{{ sub.product.name }}</div>
@@ -223,7 +223,7 @@
                 <td class="py-2.5 px-4 font-mono font-medium text-blue-600">
                   <a href="{% url 'ecommerce:customersubscription_detail' psub.pk %}">{{ psub.number }}</a>
                 </td>
-                <td class="py-2.5 px-4">{{ psub.customer_profile.customer_name|default:psub.customer_profile.email }}</td>
+                <td class="py-2.5 px-4">{{ psub.customer_profile.customer.name|default:psub.customer_profile.number }}</td>
                 <td class="py-2.5 px-4">{{ psub.product.name }}</td>
                 <td class="py-2.5 px-4 text-amber-700 font-medium">{{ psub.paused_until|default:"Indefinite hold" }}</td>
                 <td class="py-2.5 px-4 text-right">
