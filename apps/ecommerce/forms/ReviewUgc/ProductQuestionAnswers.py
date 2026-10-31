@@ -49,7 +49,7 @@ class ProductQuestionAnswerForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["product"].queryset = CatalogProduct.objects.filter(tenant=self.tenant)
-            self.fields["customer"].queryset = CustomerAccountProfile.objects.filter(tenant=self.tenant)
+            self.fields["customer"].queryset = CustomerAccountProfile.objects.filter(tenant=self.tenant).select_related("customer")
         self.fields["customer"].required = False
         self.fields["answer_text"].required = False
 
