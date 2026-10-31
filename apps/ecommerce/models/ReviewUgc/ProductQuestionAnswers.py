@@ -51,6 +51,7 @@ class ProductQuestionAnswer(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_epqa_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "status"], name="idx_epqa_ten_stat"),
             models.Index(fields=["tenant", "product", "status"], name="idx_epqa_ten_prod_stat"),
             models.Index(fields=["tenant", "is_pinned"], name="idx_epqa_ten_pinned"),
         ]
