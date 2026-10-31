@@ -59,4 +59,13 @@ class AffiliateReferralConversionForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["affiliate", "order", "referred_customer"])
+
+        order_amount = cleaned_data.get("order_amount")
+        if order_amount is not None and order_amount < 0:
+            self.add_error("order_amount", "Order amount must be greater than or equal to 0.00.")
+
+        commission_rate = cleaned_data.get("commission_rate_applied")
+        if commission_rate is not None and commission_rate < 0:
+            self.add_error("commission_rate_applied", "Commission rate must be greater than or equal to 0.00.")
+
         return cleaned_data
