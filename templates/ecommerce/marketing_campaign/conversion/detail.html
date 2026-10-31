@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Conversion {{ conversion.number }} · Marketing Campaigns · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketing_dashboard' %}" class="hover:text-blue-600">Marketing & Campaigns</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:affiliatereferralconversion_list' %}" class="hover:text-blue-600">Conversions</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ conversion.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">Referral Conversion {{ conversion.number }}</h1>
+        {% if conversion.status == 'approved' %}
+          <span class="badge badge-green">Approved</span>
+        {% elif conversion.status == 'pending_review' %}
+          <span class="badge badge-amber">Pending Review</span>
+        {% elif conversion.status == 'paid' %}
+          <span class="badge badge-info">Paid</span>
+        {% else %}
+          <span class="badge badge-red">Voided / Refund</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1 font-mono">
+        Credited to: {{ conversion.affiliate.name }} · Order: {{ conversion.order.number }} · Logged: {{ conversion.created_at|date:"M d, Y H:i" }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      {% if conversion.status == 'pending_review' %}
+        <form method="post" action="{% url 'ecommerce:affiliatereferralconversion_approve' conversion.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Approve Conversion</span>
+          </button>
+        </form>
+      {% endif %}
+      {% if conversion.status != 'voided_refund' %}
+        <form method="post" action="{% url 'ecommerce:affiliatereferralconversion_void' conversion.pk %}" onsubmit="return confirm('Void this commission due to order return or cancellation?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger inline-flex items-center gap-2">
+            <i data-lucide="x-circle" class="w-4 h-4"></i>
+            <span>Void / Clawback</span>
+          </button>
+        </form>
+      {% endif %}
+      <a href="{% url 'ecommerce:affiliatereferralconversion_edit' conversion.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+      <a href="{% url 'ecommerce:affiliatereferralconversion_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to List</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Metric Stat Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon blue w-12 h-12 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+        <i data-lucide="shopping-bag" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Eligible Order Amount</div>
+        <div class="text-xl font-bold text-slate-900 mt-0.5">${{ conversion.order_amount }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">Order # {{ conversion.order.number }}</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon purple w-12 h-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+        <i data-lucide="percent" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Commission Applied</div>
+        <div class="text-xl font-bold text-slate-900 mt-0.5">{{ conversion.commission_rate_applied }}%</div>
+        <div class="text-xs text-slate-500 mt-0.5">Rate locked at checkout</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon green w-12 h-12 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+        <i data-lucide="dollar-sign" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Commission Amount</div>
+        <div class="text-xl font-bold text-emerald-700 mt-0.5">${{ conversion.commission_amount }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">{{ conversion.get_attribution_type_display }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Partner & Attribution Info -->
+    <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <h2 class="text-base font-semibold text-slate-900">Attribution Parameters</h2>
+      </div>
+      <div class="card-body p-5 space-y-4 text-sm">
+        <div>
+          <div class="text-xs font-medium text-slate-500 uppercase">Affiliate Partner</div>
+          <div class="font-medium text-slate-800 mt-0.5">
+            <a href="{% url 'ecommerce:affiliatepartner_detail' conversion.affiliate.pk %}" class="text-blue-600 hover:underline">
+              {{ conversion.affiliate.name }}
+            </a>
+            <span class="font-mono text-xs text-slate-500 ml-1">({{ conversion.affiliate.referral_code }})</span>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-medium text-slate-500 uppercase">Referred Store Order</div>
+          <div class="font-mono text-slate-800 mt-0.5">
+            {{ conversion.order.number }}
+            <span class="text-slate-400 font-sans ml-1">({{ conversion.order.created_at|date:"M d, Y" }})</span>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-medium text-slate-500 uppercase">Referred Shopper Profile</div>
+          <div class="text-slate-800 mt-0.5">
+            {% if conversion.referred_customer %}
+              <a href="{% url 'ecommerce:customerprofile_detail' conversion.referred_customer.pk %}" class="text-blue-600 hover:underline">
+                {{ conversion.referred_customer.user.username }}
+              </a>
+            {% else %}
+              <span class="text-slate-500 italic">Guest Checkout Shopper</span>
+            {% endif %}
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-medium text-slate-500 uppercase">Attribution Mechanism</div>
+          <div class="font-medium text-slate-800 mt-0.5">{{ conversion.get_attribution_type_display }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Payout Status & Audit Notes -->
+    <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+      <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <h2 class="text-base font-semibold text-slate-900">Remittance & Audit Details</h2>
+      </div>
+      <div class="card-body p-5 space-y-4 text-sm">
+        <div>
+          <div class="text-xs font-medium text-slate-500 uppercase">Remittance Status</div>
+          <div class="font-medium text-slate-800 mt-0.5">{{ conversion.get_status_display }}</div>
+        </div>
+        <div>
+          <div class="text-xs font-medium text-slate-500 uppercase">Payout Voucher Reference</div>
+          <div class="font-mono text-slate-800 mt-0.5">{{ conversion.payout_reference|default:"Pending remittance batch" }}</div>
+        </div>
+        <div>
+          <div class="text-xs font-medium text-slate-500 uppercase">Disbursement Timestamp</div>
+          <div class="text-slate-700 mt-0.5">
+            {% if conversion.paid_at %}
+              {{ conversion.paid_at|date:"M d, Y H:i" }}
+            {% else %}
+              <span class="text-slate-400 italic">Unpaid</span>
+            {% endif %}
+          </div>
+        </div>
+        {% if conversion.notes %}
+          <div class="pt-2 border-t border-slate-100">
+            <div class="text-xs font-medium text-slate-500 uppercase mb-1">Notes & Clawback Audit</div>
+            <div class="p-3 bg-slate-50 rounded text-xs text-slate-700 font-mono whitespace-pre-line">
+              {{ conversion.notes }}
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
