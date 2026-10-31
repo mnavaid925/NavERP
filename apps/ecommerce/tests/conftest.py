@@ -52,6 +52,10 @@ from apps.ecommerce.models import (
     CustomerSubscription,
     SubscriptionBoxCuration,
     SubscriptionRetentionAction,
+    ProductReview,
+    ProductQuestionAnswer,
+    VisualUgcMedia,
+    ReviewSentimentSummary,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -2765,6 +2769,236 @@ def ecom_retention_action_a(tenant_a, ecom_customer_subscription_a):
 @pytest.fixture
 def ecom_retention_action_b(tenant_b, ecom_customer_subscription_b):
     return _subscription_retention(tenant_b, ecom_customer_subscription_b)
+
+
+# ==============================================================================
+# SUB-MODULE 9.13 — REVIEWS & USER-GENERATED CONTENT (CONTRACT & FIXTURES)
+# ==============================================================================
+
+REVIEWUGC_PAGE_SIZE = 20
+
+REVIEWUGC_MODEL_FIELDS = {
+    "ProductReview": (
+        "id", "tenant", "number", "product", "variant", "customer", "order",
+        "reviewer_name", "reviewer_email", "rating", "title", "body", "status",
+        "sentiment", "sentiment_score", "is_verified_purchase", "is_featured",
+        "media_urls", "helpful_votes", "unhelpful_votes", "merchant_response",
+        "merchant_response_at", "moderated_by", "moderation_note",
+        "created_at", "updated_at",
+    ),
+    "ProductQuestionAnswer": (
+        "id", "tenant", "number", "product", "author_name", "author_email",
+        "customer", "question_text", "status", "answer_text", "answered_by_name",
+        "is_staff_answer", "answered_by_user", "answered_at", "helpful_votes",
+        "is_pinned", "created_at", "updated_at",
+    ),
+    "VisualUgcMedia": (
+        "id", "tenant", "number", "media_type", "media_url", "thumbnail_url",
+        "caption", "uploader_name", "uploader_handle", "tagged_product",
+        "tagged_variant", "rights_status", "is_shoppable", "is_published",
+        "display_order", "views_count", "clicks_count", "created_at", "updated_at",
+    ),
+    "ReviewSentimentSummary": (
+        "id", "tenant", "number", "product", "total_reviews", "average_rating",
+        "rating_5_count", "rating_4_count", "rating_3_count", "rating_2_count",
+        "rating_1_count", "positive_sentiment_pct", "neutral_sentiment_pct",
+        "negative_sentiment_pct", "top_positive_keywords", "top_negative_keywords",
+        "improvement_recommendation", "last_calculated_at", "created_at", "updated_at",
+    ),
+}
+
+REVIEWUGC_CHOICES = {
+    "ProductReview": {
+        "rating": ((1, "1 Star - Poor"), (2, "2 Stars - Fair"), (3, "3 Stars - Good"), (4, "4 Stars - Very Good"), (5, "5 Stars - Excellent")),
+        "status": (("pending", "Pending Moderation"), ("approved", "Approved"), ("rejected", "Rejected"), ("flagged_spam", "Flagged as Spam")),
+        "sentiment": (("positive", "Positive"), ("neutral", "Neutral"), ("negative", "Negative"), ("mixed", "Mixed")),
+    },
+    "ProductQuestionAnswer": {
+        "status": (("pending", "Pending Moderation"), ("approved", "Approved"), ("rejected", "Rejected")),
+    },
+    "VisualUgcMedia": {
+        "media_type": (("photo", "Customer Photo"), ("video", "Customer Video"), ("instagram", "Instagram Post"), ("tiktok", "TikTok Video")),
+        "rights_status": (("approved", "Rights Approved / Uploaded"), ("pending_request", "Rights Requested"), ("rejected", "Rejected / No Rights")),
+    },
+}
+
+REVIEWUGC_URL_NAMES = {
+    "ProductReview": {
+        "list": "ecommerce:productreview_list",
+        "create": "ecommerce:productreview_create",
+        "detail": "ecommerce:productreview_detail",
+        "edit": "ecommerce:productreview_edit",
+        "delete": "ecommerce:productreview_delete",
+        "moderate": "ecommerce:productreview_moderate",
+    },
+    "ProductQuestionAnswer": {
+        "list": "ecommerce:productquestionanswer_list",
+        "create": "ecommerce:productquestionanswer_create",
+        "detail": "ecommerce:productquestionanswer_detail",
+        "edit": "ecommerce:productquestionanswer_edit",
+        "delete": "ecommerce:productquestionanswer_delete",
+        "respond": "ecommerce:productquestionanswer_respond",
+    },
+    "VisualUgcMedia": {
+        "list": "ecommerce:visualugcmedia_list",
+        "create": "ecommerce:visualugcmedia_create",
+        "detail": "ecommerce:visualugcmedia_detail",
+        "edit": "ecommerce:visualugcmedia_edit",
+        "delete": "ecommerce:visualugcmedia_delete",
+    },
+    "ReviewSentimentSummary": {
+        "list": "ecommerce:reviewsentimentsummary_list",
+        "create": "ecommerce:reviewsentimentsummary_create",
+        "detail": "ecommerce:reviewsentimentsummary_detail",
+        "edit": "ecommerce:reviewsentimentsummary_edit",
+        "delete": "ecommerce:reviewsentimentsummary_delete",
+        "recalculate": "ecommerce:reviewsentimentsummary_recalculate",
+    },
+}
+
+REVIEWUGC_CONTEXT_KEYS = {
+    "ProductReview": {
+        "list": ["page_obj", "reviews", "total_reviews", "pending_count", "approved_count", "rating_choices", "status_choices", "sentiment_choices", "products"],
+        "detail": ["review"],
+        "form": ["form"],
+        "moderate": ["review", "form"],
+    },
+    "ProductQuestionAnswer": {
+        "list": ["page_obj", "questions", "total_questions", "pending_count", "answered_count", "status_choices", "products"],
+        "detail": ["question"],
+        "form": ["form"],
+        "respond": ["question", "form"],
+    },
+    "VisualUgcMedia": {
+        "list": ["page_obj", "media_items", "total_items", "approved_count", "pending_count", "media_type_choices", "rights_status_choices", "products"],
+        "detail": ["media_item"],
+        "form": ["form"],
+    },
+    "ReviewSentimentSummary": {
+        "list": ["page_obj", "summaries", "total_summaries", "products"],
+        "detail": ["summary"],
+        "form": ["form"],
+    },
+}
+
+
+def _reviewugc_product_review(tenant, product, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "product": product,
+        "reviewer_name": "Test Customer",
+        "reviewer_email": "reviewer@example.com",
+        "rating": 5,
+        "title": "Outstanding Product!",
+        "body": "Really impressed with the quality and performance.",
+        "status": "approved",
+        "sentiment": "positive",
+        "sentiment_score": Decimal("0.85"),
+        "is_verified_purchase": True,
+        "is_featured": False,
+        "helpful_votes": 3,
+        "unhelpful_votes": 0,
+    }
+    defaults.update(overrides)
+    return ProductReview.objects.create(**defaults)
+
+
+def _reviewugc_question_answer(tenant, product, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "product": product,
+        "author_name": "Prospective Buyer",
+        "author_email": "inquiry@example.com",
+        "question_text": "Is this product dishwasher safe?",
+        "status": "approved",
+        "answer_text": "Yes, it is 100% dishwasher safe.",
+        "answered_by_name": "Staff Support",
+        "is_staff_answer": True,
+        "helpful_votes": 2,
+    }
+    defaults.update(overrides)
+    return ProductQuestionAnswer.objects.create(**defaults)
+
+
+def _reviewugc_visual_ugc(tenant, product, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "tagged_product": product,
+        "media_type": "photo",
+        "media_url": "https://images.unsplash.com/photo-1542291026-7eec264c27ff",
+        "thumbnail_url": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=150",
+        "caption": "Loving my new product! #shopping",
+        "uploader_name": "Creative Fan",
+        "uploader_handle": "@creativefan",
+        "rights_status": "approved",
+        "is_shoppable": True,
+        "is_published": True,
+        "display_order": 10,
+    }
+    defaults.update(overrides)
+    return VisualUgcMedia.objects.create(**defaults)
+
+
+def _reviewugc_sentiment_summary(tenant, product, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "product": product,
+        "total_reviews": 10,
+        "average_rating": Decimal("4.60"),
+        "rating_5_count": 7,
+        "rating_4_count": 2,
+        "rating_3_count": 1,
+        "rating_2_count": 0,
+        "rating_1_count": 0,
+        "positive_sentiment_pct": Decimal("80.00"),
+        "neutral_sentiment_pct": Decimal("20.00"),
+        "negative_sentiment_pct": Decimal("0.00"),
+        "top_positive_keywords": ["durable", "easy to use", "great value"],
+        "top_negative_keywords": [],
+        "improvement_recommendation": "Maintain high quality standards.",
+    }
+    defaults.update(overrides)
+    return ReviewSentimentSummary.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_reviewugc_review_a(tenant_a, ecom_product_a):
+    return _reviewugc_product_review(tenant_a, ecom_product_a)
+
+
+@pytest.fixture
+def ecom_reviewugc_review_b(tenant_b, ecom_product_b):
+    return _reviewugc_product_review(tenant_b, ecom_product_b)
+
+
+@pytest.fixture
+def ecom_reviewugc_qa_a(tenant_a, ecom_product_a):
+    return _reviewugc_question_answer(tenant_a, ecom_product_a)
+
+
+@pytest.fixture
+def ecom_reviewugc_qa_b(tenant_b, ecom_product_b):
+    return _reviewugc_question_answer(tenant_b, ecom_product_b)
+
+
+@pytest.fixture
+def ecom_reviewugc_ugc_a(tenant_a, ecom_product_a):
+    return _reviewugc_visual_ugc(tenant_a, ecom_product_a)
+
+
+@pytest.fixture
+def ecom_reviewugc_ugc_b(tenant_b, ecom_product_b):
+    return _reviewugc_visual_ugc(tenant_b, ecom_product_b)
+
+
+@pytest.fixture
+def ecom_reviewugc_summary_a(tenant_a, ecom_product_a):
+    return _reviewugc_sentiment_summary(tenant_a, ecom_product_a)
+
+
+@pytest.fixture
+def ecom_reviewugc_summary_b(tenant_b, ecom_product_b):
+    return _reviewugc_sentiment_summary(tenant_b, ecom_product_b)
 
 
 
