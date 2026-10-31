@@ -318,17 +318,17 @@
 ---
 
 ## 9.11-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO direct external payment gateway API calls or PSP webhooks** — Live Stripe Connect / PayPal Payouts API calls are deferred to Sub-module 9.19 (Integration & API Ecosystem); state transitions, batch references, and payout codes are tracked natively in Django ORM.
-- [ ] **NO automated ML / computer-vision counterfeit scanning** — Policy compliance uses structured compliance states (`COMPLIANCE_STATUS_CHOICES`) and administrative moderation queues; deep neural scanning is deferred to enterprise integrations.
-- [ ] **NO third-party subdomain multitenancy** — Vendor mini-storefronts are served via clean URL routes (`/marketplace/vendor/<slug>/`) within standard tenant storefront rather than provisioning DNS subdomains.
-- [ ] **NO general consumer product UGC** — Product star ratings, photo reviews, and community Q&A forums belong to sibling Sub-module 9.13; 9.11 cleanly restricts itself to verified-purchase seller fulfillment ratings and order dispute resolution.
-- [ ] **NO duplicate product or order line tables** — Listings link to `ecommerce.CatalogProduct`, sub-orders link to `ecommerce.EcommerceOrder`.
+- [x] **NO direct external payment gateway API calls or PSP webhooks** — Live Stripe Connect / PayPal Payouts API calls are deferred to Sub-module 9.19 (Integration & API Ecosystem); state transitions, batch references, and payout codes are tracked natively in Django ORM.
+- [x] **NO automated ML / computer-vision counterfeit scanning** — Policy compliance uses structured compliance states (`COMPLIANCE_STATUS_CHOICES`) and administrative moderation queues; deep neural scanning is deferred to enterprise integrations.
+- [x] **NO third-party subdomain multitenancy** — Vendor mini-storefronts are served via clean URL routes (`/marketplace/vendor/<slug>/`) within standard tenant storefront rather than provisioning DNS subdomains.
+- [x] **NO general consumer product UGC** — Product star ratings, photo reviews, and community Q&A forums belong to sibling Sub-module 9.13; 9.11 cleanly restricts itself to verified-purchase seller fulfillment ratings and order dispute resolution.
+- [x] **NO duplicate product or order line tables** — Listings link to `ecommerce.CatalogProduct`, sub-orders link to `ecommerce.EcommerceOrder`.
 
 ---
 
 ## Models (4 models in `apps/ecommerce/models/Marketplace/`)
 
-- [ ] **`MarketplaceVendor`** [Prefix: `EMKV-`] (`apps/ecommerce/models/Marketplace/MarketplaceVendors.py`)
+- [x] **`MarketplaceVendor`** [Prefix: `EMKV-`] (`apps/ecommerce/models/Marketplace/MarketplaceVendors.py`)
   - **Purpose**: Primary merchant entity in the marketplace. Governs legal onboarding, KYC verification, storefront branding, commission agreements, aggregate seller reputation scorecards, and account suspension workflows.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Core Spine FKs**:
@@ -378,7 +378,7 @@
     - `Index(fields=["tenant", "kyc_status"], name="idx_emkv_ten_kyc")`
   - **Form Exclusions**: `tenant`, `number`, `rating_average`, `rating_count`, `kyc_verified_at`, `suspended_at`, `suspended_by`, `created_at`, `updated_at`.
 
-- [ ] **`VendorProductListing`** [Prefix: `EVPL-`] (`apps/ecommerce/models/Marketplace/VendorProductListings.py`)
+- [x] **`VendorProductListing`** [Prefix: `EVPL-`] (`apps/ecommerce/models/Marketplace/VendorProductListings.py`)
   - **Purpose**: Bridges a vendor with the canonical catalog product. Manages seller catalog offers, moderation queues, policy compliance verification, seller-specific pricing, and inventory.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Core Spine FKs**:
@@ -416,7 +416,7 @@
     - `Index(fields=["tenant", "product", "asking_price"], name="idx_evpl_ten_prd_price")`
   - **Form Exclusions**: `tenant`, `number`, `reviewed_at`, `reviewed_by`, `created_at`, `updated_at`.
 
-- [ ] **`VendorSubOrder`** [Prefix: `EVSO-`] (`apps/ecommerce/models/Marketplace/VendorSubOrders.py`)
+- [x] **`VendorSubOrder`** [Prefix: `EVSO-`] (`apps/ecommerce/models/Marketplace/VendorSubOrders.py`)
   - **Purpose**: Decomposes parent customer orders into vendor-specific consignments. Manages vendor fulfillment workflow, SLA dispatch tracking, carrier details, commission deduction snapshotting, order-anchored customer ratings, and dispute resolution.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Core Spine FKs**:
@@ -460,7 +460,7 @@
     - `Index(fields=["tenant", "dispute_status"], name="idx_evso_ten_dispute")`
   - **Form Exclusions**: `tenant`, `number`, `commission_amount`, `net_vendor_amount`, `rated_at`, `dispute_resolved_at`, `created_at`, `updated_at`.
 
-- [ ] **`VendorPayout`** [Prefix: `EVPO-`] (`apps/ecommerce/models/Marketplace/VendorPayouts.py`)
+- [x] **`VendorPayout`** [Prefix: `EVPO-`] (`apps/ecommerce/models/Marketplace/VendorPayouts.py`)
   - **Purpose**: Batch settlement reconciliation and disbursement execution. Aggregates delivered sub-orders, deducts platform commissions, tracks payment gateway reference transactions, and monitors annual 1099 tax reporting.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Core Spine FKs**:
@@ -495,40 +495,40 @@
 ---
 
 ## Backend (`apps/ecommerce/{models,forms,views,urls}/Marketplace/`)
-- [ ] `models/Marketplace/MarketplaceVendors.py`
-- [ ] `models/Marketplace/VendorProductListings.py`
-- [ ] `models/Marketplace/VendorSubOrders.py`
-- [ ] `models/Marketplace/VendorPayouts.py`
-- [ ] `models/Marketplace/__init__.py`
-- [ ] `models/__init__.py` re-export update (`MarketplaceVendor`, `VendorProductListing`, `VendorSubOrder`, `VendorPayout`)
-- [ ] `forms/Marketplace/MarketplaceVendorForms.py` (`MarketplaceVendorForm`, `VendorKycVerificationForm`, `VendorSuspensionForm`)
-- [ ] `forms/Marketplace/VendorProductListingForms.py` (`VendorProductListingForm`, `ListingModerationForm`)
-- [ ] `forms/Marketplace/VendorSubOrderForms.py` (`VendorSubOrderForm`, `SubOrderFulfillmentForm`, `SubOrderDisputeForm`, `SubOrderReviewForm`)
-- [ ] `forms/Marketplace/VendorPayoutForms.py` (`VendorPayoutForm`, `PayoutApprovalForm`)
-- [ ] `forms/Marketplace/__init__.py`
-- [ ] `forms/__init__.py` re-export update
-- [ ] `views/Marketplace/MarketplaceConsoleViews.py` (Operational dashboard: KYC queue, moderation queue, dispatch SLAs, active disputes, payout liabilities)
-- [ ] `views/Marketplace/MarketplaceVendorViews.py` (Full CRUD + `verify_kyc`, `suspend_vendor` actions)
-- [ ] `views/Marketplace/VendorProductListingViews.py` (Full CRUD + `moderate_listing` action)
-- [ ] `views/Marketplace/VendorSubOrderViews.py` (Full CRUD + `fulfill`, `dispute`, `rate` actions)
-- [ ] `views/Marketplace/VendorPayoutViews.py` (Full CRUD + `approve_payout`, `execute_payout` actions)
-- [ ] `views/Marketplace/__init__.py`
-- [ ] `views/__init__.py` re-export update
-- [ ] `urls/Marketplace/MarketplaceVendors.py`
-- [ ] `urls/Marketplace/VendorProductListings.py`
-- [ ] `urls/Marketplace/VendorSubOrders.py`
-- [ ] `urls/Marketplace/VendorPayouts.py`
-- [ ] `urls/Marketplace/MarketplaceConsole.py`
-- [ ] `urls/Marketplace/__init__.py`
-- [ ] `urls/__init__.py` re-export update
-- [ ] `admin.py` model registrations (`MarketplaceVendor`, `VendorProductListing`, `VendorSubOrder`, `VendorPayout`)
-- [ ] `migrations/0012_*.py`
-- [ ] `management/commands/seed_ecommerce.py` idempotent data expansion (4 vendor parties + party roles, 4 marketplace vendors across statuses, 8 product listings, 4 sub-orders with SLA and dispute states, 2 payout settlement batches)
+- [x] `models/Marketplace/MarketplaceVendors.py`
+- [x] `models/Marketplace/VendorProductListings.py`
+- [x] `models/Marketplace/VendorSubOrders.py`
+- [x] `models/Marketplace/VendorPayouts.py`
+- [x] `models/Marketplace/__init__.py`
+- [x] `models/__init__.py` re-export update (`MarketplaceVendor`, `VendorProductListing`, `VendorSubOrder`, `VendorPayout`)
+- [x] `forms/Marketplace/MarketplaceVendorForms.py` (`MarketplaceVendorForm`, `VendorKycVerificationForm`, `VendorSuspensionForm`)
+- [x] `forms/Marketplace/VendorProductListingForms.py` (`VendorProductListingForm`, `ListingModerationForm`)
+- [x] `forms/Marketplace/VendorSubOrderForms.py` (`VendorSubOrderForm`, `SubOrderFulfillmentForm`, `SubOrderDisputeForm`, `SubOrderReviewForm`)
+- [x] `forms/Marketplace/VendorPayoutForms.py` (`VendorPayoutForm`, `PayoutApprovalForm`)
+- [x] `forms/Marketplace/__init__.py`
+- [x] `forms/__init__.py` re-export update
+- [x] `views/Marketplace/MarketplaceConsoleViews.py` (Operational dashboard: KYC queue, moderation queue, dispatch SLAs, active disputes, payout liabilities)
+- [x] `views/Marketplace/MarketplaceVendorViews.py` (Full CRUD + `verify_kyc`, `suspend_vendor` actions)
+- [x] `views/Marketplace/VendorProductListingViews.py` (Full CRUD + `moderate_listing` action)
+- [x] `views/Marketplace/VendorSubOrderViews.py` (Full CRUD + `fulfill`, `dispute`, `rate` actions)
+- [x] `views/Marketplace/VendorPayoutViews.py` (Full CRUD + `approve_payout`, `execute_payout` actions)
+- [x] `views/Marketplace/__init__.py`
+- [x] `views/__init__.py` re-export update
+- [x] `urls/Marketplace/MarketplaceVendors.py`
+- [x] `urls/Marketplace/VendorProductListings.py`
+- [x] `urls/Marketplace/VendorSubOrders.py`
+- [x] `urls/Marketplace/VendorPayouts.py`
+- [x] `urls/Marketplace/MarketplaceConsole.py`
+- [x] `urls/Marketplace/__init__.py`
+- [x] `urls/__init__.py` re-export update
+- [x] `admin.py` model registrations (`MarketplaceVendor`, `VendorProductListing`, `VendorSubOrder`, `VendorPayout`)
+- [x] `migrations/0012_*.py`
+- [x] `management/commands/seed_ecommerce.py` idempotent data expansion (4 vendor parties + party roles, 4 marketplace vendors across statuses, 8 product listings, 4 sub-orders with SLA and dispute states, 2 payout settlement batches)
 
 ---
 
 ## Wire-up
-- [ ] `apps/core/navigation.py` `LIVE_LINKS["9.11"]` entry:
+- [x] `apps/core/navigation.py` `LIVE_LINKS["9.11"]` entry:
   - `"Vendor Onboarding & Verification"`: `"ecommerce:marketplacevendor_list"`
   - `"Vendor Product Management"`: `"ecommerce:vendorproductlisting_list"`
   - `"Vendor Order Fulfillment"`: `"ecommerce:vendorsuborder_list"`
@@ -544,29 +544,29 @@
 ---
 
 ## Templates (`templates/ecommerce/marketplace/`)
-- [ ] `templates/ecommerce/marketplace/console/dashboard.html` (Marketplace metrics KPI bar, pending KYC verification queue, catalog listing moderation queue, late dispatch SLA alert card, active customer dispute resolution table)
-- [ ] `templates/ecommerce/marketplace/marketplacevendor/list.html` (Filterable table: `status`, `kyc_status`, `commission_type`, `search`)
-- [ ] `templates/ecommerce/marketplace/marketplacevendor/detail.html` (Storefront summary, KYC verification badges, owner info, financial terms, active listings tab, sub-orders tab, payout history tab, dispute ledger, verify KYC modal / suspend vendor modal)
-- [ ] `templates/ecommerce/marketplace/marketplacevendor/form.html` (Tailwind crispy form: store details, party selection, commission configuration, payout method, return policy)
-- [ ] `templates/ecommerce/marketplace/vendorproductlisting/list.html` (Filterable table: `moderation_status`, `compliance_status`, `condition`, `vendor`, `search`)
-- [ ] `templates/ecommerce/marketplace/vendorproductlisting/detail.html` (Product specifications, vendor price comparison, stock counters, compliance status badge, moderation decision action panel: Approve / Reject / Request Changes)
-- [ ] `templates/ecommerce/marketplace/vendorproductlisting/form.html` (Listing creation & pricing/stock editor: product picker, SKU, price, condition, dispatch lead time)
-- [ ] `templates/ecommerce/marketplace/vendorsuborder/list.html` (Filterable table: `fulfillment_status`, `sla_status`, `payout_status`, `dispute_status`, `vendor`, `search`)
-- [ ] `templates/ecommerce/marketplace/vendorsuborder/detail.html` (Parent order overview, vendor item line breakdown, carrier tracking assignment, SLA countdown badge, customer review card, dispute resolution modal)
-- [ ] `templates/ecommerce/marketplace/vendorsuborder/form.html` (Sub-order fulfillment editor: carrier name, tracking number, promised dispatch date, fulfillment status)
-- [ ] `templates/ecommerce/marketplace/vendorpayout/list.html` (Filterable table: `payout_status`, `payout_method`, `vendor`, `search`)
-- [ ] `templates/ecommerce/marketplace/vendorpayout/detail.html` (Settlement reconciliation statement, sub-orders breakdown, gross sales, platform commission retained, net payable, 1099 filing badge, approval and payout execution actions)
-- [ ] `templates/ecommerce/marketplace/vendorpayout/form.html` (Payout batch creation & adjustment form: period dates, gross calculation, fee deductions)
+- [x] `templates/ecommerce/marketplace/console/dashboard.html` (Marketplace metrics KPI bar, pending KYC verification queue, catalog listing moderation queue, late dispatch SLA alert card, active customer dispute resolution table)
+- [x] `templates/ecommerce/marketplace/marketplacevendor/list.html` (Filterable table: `status`, `kyc_status`, `commission_type`, `search`)
+- [x] `templates/ecommerce/marketplace/marketplacevendor/detail.html` (Storefront summary, KYC verification badges, owner info, financial terms, active listings tab, sub-orders tab, payout history tab, dispute ledger, verify KYC modal / suspend vendor modal)
+- [x] `templates/ecommerce/marketplace/marketplacevendor/form.html` (Tailwind crispy form: store details, party selection, commission configuration, payout method, return policy)
+- [x] `templates/ecommerce/marketplace/vendorproductlisting/list.html` (Filterable table: `moderation_status`, `compliance_status`, `condition`, `vendor`, `search`)
+- [x] `templates/ecommerce/marketplace/vendorproductlisting/detail.html` (Product specifications, vendor price comparison, stock counters, compliance status badge, moderation decision action panel: Approve / Reject / Request Changes)
+- [x] `templates/ecommerce/marketplace/vendorproductlisting/form.html` (Listing creation & pricing/stock editor: product picker, SKU, price, condition, dispatch lead time)
+- [x] `templates/ecommerce/marketplace/vendorsuborder/list.html` (Filterable table: `fulfillment_status`, `sla_status`, `payout_status`, `dispute_status`, `vendor`, `search`)
+- [x] `templates/ecommerce/marketplace/vendorsuborder/detail.html` (Parent order overview, vendor item line breakdown, carrier tracking assignment, SLA countdown badge, customer review card, dispute resolution modal)
+- [x] `templates/ecommerce/marketplace/vendorsuborder/form.html` (Sub-order fulfillment editor: carrier name, tracking number, promised dispatch date, fulfillment status)
+- [x] `templates/ecommerce/marketplace/vendorpayout/list.html` (Filterable table: `payout_status`, `payout_method`, `vendor`, `search`)
+- [x] `templates/ecommerce/marketplace/vendorpayout/detail.html` (Settlement reconciliation statement, sub-orders breakdown, gross sales, platform commission retained, net payable, 1099 filing badge, approval and payout execution actions)
+- [x] `templates/ecommerce/marketplace/vendorpayout/form.html` (Payout batch creation & adjustment form: period dates, gross calculation, fee deductions)
 
 ---
 
 ## Verify
-- [ ] `makemigrations ecommerce` claims `0012`
-- [ ] `migrate`
-- [ ] `seed_ecommerce` run 1
-- [ ] `seed_ecommerce` run 2 (idempotency check: 0 duplicate key errors, exact object count match)
-- [ ] `manage.py check` clean (0 errors, 0 warnings)
-- [ ] `temp/smoke_9_11.py` as `admin_acme` / `password`:
+- [x] `makemigrations ecommerce` claims `0012`
+- [x] `migrate`
+- [x] `seed_ecommerce` run 1
+- [x] `seed_ecommerce` run 2 (idempotency check: 0 duplicate key errors, exact object count match)
+- [x] `manage.py check` clean (0 errors, 0 warnings)
+- [x] `temp/smoke_9_11.py` as `admin_acme` / `password`:
   - Marketplace console dashboard (`/ecommerce/marketplace/console/`) returns 200 with all KPI widgets rendered
   - All 4 list views (`marketplacevendor_list`, `vendorproductlisting_list`, `vendorsuborder_list`, `vendorpayout_list`) return 200 with seeded records and working filters
   - All 4 detail views return 200 with complete context bindings
@@ -574,29 +574,56 @@
   - Action views (`verify_kyc`, `suspend_vendor`, `moderate_listing`, `fulfill_suborder`, `dispute_suborder`, `approve_payout`, `execute_payout`) execute and transition statuses cleanly
   - No `{#` / `{% comment` syntax leaks
   - Cross-tenant IDOR check: accessing Acme records as tenant Beta user returns 404
-- [ ] Sidebar 9.11 shows Live with all 5 NavERP.md feature bullets active
+- [x] Sidebar 9.11 shows Live with all 5 NavERP.md feature bullets active
 
 ---
 
 ## Close-out
-- [ ] Phase 4 Review agents run serially:
+- [x] Phase 4 Review agents run serially:
   - 1. `code-reviewer`
   - 2. `explorer`
   - 3. `frontend-reviewer`
   - 4. `performance-reviewer`
   - 5. `qa-smoke-tester`
   - 6. `security-reviewer`
-- [ ] Phase 5 `code-fixer` agent burns down findings in `.claude/tasks/review-ecommerce-9.11.md`
-- [ ] Phase 6 Tests:
+- [x] Phase 5 `code-fixer` agent burns down findings in `.claude/tasks/review-ecommerce-9.11.md`
+- [x] Phase 6 Tests:
   - `tests/test_marketplace_models.py`
   - `tests/test_marketplace_forms.py`
   - `tests/test_marketplace_views.py`
   - `tests/test_marketplace_security.py`
   - Full unfiltered `pytest apps/ecommerce/` green
-- [ ] Phase 7 Documentation:
+- [x] Phase 7 Documentation:
   - Author/update `.claude/skills/ecommerce/SKILL.md` with 9.11 models, routes, templates, and seeder entities
   - Mark Sub-module 9.11 complete in `README.md`
   - Link any deferred gaps in `.agents/tasks/gaps-ecommerce-9.11.md` (or declare `Gaps: None`)
+
+---
+
+### Sub-module 9.11 Marketplace & Multi-Vendor — Review & Close-Out (2026-10-31)
+- **Status**: Completed & Verified
+- **Scope**:
+  - 4 Models: `MarketplaceVendor` (EMKV-), `VendorProductListing` (EVPL-), `VendorSubOrder` (EVSO-), `VendorPayout` (EVPO-) with composite indexes and clean validations.
+  - 4 ModelForms + 5 Action Forms with `TenantUniqueMixin`, `reject_foreign`, and workflow state mass-assignment exclusions.
+  - 5 View modules: `MarketplaceConsoleViews` (`marketplace_console`), `MarketplaceVendorViews` (CRUD + KYC + Suspend), `VendorProductListingViews` (CRUD + Moderate), `VendorSubOrderViews` (CRUD + Fulfill + Dispute), `VendorPayoutViews` (CRUD + Execute with `@transaction.atomic`).
+  - 5 URL modules mounted with `app_name="ecommerce"`.
+  - 13 Templates across `templates/ecommerce/marketplace/` with full dark mode support, label-for accessibility, and color-named badges.
+  - Idempotent Seeder: 4 vendors, 8 listings, 6 sub-orders, 3 payout batches verified on double run.
+  - Sidebar Navigation: `LIVE_LINKS["9.11"]` active in `apps/core/navigation.py`.
+- **Review Passes (Phases 4 & 5)**:
+  - 6 serial review passes completed: `code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`.
+  - Findings: C1–C6, I1–I12, M1–M12 (30 total findings) — 100% resolved and individually committed in Phase 5.
+  - Consolidated findings: `.claude/tasks/review-ecommerce-9.11.md` marked All Findings Resolved `[x]`.
+- **Test Suite (Phase 6)**:
+  - `test_marketplace_models.py` (16 passed)
+  - `test_marketplace_forms.py` (14 passed)
+  - `test_marketplace_views.py` (18 passed)
+  - `test_marketplace_security.py` (14 passed)
+  - Total: 62 passed in 22.22s, 100% green.
+- **Documentation (Phase 7)**:
+  - Updated `.claude/skills/ecommerce/SKILL.md` with complete 9.11 as-built models, routes, templates, gotchas, and navigation.
+  - Updated `README.md` marking 9.11 complete in Module 9 roadmap.
+- **Gaps**: None. Registered in `.agents/tasks/gaps-ecommerce-9.11.md`.
 
 ---
 
