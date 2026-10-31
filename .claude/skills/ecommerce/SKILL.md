@@ -1,9 +1,9 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce: plans, subscriber lifecycle, curated boxes, churn deflection, self-service portal, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.10, 9.11, or 9.12), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content: product reviews, ratings aggregation, customer Q&A, visual UGC, sentiment analysis, scorecards, moderation workflows, rights management, plans, subscriber lifecycle, curated boxes, churn deflection, self-service portal, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.10, 9.11, 9.12, or 9.13), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content)
 
 The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, and an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising (boosting, burying, pinning, banner announcements, URL redirect forwarding), query performance and zero-result search telemetry analytics, instant search-as-you-type autocomplete, and an interactive Search Workbench Console. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
@@ -695,6 +695,12 @@ Templates are stored under `templates/ecommerce/`:
   - `vendorsuborder/` — `list.html` (consignment orders, SLA status badges, fulfillment badges, payout status dropdown filter), `detail.html` (order summary, customer card, order lines table, carrier fulfillment action, dispute resolution modal), `form.html`.
   - `vendorpayout/` — `list.html` (payout batches, gateway methods, disbursement status badges), `detail.html` (financial volume, commission retained, net payout calculation, settled sub-orders table, execute disbursement modal), `form.html`.
 
+- `review_ugc/`
+  - `product_review/` — `list.html` (with star ratings, sentiment badges, verified purchase indicator, status filters), `detail.html` (review dossier, star rating display, customer link, merchant response timeline, moderation action modal), `form.html`.
+  - `product_question/` — `list.html` (customer inquiries, answered/pending filters, pinned badges), `detail.html` (question dossier, customer attribution, official staff answer card, respond modal), `form.html`.
+  - `visual_ugc/` — `list.html` (responsive media cards grid, media type and rights status filters), `detail.html` (media preview, tagged product/variant pills, rights approval badge, shoppable toggle), `form.html`.
+  - `sentiment_summary/` — `list.html` (product scorecards, average rating stars, total reviews, recalculate action), `detail.html` (star distribution progress bars, sentiment breakdown bars, keyword praise/complaints tags, actionable recommendations, recalculate button), `form.html`.
+
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
 - Stat icon classes: `stat-icon blue`, `stat-icon green`, `stat-icon orange`, `stat-icon purple`, `stat-icon slate`.
@@ -753,6 +759,10 @@ The command provisions:
 - 8 Vendor Product Listings: New and refurbished variants with asking prices, seller SKUs, and inventory allocations.
 - 6 Vendor Sub-Orders: Consignment allocations with carrier dispatch tracking, SLA status tracking, customer ratings, and dispute simulation.
 - 3 Vendor Payout Batches: Settled earnings periods covering volume, platform commissions, gateway fees, and net disbursements.
+- 4 Product Reviews (`EPRV-`): 5-star verified purchase with helpful votes, 4-star verified review with official merchant response, 2-star negative review, and 1-star spam-flagged review.
+- 3 Product Question Answers (`EPQA-`): Answered and pinned inquiry, answered staff response inquiry, and pending customer question.
+- 4 Visual UGC Media Assets (`EUGC-`): Customer photos, unboxing videos, Instagram posts, and TikTok reviews with rights management status.
+- 2 Review Sentiment Summaries (`ERVM-`): Recalculated scorecards with star distributions, aggregate averages, keyword analysis, and actionable quality recommendations.
 - All demo data is scoped to tenant `acme`.
 
 ---
@@ -873,6 +883,17 @@ LIVE_LINKS["9.12"] = {
     "Box Curations": "ecommerce:subscriptionboxcuration_list",
     "Retention & Deflection": "ecommerce:subscriptionretentionaction_list",
     "Subscriber Portal": "ecommerce:subscription_portal",
+}
+LIVE_LINKS["9.13"] = {
+    "Review Collection & Moderation": "ecommerce:productreview_list",
+    "Rating Aggregation & Display": "ecommerce:reviewsentimentsummary_list",
+    "Q&A & Community Forums": "ecommerce:productquestionanswer_list",
+    "Visual UGC & Social Proof": "ecommerce:visualugcmedia_list",
+    "Review Analytics & Sentiment": "ecommerce:reviewsentimentsummary_list",
+    "All Customer Reviews": "ecommerce:productreview_list",
+    "Customer Q&A": "ecommerce:productquestionanswer_list",
+    "Visual UGC Gallery": "ecommerce:visualugcmedia_list",
+    "Sentiment Scorecards": "ecommerce:reviewsentimentsummary_list",
 }
 ```
 Appears under the eCommerce section of the primary navigation bar.
