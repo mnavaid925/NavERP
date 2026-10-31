@@ -437,6 +437,19 @@ class MarketingCampaignAdmin(admin.ModelAdmin):
     list_display = ["number", "name", "channel", "campaign_type", "status", "scheduled_at", "recipient_count", "delivered_count", "revenue_attributed"]
     list_filter = ["channel", "campaign_type", "status", "tenant"]
     search_fields = ["number", "name", "code", "subject"]
+    readonly_fields = [
+        "number",
+        "sent_at",
+        "recipient_count",
+        "delivered_count",
+        "opened_count",
+        "clicked_count",
+        "bounced_count",
+        "unsubscribed_count",
+        "revenue_attributed",
+        "created_at",
+        "updated_at",
+    ]
     list_select_related = ["target_segment", "target_product"]
     ordering = ["-created_at"]
 
@@ -446,6 +459,15 @@ class AffiliatePartnerAdmin(admin.ModelAdmin):
     list_display = ["number", "name", "partner_type", "referral_code", "status", "commission_type", "commission_rate", "total_orders_referred", "total_revenue_generated"]
     list_filter = ["partner_type", "status", "commission_type", "tenant"]
     search_fields = ["number", "name", "referral_code", "referral_link_slug", "party__name"]
+    readonly_fields = [
+        "number",
+        "total_orders_referred",
+        "total_revenue_generated",
+        "total_commission_earned",
+        "total_commission_paid",
+        "created_at",
+        "updated_at",
+    ]
     list_select_related = ["party", "customer_profile"]
     ordering = ["name"]
 
@@ -455,6 +477,13 @@ class AffiliateReferralConversionAdmin(admin.ModelAdmin):
     list_display = ["number", "affiliate", "order", "attribution_type", "order_amount", "commission_amount", "status", "paid_at"]
     list_filter = ["status", "attribution_type", "tenant"]
     search_fields = ["number", "affiliate__name", "order__number", "payout_reference"]
+    readonly_fields = [
+        "number",
+        "commission_amount",
+        "paid_at",
+        "created_at",
+        "updated_at",
+    ]
     list_select_related = ["affiliate", "order", "referred_customer"]
     ordering = ["-created_at"]
 
@@ -464,6 +493,13 @@ class SeoMetadataRuleAdmin(admin.ModelAdmin):
     list_display = ["number", "name", "rule_type", "json_ld_schema_type", "robots_directive", "sitemap_included", "target_keyword", "tracked_rank_position", "is_active"]
     list_filter = ["rule_type", "json_ld_schema_type", "robots_directive", "sitemap_included", "is_active", "tenant"]
     search_fields = ["number", "name", "target_keyword", "url_path_pattern"]
+    readonly_fields = [
+        "number",
+        "tracked_rank_position",
+        "last_serp_checked_at",
+        "created_at",
+        "updated_at",
+    ]
     list_select_related = ["target_category", "target_product"]
     ordering = ["-created_at"]
 
