@@ -59,7 +59,12 @@ def subscriptionretentionaction_list(request):
 
 @login_required
 def subscriptionretentionaction_detail(request, pk):
-    action = ecommerce_object(request, SubscriptionRetentionAction, pk)
+    action = ecommerce_object(
+        request,
+        SubscriptionRetentionAction,
+        pk,
+        select_related=["subscription__product", "subscription__plan", "customer_profile__customer", "customer_profile__user"],
+    )
 
     context = {
         "retention_action": action,
