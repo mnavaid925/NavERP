@@ -17,8 +17,6 @@ class AffiliateReferralConversionForm(TenantUniqueMixin, TenantModelForm):
             "attribution_type",
             "order_amount",
             "commission_rate_applied",
-            "status",
-            "payout_reference",
             "notes",
         ]
         widgets = {
@@ -31,10 +29,6 @@ class AffiliateReferralConversionForm(TenantUniqueMixin, TenantModelForm):
             ),
             "commission_rate_applied": forms.NumberInput(
                 attrs={"class": "form-input", "step": "0.01", "placeholder": "10.00"}
-            ),
-            "status": forms.Select(attrs={"class": "form-select"}),
-            "payout_reference": forms.TextInput(
-                attrs={"class": "form-input", "placeholder": "e.g. PAY-202610-001"}
             ),
             "notes": forms.Textarea(
                 attrs={
