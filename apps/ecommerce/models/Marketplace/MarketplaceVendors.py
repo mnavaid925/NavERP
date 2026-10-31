@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Avg, Count
 from django.utils.text import slugify
 
 from apps.ecommerce.models._base import TenantNumbered
@@ -241,11 +242,11 @@ class MarketplaceVendor(TenantNumbered):
         elif self.slug:
             self.slug = slugify(self.slug)
 
-        if self.commission_rate < Decimal("0.00") or self.commission_rate > Decimal("100.00"):
+        if self.commission_rate is not None and (self.commission_rate < Decimal("0.00") or self.commission_rate > Decimal("100.00")):
             raise ValidationError({"commission_rate": "Commission rate must be between 0.00% and 100.00%."})
-        if self.fixed_fee_per_order < Decimal("0.00"):
+        if self.fixed_fee_per_order is not None and self.fixed_fee_per_order < Decimal("0.00"):
             raise ValidationError({"fixed_fee_per_order": "Fixed fee per order cannot be negative."})
-        if self.min_payout_amount < Decimal("0.00"):
+        if self.min_payout_amount is not None and self.min_payout_amount < Decimal("0.00"):
             raise ValidationError({"min_payout_amount": "Minimum payout amount cannot be negative."})
 
         # Tenant boundary check for Party
@@ -254,15 +255,14 @@ class MarketplaceVendor(TenantNumbered):
 
     def update_rating(self):
         """Recomputes aggregate seller rating from fulfilled sub-orders."""
-        ratings = self.sub_orders.filter(customer_rating__isnull=False).values_list("customer_rating", flat=True)
-        if ratings:
-            total = len(ratings)
-            avg = sum(ratings) / Decimal(total)
-            self.rating_count = total
-            self.rating_average = Decimal(round(avg, 2))
-        else:
-            self.rating_count = 0
-            self.rating_average = Decimal("0.00")
+        agg = self.sub_orders.filter(customer_rating__isnull=False).aggregate(
+            total=Count("customer_rating"),
+            avg=Avg("customer_rating"),
+        )
+        total = agg["total"] or 0
+        avg = agg["avg"]
+        self.rating_count = total
+        self.rating_average = Decimal(round(avg, 2)) if avg is not None else Decimal("0.00")
         self.save(update_fields=["rating_average", "rating_count"])
 
     def __str__(self):
