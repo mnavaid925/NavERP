@@ -126,7 +126,7 @@
                 {% elif item.status == 'suspended' %}
                   <span class="badge badge-red">Suspended</span>
                 {% else %}
-                  <span class="badge badge-muted">Inactive</span>
+                  <span class="badge badge-muted">{{ item.get_status_display }}</span>
                 {% endif %}
               </td>
               <td class="py-3 px-4 text-right font-medium text-slate-800">
