@@ -1,6 +1,7 @@
 from apps.ecommerce.urls.CartCheckout import urlpatterns as _cartcheckout_urls
 from apps.ecommerce.urls.CustomerProfile import urlpatterns as _customerprofile_urls
 from apps.ecommerce.urls.InventoryStock import urlpatterns as _inventorystock_urls
+from apps.ecommerce.urls.MarketingCampaign import urlpatterns as _marketingcampaign_urls
 from apps.ecommerce.urls.Marketplace import urlpatterns as _marketplace_urls
 from apps.ecommerce.urls.OrderManagement import urlpatterns as _ordermanagement_urls
 from apps.ecommerce.urls.Personalization import urlpatterns as _personalization_urls
@@ -20,6 +21,7 @@ urlpatterns = (
     + list(_customerprofile_urls)
     + list(_searchdiscovery_urls)
     + list(_personalization_urls)
+    + list(_marketingcampaign_urls)
     + list(_marketplace_urls)
     + list(_subscriptioncommerce_urls)
 )
