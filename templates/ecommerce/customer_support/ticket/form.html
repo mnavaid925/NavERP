@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}{% if ticket %}Edit Ticket {{ ticket.number }}{% else %}Open Support Ticket{% endif %} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Customer Support</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:customersupportticket_list' %}">Tickets</a>
+            <span>/</span>
+            <span>{% if ticket %}Edit {{ ticket.number }}{% else %}Open Ticket{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if ticket %}Edit Support Ticket {{ ticket.number }}{% else %}Open New Support Ticket{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Shopper Information -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 border-b border-slate-200 pb-2 mb-4">Customer Details</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.customer_name.id_for_label }}" class="form-label">Customer Name *</label>
+                        {{ form.customer_name }}
+                        {% if form.customer_name.errors %}
+                        <div class="form-error">{{ form.customer_name.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.customer_email.id_for_label }}" class="form-label">Contact Email *</label>
+                        {{ form.customer_email }}
+                        {% if form.customer_email.errors %}
+                        <div class="form-error">{{ form.customer_email.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.customer_phone.id_for_label }}" class="form-label">Phone Number</label>
+                        {{ form.customer_phone }}
+                        {% if form.customer_phone.errors %}
+                        <div class="form-error">{{ form.customer_phone.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.customer.id_for_label }}" class="form-label">Registered Profile</label>
+                        {{ form.customer }}
+                        {% if form.customer.errors %}
+                        <div class="form-error">{{ form.customer.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.order.id_for_label }}" class="form-label">Associated eCommerce Order</label>
+                        {{ form.order }}
+                        {% if form.order.errors %}
+                        <div class="form-error">{{ form.order.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Ticket Parameters & Routing -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 border-b border-slate-200 pb-2 mb-4">Ticket Classification & Routing</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.channel.id_for_label }}" class="form-label">Inbound Channel *</label>
+                        {{ form.channel }}
+                        {% if form.channel.errors %}
+                        <div class="form-error">{{ form.channel.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.category.id_for_label }}" class="form-label">Category *</label>
+                        {{ form.category }}
+                        {% if form.category.errors %}
+                        <div class="form-error">{{ form.category.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.priority.id_for_label }}" class="form-label">Priority *</label>
+                        {{ form.priority }}
+                        {% if form.priority.errors %}
+                        <div class="form-error">{{ form.priority.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Lifecycle Status *</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}
+                        <div class="form-error">{{ form.status.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.assigned_agent.id_for_label }}" class="form-label">Assign Support Staff</label>
+                        {{ form.assigned_agent }}
+                        {% if form.assigned_agent.errors %}
+                        <div class="form-error">{{ form.assigned_agent.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2 flex items-center pt-6">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.is_bot_handled }}
+                            <span class="text-sm font-medium text-slate-700">Bot Assisted Inquiry</span>
+                        </label>
+                    </div>
+                    <div class="form-group md:col-span-4">
+                        <label for="{{ form.bot_handoff_reason.id_for_label }}" class="form-label">Bot Handoff Reason</label>
+                        {{ form.bot_handoff_reason }}
+                        {% if form.bot_handoff_reason.errors %}
+                        <div class="form-error">{{ form.bot_handoff_reason.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Subject & Conversation Body -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 border-b border-slate-200 pb-2 mb-4">Inquiry Content</h3>
+                <div class="space-y-4">
+                    <div class="form-group">
+                        <label for="{{ form.subject.id_for_label }}" class="form-label">Ticket Subject *</label>
+                        {{ form.subject }}
+                        {% if form.subject.errors %}
+                        <div class="form-error">{{ form.subject.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.initial_message.id_for_label }}" class="form-label">Customer Inquiry Message *</label>
+                        {{ form.initial_message }}
+                        {% if form.initial_message.errors %}
+                        <div class="form-error">{{ form.initial_message.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.resolution_summary.id_for_label }}" class="form-label">Resolution Summary (Provided to Shopper)</label>
+                        {{ form.resolution_summary }}
+                        {% if form.resolution_summary.errors %}
+                        <div class="form-error">{{ form.resolution_summary.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.internal_notes.id_for_label }}" class="form-label">Internal Staff Notes (Staff Only)</label>
+                        {{ form.internal_notes }}
+                        {% if form.internal_notes.errors %}
+                        <div class="form-error">{{ form.internal_notes.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if ticket %}{% url 'ecommerce:customersupportticket_detail' ticket.pk %}{% else %}{% url 'ecommerce:customersupportticket_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if ticket %}Update Ticket{% else %}Open Ticket{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
