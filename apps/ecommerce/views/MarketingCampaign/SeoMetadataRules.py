@@ -100,10 +100,11 @@ def seometadatarule_create(request):
             rule.tenant = request.tenant
             rule.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                rule,
                 "create",
-                f"Created SEO rule {rule.number} ({rule.name})",
+                changes={"number": rule.number, "name": rule.name},
+                tenant=request.tenant,
             )
             messages.success(request, f"SEO rule '{rule.name}' created successfully.")
             return redirect("ecommerce:seometadatarule_detail", pk=rule.pk)
@@ -125,10 +126,11 @@ def seometadatarule_edit(request, pk):
         if form.is_valid():
             rule = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                rule,
                 "update",
-                f"Updated SEO rule {rule.number} ({rule.name})",
+                changes={"number": rule.number, "name": rule.name},
+                tenant=request.tenant,
             )
             messages.success(request, f"SEO rule '{rule.name}' updated successfully.")
             return redirect("ecommerce:seometadatarule_detail", pk=rule.pk)
@@ -151,10 +153,11 @@ def seometadatarule_delete(request, pk):
     number = rule.number
     rule.delete()
     write_audit_log(
-        request.tenant,
         request.user,
+        rule,
         "delete",
-        f"Deleted SEO rule {number} ({name})",
+        changes={"number": number, "name": name},
+        tenant=request.tenant,
     )
     messages.success(request, f"SEO rule '{name}' was deleted.")
     return redirect("ecommerce:seometadatarule_list")
@@ -169,10 +172,11 @@ def seometadatarule_toggle(request, pk):
     rule.save()
     status_label = "activated" if rule.is_active else "deactivated"
     write_audit_log(
-        request.tenant,
         request.user,
+        rule,
         "update",
-        f"{status_label.capitalize()} SEO rule {rule.number} ({rule.name})",
+        changes={"number": rule.number, "action": status_label},
+        tenant=request.tenant,
     )
     messages.success(request, f"SEO rule '{rule.name}' was {status_label}.")
     return redirect("ecommerce:seometadatarule_detail", pk=rule.pk)
