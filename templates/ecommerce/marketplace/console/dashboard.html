@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}Marketplace & Multi-Vendor Console — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Marketplace Operations</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Marketplace & Multi-Vendor Operations Console</h1>
+      <p class="text-sm text-slate-500 mt-1">Multi-vendor marketplace governance: merchant onboarding, product catalog moderation, dispatch SLA oversight, and commission payouts.</p>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+      <a href="{% url 'ecommerce:marketplacevendor_list' %}" class="btn btn-outline text-xs inline-flex items-center gap-1.5">
+        <i data-lucide="store" class="w-4 h-4 text-blue-600"></i>
+        <span>Merchants</span>
+      </a>
+      <a href="{% url 'ecommerce:vendorproductlisting_list' %}" class="btn btn-outline text-xs inline-flex items-center gap-1.5">
+        <i data-lucide="package" class="w-4 h-4 text-indigo-600"></i>
+        <span>Catalog Queue</span>
+      </a>
+      <a href="{% url 'ecommerce:vendorsuborder_list' %}" class="btn btn-outline text-xs inline-flex items-center gap-1.5">
+        <i data-lucide="truck" class="w-4 h-4 text-amber-600"></i>
+        <span>Sub-Orders</span>
+      </a>
+      <a href="{% url 'ecommerce:vendorpayout_list' %}" class="btn btn-outline text-xs inline-flex items-center gap-1.5">
+        <i data-lucide="badge-dollar-sign" class="w-4 h-4 text-emerald-600"></i>
+        <span>Payout Settlements</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Operational Metrics Row -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Merchants</span>
+        <div class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+          <i data-lucide="store" class="w-4 h-4"></i>
+        </div>
+      </div>
+      <div class="mt-2 text-2xl font-bold text-slate-900">{{ metrics.total_vendors }}</div>
+      <div class="text-[11px] text-slate-400 mt-1">Onboarded marketplace sellers</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Pending KYC</span>
+        <div class="w-8 h-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
+          <i data-lucide="shield-alert" class="w-4 h-4"></i>
+        </div>
+      </div>
+      <div class="mt-2 text-2xl font-bold {% if metrics.pending_kyc_count > 0 %}text-amber-600{% else %}text-slate-900{% endif %}">
+        {{ metrics.pending_kyc_count }}
+      </div>
+      <div class="text-[11px] text-slate-400 mt-1">Identity verifications pending</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Product Queue</span>
+        <div class="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+          <i data-lucide="clipboard-check" class="w-4 h-4"></i>
+        </div>
+      </div>
+      <div class="mt-2 text-2xl font-bold {% if metrics.pending_moderation_count > 0 %}text-indigo-600{% else %}text-slate-900{% endif %}">
+        {{ metrics.pending_moderation_count }}
+      </div>
+      <div class="text-[11px] text-slate-400 mt-1">Listings awaiting moderation</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Open Disputes</span>
+        <div class="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+          <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+        </div>
+      </div>
+      <div class="mt-2 text-2xl font-bold {% if metrics.open_disputes_count > 0 %}text-red-600{% else %}text-slate-900{% endif %}">
+        {{ metrics.open_disputes_count }}
+      </div>
+      <div class="text-[11px] text-slate-400 mt-1">Consignments under review</div>
+    </div>
+
+    <div class="card p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Unpaid Liabilities</span>
+        <div class="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+          <i data-lucide="badge-dollar-sign" class="w-4 h-4"></i>
+        </div>
+      </div>
+      <div class="mt-2 text-2xl font-bold text-emerald-700">${{ metrics.unpaid_payouts_sum }}</div>
+      <div class="text-[11px] text-slate-400 mt-1">Pending payout disbursements</div>
+    </div>
+  </div>
+
+  <!-- Operational Queues Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Queue 1: Pending KYC Applications -->
+    <div class="card bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+      <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="shield-alert" class="w-5 h-5 text-amber-500"></i>
+          <span>Merchant KYC Verification Queue</span>
+        </h2>
+        <a href="{% url 'ecommerce:marketplacevendor_list' %}?kyc_status=pending" class="text-xs text-blue-600 hover:underline">
+          View All KYC
+        </a>
+      </div>
+      <div class="divide-y divide-slate-100 text-sm">
+        {% for v in pending_kyc_vendors %}
+        <div class="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+          <div>
+            <a href="{% url 'ecommerce:marketplacevendor_detail' v.pk %}" class="font-semibold text-slate-900 hover:text-blue-600">
+              {{ v.store_name }}
+            </a>
+            <div class="text-xs text-slate-400">{{ v.party.name }} • Doc: {{ v.kyc_document_type|default:"None uploaded" }}</div>
+          </div>
+          <div class="flex items-center gap-2">
+            {% if v.kyc_status == "pending" %}
+              <span class="badge badge-amber">Pending Verification</span>
+            {% else %}
+              <span class="badge badge-muted">Unsubmitted</span>
+            {% endif %}
+            <a href="{% url 'ecommerce:marketplacevendor_detail' v.pk %}" class="btn btn-outline text-xs">Verify</a>
+          </div>
+        </div>
+        {% empty %}
+        <div class="p-8 text-center text-xs text-slate-400">
+          <i data-lucide="check-circle-2" class="w-8 h-8 mx-auto text-emerald-500 mb-2"></i>
+          <div>All merchant KYC applications are up to date!</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Queue 2: Product Moderation Queue -->
+    <div class="card bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+      <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="clipboard-check" class="w-5 h-5 text-indigo-500"></i>
+          <span>Catalog Moderation Queue</span>
+        </h2>
+        <a href="{% url 'ecommerce:vendorproductlisting_list' %}?moderation_status=pending_review" class="text-xs text-blue-600 hover:underline">
+          View Moderation Queue
+        </a>
+      </div>
+      <div class="divide-y divide-slate-100 text-sm">
+        {% for l in pending_listings %}
+        <div class="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+          <div>
+            <a href="{% url 'ecommerce:vendorproductlisting_detail' l.pk %}" class="font-semibold text-slate-900 hover:text-blue-600">
+              {{ l.product.title }}
+            </a>
+            <div class="text-xs text-slate-400">By {{ l.vendor.store_name }} • ${{ l.asking_price }} • SKU: {{ l.seller_sku }}</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="badge badge-amber">Pending Review</span>
+            <a href="{% url 'ecommerce:vendorproductlisting_detail' l.pk %}" class="btn btn-outline text-xs">Review</a>
+          </div>
+        </div>
+        {% empty %}
+        <div class="p-8 text-center text-xs text-slate-400">
+          <i data-lucide="check-circle-2" class="w-8 h-8 mx-auto text-emerald-500 mb-2"></i>
+          <div>No pending product listings to moderate.</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Queue 3: SLA Dispatch Risks -->
+    <div class="card bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+      <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500"></i>
+          <span>Dispatch SLA Risk Warnings</span>
+        </h2>
+        <a href="{% url 'ecommerce:vendorsuborder_list' %}?sla_status=breached" class="text-xs text-blue-600 hover:underline">
+          View All Sub-Orders
+        </a>
+      </div>
+      <div class="divide-y divide-slate-100 text-sm">
+        {% for so in sla_risk_suborders %}
+        <div class="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+          <div>
+            <a href="{% url 'ecommerce:vendorsuborder_detail' so.pk %}" class="font-mono font-semibold text-slate-900 hover:text-blue-600">
+              {{ so.number }}
+            </a>
+            <div class="text-xs text-slate-400">{{ so.vendor.store_name }} • Due: {{ so.promised_dispatch_date|date:"M d, Y"|default:"Today" }}</div>
+          </div>
+          <div class="flex items-center gap-2">
+            {% if so.sla_status == "breached" %}
+              <span class="badge badge-red">Breached</span>
+            {% else %}
+              <span class="badge badge-amber">Near Deadline</span>
+            {% endif %}
+            <a href="{% url 'ecommerce:vendorsuborder_detail' so.pk %}" class="btn btn-outline text-xs">Track</a>
+          </div>
+        </div>
+        {% empty %}
+        <div class="p-8 text-center text-xs text-slate-400">
+          <i data-lucide="truck" class="w-8 h-8 mx-auto text-emerald-500 mb-2"></i>
+          <div>All merchant dispatches are comfortably on schedule!</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Queue 4: Active Customer Disputes -->
+    <div class="card bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+      <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="alert-octagon" class="w-5 h-5 text-red-500"></i>
+          <span>Active Customer Disputes</span>
+        </h2>
+        <a href="{% url 'ecommerce:vendorsuborder_list' %}?dispute_status=disputed" class="text-xs text-blue-600 hover:underline">
+          View All Disputes
+        </a>
+      </div>
+      <div class="divide-y divide-slate-100 text-sm">
+        {% for d in active_disputes %}
+        <div class="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+          <div>
+            <a href="{% url 'ecommerce:vendorsuborder_detail' d.pk %}" class="font-mono font-semibold text-slate-900 hover:text-blue-600">
+              {{ d.number }}
+            </a>
+            <div class="text-xs text-slate-400">{{ d.vendor.store_name }} • Reason: {{ d.dispute_reason|default:"Customer claim" }}</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="badge badge-red">{{ d.get_dispute_status_display }}</span>
+            <a href="{% url 'ecommerce:vendorsuborder_detail' d.pk %}" class="btn btn-outline text-xs">Resolve</a>
+          </div>
+        </div>
+        {% empty %}
+        <div class="p-8 text-center text-xs text-slate-400">
+          <i data-lucide="shield-check" class="w-8 h-8 mx-auto text-emerald-500 mb-2"></i>
+          <div>Zero active disputes across marketplace orders!</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
