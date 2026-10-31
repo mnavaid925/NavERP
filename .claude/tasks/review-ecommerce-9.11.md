@@ -3,247 +3,154 @@
 - **Sub-module:** 9.11 Marketplace & Multi-Vendor • **Module:** 9 eCommerce Management System • **App:** `apps/ecommerce`
 - **Changeset:** `f373366542e10cdb8e6b08f6aa8ce4f758c5ad69...HEAD`
 - **Review Date:** 2026-10-31
-- **Status:** Review In Progress (Passes 1–5 complete)
+- **Status:** Consolidated Review Complete (Passes 1–6) — Ready for Phase 5 (`code-fixer`)
 
 ---
 
-## Pass 1: Code Review (`code-reviewer`)
+## Critical Findings
 
-### Critical
 - [ ] **C1**: Cross-vendor payout settlement leakage in `VendorSubOrder` and `VendorSubOrderForm`
-  - `apps/ecommerce/models/Marketplace/VendorSubOrders.py:222-229`
-  - `apps/ecommerce/forms/Marketplace/VendorSubOrderForms.py:53`
-  - Description: `VendorSubOrder.clean()` does not validate `self.payout.vendor_id == self.vendor_id`. Also `VendorSubOrderForm` does not filter `payout` queryset to the selected vendor.
-  - Fix: Validate vendor alignment in `clean()` and filter payout queryset to matching vendor in form.
+  - **Files**: `apps/ecommerce/models/Marketplace/VendorSubOrders.py:222-229`, `apps/ecommerce/forms/Marketplace/VendorSubOrderForms.py:14-23`
+  - **Description**: `VendorSubOrder.clean()` does not validate `self.payout.vendor_id == self.vendor_id`. Also, `VendorSubOrderForm` exposes `payout` and `payout_status` without restricting to matching vendor or excluding them from manual edit, risking payout hijacking.
+  - **Fix**: In `VendorSubOrder.clean()`, validate `if self.payout_id and self.vendor_id and self.payout.vendor_id != self.vendor_id: raise ValidationError(...)`. In `VendorSubOrderForm.Meta.exclude`, exclude `payout` and `payout_status`.
+
 - [ ] **C2**: Mismatched product variant association in `VendorProductListing`
-  - `apps/ecommerce/models/Marketplace/VendorProductListings.py:186-193`
-  - Description: `VendorProductListing.clean()` does not validate `self.variant.product_id == self.product_id`, allowing variants from unrelated products to be linked.
-  - Fix: Add check `if self.variant_id and self.product_id and self.variant.product_id != self.product_id:` in `clean()`.
-- [ ] **C3**: Vendor commission type disregarded in financial calculations
-  - `apps/ecommerce/models/Marketplace/VendorSubOrders.py:230-237`
-  - Description: `calculate_financials()` unconditionally adds fixed fee and percentage fee without checking `vendor.commission_type` ("percentage", "fixed", "combined").
-  - Fix: Check `commission_type` and apply rate / fixed fee conditionally based on choice.
-- [ ] **C4**: Payout execution and deletion overwrites withheld and refunded sub-orders
-  - `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:164, 209`
-  - Description: `vendorpayout_execute` unconditionally sets all sub-orders to `paid` even if disputed (`withheld_dispute`) or `refunded`. `vendorpayout_delete` resets disputed sub-orders to `accrued`.
-  - Fix: Exclude `withheld_dispute` and `refunded` sub-orders from batch updates.
+  - **Files**: `apps/ecommerce/models/Marketplace/VendorProductListings.py:186-193`, `apps/ecommerce/forms/Marketplace/VendorProductListingForms.py:44-50`
+  - **Description**: `VendorProductListing.clean()` and form clean do not validate `self.variant.product_id == self.product_id`, allowing variants from unrelated products to be linked.
+  - **Fix**: Validate that `variant.product_id == self.product_id` in `VendorProductListing.clean()` and `VendorProductListingForm.clean()`.
 
-### Important
-- [ ] **I1**: Contract drift and broken fields in `vendorsuborder/detail.html`
-  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:237, 241`
-  - Description: Template uses `sub_order.order.customer_party.name` (field is `customer.name`) and `sub_order.order.grand_total` (field is `total_amount`), and omits `order_lines` table.
-  - Fix: Fix variable names to `customer.name` and `total_amount`, and add consignment order lines table.
-- [ ] **I2**: AuditLog action string length clamped by `varchar(10)` limit
-  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:262`
-  - `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:214`
-  - Description: Action strings `"dispute_update"` and `"execute_disbursement"` exceed 10 characters.
-  - Fix: Pass `"dispute"` and `"execute"`, recording details in changes payload.
-- [ ] **I3**: AuditLog called after `instance.delete()`, saving `object_id = None`
-  - `apps/ecommerce/views/Marketplace/MarketplaceVendorViews.py:172`
-  - `apps/ecommerce/views/Marketplace/VendorProductListingViews.py:169`
-  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:198`
-  - `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:165`
-  - Description: `write_audit_log` invoked after `delete()`, when `pk` has been cleared.
-  - Fix: Invoke `write_audit_log` before `instance.delete()`.
-- [ ] **I4**: Missing `reject_foreign` validation in marketplace forms
-  - `apps/ecommerce/forms/Marketplace/*.py`
-  - Description: Marketplace model forms lack `reject_foreign` defense-in-depth checks on foreign keys.
-  - Fix: Implement `clean()` with `reject_foreign` in all four forms.
-- [ ] **I5**: Vendor customer rating aggregate never synchronized on rating edits
-  - `apps/ecommerce/models/Marketplace/MarketplaceVendors.py:255`
-  - Description: `MarketplaceVendor.update_rating()` is never triggered when sub-order ratings are created or edited.
-  - Fix: Trigger `self.vendor.update_rating()` upon rating changes.
+- [ ] **C3**: Non-atomic multi-step financial & settlement mutations
+  - **Files**: `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:155-176, 200-220`, `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:243-270`
+  - **Description**: `vendorpayout_execute`, `vendorpayout_delete`, and `vendorsuborder_dispute` perform multiple mutations across payouts, sub-orders, and audit logs without `@transaction.atomic`.
+  - **Fix**: Decorate `vendorpayout_execute`, `vendorpayout_delete`, and `vendorsuborder_dispute` with `@transaction.atomic`.
 
-### Minor
-- [ ] **M1**: `payout_status` filter dropped in sub-order pagination links
-  - `templates/ecommerce/marketplace/vendorsuborder/list.html:238, 246`
-  - Fix: Append `&payout_status={{ payout_filter }}`.
-- [ ] **M2**: N+1 query risks in console and detail views
-  - `apps/ecommerce/views/Marketplace/MarketplaceConsoleViews.py:43`
-  - `apps/ecommerce/views/Marketplace/VendorProductListingViews.py:84`
-  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:90`
-  - Fix: Add missing `select_related` keys (`party`, `product__primary_category`, `order__customer`).
-- [ ] **M3**: Unused disputes query in `marketplacevendor_detail`
-  - `apps/ecommerce/views/Marketplace/MarketplaceVendorViews.py:80`
-  - Fix: Render disputes table in vendor detail or remove query.
-- [ ] **M4**: Naive datetime vs local date in SLA calculation
-  - `apps/ecommerce/models/Marketplace/VendorSubOrders.py:242`
-  - Fix: Use `timezone.localdate(self.dispatched_at)` instead of `self.dispatched_at.date()`.
-- [ ] **M5**: Missing non-negative amount validations in `VendorPayout.clean`
-  - `apps/ecommerce/models/Marketplace/VendorPayouts.py:141`
-  - Fix: Add non-negative validations for monetary line fields.
+- [ ] **C4**: Cascading N+1 query storm from chained `__str__` in `VendorSubOrderForm`
+  - **Files**: `apps/ecommerce/forms/Marketplace/VendorSubOrderForms.py:48-55`, `apps/ecommerce/models/Marketplace/VendorPayouts.py:166-168`
+  - **Description**: Form `<select>` choices trigger N+1 queries when evaluating `str(order)` and `str(payout)` because querysets in form lack `select_related("customer")` and `select_related("vendor")`.
+  - **Fix**: Add `select_related("customer")` on `order` queryset and `select_related("vendor")` on `payout` queryset in `VendorSubOrderForm.__init__`.
+
+- [ ] **C5**: Vendor commission type disregarded in financial calculations
+  - **Files**: `apps/ecommerce/models/Marketplace/VendorSubOrders.py:230-237`
+  - **Description**: `calculate_financials()` unconditionally adds fixed fee and percentage fee without checking `vendor.commission_type` ("percentage", "fixed", "combined").
+  - **Fix**: In `calculate_financials()`, inspect `vendor.commission_type` and calculate fees conditionally according to the choice.
+
+- [ ] **C6**: Payout execution and deletion overwrites withheld and refunded sub-orders
+  - **Files**: `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:164, 209`
+  - **Description**: `vendorpayout_execute` unconditionally sets all sub-orders to `paid` even if disputed (`withheld_dispute`) or `refunded`. `vendorpayout_delete` resets disputed sub-orders to `accrued`.
+  - **Fix**: Exclude `withheld_dispute` and `refunded` sub-orders from batch status updates.
 
 ---
 
-## Pass 2: Explorer Review (`explorer`)
+## Important Findings
 
-### Important
-- [ ] **EXP-I1**: Broken Attribute Lookups on `listing.product` in Listing Detail Template
-  - `templates/ecommerce/marketplace/vendorproductlisting/detail.html:207, 211`
-  - Description: Line 207 uses `{{ listing.product.category.name }}` (`CatalogProduct` FK is `primary_category`), rendering `"Uncategorized"`. Line 211 uses `listing.product.is_active` (`CatalogProduct` has `status` with choices draft/active/archived, no `is_active` boolean), rendering `"Inactive"`.
-  - Fix: Use `listing.product.primary_category.name` and `listing.product.status == "active"`.
-- [ ] **EXP-I2**: Broken Attribute Lookups on `sub_order.order` in Sub-Order Detail Template
-  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:237, 241`
-  - Description: Line 237 references `sub_order.order.customer_party.name` (`EcommerceOrder` FK is `customer`), rendering fallback `"Shopper"`. Line 241 references `${{ sub_order.order.grand_total }}` (`EcommerceOrder` field is `total_amount`), rendering blank `$`.
-  - Fix: Use `sub_order.order.customer.name` and `sub_order.order.total_amount`.
-- [ ] **EXP-I3**: Missing `payout_status` Filter Dropdown in Sub-Orders List Template
-  - `templates/ecommerce/marketplace/vendorsuborder/list.html:34-90`
-  - Description: View parses `payout_status` and passes `payout_status_choices` and `payout_filter`, but filter form lacks the dropdown and pagination links drop the parameter.
-  - Fix: Add `<select name="payout_status">` with `payout_status_choices` to the filter form and append to pagination query.
-- [ ] **EXP-I4**: `TypeError` on `None` Comparison in Model `clean()` Methods
-  - `apps/ecommerce/models/Marketplace/MarketplaceVendors.py:244-249`
-  - `apps/ecommerce/models/Marketplace/VendorProductListings.py:179`
-  - `apps/ecommerce/models/Marketplace/VendorSubOrders.py:215, 217`
-  - Description: Direct `< Decimal("0.00")` comparisons without guarding for `None` raise unhandled `TypeError` if fields are unpopulated before validation.
-  - Fix: Add `if self.<field> is not None and self.<field> < Decimal("0.00"):` guards.
+- [ ] **I1**: Contract drift and broken attribute lookups in `vendorsuborder/detail.html`
+  - **Files**: `templates/ecommerce/marketplace/vendorsuborder/detail.html:237, 241`, `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:90`
+  - **Description**: Template uses `sub_order.order.customer_party.name` (field is `customer.name`) and `sub_order.order.grand_total` (field is `total_amount`), resulting in fallback "Shopper" and blank "$". Also omits rendering the passed `order_lines` context.
+  - **Fix**: Update template to `customer.name` and `total_amount`, add `order__customer` to `select_related` in view, and render the `order_lines` table.
 
-### Minor
-- [ ] **EXP-M1**: `VendorSubOrder.save()` Does Not Update Vendor Aggregate Rating
-  - `apps/ecommerce/models/Marketplace/VendorSubOrders.py:257-260`
-  - `apps/ecommerce/models/Marketplace/MarketplaceVendors.py:255-266`
-  - Description: Vendor rating aggregates remain `0.00` because saving sub-orders with customer ratings never calls `vendor.update_rating()`.
-  - Fix: Invoke `self.vendor.update_rating()` on sub-order save when rated.
-- [ ] **EXP-M2**: Unrendered `order_lines` in Sub-Order Detail View
-  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:226-255`
-  - Description: View provides `order_lines` context, but the template does not display an items table for ordered lines.
-  - Fix: Render `order_lines` table in the parent order section.
+- [ ] **I2**: Broken attribute lookups on `listing.product` in Listing Detail Template
+  - **Files**: `templates/ecommerce/marketplace/vendorproductlisting/detail.html:207, 211`
+  - **Description**: Line 207 uses `{{ listing.product.category.name }}` (`CatalogProduct` FK is `primary_category`), rendering "Uncategorized". Line 211 uses `listing.product.is_active` (`CatalogProduct` has `status` with choices draft/active/archived, no `is_active` boolean), rendering "Inactive".
+  - **Fix**: Use `listing.product.primary_category.name` and `listing.product.status == "active"`.
 
----
+- [ ] **I3**: Missing `reject_foreign` validation across all marketplace forms
+  - **Files**: `apps/ecommerce/forms/Marketplace/*.py`
+  - **Description**: None of the four marketplace `TenantModelForm` classes implement a `clean()` method calling `reject_foreign(...)`.
+  - **Fix**: Implement `clean()` with `reject_foreign` across `MarketplaceVendorForm`, `VendorProductListingForm`, `VendorSubOrderForm`, and `VendorPayoutForm`.
 
-## Pass 3: Frontend Review (`frontend-reviewer`)
+- [ ] **I4**: AuditLog action string length exceeds `varchar(10)` limit
+  - **Files**: `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:262`, `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:214`
+  - **Description**: Action strings `"dispute_update"` (14 chars) and `"execute_disbursement"` (20 chars) exceed varchar(10) column limit, causing warnings and truncation (`dispute_up`, `execute_di`).
+  - **Fix**: Pass `"dispute"` and `"execute"` (or `"disburse"`), storing full action details in changes payload.
 
-### Critical
-- [ ] **FE-C1**: Model Field Mismatch on Parent Order in Sub-Order Detail
-  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:237-241`
-  - Description: Parent order references `sub_order.order.customer_party.name` (field is `customer.name`) and `sub_order.order.grand_total` (field is `total_amount`), resulting in fallback "Shopper" and blank "$". (Duplicate of I1 / EXP-I2).
-  - Fix: Update to `sub_order.order.customer.name` and `sub_order.order.total_amount`.
+- [ ] **I5**: AuditLog called after `instance.delete()`, nullifying `object_id`
+  - **Files**: `apps/ecommerce/views/Marketplace/MarketplaceVendorViews.py:172`, `apps/ecommerce/views/Marketplace/VendorProductListingViews.py:169`, `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:198`, `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:165`
+  - **Description**: `write_audit_log` invoked after `delete()`, when `pk` has been cleared to None.
+  - **Fix**: Invoke `write_audit_log` before `instance.delete()` across all four deletion views.
 
-### Important
-- [ ] **FE-I1**: Form Labels Missing `for` Attributes Across Forms and Modals
-  - `templates/ecommerce/marketplace/marketplacevendor/form.html:65-194`
-  - `templates/ecommerce/marketplace/vendorproductlisting/form.html:65-164`
-  - `templates/ecommerce/marketplace/vendorsuborder/form.html:65-175`
-  - `templates/ecommerce/marketplace/vendorpayout/form.html:65-137`
-  - `templates/ecommerce/marketplace/marketplacevendor/detail.html:149, 153, 157, 218`
-  - `templates/ecommerce/marketplace/vendorproductlisting/detail.html:134, 138, 142, 146`
-  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:128, 132, 136, 140, 169, 173, 177`
-  - `templates/ecommerce/marketplace/vendorpayout/detail.html:141`
-  - Description: Form labels render without `for="{{ form.<field>.id_for_label }}"` (or matching input IDs), breaking accessibility screen reader association.
-  - Fix: Add `for="{{ form.<field>.id_for_label }}"` to label tags and manual action input IDs.
-- [ ] **FE-I2**: Missing `aria-label` Attributes on Table Icon Action Buttons
-  - `templates/ecommerce/marketplace/marketplacevendor/list.html:168–179`
-  - `templates/ecommerce/marketplace/vendorproductlisting/list.html:168–179`
-  - `templates/ecommerce/marketplace/vendorsuborder/list.html:194–205`
-  - `templates/ecommerce/marketplace/vendorpayout/list.html:149–160`
-  - Description: Table row action buttons use `.btn-icon` with SVG icons and `title`, but lack `aria-label`.
-  - Fix: Add `aria-label="View Detail"`, `aria-label="Edit"`, `aria-label="Delete"` to `.btn-icon` elements.
-- [ ] **FE-I3**: Hardcoded `bg-white` and `border-slate-200` Overrides on `.card` Bypassing Dark Mode
-  - All 13 templates across `templates/ecommerce/marketplace/`
-  - Description: Hardcoded utility classes `bg-white border border-slate-200` override `.card` CSS custom properties, breaking dark mode rendering.
-  - Fix: Remove redundant `bg-white border border-slate-200` utilities where `.card` is present.
+- [ ] **I6**: Workflow state mass assignment in `VendorPayoutForm` & `VendorProductListingForm`
+  - **Files**: `apps/ecommerce/forms/Marketplace/VendorPayoutForms.py:12-20`, `apps/ecommerce/forms/Marketplace/VendorProductListingForms.py:14-21`
+  - **Description**: `payout_status` is not excluded in `VendorPayoutForm.Meta.exclude` (can bypass approval/disbursement). `moderation_status`, `compliance_status`, and `rejection_reason` are exposed in `VendorProductListingForm` (bypassing moderation flow).
+  - **Fix**: Exclude these workflow fields from standard CRUD ModelForms.
 
-### Minor
-- [ ] **FE-M1**: KPI Stat Cards Diverge from Theme Component Architecture
-  - `templates/ecommerce/marketplace/console/dashboard.html:39–100`
-  - `templates/ecommerce/marketplace/marketplacevendor/detail.html:71–106`
-  - `templates/ecommerce/marketplace/vendorproductlisting/detail.html:67–103`
-  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:67–99`
-  - Description: KPI summary cards use ad-hoc Tailwind classes instead of `.stat-grid`, `.stat-card`, `.stat-icon <color>`.
-  - Fix: Refactor KPI blocks to use theme design system `.stat-card` pattern.
-- [ ] **FE-M2**: Pagination Links Do Not URL-Encode Query Params and Emit Empty Filters
-  - `templates/ecommerce/marketplace/marketplacevendor/list.html:212, 220`
-  - `templates/ecommerce/marketplace/vendorproductlisting/list.html:212, 220`
-  - `templates/ecommerce/marketplace/vendorsuborder/list.html:238, 246`
-  - `templates/ecommerce/marketplace/vendorpayout/list.html:193, 201`
-  - Description: Raw pagination parameters can break on special characters and emit empty query string keys.
-  - Fix: Use `{{ query|urlencode }}` and filter empty parameters.
-- [ ] **FE-M3**: Potential N+1 Query in Console Dashboard
-  - `templates/ecommerce/marketplace/console/dashboard.html:122`
-  - Description: Accessing `{{ v.party.name }}` triggers extra queries without `select_related("party")`.
-  - Fix: Add `.select_related("party")` in `MarketplaceConsoleViews.py`.
+- [ ] **I7**: `TypeError` on `None` comparison in model `clean()` methods
+  - **Files**: `apps/ecommerce/models/Marketplace/MarketplaceVendors.py:244-249`, `apps/ecommerce/models/Marketplace/VendorProductListings.py:179`, `apps/ecommerce/models/Marketplace/VendorSubOrders.py:215, 217`
+  - **Description**: Direct `< Decimal("0.00")` comparisons without guarding for `None` raise unhandled `TypeError` if fields are unpopulated before validation.
+  - **Fix**: Add `if self.<field> is not None and self.<field> < Decimal("0.00"):` guards.
+
+- [ ] **I8**: Missing `payout_status` filter dropdown in Sub-Orders List template
+  - **Files**: `templates/ecommerce/marketplace/vendorsuborder/list.html:34-90, 238, 246`
+  - **Description**: View parses `payout_status` and passes `payout_status_choices` and `payout_filter`, but filter form lacks `<select name="payout_status">` and pagination links drop the parameter.
+  - **Fix**: Add `<select name="payout_status">` with `payout_status_choices` to the filter form and append to pagination query.
+
+- [ ] **I9**: Vendor customer rating calculation uses Python loops and is never synchronized on rating edits
+  - **Files**: `apps/ecommerce/models/Marketplace/MarketplaceVendors.py:255-267`, `apps/ecommerce/models/Marketplace/VendorSubOrders.py:257-260`
+  - **Description**: `update_rating` fetches all ratings into Python and calculates average with Python `sum`/`len`. SubOrder saves with ratings do not trigger `self.vendor.update_rating()`.
+  - **Fix**: Refactor `update_rating()` to use SQL `.aggregate(total=Count("customer_rating"), avg=Avg("customer_rating"))` and invoke `self.vendor.update_rating()` when a sub-order is saved with a rating.
+
+- [ ] **I10**: Form labels missing `for` attributes and table buttons missing `aria-label`
+  - **Files**: `templates/ecommerce/marketplace/**/*.html`
+  - **Description**: Form labels lack `for="{{ form.<field>.id_for_label }}"`, and list table icon buttons lack `aria-label`, violating WCAG standards.
+  - **Fix**: Add `for` attributes to form labels and `aria-label` to icon buttons.
+
+- [ ] **I11**: Hardcoded `bg-white` and `border-slate-200` overrides on `.card` bypassing dark mode
+  - **Files**: All 13 templates across `templates/ecommerce/marketplace/`
+  - **Description**: Hardcoded utility classes `bg-white border border-slate-200` override `.card` CSS custom properties, breaking dark mode rendering.
+  - **Fix**: Remove redundant `bg-white border border-slate-200` utilities where `.card` is present.
+
+- [ ] **I12**: Missing multi-tenant composite indexes for filtered fields
+  - **Files**: `apps/ecommerce/models/Marketplace/VendorSubOrders.py:194-211`, `apps/ecommerce/models/Marketplace/VendorPayouts.py:130-140`, `apps/ecommerce/models/Marketplace/VendorProductListings.py:166-175`
+  - **Description**: Missing composite indexes for hot multi-tenant filter combinations: `("tenant", "fulfillment_status")`, `("tenant", "sla_status")`, `("tenant", "payout_status")`, and `("tenant", "compliance_status")`.
+  - **Fix**: Add these composite indexes to `Meta.indexes`.
 
 ---
 
-## Pass 4: Performance Review (`performance-reviewer`)
+## Minor Findings
 
-### Critical
-- [ ] **PERF-01**: Non-Atomic Multi-Step Financial & Settlement Mutations
-  - `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:155-176, 200-220`
-  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:243-270`
-  - Description: `vendorpayout_execute` and `vendorpayout_delete` mutate sub-orders and payouts across multiple steps without `@transaction.atomic`.
-  - Fix: Wrap multi-step financial mutations in `@transaction.atomic`.
-- [ ] **PERF-02**: Cascading N+1 Query Storm from Chained `__str__` Foreign Key Lookups in Form Choice Fields
-  - `apps/ecommerce/models/Marketplace/VendorPayouts.py:166-168`
-  - `apps/ecommerce/forms/Marketplace/VendorSubOrderForms.py:48-55`
-  - Description: Form `<select>` choices trigger N+1 queries when evaluating `str(order)` and `str(payout)` because querysets in form lack `select_related("customer")` and `select_related("vendor")`.
-  - Fix: Add `select_related("customer")` on `order` queryset and `select_related("vendor")` on `payout` queryset in form `__init__`.
-- [ ] **PERF-03**: N+1 Query in Marketplace Console Dashboard KYC Queue
-  - `apps/ecommerce/views/Marketplace/MarketplaceConsoleViews.py:43`
-  - `templates/ecommerce/marketplace/console/dashboard.html:116-123`
-  - Description: `v.party.name` accesses `core.Party` foreign key without `select_related("party")`.
-  - Fix: Add `.select_related("party")` to `pending_kyc_vendors`.
+- [ ] **M1**: N+1 query in Marketplace Console Dashboard KYC Queue
+  - **Files**: `apps/ecommerce/views/Marketplace/MarketplaceConsoleViews.py:43`, `templates/ecommerce/marketplace/console/dashboard.html:122`
+  - **Fix**: Add `.select_related("party")` to `pending_kyc_vendors`.
 
-### Important
-- [ ] **PERF-04**: Python In-Memory Rating Calculation Instead of SQL Aggregation
-  - `apps/ecommerce/models/Marketplace/MarketplaceVendors.py:255-267`
-  - Description: `update_rating` fetches all ratings into memory and calculates `len` and `sum` in Python.
-  - Fix: Use Django ORM `.aggregate(total=Count("customer_rating"), avg=Avg("customer_rating"))`.
-- [ ] **PERF-05**: Missing Multi-Tenant Composite Indexes for Filtered Fields
-  - `apps/ecommerce/models/Marketplace/VendorSubOrders.py:194-211`
-  - `apps/ecommerce/models/Marketplace/VendorPayouts.py:130-140`
-  - `apps/ecommerce/models/Marketplace/VendorProductListings.py:166-175`
-  - Description: Missing composite indexes for hot multi-tenant filter combinations: `("tenant", "fulfillment_status")`, `("tenant", "sla_status")`, `("tenant", "payout_status")`, and `("tenant", "compliance_status")`.
-  - Fix: Add these composite indexes to `Meta.indexes`.
-- [ ] **PERF-06**: Hidden Foreign Key Fetch in `VendorSubOrder.save()` and Audit Logging
-  - `apps/ecommerce/models/Marketplace/VendorSubOrders.py:232`
-  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:214, 244`
-  - Description: `calculate_financials` touches `self.vendor` and audit log touches `self.order.number`, triggering lazy fetches on action views.
-  - Fix: Fetch sub_order with `select_related("vendor", "order")` in action handlers.
-- [ ] **PERF-07**: Double Query: Uncached `.count` Followed by Iteration in Payout Detail
-  - `templates/ecommerce/marketplace/vendorpayout/detail.html:163, 178`
-  - Description: `settled_suborders.count` issues separate SQL `COUNT(*)` prior to loop iteration.
-  - Fix: Use `settled_suborders|length`.
+- [ ] **M2**: Double query (`.count` followed by iteration) in Payout Detail
+  - **Files**: `templates/ecommerce/marketplace/vendorpayout/detail.html:163, 178`
+  - **Fix**: Use `settled_suborders|length` instead of `settled_suborders.count`.
 
-### Minor
-- [ ] **PERF-08**: Missing `select_related("product__primary_category")` in Listing Detail View
-  - `apps/ecommerce/views/Marketplace/VendorProductListingViews.py:80-86`
-  - Fix: Add `product__primary_category` to `select_related`.
-- [ ] **PERF-09**: Separate Consecutive `COUNT(*)` Queries in Dashboard Console
-  - `apps/ecommerce/views/Marketplace/MarketplaceConsoleViews.py:21-22`
-  - Fix: Combine counts using conditional aggregation.
-- [ ] **PERF-10**: Full Model Column Fetches for Dropdown Filters
-  - `apps/ecommerce/views/Marketplace/VendorProductListingViews.py:57`
-  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:61`
-  - `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:50`
-  - Fix: Add `.only("id", "store_name")` to vendor filter querysets.
-- [ ] **PERF-11**: Unused QuerySet in Vendor Detail View
-  - `apps/ecommerce/views/Marketplace/MarketplaceVendorViews.py:80, 96`
-  - Fix: Remove unused `disputes` queryset or render section.
-- [ ] **PERF-12**: SubOrder Detail Template Non-Existent Attribute Access
-  - `templates/ecommerce/marketplace/vendorsuborder/detail.html:237`
-  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:90`
-  - Fix: Include `order__customer` in `select_related` in `vendorsuborder_detail` alongside field rename.
+- [ ] **M3**: Hidden foreign key fetch in `VendorSubOrder.save()` and audit logging
+  - **Files**: `apps/ecommerce/models/Marketplace/VendorSubOrders.py:232`, `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:214, 244`
+  - **Fix**: Fetch sub_order with `select_related("vendor", "order")` in action handlers.
 
----
+- [ ] **M4**: Missing `select_related("product__primary_category")` in Listing Detail View
+  - **Files**: `apps/ecommerce/views/Marketplace/VendorProductListingViews.py:80-86`
+  - **Fix**: Add `product__primary_category` to `select_related`.
 
-## Pass 5: QA Smoke Testing (`qa-smoke-tester`)
+- [ ] **M5**: Separate consecutive `COUNT(*)` queries in Dashboard Console
+  - **Files**: `apps/ecommerce/views/Marketplace/MarketplaceConsoleViews.py:21-22`
+  - **Fix**: Combine counts using conditional aggregation `aggregate(total=Count("id"), pending_kyc=Count("id", filter=Q(kyc_status="pending")))`.
 
-### Important
-- [ ] **QA-I1**: AuditLog Action String Length Exceeds Column Size
-  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:262` (`verb="dispute_update"`)
-  - `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:214` (`verb="execute_disbursement"`)
-  - Description: Action strings exceed varchar(10) column limit, causing warnings and truncation (`dispute_up`, `execute_di`). (Corroborates I2).
-  - Fix: Use `"dispute"` and `"execute"`.
+- [ ] **M6**: Unescaped string interpolation in inline JavaScript confirm handlers
+  - **Files**: `templates/ecommerce/marketplace/marketplacevendor/list.html:174`, `templates/ecommerce/marketplace/vendorproductlisting/list.html:174`
+  - **Fix**: Use `{{ v.store_name|escapejs }}` in `confirm(...)`.
 
-### Minor
-- [ ] **QA-M1**: Unregistered Audit Log Verb UserWarnings
-  - `apps/ecommerce/views/Marketplace/MarketplaceVendorViews.py` (`verify_kyc`, `suspend`, `reinstate`)
-  - `apps/ecommerce/views/Marketplace/VendorProductListingViews.py` (`moderate`)
-  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py` (`fulfill`)
-  - `apps/ecommerce/views/Marketplace/VendorPayoutViews.py` (`approve`)
-  - Description: Domain action verbs trigger `UserWarning: write_audit_log(...) was called with an unregistered verb`.
-  - Fix: Standardize on `"update"` with action detail in `changes` or register verbs in `KNOWN_VERBS`.
-- [ ] **QA-M2**: Duplicate Context Variable in MarketplaceVendor List View
-  - `apps/ecommerce/views/Marketplace/MarketplaceVendorViews.py:56-57`
-  - Description: Both `"query": query` and `"search_query": query` passed to context; template only uses `{{ query }}`.
-  - Fix: Remove redundant `"search_query"` key.
+- [ ] **M7**: Unused disputes query in `marketplacevendor_detail`
+  - **Files**: `apps/ecommerce/views/Marketplace/MarketplaceVendorViews.py:80, 96`
+  - **Fix**: Render disputes table in vendor detail or remove unused queryset.
+
+- [ ] **M8**: Naive datetime vs local date in SLA calculation
+  - **Files**: `apps/ecommerce/models/Marketplace/VendorSubOrders.py:242`
+  - **Fix**: Use `timezone.localdate(self.dispatched_at)` instead of `self.dispatched_at.date()`.
+
+- [ ] **M9**: Duplicate `search_query` context key in MarketplaceVendor list view
+  - **Files**: `apps/ecommerce/views/Marketplace/MarketplaceVendorViews.py:56-57`
+  - **Fix**: Remove redundant `"search_query"` key.
+
+- [ ] **M10**: Full model column fetches for dropdown filters in list views
+  - **Files**: `apps/ecommerce/views/Marketplace/VendorProductListingViews.py:57`, `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:61`, `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:50`
+  - **Fix**: Add `.only("id", "store_name")` to vendor dropdown querysets.
+
+- [ ] **M11**: Unregistered audit log verb warnings
+  - **Files**: `apps/ecommerce/views/Marketplace/*.py`
+  - **Fix**: Use `"update"` verb with action recorded in changes dictionary for custom actions.
+
+- [ ] **M12**: Non-negative amount validations in `VendorPayout.clean`
+  - **Files**: `apps/ecommerce/models/Marketplace/VendorPayouts.py:141`
+  - **Fix**: Add non-negative validations for monetary line fields.
