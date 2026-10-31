@@ -29,8 +29,7 @@ Reviewers executed serially:
 - [x] **[I4]** `templates/ecommerce/subscriptioncommerce/{subscriptionplan,customersubscription,subscriptionboxcuration,subscriptionretentionaction}/detail.html` — fixed — added POST-Delete forms with CSRF and confirm prompts to all 4 detail page action headers
 - [x] **[I5]** `apps/ecommerce/views/SubscriptionCommerce/CustomerSubscriptions.py:18-20`, `SubscriptionPortals.py:19-21`, `SubscriptionPlans.py:66` — fixed — added chained customer_profile relations to select_related across views
 - [x] **[I6]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:23-24` — fixed — sliced active and paused subscription display querysets to [:25]
-- [ ] **[I7]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:46,83,118,138` — Missing `@tenant_admin_required` on mutating actions (`skip`, `pause`, `resume`, `deflect`). Any logged-in non-admin user can modify schedules, cancel contracts, or apply recurring discounts.
-  - **Fix**: Apply `@tenant_admin_required` to mutating action endpoints in `SubscriptionPortals.py`.
+- [x] **[I7]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:46,83,118,138` — fixed — added tenant_admin_required to skip, pause, resume, and deflect portal actions
 - [ ] **[I8]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:48,85,120,140` — Lack of prerequisite lifecycle state guards allows modifying or reviving cancelled/expired subscriptions.
   - **Fix**: Guard state transitions in views: `skip`, `pause`, and `deflect` require `status == 'active'`; `resume` requires `status == 'paused'`.
 - [ ] **[I9]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:141-168` — Unvalidated `reason` (causes MariaDB `DataError` if > 50 chars) and unsafe default fallthrough on `action_choice`.
