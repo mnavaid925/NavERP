@@ -8,6 +8,249 @@
 > Do not mass-tick the backlog.
 ---
 
+# Sub-module 9.13: Reviews & User-Generated Content (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.13.md` (2026-10-31)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.12.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0017_affiliatepartner_idx_eaff_ten_party_and_more.py`, so **9.13 claims `0018`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.13.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/ReviewUgc/`
+> Template folder name: `templates/ecommerce/review_ugc/{product_review,product_question,visual_ugc,sentiment_summary}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Spine & Entity Integration (L28/L29)**:
+  - Product reviews and community Q&A attach directly to canonical `ecommerce.CatalogProduct` (`EPRD-`, 9.1) and `ecommerce.ProductVariant` (`PVR-`, 9.1).
+  - Reviewer/author profile anchors to `ecommerce.CustomerAccountProfile` (`ECAP-`, 9.6) and unified Core Spine `core.Party` / `accounts.User`.
+  - Verified buyer badge verification checks `ecommerce.EcommerceOrder` (`EORD-`, 9.5) and `ecommerce.EcommerceOrderLine`.
+  - Financial ledger integrity: No financial ledger tables in ecommerce; financial effects post to `apps/accounting/` (Module 2).
+- **Clear Sibling Boundaries (9.1 vs. 9.3 vs. 9.5 vs. 9.6 vs. 9.8 vs. 9.10 vs. 9.13 vs. 9.14)**:
+  - 9.1 (Product Catalog): Owns core product masters and specs; 9.13 attaches reviews and ratings.
+  - 9.3 (Pricing & Promotions): Owns coupon codes; 9.13 triggers reward events for review submissions.
+  - 9.5 (Order Management): Owns orders and delivery tracking; 9.13 validates purchase history.
+  - 9.6 (Customer Account): Owns customer address book and account profiles; 9.13 stores shopper reviews and upvotes.
+  - 9.8 (Personalization): Owns behavioral telemetry and recommendation carousels; 9.13 feeds rating and sentiment weights.
+  - 9.10 (Marketing Campaigns): Owns omnichannel blast dispatchers; 9.13 models review submission and token verification.
+  - 9.13 (This Pass): Owns product reviews, ratings, moderation workflows, Q&A threads, customer photo/video visual UGC, and sentiment intelligence scorecards.
+  - 9.14 (Customer Service): Owns help desk tickets; negative reviews can be flagged for service escalation.
+- **Multi-Tenancy & Data Isolation**: All reviews, questions, visual media assets, and sentiment aggregates are strictly scoped by `tenant` (`core.Tenant`).
+- **Base Class & Prefix Discipline**: All 4 models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`), providing `tenant` FK (`on_delete=CASCADE`), thread-safe auto-number generation, and audit timestamps.
+- **Prefix Collision Sweep**: `EPRV`, `EPQA`, `EUGC`, `ERVM` verified 100% free across repo.
+
+---
+
+## 9.13-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO duplicate party, user, or product table** — Reviews link directly to `core.Party`, `accounts.User`, `ecommerce.CatalogProduct`, and `ecommerce.CustomerAccountProfile`.
+- [ ] **NO synchronous cloud AI vision / live Instagram scraping daemon** — Media URLs and social handles are modeled natively in Django; external cloud sync runs asynchronously.
+- [ ] **NO proprietary SaaS external review widget dependency** — Review forms, star distribution bars, helpfulness voting, and visual lightboxes execute natively in Tailwind + Django.
+- [ ] **NO third-party review syndication network** — Scoped to native tenant store reviews.
+
+---
+
+## Models (4 models in `apps/ecommerce/models/ReviewUgc/`)
+
+- [ ] **`ProductReview`** [Prefix: `EPRV-`] (`apps/ecommerce/models/ReviewUgc/ProductReviews.py`)
+  - **Purpose**: Core customer review, star rating (1–5), moderation status (`pending`, `approved`, `rejected`, `flagged_spam`), sentiment analysis classification (`positive`, `neutral`, `negative`, `mixed`), verified buyer badge, merchant response, media attachment URLs, and helpfulness voting counters.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `RATING_CHOICES = [(1, "1 Star - Poor"), (2, "2 Stars - Fair"), (3, "3 Stars - Good"), (4, "4 Stars - Very Good"), (5, "5 Stars - Excellent")]`
+    - `STATUS_CHOICES = [("pending", "Pending Moderation"), ("approved", "Approved"), ("rejected", "Rejected"), ("flagged_spam", "Flagged as Spam")]`
+    - `SENTIMENT_CHOICES = [("positive", "Positive"), ("neutral", "Neutral"), ("negative", "Negative"), ("mixed", "Mixed")]`
+  - **Fields**:
+    - `product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.CASCADE, related_name="customer_reviews")`
+    - `variant`: `ForeignKey("ecommerce.ProductVariant", on_delete=models.SET_NULL, null=True, blank=True, related_name="customer_reviews")`
+    - `customer`: `ForeignKey("ecommerce.CustomerAccountProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="reviews")`
+    - `order`: `ForeignKey("ecommerce.EcommerceOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="reviews")`
+    - `reviewer_name`: `CharField(max_length=120, help_text="Public display name")`
+    - `reviewer_email`: `EmailField(help_text="Private email for verification")`
+    - `rating`: `PositiveSmallIntegerField(choices=RATING_CHOICES, default=5)`
+    - `title`: `CharField(max_length=200, help_text="Review headline")`
+    - `body`: `TextField(help_text="Detailed customer review text")`
+    - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="pending")`
+    - `sentiment`: `CharField(max_length=20, choices=SENTIMENT_CHOICES, default="neutral")`
+    - `sentiment_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), help_text="Score from -1.00 (negative) to +1.00 (positive)")`
+    - `is_verified_purchase`: `BooleanField(default=False)`
+    - `is_featured`: `BooleanField(default=False, help_text="Pin to top of review list")`
+    - `media_urls`: `JSONField(default=list, blank=True, help_text="List of attached photo/video URLs")`
+    - `helpful_votes`: `PositiveIntegerField(default=0)`
+    - `unhelpful_votes`: `PositiveIntegerField(default=0)`
+    - `merchant_response`: `TextField(blank=True, help_text="Official merchant public reply")`
+    - `merchant_response_at`: `DateTimeField(null=True, blank=True)`
+    - `moderated_by`: `ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="moderated_reviews")`
+    - `moderation_note`: `CharField(max_length=255, blank=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_eprv_tenant_num_uniq")`
+    - `Index(fields=["tenant", "product", "status"], name="idx_eprv_ten_prod_stat")`
+    - `Index(fields=["tenant", "rating", "status"], name="idx_eprv_ten_rate_stat")`
+    - `Index(fields=["tenant", "sentiment"], name="idx_eprv_ten_snt")`
+  - **Form Exclusions**: `tenant`, `number`, `is_verified_purchase`, `helpful_votes`, `unhelpful_votes`, `sentiment_score`, `moderated_by`, `merchant_response_at`, `created_at`, `updated_at`.
+
+- [ ] **`ProductQuestionAnswer`** [Prefix: `EPQA-`] (`apps/ecommerce/models/ReviewUgc/ProductQuestionAnswers.py`)
+  - **Purpose**: Community and merchant expert Q&A thread attached to catalog products. Captures pre-purchase customer queries, official staff answers, moderation status (`pending`, `approved`, `rejected`), and helpfulness voting.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `STATUS_CHOICES = [("pending", "Pending Moderation"), ("approved", "Approved"), ("rejected", "Rejected")]`
+  - **Fields**:
+    - `product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.CASCADE, related_name="questions_and_answers")`
+    - `author_name`: `CharField(max_length=120, help_text="Public author name")`
+    - `author_email`: `EmailField(blank=True, help_text="Private email for notifications")`
+    - `customer`: `ForeignKey("ecommerce.CustomerAccountProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="questions")`
+    - `question_text`: `TextField(help_text="Customer pre-purchase inquiry")`
+    - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="pending")`
+    - `answer_text`: `TextField(blank=True, help_text="Staff or expert response")`
+    - `answered_by_name`: `CharField(max_length=120, blank=True)`
+    - `is_staff_answer`: `BooleanField(default=False)`
+    - `answered_by_user`: `ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="product_answers")`
+    - `answered_at`: `DateTimeField(null=True, blank=True)`
+    - `helpful_votes`: `PositiveIntegerField(default=0)`
+    - `is_pinned`: `BooleanField(default=False, help_text="Pin to top of Q&A section")`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_epqa_tenant_num_uniq")`
+    - `Index(fields=["tenant", "product", "status"], name="idx_epqa_ten_prod_stat")`
+    - `Index(fields=["tenant", "is_pinned"], name="idx_epqa_ten_pinned")`
+  - **Form Exclusions**: `tenant`, `number`, `answered_by_user`, `answered_at`, `helpful_votes`, `created_at`, `updated_at`.
+
+- [ ] **`VisualUgcMedia`** [Prefix: `EUGC-`] (`apps/ecommerce/models/ReviewUgc/VisualUgcMedia.py`)
+  - **Purpose**: Visual social proof asset repository for customer-uploaded photos, unboxing videos, and social media embeds. Supports shoppable product tagging, usage rights approval tracking, and storefront carousel/grid publication.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `MEDIA_TYPE_CHOICES = [("photo", "Customer Photo"), ("video", "Customer Video"), ("instagram", "Instagram Post"), ("tiktok", "TikTok Video")]`
+    - `RIGHTS_STATUS_CHOICES = [("approved", "Rights Approved / Uploaded"), ("pending_request", "Rights Requested"), ("rejected", "Rejected / No Rights")]`
+  - **Fields**:
+    - `media_type`: `CharField(max_length=20, choices=MEDIA_TYPE_CHOICES, default="photo")`
+    - `media_url`: `URLField(max_length=500, help_text="Direct media URL")`
+    - `thumbnail_url`: `URLField(max_length=500, blank=True, help_text="Thumbnail preview URL")`
+    - `caption`: `TextField(blank=True, help_text="Customer caption or quote")`
+    - `uploader_name`: `CharField(max_length=120, blank=True)`
+    - `uploader_handle`: `CharField(max_length=80, blank=True, help_text="@social_handle")`
+    - `tagged_product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.CASCADE, related_name="ugc_media")`
+    - `tagged_variant`: `ForeignKey("ecommerce.ProductVariant", on_delete=models.SET_NULL, null=True, blank=True, related_name="ugc_media")`
+    - `rights_status`: `CharField(max_length=25, choices=RIGHTS_STATUS_CHOICES, default="approved")`
+    - `is_shoppable`: `BooleanField(default=True)`
+    - `is_published`: `BooleanField(default=True)`
+    - `display_order`: `PositiveIntegerField(default=10)`
+    - `views_count`: `PositiveIntegerField(default=0)`
+    - `clicks_count`: `PositiveIntegerField(default=0)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_eugc_tenant_num_uniq")`
+    - `Index(fields=["tenant", "tagged_product", "is_published"], name="idx_eugc_ten_prod_pub")`
+    - `Index(fields=["tenant", "rights_status"], name="idx_eugc_ten_rights")`
+  - **Form Exclusions**: `tenant`, `number`, `views_count`, `clicks_count`, `created_at`, `updated_at`.
+
+- [ ] **`ReviewSentimentSummary`** [Prefix: `ERVM-`] (`apps/ecommerce/models/ReviewUgc/ReviewSentimentSummaries.py`)
+  - **Purpose**: Aggregated rating distribution, average star rating, sentiment breakdown percentages, and NLP keyword extraction scorecard per product. Provides fast-rendering cached review stats and product improvement insights.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Fields**:
+    - `product`: `OneToOneField("ecommerce.CatalogProduct", on_delete=models.CASCADE, related_name="review_summary")`
+    - `total_reviews`: `PositiveIntegerField(default=0)`
+    - `average_rating`: `DecimalField(max_digits=3, decimal_places=2, default=Decimal("0.00"))`
+    - `rating_5_count`: `PositiveIntegerField(default=0)`
+    - `rating_4_count`: `PositiveIntegerField(default=0)`
+    - `rating_3_count`: `PositiveIntegerField(default=0)`
+    - `rating_2_count`: `PositiveIntegerField(default=0)`
+    - `rating_1_count`: `PositiveIntegerField(default=0)`
+    - `positive_sentiment_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))`
+    - `neutral_sentiment_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))`
+    - `negative_sentiment_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))`
+    - `top_positive_keywords`: `JSONField(default=list, blank=True, help_text="List of top praised attributes")`
+    - `top_negative_keywords`: `JSONField(default=list, blank=True, help_text="List of top customer complaints")`
+    - `improvement_recommendation`: `TextField(blank=True, help_text="Actionable quality guidance")`
+    - `last_calculated_at`: `DateTimeField(auto_now=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_ervm_tenant_num_uniq")`
+    - `Index(fields=["tenant", "average_rating"], name="idx_ervm_ten_avg_rate")`
+    - `Index(fields=["tenant", "total_reviews"], name="idx_ervm_ten_tot_rev")`
+  - **Form Exclusions**: `tenant`, `number`, `total_reviews`, `average_rating`, `rating_5_count`, `rating_4_count`, `rating_3_count`, `rating_2_count`, `rating_1_count`, `positive_sentiment_pct`, `neutral_sentiment_pct`, `negative_sentiment_pct`, `last_calculated_at`, `created_at`, `updated_at`.
+
+---
+
+## Backend Packages (apps/ecommerce/{models,forms,views,urls}/ReviewUgc/)
+
+- [ ] **Models**:
+  - `apps/ecommerce/models/ReviewUgc/__init__.py`
+  - `apps/ecommerce/models/ReviewUgc/ProductReviews.py`
+  - `apps/ecommerce/models/ReviewUgc/ProductQuestionAnswers.py`
+  - `apps/ecommerce/models/ReviewUgc/VisualUgcMedia.py`
+  - `apps/ecommerce/models/ReviewUgc/ReviewSentimentSummaries.py`
+  - `apps/ecommerce/models/__init__.py` re-export block
+- [ ] **Forms**:
+  - `apps/ecommerce/forms/ReviewUgc/__init__.py`
+  - `apps/ecommerce/forms/ReviewUgc/ProductReviews.py` (`ProductReviewForm`, `ProductReviewModerationForm`)
+  - `apps/ecommerce/forms/ReviewUgc/ProductQuestionAnswers.py` (`ProductQuestionAnswerForm`, `ProductQuestionAnswerResponseForm`)
+  - `apps/ecommerce/forms/ReviewUgc/VisualUgcMedia.py` (`VisualUgcMediaForm`)
+  - `apps/ecommerce/forms/ReviewUgc/ReviewSentimentSummaries.py` (`ReviewSentimentSummaryForm`)
+  - `apps/ecommerce/forms/__init__.py` re-export block
+- [ ] **Views**:
+  - `apps/ecommerce/views/ReviewUgc/__init__.py`
+  - `apps/ecommerce/views/ReviewUgc/ProductReviews.py` (CRUD + moderation action + sentiment recalculation)
+  - `apps/ecommerce/views/ReviewUgc/ProductQuestionAnswers.py` (CRUD + answer submission action)
+  - `apps/ecommerce/views/ReviewUgc/VisualUgcMedia.py` (CRUD + rights status toggle)
+  - `apps/ecommerce/views/ReviewUgc/ReviewSentimentSummaries.py` (List, Detail, Recalculate Sentiment action)
+  - `apps/ecommerce/views/__init__.py` re-export block
+- [ ] **URLs**:
+  - `apps/ecommerce/urls/ReviewUgc/__init__.py`
+  - `apps/ecommerce/urls/ReviewUgc/ProductReviews.py`
+  - `apps/ecommerce/urls/ReviewUgc/ProductQuestionAnswers.py`
+  - `apps/ecommerce/urls/ReviewUgc/VisualUgcMedia.py`
+  - `apps/ecommerce/urls/ReviewUgc/ReviewSentimentSummaries.py`
+  - `apps/ecommerce/urls/__init__.py` concatenation block
+- [ ] **Admin Registration**:
+  - `apps/ecommerce/admin.py` register `ProductReview`, `ProductQuestionAnswer`, `VisualUgcMedia`, `ReviewSentimentSummary`
+- [ ] **Navigation & Sidebar Wiring**:
+  - `apps/core/navigation.py` add `LIVE_LINKS["9.13"]`:
+    - `"Review Collection & Moderation": "ecommerce:productreview_list"`
+    - `"Rating Aggregation & Display": "ecommerce:reviewsentimentsummary_list"`
+    - `"Q&A & Community Forums": "ecommerce:productquestionanswer_list"`
+    - `"Visual UGC & Social Proof": "ecommerce:visualugcmedia_list"`
+    - `"Review Analytics & Sentiment": "ecommerce:reviewsentimentsummary_list"`
+- [ ] **Database Migration**:
+  - `makemigrations ecommerce` -> `0018_...`
+  - `migrate`
+- [ ] **Seeder Extension**:
+  - `apps/ecommerce/management/commands/seed_ecommerce.py` extend with realistic demo reviews, Q&As, visual UGC photos, and sentiment scorecard rows.
+
+---
+
+## Templates (templates/ecommerce/review_ugc/)
+
+- [ ] **ProductReview** (`templates/ecommerce/review_ugc/product_review/`):
+  - `list.html`: Search, rating filter, status filter, verified purchase badge, sentiment badge, star display, actions.
+  - `detail.html`: Full review text, attached media gallery, sentiment polarity score, verified order link, merchant response display, audit logs.
+  - `form.html`: Review submission/edit form with rating selector and moderation fields.
+- [ ] **ProductQuestionAnswer** (`templates/ecommerce/review_ugc/product_question/`):
+  - `list.html`: Product filter, moderation status filter, pinned badges, staff answer indicator.
+  - `detail.html`: Inquiry text, author details, staff answer body, helpfulness votes.
+  - `form.html`: Question & answer management form.
+- [ ] **VisualUgcMedia** (`templates/ecommerce/review_ugc/visual_ugc/`):
+  - `list.html`: Gallery grid/card view, media type badge, tagged product link, rights status badge.
+  - `detail.html`: High-res photo/video preview, tagged variant link, views/clicks counters, rights management.
+  - `form.html`: Media asset metadata and tagging form.
+- [ ] **ReviewSentimentSummary** (`templates/ecommerce/review_ugc/sentiment_summary/`):
+  - `list.html`: Catalog overview of ratings, average star score, sentiment bar breakdown, total reviews.
+  - `detail.html`: Product scorecard, 5-star distribution chart, top positive keywords, top negative keywords, improvement advice, recalculate button.
+  - `form.html`: Manual adjustment / guidance override form.
+
+---
+
+## Verification & Quality Gates
+- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 1)
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 2 — must be strictly idempotent)
+- [ ] `venv\Scripts\python.exe manage.py check`
+- [ ] `temp/smoke_review_ugc.py` smoke test verifying all new URLs return HTTP 200/302, rendered content assertions, and IDOR isolation.
+
+---
+
+## Review & Tests & Close-Out (Phases 4–7)
+- [ ] Phase 4: Six Reviewers in strict serial sequence (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) appending to `.claude/tasks/review-ecommerce-9.13.md`
+- [ ] Phase 5: `code-fixer` agent burns down findings
+- [ ] Phase 6: Tests in serial order (`test_reviewugc_models.py`, `test_reviewugc_forms.py`, `test_reviewugc_views.py`, `test_reviewugc_security.py`)
+- [ ] Phase 7: Update `.claude/skills/ecommerce/SKILL.md` and `README.md`
+- [ ] Register gaps in `.agents/tasks/gaps-ecommerce-9.13.md`
+
+---
+
+
 # Sub-module 9.10: Marketing & Campaign Management (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.10.md` (2026-10-31)
 
 > **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.8.
