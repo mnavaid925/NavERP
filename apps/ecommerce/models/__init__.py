@@ -39,6 +39,10 @@ from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacet
 from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
 from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
 from apps.ecommerce.models.SearchDiscovery.SearchSynonyms import SearchSynonym
+from apps.ecommerce.models.ReviewUgc.ProductQuestionAnswers import ProductQuestionAnswer
+from apps.ecommerce.models.ReviewUgc.ProductReviews import ProductReview
+from apps.ecommerce.models.ReviewUgc.ReviewSentimentSummaries import ReviewSentimentSummary
+from apps.ecommerce.models.ReviewUgc.VisualUgcMedia import VisualUgcMedia
 from apps.ecommerce.models.SubscriptionCommerce.CustomerSubscriptions import CustomerSubscription
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionBoxCurations import SubscriptionBoxCuration
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionPlans import SubscriptionPlan
@@ -105,4 +109,9 @@ __all__ = [
     "CustomerSubscription",
     "SubscriptionBoxCuration",
     "SubscriptionRetentionAction",
+    # 9.13 Reviews & User-Generated Content
+    "ProductReview",
+    "ProductQuestionAnswer",
+    "VisualUgcMedia",
+    "ReviewSentimentSummary",
 ]
