@@ -25,11 +25,14 @@ def subscription_portal(request):
 
     active_subscriptions = subs_qs.filter(status="active").order_by("next_billing_date")[:25]
     paused_subscriptions = subs_qs.filter(status="paused").order_by("-updated_at")[:25]
-    retention_actions = ecommerce_scope(SubscriptionRetentionAction.objects.all(), request).select_related(
+    retention_qs = ecommerce_scope(SubscriptionRetentionAction.objects.all(), request)
+    retention_actions = retention_qs.select_related(
         "subscription", "customer_profile__customer", "customer_profile__user"
     ).order_by("-created_at")[:10]
 
     total_subscribers = subs_qs.filter(status="active").count()
+    total_paused = subs_qs.filter(status="paused").count()
+    total_retentions = retention_qs.count()
     mrr_multiplier = Case(
         When(plan__frequency="weekly", then=Value(Decimal("4.3333"))),
         When(plan__frequency="biweekly", then=Value(Decimal("2.1667"))),
@@ -54,6 +57,8 @@ def subscription_portal(request):
         "paused_subscriptions": paused_subscriptions,
         "retention_actions": retention_actions,
         "total_subscribers": total_subscribers,
+        "total_paused": total_paused,
+        "total_retentions": total_retentions,
         "monthly_recurring_revenue": monthly_recurring_revenue,
     }
     return render(request, "ecommerce/subscriptioncommerce/portal/portal.html", context)
