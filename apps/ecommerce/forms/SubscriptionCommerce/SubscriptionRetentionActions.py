@@ -55,4 +55,8 @@ class SubscriptionRetentionActionForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["subscription", "customer_profile"])
+        sub = cleaned.get("subscription")
+        cust = cleaned.get("customer_profile")
+        if sub and cust and sub.customer_profile_id != cust.id:
+            self.add_error("customer_profile", "Customer profile does not match the subscription owner.")
         return cleaned
