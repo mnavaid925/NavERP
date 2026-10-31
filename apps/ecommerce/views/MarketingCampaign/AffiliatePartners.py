@@ -64,9 +64,9 @@ def affiliatepartner_detail(request, pk):
         request,
         AffiliatePartner,
         pk,
-        select_related=("party", "customer_profile"),
+        select_related=("party", "customer_profile__user"),
     )
-    conversions = partner.conversions.select_related("order", "referred_customer")[:20]
+    conversions = partner.conversions.select_related("order", "referred_customer__user")[:20]
     context = {
         "partner": partner,
         "conversions": conversions,
