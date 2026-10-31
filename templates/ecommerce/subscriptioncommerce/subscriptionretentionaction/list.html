@@ -103,7 +103,7 @@
                 <a href="{% url 'ecommerce:customersubscription_detail' act.subscription.pk %}" class="font-mono text-slate-800 hover:underline">
                   {{ act.subscription.number }}
                 </a>
-                <div class="text-xs text-slate-500">{{ act.customer_profile.customer_name|default:act.customer_profile.email }}</div>
+                <div class="text-xs text-slate-500">{{ act.customer_profile.customer.name|default:act.customer_profile.number }}</div>
               </td>
               <td class="py-3 px-4 text-slate-700">
                 <div class="font-medium text-xs text-slate-900">{{ act.get_trigger_type_display }}</div>
