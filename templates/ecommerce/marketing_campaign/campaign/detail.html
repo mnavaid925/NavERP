@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}{{ campaign.name }} · Marketing Campaigns · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketing_dashboard' %}" class="hover:text-blue-600">Marketing & Campaigns</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketingcampaign_list' %}" class="hover:text-blue-600">Campaigns</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ campaign.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ campaign.name }}</h1>
+        {% if campaign.status == 'sent' %}
+          <span class="badge badge-green">Sent</span>
+        {% elif campaign.status == 'scheduled' %}
+          <span class="badge badge-info">Scheduled</span>
+        {% elif campaign.status == 'sending' %}
+          <span class="badge badge-amber">Sending</span>
+        {% elif campaign.status == 'draft' %}
+          <span class="badge badge-slate">Draft</span>
+        {% elif campaign.status == 'paused' %}
+          <span class="badge badge-muted">Paused</span>
+        {% else %}
+          <span class="badge badge-red">{{ campaign.get_status_display }}</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1 font-mono">Code: {{ campaign.code }} · Created {{ campaign.created_at|date:"M d, Y H:i" }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      {% if campaign.status != 'sent' %}
+        <form method="post" action="{% url 'ecommerce:marketingcampaign_send' campaign.pk %}" onsubmit="return confirm('Are you sure you want to trigger dispatch for this campaign?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary inline-flex items-center gap-2">
+            <i data-lucide="send" class="w-4 h-4"></i>
+            <span>Dispatch Now</span>
+          </button>
+        </form>
+      {% endif %}
+      <a href="{% url 'ecommerce:marketingcampaign_edit' campaign.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Campaign</span>
+      </a>
+      <a href="{% url 'ecommerce:marketingcampaign_list' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to List</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Metric Stat Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon blue w-12 h-12 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+        <i data-lucide="users" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Recipients / Delivered</div>
+        <div class="text-xl font-bold text-slate-900 mt-0.5">{{ campaign.recipient_count }} / {{ campaign.delivered_count }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">{{ campaign.bounced_count }} bounced</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon green w-12 h-12 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+        <i data-lucide="mail-open" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Open Rate</div>
+        <div class="text-xl font-bold text-slate-900 mt-0.5">{{ campaign.open_rate }}%</div>
+        <div class="text-xs text-slate-500 mt-0.5">{{ campaign.opened_count }} unique opens</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon purple w-12 h-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+        <i data-lucide="mouse-pointer-click" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Click-Through Rate</div>
+        <div class="text-xl font-bold text-slate-900 mt-0.5">{{ campaign.click_rate }}%</div>
+        <div class="text-xs text-slate-500 mt-0.5">{{ campaign.clicked_count }} unique clicks</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg flex items-center gap-4">
+      <div class="stat-icon orange w-12 h-12 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+        <i data-lucide="dollar-sign" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 uppercase">Attributed Revenue</div>
+        <div class="text-xl font-bold text-green-700 mt-0.5">${{ campaign.revenue_attributed|default:"0.00" }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">{{ campaign.unsubscribed_count }} unsubscribed</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Content Body & Preview -->
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+        <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <h2 class="text-base font-semibold text-slate-900">Message Content & Envelope</h2>
+          <span class="badge badge-info uppercase text-xs">{{ campaign.channel }}</span>
+        </div>
+        <div class="card-body p-5 space-y-4">
+          {% if campaign.channel in 'email omnichannel' %}
+            <div>
+              <div class="text-xs font-medium text-slate-500 uppercase">Subject Line</div>
+              <div class="text-base font-semibold text-slate-900 mt-1">{{ campaign.subject|default:"(No subject line configured)" }}</div>
+            </div>
+            {% if campaign.preview_text %}
+              <div>
+                <div class="text-xs font-medium text-slate-500 uppercase">Preheader Preview</div>
+                <div class="text-sm text-slate-600 mt-0.5">{{ campaign.preview_text }}</div>
+              </div>
+            {% endif %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 text-sm">
+              <div>
+                <span class="text-slate-500">Sender Name:</span>
+                <span class="font-medium text-slate-800 ml-1">{{ campaign.sender_name|default:"Store Default" }}</span>
+              </div>
+              <div>
+                <span class="text-slate-500">Sender Address:</span>
+                <span class="font-medium text-slate-800 ml-1">{{ campaign.sender_address|default:"noreply@store.com" }}</span>
+              </div>
+            </div>
+          {% endif %}
+
+          <div class="pt-3 border-t border-slate-100">
+            <div class="text-xs font-medium text-slate-500 uppercase mb-2">Message Body Preview</div>
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 whitespace-pre-line font-sans leading-relaxed">
+              {{ campaign.content_body }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Campaign Parameters & Targeting -->
+    <div class="space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+        <div class="card-header px-5 py-4 border-b border-slate-200 bg-slate-50">
+          <h2 class="text-base font-semibold text-slate-900">Targeting & Automation</h2>
+        </div>
+        <div class="card-body p-5 space-y-4 text-sm">
+          <div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Campaign Type</div>
+            <div class="font-medium text-slate-800 mt-0.5">{{ campaign.get_campaign_type_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Target Audience Segment</div>
+            <div class="font-medium text-slate-800 mt-0.5">
+              {% if campaign.target_segment %}
+                <a href="{% url 'ecommerce:audiencesegment_detail' campaign.target_segment.pk %}" class="text-blue-600 hover:underline inline-flex items-center gap-1">
+                  <i data-lucide="users" class="w-3.5 h-3.5"></i>
+                  {{ campaign.target_segment.name }}
+                </a>
+                <div class="text-xs text-slate-500 mt-0.5">Cached Members: {{ campaign.target_segment.cached_member_count }}</div>
+              {% else %}
+                <span class="text-slate-500 italic">Entire Customer Base</span>
+              {% endif %}
+            </div>
+          </div>
+          {% if campaign.target_product %}
+            <div>
+              <div class="text-xs font-medium text-slate-500 uppercase">Target Catalog Product</div>
+              <div class="font-medium text-slate-800 mt-0.5">
+                <a href="{% url 'ecommerce:product_detail' campaign.target_product.pk %}" class="text-blue-600 hover:underline inline-flex items-center gap-1">
+                  <i data-lucide="package" class="w-3.5 h-3.5"></i>
+                  {{ campaign.target_product.name }}
+                </a>
+              </div>
+            </div>
+          {% endif %}
+          <div>
+            <div class="text-xs font-medium text-slate-500 uppercase">Smart Sending Cooldown</div>
+            <div class="font-medium text-slate-800 mt-0.5">{{ campaign.send_throttle_window_hours }} hours fatigue throttle</div>
+          </div>
+          {% if campaign.geofence_latitude and campaign.geofence_longitude %}
+            <div class="pt-2 border-t border-slate-100">
+              <div class="text-xs font-medium text-slate-500 uppercase">Geofenced Coordinates</div>
+              <div class="font-mono text-xs text-slate-700 mt-0.5">
+                {{ campaign.geofence_latitude }}, {{ campaign.geofence_longitude }} (Radius: {{ campaign.geofence_radius_km }} km)
+              </div>
+            </div>
+          {% endif %}
+          <div class="pt-2 border-t border-slate-100">
+            <div class="text-xs font-medium text-slate-500 uppercase">Dispatch Schedule</div>
+            <div class="text-xs text-slate-600 mt-0.5">
+              {% if campaign.scheduled_at %}
+                Scheduled: {{ campaign.scheduled_at|date:"M d, Y H:i" }}
+              {% else %}
+                Immediate Manual Broadcast
+              {% endif %}
+            </div>
+            {% if campaign.sent_at %}
+              <div class="text-xs text-emerald-600 mt-0.5">
+                Sent At: {{ campaign.sent_at|date:"M d, Y H:i" }}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
