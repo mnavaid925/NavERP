@@ -14,6 +14,25 @@ from apps.ecommerce.forms.InventoryStock.InventoryAllocations import (
     InventoryAllocationForm,
     StockAdjustmentActionForm,
 )
+from apps.ecommerce.forms.Marketplace.MarketplaceVendorForms import (
+    MarketplaceVendorForm,
+    VendorKycVerificationForm,
+    VendorSuspensionForm,
+)
+from apps.ecommerce.forms.Marketplace.VendorPayoutForms import (
+    PayoutApprovalForm,
+    VendorPayoutForm,
+)
+from apps.ecommerce.forms.Marketplace.VendorProductListingForms import (
+    ListingModerationForm,
+    VendorProductListingForm,
+)
+from apps.ecommerce.forms.Marketplace.VendorSubOrderForms import (
+    SubOrderDisputeForm,
+    SubOrderFulfillmentForm,
+    SubOrderReviewForm,
+    VendorSubOrderForm,
+)
 from apps.ecommerce.forms.OrderManagement.EcommerceOrders import EcommerceOrderForm, EcommerceOrderLineForm
 from apps.ecommerce.forms.OrderManagement.OrderFulfillments import OrderFulfillmentForm
 from apps.ecommerce.forms.OrderManagement.OrderRoutingRules import OrderRoutingRuleForm
@@ -94,6 +113,18 @@ __all__ = [
     "RecommendationStrategyForm",
     "PersonalizedExperienceForm",
     "ShopperBehaviorEventFilterForm",
+    # 9.11 Marketplace & Multi-Vendor
+    "MarketplaceVendorForm",
+    "VendorKycVerificationForm",
+    "VendorSuspensionForm",
+    "VendorProductListingForm",
+    "ListingModerationForm",
+    "VendorSubOrderForm",
+    "SubOrderFulfillmentForm",
+    "SubOrderDisputeForm",
+    "SubOrderReviewForm",
+    "VendorPayoutForm",
+    "PayoutApprovalForm",
     # 9.12 Subscription & Recurring Commerce
     "SubscriptionPlanForm",
     "CustomerSubscriptionForm",
