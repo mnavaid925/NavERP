@@ -115,7 +115,7 @@ def social_commerce_feed(request):
 
     data = {
         "channel": "NavERP Social Commerce Product Feed",
-        "tenant_id": request.tenant.pk,
+        "tenant_id": request.tenant.pk if request.tenant else None,
         "product_count": len(items),
         "items": items,
     }
