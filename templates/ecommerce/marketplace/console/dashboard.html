@@ -155,7 +155,7 @@
         <div class="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
           <div>
             <a href="{% url 'ecommerce:vendorproductlisting_detail' l.pk %}" class="font-semibold text-slate-900 hover:text-blue-600">
-              {{ l.product.title }}
+              {{ l.product.name }}
             </a>
             <div class="text-xs text-slate-400">By {{ l.vendor.store_name }} • ${{ l.asking_price }} • SKU: {{ l.seller_sku }}</div>
           </div>
