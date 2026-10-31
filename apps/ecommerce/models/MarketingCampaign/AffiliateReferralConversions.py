@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from apps.ecommerce.models._base import TenantNumbered
@@ -51,17 +52,20 @@ class AffiliateReferralConversion(TenantNumbered):
     order_amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
         help_text="Eligible net merchandise order amount",
     )
     commission_rate_applied = models.DecimalField(
         max_digits=6,
         decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
         help_text="Historical commission rate locked at conversion time",
     )
     commission_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
         help_text="Calculated partner commission amount",
     )
     status = models.CharField(
