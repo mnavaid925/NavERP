@@ -20,6 +20,14 @@ from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPoli
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
 from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
+from apps.ecommerce.models.MarketingCampaign.AffiliatePartners import AffiliatePartner
+from apps.ecommerce.models.MarketingCampaign.AffiliateReferralConversions import AffiliateReferralConversion
+from apps.ecommerce.models.MarketingCampaign.MarketingCampaigns import MarketingCampaign
+from apps.ecommerce.models.MarketingCampaign.SeoMetadataRules import SeoMetadataRule
+from apps.ecommerce.models.Marketplace.MarketplaceVendors import MarketplaceVendor
+from apps.ecommerce.models.Marketplace.VendorPayouts import VendorPayout
+from apps.ecommerce.models.Marketplace.VendorProductListings import VendorProductListing
+from apps.ecommerce.models.Marketplace.VendorSubOrders import VendorSubOrder
 from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder, EcommerceOrderLine
 from apps.ecommerce.models.OrderManagement.OrderFulfillments import OrderFulfillment
 from apps.ecommerce.models.OrderManagement.OrderRoutingRules import OrderRoutingRule
@@ -2071,6 +2079,325 @@ class Command(BaseCommand):
                     outcome="deflected",
                     notes="Customer had surplus inventory; accepted 1-cycle skip offer and retained subscription.",
                 )
+
+        # ------------------------------------------------------------------
+        # 9.11 Marketplace & Multi-Vendor
+        # ------------------------------------------------------------------
+        # 1. Vendor Legal Parties
+        vendor_party_1, _ = Party.objects.get_or_create(
+            tenant=tenant,
+            name="Apex Audio & Electronics LLC",
+            defaults={"party_type": "organization"},
+        )
+        vendor_party_2, _ = Party.objects.get_or_create(
+            tenant=tenant,
+            name="Artisan Woods & Leather Co",
+            defaults={"party_type": "organization"},
+        )
+        vendor_party_3, _ = Party.objects.get_or_create(
+            tenant=tenant,
+            name="Nordic Living Design Studio",
+            defaults={"party_type": "organization"},
+        )
+        vendor_party_4, _ = Party.objects.get_or_create(
+            tenant=tenant,
+            name="Summit Peak Mountain Gear",
+            defaults={"party_type": "organization"},
+        )
+
+        # 2. Marketplace Vendors
+        v_apex, _ = MarketplaceVendor.objects.get_or_create(
+            tenant=tenant,
+            slug="apex-audio-direct",
+            defaults={
+                "party": vendor_party_1,
+                "store_name": "Apex Audio Direct",
+                "headline": "High-Fidelity Audio Gear & Studio Electronics",
+                "description": "Authorized marketplace seller for studio monitoring headphones, audio interfaces, and digital acoustic accessories.",
+                "support_email": "support@apexaudio.com",
+                "support_phone": "+1 555-0144",
+                "status": "active",
+                "kyc_status": "verified",
+                "kyc_document_type": "State Certificate of Incorporation",
+                "kyc_verified_at": timezone.now() - timedelta(days=60),
+                "commission_type": "percentage",
+                "commission_rate": Decimal("12.00"),
+                "fixed_fee_per_order": Decimal("1.50"),
+                "payout_method": "stripe_connect",
+                "payout_account_identifier": "acct_1N7ApexAudioMarket",
+                "min_payout_amount": Decimal("50.00"),
+                "tax_id": "EIN-88-2940112",
+                "tax_form_status": "1099_eligible",
+                "shipping_lead_time_days": 1,
+                "rating_average": Decimal("4.85"),
+                "rating_count": 34,
+                "is_featured": True,
+            },
+        )
+
+        v_artisan, _ = MarketplaceVendor.objects.get_or_create(
+            tenant=tenant,
+            slug="artisan-craft-collective",
+            defaults={
+                "party": vendor_party_2,
+                "store_name": "Artisan Craft Collective",
+                "headline": "Hand-Turned Hardwood Furniture & Heritage Leather Goods",
+                "description": "Master crafters specializing in heirloom walnut desks, leather travel bags, and custom lifestyle accessories.",
+                "support_email": "guild@artisancraft.org",
+                "support_phone": "+1 555-0188",
+                "status": "active",
+                "kyc_status": "verified",
+                "kyc_document_type": "Master Guild Artisan License",
+                "kyc_verified_at": timezone.now() - timedelta(days=90),
+                "commission_type": "percentage",
+                "commission_rate": Decimal("15.00"),
+                "payout_method": "bank_transfer",
+                "payout_account_identifier": "US8800019283749283",
+                "min_payout_amount": Decimal("100.00"),
+                "tax_id": "EIN-34-9102938",
+                "tax_form_status": "w9_received",
+                "shipping_lead_time_days": 3,
+                "rating_average": Decimal("4.70"),
+                "rating_count": 18,
+                "is_featured": True,
+            },
+        )
+
+        v_nordic, _ = MarketplaceVendor.objects.get_or_create(
+            tenant=tenant,
+            slug="nordic-living-goods",
+            defaults={
+                "party": vendor_party_3,
+                "store_name": "Nordic Living Design",
+                "headline": "Minimalist Ceramic Homeware & Scandinavian Design",
+                "description": "Clean lines, sustainable clay, and functional Scandinavian interior accents.",
+                "support_email": "hello@nordicliving.se",
+                "status": "under_review",
+                "kyc_status": "pending",
+                "kyc_document_type": "Swedish Org Registration & Passport",
+                "commission_type": "percentage",
+                "commission_rate": Decimal("14.00"),
+                "payout_method": "paypal",
+                "payout_account_identifier": "disburse@nordicliving.se",
+                "min_payout_amount": Decimal("50.00"),
+                "tax_form_status": "w8ben_received",
+                "shipping_lead_time_days": 2,
+                "rating_average": Decimal("0.00"),
+                "rating_count": 0,
+            },
+        )
+
+        v_summit, _ = MarketplaceVendor.objects.get_or_create(
+            tenant=tenant,
+            slug="summit-peak-supply",
+            defaults={
+                "party": vendor_party_4,
+                "store_name": "Summit Peak Supply",
+                "headline": "Alpine Climbing Gear & Outdoor Expeditions",
+                "description": "Technical mountain hardware and all-weather trekking equipment.",
+                "support_email": "support@summitpeak.co",
+                "status": "suspended",
+                "kyc_status": "verified",
+                "commission_type": "combined",
+                "commission_rate": Decimal("15.00"),
+                "fixed_fee_per_order": Decimal("2.00"),
+                "payout_method": "bank_transfer",
+                "suspension_reason": "Multiple late dispatch SLA breaches and unresolved customer item-damaged claims.",
+                "suspended_at": timezone.now() - timedelta(days=2),
+                "rating_average": Decimal("2.80"),
+                "rating_count": 12,
+            },
+        )
+
+        # 3. Product Listings
+        prod_sample = CatalogProduct.objects.filter(tenant=tenant).first()
+        prod_secondary = CatalogProduct.objects.filter(tenant=tenant).exclude(pk=getattr(prod_sample, "pk", None)).first() or prod_sample
+
+        if prod_sample:
+            VendorProductListing.objects.get_or_create(
+                tenant=tenant,
+                vendor=v_apex,
+                seller_sku="APX-AUD-PRO-01",
+                defaults={
+                    "product": prod_sample,
+                    "condition": "new",
+                    "asking_price": Decimal("189.99"),
+                    "compare_at_price": Decimal("229.99"),
+                    "cost_price": Decimal("120.00"),
+                    "available_quantity": 42,
+                    "low_stock_threshold": 8,
+                    "lead_time_days": 1,
+                    "moderation_status": "approved",
+                    "compliance_status": "compliant",
+                    "is_active": True,
+                    "submitted_at": timezone.now() - timedelta(days=20),
+                    "reviewed_at": timezone.now() - timedelta(days=19),
+                },
+            )
+            VendorProductListing.objects.get_or_create(
+                tenant=tenant,
+                vendor=v_apex,
+                seller_sku="APX-AUD-REF-02",
+                defaults={
+                    "product": prod_sample,
+                    "condition": "refurbished",
+                    "condition_notes": "Factory recertified with genuine replacement foam pads and 90-day warranty.",
+                    "asking_price": Decimal("139.99"),
+                    "compare_at_price": Decimal("189.99"),
+                    "cost_price": Decimal("85.00"),
+                    "available_quantity": 6,
+                    "low_stock_threshold": 3,
+                    "lead_time_days": 2,
+                    "moderation_status": "approved",
+                    "compliance_status": "compliant",
+                    "is_active": True,
+                    "submitted_at": timezone.now() - timedelta(days=15),
+                    "reviewed_at": timezone.now() - timedelta(days=14),
+                },
+            )
+
+        if prod_secondary:
+            VendorProductListing.objects.get_or_create(
+                tenant=tenant,
+                vendor=v_artisan,
+                seller_sku="ART-OAK-HERITAGE",
+                defaults={
+                    "product": prod_secondary,
+                    "condition": "new",
+                    "condition_notes": "Sustainably harvested white oak with natural beeswax polish.",
+                    "asking_price": Decimal("340.00"),
+                    "compare_at_price": Decimal("420.00"),
+                    "cost_price": Decimal("210.00"),
+                    "available_quantity": 14,
+                    "low_stock_threshold": 4,
+                    "lead_time_days": 3,
+                    "moderation_status": "approved",
+                    "compliance_status": "compliant",
+                    "is_active": True,
+                    "submitted_at": timezone.now() - timedelta(days=30),
+                    "reviewed_at": timezone.now() - timedelta(days=29),
+                },
+            )
+            VendorProductListing.objects.get_or_create(
+                tenant=tenant,
+                vendor=v_nordic,
+                seller_sku="NOR-CERAMIC-VASE",
+                defaults={
+                    "product": prod_secondary,
+                    "condition": "new",
+                    "asking_price": Decimal("48.00"),
+                    "available_quantity": 25,
+                    "low_stock_threshold": 5,
+                    "lead_time_days": 2,
+                    "moderation_status": "pending_review",
+                    "compliance_status": "pending",
+                    "moderator_notes": "Awaiting merchant proof of safe transit drop-testing.",
+                    "is_active": True,
+                    "submitted_at": timezone.now() - timedelta(days=1),
+                },
+            )
+
+        # 4. Vendor Sub-Orders
+        parent_order = EcommerceOrder.objects.filter(tenant=tenant).first()
+        if parent_order:
+            so1, _ = VendorSubOrder.objects.get_or_create(
+                tenant=tenant,
+                vendor=v_apex,
+                order=parent_order,
+                defaults={
+                    "fulfillment_status": "delivered",
+                    "sla_status": "on_time",
+                    "payout_status": "paid",
+                    "subtotal_amount": Decimal("189.99"),
+                    "shipping_amount": Decimal("9.99"),
+                    "commission_rate": Decimal("12.00"),
+                    "carrier_name": "FedEx Ground",
+                    "tracking_number": "781299401122",
+                    "promised_dispatch_date": timezone.localdate() - timedelta(days=12),
+                    "dispatched_at": timezone.now() - timedelta(days=12),
+                    "delivered_at": timezone.now() - timedelta(days=9),
+                    "customer_rating": 5,
+                    "customer_feedback": "Fastest shipping ever! Sound quality on these studio headphones is unbelievable.",
+                    "seller_response": "Thank you for supporting Apex Audio Direct! Enjoy the studio sessions.",
+                    "rated_at": timezone.now() - timedelta(days=8),
+                },
+            )
+            so2, _ = VendorSubOrder.objects.get_or_create(
+                tenant=tenant,
+                vendor=v_artisan,
+                order=parent_order,
+                defaults={
+                    "fulfillment_status": "shipped",
+                    "sla_status": "on_time",
+                    "payout_status": "accrued",
+                    "subtotal_amount": Decimal("340.00"),
+                    "shipping_amount": Decimal("24.00"),
+                    "commission_rate": Decimal("15.00"),
+                    "carrier_name": "UPS Freight",
+                    "tracking_number": "1Z88291029381",
+                    "promised_dispatch_date": timezone.localdate() - timedelta(days=2),
+                    "dispatched_at": timezone.now() - timedelta(days=2),
+                },
+            )
+            so3, _ = VendorSubOrder.objects.get_or_create(
+                tenant=tenant,
+                vendor=v_summit,
+                order=parent_order,
+                defaults={
+                    "fulfillment_status": "unfulfilled",
+                    "sla_status": "breached",
+                    "payout_status": "withheld_dispute",
+                    "subtotal_amount": Decimal("110.00"),
+                    "shipping_amount": Decimal("12.00"),
+                    "commission_rate": Decimal("15.00"),
+                    "promised_dispatch_date": timezone.localdate() - timedelta(days=4),
+                    "dispute_status": "disputed",
+                    "dispute_reason": "Order unfulfilled after 5 business days past SLA promise",
+                    "dispute_notes": "Customer opened dispute requesting immediate cancellation or priority dispatch.",
+                },
+            )
+
+            # 5. Vendor Payouts
+            payout_1, _ = VendorPayout.objects.get_or_create(
+                tenant=tenant,
+                vendor=v_apex,
+                period_start=timezone.localdate() - timedelta(days=30),
+                period_end=timezone.localdate() - timedelta(days=15),
+                defaults={
+                    "gross_sales_amount": Decimal("189.99"),
+                    "commission_deducted": Decimal("24.30"),
+                    "fees_deducted": Decimal("5.50"),
+                    "refunds_deducted": Decimal("0.00"),
+                    "tax_withholding_amount": Decimal("0.00"),
+                    "payout_method": "stripe_connect",
+                    "payout_status": "completed",
+                    "reference_code": "tr_1N7ApexAudioDisb988",
+                    "tax_year": 2026,
+                    "is_1099_reported": True,
+                    "notes": "Automated bi-weekly settlement disbursement executed via Stripe Connect.",
+                    "processed_at": timezone.now() - timedelta(days=14),
+                },
+            )
+            if so1.payout_id is None:
+                so1.payout = payout_1
+                so1.save(update_fields=["payout"])
+
+            payout_2, _ = VendorPayout.objects.get_or_create(
+                tenant=tenant,
+                vendor=v_artisan,
+                period_start=timezone.localdate() - timedelta(days=14),
+                period_end=timezone.localdate(),
+                defaults={
+                    "gross_sales_amount": Decimal("340.00"),
+                    "commission_deducted": Decimal("51.00"),
+                    "fees_deducted": Decimal("9.86"),
+                    "refunds_deducted": Decimal("0.00"),
+                    "tax_withholding_amount": Decimal("0.00"),
+                    "payout_method": "bank_transfer",
+                    "payout_status": "pending_approval",
+                    "notes": "Batch pending finance review for scheduled ACH wire transfer.",
+                },
+            )
 
 
 
