@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.ecommerce.forms.ReviewUgc.ProductQuestionAnswers import (
     ProductQuestionAnswerForm,
@@ -132,6 +133,7 @@ def productquestionanswer_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def productquestionanswer_delete(request, pk):
     question = ecommerce_object(request, ProductQuestionAnswer, pk)
@@ -150,6 +152,7 @@ def productquestionanswer_delete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def productquestionanswer_respond(request, pk):
     question = ecommerce_object(request, ProductQuestionAnswer, pk)
     if request.method == "POST":
