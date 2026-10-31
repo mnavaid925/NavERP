@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}{{ plan.name }} · Subscription Plans · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:subscriptionplan_list' %}" class="hover:text-blue-600">Subscription Plans</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ plan.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">{{ plan.name }}</h1>
+        {% if plan.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-slate">Inactive</span>
+        {% endif %}
+        <span class="badge badge-info">{{ plan.get_plan_type_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 font-mono mt-1">Code: {{ plan.code }} · Number: {{ plan.number }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'ecommerce:subscriptionplan_edit' plan.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Plan</span>
+      </a>
+      <a href="{% url 'ecommerce:subscriptionplan_list' %}" class="btn btn-outline">
+        Back to Plans
+      </a>
+    </div>
+  </div>
+
+  <!-- Plan Overview Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Billing Cadence</div>
+      <div class="text-xl font-bold text-slate-900 mt-1">{{ plan.get_frequency_display }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Every {{ plan.interval_count }} interval(s)</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Incentive Discount</div>
+      <div class="text-xl font-bold text-emerald-600 mt-1">
+        {% if plan.discount_type == 'percentage' %}
+          {{ plan.discount_value }}% off
+        {% elif plan.discount_type == 'fixed_amount' %}
+          ${{ plan.discount_value }} off
+        {% else %}
+          No Discount
+        {% endif %}
+      </div>
+      <div class="text-xs text-slate-500 mt-0.5">{{ plan.get_discount_type_display }}</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Trial & Terms</div>
+      <div class="text-xl font-bold text-slate-900 mt-1">{{ plan.trial_period_days }} Days</div>
+      <div class="text-xs text-slate-500 mt-0.5">Min commitment: {{ plan.min_commitment_cycles }} order(s)</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Self-Service Policies</div>
+      <div class="text-sm font-medium text-slate-800 mt-1">
+        Pause: {% if plan.allow_pause %}Yes ({{ plan.max_pause_days }}d){% else %}No{% endif %}
+      </div>
+      <div class="text-xs text-slate-500 mt-0.5">Skip: {% if plan.allow_skip %}Yes{% else %}No{% endif %} · Swap: {% if plan.allow_swap %}Yes{% else %}No{% endif %}</div>
+    </div>
+  </div>
+
+  <!-- Plan Details -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="md:col-span-2 space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-5">
+        <h2 class="text-base font-semibold text-slate-900 mb-3">Plan Description & Terms</h2>
+        {% if plan.description %}
+          <p class="text-sm text-slate-700 whitespace-pre-line">{{ plan.description }}</p>
+        {% else %}
+          <p class="text-sm text-slate-400 italic">No operational description entered for this plan.</p>
+        {% endif %}
+      </div>
+
+      <!-- Active Subscribers Sample -->
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+        <div class="card-header p-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 class="text-base font-semibold text-slate-900">Active Subscriptions on this Plan</h2>
+          <a href="{% url 'ecommerce:customersubscription_list' %}?plan={{ plan.pk }}" class="text-xs text-blue-600 hover:text-blue-800 font-medium">
+            View All Subscriptions &rarr;
+          </a>
+        </div>
+        <div class="table-wrap overflow-x-auto">
+          <table class="table w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                <th class="py-2.5 px-4">Subscription</th>
+                <th class="py-2.5 px-4">Customer</th>
+                <th class="py-2.5 px-4">Product</th>
+                <th class="py-2.5 px-4">Next Billing</th>
+                <th class="py-2.5 px-4">Cycles</th>
+                <th class="py-2.5 px-4">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              {% for sub in active_subscriptions %}
+                <tr class="hover:bg-slate-50/75">
+                  <td class="py-2.5 px-4 font-mono font-medium text-blue-600">
+                    <a href="{% url 'ecommerce:customersubscription_detail' sub.pk %}">{{ sub.number }}</a>
+                  </td>
+                  <td class="py-2.5 px-4">
+                    {{ sub.customer_profile.customer_name|default:sub.customer_profile.email }}
+                  </td>
+                  <td class="py-2.5 px-4">{{ sub.product.name }}</td>
+                  <td class="py-2.5 px-4">{{ sub.next_billing_date }}</td>
+                  <td class="py-2.5 px-4">{{ sub.completed_cycles_count }}</td>
+                  <td class="py-2.5 px-4"><span class="badge badge-green">Active</span></td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="6" class="py-4 text-center text-slate-400 text-xs">
+                    No active subscriptions enrolled under this plan yet.
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Linked Curations -->
+      {% if plan.plan_type == 'curated_box' %}
+        <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+          <div class="card-header p-4 border-b border-slate-200 flex items-center justify-between">
+            <h2 class="text-base font-semibold text-slate-900">Curated Assortment Rotations</h2>
+            <a href="{% url 'ecommerce:subscriptionboxcuration_create' %}" class="btn btn-outline text-xs py-1 px-2.5">
+              New Curation
+            </a>
+          </div>
+          <div class="table-wrap overflow-x-auto">
+            <table class="table w-full text-left border-collapse text-sm">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                  <th class="py-2.5 px-4">Cycle</th>
+                  <th class="py-2.5 px-4">Box Title</th>
+                  <th class="py-2.5 px-4">Schedule</th>
+                  <th class="py-2.5 px-4">Surprise Item</th>
+                  <th class="py-2.5 px-4">Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                {% for cur in active_curations %}
+                  <tr class="hover:bg-slate-50/75">
+                    <td class="py-2.5 px-4 font-mono font-medium">{{ cur.cycle_identifier }}</td>
+                    <td class="py-2.5 px-4">
+                      <a href="{% url 'ecommerce:subscriptionboxcuration_detail' cur.pk %}" class="text-blue-600 hover:text-blue-800">
+                        {{ cur.name }}
+                      </a>
+                    </td>
+                    <td class="py-2.5 px-4 text-xs text-slate-500">{{ cur.start_date }} to {{ cur.end_date }}</td>
+                    <td class="py-2.5 px-4">
+                      {% if cur.has_surprise_item %}
+                        <span class="badge badge-amber">Surprise Item</span>
+                      {% else %}
+                        <span class="text-xs text-slate-400">None</span>
+                      {% endif %}
+                    </td>
+                    <td class="py-2.5 px-4">
+                      {% if cur.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="5" class="py-4 text-center text-slate-400 text-xs">
+                      No box curations scheduled for this plan.
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Metadata Side Card -->
+    <div class="space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-5">
+        <h2 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Plan Metadata</h2>
+        <dl class="divide-y divide-slate-100 text-sm">
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Plan Number</dt>
+            <dd class="font-mono text-slate-800">{{ plan.number }}</dd>
+          </div>
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Default Product</dt>
+            <dd class="text-slate-800 font-medium">{{ plan.target_product.name|default:"Any Product" }}</dd>
+          </div>
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Created</dt>
+            <dd class="text-slate-800">{{ plan.created_at|date:"M d, Y H:i" }}</dd>
+          </div>
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Last Updated</dt>
+            <dd class="text-slate-800">{{ plan.updated_at|date:"M d, Y H:i" }}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
