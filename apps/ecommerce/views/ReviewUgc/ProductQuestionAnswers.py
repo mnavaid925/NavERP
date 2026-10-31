@@ -87,12 +87,11 @@ def productquestionanswer_create(request):
                     question.answered_by_user = request.user
             question.save()
             write_audit_log(
+                request.user,
+                question,
+                "create",
+                {"number": question.number, "product": question.product.name},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="ProductQuestionAnswer",
-                object_id=question.pk,
-                changes={"number": question.number, "product": question.product.name},
             )
             messages.success(request, f"Question {question.number} submitted.")
             return redirect("ecommerce:productquestionanswer_detail", pk=question.pk)
@@ -114,12 +113,11 @@ def productquestionanswer_edit(request, pk):
         if form.is_valid():
             question = form.save()
             write_audit_log(
+                request.user,
+                question,
+                "update",
+                {"status": question.status},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="ProductQuestionAnswer",
-                object_id=question.pk,
-                changes={"status": question.status},
             )
             messages.success(request, f"Question {question.number} updated.")
             return redirect("ecommerce:productquestionanswer_detail", pk=question.pk)
@@ -141,12 +139,11 @@ def productquestionanswer_delete(request, pk):
     pk_val = question.pk
     question.delete()
     write_audit_log(
+        request.user,
+        question,
+        "delete",
+        {"number": number},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="ProductQuestionAnswer",
-        object_id=pk_val,
-        changes={"number": number},
     )
     messages.success(request, f"Question {number} deleted.")
     return redirect("ecommerce:productquestionanswer_list")
@@ -165,12 +162,11 @@ def productquestionanswer_respond(request, pk):
                 question.answered_by_name = request.user.get_full_name() or request.user.username
             question.save()
             write_audit_log(
+                request.user,
+                question,
+                "respond",
+                {"status": question.status, "answer_text": question.answer_text[:100]},
                 tenant=request.tenant,
-                user=request.user,
-                action="respond",
-                model_name="ProductQuestionAnswer",
-                object_id=question.pk,
-                changes={"status": question.status, "answer_text": question.answer_text[:100]},
             )
             messages.success(request, f"Response saved for question {question.number}.")
             return redirect("ecommerce:productquestionanswer_detail", pk=question.pk)
