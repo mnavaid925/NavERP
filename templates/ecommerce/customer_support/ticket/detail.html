@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Ticket {{ ticket.number }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Customer Support</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:customersupportticket_list' %}">Tickets</a>
+            <span>/</span>
+            <span>{{ ticket.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ ticket.number }}: {{ ticket.subject }}</h1>
+            {% if ticket.priority == 'urgent' %}
+            <span class="badge badge-red">Urgent</span>
+            {% elif ticket.priority == 'high' %}
+            <span class="badge badge-amber">High</span>
+            {% elif ticket.priority == 'medium' %}
+            <span class="badge badge-info">Medium</span>
+            {% else %}
+            <span class="badge badge-muted">Low</span>
+            {% endif %}
+
+            {% if ticket.status == 'new' %}
+            <span class="badge badge-info">New</span>
+            {% elif ticket.status == 'open' %}
+            <span class="badge badge-green">Open</span>
+            {% elif ticket.status == 'pending_customer' %}
+            <span class="badge badge-amber">Pending Customer</span>
+            {% elif ticket.status == 'waiting_carrier' %}
+            <span class="badge badge-info">Waiting Carrier</span>
+            {% elif ticket.status == 'resolved' %}
+            <span class="badge badge-green">Resolved</span>
+            {% elif ticket.status == 'closed' %}
+            <span class="badge badge-slate">Closed</span>
+            {% else %}
+            <span class="badge badge-red">Cancelled</span>
+            {% endif %}
+
+            {% if ticket.is_sla_breached %}
+            <span class="badge badge-red">SLA Breached</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'ecommerce:customersupportticket_edit' ticket.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Ticket
+        </a>
+        <form action="{% url 'ecommerce:customersupportticket_delete' ticket.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete ticket {{ ticket.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Inquiry, Resolution & Internal Notes -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Initial Message -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title text-base font-semibold">Customer Initial Inquiry</h3>
+                <span class="text-xs text-slate-500">{{ ticket.created_at|date:"M d, Y H:i" }}</span>
+            </div>
+            <div class="card-body">
+                <p class="whitespace-pre-line text-slate-800 leading-relaxed">{{ ticket.initial_message }}</p>
+                {% if ticket.is_bot_handled %}
+                <div class="mt-4 p-3 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600 flex items-center gap-2">
+                    <i data-lucide="bot" class="w-4 h-4 text-primary"></i>
+                    <span>Bot Assisted Interaction: {{ ticket.bot_handoff_reason|default:"Automated assistance with agent handoff" }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Resolution Summary -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title text-base font-semibold">Resolution Summary</h3>
+                {% if ticket.resolved_at %}
+                <span class="text-xs text-slate-500">Resolved at {{ ticket.resolved_at|date:"M d, Y H:i" }}</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if ticket.resolution_summary %}
+                <p class="whitespace-pre-line text-slate-800 leading-relaxed">{{ ticket.resolution_summary }}</p>
+                {% else %}
+                <p class="text-sm text-slate-400 italic">No resolution notes recorded yet.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Internal Staff Notes -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Internal Staff Notes (Private)</h3>
+            </div>
+            <div class="card-body">
+                {% if ticket.internal_notes %}
+                <p class="whitespace-pre-line text-slate-700 bg-amber-50 p-4 rounded border border-amber-200 text-sm leading-relaxed">{{ ticket.internal_notes }}</p>
+                {% else %}
+                <p class="text-sm text-slate-400 italic">No internal notes added.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Metadata, Customer Info, SLA Targets -->
+    <div class="space-y-6">
+        <!-- Customer Details -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Customer Information</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500 block text-xs">Customer Name</span>
+                    <span class="font-medium text-slate-900">{{ ticket.customer_name }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block text-xs">Email Address</span>
+                    <a href="mailto:{{ ticket.customer_email }}" class="text-primary hover:underline">{{ ticket.customer_email }}</a>
+                </div>
+                {% if ticket.customer_phone %}
+                <div>
+                    <span class="text-slate-500 block text-xs">Phone</span>
+                    <span class="font-medium text-slate-900">{{ ticket.customer_phone }}</span>
+                </div>
+                {% endif %}
+                {% if ticket.customer %}
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-slate-500 block text-xs">Registered Profile</span>
+                    <a href="{% url 'ecommerce:customeraccountprofile_detail' ticket.customer.pk %}" class="text-primary hover:underline font-medium">
+                        {{ ticket.customer.number }} - {{ ticket.customer }}
+                    </a>
+                </div>
+                {% endif %}
+                {% if ticket.order %}
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-slate-500 block text-xs">Associated Order</span>
+                    <a href="{% url 'ecommerce:ecommerceorder_detail' ticket.order.pk %}" class="text-primary hover:underline font-mono font-medium">
+                        {{ ticket.order.number }}
+                    </a>
+                    <span class="text-xs text-slate-500 block">Total: ${{ ticket.order.grand_total }} &bull; Status: {{ ticket.order.get_status_display }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Ticket Parameters & SLA -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Service Level Agreement (SLA)</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500 block text-xs">Inbound Channel</span>
+                    <span class="font-medium text-slate-900">{{ ticket.get_channel_display }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block text-xs">Inquiry Category</span>
+                    <span class="font-medium text-slate-900">{{ ticket.get_category_display }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block text-xs">Assigned Support Agent</span>
+                    <span class="font-medium text-slate-900">
+                        {% if ticket.assigned_agent %}
+                        {{ ticket.assigned_agent.get_full_name|default:ticket.assigned_agent.username }}
+                        {% else %}
+                        <span class="text-slate-400 italic">Unassigned</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-slate-500 block text-xs">First Response SLA Due</span>
+                    <span class="font-medium text-slate-900">{{ ticket.sla_first_response_due_at|date:"M d, Y H:i"|default:"Not specified" }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block text-xs">Resolution SLA Due</span>
+                    <span class="font-medium text-slate-900">{{ ticket.sla_resolution_due_at|date:"M d, Y H:i"|default:"Not specified" }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block text-xs">First Response Logged</span>
+                    <span class="font-medium text-slate-900">{{ ticket.first_responded_at|date:"M d, Y H:i"|default:"Pending" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
