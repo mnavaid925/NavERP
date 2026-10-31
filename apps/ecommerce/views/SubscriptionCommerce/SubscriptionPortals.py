@@ -22,8 +22,8 @@ def subscription_portal(request):
         "customer_profile__customer", "customer_profile__user", "plan", "product", "variant"
     )
 
-    active_subscriptions = subs_qs.filter(status="active").order_by("next_billing_date")
-    paused_subscriptions = subs_qs.filter(status="paused").order_by("-updated_at")
+    active_subscriptions = subs_qs.filter(status="active").order_by("next_billing_date")[:25]
+    paused_subscriptions = subs_qs.filter(status="paused").order_by("-updated_at")[:25]
     retention_actions = ecommerce_scope(SubscriptionRetentionAction.objects.all(), request).select_related(
         "subscription", "customer_profile__customer", "customer_profile__user"
     ).order_by("-created_at")[:10]
