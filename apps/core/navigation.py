@@ -2732,10 +2732,10 @@ LIVE_LINKS = {
         "Behavioral Telemetry": "ecommerce:shopperbehaviorevent_list",
     },
     "9.10": {
-        "Email Marketing Automation": "ecommerce:marketingcampaign_list",
-        "SMS & Push Notification": "ecommerce:marketingcampaign_list",
+        "Email Marketing Automation": "ecommerce:marketingcampaign_list?channel=email",
+        "SMS & Push Notification": "ecommerce:marketingcampaign_list?channel=sms",
         "Affiliate & Referral Programs": "ecommerce:affiliatepartner_list",
-        "Social Commerce Integration": "ecommerce:marketing_dashboard",
+        "Social Commerce Integration": "ecommerce:marketing_dashboard?tab=social",
         "SEO & Organic Traffic Tools": "ecommerce:seometadatarule_list",
         # Extra live leaves
         "Marketing Dashboard": "ecommerce:marketing_dashboard",
