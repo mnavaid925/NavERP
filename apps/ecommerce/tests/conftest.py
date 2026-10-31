@@ -40,6 +40,10 @@ from apps.ecommerce.models import (
     RecommendationStrategy,
     PersonalizedExperience,
     ShopperBehaviorEvent,
+    MarketplaceVendor,
+    VendorProductListing,
+    VendorSubOrder,
+    VendorPayout,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -2177,6 +2181,261 @@ def ecom_event_a(tenant_a, ecom_product_a):
 @pytest.fixture
 def ecom_event_b(tenant_b, ecom_product_b):
     return _personalization_event(tenant_b, event_type="product_view", product=ecom_product_b)
+
+
+# ==============================================================================
+# Marketplace & Multi-Vendor (9.11) Contract Constants, Helpers, and Fixtures
+# ==============================================================================
+
+MARKETPLACE_PAGE_SIZE = 25
+
+MARKETPLACE_MODEL_FIELDS = {
+    "MarketplaceVendor": (
+        "id", "tenant", "number", "party", "store_name", "slug", "vendor_tier",
+        "commission_type", "commission_rate", "commission_fixed_fee", "payout_schedule",
+        "payout_method", "bank_account_details", "tax_identifier", "kyc_status",
+        "is_approved", "is_suspended", "suspension_reason", "average_rating",
+        "rating_count", "auto_approve_products", "allow_custom_shipping",
+        "support_email", "support_phone", "return_policy", "terms_accepted_at",
+        "created_at", "updated_at",
+    ),
+    "VendorProductListing": (
+        "id", "tenant", "number", "vendor", "product", "variant", "vendor_sku",
+        "listing_price", "compare_at_price", "cost_price", "allocated_inventory",
+        "condition", "moderation_status", "compliance_status", "rejection_reason",
+        "is_active", "featured_in_store", "created_at", "updated_at",
+    ),
+    "VendorSubOrder": (
+        "id", "tenant", "number", "vendor", "order", "payout", "fulfillment_status",
+        "payout_status", "subtotal_amount", "commission_amount", "payout_net_amount",
+        "shipping_fee", "tax_amount", "tracking_number", "shipping_carrier",
+        "estimated_delivery", "dispatched_at", "delivered_at", "sla_status",
+        "customer_rating", "customer_review", "dispute_reason", "dispute_resolved_at",
+        "created_at", "updated_at",
+    ),
+    "VendorPayout": (
+        "id", "tenant", "number", "vendor", "period_start", "period_end",
+        "subtotal_volume", "total_commission_retained", "total_fees",
+        "total_adjustments", "net_payout_amount", "currency", "payout_status",
+        "payout_method", "transaction_reference", "notes", "processed_at",
+        "created_at", "updated_at",
+    ),
+}
+
+MARKETPLACE_CHOICES = {
+    "MarketplaceVendor": {
+        "vendor_tier": (("standard", "Standard"), ("silver", "Silver"), ("gold", "Gold"), ("platinum", "Platinum")),
+        "commission_type": (("percentage", "Percentage Only"), ("fixed", "Fixed Fee Only"), ("combined", "Combined (Fixed + Pct)")),
+        "payout_schedule": (("manual", "Manual On-Demand"), ("daily", "Daily"), ("weekly", "Weekly"), ("biweekly", "Bi-Weekly"), ("monthly", "Monthly")),
+        "payout_method": (("bank_transfer", "Direct Bank Transfer (ACH/SEPA)"), ("wire", "Wire Transfer"), ("stripe", "Stripe Connect"), ("paypal", "PayPal Payouts"), ("check", "Physical Check")),
+        "kyc_status": (("pending", "Pending Verification"), ("under_review", "Under Review"), ("approved", "Verified / Approved"), ("rejected", "Verification Rejected")),
+    },
+    "VendorProductListing": {
+        "condition": (("new", "Brand New"), ("refurbished_like_new", "Refurbished (Like New)"), ("refurbished_good", "Refurbished (Good)"), ("refurbished_fair", "Refurbished (Fair)"), ("used", "Pre-Owned / Used")),
+        "moderation_status": (("pending", "Pending Review"), ("approved", "Approved"), ("rejected", "Rejected"), ("requires_changes", "Requires Changes")),
+        "compliance_status": (("compliant", "Fully Compliant"), ("pending_audit", "Pending Audit"), ("non_compliant", "Non-Compliant"), ("restricted", "Restricted Goods")),
+    },
+    "VendorSubOrder": {
+        "fulfillment_status": (("pending", "Pending Processing"), ("processing", "Processing"), ("shipped", "Shipped / In Transit"), ("delivered", "Delivered"), ("cancelled", "Cancelled"), ("returned", "Returned")),
+        "payout_status": (("pending_escrow", "Pending Escrow"), ("accrued", "Accrued"), ("eligible", "Eligible for Settlement"), ("in_payout", "Batch Processing"), ("paid", "Disbursed / Paid"), ("withheld_dispute", "Withheld (Dispute)"), ("refunded", "Refunded / Clapped Back")),
+        "sla_status": (("on_time", "On Schedule"), ("breached", "SLA Breached"), ("at_risk", "At Risk (< 24h)")),
+    },
+    "VendorPayout": {
+        "payout_status": (("draft", "Draft Batch"), ("approved", "Approved for Disbursement"), ("processing", "Processing Gateway"), ("completed", "Disbursed / Completed"), ("failed", "Disbursement Failed"), ("cancelled", "Cancelled")),
+        "payout_method": (("bank_transfer", "Direct Bank Transfer (ACH/SEPA)"), ("wire", "Wire Transfer"), ("stripe", "Stripe Connect"), ("paypal", "PayPal Payouts"), ("check", "Physical Check")),
+    },
+}
+
+MARKETPLACE_FORM_EXCLUDES = {
+    "MarketplaceVendorForm": ["tenant", "number", "average_rating", "rating_count", "created_at", "updated_at"],
+    "VendorProductListingForm": ["tenant", "number", "moderation_status", "compliance_status", "rejection_reason", "created_at", "updated_at"],
+    "VendorSubOrderForm": ["tenant", "number", "payout", "payout_status", "sla_status", "dispute_resolved_at", "created_at", "updated_at"],
+    "VendorPayoutForm": ["tenant", "number", "payout_status", "processed_at", "created_at", "updated_at"],
+}
+
+MARKETPLACE_URLS = {
+    "marketplace_console_dashboard": "marketplace/console/",
+    "marketplacevendor_list": "marketplace/vendors/",
+    "marketplacevendor_create": "marketplace/vendors/create/",
+    "marketplacevendor_detail": "marketplace/vendors/<int:pk>/",
+    "marketplacevendor_edit": "marketplace/vendors/<int:pk>/edit/",
+    "marketplacevendor_delete": "marketplace/vendors/<int:pk>/delete/",
+    "marketplacevendor_verify_kyc": "marketplace/vendors/<int:pk>/verify-kyc/",
+    "marketplacevendor_suspend": "marketplace/vendors/<int:pk>/suspend/",
+    "vendorproductlisting_list": "marketplace/listings/",
+    "vendorproductlisting_create": "marketplace/listings/create/",
+    "vendorproductlisting_detail": "marketplace/listings/<int:pk>/",
+    "vendorproductlisting_edit": "marketplace/listings/<int:pk>/edit/",
+    "vendorproductlisting_delete": "marketplace/listings/<int:pk>/delete/",
+    "vendorproductlisting_moderate": "marketplace/listings/<int:pk>/moderate/",
+    "vendorsuborder_list": "marketplace/sub-orders/",
+    "vendorsuborder_create": "marketplace/sub-orders/create/",
+    "vendorsuborder_detail": "marketplace/sub-orders/<int:pk>/",
+    "vendorsuborder_edit": "marketplace/sub-orders/<int:pk>/edit/",
+    "vendorsuborder_delete": "marketplace/sub-orders/<int:pk>/delete/",
+    "vendorsuborder_fulfill": "marketplace/sub-orders/<int:pk>/fulfill/",
+    "vendorsuborder_dispute": "marketplace/sub-orders/<int:pk>/dispute/",
+    "vendorpayout_list": "marketplace/payouts/",
+    "vendorpayout_create": "marketplace/payouts/create/",
+    "vendorpayout_detail": "marketplace/payouts/<int:pk>/",
+    "vendorpayout_edit": "marketplace/payouts/<int:pk>/edit/",
+    "vendorpayout_delete": "marketplace/payouts/<int:pk>/delete/",
+    "vendorpayout_execute": "marketplace/payouts/<int:pk>/execute/",
+}
+
+
+def _marketplace_party(tenant, name="Apex Vendor Corp", kind="organization", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": name,
+        "kind": kind,
+    }
+    defaults.update(overrides)
+    return Party.objects.create(**defaults)
+
+
+def _marketplace_vendor(tenant, store_name="Apex Store", party=None, slug=None, **overrides):
+    if party is None and "party" not in overrides:
+        party = _marketplace_party(tenant, name=f"{store_name} Entity")
+    if not slug:
+        slug = f"{store_name.lower().replace(' ', '-')}-{tenant.slug}"
+    defaults = {
+        "tenant": tenant,
+        "party": party,
+        "store_name": store_name,
+        "slug": slug,
+        "vendor_tier": "standard",
+        "commission_type": "percentage",
+        "commission_rate": Decimal("15.00"),
+        "commission_fixed_fee": Decimal("1.50"),
+        "payout_schedule": "weekly",
+        "payout_method": "bank_transfer",
+        "bank_account_details": "IBAN1234567890",
+        "tax_identifier": "TAX-998877",
+        "kyc_status": "approved",
+        "is_approved": True,
+        "is_suspended": False,
+        "auto_approve_products": False,
+        "allow_custom_shipping": True,
+        "support_email": f"support@{tenant.slug}-vendor.com",
+        "support_phone": "+1-555-0199",
+        "return_policy": "30 days standard return policy.",
+        "terms_accepted_at": timezone.now(),
+    }
+    defaults.update(overrides)
+    return MarketplaceVendor.objects.create(**defaults)
+
+
+def _marketplace_listing(tenant, vendor=None, product=None, variant=None, **overrides):
+    if vendor is None and "vendor" not in overrides:
+        vendor = _marketplace_vendor(tenant)
+    if product is None and "product" not in overrides:
+        product = _productcatalog_product(tenant)
+    defaults = {
+        "tenant": tenant,
+        "vendor": vendor,
+        "product": product,
+        "variant": variant,
+        "vendor_sku": f"VSKU-{vendor.id}-{product.id}",
+        "listing_price": Decimal("49.99"),
+        "compare_at_price": Decimal("59.99"),
+        "cost_price": Decimal("30.00"),
+        "allocated_inventory": 50,
+        "condition": "new",
+        "moderation_status": "approved",
+        "compliance_status": "compliant",
+        "is_active": True,
+        "featured_in_store": False,
+    }
+    defaults.update(overrides)
+    return VendorProductListing.objects.create(**defaults)
+
+
+def _marketplace_suborder(tenant, vendor=None, order=None, **overrides):
+    if vendor is None and "vendor" not in overrides:
+        vendor = _marketplace_vendor(tenant)
+    if order is None and "order" not in overrides:
+        order = _ordermanagement_order(tenant)
+    defaults = {
+        "tenant": tenant,
+        "vendor": vendor,
+        "order": order,
+        "fulfillment_status": "pending",
+        "payout_status": "accrued",
+        "subtotal_amount": Decimal("100.00"),
+        "commission_amount": Decimal("15.00"),
+        "payout_net_amount": Decimal("85.00"),
+        "shipping_fee": Decimal("10.00"),
+        "tax_amount": Decimal("8.00"),
+        "tracking_number": "TRK99887766",
+        "shipping_carrier": "UPS Ground",
+        "sla_status": "on_time",
+    }
+    defaults.update(overrides)
+    return VendorSubOrder.objects.create(**defaults)
+
+
+def _marketplace_payout(tenant, vendor=None, **overrides):
+    if vendor is None and "vendor" not in overrides:
+        vendor = _marketplace_vendor(tenant)
+    defaults = {
+        "tenant": tenant,
+        "vendor": vendor,
+        "period_start": timezone.now().date(),
+        "period_end": timezone.now().date(),
+        "subtotal_volume": Decimal("500.00"),
+        "total_commission_retained": Decimal("75.00"),
+        "total_fees": Decimal("5.00"),
+        "total_adjustments": Decimal("0.00"),
+        "net_payout_amount": Decimal("420.00"),
+        "currency": "USD",
+        "payout_status": "draft",
+        "payout_method": "bank_transfer",
+        "transaction_reference": "TXN-PAYOUT-001",
+    }
+    defaults.update(overrides)
+    return VendorPayout.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_vendor_a(tenant_a):
+    return _marketplace_vendor(tenant_a, store_name="Apex Store A")
+
+
+@pytest.fixture
+def ecom_vendor_b(tenant_b):
+    return _marketplace_vendor(tenant_b, store_name="Apex Store B")
+
+
+@pytest.fixture
+def ecom_listing_a(tenant_a, ecom_vendor_a, ecom_product_a):
+    return _marketplace_listing(tenant_a, vendor=ecom_vendor_a, product=ecom_product_a)
+
+
+@pytest.fixture
+def ecom_listing_b(tenant_b, ecom_vendor_b, ecom_product_b):
+    return _marketplace_listing(tenant_b, vendor=ecom_vendor_b, product=ecom_product_b)
+
+
+@pytest.fixture
+def ecom_suborder_a(tenant_a, ecom_vendor_a):
+    return _marketplace_suborder(tenant_a, vendor=ecom_vendor_a)
+
+
+@pytest.fixture
+def ecom_suborder_b(tenant_b, ecom_vendor_b):
+    return _marketplace_suborder(tenant_b, vendor=ecom_vendor_b)
+
+
+@pytest.fixture
+def ecom_payout_a(tenant_a, ecom_vendor_a):
+    return _marketplace_payout(tenant_a, vendor=ecom_vendor_a)
+
+
+@pytest.fixture
+def ecom_payout_b(tenant_b, ecom_vendor_b):
+    return _marketplace_payout(tenant_b, vendor=ecom_vendor_b)
+
 
 
 
