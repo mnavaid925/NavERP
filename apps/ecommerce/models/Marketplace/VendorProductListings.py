@@ -169,6 +169,10 @@ class VendorProductListing(TenantNumbered):
                 name="idx_evpl_ten_mod_act",
             ),
             models.Index(
+                fields=["tenant", "compliance_status"],
+                name="idx_evpl_ten_comp",
+            ),
+            models.Index(
                 fields=["tenant", "product", "asking_price"],
                 name="idx_evpl_ten_prd_price",
             ),
@@ -176,12 +180,16 @@ class VendorProductListing(TenantNumbered):
 
     def clean(self):
         super().clean()
-        if self.asking_price < Decimal("0.00"):
+        if self.asking_price is not None and self.asking_price < Decimal("0.00"):
             raise ValidationError({"asking_price": "Asking price cannot be negative."})
         if self.compare_at_price is not None and self.compare_at_price < Decimal("0.00"):
             raise ValidationError({"compare_at_price": "Compare-at price cannot be negative."})
         if self.cost_price is not None and self.cost_price < Decimal("0.00"):
             raise ValidationError({"cost_price": "Cost price cannot be negative."})
+
+        # Cross-record product-variant alignment
+        if self.variant_id and self.product_id and self.variant.product_id != self.product_id:
+            raise ValidationError({"variant": "The selected product variant does not belong to the selected catalog product."})
 
         # Tenant boundary check
         if self.vendor_id and hasattr(self, "tenant_id") and self.vendor.tenant_id != self.tenant_id:
