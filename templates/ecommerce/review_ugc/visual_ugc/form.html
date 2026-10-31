@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if media_item %}
+Edit UGC Asset {{ media_item.number }}
+{% else %}
+Add Visual UGC Asset
+{% endif %}
+| NavERP
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:visualugcmedia_list' %}">Visual UGC</a>
+            <span>/</span>
+            <span>
+                {% if media_item %}
+                Edit {{ media_item.number }}
+                {% else %}
+                New UGC Asset
+                {% endif %}
+            </span>
+        </div>
+        <h1 class="page-title">
+            {% if media_item %}
+            Edit UGC Asset: {{ media_item.number }}
+            {% else %}
+            Create Visual UGC Asset
+            {% endif %}
+        </h1>
+    </div>
+</div>
+
+<div class="max-w-3xl">
+    <div class="card">
+        <div class="card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-3 mb-4 rounded bg-red-50 text-red text-sm">
+                    {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="{{ form.media_type.id_for_label }}" class="form-label">Media Type *</label>
+                            {{ form.media_type }}
+                            {% if form.media_type.errors %}<div class="form-error">{{ form.media_type.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.rights_status.id_for_label }}" class="form-label">Rights & Usage Status *</label>
+                            {{ form.rights_status }}
+                            {% if form.rights_status.errors %}<div class="form-error">{{ form.rights_status.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.media_url.id_for_label }}" class="form-label">Media Asset URL *</label>
+                        {{ form.media_url }}
+                        <span class="text-xs text-muted">Direct HTTPS image or MP4 video URL.</span>
+                        {% if form.media_url.errors %}<div class="form-error">{{ form.media_url.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.thumbnail_url.id_for_label }}" class="form-label">Thumbnail URL (Optional)</label>
+                        {{ form.thumbnail_url }}
+                        {% if form.thumbnail_url.errors %}<div class="form-error">{{ form.thumbnail_url.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="{{ form.tagged_product.id_for_label }}" class="form-label">Tagged Catalog Product *</label>
+                            {{ form.tagged_product }}
+                            {% if form.tagged_product.errors %}<div class="form-error">{{ form.tagged_product.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.tagged_variant.id_for_label }}" class="form-label">Tagged Variant / SKU (Optional)</label>
+                            {{ form.tagged_variant }}
+                            {% if form.tagged_variant.errors %}<div class="form-error">{{ form.tagged_variant.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="{{ form.uploader_name.id_for_label }}" class="form-label">Customer / Creator Name</label>
+                            {{ form.uploader_name }}
+                            {% if form.uploader_name.errors %}<div class="form-error">{{ form.uploader_name.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.uploader_handle.id_for_label }}" class="form-label">Social Media Handle</label>
+                            {{ form.uploader_handle }}
+                            <span class="text-xs text-muted">e.g. @instagram_username</span>
+                            {% if form.uploader_handle.errors %}<div class="form-error">{{ form.uploader_handle.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.caption.id_for_label }}" class="form-label">Caption / Testimonial</label>
+                        {{ form.caption }}
+                        {% if form.caption.errors %}<div class="form-error">{{ form.caption.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                        <div class="form-group">
+                            <label class="flex items-center gap-2 cursor-pointer pt-6">
+                                {{ form.is_shoppable }}
+                                <span class="form-label mb-0">Shoppable Tagged</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="flex items-center gap-2 cursor-pointer pt-6">
+                                {{ form.is_published }}
+                                <span class="form-label mb-0">Publish on Storefront</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.display_order.id_for_label }}" class="form-label">Display Order</label>
+                            {{ form.display_order }}
+                            {% if form.display_order.errors %}<div class="form-error">{{ form.display_order.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
+                    <a href="{% if media_item %}{% url 'ecommerce:visualugcmedia_detail' media_item.pk %}{% else %}{% url 'ecommerce:visualugcmedia_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i> Save Asset
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
