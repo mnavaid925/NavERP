@@ -20,7 +20,6 @@ class CustomerSubscriptionForm(TenantUniqueMixin, TenantModelForm):
             "quantity",
             "unit_price",
             "recurring_discount_pct",
-            "started_at",
             "next_billing_date",
             "next_delivery_date",
             "paused_until",
@@ -42,9 +41,6 @@ class CustomerSubscriptionForm(TenantUniqueMixin, TenantModelForm):
             ),
             "recurring_discount_pct": forms.NumberInput(
                 attrs={"class": "form-input", "placeholder": "0.00", "step": "0.01", "min": 0, "max": 100}
-            ),
-            "started_at": forms.DateTimeInput(
-                attrs={"class": "form-input", "type": "datetime-local"}
             ),
             "next_billing_date": forms.DateInput(
                 attrs={"class": "form-input", "type": "date"}
