@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.ecommerce.forms.ReviewUgc.VisualUgcMedia import VisualUgcMediaForm
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
@@ -130,6 +131,7 @@ def visualugcmedia_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def visualugcmedia_delete(request, pk):
     media_item = ecommerce_object(request, VisualUgcMedia, pk)
