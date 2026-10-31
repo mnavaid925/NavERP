@@ -129,6 +129,10 @@ class VendorPayout(TenantNumbered):
         ]
         indexes = [
             models.Index(
+                fields=["tenant", "payout_status"],
+                name="idx_evpo_ten_stat",
+            ),
+            models.Index(
                 fields=["tenant", "vendor", "payout_status"],
                 name="idx_evpo_ten_ven_stat",
             ),
@@ -142,6 +146,11 @@ class VendorPayout(TenantNumbered):
         super().clean()
         if self.period_start and self.period_end and self.period_start > self.period_end:
             raise ValidationError({"period_end": "Period end date cannot precede period start date."})
+
+        for field_name in ["gross_sales_amount", "commission_deducted", "fees_deducted", "refunds_deducted", "tax_withholding_amount"]:
+            val = getattr(self, field_name, None)
+            if val is not None and val < Decimal("0.00"):
+                raise ValidationError({field_name: f"{field_name.replace('_', ' ').capitalize()} cannot be negative."})
 
         # Tenant boundary check
         if self.vendor_id and hasattr(self, "tenant_id") and self.vendor.tenant_id != self.tenant_id:
