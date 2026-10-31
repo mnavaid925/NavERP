@@ -2731,6 +2731,19 @@ LIVE_LINKS = {
         "Personalized Experiences": "ecommerce:personalizedexperience_list",
         "Behavioral Telemetry": "ecommerce:shopperbehaviorevent_list",
     },
+    "9.11": {
+        "Vendor Onboarding & Verification": "ecommerce:marketplacevendor_list",
+        "Vendor Product Management": "ecommerce:vendorproductlisting_list",
+        "Vendor Order Fulfillment": "ecommerce:vendorsuborder_list",
+        "Vendor Commission & Payouts": "ecommerce:vendorpayout_list",
+        "Vendor Ratings & Reviews": "ecommerce:marketplace_console",
+        # Extra live leaves
+        "Marketplace Console": "ecommerce:marketplace_console",
+        "Marketplace Vendors": "ecommerce:marketplacevendor_list",
+        "Product Listings & Moderation": "ecommerce:vendorproductlisting_list",
+        "Vendor Sub-Orders": "ecommerce:vendorsuborder_list",
+        "Commission Payouts": "ecommerce:vendorpayout_list",
+    },
     "9.12": {
         "Subscription Plan Design": "ecommerce:subscriptionplan_list",
         "Recurring Billing & Invoicing": "ecommerce:customersubscription_list",
