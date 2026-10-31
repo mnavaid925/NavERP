@@ -53,7 +53,7 @@ class AffiliateReferralConversionForm(TenantUniqueMixin, TenantModelForm):
             self.fields["referred_customer"].queryset = (
                 CustomerAccountProfile.objects.filter(tenant=self.tenant)
                 .select_related("customer")
-                .order_by("user__username")
+                .order_by("customer__name")
             )
 
     def clean(self):
