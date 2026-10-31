@@ -50,7 +50,7 @@ class SubscriptionRetentionActionForm(TenantUniqueMixin, TenantModelForm):
             ).order_by("-started_at")
             self.fields["customer_profile"].queryset = CustomerAccountProfile.objects.filter(
                 tenant=self.tenant
-            ).order_by("email")
+            ).select_related("customer").order_by("customer__name")
 
     def clean(self):
         cleaned = super().clean()
