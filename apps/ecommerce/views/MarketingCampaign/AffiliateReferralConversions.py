@@ -40,7 +40,7 @@ def affiliatereferralconversion_list(request):
     if attribution_type:
         qs = qs.filter(attribution_type=attribution_type)
 
-    paginator = Paginator(qs, 25)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
