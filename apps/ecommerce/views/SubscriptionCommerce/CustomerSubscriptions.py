@@ -16,7 +16,7 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 @login_required
 def customersubscription_list(request):
     qs = ecommerce_scope(CustomerSubscription.objects.all(), request).select_related(
-        "customer_profile__customer", "plan", "product", "variant"
+        "customer_profile__customer", "customer_profile__user", "plan", "product", "variant"
     )
 
     query = request.GET.get("q", "").strip()
