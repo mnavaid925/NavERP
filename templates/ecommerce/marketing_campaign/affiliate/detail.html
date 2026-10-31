@@ -134,7 +134,7 @@
             <div class="text-xs font-medium text-slate-500 uppercase">Linked Shopper Account</div>
             <div class="text-xs text-slate-700 mt-0.5">
               {% if partner.customer_profile %}
-                <a href="{% url 'ecommerce:customerprofile_detail' partner.customer_profile.pk %}" class="text-blue-600 hover:underline">
+                <a href="{% url 'ecommerce:customeraccountprofile_detail' partner.customer_profile.pk %}" class="text-blue-600 hover:underline">
                   {{ partner.customer_profile.user.username }}
                 </a>
               {% else %}
