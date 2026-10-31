@@ -5,7 +5,7 @@ from apps.ecommerce.forms._common import TenantUniqueMixin
 from apps.ecommerce.models.Marketplace.MarketplaceVendors import MarketplaceVendor
 from apps.ecommerce.models.Marketplace.VendorPayouts import VendorPayout
 from apps.ecommerce.models.Marketplace.VendorSubOrders import VendorSubOrder
-from apps.ecommerce.models.OrderManagement.Orders import EcommerceOrder
+from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder
 
 
 class VendorSubOrderForm(TenantUniqueMixin, TenantModelForm):
