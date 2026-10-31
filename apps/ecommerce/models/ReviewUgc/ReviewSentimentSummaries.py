@@ -49,20 +49,32 @@ class ReviewSentimentSummary(TenantNumbered):
 
     def recalculate(self):
         """Aggregate ratings and sentiment metrics from approved customer reviews."""
+        from django.db.models import Count, Q
         from apps.ecommerce.models.ReviewUgc.ProductReviews import ProductReview
 
         approved_reviews = ProductReview.objects.filter(
             tenant=self.tenant, product=self.product, status="approved"
         )
-        total = approved_reviews.count()
+        data = approved_reviews.aggregate(
+            total=Count("id"),
+            r5=Count("id", filter=Q(rating=5)),
+            r4=Count("id", filter=Q(rating=4)),
+            r3=Count("id", filter=Q(rating=3)),
+            r2=Count("id", filter=Q(rating=2)),
+            r1=Count("id", filter=Q(rating=1)),
+            pos=Count("id", filter=Q(sentiment="positive")),
+            neu=Count("id", filter=Q(sentiment__in=["neutral", "mixed"])),
+            neg=Count("id", filter=Q(sentiment="negative")),
+        )
+        total = data["total"] or 0
         self.total_reviews = total
 
         if total > 0:
-            r5 = approved_reviews.filter(rating=5).count()
-            r4 = approved_reviews.filter(rating=4).count()
-            r3 = approved_reviews.filter(rating=3).count()
-            r2 = approved_reviews.filter(rating=2).count()
-            r1 = approved_reviews.filter(rating=1).count()
+            r5 = data["r5"] or 0
+            r4 = data["r4"] or 0
+            r3 = data["r3"] or 0
+            r2 = data["r2"] or 0
+            r1 = data["r1"] or 0
 
             self.rating_5_count = r5
             self.rating_4_count = r4
@@ -73,9 +85,9 @@ class ReviewSentimentSummary(TenantNumbered):
             sum_stars = (r5 * 5) + (r4 * 4) + (r3 * 3) + (r2 * 2) + (r1 * 1)
             self.average_rating = Decimal(str(round(sum_stars / total, 2)))
 
-            pos = approved_reviews.filter(sentiment="positive").count()
-            neu = approved_reviews.filter(sentiment="neutral").count()
-            neg = approved_reviews.filter(sentiment="negative").count()
+            pos = data["pos"] or 0
+            neu = data["neu"] or 0
+            neg = data["neg"] or 0
 
             self.positive_sentiment_pct = Decimal(str(round((pos / total) * 100, 2)))
             self.neutral_sentiment_pct = Decimal(str(round((neu / total) * 100, 2)))
