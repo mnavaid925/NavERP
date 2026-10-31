@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Subscription {{ subscription.number }} · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:customersubscription_list' %}" class="hover:text-blue-600">Subscriptions</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ subscription.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">Subscription {{ subscription.number }}</h1>
+        {% if subscription.status == 'active' %}
+          <span class="badge badge-green">Active</span>
+        {% elif subscription.status == 'trialing' %}
+          <span class="badge badge-info">Trialing</span>
+        {% elif subscription.status == 'paused' %}
+          <span class="badge badge-amber">Paused</span>
+        {% elif subscription.status == 'past_due' %}
+          <span class="badge badge-red">Past Due</span>
+        {% elif subscription.status == 'cancelled' %}
+          <span class="badge badge-red">Cancelled</span>
+        {% else %}
+          <span class="badge badge-slate">{{ subscription.get_status_display }}</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Subscriber: <span class="font-medium text-slate-800">{{ subscription.customer_profile.customer_name|default:subscription.customer_profile.email }}</span>
+        · Started: {{ subscription.started_at|date:"M d, Y" }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'ecommerce:customersubscription_edit' subscription.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Subscription</span>
+      </a>
+      <a href="{% url 'ecommerce:customersubscription_list' %}" class="btn btn-outline">
+        Back to Subscriptions
+      </a>
+    </div>
+  </div>
+
+  <!-- Subscription Stat Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Recurring Order Total</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">${{ subscription.recurring_total }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">
+        Qty: {{ subscription.quantity }} @ ${{ subscription.unit_price }}
+        {% if subscription.recurring_discount_pct > 0 %}(-{{ subscription.recurring_discount_pct }}%){% endif %}
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Next Billing Date</div>
+      <div class="text-xl font-bold text-slate-900 mt-1">{{ subscription.next_billing_date }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Est. Delivery: {{ subscription.next_delivery_date|default:"Scheduled with billing" }}</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Cycle History</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">{{ subscription.completed_cycles_count }} Orders</div>
+      <div class="text-xs text-slate-500 mt-0.5">{{ subscription.consecutive_successful_cycles }} consecutive successful</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Payment & Dunning</div>
+      <div class="text-sm font-medium text-slate-800 mt-1">
+        {% if subscription.failed_payment_count == 0 %}
+          <span class="text-emerald-700">Good Standing (0 declines)</span>
+        {% else %}
+          <span class="text-red-600 font-semibold">{{ subscription.failed_payment_count }} Failed Attempts</span>
+        {% endif %}
+      </div>
+      <div class="text-xs text-slate-500 mt-0.5 font-mono">Ref: {{ subscription.payment_method_ref|default:"None on file" }}</div>
+    </div>
+  </div>
+
+  <!-- Subscription Body Details -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="md:col-span-2 space-y-6">
+      <!-- Item & Plan Specifications -->
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-5">
+        <h2 class="text-base font-semibold text-slate-900 mb-4">Subscription Items & Terms</h2>
+        <div class="space-y-4">
+          <div class="flex items-start justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <div>
+              <div class="font-semibold text-slate-900">{{ subscription.product.name }}</div>
+              {% if subscription.variant %}
+                <div class="text-xs text-slate-500 mt-0.5">Variant: {{ subscription.variant.sku }} ({{ subscription.variant.name|default:"Standard" }})</div>
+              {% endif %}
+              <div class="text-xs text-slate-500 mt-1">Quantity per delivery: {{ subscription.quantity }}</div>
+            </div>
+            <div class="text-right">
+              <div class="font-mono font-semibold text-slate-900">${{ subscription.unit_price }} / unit</div>
+              {% if subscription.recurring_discount_pct > 0 %}
+                <div class="text-xs text-emerald-700 font-medium">-{{ subscription.recurring_discount_pct }}% subscriber perk</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
+            <div>
+              <span class="text-slate-500 block text-xs">Governing Plan:</span>
+              <a href="{% url 'ecommerce:subscriptionplan_detail' subscription.plan.pk %}" class="font-medium text-blue-600 hover:text-blue-800">
+                {{ subscription.plan.name }} ({{ subscription.plan.get_frequency_display }})
+              </a>
+            </div>
+            <div>
+              <span class="text-slate-500 block text-xs">Shipping Address Snapshot:</span>
+              <span class="font-medium text-slate-800">{{ subscription.shipping_address_line|default:"Default profile shipping address" }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Retention & Churn Deflection Actions -->
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+        <div class="card-header p-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 class="text-base font-semibold text-slate-900">Retention & Churn Deflection History</h2>
+          <a href="{% url 'ecommerce:subscriptionretentionaction_create' %}" class="btn btn-outline text-xs py-1 px-2.5">
+            Log Retention Action
+          </a>
+        </div>
+        <div class="table-wrap overflow-x-auto">
+          <table class="table w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                <th class="py-2.5 px-4">Date</th>
+                <th class="py-2.5 px-4">Trigger</th>
+                <th class="py-2.5 px-4">Reason</th>
+                <th class="py-2.5 px-4">Offer Presented</th>
+                <th class="py-2.5 px-4">Outcome</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              {% for ret in retention_actions %}
+                <tr class="hover:bg-slate-50/75">
+                  <td class="py-2.5 px-4 text-xs text-slate-500">{{ ret.created_at|date:"M d, Y" }}</td>
+                  <td class="py-2.5 px-4"><span class="badge badge-info">{{ ret.get_trigger_type_display }}</span></td>
+                  <td class="py-2.5 px-4 text-xs text-slate-700">{{ ret.get_cancellation_reason_display }}</td>
+                  <td class="py-2.5 px-4 text-xs text-slate-700">{{ ret.get_offered_action_display }}</td>
+                  <td class="py-2.5 px-4">
+                    {% if ret.outcome == 'deflected' %}
+                      <span class="badge badge-green">Deflected</span>
+                    {% elif ret.outcome == 'cancelled' %}
+                      <span class="badge badge-red">Cancelled</span>
+                    {% elif ret.outcome == 'paused' %}
+                      <span class="badge badge-amber">Paused</span>
+                    {% else %}
+                      <span class="badge badge-slate">{{ ret.get_outcome_display }}</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="5" class="py-4 text-center text-slate-400 text-xs">
+                    No cancellation deflection interactions logged for this subscriber.
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metadata Sidebar -->
+    <div class="space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-5">
+        <h2 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Subscriber Profile</h2>
+        <dl class="divide-y divide-slate-100 text-sm">
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Profile</dt>
+            <dd class="text-slate-800 font-medium">
+              <a href="{% url 'ecommerce:customeraccountprofile_detail' subscription.customer_profile.pk %}" class="text-blue-600 hover:text-blue-800">
+                {{ subscription.customer_profile.customer_name|default:subscription.customer_profile.email }}
+              </a>
+            </dd>
+          </div>
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Email</dt>
+            <dd class="text-slate-800">{{ subscription.customer_profile.email }}</dd>
+          </div>
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Created</dt>
+            <dd class="text-slate-800">{{ subscription.created_at|date:"M d, Y H:i" }}</dd>
+          </div>
+          {% if subscription.cancelled_at %}
+            <div class="py-2 flex justify-between text-red-600">
+              <dt>Cancelled</dt>
+              <dd>{{ subscription.cancelled_at|date:"M d, Y" }}</dd>
+            </div>
+            <div class="py-2">
+              <dt class="text-slate-500 text-xs">Cancellation Reason</dt>
+              <dd class="text-slate-800 text-xs mt-1">{{ subscription.cancellation_reason }}</dd>
+            </div>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
