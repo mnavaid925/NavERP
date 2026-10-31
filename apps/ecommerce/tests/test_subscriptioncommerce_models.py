@@ -126,7 +126,7 @@ class TestSubscriptionCommerceModels:
             outcome="deflected",
         )
         assert action.number.startswith("ESRT-")
-        assert "cancel_intent" in str(action)
+        assert "Cancellation Intent" in str(action)
 
         # Customer profile mismatch
         invalid_action = SubscriptionRetentionAction(
