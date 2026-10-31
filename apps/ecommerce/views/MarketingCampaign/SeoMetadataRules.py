@@ -42,7 +42,7 @@ def seometadatarule_list(request):
     elif is_active in ("0", "false", "False"):
         qs = qs.filter(is_active=False)
 
-    paginator = Paginator(qs, 25)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
