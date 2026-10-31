@@ -105,9 +105,9 @@
                         <a href="{% url 'ecommerce:reviewsentimentsummary_detail' summary.pk %}" class="btn-icon" title="View Scorecard">
                             <i data-lucide="eye"></i>
                         </a>
-                        <form action="{% url 'ecommerce:reviewsentimentsummary_recalculate' summary.pk %}" method="post" class="inline" title="Recalculate Metrics">
+                        <form action="{% url 'ecommerce:reviewsentimentsummary_recalculate' summary.pk %}" method="post" class="inline">
                             {% csrf_token %}
-                            <button type="submit" class="btn-icon text-brand hover:text-brand">
+                            <button type="submit" class="btn-icon text-brand hover:text-brand" title="Recalculate Metrics" aria-label="Recalculate Metrics">
                                 <i data-lucide="refresh-cw"></i>
                             </button>
                         </form>
