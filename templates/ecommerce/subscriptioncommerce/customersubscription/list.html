@@ -101,9 +101,9 @@
               </td>
               <td class="py-3 px-4">
                 <div class="font-medium text-slate-800">
-                  {{ sub.customer_profile.customer_name|default:sub.customer_profile.email }}
+                  {{ sub.customer_profile.customer.name|default:sub.customer_profile.number }}
                 </div>
-                <div class="text-xs text-slate-400">{{ sub.customer_profile.email }}</div>
+                <div class="text-xs text-slate-400">{{ sub.customer_profile.user.email|default:sub.customer_profile.number }}</div>
               </td>
               <td class="py-3 px-4">
                 <div class="font-medium text-slate-800">{{ sub.product.name }}</div>
