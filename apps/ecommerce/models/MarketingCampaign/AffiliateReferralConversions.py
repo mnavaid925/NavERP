@@ -125,10 +125,16 @@ class AffiliateReferralConversion(TenantNumbered):
 
     def clean(self):
         super().clean()
-        if self.affiliate and not self.commission_rate_applied:
-            self.commission_rate_applied = self.affiliate.commission_rate
+        affiliate = None
+        if self.affiliate_id:
+            try:
+                affiliate = self.affiliate
+            except Exception:
+                affiliate = None
+        if affiliate and not self.commission_rate_applied:
+            self.commission_rate_applied = affiliate.commission_rate
         if self.order_amount is not None and self.commission_rate_applied is not None:
-            if self.affiliate and self.affiliate.commission_type == "flat_per_order":
+            if affiliate and affiliate.commission_type == "flat_per_order":
                 self.commission_amount = self.commission_rate_applied
             else:
                 self.commission_amount = round(
