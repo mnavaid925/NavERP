@@ -4,7 +4,7 @@ from django.utils import timezone
 
 from apps.core.forms import TenantModelForm
 from apps.core.models.Party import Party
-from apps.ecommerce.forms._common import TenantUniqueMixin
+from apps.ecommerce.forms._common import TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.Marketplace.MarketplaceVendors import MarketplaceVendor
 
 User = get_user_model()
@@ -58,6 +58,11 @@ class MarketplaceVendorForm(TenantUniqueMixin, TenantModelForm):
         if self.tenant:
             self.fields["party"].queryset = Party.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["owner_user"].queryset = User.objects.filter(is_active=True).order_by("username")
+
+    def clean(self):
+        cleaned_data = super().clean()
+        reject_foreign(self, cleaned_data, ["party"])
+        return cleaned_data
 
 
 class VendorKycVerificationForm(forms.Form):
