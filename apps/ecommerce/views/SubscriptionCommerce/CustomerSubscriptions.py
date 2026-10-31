@@ -61,7 +61,12 @@ def customersubscription_list(request):
 
 @login_required
 def customersubscription_detail(request, pk):
-    subscription = ecommerce_object(request, CustomerSubscription, pk)
+    subscription = ecommerce_object(
+        request,
+        CustomerSubscription,
+        pk,
+        select_related=["customer_profile__customer", "customer_profile__user", "plan", "product", "variant"],
+    )
     retention_actions = subscription.retention_actions.all().order_by("-created_at")[:10]
 
     context = {
