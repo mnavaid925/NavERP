@@ -60,4 +60,8 @@ class VisualUgcMediaForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["tagged_product", "tagged_variant"])
+        tagged_product = cleaned.get("tagged_product")
+        tagged_variant = cleaned.get("tagged_variant")
+        if tagged_variant and tagged_product and tagged_variant.product_id != tagged_product.pk:
+            self.add_error("tagged_variant", "The selected variant does not belong to the tagged product.")
         return cleaned
