@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -11,7 +11,7 @@ from apps.core.utils import write_audit_log
 from apps.ecommerce.forms.ReviewUgc.ProductReviews import ProductReviewForm, ProductReviewModerationForm
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
 from apps.ecommerce.models.ReviewUgc.ProductReviews import ProductReview
-from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
+from apps.ecommerce.views._common import ecommerce_object
 
 
 @login_required
