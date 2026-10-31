@@ -83,10 +83,11 @@ def affiliatepartner_create(request):
             partner.tenant = request.tenant
             partner.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                partner,
                 "create",
-                f"Created affiliate partner {partner.number} ({partner.name})",
+                changes={"number": partner.number, "name": partner.name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Affiliate partner '{partner.name}' created successfully.")
             return redirect("ecommerce:affiliatepartner_detail", pk=partner.pk)
@@ -108,10 +109,11 @@ def affiliatepartner_edit(request, pk):
         if form.is_valid():
             partner = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                partner,
                 "update",
-                f"Updated affiliate partner {partner.number} ({partner.name})",
+                changes={"number": partner.number, "name": partner.name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Affiliate partner '{partner.name}' updated successfully.")
             return redirect("ecommerce:affiliatepartner_detail", pk=partner.pk)
@@ -134,10 +136,11 @@ def affiliatepartner_delete(request, pk):
     number = partner.number
     partner.delete()
     write_audit_log(
-        request.tenant,
         request.user,
+        partner,
         "delete",
-        f"Deleted affiliate partner {number} ({name})",
+        changes={"number": number, "name": name},
+        tenant=request.tenant,
     )
     messages.success(request, f"Affiliate partner '{name}' was deleted.")
     return redirect("ecommerce:affiliatepartner_list")
@@ -151,10 +154,11 @@ def affiliatepartner_approve(request, pk):
     partner.status = "active"
     partner.save()
     write_audit_log(
-        request.tenant,
         request.user,
+        partner,
         "approve",
-        f"Approved affiliate partner {partner.number} ({partner.name})",
+        changes={"number": partner.number, "name": partner.name},
+        tenant=request.tenant,
     )
     messages.success(request, f"Affiliate partner '{partner.name}' has been approved and activated.")
     return redirect("ecommerce:affiliatepartner_detail", pk=partner.pk)
