@@ -50,33 +50,28 @@
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Campaign Name *</label>
+            <label for="{{ form.name.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Campaign Name *</label>
             {{ form.name }}
             {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Machine Identifier Slug</label>
+            <label for="{{ form.code.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Machine Identifier Slug</label>
             {{ form.code }}
             {% if form.code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.code.errors }}</div>{% endif %}
             <span class="text-xs text-slate-400">Leave blank to auto-generate from name.</span>
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Campaign Archetype *</label>
+            <label for="{{ form.campaign_type.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Campaign Archetype *</label>
             {{ form.campaign_type }}
             {% if form.campaign_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.campaign_type.errors }}</div>{% endif %}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Delivery Channel *</label>
+            <label for="{{ form.channel.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Delivery Channel *</label>
             {{ form.channel }}
             {% if form.channel.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.channel.errors }}</div>{% endif %}
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Status</label>
-            {{ form.status }}
-            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
-          </div>
-          <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Scheduled Broadcast Time</label>
+            <label for="{{ form.scheduled_at.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Scheduled Broadcast Time</label>
             {{ form.scheduled_at }}
             {% if form.scheduled_at.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.scheduled_at.errors }}</div>{% endif %}
           </div>
@@ -91,19 +86,19 @@
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Target Audience Cohort</label>
+            <label for="{{ form.target_segment.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Target Audience Cohort</label>
             {{ form.target_segment }}
             {% if form.target_segment.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.target_segment.errors }}</div>{% endif %}
             <span class="text-xs text-slate-400">Target cohort from 9.8 Personalization. Leave empty for all store customers.</span>
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Target Product (Optional)</label>
+            <label for="{{ form.target_product.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Target Product (Optional)</label>
             {{ form.target_product }}
             {% if form.target_product.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.target_product.errors }}</div>{% endif %}
             <span class="text-xs text-slate-400">Used for single product promotions and back-in-stock alerts.</span>
           </div>
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Smart Sending Fatigue Window (Hours)</label>
+            <label for="{{ form.send_throttle_window_hours.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Smart Sending Fatigue Window (Hours)</label>
             {{ form.send_throttle_window_hours }}
             {% if form.send_throttle_window_hours.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.send_throttle_window_hours.errors }}</div>{% endif %}
             <span class="text-xs text-slate-400">Skip recipients who received a promotional message within this window.</span>
@@ -114,22 +109,22 @@
           <span class="text-xs font-medium text-slate-700 block mb-2">Geofenced Location Notification (Optional)</span>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label class="text-xs text-slate-500 mb-1 block">Latitude</label>
+              <label for="{{ form.geofence_latitude.id_for_label }}" class="text-xs text-slate-500 mb-1 block">Latitude</label>
               {{ form.geofence_latitude }}
             </div>
             <div>
-              <label class="text-xs text-slate-500 mb-1 block">Longitude</label>
+              <label for="{{ form.geofence_longitude.id_for_label }}" class="text-xs text-slate-500 mb-1 block">Longitude</label>
               {{ form.geofence_longitude }}
             </div>
             <div>
-              <label class="text-xs text-slate-500 mb-1 block">Radius (km)</label>
+              <label for="{{ form.geofence_radius_km.id_for_label }}" class="text-xs text-slate-500 mb-1 block">Radius (km)</label>
               {{ form.geofence_radius_km }}
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Section: Content & Creative -->
+      <!-- Section: Creative Content & Sender Details -->
       <div>
         <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
           <i data-lucide="mail" class="w-4 h-4 text-emerald-600"></i>
@@ -138,31 +133,31 @@
         <div class="space-y-4">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="form-group">
-              <label class="form-label block text-xs font-medium text-slate-700 mb-1">Sender Display Name</label>
+              <label for="{{ form.sender_name.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Sender Display Name</label>
               {{ form.sender_name }}
               {% if form.sender_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sender_name.errors }}</div>{% endif %}
             </div>
             <div class="form-group">
-              <label class="form-label block text-xs font-medium text-slate-700 mb-1">Sender Address / Caller ID</label>
+              <label for="{{ form.sender_address.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Sender Address / Caller ID</label>
               {{ form.sender_address }}
               {% if form.sender_address.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sender_address.errors }}</div>{% endif %}
             </div>
           </div>
 
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Subject Line / Push Title</label>
+            <label for="{{ form.subject.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Subject Line / Push Title</label>
             {{ form.subject }}
             {% if form.subject.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.subject.errors }}</div>{% endif %}
           </div>
 
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Preheader Preview Text</label>
+            <label for="{{ form.preview_text.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Preheader Preview Text</label>
             {{ form.preview_text }}
             {% if form.preview_text.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.preview_text.errors }}</div>{% endif %}
           </div>
 
           <div class="form-group">
-            <label class="form-label block text-xs font-medium text-slate-700 mb-1">Message Content Body *</label>
+            <label for="{{ form.content_body.id_for_label }}" class="form-label block text-xs font-medium text-slate-700 mb-1">Message Content Body *</label>
             {{ form.content_body }}
             {% if form.content_body.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.content_body.errors }}</div>{% endif %}
           </div>
