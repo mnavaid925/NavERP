@@ -2576,14 +2576,7 @@ def _affiliate_conversion(tenant, affiliate=None, order=None, **overrides):
     if affiliate is None and "affiliate" not in overrides:
         affiliate = _affiliate_partner(tenant)
     if order is None and "order" not in overrides:
-        party = Party.objects.create(tenant=tenant, name="Customer Order Party", kind="person")
-        order = EcommerceOrder.objects.create(
-            tenant=tenant,
-            customer=party,
-            customer_email="cust@example.com",
-            total_amount=Decimal("120.00"),
-            currency="USD",
-        )
+        order = _ordermanagement_order(tenant, total_amount=Decimal("120.00"))
     defaults = {
         "tenant": tenant,
         "affiliate": affiliate,
