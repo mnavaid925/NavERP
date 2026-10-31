@@ -122,8 +122,10 @@
                             <span class="badge badge-green text-xs">Rights Approved</span>
                             {% elif item.rights_status == "pending_request" %}
                             <span class="badge badge-amber text-xs">Pending Rights</span>
-                            {% else %}
+                            {% elif item.rights_status == "rejected" %}
                             <span class="badge badge-red text-xs">Rejected</span>
+                            {% else %}
+                            <span class="badge badge-slate text-xs">{{ item.get_rights_status_display }}</span>
                             {% endif %}
                         </div>
                         <div class="flex items-center gap-1">
