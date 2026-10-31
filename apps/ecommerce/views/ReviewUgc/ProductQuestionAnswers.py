@@ -180,6 +180,8 @@ def productquestionanswer_respond(request, pk):
             return redirect("ecommerce:productquestionanswer_detail", pk=question.pk)
     else:
         initial = {}
+        if question.status == "pending":
+            initial["status"] = "approved"
         if not question.answered_by_name:
             initial["answered_by_name"] = request.user.get_full_name() or request.user.username
         if not question.answer_text:
