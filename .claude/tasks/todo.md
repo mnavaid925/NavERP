@@ -42,16 +42,16 @@
 ---
 
 ## 9.10-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO duplicate party, user, or order table** — Campaigns and affiliates link directly to `core.Party`, `accounts.User`, and `ecommerce.EcommerceOrder`.
-- [ ] **NO proprietary external marketing SaaS dependency** — Omnichannel message orchestration, smart sending fatigue rules, affiliate tracking slugs, and SEO token engines execute natively in Django.
-- [ ] **NO outbound mass SMTP / SMS daemon running synchronously in web request-response cycle** — Delivery tracking is modeled in Django; physical network dispatchers are handled asynchronously.
-- [ ] **NO headless browser SERP scraper daemon required** — SEO rules configure dynamic tokens, schema JSON-LD, and SERP keyword rank positions directly.
+- [x] **NO duplicate party, user, or order table** — Campaigns and affiliates link directly to `core.Party`, `accounts.User`, and `ecommerce.EcommerceOrder`.
+- [x] **NO proprietary external marketing SaaS dependency** — Omnichannel message orchestration, smart sending fatigue rules, affiliate tracking slugs, and SEO token engines execute natively in Django.
+- [x] **NO outbound mass SMTP / SMS daemon running synchronously in web request-response cycle** — Delivery tracking is modeled in Django; physical network dispatchers are handled asynchronously.
+- [x] **NO headless browser SERP scraper daemon required** — SEO rules configure dynamic tokens, schema JSON-LD, and SERP keyword rank positions directly.
 
 ---
 
 ## Models (4 models in `apps/ecommerce/models/MarketingCampaign/`)
 
-- [ ] **`MarketingCampaign`** [Prefix: `EMCP-`] (`apps/ecommerce/models/MarketingCampaign/MarketingCampaigns.py`)
+- [x] **`MarketingCampaign`** [Prefix: `EMCP-`] (`apps/ecommerce/models/MarketingCampaign/MarketingCampaigns.py`)
   - **Purpose**: Core omnichannel marketing campaign and automated flow entity. Orchestrates email newsletters, drip journeys, transactional alerts, SMS promotional blasts, push notifications, and back-in-stock alerts with audience segment targeting, smart sending fatigue controls, and deliverability performance tracking.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -92,7 +92,7 @@
     - `Index(fields=["tenant", "scheduled_at"], name="idx_emcp_ten_sched_at")`
   - **Form Exclusions**: `tenant`, `number`, `sent_at`, `recipient_count`, `delivered_count`, `opened_count`, `clicked_count`, `bounced_count`, `unsubscribed_count`, `complaint_count`, `revenue_attributed`, `created_at`, `updated_at`.
 
-- [ ] **`AffiliatePartner`** [Prefix: `EAFF-`] (`apps/ecommerce/models/MarketingCampaign/AffiliatePartners.py`)
+- [x] **`AffiliatePartner`** [Prefix: `EAFF-`] (`apps/ecommerce/models/MarketingCampaign/AffiliatePartners.py`)
   - **Purpose**: Master record for external affiliate partners, brand ambassadors, influencers, and customer referral advocates. Configures referral tracking slugs, unique coupon codes, commission rates, attribution cookie windows, and aggregates lifetime referred revenue.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -123,7 +123,7 @@
     - `Index(fields=["tenant", "status", "partner_type"], name="idx_eaff_ten_stat_type")`
   - **Form Exclusions**: `tenant`, `number`, `total_orders_referred`, `total_revenue_generated`, `total_commission_earned`, `total_commission_paid`, `created_at`, `updated_at`.
 
-- [ ] **`AffiliateReferralConversion`** [Prefix: `EARC-`] (`apps/ecommerce/models/MarketingCampaign/AffiliateReferralConversions.py`)
+- [x] **`AffiliateReferralConversion`** [Prefix: `EARC-`] (`apps/ecommerce/models/MarketingCampaign/AffiliateReferralConversions.py`)
   - **Purpose**: Granular transaction ledger recording referred store orders, attribution mechanics (link click vs coupon code), computed commissions, approval status, and automatic clawback handling upon order cancellation or return.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -147,7 +147,7 @@
     - `Index(fields=["tenant", "status", "created_at"], name="idx_earc_ten_stat_created")`
   - **Form Exclusions**: `tenant`, `number`, `commission_amount`, `paid_at`, `created_at`, `updated_at`.
 
-- [ ] **`SeoMetadataRule`** [Prefix: `ESEO-`] (`apps/ecommerce/models/MarketingCampaign/SeoMetadataRules.py`)
+- [x] **`SeoMetadataRule`** [Prefix: `ESEO-`] (`apps/ecommerce/models/MarketingCampaign/SeoMetadataRules.py`)
   - **Purpose**: Technical SEO automation rule engine configuring dynamic meta titles, meta descriptions, Schema.org JSON-LD structured data, XML sitemap indexing controls, robots directives, and SERP focus keyword tracking across categories, products, or custom storefront pages.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -185,40 +185,40 @@
 ---
 
 ## Backend (`apps/ecommerce/{models,forms,views,urls}/MarketingCampaign/`)
-- [ ] `models/MarketingCampaign/MarketingCampaigns.py`
-- [ ] `models/MarketingCampaign/AffiliatePartners.py`
-- [ ] `models/MarketingCampaign/AffiliateReferralConversions.py`
-- [ ] `models/MarketingCampaign/SeoMetadataRules.py`
-- [ ] `models/MarketingCampaign/__init__.py`
-- [ ] `models/__init__.py` re-export update (`MarketingCampaign`, `AffiliatePartner`, `AffiliateReferralConversion`, `SeoMetadataRule`)
-- [ ] `forms/MarketingCampaign/MarketingCampaigns.py` (`MarketingCampaignForm`)
-- [ ] `forms/MarketingCampaign/AffiliatePartners.py` (`AffiliatePartnerForm`)
-- [ ] `forms/MarketingCampaign/AffiliateReferralConversions.py` (`AffiliateReferralConversionForm`)
-- [ ] `forms/MarketingCampaign/SeoMetadataRules.py` (`SeoMetadataRuleForm`)
-- [ ] `forms/MarketingCampaign/__init__.py`
-- [ ] `forms/__init__.py` re-export update
-- [ ] `views/MarketingCampaign/MarketingCampaigns.py` (CRUD + dispatch/send action)
-- [ ] `views/MarketingCampaign/AffiliatePartners.py` (CRUD + approve action)
-- [ ] `views/MarketingCampaign/AffiliateReferralConversions.py` (CRUD + approve/void actions)
-- [ ] `views/MarketingCampaign/SeoMetadataRules.py` (CRUD + toggle/preview actions)
-- [ ] `views/MarketingCampaign/MarketingDashboards.py` (marketing overview hub + XML/JSON social catalog feed syndication)
-- [ ] `views/MarketingCampaign/__init__.py`
-- [ ] `views/__init__.py` re-export update
-- [ ] `urls/MarketingCampaign/MarketingCampaigns.py`
-- [ ] `urls/MarketingCampaign/AffiliatePartners.py`
-- [ ] `urls/MarketingCampaign/AffiliateReferralConversions.py`
-- [ ] `urls/MarketingCampaign/SeoMetadataRules.py`
-- [ ] `urls/MarketingCampaign/MarketingDashboards.py`
-- [ ] `urls/MarketingCampaign/__init__.py`
-- [ ] `urls/__init__.py` re-export update
-- [ ] `admin.py` model registrations for all 4 models
-- [ ] `migrations/0012_*.py`
-- [ ] `management/commands/seed_ecommerce.py` idempotent data expansion (campaigns, affiliates, conversions, SEO rules)
+- [x] `models/MarketingCampaign/MarketingCampaigns.py`
+- [x] `models/MarketingCampaign/AffiliatePartners.py`
+- [x] `models/MarketingCampaign/AffiliateReferralConversions.py`
+- [x] `models/MarketingCampaign/SeoMetadataRules.py`
+- [x] `models/MarketingCampaign/__init__.py`
+- [x] `models/__init__.py` re-export update (`MarketingCampaign`, `AffiliatePartner`, `AffiliateReferralConversion`, `SeoMetadataRule`)
+- [x] `forms/MarketingCampaign/MarketingCampaigns.py` (`MarketingCampaignForm`)
+- [x] `forms/MarketingCampaign/AffiliatePartners.py` (`AffiliatePartnerForm`)
+- [x] `forms/MarketingCampaign/AffiliateReferralConversions.py` (`AffiliateReferralConversionForm`)
+- [x] `forms/MarketingCampaign/SeoMetadataRules.py` (`SeoMetadataRuleForm`)
+- [x] `forms/MarketingCampaign/__init__.py`
+- [x] `forms/__init__.py` re-export update
+- [x] `views/MarketingCampaign/MarketingCampaigns.py` (CRUD + dispatch/send action)
+- [x] `views/MarketingCampaign/AffiliatePartners.py` (CRUD + approve action)
+- [x] `views/MarketingCampaign/AffiliateReferralConversions.py` (CRUD + approve/void actions)
+- [x] `views/MarketingCampaign/SeoMetadataRules.py` (CRUD + toggle/preview actions)
+- [x] `views/MarketingCampaign/MarketingDashboards.py` (marketing overview hub + XML/JSON social catalog feed syndication)
+- [x] `views/MarketingCampaign/__init__.py`
+- [x] `views/__init__.py` re-export update
+- [x] `urls/MarketingCampaign/MarketingCampaigns.py`
+- [x] `urls/MarketingCampaign/AffiliatePartners.py`
+- [x] `urls/MarketingCampaign/AffiliateReferralConversions.py`
+- [x] `urls/MarketingCampaign/SeoMetadataRules.py`
+- [x] `urls/MarketingCampaign/MarketingDashboards.py`
+- [x] `urls/MarketingCampaign/__init__.py`
+- [x] `urls/__init__.py` re-export update
+- [x] `admin.py` model registrations for all 4 models
+- [x] `migrations/0012_*.py`
+- [x] `management/commands/seed_ecommerce.py` idempotent data expansion (campaigns, affiliates, conversions, SEO rules)
 
 ---
 
 ## Wire-up
-- [ ] `apps/core/navigation.py` `LIVE_LINKS["9.10"]` entry:
+- [x] `apps/core/navigation.py` `LIVE_LINKS["9.10"]` entry:
   - `"Email Marketing Automation"`: `"ecommerce:marketingcampaign_list?channel=email"`
   - `"SMS & Push Notification"`: `"ecommerce:marketingcampaign_list?channel=sms"`
   - `"Affiliate & Referral Programs"`: `"ecommerce:affiliatepartner_list"`
@@ -235,42 +235,42 @@
 ---
 
 ## Templates (`templates/ecommerce/marketing_campaign/`)
-- [ ] `templates/ecommerce/marketing_campaign/campaign/list.html` (filters: channel, status, campaign_type, search, badges, pagination)
-- [ ] `templates/ecommerce/marketing_campaign/campaign/detail.html` (campaign header, deliverability metrics, audience segment, product preview, dispatch actions)
-- [ ] `templates/ecommerce/marketing_campaign/campaign/form.html` (responsive form with token helpers, channel tabs, audience segment picker)
-- [ ] `templates/ecommerce/marketing_campaign/affiliate/list.html` (filters: partner_type, status, search, commission rate, referral codes)
-- [ ] `templates/ecommerce/marketing_campaign/affiliate/detail.html` (partner profile, Party info, referred revenue KPIs, active coupon link, conversions sub-table)
-- [ ] `templates/ecommerce/marketing_campaign/affiliate/form.html` (form for partner onboarding, party selection, commission configuration)
-- [ ] `templates/ecommerce/marketing_campaign/conversion/list.html` (filters: status, attribution_type, date range, search)
-- [ ] `templates/ecommerce/marketing_campaign/conversion/detail.html` (order details, commission calculations, payout reference, approval/void actions)
-- [ ] `templates/ecommerce/marketing_campaign/conversion/form.html` (form for manual attribution / commission adjustment)
-- [ ] `templates/ecommerce/marketing_campaign/seo_rule/list.html` (filters: rule_type, is_active, search)
-- [ ] `templates/ecommerce/marketing_campaign/seo_rule/detail.html` (dynamic token preview, JSON-LD schema snippet, robots & sitemap settings, SERP rank tracking)
-- [ ] `templates/ecommerce/marketing_campaign/seo_rule/form.html` (rule editor with token cheat-sheet, Schema.org selector, target category/product pickers)
-- [ ] `templates/ecommerce/marketing_campaign/dashboard/dashboard.html` (marketing hub: omnichannel campaign health, email/SMS open & click KPIs, affiliate revenue leaderboard, SEO indexation overview, social catalog feed sync widget)
+- [x] `templates/ecommerce/marketing_campaign/campaign/list.html` (filters: channel, status, campaign_type, search, badges, pagination)
+- [x] `templates/ecommerce/marketing_campaign/campaign/detail.html` (campaign header, deliverability metrics, audience segment, product preview, dispatch actions)
+- [x] `templates/ecommerce/marketing_campaign/campaign/form.html` (responsive form with token helpers, channel tabs, audience segment picker)
+- [x] `templates/ecommerce/marketing_campaign/affiliate/list.html` (filters: partner_type, status, search, commission rate, referral codes)
+- [x] `templates/ecommerce/marketing_campaign/affiliate/detail.html` (partner profile, Party info, referred revenue KPIs, active coupon link, conversions sub-table)
+- [x] `templates/ecommerce/marketing_campaign/affiliate/form.html` (form for partner onboarding, party selection, commission configuration)
+- [x] `templates/ecommerce/marketing_campaign/conversion/list.html` (filters: status, attribution_type, date range, search)
+- [x] `templates/ecommerce/marketing_campaign/conversion/detail.html` (order details, commission calculations, payout reference, approval/void actions)
+- [x] `templates/ecommerce/marketing_campaign/conversion/form.html` (form for manual attribution / commission adjustment)
+- [x] `templates/ecommerce/marketing_campaign/seo_rule/list.html` (filters: rule_type, is_active, search)
+- [x] `templates/ecommerce/marketing_campaign/seo_rule/detail.html` (dynamic token preview, JSON-LD schema snippet, robots & sitemap settings, SERP rank tracking)
+- [x] `templates/ecommerce/marketing_campaign/seo_rule/form.html` (rule editor with token cheat-sheet, Schema.org selector, target category/product pickers)
+- [x] `templates/ecommerce/marketing_campaign/dashboard/dashboard.html` (marketing hub: omnichannel campaign health, email/SMS open & click KPIs, affiliate revenue leaderboard, SEO indexation overview, social catalog feed sync widget)
 
 ---
 
 ## Verify
-- [ ] `makemigrations ecommerce` (generates `0012_*.py`)
-- [ ] `migrate`
-- [ ] `seed_ecommerce` run 1
-- [ ] `seed_ecommerce` run 2 (idempotency check)
-- [ ] `manage.py check` clean (0 issues)
-- [ ] `temp/smoke_9_10.py` test sweep as `admin_acme` / `password`:
+- [x] `makemigrations ecommerce` (generates `0012_*.py`)
+- [x] `migrate`
+- [x] `seed_ecommerce` run 1
+- [x] `seed_ecommerce` run 2 (idempotency check)
+- [x] `manage.py check` clean (0 issues)
+- [x] `temp/smoke_9_10.py` test sweep as `admin_acme` / `password`:
   - All new endpoints return 200/302
   - No `{#` / `{% comment` syntax leaks
   - Seeded records and page titles present
   - Cross-tenant IDOR check returns 404
-- [ ] Sidebar 9.10 shows Live (all 5 NavERP.md bullets live)
+- [x] Sidebar 9.10 shows Live (all 5 NavERP.md bullets live)
 
 ---
 
 ## Close-out
-- [ ] Phase 4 Review agents (code-reviewer -> explorer -> frontend-reviewer -> performance-reviewer -> qa-smoke-tester -> security-reviewer)
-- [ ] Phase 5 Code-fixer agent
-- [ ] Phase 6 Tests (models, forms, views, security) green unfiltered
-- [ ] Phase 7 Update `.claude/skills/ecommerce/SKILL.md` + `README.md`
+- [x] Phase 4 Review agents (code-reviewer -> explorer -> frontend-reviewer -> performance-reviewer -> qa-smoke-tester -> security-reviewer) — all 6 completed
+- [x] Phase 5 Code-fixer agent — 25/25 findings resolved (C1-C6, I1-I11, M1-M8)
+- [x] Phase 6 Tests (models, forms, views, security) green unfiltered — 69/69 passed (100% green)
+- [x] Phase 7 Update `.claude/skills/ecommerce/SKILL.md` + `README.md` — completed
 
 ---
 
@@ -285,10 +285,13 @@
 ---
 
 ## Review notes
-(filled in at the end)
-
----
-
+- **Completed**: 2026-10-31
+- **Sub-module**: 9.10 Marketing & Campaign Management (`apps/ecommerce`)
+- **Review Findings File**: [`.claude/tasks/review-ecommerce-9.10.md`](file:///c:/xampp/htdocs/NavERP/.claude/tasks/review-ecommerce-9.10.md) (All 25 findings verified and fixed)
+- **Gap Register**: [`.agents/tasks/gaps-ecommerce-9.10.md`](file:///c:/xampp/htdocs/NavERP/.agents/tasks/gaps-ecommerce-9.10.md) (3 deferred infrastructure items documented)
+- **Suite Verification**: 69 unit/form/view/security tests executed via pytest, 100% passed in SQLite in-memory runner.
+- **Django Check**: Clean (0 issues, 0 silenced).
+- **Navigation Live Links**: `LIVE_LINKS["9.10"]` verified in `apps/core/navigation.py`.
 
 # Sub-module 9.11: Marketplace & Multi-Vendor (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.11.md` (2026-10-31)
 
