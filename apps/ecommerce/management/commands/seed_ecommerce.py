@@ -2399,6 +2399,202 @@ class Command(BaseCommand):
                 },
             )
 
+        # ------------------------------------------------------------------
+        # 9.10 Marketing & Campaign Management
+        # ------------------------------------------------------------------
+        # 1. Marketing Campaigns
+        target_segment = AudienceSegment.objects.filter(tenant=tenant).first()
+        catalog_sample_product = CatalogProduct.objects.filter(tenant=tenant).first()
+
+        MarketingCampaign.objects.get_or_create(
+            tenant=tenant,
+            code="holiday-vip-early-access",
+            defaults={
+                "name": "Holiday VIP Early Access Broadcast",
+                "campaign_type": "newsletter_broadcast",
+                "channel": "email",
+                "status": "sent",
+                "target_segment": target_segment,
+                "target_product": catalog_sample_product,
+                "subject": "✨ Exclusive VIP Access: Discover The New Season",
+                "preview_text": "Shop 24 hours before everyone else with free express shipping.",
+                "content_body": "Dear VIP Member,\n\nWe are delighted to offer you early access to our curated holiday collection with an exclusive 20% discount code: VIP2026.\n\nEnjoy complimentary express shipping on all orders this weekend.\n\nWarm regards,\nNavStore Team",
+                "sender_name": "NavStore VIP Concierge",
+                "sender_address": "vip@navstore.com",
+                "scheduled_at": timezone.now() - timedelta(days=3),
+                "sent_at": timezone.now() - timedelta(days=3),
+                "send_throttle_window_hours": 16,
+                "recipient_count": 1250,
+                "delivered_count": 1220,
+                "opened_count": 488,
+                "clicked_count": 170,
+                "bounced_count": 30,
+                "unsubscribed_count": 4,
+                "complaint_count": 0,
+                "revenue_attributed": Decimal("14500.00"),
+            },
+        )
+
+        MarketingCampaign.objects.get_or_create(
+            tenant=tenant,
+            code="cart-recovery-1hr",
+            defaults={
+                "name": "Automated Cart Recovery Sequence",
+                "campaign_type": "abandoned_cart",
+                "channel": "email",
+                "status": "sending",
+                "target_segment": target_segment,
+                "subject": "Did you forget something in your shopping cart?",
+                "preview_text": "Your reserved items are waiting. Complete checkout today.",
+                "content_body": "Hello,\n\nWe noticed you left items in your shopping bag. We have reserved them for you for the next 24 hours.\n\nClick below to resume your checkout with one click.\n\nBest,\nNavStore Customer Care",
+                "sender_name": "NavStore Customer Care",
+                "sender_address": "support@navstore.com",
+                "scheduled_at": timezone.now() - timedelta(days=1),
+                "sent_at": timezone.now() - timedelta(hours=12),
+                "send_throttle_window_hours": 24,
+                "recipient_count": 340,
+                "delivered_count": 335,
+                "opened_count": 145,
+                "clicked_count": 62,
+                "bounced_count": 5,
+                "unsubscribed_count": 1,
+                "revenue_attributed": Decimal("4200.00"),
+            },
+        )
+
+        MarketingCampaign.objects.get_or_create(
+            tenant=tenant,
+            code="weekend-flash-sms",
+            defaults={
+                "name": "Weekend Flash Sale SMS Alert",
+                "campaign_type": "promotional_flash",
+                "channel": "sms",
+                "status": "sent",
+                "subject": "FLASH SALE: 48 Hours Only",
+                "content_body": "NavStore: FLASH SALE active now! Take an extra 25% off storewide with code FLASH25. Shop now: https://navstore.com/flash Opt-out reply STOP",
+                "sender_name": "NAVSTORE",
+                "sender_address": "+18005550199",
+                "sent_at": timezone.now() - timedelta(days=2),
+                "recipient_count": 850,
+                "delivered_count": 840,
+                "opened_count": 310,
+                "clicked_count": 105,
+                "bounced_count": 10,
+                "revenue_attributed": Decimal("6800.00"),
+            },
+        )
+
+        # 2. Affiliate Partners
+        partner_party_1, _ = Party.objects.get_or_create(
+            tenant=tenant,
+            name="Alice Smith / Fashionista Blog",
+            defaults={"party_type": "individual"},
+        )
+        partner_party_2, _ = Party.objects.get_or_create(
+            tenant=tenant,
+            name="Tech Reviews Daily Media",
+            defaults={"party_type": "organization"},
+        )
+
+        partner_1, _ = AffiliatePartner.objects.get_or_create(
+            tenant=tenant,
+            referral_code="ALICE15",
+            defaults={
+                "name": "Alice Smith (Fashionista Blog)",
+                "party": partner_party_1,
+                "partner_type": "influencer",
+                "referral_link_slug": "alice-smith",
+                "commission_type": "percentage_net_sales",
+                "commission_rate": Decimal("12.00"),
+                "cookie_duration_days": 30,
+                "status": "active",
+                "payout_threshold": Decimal("50.00"),
+                "payment_email": "alice@fashionistablog.com",
+                "total_orders_referred": 42,
+                "total_revenue_generated": Decimal("5880.00"),
+                "total_commission_earned": Decimal("705.60"),
+                "total_commission_paid": Decimal("500.00"),
+            },
+        )
+
+        partner_2, _ = AffiliatePartner.objects.get_or_create(
+            tenant=tenant,
+            referral_code="TECH20",
+            defaults={
+                "name": "Tech Reviews Daily",
+                "party": partner_party_2,
+                "partner_type": "affiliate",
+                "referral_link_slug": "tech-daily",
+                "commission_type": "percentage_net_sales",
+                "commission_rate": Decimal("10.00"),
+                "cookie_duration_days": 45,
+                "status": "active",
+                "payout_threshold": Decimal("100.00"),
+                "payment_email": "finance@techreviewsdaily.com",
+                "total_orders_referred": 28,
+                "total_revenue_generated": Decimal("4200.00"),
+                "total_commission_earned": Decimal("420.00"),
+                "total_commission_paid": Decimal("300.00"),
+            },
+        )
+
+        # 3. Affiliate Referral Conversions
+        existing_order = EcommerceOrder.objects.filter(tenant=tenant).first()
+        if existing_order and not AffiliateReferralConversion.objects.filter(tenant=tenant, affiliate=partner_1, order=existing_order).exists():
+            AffiliateReferralConversion.objects.create(
+                tenant=tenant,
+                affiliate=partner_1,
+                order=existing_order,
+                attribution_type="referral_link",
+                order_amount=Decimal("180.00"),
+                commission_rate_applied=Decimal("12.00"),
+                commission_amount=Decimal("21.60"),
+                status="approved",
+                notes="Referred via Instagram story swipe-up campaign.",
+            )
+
+        # 4. SEO Metadata Rules
+        store_cat = StoreCategory.objects.filter(tenant=tenant).first()
+        SeoMetadataRule.objects.get_or_create(
+            tenant=tenant,
+            name="Global Catalog Dynamic Product Meta Rule",
+            defaults={
+                "rule_type": "product_template",
+                "meta_title_template": "{product_name} - Premium Quality Online | {site_name}",
+                "meta_description_template": "Discover {product_name} by {brand} in {category}. Best price starting at ${price} with free express delivery and hassle-free returns.",
+                "json_ld_schema_type": "Product",
+                "robots_directive": "index_follow",
+                "sitemap_included": True,
+                "sitemap_priority": Decimal("0.80"),
+                "sitemap_changefreq": "daily",
+                "target_keyword": "buy products online",
+                "tracked_rank_position": 4,
+                "rank_tracked_at": timezone.now() - timedelta(days=1),
+                "is_active": True,
+            },
+        )
+
+        SeoMetadataRule.objects.get_or_create(
+            tenant=tenant,
+            name="Category Dynamic Structured Data Rule",
+            defaults={
+                "rule_type": "category_template",
+                "target_category": store_cat,
+                "meta_title_template": "{category} Collection - Best Styles Online | {site_name}",
+                "meta_description_template": "Explore our curated {category} collection. Unbeatable quality, seasonal discounts, and free shipping on eligible orders.",
+                "json_ld_schema_type": "BreadcrumbList",
+                "robots_directive": "index_follow",
+                "sitemap_included": True,
+                "sitemap_priority": Decimal("0.90"),
+                "sitemap_changefreq": "weekly",
+                "target_keyword": "apparel and fashion online",
+                "tracked_rank_position": 7,
+                "rank_tracked_at": timezone.now() - timedelta(days=2),
+                "is_active": True,
+            },
+        )
+
+
 
 
 
