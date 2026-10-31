@@ -96,6 +96,7 @@ class ProductReview(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_eprv_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "status"], name="idx_eprv_ten_stat"),
             models.Index(fields=["tenant", "product", "status"], name="idx_eprv_ten_prod_stat"),
             models.Index(fields=["tenant", "rating", "status"], name="idx_eprv_ten_rate_stat"),
             models.Index(fields=["tenant", "sentiment"], name="idx_eprv_ten_snt"),
