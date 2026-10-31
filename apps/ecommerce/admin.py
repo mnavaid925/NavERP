@@ -12,6 +12,10 @@ from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPoli
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
 from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
+from apps.ecommerce.models.Marketplace.MarketplaceVendors import MarketplaceVendor
+from apps.ecommerce.models.Marketplace.VendorPayouts import VendorPayout
+from apps.ecommerce.models.Marketplace.VendorProductListings import VendorProductListing
+from apps.ecommerce.models.Marketplace.VendorSubOrders import VendorSubOrder
 from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder, EcommerceOrderLine
 from apps.ecommerce.models.OrderManagement.OrderFulfillments import OrderFulfillment
 from apps.ecommerce.models.OrderManagement.OrderRoutingRules import OrderRoutingRule
@@ -376,6 +380,48 @@ class SubscriptionRetentionActionAdmin(admin.ModelAdmin):
     search_fields = ["number", "subscription__number", "customer_profile__email", "notes"]
     list_select_related = ["subscription", "customer_profile"]
     ordering = ["-created_at"]
+
+
+# ---------------------------------------------------------------------------
+# 9.11 Marketplace & Multi-Vendor
+# ---------------------------------------------------------------------------
+
+
+@admin.register(MarketplaceVendor)
+class MarketplaceVendorAdmin(admin.ModelAdmin):
+    list_display = ["number", "store_name", "party", "status", "kyc_status", "commission_rate", "rating_average", "is_featured"]
+    list_filter = ["status", "kyc_status", "commission_type", "is_featured", "tenant"]
+    search_fields = ["number", "store_name", "slug", "party__name", "support_email", "tax_id"]
+    list_select_related = ["party", "owner_user", "suspended_by"]
+    ordering = ["store_name"]
+
+
+@admin.register(VendorProductListing)
+class VendorProductListingAdmin(admin.ModelAdmin):
+    list_display = ["number", "product", "vendor", "seller_sku", "asking_price", "available_quantity", "moderation_status", "compliance_status", "is_active"]
+    list_filter = ["moderation_status", "compliance_status", "condition", "is_active", "tenant"]
+    search_fields = ["number", "seller_sku", "barcode", "product__title", "vendor__store_name"]
+    list_select_related = ["product", "variant", "vendor", "reviewed_by"]
+    ordering = ["-created_at"]
+
+
+@admin.register(VendorSubOrder)
+class VendorSubOrderAdmin(admin.ModelAdmin):
+    list_display = ["number", "order", "vendor", "fulfillment_status", "sla_status", "subtotal_amount", "net_vendor_amount", "payout_status", "dispute_status"]
+    list_filter = ["fulfillment_status", "sla_status", "payout_status", "dispute_status", "tenant"]
+    search_fields = ["number", "order__number", "vendor__store_name", "tracking_number", "carrier_name"]
+    list_select_related = ["order", "vendor", "payout"]
+    ordering = ["-created_at"]
+
+
+@admin.register(VendorPayout)
+class VendorPayoutAdmin(admin.ModelAdmin):
+    list_display = ["number", "vendor", "period_start", "period_end", "gross_sales_amount", "commission_deducted", "net_payout_amount", "payout_status", "is_1099_reported"]
+    list_filter = ["payout_status", "payout_method", "is_1099_reported", "tenant"]
+    search_fields = ["number", "vendor__store_name", "reference_code", "notes"]
+    list_select_related = ["vendor", "approved_by"]
+    ordering = ["-period_end"]
+
 
 
 
