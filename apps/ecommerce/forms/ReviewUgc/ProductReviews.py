@@ -22,11 +22,7 @@ class ProductReviewForm(TenantUniqueMixin, TenantModelForm):
             "rating",
             "title",
             "body",
-            "status",
-            "sentiment",
             "is_featured",
-            "merchant_response",
-            "moderation_note",
         ]
         widgets = {
             "product": forms.Select(attrs={"class": "form-select"}),
@@ -46,15 +42,7 @@ class ProductReviewForm(TenantUniqueMixin, TenantModelForm):
             "body": forms.Textarea(
                 attrs={"class": "form-textarea", "rows": 4, "placeholder": "Share detailed impressions of the product..."}
             ),
-            "status": forms.Select(attrs={"class": "form-select"}),
-            "sentiment": forms.Select(attrs={"class": "form-select"}),
             "is_featured": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
-            "merchant_response": forms.Textarea(
-                attrs={"class": "form-textarea", "rows": 3, "placeholder": "Official response from the brand..."}
-            ),
-            "moderation_note": forms.TextInput(
-                attrs={"class": "form-input", "placeholder": "Internal moderation commentary"}
-            ),
         }
 
     def __init__(self, *args, **kwargs):
