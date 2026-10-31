@@ -2488,12 +2488,12 @@ class Command(BaseCommand):
         partner_party_1, _ = Party.objects.get_or_create(
             tenant=tenant,
             name="Alice Smith / Fashionista Blog",
-            defaults={"party_type": "individual"},
+            defaults={"kind": "person"},
         )
         partner_party_2, _ = Party.objects.get_or_create(
             tenant=tenant,
             name="Tech Reviews Daily Media",
-            defaults={"party_type": "organization"},
+            defaults={"kind": "organization"},
         )
 
         partner_1, _ = AffiliatePartner.objects.get_or_create(
