@@ -38,7 +38,7 @@ def affiliatepartner_list(request):
     if status:
         qs = qs.filter(status=status)
 
-    paginator = Paginator(qs, 25)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
