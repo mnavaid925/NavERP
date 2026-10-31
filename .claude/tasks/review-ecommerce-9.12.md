@@ -23,8 +23,7 @@ Reviewers executed serially:
 
 ## Important Findings
 
-- [ ] **[I1]** `apps/ecommerce/admin.py:366`, `384` — `CustomerSubscriptionAdmin.search_fields` uses `"customer_profile__customer_name"` and `"customer_profile__email"`, and `SubscriptionRetentionActionAdmin.search_fields` uses `"customer_profile__email"`. Neither `customer_name` nor `email` are fields on `CustomerAccountProfile` directly. Django admin searches crash with `FieldError`.
-  - **Fix**: In `CustomerSubscriptionAdmin.search_fields`, use `"customer_profile__customer__name"` and `"customer_profile__user__email"`. In `SubscriptionRetentionActionAdmin.search_fields`, use `"customer_profile__user__email"`.
+- [x] **[I1]** `apps/ecommerce/admin.py:366`, `384` — fixed — corrected admin search_fields to customer_profile__customer__name and customer_profile__user__email
 - [ ] **[I2]** `apps/ecommerce/views/SubscriptionCommerce/CustomerSubscriptions.py:38` & `SubscriptionBoxCurations.py:36` — In `customersubscription_list` and `subscriptionboxcuration_list`, the `plan` GET parameter is queried without `plan_id.isdigit()` validation before passing to `qs.filter(plan_id=plan_id)`. Non-numeric parameters crash with `ValueError` (HTTP 500).
   - **Fix**: Guard with `if plan_id and plan_id.isdigit(): qs = qs.filter(plan_id=int(plan_id))`.
 - [ ] **[I3]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPlans.py:137` — Unhandled `ProtectedError` on subscription plan deletion: In `subscriptionplan_delete`, `plan.delete()` is called without catching `django.db.models.ProtectedError`. Because `CustomerSubscription.plan` is declared with `on_delete=models.PROTECT`, attempting to delete any plan with active or historical subscriptions crashes with HTTP 500. Additionally, the confirmation prompt in `templates/ecommerce/subscriptioncommerce/subscriptionplan/list.html:173` inaccurately claims "Existing subscriptions will remain".
