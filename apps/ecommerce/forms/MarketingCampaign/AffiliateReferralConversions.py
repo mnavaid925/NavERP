@@ -45,12 +45,16 @@ class AffiliateReferralConversionForm(TenantUniqueMixin, TenantModelForm):
             self.fields["affiliate"].queryset = AffiliatePartner.objects.filter(
                 tenant=self.tenant
             ).order_by("name")
-            self.fields["order"].queryset = EcommerceOrder.objects.filter(
-                tenant=self.tenant
-            ).order_by("-created_at")
-            self.fields["referred_customer"].queryset = CustomerAccountProfile.objects.filter(
-                tenant=self.tenant
-            ).order_by("user__username")
+            self.fields["order"].queryset = (
+                EcommerceOrder.objects.filter(tenant=self.tenant)
+                .select_related("customer")
+                .order_by("-created_at")
+            )
+            self.fields["referred_customer"].queryset = (
+                CustomerAccountProfile.objects.filter(tenant=self.tenant)
+                .select_related("customer")
+                .order_by("user__username")
+            )
 
     def clean(self):
         cleaned_data = super().clean()
