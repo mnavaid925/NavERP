@@ -94,6 +94,43 @@ from apps.ecommerce.views.InventoryStock.InventoryAllocations import (
     inventoryallocation_list,
 )
 from apps.ecommerce.views.InventoryStock.Operations import inventory_operations
+from apps.ecommerce.views.MarketingCampaign.AffiliatePartners import (
+    affiliatepartner_approve,
+    affiliatepartner_create,
+    affiliatepartner_delete,
+    affiliatepartner_detail,
+    affiliatepartner_edit,
+    affiliatepartner_list,
+)
+from apps.ecommerce.views.MarketingCampaign.AffiliateReferralConversions import (
+    affiliatereferralconversion_approve,
+    affiliatereferralconversion_create,
+    affiliatereferralconversion_delete,
+    affiliatereferralconversion_detail,
+    affiliatereferralconversion_edit,
+    affiliatereferralconversion_list,
+    affiliatereferralconversion_void,
+)
+from apps.ecommerce.views.MarketingCampaign.MarketingCampaigns import (
+    marketingcampaign_create,
+    marketingcampaign_delete,
+    marketingcampaign_detail,
+    marketingcampaign_edit,
+    marketingcampaign_list,
+    marketingcampaign_send,
+)
+from apps.ecommerce.views.MarketingCampaign.MarketingDashboards import (
+    marketing_dashboard,
+    social_commerce_feed,
+)
+from apps.ecommerce.views.MarketingCampaign.SeoMetadataRules import (
+    seometadatarule_create,
+    seometadatarule_delete,
+    seometadatarule_detail,
+    seometadatarule_edit,
+    seometadatarule_list,
+    seometadatarule_toggle,
+)
 from apps.ecommerce.views.Marketplace.MarketplaceConsoleViews import (
     marketplace_console,
 )
@@ -528,6 +565,34 @@ __all__ = [
     "shopperbehaviorevent_delete",
     "personalization_console",
     "recommendation_simulate",
+    # 9.10 Marketing & Campaign Management
+    "marketingcampaign_list",
+    "marketingcampaign_detail",
+    "marketingcampaign_create",
+    "marketingcampaign_edit",
+    "marketingcampaign_delete",
+    "marketingcampaign_send",
+    "affiliatepartner_list",
+    "affiliatepartner_detail",
+    "affiliatepartner_create",
+    "affiliatepartner_edit",
+    "affiliatepartner_delete",
+    "affiliatepartner_approve",
+    "affiliatereferralconversion_list",
+    "affiliatereferralconversion_detail",
+    "affiliatereferralconversion_create",
+    "affiliatereferralconversion_edit",
+    "affiliatereferralconversion_delete",
+    "affiliatereferralconversion_approve",
+    "affiliatereferralconversion_void",
+    "seometadatarule_list",
+    "seometadatarule_detail",
+    "seometadatarule_create",
+    "seometadatarule_edit",
+    "seometadatarule_delete",
+    "seometadatarule_toggle",
+    "marketing_dashboard",
+    "social_commerce_feed",
     # 9.11 Marketplace & Multi-Vendor
     "marketplace_console",
     "marketplacevendor_list",
