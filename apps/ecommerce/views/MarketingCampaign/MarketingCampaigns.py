@@ -86,10 +86,11 @@ def marketingcampaign_create(request):
             campaign.tenant = request.tenant
             campaign.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                campaign,
                 "create",
-                f"Created marketing campaign {campaign.number} ({campaign.name})",
+                changes={"number": campaign.number, "name": campaign.name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Campaign '{campaign.name}' created successfully.")
             return redirect("ecommerce:marketingcampaign_detail", pk=campaign.pk)
@@ -111,10 +112,11 @@ def marketingcampaign_edit(request, pk):
         if form.is_valid():
             campaign = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                campaign,
                 "update",
-                f"Updated marketing campaign {campaign.number} ({campaign.name})",
+                changes={"number": campaign.number, "name": campaign.name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Campaign '{campaign.name}' updated successfully.")
             return redirect("ecommerce:marketingcampaign_detail", pk=campaign.pk)
@@ -137,10 +139,11 @@ def marketingcampaign_delete(request, pk):
     number = campaign.number
     campaign.delete()
     write_audit_log(
-        request.tenant,
         request.user,
+        campaign,
         "delete",
-        f"Deleted marketing campaign {number} ({name})",
+        changes={"number": number, "name": name},
+        tenant=request.tenant,
     )
     messages.success(request, f"Campaign '{name}' was deleted.")
     return redirect("ecommerce:marketingcampaign_list")
@@ -170,10 +173,11 @@ def marketingcampaign_send(request, pk):
     campaign.save()
 
     write_audit_log(
-        request.tenant,
         request.user,
+        campaign,
         "execute",
-        f"Dispatched marketing campaign {campaign.number} to {campaign.recipient_count} recipients",
+        changes={"number": campaign.number, "recipients": campaign.recipient_count},
+        tenant=request.tenant,
     )
     messages.success(
         request,
