@@ -163,6 +163,8 @@ class CustomerSubscription(TenantNumbered):
             raise ValidationError({"product": "Catalog product belongs to another workspace."})
         if self.variant_id and self.variant and self.variant.tenant_id != self.tenant_id:
             raise ValidationError({"variant": "Product variant belongs to another workspace."})
+        if self.variant_id and self.product_id and self.variant and self.variant.product_id != self.product_id:
+            raise ValidationError({"variant": "Product variant does not belong to the selected catalog product."})
 
     def __str__(self):
         return f"{self.customer_profile} - {self.product.name} ({self.number}) [{self.get_status_display()}]"
