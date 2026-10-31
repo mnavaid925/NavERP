@@ -364,7 +364,7 @@ class CustomerSubscriptionAdmin(admin.ModelAdmin):
     list_display = ["number", "customer_profile", "plan", "product", "status", "next_billing_date", "completed_cycles_count"]
     list_filter = ["status", "plan", "tenant"]
     search_fields = ["number", "customer_profile__customer__name", "customer_profile__user__email", "product__name"]
-    list_select_related = ["customer_profile", "plan", "product", "variant"]
+    list_select_related = ["customer_profile__customer", "customer_profile__user", "plan", "product", "variant"]
     ordering = ["-started_at"]
 
 
@@ -382,7 +382,7 @@ class SubscriptionRetentionActionAdmin(admin.ModelAdmin):
     list_display = ["number", "subscription", "trigger_type", "cancellation_reason", "offered_action", "outcome", "churn_risk_score", "created_at"]
     list_filter = ["trigger_type", "outcome", "cancellation_reason", "tenant"]
     search_fields = ["number", "subscription__number", "customer_profile__user__email", "notes"]
-    list_select_related = ["subscription", "customer_profile"]
+    list_select_related = ["subscription__customer_profile__customer", "subscription__product", "customer_profile__customer"]
     ordering = ["-created_at"]
 
 
