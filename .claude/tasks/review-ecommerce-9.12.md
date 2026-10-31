@@ -32,8 +32,7 @@ Reviewers executed serially:
 - [x] **[I7]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:46,83,118,138` — fixed — added tenant_admin_required to skip, pause, resume, and deflect portal actions
 - [x] **[I8]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:48,85,120,140` — fixed — guarded lifecycle state transitions (active required for skip/pause/deflect; paused required for resume)
 - [x] **[I9]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:141-168` — fixed — validated action_choice against allowed set and clamped reason to REASON_CHOICES
-- [ ] **[I10]** `apps/ecommerce/models/SubscriptionCommerce/CustomerSubscriptions.py:148` & `apps/ecommerce/forms/SubscriptionCommerce/CustomerSubscriptions.py:85` — Cross-record integrity: `variant` is not validated to belong to the selected `product`.
-  - **Fix**: Validate `if self.variant and self.product and self.variant.product_id != self.product_id: raise ValidationError(...)` in model `clean()` and form `clean()`.
+- [x] **[I10]** `apps/ecommerce/models/SubscriptionCommerce/CustomerSubscriptions.py:148` & `apps/ecommerce/forms/SubscriptionCommerce/CustomerSubscriptions.py:85` — fixed — validated that variant belongs to selected product in model and form clean()
 
 ---
 
