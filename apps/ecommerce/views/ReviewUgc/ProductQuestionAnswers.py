@@ -112,7 +112,12 @@ def productquestionanswer_edit(request, pk):
     if request.method == "POST":
         form = ProductQuestionAnswerForm(request.POST, instance=question, tenant=request.tenant)
         if form.is_valid():
-            question = form.save()
+            question = form.save(commit=False)
+            if question.answer_text and not question.answered_at:
+                question.answered_at = timezone.now()
+                if request.user.is_authenticated and not question.answered_by_user:
+                    question.answered_by_user = request.user
+            question.save()
             write_audit_log(
                 request.user,
                 question,
