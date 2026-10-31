@@ -38,8 +38,7 @@ Reviewers executed serially:
 
 ## Minor Findings
 
-- [ ] **[M1]** `templates/ecommerce/subscriptioncommerce/subscriptionplan/list.html:114` & `detail.html:24` — Archetype badge coloring handles `subscribe_save` and `curated_box`, falling through to `badge-slate` for `membership_club` or rendering statically.
-  - **Fix**: Explicitly check `elif plan.plan_type == 'membership_club'` and apply `badge-amber` across list and detail templates.
+- [x] **[M1]** `templates/ecommerce/subscriptioncommerce/subscriptionplan/list.html:114` & `detail.html:24` — fixed — added badge-amber styling for membership_club archetype across list and detail templates
 - [ ] **[M2]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionBoxCurations.py:48` & `apps/ecommerce/forms/SubscriptionCommerce/SubscriptionBoxCurations.py:73` — Curation plan queryset archetype filtering divergence: Contract Section 4.3 specifies `plans: Queryset of SubscriptionPlan (curated_box type)`. The view and form currently query all active plans regardless of `plan_type`.
   - **Fix**: Filter `plans` in `subscriptionboxcuration_list` and `SubscriptionBoxCurationForm.__init__` with `.filter(plan_type="curated_box", is_active=True)`.
 - [ ] **[M3]** `templates/ecommerce/subscriptioncommerce/portal/portal.html:133, 140-141, 154` — Deflection modal accessibility issues (missing `aria-label`/`title` on close button, missing `id`/`for` label association, non-theme `text-primary` class on radio inputs).
