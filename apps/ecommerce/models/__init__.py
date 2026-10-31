@@ -11,6 +11,10 @@ from apps.ecommerce.models.InventoryStock.BackorderPolicies import BackorderPoli
 from apps.ecommerce.models.InventoryStock.ChannelInventorySyncs import ChannelInventorySync
 from apps.ecommerce.models.InventoryStock.FulfillmentCenters import FulfillmentCenter
 from apps.ecommerce.models.InventoryStock.InventoryAllocations import InventoryAllocation
+from apps.ecommerce.models.MarketingCampaign.AffiliatePartners import AffiliatePartner
+from apps.ecommerce.models.MarketingCampaign.AffiliateReferralConversions import AffiliateReferralConversion
+from apps.ecommerce.models.MarketingCampaign.MarketingCampaigns import MarketingCampaign
+from apps.ecommerce.models.MarketingCampaign.SeoMetadataRules import SeoMetadataRule
 from apps.ecommerce.models.Marketplace.MarketplaceVendors import MarketplaceVendor
 from apps.ecommerce.models.Marketplace.VendorPayouts import VendorPayout
 from apps.ecommerce.models.Marketplace.VendorProductListings import VendorProductListing
@@ -86,6 +90,11 @@ __all__ = [
     "RecommendationStrategy",
     "PersonalizedExperience",
     "ShopperBehaviorEvent",
+    # 9.10 Marketing & Campaign Management
+    "MarketingCampaign",
+    "AffiliatePartner",
+    "AffiliateReferralConversion",
+    "SeoMetadataRule",
     # 9.11 Marketplace & Multi-Vendor
     "MarketplaceVendor",
     "VendorProductListing",
