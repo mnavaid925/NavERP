@@ -96,5 +96,22 @@ None.
 - [ ] Detail views omit `select_related` when fetching single objects via `ecommerce_object`.
   - **Fix**: Pass `select_related` to `ecommerce_object` in detail views.
 
+---
+
+## 5. QA Smoke Tester Findings
+
+### Critical
+None.
+
+### Important
+- [ ] `apps/ecommerce/views/SubscriptionCommerce/CustomerSubscriptions.py:39` — `customersubscription_list` crashes with HTTP 500 when non-numeric `?plan=abc` is passed (`ValueError: Field 'id' expected a number but got 'abc'`).
+  - **Fix**: Validate with `if plan_id and plan_id.isdigit(): qs = qs.filter(plan_id=int(plan_id))`.
+- [ ] `apps/ecommerce/views/SubscriptionCommerce/SubscriptionBoxCurations.py:37` — `subscriptionboxcuration_list` crashes with HTTP 500 when non-numeric `?plan=abc` is passed (`ValueError: Field 'id' expected a number but got 'abc'`).
+  - **Fix**: Validate with `if plan_id and plan_id.isdigit(): qs = qs.filter(plan_id=int(plan_id))`.
+
+### Minor
+None.
+
+
 
 
