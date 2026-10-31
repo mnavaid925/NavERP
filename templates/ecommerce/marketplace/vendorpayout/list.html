@@ -146,15 +146,15 @@
             </td>
             <td class="py-3 px-4 text-right">
               <div class="table-actions flex items-center justify-end gap-2">
-                <a href="{% url 'ecommerce:vendorpayout_detail' p.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="View Statement">
+                <a href="{% url 'ecommerce:vendorpayout_detail' p.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="View Statement" aria-label="View Statement">
                   <i data-lucide="eye" class="w-4 h-4"></i>
                 </a>
-                <a href="{% url 'ecommerce:vendorpayout_edit' p.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit Batch">
+                <a href="{% url 'ecommerce:vendorpayout_edit' p.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit Batch" aria-label="Edit Batch">
                   <i data-lucide="pencil" class="w-4 h-4"></i>
                 </a>
-                <form method="post" action="{% url 'ecommerce:vendorpayout_delete' p.pk %}" onsubmit="return confirm('Are you sure you want to delete payout batch {{ p.number }}?');" class="inline">
+                <form method="post" action="{% url 'ecommerce:vendorpayout_delete' p.pk %}" onsubmit="return confirm('Are you sure you want to delete payout batch {{ p.number|escapejs }}?');" class="inline">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete Batch">
+                  <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete Batch" aria-label="Delete Batch">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </form>
