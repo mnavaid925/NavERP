@@ -125,7 +125,7 @@
                 <div class="pt-2 border-t border-slate-100">
                     <span class="text-muted block text-xs">Customer Profile</span>
                     <a href="{% url 'ecommerce:customeraccountprofile_detail' question.customer.pk %}" class="font-medium text-brand hover:underline">
-                        {{ question.customer.display_name }} ({{ question.customer.number }})
+                        {{ question.customer.customer.name|default:question.customer.number }}{% if question.customer.customer.name %} ({{ question.customer.number }}){% endif %}
                     </a>
                 </div>
                 {% endif %}
