@@ -3,7 +3,7 @@
 - **Sub-module:** 9.11 Marketplace & Multi-Vendor • **Module:** 9 eCommerce Management System • **App:** `apps/ecommerce`
 - **Changeset:** `f373366542e10cdb8e6b08f6aa8ce4f758c5ad69...HEAD`
 - **Review Date:** 2026-10-31
-- **Status:** Review In Progress (Pass 1, Pass 2, Pass 3, & Pass 4 complete)
+- **Status:** Review In Progress (Passes 1–5 complete)
 
 ---
 
@@ -223,3 +223,27 @@
   - `templates/ecommerce/marketplace/vendorsuborder/detail.html:237`
   - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:90`
   - Fix: Include `order__customer` in `select_related` in `vendorsuborder_detail` alongside field rename.
+
+---
+
+## Pass 5: QA Smoke Testing (`qa-smoke-tester`)
+
+### Important
+- [ ] **QA-I1**: AuditLog Action String Length Exceeds Column Size
+  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py:262` (`verb="dispute_update"`)
+  - `apps/ecommerce/views/Marketplace/VendorPayoutViews.py:214` (`verb="execute_disbursement"`)
+  - Description: Action strings exceed varchar(10) column limit, causing warnings and truncation (`dispute_up`, `execute_di`). (Corroborates I2).
+  - Fix: Use `"dispute"` and `"execute"`.
+
+### Minor
+- [ ] **QA-M1**: Unregistered Audit Log Verb UserWarnings
+  - `apps/ecommerce/views/Marketplace/MarketplaceVendorViews.py` (`verify_kyc`, `suspend`, `reinstate`)
+  - `apps/ecommerce/views/Marketplace/VendorProductListingViews.py` (`moderate`)
+  - `apps/ecommerce/views/Marketplace/VendorSubOrderViews.py` (`fulfill`)
+  - `apps/ecommerce/views/Marketplace/VendorPayoutViews.py` (`approve`)
+  - Description: Domain action verbs trigger `UserWarning: write_audit_log(...) was called with an unregistered verb`.
+  - Fix: Standardize on `"update"` with action detail in `changes` or register verbs in `KNOWN_VERBS`.
+- [ ] **QA-M2**: Duplicate Context Variable in MarketplaceVendor List View
+  - `apps/ecommerce/views/Marketplace/MarketplaceVendorViews.py:56-57`
+  - Description: Both `"query": query` and `"search_query": query` passed to context; template only uses `{{ query }}`.
+  - Fix: Remove redundant `"search_query"` key.
