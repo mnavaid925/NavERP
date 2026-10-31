@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Marketing Campaigns · Marketing & Campaign Management · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketing_dashboard' %}" class="hover:text-blue-600">Marketing & Campaigns</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Campaigns</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Marketing Campaigns</h1>
+      <p class="text-sm text-slate-500 mt-1">Omnichannel marketing automation, newsletters, drips, transactional alerts, and SMS/push broadcasts.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:marketing_dashboard' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>Marketing Hub</span>
+      </a>
+      <a href="{% url 'ecommerce:marketingcampaign_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Campaign</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Campaign #, name, subject..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-channel" class="block text-xs font-medium text-slate-600 mb-1">Channel</label>
+        <select id="filter-channel" name="channel" class="form-select w-full text-sm">
+          <option value="">All Channels</option>
+          {% for val, label in channel_choices %}
+            <option value="{{ val }}" {% if selected_channel == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-type" class="block text-xs font-medium text-slate-600 mb-1">Campaign Type</label>
+        <select id="filter-type" name="campaign_type" class="form-select w-full text-sm">
+          <option value="">All Campaign Types</option>
+          {% for val, label in campaign_type_choices %}
+            <option value="{{ val }}" {% if selected_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-600 mb-1">Status</label>
+        <select id="filter-status" name="status" class="form-select w-full text-sm">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-primary w-full text-sm">Filter</button>
+        <a href="{% url 'ecommerce:marketingcampaign_list' %}" class="btn btn-outline text-sm" title="Clear Filters">Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Campaigns Table -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            <th class="py-3 px-4">Campaign</th>
+            <th class="py-3 px-4">Channel</th>
+            <th class="py-3 px-4">Type</th>
+            <th class="py-3 px-4">Target Segment</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4 text-right">Recipients</th>
+            <th class="py-3 px-4 text-right">Open Rate</th>
+            <th class="py-3 px-4 text-right">Attributed Rev</th>
+            <th class="py-3 px-4 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-sm">
+          {% for item in campaigns %}
+            <tr class="hover:bg-slate-50/80 transition-colors">
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-900">
+                  <a href="{% url 'ecommerce:marketingcampaign_detail' item.pk %}" class="hover:text-blue-600">
+                    {{ item.name }}
+                  </a>
+                </div>
+                <div class="text-xs text-slate-500 font-mono">{{ item.number }} · {{ item.code }}</div>
+              </td>
+              <td class="py-3 px-4">
+                {% if item.channel == 'email' %}
+                  <span class="badge badge-info inline-flex items-center gap-1">
+                    <i data-lucide="mail" class="w-3 h-3"></i> Email
+                  </span>
+                {% elif item.channel == 'sms' %}
+                  <span class="badge badge-amber inline-flex items-center gap-1">
+                    <i data-lucide="message-square" class="w-3 h-3"></i> SMS
+                  </span>
+                {% elif item.channel == 'push' %}
+                  <span class="badge badge-purple inline-flex items-center gap-1">
+                    <i data-lucide="bell" class="w-3 h-3"></i> Push
+                  </span>
+                {% else %}
+                  <span class="badge badge-green inline-flex items-center gap-1">
+                    <i data-lucide="radio" class="w-3 h-3"></i> Omnichannel
+                  </span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-slate-700">
+                {{ item.get_campaign_type_display }}
+              </td>
+              <td class="py-3 px-4 text-slate-600">
+                {% if item.target_segment %}
+                  <span class="inline-flex items-center gap-1 text-slate-700">
+                    <i data-lucide="users" class="w-3.5 h-3.5 text-slate-400"></i>
+                    {{ item.target_segment.name }}
+                  </span>
+                {% else %}
+                  <span class="text-slate-400 italic">All Store Shoppers</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                {% if item.status == 'sent' %}
+                  <span class="badge badge-green">Sent</span>
+                {% elif item.status == 'scheduled' %}
+                  <span class="badge badge-info">Scheduled</span>
+                {% elif item.status == 'sending' %}
+                  <span class="badge badge-amber">Sending</span>
+                {% elif item.status == 'draft' %}
+                  <span class="badge badge-slate">Draft</span>
+                {% elif item.status == 'paused' %}
+                  <span class="badge badge-muted">Paused</span>
+                {% else %}
+                  <span class="badge badge-red">{{ item.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right font-medium text-slate-800">
+                {{ item.recipient_count|default:"0" }}
+              </td>
+              <td class="py-3 px-4 text-right font-medium text-slate-800">
+                {{ item.open_rate }}%
+              </td>
+              <td class="py-3 px-4 text-right font-medium text-green-700">
+                ${{ item.revenue_attributed|default:"0.00" }}
+              </td>
+              <td class="py-3 px-4 text-center">
+                <div class="table-actions flex items-center justify-center gap-1">
+                  <a href="{% url 'ecommerce:marketingcampaign_detail' item.pk %}" class="btn-icon p-1.5 text-slate-500 hover:text-blue-600" title="View Campaign">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'ecommerce:marketingcampaign_edit' item.pk %}" class="btn-icon p-1.5 text-slate-500 hover:text-amber-600" title="Edit Campaign">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'ecommerce:marketingcampaign_delete' item.pk %}" onsubmit="return confirm('Are you sure you want to delete campaign {{ item.name }}?');" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-icon p-1.5 text-slate-500 hover:text-red-600" title="Delete Campaign">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9" class="py-12 text-center">
+                <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                  <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                    <i data-lucide="megaphone" class="w-6 h-6"></i>
+                  </div>
+                  <h3 class="text-base font-semibold text-slate-800">No Marketing Campaigns Found</h3>
+                  <p class="text-sm text-slate-500 mt-1 mb-4">Create your first automated email, SMS, or push marketing broadcast.</p>
+                  <a href="{% url 'ecommerce:marketingcampaign_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Create Campaign</span>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+        <div>
+          Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </div>
+        <div class="flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_channel %}&channel={{ selected_channel }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_type %}&campaign_type={{ selected_type }}{% endif %}" class="btn btn-outline text-xs px-2.5 py-1.5">
+              Previous
+            </a>
+          {% endif %}
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_channel %}&channel={{ selected_channel }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_type %}&campaign_type={{ selected_type }}{% endif %}" class="btn btn-outline text-xs px-2.5 py-1.5">
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
