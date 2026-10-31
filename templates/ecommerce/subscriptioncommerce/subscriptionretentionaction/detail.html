@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Retention Action {{ retention_action.number }} · NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:subscriptionretentionaction_list' %}" class="hover:text-blue-600">Retention Actions</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">{{ retention_action.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">Retention Record {{ retention_action.number }}</h1>
+        {% if retention_action.outcome == 'deflected' %}
+          <span class="badge badge-green">Deflected</span>
+        {% elif retention_action.outcome == 'paused' %}
+          <span class="badge badge-amber">Paused</span>
+        {% elif retention_action.outcome == 'accepted_swap' %}
+          <span class="badge badge-info">Swapped</span>
+        {% elif retention_action.outcome == 'cancelled' %}
+          <span class="badge badge-red">Cancelled</span>
+        {% else %}
+          <span class="badge badge-slate">{{ retention_action.get_outcome_display }}</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Subscription: <a href="{% url 'ecommerce:customersubscription_detail' retention_action.subscription.pk %}" class="font-mono text-blue-600 hover:underline">{{ retention_action.subscription.number }}</a>
+        · Logged: {{ retention_action.created_at|date:"M d, Y H:i" }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'ecommerce:subscriptionretentionaction_edit' retention_action.pk %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Action</span>
+      </a>
+      <a href="{% url 'ecommerce:subscriptionretentionaction_list' %}" class="btn btn-outline">
+        Back to Actions
+      </a>
+    </div>
+  </div>
+
+  <!-- Detail Stat Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Trigger Source</div>
+      <div class="text-base font-bold text-slate-900 mt-1">{{ retention_action.get_trigger_type_display }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Reported: {{ retention_action.get_cancellation_reason_display }}</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Calculated Churn Risk</div>
+      <div class="text-2xl font-bold mt-1 {% if retention_action.churn_risk_score > 70 %}text-red-600{% elif retention_action.churn_risk_score > 40 %}text-amber-600{% else %}text-emerald-600{% endif %}">
+        {{ retention_action.churn_risk_score }} / 100
+      </div>
+      <div class="text-xs text-slate-500 mt-0.5">Risk probability index</div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Offer Presented</div>
+      <div class="text-base font-bold text-slate-900 mt-1">{{ retention_action.get_offered_action_display }}</div>
+      <div class="text-xs text-emerald-700 font-semibold mt-0.5">
+        {% if retention_action.offer_discount_pct > 0 %}{{ retention_action.offer_discount_pct }}% discount offered{% else %}Non-monetary offer{% endif %}
+      </div>
+    </div>
+    <div class="stat-card card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+      <div class="text-xs font-semibold text-slate-500 uppercase">Final Outcome</div>
+      <div class="text-lg font-bold text-slate-900 mt-1">{{ retention_action.get_outcome_display }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Subscriber resolution status</div>
+    </div>
+  </div>
+
+  <!-- Main Body Details -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="md:col-span-2 space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-5">
+        <h2 class="text-base font-semibold text-slate-900 mb-3">Deflection Feedback & Staff Notes</h2>
+        {% if retention_action.notes %}
+          <p class="text-sm text-slate-700 whitespace-pre-line leading-relaxed">{{ retention_action.notes }}</p>
+        {% else %}
+          <p class="text-sm text-slate-400 italic">No notes or verbatim customer feedback recorded.</p>
+        {% endif %}
+      </div>
+
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-5">
+        <h2 class="text-base font-semibold text-slate-900 mb-3">Target Subscription Overview</h2>
+        <div class="flex items-start justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+          <div>
+            <div class="font-mono font-bold text-blue-600 text-sm">
+              <a href="{% url 'ecommerce:customersubscription_detail' retention_action.subscription.pk %}">
+                {{ retention_action.subscription.number }}
+              </a>
+            </div>
+            <div class="text-sm font-semibold text-slate-900 mt-1">{{ retention_action.subscription.product.name }}</div>
+            <div class="text-xs text-slate-500">Plan: {{ retention_action.subscription.plan.name }} ({{ retention_action.subscription.plan.get_frequency_display }})</div>
+          </div>
+          <div class="text-right">
+            <div class="text-xs text-slate-500">Completed Orders</div>
+            <div class="text-lg font-bold text-slate-900">{{ retention_action.subscription.completed_cycles_count }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metadata Sidebar -->
+    <div class="space-y-6">
+      <div class="card bg-white shadow-sm border border-slate-200 rounded-lg p-5">
+        <h2 class="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3">Customer Information</h2>
+        <dl class="divide-y divide-slate-100 text-sm">
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Customer</dt>
+            <dd class="text-slate-800 font-medium">
+              <a href="{% url 'ecommerce:customeraccountprofile_detail' retention_action.customer_profile.pk %}" class="text-blue-600 hover:text-blue-800">
+                {{ retention_action.customer_profile.customer_name|default:retention_action.customer_profile.email }}
+              </a>
+            </dd>
+          </div>
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Email</dt>
+            <dd class="text-slate-800">{{ retention_action.customer_profile.email }}</dd>
+          </div>
+          <div class="py-2 flex justify-between">
+            <dt class="text-slate-500">Timestamp</dt>
+            <dd class="text-slate-800">{{ retention_action.created_at|date:"M d, Y H:i" }}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
