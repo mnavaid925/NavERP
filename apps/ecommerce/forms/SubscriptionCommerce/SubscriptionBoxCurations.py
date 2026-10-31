@@ -71,7 +71,7 @@ class SubscriptionBoxCurationForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             self.fields["plan"].queryset = SubscriptionPlan.objects.filter(
-                tenant=self.tenant, is_active=True
+                tenant=self.tenant, plan_type="curated_box", is_active=True
             ).order_by("name")
             self.fields["primary_product"].queryset = CatalogProduct.objects.filter(
                 tenant=self.tenant, status="active"
