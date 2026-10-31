@@ -76,4 +76,12 @@ class AffiliatePartnerForm(TenantUniqueMixin, TenantModelForm):
         if code:
             cleaned_data["referral_code"] = code.upper().strip()
 
+        commission_rate = cleaned_data.get("commission_rate")
+        if commission_rate is not None and commission_rate < 0:
+            self.add_error("commission_rate", "Commission rate must be greater than or equal to 0.00.")
+
+        payout_threshold = cleaned_data.get("payout_threshold")
+        if payout_threshold is not None and payout_threshold < 0:
+            self.add_error("payout_threshold", "Payout threshold must be greater than or equal to 0.00.")
+
         return cleaned_data
