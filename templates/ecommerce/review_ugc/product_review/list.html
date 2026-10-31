@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Product Reviews | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Reviews & UGC</span>
+            <span>/</span>
+            <span>Product Reviews</span>
+        </div>
+        <h1 class="page-title">Product Reviews & Ratings</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:productreview_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Add Review
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="form-group mb-0">
+                <label for="q" class="form-label">Search</label>
+                <input type="text" id="q" name="q" value="{{ query }}" placeholder="Title, body, reviewer, number..." class="form-input">
+            </div>
+            <div class="form-group mb-0">
+                <label for="status" class="form-label">Status</label>
+                <select id="status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="rating" class="form-label">Rating</label>
+                <select id="rating" name="rating" class="form-select">
+                    <option value="">All Ratings</option>
+                    {% for val, label in rating_choices %}
+                    <option value="{{ val }}" {% if selected_rating == val|stringformat:"d" %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="sentiment" class="form-label">Sentiment</label>
+                <select id="sentiment" name="sentiment" class="form-select">
+                    <option value="">All Sentiments</option>
+                    {% for val, label in sentiment_choices %}
+                    <option value="{{ val }}" {% if selected_sentiment == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="product" class="form-label">Product</label>
+                <select id="product" name="product" class="form-select">
+                    <option value="">All Products</option>
+                    {% for prod in products %}
+                    <option value="{{ prod.pk }}" {% if selected_product == prod.pk|stringformat:"d" %}selected{% endif %}>{{ prod.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-5 flex justify-end gap-2">
+                <a href="{% url 'ecommerce:productreview_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Review #</th>
+                    <th>Product</th>
+                    <th>Reviewer</th>
+                    <th>Rating</th>
+                    <th>Sentiment</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rev in reviews %}
+                <tr>
+                    <td>
+                        <a href="{% url 'ecommerce:productreview_detail' rev.pk %}" class="font-medium text-brand hover:underline">
+                            {{ rev.number }}
+                        </a>
+                        {% if rev.is_featured %}
+                        <span class="badge badge-amber ml-1" title="Featured Spotlight Review">Featured</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-medium text-slate-800">{{ rev.product.name }}</span>
+                        {% if rev.variant %}
+                        <div class="text-xs text-muted">{{ rev.variant.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ rev.reviewer_name }}</div>
+                        {% if rev.is_verified_purchase %}
+                        <span class="badge badge-green text-xs" title="Verified Buyer">
+                            <i data-lucide="check-circle" class="w-3 h-3 inline"></i> Verified
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="flex items-center text-amber-500">
+                            {% for _ in rev.star_range %}★{% endfor %}{% for _ in rev.empty_star_range %}☆{% endfor %}
+                            <span class="text-xs text-muted ml-1 font-semibold">({{ rev.rating }})</span>
+                        </div>
+                    </td>
+                    <td>
+                        {% if rev.sentiment == "positive" %}
+                        <span class="badge badge-green">Positive</span>
+                        {% elif rev.sentiment == "negative" %}
+                        <span class="badge badge-red">Negative</span>
+                        {% elif rev.sentiment == "mixed" %}
+                        <span class="badge badge-amber">Mixed</span>
+                        {% else %}
+                        <span class="badge badge-info">Neutral</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if rev.status == "approved" %}
+                        <span class="badge badge-green">Approved</span>
+                        {% elif rev.status == "rejected" %}
+                        <span class="badge badge-red">Rejected</span>
+                        {% elif rev.status == "flagged_spam" %}
+                        <span class="badge badge-slate">Spam</span>
+                        {% else %}
+                        <span class="badge badge-amber">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-muted text-sm">
+                        {{ rev.created_at|date:"M d, Y" }}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'ecommerce:productreview_detail' rev.pk %}" class="btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'ecommerce:productreview_edit' rev.pk %}" class="btn-icon" title="Edit Review">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <a href="{% url 'ecommerce:productreview_moderate' rev.pk %}" class="btn-icon" title="Moderate Review">
+                            <i data-lucide="shield-check"></i>
+                        </a>
+                        <form action="{% url 'ecommerce:productreview_delete' rev.pk %}" method="post" class="inline" onsubmit="return confirm('Delete review {{ rev.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn-icon text-red hover:text-red" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="star" class="w-10 h-10 text-muted mx-auto mb-2"></i>
+                            <div class="font-medium text-slate-800">No product reviews found</div>
+                            <div class="text-sm text-muted">Customer reviews and ratings will appear here as they are submitted.</div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer flex justify-between items-center">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} reviews
+        </div>
+        <div class="pagination">
+            <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}&q={{ query }}&status={{ selected_status }}&rating={{ selected_rating }}&sentiment={{ selected_sentiment }}&product={{ selected_product }}" class="btn btn-outline btn-sm {% if not page_obj.has_previous %}disabled{% endif %}">
+                Previous
+            </a>
+            <span class="px-3 py-1 text-sm font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}&q={{ query }}&status={{ selected_status }}&rating={{ selected_rating }}&sentiment={{ selected_sentiment }}&product={{ selected_product }}" class="btn btn-outline btn-sm {% if not page_obj.has_next %}disabled{% endif %}">
+                Next
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
