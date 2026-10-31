@@ -2731,6 +2731,19 @@ LIVE_LINKS = {
         "Personalized Experiences": "ecommerce:personalizedexperience_list",
         "Behavioral Telemetry": "ecommerce:shopperbehaviorevent_list",
     },
+    "9.12": {
+        "Subscription Plan Design": "ecommerce:subscriptionplan_list",
+        "Recurring Billing & Invoicing": "ecommerce:customersubscription_list",
+        "Subscription Self-Service Portal": "ecommerce:subscription_portal",
+        "Subscription Box & Curation": "ecommerce:subscriptionboxcuration_list",
+        "Churn Prediction & Retention": "ecommerce:subscriptionretentionaction_list",
+        # Extra live leaves
+        "Subscription Portal": "ecommerce:subscription_portal",
+        "Subscription Plans": "ecommerce:subscriptionplan_list",
+        "Customer Subscriptions": "ecommerce:customersubscription_list",
+        "Box Curations": "ecommerce:subscriptionboxcuration_list",
+        "Retention Actions": "ecommerce:subscriptionretentionaction_list",
+    },
 
 
 
