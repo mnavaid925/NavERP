@@ -76,7 +76,7 @@ class CustomerSubscriptionForm(TenantUniqueMixin, TenantModelForm):
                 tenant=self.tenant, is_active=True
             ).order_by("name")
             self.fields["product"].queryset = CatalogProduct.objects.filter(
-                tenant=self.tenant, is_active=True
+                tenant=self.tenant, status="active"
             ).order_by("name")
             self.fields["variant"].queryset = ProductVariant.objects.filter(
                 tenant=self.tenant, is_active=True
