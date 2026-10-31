@@ -48,6 +48,10 @@ from apps.ecommerce.models import (
     AffiliatePartner,
     AffiliateReferralConversion,
     SeoMetadataRule,
+    SubscriptionPlan,
+    CustomerSubscription,
+    SubscriptionBoxCuration,
+    SubscriptionRetentionAction,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -2647,6 +2651,120 @@ def ecom_seo_rule_a(tenant_a):
 @pytest.fixture
 def ecom_seo_rule_b(tenant_b):
     return _seo_rule(tenant_b, name="Globex SEO Rule B")
+
+
+# ---------------------------------------------------------------------------
+# 9.12 Subscription & Recurring Commerce fixtures and helpers
+# ---------------------------------------------------------------------------
+
+def _subscription_plan(tenant, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": f"Plan {timezone.now().timestamp()}",
+        "code": f"plan-{timezone.now().timestamp()}",
+        "plan_type": "subscribe_save",
+        "frequency": "monthly",
+        "billing_interval_days": 30,
+        "discount_percentage": Decimal("10.00"),
+        "allow_pause": True,
+        "max_pause_days": 60,
+        "allow_skip": True,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return SubscriptionPlan.objects.create(**defaults)
+
+
+def _customer_subscription(tenant, plan, product, customer_profile, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "plan": plan,
+        "product": product,
+        "customer_profile": customer_profile,
+        "status": "active",
+        "quantity": 1,
+        "unit_price": Decimal("25.00"),
+        "recurring_discount_pct": Decimal("10.00"),
+        "next_billing_date": timezone.now().date() + timezone.timedelta(days=30),
+        "payment_method_ref": "pm_tok_test_1234",
+    }
+    defaults.update(overrides)
+    return CustomerSubscription.objects.create(**defaults)
+
+
+def _subscription_curation(tenant, plan, product, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "plan": plan,
+        "primary_product": product,
+        "name": f"Curation {timezone.now().timestamp()}",
+        "code": f"cur-{timezone.now().timestamp()}",
+        "cycle_identifier": "2026-11",
+        "theme_title": "Autumn Harvest",
+        "start_date": timezone.now().date(),
+        "end_date": timezone.now().date() + timezone.timedelta(days=30),
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return SubscriptionBoxCuration.objects.create(**defaults)
+
+
+def _subscription_retention(tenant, subscription, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "subscription": subscription,
+        "customer_profile": subscription.customer_profile,
+        "trigger_type": "cancel_intent",
+        "cancellation_reason": "too_much_product",
+        "offered_action": "discount_cycle",
+        "offer_discount_pct": Decimal("15.00"),
+        "outcome": "deflected",
+        "churn_risk_score": Decimal("45.00"),
+        "notes": "Test deflection interaction",
+    }
+    defaults.update(overrides)
+    return SubscriptionRetentionAction.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_subscription_plan_a(tenant_a, ecom_product_a):
+    return _subscription_plan(tenant_a, name="Acme Monthly Coffee Club", plan_type="curated_box", target_product=ecom_product_a)
+
+
+@pytest.fixture
+def ecom_subscription_plan_b(tenant_b, ecom_product_b):
+    return _subscription_plan(tenant_b, name="Globex Monthly Supply", plan_type="curated_box", target_product=ecom_product_b)
+
+
+@pytest.fixture
+def ecom_customer_subscription_a(tenant_a, ecom_subscription_plan_a, ecom_product_a, ecom_profile_a):
+    return _customer_subscription(tenant_a, ecom_subscription_plan_a, ecom_product_a, ecom_profile_a)
+
+
+@pytest.fixture
+def ecom_customer_subscription_b(tenant_b, ecom_subscription_plan_b, ecom_product_b, ecom_profile_b):
+    return _customer_subscription(tenant_b, ecom_subscription_plan_b, ecom_product_b, ecom_profile_b)
+
+
+@pytest.fixture
+def ecom_box_curation_a(tenant_a, ecom_subscription_plan_a, ecom_product_a):
+    return _subscription_curation(tenant_a, ecom_subscription_plan_a, ecom_product_a, name="Acme November Curation")
+
+
+@pytest.fixture
+def ecom_box_curation_b(tenant_b, ecom_subscription_plan_b, ecom_product_b):
+    return _subscription_curation(tenant_b, ecom_subscription_plan_b, ecom_product_b, name="Globex November Curation")
+
+
+@pytest.fixture
+def ecom_retention_action_a(tenant_a, ecom_customer_subscription_a):
+    return _subscription_retention(tenant_a, ecom_customer_subscription_a)
+
+
+@pytest.fixture
+def ecom_retention_action_b(tenant_b, ecom_customer_subscription_b):
+    return _subscription_retention(tenant_b, ecom_customer_subscription_b)
+
 
 
 
