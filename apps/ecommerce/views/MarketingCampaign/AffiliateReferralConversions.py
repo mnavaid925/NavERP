@@ -87,10 +87,11 @@ def affiliatereferralconversion_create(request):
             affiliate.save()
 
             write_audit_log(
-                request.tenant,
                 request.user,
+                conversion,
                 "create",
-                f"Created referral conversion {conversion.number} for affiliate {affiliate.name} on order {conversion.order.number}",
+                changes={"number": conversion.number, "affiliate": affiliate.name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Referral conversion '{conversion.number}' created successfully.")
             return redirect("ecommerce:affiliatereferralconversion_detail", pk=conversion.pk)
@@ -112,10 +113,11 @@ def affiliatereferralconversion_edit(request, pk):
         if form.is_valid():
             conversion = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                conversion,
                 "update",
-                f"Updated referral conversion {conversion.number}",
+                changes={"number": conversion.number},
+                tenant=request.tenant,
             )
             messages.success(request, f"Referral conversion '{conversion.number}' updated successfully.")
             return redirect("ecommerce:affiliatereferralconversion_detail", pk=conversion.pk)
@@ -137,10 +139,11 @@ def affiliatereferralconversion_delete(request, pk):
     number = conversion.number
     conversion.delete()
     write_audit_log(
-        request.tenant,
         request.user,
+        conversion,
         "delete",
-        f"Deleted referral conversion {number}",
+        changes={"number": number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Referral conversion '{number}' was deleted.")
     return redirect("ecommerce:affiliatereferralconversion_list")
@@ -154,10 +157,11 @@ def affiliatereferralconversion_approve(request, pk):
     conversion.status = "approved"
     conversion.save()
     write_audit_log(
-        request.tenant,
         request.user,
+        conversion,
         "approve",
-        f"Approved referral conversion {conversion.number} for affiliate {conversion.affiliate.name}",
+        changes={"number": conversion.number, "affiliate": conversion.affiliate.name},
+        tenant=request.tenant,
     )
     messages.success(request, f"Conversion '{conversion.number}' approved for payout.")
     return redirect("ecommerce:affiliatereferralconversion_detail", pk=conversion.pk)
@@ -172,10 +176,11 @@ def affiliatereferralconversion_void(request, pk):
     conversion.notes += f"\nVoided on {timezone.now().strftime('%Y-%m-%d %H:%M')} due to refund/cancellation."
     conversion.save()
     write_audit_log(
-        request.tenant,
         request.user,
+        conversion,
         "void",
-        f"Voided referral conversion {conversion.number} due to clawback",
+        changes={"number": conversion.number},
+        tenant=request.tenant,
     )
     messages.warning(request, f"Conversion '{conversion.number}' voided due to clawback.")
     return redirect("ecommerce:affiliatereferralconversion_detail", pk=conversion.pk)
