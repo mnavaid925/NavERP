@@ -85,12 +85,11 @@ def visualugcmedia_create(request):
             media_item.tenant = request.tenant
             media_item.save()
             write_audit_log(
+                request.user,
+                media_item,
+                "create",
+                {"number": media_item.number, "media_type": media_item.media_type},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="VisualUgcMedia",
-                object_id=media_item.pk,
-                changes={"number": media_item.number, "media_type": media_item.media_type},
             )
             messages.success(request, f"Visual UGC asset {media_item.number} created.")
             return redirect("ecommerce:visualugcmedia_detail", pk=media_item.pk)
@@ -112,12 +111,11 @@ def visualugcmedia_edit(request, pk):
         if form.is_valid():
             media_item = form.save()
             write_audit_log(
+                request.user,
+                media_item,
+                "update",
+                {"rights_status": media_item.rights_status, "is_published": media_item.is_published},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="VisualUgcMedia",
-                object_id=media_item.pk,
-                changes={"rights_status": media_item.rights_status, "is_published": media_item.is_published},
             )
             messages.success(request, f"Visual UGC asset {media_item.number} updated.")
             return redirect("ecommerce:visualugcmedia_detail", pk=media_item.pk)
@@ -139,12 +137,11 @@ def visualugcmedia_delete(request, pk):
     pk_val = media_item.pk
     media_item.delete()
     write_audit_log(
+        request.user,
+        media_item,
+        "delete",
+        {"number": number},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="VisualUgcMedia",
-        object_id=pk_val,
-        changes={"number": number},
     )
     messages.success(request, f"Visual UGC asset {number} deleted.")
     return redirect("ecommerce:visualugcmedia_list")
