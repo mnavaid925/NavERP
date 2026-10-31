@@ -40,6 +40,10 @@ from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacet
 from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
 from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
 from apps.ecommerce.models.SearchDiscovery.SearchSynonyms import SearchSynonym
+from apps.ecommerce.models.ReviewUgc.ProductQuestionAnswers import ProductQuestionAnswer
+from apps.ecommerce.models.ReviewUgc.ProductReviews import ProductReview
+from apps.ecommerce.models.ReviewUgc.ReviewSentimentSummaries import ReviewSentimentSummary
+from apps.ecommerce.models.ReviewUgc.VisualUgcMedia import VisualUgcMedia
 from apps.ecommerce.models.SubscriptionCommerce.CustomerSubscriptions import CustomerSubscription
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionBoxCurations import SubscriptionBoxCuration
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionPlans import SubscriptionPlan
@@ -502,6 +506,82 @@ class SeoMetadataRuleAdmin(admin.ModelAdmin):
     ]
     list_select_related = ["target_category", "target_product"]
     ordering = ["-created_at"]
+
+
+@admin.register(ProductReview)
+class ProductReviewAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "product",
+        "reviewer_name",
+        "rating",
+        "status",
+        "sentiment",
+        "is_verified_purchase",
+        "is_featured",
+        "created_at",
+    ]
+    list_filter = ["status", "rating", "sentiment", "is_verified_purchase", "is_featured", "tenant"]
+    search_fields = ["number", "title", "body", "reviewer_name", "reviewer_email", "product__name"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["product", "variant", "customer", "order", "moderated_by"]
+    ordering = ["-is_featured", "-created_at"]
+
+
+@admin.register(ProductQuestionAnswer)
+class ProductQuestionAnswerAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "product",
+        "author_name",
+        "status",
+        "is_staff_answer",
+        "is_pinned",
+        "created_at",
+    ]
+    list_filter = ["status", "is_staff_answer", "is_pinned", "tenant"]
+    search_fields = ["number", "question_text", "answer_text", "author_name", "product__name"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["product", "customer", "answered_by_user"]
+    ordering = ["-is_pinned", "-created_at"]
+
+
+@admin.register(VisualUgcMedia)
+class VisualUgcMediaAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "tagged_product",
+        "media_type",
+        "uploader_name",
+        "rights_status",
+        "is_published",
+        "is_shoppable",
+        "display_order",
+    ]
+    list_filter = ["media_type", "rights_status", "is_published", "is_shoppable", "tenant"]
+    search_fields = ["number", "caption", "uploader_name", "uploader_handle", "tagged_product__name"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["tagged_product", "tagged_variant"]
+    ordering = ["display_order", "-created_at"]
+
+
+@admin.register(ReviewSentimentSummary)
+class ReviewSentimentSummaryAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "product",
+        "total_reviews",
+        "average_rating",
+        "positive_sentiment_pct",
+        "negative_sentiment_pct",
+        "last_calculated_at",
+    ]
+    list_filter = ["tenant"]
+    search_fields = ["number", "product__name", "improvement_recommendation"]
+    readonly_fields = ["number", "last_calculated_at", "created_at", "updated_at"]
+    list_select_related = ["product"]
+    ordering = ["-total_reviews", "-average_rating"]
+
 
 
 
