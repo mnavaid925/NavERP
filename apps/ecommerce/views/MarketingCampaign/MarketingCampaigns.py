@@ -42,7 +42,7 @@ def marketingcampaign_list(request):
     if campaign_type:
         qs = qs.filter(campaign_type=campaign_type)
 
-    paginator = Paginator(qs, 25)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
