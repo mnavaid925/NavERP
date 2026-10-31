@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Review {{ review.number }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:productreview_list' %}">Reviews</a>
+            <span>/</span>
+            <span>{{ review.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Review {{ review.number }}</h1>
+            {% if review.status == "approved" %}
+            <span class="badge badge-green">Approved</span>
+            {% elif review.status == "rejected" %}
+            <span class="badge badge-red">Rejected</span>
+            {% elif review.status == "flagged_spam" %}
+            <span class="badge badge-slate">Spam</span>
+            {% else %}
+            <span class="badge badge-amber">Pending Moderation</span>
+            {% endif %}
+
+            {% if review.is_featured %}
+            <span class="badge badge-amber">Featured Spotlight</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'ecommerce:productreview_moderate' review.pk %}" class="btn btn-primary">
+            <i data-lucide="shield-check"></i> Moderate
+        </a>
+        <a href="{% url 'ecommerce:productreview_edit' review.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        <form action="{% url 'ecommerce:productreview_delete' review.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete review {{ review.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Main Review Body & Merchant Reply -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Main Review Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <div class="text-amber-500 text-xl font-bold">
+                        {% for _ in review.star_range %}★{% endfor %}{% for _ in review.empty_star_range %}☆{% endfor %}
+                    </div>
+                    <span class="text-slate-800 font-semibold text-lg">{{ review.rating }} out of 5 Stars</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    {% if review.sentiment == "positive" %}
+                    <span class="badge badge-green">Positive Sentiment</span>
+                    {% elif review.sentiment == "negative" %}
+                    <span class="badge badge-red">Negative Sentiment</span>
+                    {% elif review.sentiment == "mixed" %}
+                    <span class="badge badge-amber">Mixed Sentiment</span>
+                    {% else %}
+                    <span class="badge badge-info">Neutral Sentiment</span>
+                    {% endif %}
+                    <span class="text-xs text-muted">Polarity: {{ review.sentiment_score }}</span>
+                </div>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900 mb-2">{{ review.title }}</h2>
+                    <p class="text-slate-700 whitespace-pre-line leading-relaxed text-base">{{ review.body }}</p>
+                </div>
+
+                <!-- Attached Media Gallery -->
+                {% if review.media_urls %}
+                <div class="pt-4 border-t border-slate-100">
+                    <h4 class="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                        <i data-lucide="image" class="w-4 h-4 text-brand"></i> Customer Photo / Video Uploads
+                    </h4>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {% for media_url in review.media_urls %}
+                        <a href="{{ media_url }}" target="_blank" rel="noopener noreferrer" class="block border rounded-lg overflow-hidden hover:opacity-90 transition">
+                            <img src="{{ media_url }}" alt="Review Attachment" class="w-full h-32 object-cover">
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Helpfulness Voting -->
+                <div class="flex items-center gap-6 pt-3 text-sm text-muted">
+                    <span class="flex items-center gap-1 font-medium text-slate-700">
+                        <i data-lucide="thumbs-up" class="w-4 h-4 text-brand"></i> {{ review.helpful_votes }} found this helpful
+                    </span>
+                    <span class="flex items-center gap-1 font-medium text-slate-700">
+                        <i data-lucide="thumbs-down" class="w-4 h-4 text-slate-400"></i> {{ review.unhelpful_votes }} found this unhelpful
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Official Merchant Response Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-bold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="message-square" class="w-5 h-5 text-brand"></i> Brand Public Reply
+                </h3>
+                {% if review.merchant_response_at %}
+                <span class="text-xs text-muted">Replied on {{ review.merchant_response_at|date:"M d, Y H:i" }}</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if review.merchant_response %}
+                <div class="p-4 bg-slate-50 border-l-4 border-brand rounded-r text-slate-800">
+                    <div class="font-medium text-sm text-brand mb-1">Official Response from Store Merchant:</div>
+                    <p class="whitespace-pre-line text-sm">{{ review.merchant_response }}</p>
+                </div>
+                {% else %}
+                <p class="text-sm text-muted italic">No official merchant reply has been published yet.</p>
+                <div class="mt-3">
+                    <a href="{% url 'ecommerce:productreview_moderate' review.pk %}" class="btn btn-outline btn-sm">
+                        <i data-lucide="reply"></i> Add Official Reply
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Review Metadata & Links -->
+    <div class="space-y-6">
+        <!-- Product & Order Context -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-bold text-slate-900">Reviewed Catalog Item</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-muted block text-xs">Catalog Product</span>
+                    <a href="{% url 'ecommerce:catalogproduct_detail' review.product.pk %}" class="font-semibold text-brand hover:underline">
+                        {{ review.product.name }}
+                    </a>
+                    <div class="text-xs text-muted font-mono mt-0.5">{{ review.product.number }}</div>
+                </div>
+
+                {% if review.variant %}
+                <div>
+                    <span class="text-muted block text-xs">Variant / SKU</span>
+                    <span class="font-medium text-slate-800">{{ review.variant.name }}</span>
+                    <span class="text-xs text-muted font-mono">({{ review.variant.sku }})</span>
+                </div>
+                {% endif %}
+
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-muted block text-xs">Verified Purchase Validation</span>
+                    {% if review.is_verified_purchase %}
+                    <span class="badge badge-green mt-1">
+                        <i data-lucide="check-circle" class="w-3 h-3 inline"></i> Confirmed Order
+                    </span>
+                    {% if review.order %}
+                    <div class="mt-1 text-xs">
+                        Order: <a href="{% url 'ecommerce:ecommerceorder_detail' review.order.pk %}" class="text-brand hover:underline font-mono">{{ review.order.number }}</a>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <span class="badge badge-muted mt-1">Unverified Purchase</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Reviewer Information -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-bold text-slate-900">Reviewer Information</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-muted block text-xs">Display Name</span>
+                    <span class="font-medium text-slate-800">{{ review.reviewer_name }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Email Address</span>
+                    <a href="mailto:{{ review.reviewer_email }}" class="text-brand hover:underline">{{ review.reviewer_email }}</a>
+                </div>
+                {% if review.customer %}
+                <div>
+                    <span class="text-muted block text-xs">Linked Customer Profile</span>
+                    <a href="{% url 'ecommerce:customeraccountprofile_detail' review.customer.pk %}" class="font-medium text-brand hover:underline">
+                        {{ review.customer.display_name }} ({{ review.customer.number }})
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Moderation & System Audit -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-bold text-slate-900">Moderation & Audit</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-muted block text-xs">Moderator Staff</span>
+                    <span class="font-medium text-slate-800">
+                        {% if review.moderated_by %}
+                        {{ review.moderated_by.get_full_name|default:review.moderated_by.username }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </span>
+                </div>
+                {% if review.moderation_note %}
+                <div>
+                    <span class="text-muted block text-xs">Moderation Note</span>
+                    <p class="text-slate-700 bg-slate-50 p-2 rounded text-xs">{{ review.moderation_note }}</p>
+                </div>
+                {% endif %}
+                <div class="pt-2 border-t border-slate-100 flex justify-between text-xs text-muted">
+                    <span>Submitted: {{ review.created_at|date:"M d, Y H:i" }}</span>
+                    <span>Updated: {{ review.updated_at|date:"M d, Y" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
