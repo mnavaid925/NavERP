@@ -62,8 +62,8 @@ class ProductReviewForm(TenantUniqueMixin, TenantModelForm):
         if self.tenant:
             self.fields["product"].queryset = CatalogProduct.objects.filter(tenant=self.tenant)
             self.fields["variant"].queryset = ProductVariant.objects.filter(tenant=self.tenant)
-            self.fields["customer"].queryset = CustomerAccountProfile.objects.filter(tenant=self.tenant)
-            self.fields["order"].queryset = EcommerceOrder.objects.filter(tenant=self.tenant)
+            self.fields["customer"].queryset = CustomerAccountProfile.objects.filter(tenant=self.tenant).select_related("customer")
+            self.fields["order"].queryset = EcommerceOrder.objects.filter(tenant=self.tenant).select_related("customer")
         self.fields["variant"].required = False
         self.fields["customer"].required = False
         self.fields["order"].required = False
