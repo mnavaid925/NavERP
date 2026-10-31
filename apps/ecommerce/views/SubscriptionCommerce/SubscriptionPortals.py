@@ -10,6 +10,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.ecommerce.models.SubscriptionCommerce.CustomerSubscriptions import CustomerSubscription
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionRetentionActions import SubscriptionRetentionAction
@@ -59,6 +60,7 @@ def subscription_portal(request):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 @transaction.atomic
 def subscription_portal_skip(request, pk):
@@ -97,6 +99,7 @@ def subscription_portal_skip(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 @transaction.atomic
 def subscription_portal_pause(request, pk):
@@ -133,6 +136,7 @@ def subscription_portal_pause(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 @transaction.atomic
 def subscription_portal_resume(request, pk):
@@ -154,6 +158,7 @@ def subscription_portal_resume(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 @transaction.atomic
 def subscription_portal_deflect(request, pk):
