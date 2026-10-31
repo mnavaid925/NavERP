@@ -125,19 +125,19 @@
         <form method="post" action="{% url 'ecommerce:vendorsuborder_fulfill' sub_order.pk %}" class="space-y-3">
           {% csrf_token %}
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Fulfillment Status</label>
+            <label for="{{ fulfillment_form.fulfillment_status.id_for_label }}" class="block text-xs font-semibold text-slate-700 mb-1">Fulfillment Status</label>
             {{ fulfillment_form.fulfillment_status }}
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Shipping Carrier</label>
+            <label for="{{ fulfillment_form.carrier_name.id_for_label }}" class="block text-xs font-semibold text-slate-700 mb-1">Shipping Carrier</label>
             {{ fulfillment_form.carrier_name }}
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Tracking Number</label>
+            <label for="{{ fulfillment_form.tracking_number.id_for_label }}" class="block text-xs font-semibold text-slate-700 mb-1">Tracking Number</label>
             {{ fulfillment_form.tracking_number }}
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Tracking URL</label>
+            <label for="{{ fulfillment_form.tracking_url.id_for_label }}" class="block text-xs font-semibold text-slate-700 mb-1">Tracking URL</label>
             {{ fulfillment_form.tracking_url }}
           </div>
           <button type="submit" class="btn btn-primary w-full text-xs">Update Fulfillment</button>
@@ -166,15 +166,15 @@
         <form method="post" action="{% url 'ecommerce:vendorsuborder_dispute' sub_order.pk %}" class="space-y-3">
           {% csrf_token %}
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Dispute State</label>
+            <label for="{{ dispute_form.dispute_status.id_for_label }}" class="block text-xs font-semibold text-slate-700 mb-1">Dispute State</label>
             {{ dispute_form.dispute_status }}
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Dispute Reason</label>
+            <label for="{{ dispute_form.dispute_reason.id_for_label }}" class="block text-xs font-semibold text-slate-700 mb-1">Dispute Reason</label>
             {{ dispute_form.dispute_reason }}
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Investigation Remarks</label>
+            <label for="{{ dispute_form.dispute_notes.id_for_label }}" class="block text-xs font-semibold text-slate-700 mb-1">Investigation Remarks</label>
             {{ dispute_form.dispute_notes }}
           </div>
           <button type="submit" class="btn btn-outline text-xs w-full text-slate-800 hover:bg-slate-50">
@@ -234,11 +234,11 @@
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div>
             <span class="text-slate-500 block">Customer Name:</span>
-            <span class="font-medium text-slate-800">{{ sub_order.order.customer_party.name|default:"Shopper" }}</span>
+            <span class="font-medium text-slate-800">{{ sub_order.order.customer.name|default:"Shopper" }}</span>
           </div>
           <div>
             <span class="text-slate-500 block">Total Order Value:</span>
-            <span class="font-medium text-slate-800 font-mono">${{ sub_order.order.grand_total }}</span>
+            <span class="font-medium text-slate-800 font-mono">${{ sub_order.order.total_amount }}</span>
           </div>
           <div>
             <span class="text-slate-500 block">Order Status:</span>
@@ -249,6 +249,39 @@
             <span class="font-medium text-slate-800">{{ sub_order.order.created_at|date:"M d, Y H:i" }}</span>
           </div>
         </div>
+
+        {% if order_lines %}
+          <div class="mt-4 pt-4 border-t border-slate-100">
+            <h3 class="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Order Line Items</h3>
+            <div class="table-wrap overflow-x-auto">
+              <table class="table w-full text-left text-xs">
+                <thead>
+                  <tr class="border-b border-slate-200 text-slate-500">
+                    <th class="py-1 px-2">SKU</th>
+                    <th class="py-1 px-2">Product</th>
+                    <th class="py-1 px-2 text-right">Quantity</th>
+                    <th class="py-1 px-2 text-right">Unit Price</th>
+                    <th class="py-1 px-2 text-right">Line Total</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  {% for line in order_lines %}
+                    <tr>
+                      <td class="py-1.5 px-2 font-mono text-slate-600">{{ line.sku|default:line.product.sku|default:"—" }}</td>
+                      <td class="py-1.5 px-2 font-medium text-slate-800">
+                        {{ line.product.name }}
+                        {% if line.variant %}<span class="text-slate-400">({{ line.variant.name }})</span>{% endif %}
+                      </td>
+                      <td class="py-1.5 px-2 text-right">{{ line.quantity }}</td>
+                      <td class="py-1.5 px-2 text-right font-mono">${{ line.unit_price }}</td>
+                      <td class="py-1.5 px-2 text-right font-mono font-medium">${{ line.line_total }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {% endif %}
       </div>
     </div>
   </div>
