@@ -1,8 +1,9 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -153,32 +154,35 @@ def marketingcampaign_delete(request, pk):
 @tenant_admin_required
 @require_POST
 def marketingcampaign_send(request, pk):
-    campaign = ecommerce_object(request, MarketingCampaign, pk)
-    if campaign.status in ("sent", "sending"):
-        messages.warning(request, f"Campaign '{campaign.name}' has already been dispatched.")
-        return redirect("ecommerce:marketingcampaign_detail", pk=campaign.pk)
+    with transaction.atomic():
+        campaign = get_object_or_404(
+            MarketingCampaign.objects.select_for_update(), pk=pk, tenant=request.tenant
+        )
+        if campaign.status in ("sent", "sending"):
+            messages.warning(request, f"Campaign '{campaign.name}' has already been dispatched.")
+            return redirect("ecommerce:marketingcampaign_detail", pk=campaign.pk)
 
-    # Compute audience dispatch numbers
-    recipients = 100
-    if campaign.target_segment:
-        recipients = max(campaign.target_segment.cached_member_count, 1)
+        # Compute audience dispatch numbers
+        recipients = 100
+        if campaign.target_segment:
+            recipients = max(campaign.target_segment.cached_member_count, 1)
 
-    campaign.status = "sent"
-    campaign.sent_at = timezone.now()
-    campaign.recipient_count = recipients
-    campaign.delivered_count = max(int(recipients * 0.98), 1)
-    campaign.opened_count = int(campaign.delivered_count * 0.35)
-    campaign.clicked_count = int(campaign.delivered_count * 0.12)
-    campaign.bounced_count = recipients - campaign.delivered_count
-    campaign.save()
+        campaign.status = "sent"
+        campaign.sent_at = timezone.now()
+        campaign.recipient_count = recipients
+        campaign.delivered_count = max(int(recipients * 0.98), 1)
+        campaign.opened_count = int(campaign.delivered_count * 0.35)
+        campaign.clicked_count = int(campaign.delivered_count * 0.12)
+        campaign.bounced_count = recipients - campaign.delivered_count
+        campaign.save()
 
-    write_audit_log(
-        request.user,
-        campaign,
-        "execute",
-        changes={"number": campaign.number, "recipients": campaign.recipient_count},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            request.user,
+            campaign,
+            "execute",
+            changes={"number": campaign.number, "recipients": campaign.recipient_count},
+            tenant=request.tenant,
+        )
     messages.success(
         request,
         f"Campaign '{campaign.name}' was successfully dispatched to {campaign.recipient_count} recipients.",
