@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Vendor Sub-Orders — Marketplace & Multi-Vendor — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalog_overview' %}" class="hover:text-blue-600">eCommerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:marketplace_console' %}" class="hover:text-blue-600">Marketplace</a>
+        <span>/</span>
+        <span class="text-slate-800 font-medium">Vendor Sub-Orders</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900">Vendor Fulfillment Sub-Orders</h1>
+      <p class="text-sm text-slate-500 mt-1">Order consignments routed to marketplace merchants, dispatch SLA monitoring, and carrier tracking.</p>
+    </div>
+    <div class="page-actions flex items-center gap-3">
+      <a href="{% url 'ecommerce:marketplace_console' %}" class="btn btn-outline inline-flex items-center gap-2">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>Marketplace Console</span>
+      </a>
+      <a href="{% url 'ecommerce:vendorsuborder_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Sub-Order</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters & Search -->
+  <div class="card p-4 bg-white shadow-sm border border-slate-200 rounded-lg">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+      <div>
+        <label for="filter-q" class="block text-xs font-medium text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ query }}"
+            placeholder="Sub-order, Order #, tracking..."
+            class="form-input w-full pl-9 text-sm"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="filter-vendor" class="block text-xs font-medium text-slate-600 mb-1">Vendor</label>
+        <select id="filter-vendor" name="vendor" class="form-select w-full text-sm">
+          <option value="">All Vendors</option>
+          {% for v in vendors %}
+            <option value="{{ v.pk }}" {% if vendor_filter == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.store_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-fulfillment" class="block text-xs font-medium text-slate-600 mb-1">Fulfillment</label>
+        <select id="filter-fulfillment" name="fulfillment_status" class="form-select w-full text-sm">
+          <option value="">All Fulfillment</option>
+          {% for val, label in fulfillment_status_choices %}
+            <option value="{{ val }}" {% if fulfillment_filter == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-sla" class="block text-xs font-medium text-slate-600 mb-1">SLA Status</label>
+        <select id="filter-sla" name="sla_status" class="form-select w-full text-sm">
+          <option value="">All SLA States</option>
+          {% for val, label in sla_status_choices %}
+            <option value="{{ val }}" {% if sla_filter == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-dispute" class="block text-xs font-medium text-slate-600 mb-1">Dispute</label>
+        <select id="filter-dispute" name="dispute_status" class="form-select w-full text-sm">
+          <option value="">All Disputes</option>
+          {% for val, label in dispute_status_choices %}
+            <option value="{{ val }}" {% if dispute_filter == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn btn-primary w-full text-sm">Filter</button>
+        <a href="{% url 'ecommerce:vendorsuborder_list' %}" class="btn btn-outline text-sm" title="Clear Filters">Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Sub-Orders Table -->
+  <div class="card bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+    <div class="table-wrap overflow-x-auto">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            <th class="py-3 px-4">Sub-Order # / Order</th>
+            <th class="py-3 px-4">Marketplace Vendor</th>
+            <th class="py-3 px-4">Fulfillment Status</th>
+            <th class="py-3 px-4">Dispatch SLA</th>
+            <th class="py-3 px-4">Subtotal / Net</th>
+            <th class="py-3 px-4">Payout Settlement</th>
+            <th class="py-3 px-4">Dispute</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-sm text-slate-700">
+          {% for so in sub_orders %}
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="py-3 px-4">
+              <a href="{% url 'ecommerce:vendorsuborder_detail' so.pk %}" class="font-semibold text-slate-900 hover:text-blue-600 font-mono block">
+                {{ so.number }}
+              </a>
+              <div class="text-xs text-slate-400 font-mono">
+                Order: {{ so.order.number }}
+              </div>
+            </td>
+            <td class="py-3 px-4">
+              <a href="{% url 'ecommerce:marketplacevendor_detail' so.vendor.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
+                {{ so.vendor.store_name }}
+              </a>
+              <div class="text-xs text-slate-400">{{ so.vendor.number }}</div>
+            </td>
+            <td class="py-3 px-4">
+              {% if so.fulfillment_status == "delivered" %}
+                <span class="badge badge-green flex items-center gap-1 w-fit">
+                  <i data-lucide="check" class="w-3 h-3"></i>
+                  <span>Delivered</span>
+                </span>
+              {% elif so.fulfillment_status == "shipped" %}
+                <span class="badge badge-info flex items-center gap-1 w-fit">
+                  <i data-lucide="truck" class="w-3 h-3"></i>
+                  <span>Shipped</span>
+                </span>
+              {% elif so.fulfillment_status == "cancelled" %}
+                <span class="badge badge-slate">Cancelled</span>
+              {% elif so.fulfillment_status == "unfulfilled" %}
+                <span class="badge badge-amber">Unfulfilled</span>
+              {% else %}
+                <span class="badge badge-muted">{{ so.get_fulfillment_status_display }}</span>
+              {% endif %}
+            </td>
+            <td class="py-3 px-4">
+              {% if so.sla_status == "on_time" %}
+                <span class="badge badge-green flex items-center gap-1 w-fit">
+                  <i data-lucide="check-circle" class="w-3 h-3"></i>
+                  <span>On Time</span>
+                </span>
+              {% elif so.sla_status == "near_breach" %}
+                <span class="badge badge-amber flex items-center gap-1 w-fit">
+                  <i data-lucide="clock" class="w-3 h-3"></i>
+                  <span>Near Deadline</span>
+                </span>
+              {% else %}
+                <span class="badge badge-red flex items-center gap-1 w-fit">
+                  <i data-lucide="alert-octagon" class="w-3 h-3"></i>
+                  <span>Breached</span>
+                </span>
+              {% endif %}
+              {% if so.promised_dispatch_date %}
+                <div class="text-[10px] text-slate-400 mt-0.5">Due: {{ so.promised_dispatch_date|date:"M d, Y" }}</div>
+              {% endif %}
+            </td>
+            <td class="py-3 px-4">
+              <div class="font-bold text-slate-900">${{ so.subtotal_amount }}</div>
+              <div class="text-xs text-emerald-600 font-medium">Net: ${{ so.net_vendor_amount }}</div>
+            </td>
+            <td class="py-3 px-4">
+              {% if so.payout_status == "paid" %}
+                <span class="badge badge-green">Paid</span>
+              {% elif so.payout_status == "in_payout_batch" %}
+                <span class="badge badge-info">In Batch</span>
+              {% elif so.payout_status == "withheld_dispute" %}
+                <span class="badge badge-red">Withheld</span>
+              {% elif so.payout_status == "refunded" %}
+                <span class="badge badge-slate">Refunded</span>
+              {% else %}
+                <span class="badge badge-amber">Accrued</span>
+              {% endif %}
+            </td>
+            <td class="py-3 px-4">
+              {% if so.dispute_status != "none" %}
+                <span class="badge badge-red flex items-center gap-1 w-fit">
+                  <i data-lucide="alert-triangle" class="w-3 h-3"></i>
+                  <span>{{ so.get_dispute_status_display }}</span>
+                </span>
+              {% else %}
+                <span class="text-xs text-slate-400">None</span>
+              {% endif %}
+            </td>
+            <td class="py-3 px-4 text-right">
+              <div class="table-actions flex items-center justify-end gap-2">
+                <a href="{% url 'ecommerce:vendorsuborder_detail' so.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-blue-600" title="View Sub-Order">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </a>
+                <a href="{% url 'ecommerce:vendorsuborder_edit' so.pk %}" class="btn btn-icon btn-outline text-slate-600 hover:text-amber-600" title="Edit Sub-Order">
+                  <i data-lucide="pencil" class="w-4 h-4"></i>
+                </a>
+                <form method="post" action="{% url 'ecommerce:vendorsuborder_delete' so.pk %}" onsubmit="return confirm('Are you sure you want to delete sub-order {{ so.number }}?');" class="inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon btn-outline text-slate-600 hover:text-red-600" title="Delete Sub-Order">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="8" class="py-12 text-center">
+              <div class="empty-state max-w-sm mx-auto flex flex-col items-center">
+                <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                  <i data-lucide="truck" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-base font-semibold text-slate-800 mb-1">No Vendor Sub-Orders Found</h3>
+                <p class="text-xs text-slate-500 mb-4">No order consignments match your search filters or none have been placed yet.</p>
+                <a href="{% url 'ecommerce:vendorsuborder_create' %}" class="btn btn-primary text-sm inline-flex items-center gap-2">
+                  <i data-lucide="plus" class="w-4 h-4"></i>
+                  <span>Create Sub-Order</span>
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+      <div>
+        Showing page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total sub-orders)
+      </div>
+      <div class="flex items-center gap-1">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}&q={{ query }}&vendor={{ vendor_filter }}&fulfillment_status={{ fulfillment_filter }}&sla_status={{ sla_filter }}&dispute_status={{ dispute_filter }}" class="btn btn-outline text-xs">
+            Previous
+          </a>
+        {% endif %}
+        <span class="px-3 py-1 text-xs font-semibold text-slate-800 bg-slate-100 rounded">
+          {{ page_obj.number }}
+        </span>
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}&q={{ query }}&vendor={{ vendor_filter }}&fulfillment_status={{ fulfillment_filter }}&sla_status={{ sla_filter }}&dispute_status={{ dispute_filter }}" class="btn btn-outline text-xs">
+            Next
+          </a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
