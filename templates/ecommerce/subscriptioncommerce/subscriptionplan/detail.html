@@ -30,6 +30,13 @@
         <i data-lucide="pencil" class="w-4 h-4"></i>
         <span>Edit Plan</span>
       </a>
+      <form method="post" action="{% url 'ecommerce:subscriptionplan_delete' plan.pk %}" class="inline" onsubmit="return confirm('Delete subscription plan {{ plan.name }}? This action cannot be undone.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger inline-flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
       <a href="{% url 'ecommerce:subscriptionplan_list' %}" class="btn btn-outline">
         Back to Plans
       </a>
