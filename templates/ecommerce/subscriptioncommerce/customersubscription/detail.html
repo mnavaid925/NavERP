@@ -177,13 +177,13 @@
             <dt class="text-slate-500">Profile</dt>
             <dd class="text-slate-800 font-medium">
               <a href="{% url 'ecommerce:customeraccountprofile_detail' subscription.customer_profile.pk %}" class="text-blue-600 hover:text-blue-800">
-                {{ subscription.customer_profile.customer_name|default:subscription.customer_profile.email }}
+                {{ subscription.customer_profile.customer.name|default:subscription.customer_profile.number }}
               </a>
             </dd>
           </div>
           <div class="py-2 flex justify-between">
             <dt class="text-slate-500">Email</dt>
-            <dd class="text-slate-800">{{ subscription.customer_profile.email }}</dd>
+            <dd class="text-slate-800">{{ subscription.customer_profile.user.email|default:subscription.customer_profile.number }}</dd>
           </div>
           <div class="py-2 flex justify-between">
             <dt class="text-slate-500">Created</dt>
