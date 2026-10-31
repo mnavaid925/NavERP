@@ -170,7 +170,7 @@
                     method="post"
                     action="{% url 'ecommerce:subscriptionplan_delete' plan.pk %}"
                     class="inline-block"
-                    onsubmit="return confirm('Delete subscription plan {{ plan.name }}? Existing subscriptions will remain.');"
+                    onsubmit="return confirm('Delete subscription plan {{ plan.name }}? This action cannot be undone.');"
                   >
                     {% csrf_token %}
                     <button
