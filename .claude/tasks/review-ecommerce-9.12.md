@@ -15,8 +15,7 @@ Reviewers executed serially:
 
 ## Critical Findings
 
-- [ ] **[C1]** `apps/ecommerce/forms/SubscriptionCommerce/CustomerSubscriptions.py:23` — `CustomerSubscriptionForm` includes `started_at` in `Meta.fields` (required since `CustomerSubscription.started_at` lacks `blank=True`), but `started_at` is omitted from `templates/ecommerce/subscriptioncommerce/customersubscription/form.html`. Any form submission from browser fails validation silently.
-  - **Fix**: Exclude `started_at` from `CustomerSubscriptionForm.Meta.fields` (it defaults to `timezone.now` automatically per model definition and Lesson L22).
+- [x] **[C1]** `apps/ecommerce/forms/SubscriptionCommerce/CustomerSubscriptions.py:23` — fixed — excluded started_at from CustomerSubscriptionForm fields
 - [ ] **[C2]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:47-196` — Missing `@transaction.atomic` on mutating portal endpoints (`subscription_portal_skip`, `subscription_portal_pause`, `subscription_portal_deflect`). Multi-model writes risk inconsistent state if retention action creation fails.
   - **Fix**: Wrap mutations with `@transaction.atomic`.
 - [ ] **[C3]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:23-33` — Python-side loop for Monthly Recurring Revenue (MRR) calculation and unbounded in-memory evaluation of `active_subscriptions`. Violates Rule 5 (derived balances/KPIs via DB aggregate, never Python loops).
