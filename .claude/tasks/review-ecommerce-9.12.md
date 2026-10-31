@@ -43,8 +43,7 @@ Reviewers executed serially:
 - [x] **[M3]** `templates/ecommerce/subscriptioncommerce/portal/portal.html:133, 140-141, 154` — fixed — added aria-label/title on close button, id/for label association, and replaced text-primary with text-blue-600
 - [x] **[M4]** `templates/ecommerce/subscriptioncommerce/portal/portal.html:129-186` — fixed — moved deflection modals outside table-wrap to prevent stacking context quirks
 - [x] **[M5]** `apps/ecommerce/forms/SubscriptionCommerce/SubscriptionRetentionActions.py:48-50` — fixed — added customer_profile__customer and product to select_related in form subscription queryset
-- [ ] **[M6]** `apps/ecommerce/admin.py:367`, `385` — Missing chained relations in Django admin `list_select_related` (`CustomerSubscriptionAdmin` and `SubscriptionRetentionActionAdmin`).
-  - **Fix**: Update `list_select_related` to include chained relations (`customer_profile__customer`, etc.).
+- [x] **[M6]** `apps/ecommerce/admin.py:367`, `385` — fixed — updated admin list_select_related to include chained profile and subscription relations
 - [ ] **[M7]** `apps/ecommerce/models/SubscriptionCommerce/CustomerSubscriptions.py:130-138` — Missing compound index on `(tenant, plan, status)` in `CustomerSubscription`.
   - **Fix**: Add compound index `idx_esub_ten_plan_stat` in `Meta.indexes`.
 - [ ] **[M8]** `apps/ecommerce/views/SubscriptionCommerce/SubscriptionPortals.py:25-27` & `portal.html:57` — Calling `.count` on sliced `retention_actions[:10]` caps the stat card at 10 instead of total tenant count.
