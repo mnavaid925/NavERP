@@ -129,7 +129,7 @@
                             {{ page_item.updated_at|date:"M d, Y" }}
                         </td>
                         <td class="table-actions text-right">
-                            <a href="{% url 'ecommerce:cmspage_preview' page_item.pk %}" class="btn btn-icon" title="Preview Page" target="_blank">
+                            <a href="{% url 'ecommerce:cmspage_preview' page_item.pk %}" class="btn btn-icon" title="Preview Page" target="_blank" rel="noopener noreferrer">
                                 <i data-lucide="external-link"></i>
                             </a>
                             <a href="{% url 'ecommerce:cmspage_detail' page_item.pk %}" class="btn btn-icon" title="View Detail">
