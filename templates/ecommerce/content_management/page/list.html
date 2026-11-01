@@ -129,18 +129,18 @@
                             {{ page_item.updated_at|date:"M d, Y" }}
                         </td>
                         <td class="table-actions text-right">
-                            <a href="{% url 'ecommerce:cmspage_preview' page_item.pk %}" class="btn btn-icon" title="Preview Page" target="_blank" rel="noopener noreferrer">
+                            <a href="{% url 'ecommerce:cmspage_preview' page_item.pk %}" class="btn btn-icon" title="Preview Page" aria-label="Preview Page" target="_blank" rel="noopener noreferrer">
                                 <i data-lucide="external-link"></i>
                             </a>
-                            <a href="{% url 'ecommerce:cmspage_detail' page_item.pk %}" class="btn btn-icon" title="View Detail">
+                            <a href="{% url 'ecommerce:cmspage_detail' page_item.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'ecommerce:cmspage_edit' page_item.pk %}" class="btn btn-icon" title="Edit Page">
+                            <a href="{% url 'ecommerce:cmspage_edit' page_item.pk %}" class="btn btn-icon" title="Edit Page" aria-label="Edit Page">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form action="{% url 'ecommerce:cmspage_delete' page_item.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete CMS page {{ page_item.title }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-danger" title="Delete Page">
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Page" aria-label="Delete Page">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
