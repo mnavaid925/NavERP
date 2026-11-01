@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -149,12 +150,16 @@ def productmerchandisingmetric_delete(request, pk):
 @tenant_admin_required
 def productmerchandisingmetric_reclassify(request):
     """Reclassifies velocity tiers for all merchandising metrics."""
-    metrics = ProductMerchandisingMetric.objects.filter(tenant=request.tenant)
-    count = 0
-    for m in metrics:
-        m.recalculate_metrics()
-        m.save(update_fields=["velocity_tier", "gross_margin_pct", "return_rate_pct", "conversion_rate_pct"])
-        count += 1
+    metrics = list(ProductMerchandisingMetric.objects.filter(tenant=request.tenant))
+    with transaction.atomic():
+        for m in metrics:
+            m.recalculate_metrics()
+        ProductMerchandisingMetric.objects.bulk_update(
+            metrics,
+            ["velocity_tier", "gross_margin_pct", "return_rate_pct", "conversion_rate_pct"],
+            batch_size=500,
+        )
+    count = len(metrics)
 
     write_audit_log(
         request.user,
