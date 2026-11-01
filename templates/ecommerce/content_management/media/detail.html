@@ -24,7 +24,7 @@
         <p class="text-sm text-slate-500 font-mono mt-1">{{ asset.number }} · {{ asset.mime_type }}</p>
     </div>
     <div class="page-actions flex items-center gap-2">
-        <a href="{{ asset.file_url }}" target="_blank" class="btn btn-outline">
+        <a href="{{ asset.file_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline">
             <i data-lucide="external-link"></i> View Original
         </a>
         <a href="{% url 'ecommerce:mediaasset_edit' asset.pk %}" class="btn btn-primary">
@@ -54,7 +54,7 @@
                 <div class="text-center text-slate-300 p-8">
                     <i data-lucide="video" class="w-16 h-16 mx-auto mb-3 text-slate-400"></i>
                     <p class="font-semibold mb-2">Video Asset Stream</p>
-                    <a href="{{ asset.file_url }}" target="_blank" class="btn btn-primary btn-sm">
+                    <a href="{{ asset.file_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
                         <i data-lucide="play"></i> Watch Stream
                     </a>
                 </div>
@@ -62,7 +62,7 @@
                 <div class="text-center text-slate-300 p-8">
                     <i data-lucide="file-text" class="w-16 h-16 mx-auto mb-3 text-slate-400"></i>
                     <p class="font-semibold mb-2">Document / Downloadable File</p>
-                    <a href="{{ asset.file_url }}" target="_blank" class="btn btn-primary btn-sm">
+                    <a href="{{ asset.file_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
                         <i data-lucide="download"></i> Download / View File
                     </a>
                 </div>
