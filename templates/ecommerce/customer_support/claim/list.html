@@ -92,7 +92,7 @@
                             </a>
                         </td>
                         <td>
-                            <div class="font-semibold text-slate-900 font-mono">{{ claim.order.number }}</div>
+                            <div class="font-semibold text-slate-900 dark:text-slate-100 font-mono">{{ claim.order.number }}</div>
                             <div class="text-xs text-slate-500">
                                 {% if claim.customer %}
                                 {{ claim.customer }}
@@ -107,13 +107,13 @@
                             </div>
                         </td>
                         <td class="text-sm">
-                            <div class="font-medium text-slate-800">{{ claim.get_claim_type_display }}</div>
+                            <div class="font-medium text-slate-800 dark:text-slate-200">{{ claim.get_claim_type_display }}</div>
                             {% if claim.ticket %}
                             <div class="text-xs text-slate-500">Ticket: {{ claim.ticket.number }}</div>
                             {% endif %}
                         </td>
                         <td>
-                            <div class="font-mono text-sm font-semibold text-slate-900">${{ claim.claimed_amount }}</div>
+                            <div class="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100">${{ claim.claimed_amount }}</div>
                             {% if claim.approved_amount > 0 %}
                             <div class="text-xs font-mono text-green-700 font-medium">Approved: ${{ claim.approved_amount }}</div>
                             {% endif %}
@@ -169,7 +169,7 @@
                         <td colspan="8" class="text-center py-8">
                             <div class="empty-state">
                                 <i data-lucide="shield-alert" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
-                                <h3 class="text-base font-semibold text-slate-700">No issue claims found</h3>
+                                <h3 class="text-base font-semibold text-slate-700 dark:text-slate-200">No issue claims found</h3>
                                 <p class="text-sm text-slate-500 mb-4">No damage or loss claims match the filter criteria.</p>
                                 <a href="{% url 'ecommerce:orderissueclaim_create' %}" class="btn btn-primary btn-sm">File First Claim</a>
                             </div>
