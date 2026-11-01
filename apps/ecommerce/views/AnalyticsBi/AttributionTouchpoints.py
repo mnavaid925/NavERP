@@ -73,6 +73,9 @@ def attributiontouchpoint_detail(request, pk):
 
 @login_required
 def attributiontouchpoint_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select or switch to a workspace first.")
+        return redirect("ecommerce:attributiontouchpoint_list")
     if request.method == "POST":
         form = AttributionTouchpointForm(request.POST, tenant=request.tenant)
         if form.is_valid():
