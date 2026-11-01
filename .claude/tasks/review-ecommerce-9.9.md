@@ -22,7 +22,7 @@
 - **File**: `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
 - **Problem**: `self.fields["author"].queryset` is set to `User.objects.filter(is_active=True).order_by("username")` without filtering by `tenant=self.tenant`. Also, `reject_foreign` only checks `["featured_media"]`, omitting `"author"`. A user can see and assign users from other workspaces.
 - **Fix**: Filter `author` queryset by `tenant=self.tenant, is_active=True`, and add `"author"` to `reject_foreign(self, cleaned, ["featured_media", "author"])`.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [C3] Stored XSS vulnerability in CMS Page detail / preview via unsanitized `raw_html_body|safe`
 - **Files**:
