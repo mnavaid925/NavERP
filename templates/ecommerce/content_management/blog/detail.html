@@ -162,7 +162,11 @@
             </div>
             <div class="card-body">
                 <div class="flex flex-wrap gap-2">
+                    {% for tag_item in article.tag_list %}
+                    <span class="badge badge-gray">{{ tag_item }}</span>
+                    {% empty %}
                     <span class="badge badge-gray">{{ article.tags }}</span>
+                    {% endfor %}
                 </div>
             </div>
         </div>
