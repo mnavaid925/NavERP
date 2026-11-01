@@ -262,7 +262,13 @@
 ---
 
 ## Review notes
-(filled in at the end)
+### eCommerce 9.14 — Customer Service & Support (close-out 2026-11-01)
+- **Built Scope**: 4 tenant-scoped models (CustomerSupportTicket, KnowledgeBaseArticle, OrderIssueClaim, CustomerSatisfactionSurvey) under apps/ecommerce/{models,forms,views,urls}/CustomerSupport/ with 12 templates under templates/ecommerce/customer_support/.
+- **Wire-Up**: LIVE_LINKS["9.14"] wired for all 5 feature bullets, admin registered, demo data seeded.
+- **Review**: 23 review findings resolved in Phase 5 across review-ecommerce-9.14.md.
+- **Tests**: 176 unit, form, view, and security tests green in SQLite in-memory suite (apps/ecommerce/tests/test_customersupport_*.py).
+- **Gaps**: Recorded in .agents/tasks/gaps-ecommerce-9.14.md (GAP-9.14-01 through GAP-9.14-04).
+- **Status**: 9.14 complete and closed out. Ready for next sub-module (9.9 CMS).
 
 ---
 
