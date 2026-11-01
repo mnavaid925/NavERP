@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}CMS Pages | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Content Management</span>
+            <span>/</span>
+            <span>Pages</span>
+        </div>
+        <h1 class="page-title">CMS Pages & Landings</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:cmspage_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Page
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="form-group mb-0">
+                <label for="q" class="form-label">Search</label>
+                <input type="text" id="q" name="q" value="{{ search_query }}" placeholder="Title, slug, page #..." class="form-input">
+            </div>
+            <div class="form-group mb-0">
+                <label for="page_type" class="form-label">Page Type</label>
+                <select id="page_type" name="page_type" class="form-select">
+                    <option value="">All Page Types</option>
+                    {% for val, label in page_type_choices %}
+                    <option value="{{ val }}" {% if selected_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="status" class="form-label">Status</label>
+                <select id="status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="template_layout" class="form-label">Layout</label>
+                <select id="template_layout" name="template_layout" class="form-select">
+                    <option value="">All Layouts</option>
+                    {% for val, label in layout_choices %}
+                    <option value="{{ val }}" {% if selected_layout == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+                <a href="{% url 'ecommerce:cmspage_list' %}" class="btn btn-outline">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Pages Table Card -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Page #</th>
+                        <th>Title & URL Slug</th>
+                        <th>Type</th>
+                        <th>Layout</th>
+                        <th>Status</th>
+                        <th>A/B Test</th>
+                        <th>Views</th>
+                        <th>Updated</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for page_item in pages %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'ecommerce:cmspage_detail' page_item.pk %}" class="font-medium text-primary">
+                                {{ page_item.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-semibold text-slate-800 dark:text-slate-100">{{ page_item.title }}</div>
+                            <div class="text-xs text-slate-400 font-mono">/{{ page_item.slug }}/</div>
+                        </td>
+                        <td>
+                            <span class="badge badge-blue">{{ page_item.get_page_type_display }}</span>
+                        </td>
+                        <td class="text-sm text-slate-600">
+                            {{ page_item.get_template_layout_display }}
+                        </td>
+                        <td>
+                            {% if page_item.status == 'published' %}
+                            <span class="badge badge-green">Published</span>
+                            {% elif page_item.status == 'scheduled' %}
+                            <span class="badge badge-blue">Scheduled</span>
+                            {% elif page_item.status == 'archived' %}
+                            <span class="badge badge-yellow">Archived</span>
+                            {% else %}
+                            <span class="badge badge-gray">Draft</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if page_item.is_ab_test_active %}
+                            <span class="badge badge-purple" title="{{ page_item.ab_variant_label }} ({{ page_item.ab_traffic_percentage }}%)">
+                                Active ({{ page_item.ab_traffic_percentage }}%)
+                            </span>
+                            {% else %}
+                            <span class="text-xs text-slate-400">Off</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm text-slate-700">
+                            {{ page_item.view_count }}
+                        </td>
+                        <td class="text-sm text-slate-500">
+                            {{ page_item.updated_at|date:"M d, Y" }}
+                        </td>
+                        <td class="table-actions text-right">
+                            <a href="{% url 'ecommerce:cmspage_preview' page_item.pk %}" class="btn btn-icon" title="Preview Page" target="_blank">
+                                <i data-lucide="external-link"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:cmspage_detail' page_item.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:cmspage_edit' page_item.pk %}" class="btn btn-icon" title="Edit Page">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form action="{% url 'ecommerce:cmspage_delete' page_item.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete CMS page {{ page_item.title }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Page">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center py-8">
+                            <div class="empty-state">
+                                <i data-lucide="layout" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
+                                <h3 class="text-base font-semibold text-slate-700 dark:text-slate-200">No CMS pages found</h3>
+                                <p class="text-sm text-slate-500 mb-4">No content pages match your current filters.</p>
+                                <a href="{% url 'ecommerce:cmspage_create' %}" class="btn btn-primary btn-sm">Create First Page</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if pages.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing {{ pages.start_index }} to {{ pages.end_index }} of {{ pages.paginator.count }} pages
+            </div>
+            <div class="flex gap-1">
+                <a href="?page={% if pages.has_previous %}{{ pages.previous_page_number }}{% else %}1{% endif %}&q={{ search_query }}&page_type={{ selected_type }}&status={{ selected_status }}&template_layout={{ selected_layout }}"
+                   class="btn btn-outline btn-sm {% if not pages.has_previous %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Previous
+                </a>
+                <span class="btn btn-sm btn-outline active">{{ pages.number }} / {{ pages.paginator.num_pages }}</span>
+                <a href="?page={% if pages.has_next %}{{ pages.next_page_number }}{% else %}{{ pages.paginator.num_pages }}{% endif %}&q={{ search_query }}&page_type={{ selected_type }}&status={{ selected_status }}&template_layout={{ selected_layout }}"
+                   class="btn btn-outline btn-sm {% if not pages.has_next %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Next
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
