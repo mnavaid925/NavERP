@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Media Assets | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Content Management</span>
+            <span>/</span>
+            <span>Media</span>
+        </div>
+        <h1 class="page-title">Digital Asset Library (DAM)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:mediaasset_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Add Media Asset
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label for="q" class="form-label">Search</label>
+                <input type="text" id="q" name="q" value="{{ search_query }}" placeholder="Title, alt text, MIME type..." class="form-input">
+            </div>
+            <div class="form-group mb-0">
+                <label for="media_type" class="form-label">Media Type</label>
+                <select id="media_type" name="media_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in media_type_choices %}
+                    <option value="{{ val }}" {% if selected_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="folder_category" class="form-label">Folder / Category</label>
+                <select id="folder_category" name="folder_category" class="form-select">
+                    <option value="">All Folders</option>
+                    {% for val, label in folder_choices %}
+                    <option value="{{ val }}" {% if selected_folder == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+                <a href="{% url 'ecommerce:mediaasset_list' %}" class="btn btn-outline">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Media Assets Card -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Asset #</th>
+                        <th>Preview</th>
+                        <th>Title & Alt Text</th>
+                        <th>Type</th>
+                        <th>Folder</th>
+                        <th>Dimensions / MIME</th>
+                        <th>Uploaded By</th>
+                        <th>Date</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for asset_item in assets %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'ecommerce:mediaasset_detail' asset_item.pk %}" class="font-medium text-primary">
+                                {{ asset_item.number }}
+                            </a>
+                        </td>
+                        <td>
+                            {% if asset_item.media_type == 'image' or asset_item.media_type == 'banner' or asset_item.media_type == 'icon' %}
+                            <a href="{{ asset_item.file_url }}" target="_blank" class="block w-12 h-12 rounded bg-slate-100 overflow-hidden border border-slate-200">
+                                <img src="{{ asset_item.file_url }}" alt="{{ asset_item.alt_text|default:asset_item.title }}" class="w-full h-full object-cover">
+                            </a>
+                            {% else %}
+                            <div class="w-12 h-12 rounded bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200">
+                                <i data-lucide="file" class="w-6 h-6"></i>
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="font-semibold text-slate-800 dark:text-slate-100">{{ asset_item.title }}</div>
+                            <div class="text-xs text-slate-400 truncate max-w-xs">{{ asset_item.alt_text|default:"No alt text" }}</div>
+                        </td>
+                        <td>
+                            <span class="badge badge-blue">{{ asset_item.get_media_type_display }}</span>
+                        </td>
+                        <td>
+                            <span class="badge badge-gray">{{ asset_item.get_folder_category_display }}</span>
+                        </td>
+                        <td class="text-xs font-mono text-slate-600">
+                            {% if asset_item.width_px and asset_item.height_px %}
+                            <div>{{ asset_item.width_px }} × {{ asset_item.height_px }} px</div>
+                            {% endif %}
+                            <div class="text-slate-400">{{ asset_item.mime_type }}</div>
+                        </td>
+                        <td class="text-sm text-slate-600">
+                            {% if asset_item.uploaded_by %}
+                            {{ asset_item.uploaded_by.get_full_name|default:asset_item.uploaded_by.username }}
+                            {% else %}
+                            <span class="text-slate-400 italic">System</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm text-slate-500">
+                            {{ asset_item.created_at|date:"M d, Y" }}
+                        </td>
+                        <td class="table-actions text-right">
+                            <a href="{{ asset_item.file_url }}" target="_blank" class="btn btn-icon" title="Open Asset Link">
+                                <i data-lucide="external-link"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:mediaasset_detail' asset_item.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:mediaasset_edit' asset_item.pk %}" class="btn btn-icon" title="Edit Asset">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form action="{% url 'ecommerce:mediaasset_delete' asset_item.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete media asset {{ asset_item.title }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Asset">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center py-8">
+                            <div class="empty-state">
+                                <i data-lucide="image" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
+                                <h3 class="text-base font-semibold text-slate-700 dark:text-slate-200">No media assets found</h3>
+                                <p class="text-sm text-slate-500 mb-4">No graphics, banners, or files match your search query.</p>
+                                <a href="{% url 'ecommerce:mediaasset_create' %}" class="btn btn-primary btn-sm">Add First Asset</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if assets.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing {{ assets.start_index }} to {{ assets.end_index }} of {{ assets.paginator.count }} assets
+            </div>
+            <div class="flex gap-1">
+                <a href="?page={% if assets.has_previous %}{{ assets.previous_page_number }}{% else %}1{% endif %}&q={{ search_query }}&media_type={{ selected_type }}&folder_category={{ selected_folder }}"
+                   class="btn btn-outline btn-sm {% if not assets.has_previous %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Previous
+                </a>
+                <span class="btn btn-sm btn-outline active">{{ assets.number }} / {{ assets.paginator.num_pages }}</span>
+                <a href="?page={% if assets.has_next %}{{ assets.next_page_number }}{% else %}{{ assets.paginator.num_pages }}{% endif %}&q={{ search_query }}&media_type={{ selected_type }}&folder_category={{ selected_folder }}"
+                   class="btn btn-outline btn-sm {% if not assets.has_next %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Next
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
