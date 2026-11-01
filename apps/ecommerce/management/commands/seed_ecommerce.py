@@ -66,6 +66,10 @@ from apps.ecommerce.models.ContentManagement.BlogArticles import BlogArticle
 from apps.ecommerce.models.ContentManagement.CmsPages import CmsPage
 from apps.ecommerce.models.ContentManagement.ContentBlocks import ContentBlock
 from apps.ecommerce.models.ContentManagement.MediaAssets import MediaAsset
+from apps.ecommerce.models.AnalyticsBi.DailySalesSnapshots import DailySalesSnapshot
+from apps.ecommerce.models.AnalyticsBi.CustomerCohortMetrics import CustomerCohortMetric
+from apps.ecommerce.models.AnalyticsBi.ProductMerchandisingMetrics import ProductMerchandisingMetric
+from apps.ecommerce.models.AnalyticsBi.AttributionTouchpoints import AttributionTouchpoint
 from apps.scm.models.InventoryManagement.Items import Item
 from apps.scm.models.InventoryManagement.Locations import Location
 
@@ -3262,6 +3266,115 @@ class Command(BaseCommand):
                 "is_active": True,
             },
         )
+
+        # =========================================================================
+        # 9.15 Analytics & Business Intelligence
+        # =========================================================================
+        today = timezone.now().date()
+        for i in range(7):
+            d = today - timedelta(days=i)
+            DailySalesSnapshot.objects.get_or_create(
+                tenant=tenant,
+                snapshot_date=d,
+                currency="USD",
+                defaults={
+                    "gross_sales": Decimal(str(1500 + i * 250)),
+                    "discounts_total": Decimal(str(120 + i * 15)),
+                    "refunds_total": Decimal(str(50 + i * 10)),
+                    "net_sales": Decimal(str(1450 + i * 230)),
+                    "shipping_collected": Decimal(str(95 + i * 12)),
+                    "taxes_collected": Decimal(str(85 + i * 10)),
+                    "cost_of_goods_sold": Decimal(str(600 + i * 100)),
+                    "gross_profit": Decimal(str(850 + i * 130)),
+                    "orders_count": 18 + i * 3,
+                    "units_sold": 25 + i * 4,
+                    "average_order_value": Decimal("85.50"),
+                    "carts_created": 65 + i * 8,
+                    "carts_abandoned": 42 + i * 5,
+                    "conversion_rate_pct": Decimal("27.69"),
+                    "is_finalized": (i > 0),
+                    "notes": f"Automated daily snapshot for {d}",
+                },
+            )
+
+        # Cohort metrics
+        first_of_this_month = today.replace(day=1)
+        for offset in range(4):
+            CustomerCohortMetric.objects.get_or_create(
+                tenant=tenant,
+                cohort_month=first_of_this_month - timedelta(days=90),
+                period_offset_months=offset,
+                acquisition_channel_tag="organic_search",
+                defaults={
+                    "initial_cohort_size": 200,
+                    "active_customers": max(20, 200 - offset * 45),
+                    "retention_rate_pct": Decimal(str(max(10.0, 100.0 - offset * 22.5))),
+                    "cohort_orders_count": 220 + offset * 80,
+                    "cumulative_gross_revenue": Decimal(str(18000 + offset * 7500)),
+                    "cumulative_net_revenue": Decimal(str(17100 + offset * 7100)),
+                    "cumulative_margin": Decimal(str(9500 + offset * 4200)),
+                    "cumulative_ltv_per_customer": Decimal(str(85.50 + offset * 35.50)),
+                    "churn_rate_pct": Decimal(str(min(90.0, offset * 22.5))),
+                },
+            )
+
+        # Product merchandising metrics
+        all_prods = list(CatalogProduct.objects.filter(tenant=tenant)[:4])
+        velocity_tiers = ["best_seller", "core_performer", "slow_mover", "dead_stock"]
+        for idx, p in enumerate(all_prods):
+            ProductMerchandisingMetric.objects.get_or_create(
+                tenant=tenant,
+                product=p,
+                period_start=today - timedelta(days=30),
+                period_end=today,
+                defaults={
+                    "velocity_tier": velocity_tiers[idx % len(velocity_tiers)],
+                    "units_sold": 120 - idx * 30,
+                    "gross_revenue": Decimal(str(4500 - idx * 1100)),
+                    "cost_of_goods": Decimal(str(2100 - idx * 500)),
+                    "gross_margin_pct": Decimal("53.33"),
+                    "refunds_count": 4 - idx,
+                    "return_rate_pct": Decimal("3.33"),
+                    "page_views_count": 1500 - idx * 300,
+                    "add_to_cart_count": 250 - idx * 50,
+                    "conversion_rate_pct": Decimal("8.00"),
+                    "inventory_turnover_ratio": Decimal("4.25"),
+                },
+            )
+
+        # Attribution Touchpoints
+        recent_order = EcommerceOrder.objects.filter(tenant=tenant).first()
+        recent_cart = Cart.objects.filter(tenant=tenant).first()
+        recent_campaign = MarketingCampaign.objects.filter(tenant=tenant).first()
+        recent_affiliate = AffiliatePartner.objects.filter(tenant=tenant).first()
+
+        touchpoint_samples = [
+            ("organic_search", "last_touch", "google", "organic", "brand_search", Decimal("185.00"), Decimal("12.50")),
+            ("paid_search", "first_touch", "google_ads", "cpc", "summer_apparel", Decimal("245.00"), Decimal("35.00")),
+            ("paid_social", "linear", "meta_ads", "cpc", "retargeting_v1", Decimal("160.00"), Decimal("28.00")),
+            ("email", "last_touch", "klaviyo", "newsletter", "weekly_vip", Decimal("320.00"), Decimal("5.00")),
+        ]
+        for ch, model_type, src, med, cmp_name, rev, cac in touchpoint_samples:
+            AttributionTouchpoint.objects.get_or_create(
+                tenant=tenant,
+                channel_type=ch,
+                utm_source=src,
+                utm_campaign=cmp_name,
+                defaults={
+                    "order": recent_order,
+                    "cart": recent_cart,
+                    "campaign": recent_campaign,
+                    "affiliate": recent_affiliate,
+                    "attribution_model": model_type,
+                    "utm_medium": med,
+                    "touchpoint_timestamp": timezone.now() - timedelta(hours=6),
+                    "attribution_weight": Decimal("1.0000"),
+                    "attributed_revenue": rev,
+                    "estimated_cac": cac,
+                    "landing_page_url": f"https://store.nav-erp.com/?utm_source={src}&utm_campaign={cmp_name}",
+                    "referrer_url": f"https://{src}.com/referral",
+                },
+            )
 
 
 
