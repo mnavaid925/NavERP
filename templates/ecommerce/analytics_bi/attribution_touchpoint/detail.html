@@ -131,7 +131,7 @@
           <span class="font-medium">
             {% if touchpoint.affiliate %}
             <a href="{% url 'ecommerce:affiliatepartner_detail' touchpoint.affiliate.pk %}" class="text-brand hover:underline">
-              {{ touchpoint.affiliate.partner_code }} ({{ touchpoint.affiliate.company_name }})
+              {{ touchpoint.affiliate.referral_code }} ({{ touchpoint.affiliate.name }})
             </a>
             {% else %}
             <span class="text-slate-400 italic">None linked</span>
