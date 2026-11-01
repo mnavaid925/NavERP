@@ -3050,6 +3050,10 @@ class Command(BaseCommand):
         # 9.9 Content Management System (CMS)
         author_user = User.objects.filter(is_active=True).first()
         sample_prod = CatalogProduct.objects.filter(tenant=tenant).first()
+        cat_apparel = (
+            StoreCategory.objects.filter(tenant=tenant, slug="apparel-fashion").first()
+            or StoreCategory.objects.filter(tenant=tenant).first()
+        )
 
         # Media Assets
         hero_media, _ = MediaAsset.objects.get_or_create(
@@ -3211,7 +3215,7 @@ class Command(BaseCommand):
                 "media_asset": hero_media,
                 "cta_label": "Shop Summer Collection",
                 "cta_url": "/category/apparel-fashion/",
-                "target_category": apparel,
+                "target_category": cat_apparel,
                 "bg_color_class": "bg-indigo-900",
                 "text_color_class": "text-white",
                 "sort_order": 1,
@@ -3248,7 +3252,7 @@ class Command(BaseCommand):
                 "cta_label": "View All Products",
                 "cta_url": "/products/",
                 "target_product": sample_prod,
-                "target_category": apparel,
+                "target_category": cat_apparel,
                 "bg_color_class": "bg-white",
                 "text_color_class": "text-slate-900",
                 "sort_order": 3,
