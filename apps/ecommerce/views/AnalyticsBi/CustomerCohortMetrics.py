@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -140,12 +141,16 @@ def customercohortmetric_delete(request, pk):
 @tenant_admin_required
 def customercohortmetric_recalculate(request):
     """Batch recalculates retention percentages, churn rates, and LTV on all cohort rows."""
-    metrics = CustomerCohortMetric.objects.filter(tenant=request.tenant)
-    count = 0
-    for m in metrics:
-        m.recalculate_rates()
-        m.save(update_fields=["retention_rate_pct", "churn_rate_pct", "cumulative_ltv_per_customer"])
-        count += 1
+    metrics = list(CustomerCohortMetric.objects.filter(tenant=request.tenant))
+    with transaction.atomic():
+        for m in metrics:
+            m.recalculate_rates()
+        CustomerCohortMetric.objects.bulk_update(
+            metrics,
+            ["retention_rate_pct", "churn_rate_pct", "cumulative_ltv_per_customer"],
+            batch_size=500,
+        )
+    count = len(metrics)
 
     write_audit_log(
         request.user,
