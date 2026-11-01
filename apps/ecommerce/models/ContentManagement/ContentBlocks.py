@@ -4,7 +4,7 @@ from apps.ecommerce.models._base import TenantNumbered
 
 
 class ContentBlock(TenantNumbered):
-    prefix = "EBLK"
+    NUMBER_PREFIX = "EBLK"
 
     BLOCK_TYPE_CHOICES = [
         ("hero_banner", "Hero Banner with CTA"),
