@@ -105,7 +105,7 @@
                     {% for ticket in tickets %}
                     <tr>
                         <td class="font-mono text-sm">
-                            <a href="{% url 'ecommerce:customersupportticket_detail' ticket.pk %}" class="text-primary font-semibold hover:underline">
+                            <a href="{% url 'ecommerce:customersupportticket_detail' ticket.pk %}" class="text-brand font-semibold hover:underline">
                                 {{ ticket.number }}
                             </a>
                         </td>
