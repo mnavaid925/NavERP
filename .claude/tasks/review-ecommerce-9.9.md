@@ -49,3 +49,39 @@
 - **[MR1-03] `BlogArticleForm` does not lowercase or strip slug**
   - **File**: `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
   - **Fix**: Add `clean_slug()` normalizing `.strip().lower()`.
+
+---
+
+## Reviewer 2: `explorer`
+
+### Critical Findings
+*None.*
+
+### Important Findings
+- **[IR2-01] Silent Blank Product Name Rendering in Content Block Templates (Duplicate of IR1-01)**
+  - **Files**:
+    - `templates/ecommerce/content_management/block/list.html`
+    - `templates/ecommerce/content_management/block/detail.html`
+  - **Problem**: Both templates reference `target_product.title`. `CatalogProduct` has `name`, not `title`.
+  - **Fix**: Change `target_product.title` to `target_product.name`.
+
+- **[IR2-02] Context Variable Discrepancy for Content Block Templates (`block` vs `content_block`)**
+  - **Files**:
+    - `templates/ecommerce/content_management/block/detail.html`
+    - `templates/ecommerce/content_management/block/form.html`
+    - `apps/ecommerce/views/ContentManagement/ContentBlocks.py`
+  - **Problem**: Contract lists `block`, but Django template keyword `{% block ... %}` shadows `block` variable. View passes both `block` and `content_block`.
+  - **Fix**: Keep both `block` and `content_block` in view context for backward compatibility and document in gap register.
+
+### Minor Findings
+- **[MR2-01] Table Name Defaulting on `CmsPage` (`ecommerce_cmspage` vs `ecommerce_cms_page`) (Duplicate of MR1-01)**
+  - **File**: `apps/ecommerce/models/ContentManagement/CmsPages.py`
+  - **Fix**: Document in gap register.
+
+- **[MR2-02] Missing Foreign Key Eager-Loading in Detail Views (N+1 Query Avoidance) (Duplicate of MR1-02)**
+  - **Files**:
+    - `apps/ecommerce/views/ContentManagement/BlogArticles.py`
+    - `apps/ecommerce/views/ContentManagement/MediaAssets.py`
+    - `apps/ecommerce/views/ContentManagement/ContentBlocks.py`
+  - **Fix**: Pass `select_related` on FKs in detail views.
+
