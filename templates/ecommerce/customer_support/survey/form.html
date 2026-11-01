@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}{% if survey %}Edit Feedback {{ survey.number }}{% else %}Record Customer Feedback{% endif %} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Customer Support</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:customersatisfactionsurvey_list' %}">Feedback & NPS</a>
+            <span>/</span>
+            <span>{% if survey %}Edit {{ survey.number }}{% else %}Record Feedback{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if survey %}Edit Feedback {{ survey.number }}{% else %}Record Customer Satisfaction Feedback{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Survey Origin & Context -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 border-b border-slate-200 pb-2 mb-4">Survey Attribution</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.survey_type.id_for_label }}" class="form-label">Survey Type *</label>
+                        {{ form.survey_type }}
+                        {% if form.survey_type.errors %}
+                        <div class="form-error">{{ form.survey_type.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.ticket.id_for_label }}" class="form-label">Evaluated Ticket</label>
+                        {{ form.ticket }}
+                        {% if form.ticket.errors %}
+                        <div class="form-error">{{ form.ticket.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.order.id_for_label }}" class="form-label">Evaluated Order</label>
+                        {{ form.order }}
+                        {% if form.order.errors %}
+                        <div class="form-error">{{ form.order.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.customer.id_for_label }}" class="form-label">Customer Profile</label>
+                        {{ form.customer }}
+                        {% if form.customer.errors %}
+                        <div class="form-error">{{ form.customer.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.agent_rated.id_for_label }}" class="form-label">Rated Support Agent</label>
+                        {{ form.agent_rated }}
+                        {% if form.agent_rated.errors %}
+                        <div class="form-error">{{ form.agent_rated.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Scorecard & Sentiment -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 border-b border-slate-200 pb-2 mb-4">Rating & Verbatim Feedback</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.rating_score.id_for_label }}" class="form-label">Rating Score (1-5 for CSAT, 0-10 for NPS) *</label>
+                        {{ form.rating_score }}
+                        {% if form.rating_score.errors %}
+                        <div class="form-error">{{ form.rating_score.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.sentiment.id_for_label }}" class="form-label">Sentiment Classification *</label>
+                        {{ form.sentiment }}
+                        {% if form.sentiment.errors %}
+                        <div class="form-error">{{ form.sentiment.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-3">
+                        <label for="{{ form.feedback_comment.id_for_label }}" class="form-label">Customer Written Comments</label>
+                        {{ form.feedback_comment }}
+                        {% if form.feedback_comment.errors %}
+                        <div class="form-error">{{ form.feedback_comment.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Closed-Loop Follow-up -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 border-b border-slate-200 pb-2 mb-4">Closed-Loop Follow-up & Detractor Recovery</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.follow_up_status.id_for_label }}" class="form-label">Follow-up Status *</label>
+                        {{ form.follow_up_status }}
+                        {% if form.follow_up_status.errors %}
+                        <div class="form-error">{{ form.follow_up_status.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.reviewed_by.id_for_label }}" class="form-label">Supervisor Reviewer</label>
+                        {{ form.reviewed_by }}
+                        {% if form.reviewed_by.errors %}
+                        <div class="form-error">{{ form.reviewed_by.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-3">
+                        <label for="{{ form.follow_up_notes.id_for_label }}" class="form-label">Follow-up & Recovery Notes</label>
+                        {{ form.follow_up_notes }}
+                        {% if form.follow_up_notes.errors %}
+                        <div class="form-error">{{ form.follow_up_notes.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if survey %}{% url 'ecommerce:customersatisfactionsurvey_detail' survey.pk %}{% else %}{% url 'ecommerce:customersatisfactionsurvey_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if survey %}Update Feedback{% else %}Save Feedback{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
