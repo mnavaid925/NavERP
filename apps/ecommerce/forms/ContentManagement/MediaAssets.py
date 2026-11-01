@@ -1,11 +1,11 @@
 from django import forms
 from django.core.exceptions import ValidationError
 
-from apps.ecommerce.forms._common import TenantModelForm
+from apps.ecommerce.forms._common import TenantModelForm, TenantUniqueMixin
 from apps.ecommerce.models.ContentManagement.MediaAssets import MediaAsset
 
 
-class MediaAssetForm(TenantModelForm):
+class MediaAssetForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = MediaAsset
         fields = [
