@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Marketing Attribution Touchpoints | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="target" class="w-7 h-7 text-brand"></i>
+        Marketing Attribution Touchpoints
+      </h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        Multi-touch marketing acquisition channels, UTM campaign parameters, and order attribution weighting
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="{% url 'ecommerce:attributiontouchpoint_create' %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Touchpoint</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div>
+        <label for="filter-q" class="form-label text-xs uppercase text-slate-500">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ query }}"
+            placeholder="Touchpoint #, UTM source, campaign..."
+            class="form-input pl-9 w-full"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        </div>
+      </div>
+
+      <div>
+        <label for="filter-channel" class="form-label text-xs uppercase text-slate-500">Channel Type</label>
+        <select id="filter-channel" name="channel" class="form-select w-full">
+          <option value="">All Channels</option>
+          {% for val, label in channel_choices %}
+          <option value="{{ val }}" {% if selected_channel == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label for="filter-model" class="form-label text-xs uppercase text-slate-500">Attribution Model</label>
+        <select id="filter-model" name="model" class="form-select w-full">
+          <option value="">All Models</option>
+          {% for val, label in attribution_model_choices %}
+          <option value="{{ val }}" {% if selected_model == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary w-full flex items-center justify-center gap-2">
+          <i data-lucide="filter" class="w-4 h-4"></i>
+          <span>Filter</span>
+        </button>
+        <a href="{% url 'ecommerce:attributiontouchpoint_list' %}" class="btn btn-outline" title="Reset Filters">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Table Card -->
+  <div class="card overflow-hidden">
+    {% if touchpoints %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Touchpoint</th>
+            <th>Channel</th>
+            <th>Attribution Model</th>
+            <th>Attributed Revenue</th>
+            <th>Order Ref</th>
+            <th>UTM Source / Campaign</th>
+            <th>Timestamp</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tp in touchpoints %}
+          <tr>
+            <td class="font-medium text-slate-900 dark:text-white">
+              <a href="{% url 'ecommerce:attributiontouchpoint_detail' tp.pk %}" class="hover:text-brand font-semibold">
+                {{ tp.number }}
+              </a>
+            </td>
+            <td>
+              {% if tp.channel_type == "paid_search" or tp.channel_type == "paid_social" %}
+              <span class="badge badge-info">{{ tp.get_channel_type_display }}</span>
+              {% elif tp.channel_type == "email" or tp.channel_type == "affiliate" %}
+              <span class="badge badge-green">{{ tp.get_channel_type_display }}</span>
+              {% elif tp.channel_type == "organic_search" or tp.channel_type == "direct" %}
+              <span class="badge badge-slate">{{ tp.get_channel_type_display }}</span>
+              {% else %}
+              <span class="badge badge-amber">{{ tp.get_channel_type_display }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if tp.attribution_model == "first_touch" %}
+              <span class="badge badge-green">First Touch</span>
+              {% elif tp.attribution_model == "last_touch" %}
+              <span class="badge badge-info">Last Touch</span>
+              {% else %}
+              <span class="badge badge-slate">{{ tp.get_attribution_model_display }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="font-mono text-sm font-semibold text-slate-900 dark:text-white">${{ tp.attributed_revenue }}</span>
+              <span class="text-xs text-slate-400">({{ tp.attribution_weight|floatformat:2 }} wt)</span>
+            </td>
+            <td>
+              {% if tp.order %}
+              <a href="{% url 'ecommerce:ecommerceorder_detail' tp.order.pk %}" class="font-mono text-xs text-brand hover:underline">
+                {{ tp.order.number }}
+              </a>
+              {% else %}
+              <span class="text-slate-400 text-xs italic">Pre-order touch</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="flex flex-col text-xs">
+                {% if tp.utm_source %}<span class="font-medium text-slate-700 dark:text-slate-300">src: {{ tp.utm_source }}</span>{% endif %}
+                {% if tp.utm_campaign %}<span class="text-slate-400">cmp: {{ tp.utm_campaign }}</span>{% endif %}
+                {% if not tp.utm_source and not tp.utm_campaign %}<span class="text-slate-400 italic">—</span>{% endif %}
+              </div>
+            </td>
+            <td>
+              <span class="text-xs text-slate-500">{{ tp.touchpoint_timestamp|date:"Y-m-d H:i" }}</span>
+            </td>
+            <td class="text-right">
+              <div class="table-actions justify-end">
+                <a href="{% url 'ecommerce:attributiontouchpoint_detail' tp.pk %}" class="btn btn-icon" title="View Detail">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </a>
+                <a href="{% url 'ecommerce:attributiontouchpoint_edit' tp.pk %}" class="btn btn-icon" title="Edit Touchpoint">
+                  <i data-lucide="pencil" class="w-4 h-4"></i>
+                </a>
+                <form method="post" action="{% url 'ecommerce:attributiontouchpoint_delete' tp.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete touchpoint {{ tp.number }}?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30" title="Delete Touchpoint">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-sm">
+      <span class="text-slate-500">
+        Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} touchpoints
+      </span>
+      <div class="pagination flex items-center gap-1">
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_channel %}&channel={{ selected_channel }}{% endif %}{% if selected_model %}&model={{ selected_model }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+          Previous
+        </a>
+        {% endif %}
+
+        <span class="px-3 py-1 font-semibold text-slate-700 dark:text-slate-300 text-xs">
+          Page {{ page_obj.number }} of {{ paginator.num_pages }}
+        </span>
+
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_channel %}&channel={{ selected_channel }}{% endif %}{% if selected_model %}&model={{ selected_model }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+          Next
+        </a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state p-12 text-center">
+      <div class="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400 mb-3">
+        <i data-lucide="crosshair" class="w-6 h-6"></i>
+      </div>
+      <h3 class="text-base font-semibold text-slate-800 dark:text-slate-200">No Attribution Touchpoints Found</h3>
+      <p class="text-sm text-slate-500 max-w-sm mx-auto mt-1">
+        Track customer acquisition channels, campaign referrals, and revenue attribution.
+      </p>
+      <div class="mt-4">
+        <a href="{% url 'ecommerce:attributiontouchpoint_create' %}" class="btn btn-primary">
+          <i data-lucide="plus" class="w-4 h-4 mr-2"></i>
+          Record First Touchpoint
+        </a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
