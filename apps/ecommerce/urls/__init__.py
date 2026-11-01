@@ -12,6 +12,7 @@ from apps.ecommerce.urls.CustomerSupport import urlpatterns as _customersupport_
 from apps.ecommerce.urls.ReviewUgc import urlpatterns as _reviewugc_urls
 from apps.ecommerce.urls.SubscriptionCommerce import urlpatterns as _subscriptioncommerce_urls
 from apps.ecommerce.urls.ContentManagement import urlpatterns as _contentmanagement_urls
+from apps.ecommerce.urls.AnalyticsBi import urlpatterns as _analyticsbi_urls
 
 app_name = "ecommerce"
 
@@ -30,6 +31,7 @@ urlpatterns = (
     + list(_reviewugc_urls)
     + list(_customersupport_urls)
     + list(_contentmanagement_urls)
+    + list(_analyticsbi_urls)
 )
 
 
