@@ -30,7 +30,7 @@
   - `apps/ecommerce/forms/ContentManagement/CmsPages.py`
 - **Problem**: `page.raw_html_body|safe` renders unescaped HTML directly in the browser DOM. Unsanitized user HTML allows script injection or malicious iframes.
 - **Fix**: Restrict raw script/event handler injection or sanitize HTML to safe tags/attributes, and verify only authenticated staff can submit content.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ---
 
