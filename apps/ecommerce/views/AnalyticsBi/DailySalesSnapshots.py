@@ -67,6 +67,9 @@ def dailysalessnapshot_detail(request, pk):
 
 @login_required
 def dailysalessnapshot_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select or switch to a workspace first.")
+        return redirect("ecommerce:dailysalessnapshot_list")
     if request.method == "POST":
         form = DailySalesSnapshotForm(request.POST, tenant=request.tenant)
         if form.is_valid():
@@ -144,6 +147,9 @@ def dailysalessnapshot_delete(request, pk):
 @tenant_admin_required
 def dailysalessnapshot_generate(request):
     """Triggers recalculation and aggregation of today's sales snapshot."""
+    if request.tenant is None:
+        messages.error(request, "Select or switch to a workspace first.")
+        return redirect("ecommerce:dailysalessnapshot_list")
     today = timezone.now().date()
     snapshot = DailySalesSnapshot.aggregate_for_tenant_date(request.tenant, today)
     write_audit_log(
