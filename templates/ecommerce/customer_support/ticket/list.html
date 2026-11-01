@@ -110,7 +110,7 @@
                             </a>
                         </td>
                         <td>
-                            <div class="font-semibold text-slate-900">{{ ticket.subject }}</div>
+                            <div class="font-semibold text-slate-900 dark:text-slate-100">{{ ticket.subject }}</div>
                             <div class="text-xs text-slate-500">
                                 {{ ticket.customer_name }} &bull; {{ ticket.customer_email }}
                                 {% if ticket.order %}
@@ -183,7 +183,7 @@
                         <td colspan="8" class="text-center py-8">
                             <div class="empty-state">
                                 <i data-lucide="life-buoy" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
-                                <h3 class="text-base font-semibold text-slate-700">No support tickets found</h3>
+                                <h3 class="text-base font-semibold text-slate-700 dark:text-slate-200">No support tickets found</h3>
                                 <p class="text-sm text-slate-500 mb-4">No support tickets match the current filter query.</p>
                                 <a href="{% url 'ecommerce:customersupportticket_create' %}" class="btn btn-primary btn-sm">Open First Ticket</a>
                             </div>
