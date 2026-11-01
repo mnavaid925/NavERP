@@ -454,6 +454,40 @@ from apps.ecommerce.views.ContentManagement.MediaAssets import (
     mediaasset_edit,
     mediaasset_list,
 )
+from apps.ecommerce.views.AnalyticsBi.DailySalesSnapshots import (
+    dailysalessnapshot_create,
+    dailysalessnapshot_delete,
+    dailysalessnapshot_detail,
+    dailysalessnapshot_edit,
+    dailysalessnapshot_generate,
+    dailysalessnapshot_list,
+)
+from apps.ecommerce.views.AnalyticsBi.CustomerCohortMetrics import (
+    customercohortmetric_create,
+    customercohortmetric_delete,
+    customercohortmetric_detail,
+    customercohortmetric_edit,
+    customercohortmetric_list,
+    customercohortmetric_recalculate,
+)
+from apps.ecommerce.views.AnalyticsBi.ProductMerchandisingMetrics import (
+    productmerchandisingmetric_create,
+    productmerchandisingmetric_delete,
+    productmerchandisingmetric_detail,
+    productmerchandisingmetric_edit,
+    productmerchandisingmetric_list,
+    productmerchandisingmetric_reclassify,
+)
+from apps.ecommerce.views.AnalyticsBi.AttributionTouchpoints import (
+    attributiontouchpoint_create,
+    attributiontouchpoint_delete,
+    attributiontouchpoint_detail,
+    attributiontouchpoint_edit,
+    attributiontouchpoint_list,
+)
+from apps.ecommerce.views.AnalyticsBi.AnalyticsCockpit import (
+    analytics_cockpit,
+)
 
 __all__ = [
     "ecommerce_scope",
@@ -803,5 +837,30 @@ __all__ = [
     "contentblock_create",
     "contentblock_edit",
     "contentblock_delete",
+    # 9.15 Analytics & Business Intelligence
+    "dailysalessnapshot_list",
+    "dailysalessnapshot_detail",
+    "dailysalessnapshot_create",
+    "dailysalessnapshot_edit",
+    "dailysalessnapshot_delete",
+    "dailysalessnapshot_generate",
+    "customercohortmetric_list",
+    "customercohortmetric_detail",
+    "customercohortmetric_create",
+    "customercohortmetric_edit",
+    "customercohortmetric_delete",
+    "customercohortmetric_recalculate",
+    "productmerchandisingmetric_list",
+    "productmerchandisingmetric_detail",
+    "productmerchandisingmetric_create",
+    "productmerchandisingmetric_edit",
+    "productmerchandisingmetric_delete",
+    "productmerchandisingmetric_reclassify",
+    "attributiontouchpoint_list",
+    "attributiontouchpoint_detail",
+    "attributiontouchpoint_create",
+    "attributiontouchpoint_edit",
+    "attributiontouchpoint_delete",
+    "analytics_cockpit",
 ]
 
