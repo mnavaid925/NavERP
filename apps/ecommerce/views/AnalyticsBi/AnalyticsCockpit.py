@@ -2,7 +2,7 @@ import json
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import render
 from django.utils import timezone
 
@@ -36,9 +36,16 @@ def analytics_cockpit(request):
         today_aov = (today_revenue / Decimal(str(today_orders_count))).quantize(Decimal("0.01"))
 
     # 2. Cart telemetry & recovery
-    active_carts_count = Cart.objects.filter(tenant=tenant, status="active").count()
-    abandoned_carts_count = Cart.objects.filter(tenant=tenant, status="abandoned").count()
-    recovered_carts_count = Cart.objects.filter(tenant=tenant, status="recovered").count()
+    cart_stats = Cart.objects.filter(tenant=tenant).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+        abandoned=Count("id", filter=Q(status="abandoned")),
+        recovered=Count("id", filter=Q(status="recovered")),
+    )
+    total_carts = cart_stats["total"] or 1
+    active_carts_count = cart_stats["active"] or 0
+    abandoned_carts_count = cart_stats["abandoned"] or 0
+    recovered_carts_count = cart_stats["recovered"] or 0
     total_abandon_pool = abandoned_carts_count + recovered_carts_count
     cart_recovery_rate_pct = Decimal("0.00")
     if total_abandon_pool > 0:
@@ -47,16 +54,20 @@ def analytics_cockpit(request):
         ).quantize(Decimal("0.01"))
 
     # 3. Checkout Funnel Stages
-    total_carts = Cart.objects.filter(tenant=tenant).count() or 1
-    total_checkouts = CheckoutSession.objects.filter(tenant=tenant).count()
-    shipping_sessions = CheckoutSession.objects.filter(
-        tenant=tenant,
-        current_step__in=["shipping_method", "payment_method", "review", "completed"],
-    ).count()
-    payment_sessions = CheckoutSession.objects.filter(
-        tenant=tenant,
-        current_step__in=["payment_method", "review", "completed"],
-    ).count()
+    checkout_stats = CheckoutSession.objects.filter(tenant=tenant).aggregate(
+        total=Count("id"),
+        shipping=Count(
+            "id",
+            filter=Q(current_step__in=["shipping_method", "payment_method", "review", "completed"]),
+        ),
+        payment=Count(
+            "id",
+            filter=Q(current_step__in=["payment_method", "review", "completed"]),
+        ),
+    )
+    total_checkouts = checkout_stats["total"] or 0
+    shipping_sessions = checkout_stats["shipping"] or 0
+    payment_sessions = checkout_stats["payment"] or 0
     completed_orders = EcommerceOrder.objects.filter(tenant=tenant).exclude(status="cancelled").count()
 
     funnel_stages = [
