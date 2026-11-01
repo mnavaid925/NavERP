@@ -101,7 +101,7 @@
 - **File**: `apps/ecommerce/views/ContentManagement/BlogArticles.py`
 - **Problem**: List view joins `featured_media` but template does not render it.
 - **Fix**: Remove `"featured_media"` from `select_related` in `blogarticle_list`.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [M2] Accessibility: Icon-only table action buttons lack explicit `aria-label` attributes
 - **Files**:
