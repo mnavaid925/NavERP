@@ -80,12 +80,11 @@ def attributiontouchpoint_create(request):
             touchpoint.tenant = request.tenant
             touchpoint.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "CREATE",
-                "AttributionTouchpoint",
-                touchpoint.pk,
-                f"Created attribution touchpoint {touchpoint.number} ({touchpoint.channel_type})",
+                touchpoint,
+                "create",
+                {"number": touchpoint.number, "channel": touchpoint.channel_type},
+                tenant=request.tenant,
             )
             messages.success(request, f"Attribution touchpoint {touchpoint.number} created successfully.")
             return redirect("ecommerce:attributiontouchpoint_detail", pk=touchpoint.pk)
@@ -117,12 +116,11 @@ def attributiontouchpoint_edit(request, pk):
         if form.is_valid():
             touchpoint = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "UPDATE",
-                "AttributionTouchpoint",
-                touchpoint.pk,
-                f"Updated attribution touchpoint {touchpoint.number}",
+                touchpoint,
+                "update",
+                {"number": touchpoint.number},
+                tenant=request.tenant,
             )
             messages.success(request, f"Attribution touchpoint {touchpoint.number} updated successfully.")
             return redirect("ecommerce:attributiontouchpoint_detail", pk=touchpoint.pk)
@@ -144,12 +142,11 @@ def attributiontouchpoint_delete(request, pk):
     number = touchpoint.number
     touchpoint.delete()
     write_audit_log(
-        request.tenant,
         request.user,
-        "DELETE",
-        "AttributionTouchpoint",
-        pk,
-        f"Deleted attribution touchpoint {number}",
+        touchpoint,
+        "delete",
+        {"number": number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Attribution touchpoint {number} was deleted.")
     return redirect("ecommerce:attributiontouchpoint_list")
