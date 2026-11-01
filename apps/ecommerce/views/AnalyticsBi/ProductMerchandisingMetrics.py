@@ -66,6 +66,9 @@ def productmerchandisingmetric_detail(request, pk):
 
 @login_required
 def productmerchandisingmetric_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select or switch to a workspace first.")
+        return redirect("ecommerce:productmerchandisingmetric_list")
     if request.method == "POST":
         form = ProductMerchandisingMetricForm(request.POST, tenant=request.tenant)
         if form.is_valid():
@@ -150,6 +153,9 @@ def productmerchandisingmetric_delete(request, pk):
 @tenant_admin_required
 def productmerchandisingmetric_reclassify(request):
     """Reclassifies velocity tiers for all merchandising metrics."""
+    if request.tenant is None:
+        messages.error(request, "Select or switch to a workspace first.")
+        return redirect("ecommerce:productmerchandisingmetric_list")
     metrics = list(ProductMerchandisingMetric.objects.filter(tenant=request.tenant))
     with transaction.atomic():
         for m in metrics:
