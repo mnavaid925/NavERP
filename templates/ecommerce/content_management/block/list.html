@@ -124,15 +124,15 @@
                             {{ block_item.updated_at|date:"M d, Y" }}
                         </td>
                         <td class="table-actions text-right">
-                            <a href="{% url 'ecommerce:contentblock_detail' block_item.pk %}" class="btn btn-icon" title="View Detail">
+                            <a href="{% url 'ecommerce:contentblock_detail' block_item.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'ecommerce:contentblock_edit' block_item.pk %}" class="btn btn-icon" title="Edit Block">
+                            <a href="{% url 'ecommerce:contentblock_edit' block_item.pk %}" class="btn btn-icon" title="Edit Block" aria-label="Edit Block">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form action="{% url 'ecommerce:contentblock_delete' block_item.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete content block {{ block_item.name }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-danger" title="Delete Block">
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Block" aria-label="Delete Block">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
