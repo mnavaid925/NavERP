@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if snapshot %}Edit Daily Sales Snapshot {{ snapshot.number }}{% else %}New Daily Sales Snapshot{% endif %} | NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <a href="{% if snapshot %}{% url 'ecommerce:dailysalessnapshot_detail' snapshot.pk %}{% else %}{% url 'ecommerce:dailysalessnapshot_list' %}{% endif %}" class="btn btn-icon" title="Cancel">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+      </a>
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">
+          {% if snapshot %}Edit Daily Sales Snapshot {{ snapshot.number }}{% else %}New Daily Sales Snapshot{% endif %}
+        </h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          {% if snapshot %}Update aggregation metrics for {{ snapshot.snapshot_date }}{% else %}Record a manual daily sales performance summary{% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-sm">
+        {{ form.non_field_errors }}
+      </div>
+      {% endif %}
+
+      <!-- Section: Snapshot Identification -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          Aggregation Period & Currency
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.snapshot_date.id_for_label }}" class="form-label">Snapshot Date *</label>
+            {{ form.snapshot_date }}
+            {% if form.snapshot_date.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.snapshot_date.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.currency.id_for_label }}" class="form-label">Currency (ISO 3) *</label>
+            {{ form.currency }}
+            {% if form.currency.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.currency.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Sales & Revenue Totals -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          Sales & Financial Metrics
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.gross_sales.id_for_label }}" class="form-label">Gross Sales</label>
+            {{ form.gross_sales }}
+            {% if form.gross_sales.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.gross_sales.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.discounts_total.id_for_label }}" class="form-label">Discounts Total</label>
+            {{ form.discounts_total }}
+            {% if form.discounts_total.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.discounts_total.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.refunds_total.id_for_label }}" class="form-label">Refunds Total</label>
+            {{ form.refunds_total }}
+            {% if form.refunds_total.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.refunds_total.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.net_sales.id_for_label }}" class="form-label">Net Sales</label>
+            {{ form.net_sales }}
+            {% if form.net_sales.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.net_sales.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.shipping_collected.id_for_label }}" class="form-label">Shipping Collected</label>
+            {{ form.shipping_collected }}
+            {% if form.shipping_collected.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.shipping_collected.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.taxes_collected.id_for_label }}" class="form-label">Taxes Collected</label>
+            {{ form.taxes_collected }}
+            {% if form.taxes_collected.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.taxes_collected.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.cost_of_goods_sold.id_for_label }}" class="form-label">Cost of Goods Sold (COGS)</label>
+            {{ form.cost_of_goods_sold }}
+            {% if form.cost_of_goods_sold.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.cost_of_goods_sold.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.gross_profit.id_for_label }}" class="form-label">Gross Profit</label>
+            {{ form.gross_profit }}
+            {% if form.gross_profit.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.gross_profit.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.average_order_value.id_for_label }}" class="form-label">Average Order Value (AOV)</label>
+            {{ form.average_order_value }}
+            {% if form.average_order_value.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.average_order_value.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Orders & Cart Conversion -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          Volume & Conversion Telemetry
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="form-group">
+            <label for="{{ form.orders_count.id_for_label }}" class="form-label">Orders Placed</label>
+            {{ form.orders_count }}
+            {% if form.orders_count.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.orders_count.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.units_sold.id_for_label }}" class="form-label">Units Sold</label>
+            {{ form.units_sold }}
+            {% if form.units_sold.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.units_sold.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.carts_created.id_for_label }}" class="form-label">Carts Created</label>
+            {{ form.carts_created }}
+            {% if form.carts_created.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.carts_created.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.carts_abandoned.id_for_label }}" class="form-label">Carts Abandoned</label>
+            {{ form.carts_abandoned }}
+            {% if form.carts_abandoned.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.carts_abandoned.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.conversion_rate_pct.id_for_label }}" class="form-label">Conversion Rate %</label>
+            {{ form.conversion_rate_pct }}
+            {% if form.conversion_rate_pct.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.conversion_rate_pct.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2 flex items-center pt-6">
+            <label class="flex items-center gap-2 cursor-pointer">
+              {{ form.is_finalized }}
+              <span class="text-sm font-medium text-slate-700 dark:text-slate-300">Mark Day as Finalized (Closed)</span>
+            </label>
+            {% if form.is_finalized.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.is_finalized.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Notes -->
+      <div>
+        <div class="form-group">
+          <label for="{{ form.notes.id_for_label }}" class="form-label">Operational Notes</label>
+          {{ form.notes }}
+          {% if form.notes.errors %}
+          <p class="form-error text-xs text-rose-600 mt-1">{{ form.notes.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <a href="{% if snapshot %}{% url 'ecommerce:dailysalessnapshot_detail' snapshot.pk %}{% else %}{% url 'ecommerce:dailysalessnapshot_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="check" class="w-4 h-4 mr-2"></i>
+          {% if snapshot %}Save Changes{% else %}Create Snapshot{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
