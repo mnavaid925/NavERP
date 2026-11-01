@@ -6,6 +6,14 @@ from apps.ecommerce.models.ContentManagement.CmsPages import CmsPage
 
 
 class CmsPageForm(TenantUniqueMixin, TenantModelForm):
+    ab_traffic_percentage = forms.IntegerField(
+        required=False,
+        initial=50,
+        min_value=0,
+        max_value=100,
+        widget=forms.NumberInput(attrs={"class": "form-input", "min": 0, "max": 100}),
+    )
+
     class Meta:
         model = CmsPage
         fields = [
@@ -49,6 +57,12 @@ class CmsPageForm(TenantUniqueMixin, TenantModelForm):
         if qs.exists():
             raise ValidationError(f"A page with slug '{slug}' already exists for this tenant.")
         return slug
+
+    def clean_ab_traffic_percentage(self):
+        val = self.cleaned_data.get("ab_traffic_percentage")
+        if val is None:
+            return 50
+        return val
 
     def clean_raw_html_body(self):
         import re
