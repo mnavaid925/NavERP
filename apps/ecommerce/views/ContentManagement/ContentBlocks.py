@@ -59,7 +59,12 @@ def contentblock_list(request):
 
 @login_required
 def contentblock_detail(request, pk):
-    block = ecommerce_object(request, ContentBlock, pk)
+    block = ecommerce_object(
+        request,
+        ContentBlock,
+        pk,
+        select_related=("media_asset", "target_product", "target_category"),
+    )
     return render(
         request,
         "ecommerce/content_management/block/detail.html",
