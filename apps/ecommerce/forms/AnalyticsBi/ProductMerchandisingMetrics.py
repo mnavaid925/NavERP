@@ -57,4 +57,8 @@ class ProductMerchandisingMetricForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["product", "variant"])
+        product = cleaned.get("product")
+        variant = cleaned.get("variant")
+        if variant and product and variant.product_id != product.id:
+            self.add_error("variant", "Selected variant does not belong to the selected product.")
         return cleaned
