@@ -37,3 +37,25 @@ Head: `HEAD`
 5. **Conversion funnel percentage display unbounded:**
    - `AnalyticsCockpit.py:72, 78, 84, 90` stage percentage can exceed 100%. Wrap in `min(100.0, ...)`.
 
+---
+
+## 2. Explorer Findings
+
+### Critical
+None. All 18 backend files and 13 templates are in place, migration 0027 is clean, routes resolve without collision, and Django check reports zero issues.
+
+### Important
+1. **Sub-Package `__init__.py` Re-exports Omitted in `AnalyticsBi`**:
+   - `apps/ecommerce/models/AnalyticsBi/__init__.py`, `apps/ecommerce/forms/AnalyticsBi/__init__.py`, and `apps/ecommerce/views/AnalyticsBi/__init__.py` lack `__all__` and re-exports. (Confirms Code Reviewer Critical #3).
+2. **Missing `TenantUniqueMixin` on Tenant-Scoped Forms**:
+   - All four forms omit `TenantUniqueMixin`. (Confirms Code Reviewer Critical #2).
+
+### Minor
+1. **Contract Drift in `channel_attribution_summary` Dictionary Key**:
+   - Contract specifies key `"orders"` while view and template use `"count"` for touchpoint events. View and template are synchronized.
+2. **Filter State Dropdown Mismatch for `is_finalized`**:
+   - `DailySalesSnapshots.py:34-38` passes raw string to context; normalize to `"1"` / `"0"`. (Confirms Code Reviewer Minor #3).
+3. **Redundant Chart.js CDN Script Tag in Cockpit Template**:
+   - `templates/ecommerce/analytics_bi/cockpit/cockpit.html:245` redundant script tag. (Confirms Code Reviewer Minor #1).
+
+
