@@ -60,7 +60,7 @@ class AttributionTouchpointForm(TenantModelForm):
             ).order_by("name")
             self.fields["affiliate"].queryset = AffiliatePartner.objects.filter(
                 tenant=self.tenant
-            ).order_by("partner_code")
+            ).order_by("name")
 
     def clean(self):
         cleaned = super().clean()
