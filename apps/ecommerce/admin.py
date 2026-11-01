@@ -56,6 +56,10 @@ from apps.ecommerce.models.ContentManagement.BlogArticles import BlogArticle
 from apps.ecommerce.models.ContentManagement.CmsPages import CmsPage
 from apps.ecommerce.models.ContentManagement.ContentBlocks import ContentBlock
 from apps.ecommerce.models.ContentManagement.MediaAssets import MediaAsset
+from apps.ecommerce.models.AnalyticsBi.DailySalesSnapshots import DailySalesSnapshot
+from apps.ecommerce.models.AnalyticsBi.CustomerCohortMetrics import CustomerCohortMetric
+from apps.ecommerce.models.AnalyticsBi.ProductMerchandisingMetrics import ProductMerchandisingMetric
+from apps.ecommerce.models.AnalyticsBi.AttributionTouchpoints import AttributionTouchpoint
 
 
 @admin.register(StoreCategory)
@@ -748,6 +752,81 @@ class ContentBlockAdmin(admin.ModelAdmin):
     readonly_fields = ["number", "created_at", "updated_at"]
     list_select_related = ["media_asset", "target_category", "target_product"]
     ordering = ["sort_order", "-created_at"]
+
+
+@admin.register(DailySalesSnapshot)
+class DailySalesSnapshotAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "snapshot_date",
+        "currency",
+        "orders_count",
+        "gross_sales",
+        "net_sales",
+        "average_order_value",
+        "conversion_rate_pct",
+        "is_finalized",
+    ]
+    list_filter = ["currency", "is_finalized", "tenant"]
+    search_fields = ["number", "notes"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    ordering = ["-snapshot_date"]
+
+
+@admin.register(CustomerCohortMetric)
+class CustomerCohortMetricAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "cohort_month",
+        "period_offset_months",
+        "initial_cohort_size",
+        "active_customers",
+        "retention_rate_pct",
+        "cumulative_ltv_per_customer",
+        "acquisition_channel_tag",
+    ]
+    list_filter = ["cohort_month", "acquisition_channel_tag", "tenant"]
+    search_fields = ["number", "acquisition_channel_tag"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    ordering = ["-cohort_month", "period_offset_months"]
+
+
+@admin.register(ProductMerchandisingMetric)
+class ProductMerchandisingMetricAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "product",
+        "velocity_tier",
+        "units_sold",
+        "gross_revenue",
+        "gross_margin_pct",
+        "return_rate_pct",
+        "conversion_rate_pct",
+    ]
+    list_filter = ["velocity_tier", "tenant"]
+    search_fields = ["number", "product__name", "variant__sku"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["product", "variant"]
+    ordering = ["-period_end", "-gross_revenue"]
+
+
+@admin.register(AttributionTouchpoint)
+class AttributionTouchpointAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "channel_type",
+        "attribution_model",
+        "attributed_revenue",
+        "order",
+        "utm_source",
+        "touchpoint_timestamp",
+    ]
+    list_filter = ["channel_type", "attribution_model", "tenant"]
+    search_fields = ["number", "utm_source", "utm_campaign", "order__number"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["order", "cart", "campaign", "affiliate"]
+    ordering = ["-touchpoint_timestamp"]
+
 
 
 
