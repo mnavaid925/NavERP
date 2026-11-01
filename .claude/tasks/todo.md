@@ -8,6 +8,254 @@
 > Do not mass-tick the backlog.
 ---
 
+# Sub-module 9.9: Content Management System (CMS) (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.9.md` (2026-11-01)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.8 and 9.10 through 9.14.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0025_alter_orderissueclaim_photo_evidence_url.py`, so **9.9 claims `0026`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.9.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/ContentManagement/`
+> Template folder name: `templates/ecommerce/content_management/{page,blog,media,block}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Spine & Entity Integration (L28/L29)**:
+  - User and author identity anchors to `accounts.User` (`on_delete=models.SET_NULL`).
+  - Catalog references in promotional blocks link directly to canonical `ecommerce.CatalogProduct` (`EPRD-`, 9.1) and `ecommerce.StoreCategory` (`ECAT-`, 9.1).
+  - Media assets reference valid HTTPS URLs and store structured metadata (dimensions, mime type, alt text).
+  - No duplicate file, user, or party storage backends.
+- **Clear Sibling Boundaries (9.1 vs. 9.7 vs. 9.8 vs. 9.9 vs. 9.10 vs. 9.14)**:
+  - 9.1 (Product Catalog): Owns product and category masters; 9.9 references them in visual layout blocks.
+  - 9.7 (Search Discovery): Owns search merchandising rules; 9.9 provides the landing pages and editorial content searched.
+  - 9.8 (Personalization): Owns dynamic recommendation carousels; 9.9 provides the content blocks and page layouts.
+  - 9.9 (This Pass): Owns CMS pages, blog articles, media assets, and modular visual layout blocks.
+  - 9.10 (Marketing Campaigns): Owns campaign blast dispatchers; 9.9 provides the landing page URLs and hero banners.
+  - 9.14 (Customer Service): Owns support tickets and helpdesk FAQ articles; 9.9 handles brand blogs and public marketing pages.
+- **Multi-Tenancy & Data Isolation**: All CMS pages, articles, media assets, and content blocks are strictly scoped by `tenant` (`core.Tenant`).
+- **Base Class & Prefix Discipline**: All 4 models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`), providing `tenant` FK (`on_delete=CASCADE`), thread-safe auto-number generation, and audit timestamps.
+- **Prefix Collision Sweep**: `EPAG`, `EBLG`, `EMED`, `EBLK` verified 100% free across repo.
+
+---
+
+## 9.9-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO headless GraphQL content delivery server** — Standard Django HTTP/HTMX views render pages and provide structured JSON data.
+- [ ] **NO direct CDN API credentials management** — MediaAsset models store CDN delivery URLs and asset metadata; cloud cache purges are out of scope.
+- [ ] **NO real-time collaborative multi-user WYSIWYG WebSockets** — Editing is form-based with live responsive preview.
+- [ ] **NO duplicate file storage engines** — File assets reference standard media storage URLs.
+
+---
+
+## Models (4 models in `apps/ecommerce/models/ContentManagement/`)
+
+- [ ] **`CmsPage`** [Prefix: `EPAG-`] (`apps/ecommerce/models/ContentManagement/CmsPages.py`)
+  - **Purpose**: Dynamic store page and promotional landing page engine. Manages title, slug, page type, publishing status, responsive layout templates, structured content blocks JSON, SEO meta tags, and A/B variant testing configuration.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `PAGE_TYPE_CHOICES = [("standard", "Standard Store Page"), ("landing", "Promotional Landing Page"), ("policy", "Store Policy / Legal"), ("about", "About Us / Story"), ("contact", "Contact Us"), ("homepage", "Custom Homepage Layout")]`
+    - `STATUS_CHOICES = [("draft", "Draft"), ("scheduled", "Scheduled"), ("published", "Published"), ("archived", "Archived")]`
+    - `LAYOUT_CHOICES = [("full_width", "Full Width (No Sidebars)"), ("boxed", "Boxed Container"), ("sidebar_left", "Left Sidebar"), ("sidebar_right", "Right Sidebar"), ("minimal_landing", "Minimal Landing (No Header/Footer)")]`
+  - **Fields**:
+    - `title`: `CharField(max_length=255, help_text="Public page headline")`
+    - `slug`: `SlugField(max_length=255, help_text="URL path slug")`
+    - `page_type`: `CharField(max_length=25, choices=PAGE_TYPE_CHOICES, default="standard")`
+    - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft")`
+    - `template_layout`: `CharField(max_length=25, choices=LAYOUT_CHOICES, default="full_width")`
+    - `meta_title`: `CharField(max_length=255, blank=True, help_text="SEO title tag")`
+    - `meta_description`: `TextField(max_length=500, blank=True, help_text="SEO meta description snippet")`
+    - `canonical_url`: `URLField(max_length=500, blank=True, help_text="Canonical URL override")`
+    - `is_indexable`: `BooleanField(default=True, help_text="Allow search engines to index")`
+    - `content_json`: `JSONField(default=dict, blank=True, help_text="Structured layout blocks payload")`
+    - `raw_html_body`: `TextField(blank=True, help_text="Editorial or fallback HTML content")`
+    - `published_at`: `DateTimeField(null=True, blank=True)`
+    - `view_count`: `PositiveIntegerField(default=0)`
+    - `is_ab_test_active`: `BooleanField(default=False)`
+    - `ab_variant_label`: `CharField(max_length=50, blank=True, help_text="A/B variant name e.g. Variant B")`
+    - `ab_traffic_percentage`: `PositiveSmallIntegerField(default=50, validators=[MinValueValidator(0), MaxValueValidator(100)])`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_epag_tenant_num_uniq")`
+    - `UniqueConstraint(fields=["tenant", "slug"], name="ecommerce_epag_tenant_slug_uniq")`
+    - `Index(fields=["tenant", "status", "page_type"], name="idx_epag_ten_stat_type")`
+    - `Index(fields=["tenant", "is_ab_test_active"], name="idx_epag_ten_ab")`
+  - **Form Exclusions**: `tenant`, `number`, `view_count`, `published_at`, `created_at`, `updated_at`.
+
+- [ ] **`BlogArticle`** [Prefix: `EBLG-`] (`apps/ecommerce/models/ContentManagement/BlogArticles.py`)
+  - **Purpose**: Editorial blog posts, storytelling, product tutorials, and brand journalism.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `CATEGORY_CHOICES = [("news", "Company News"), ("product_spotlight", "Product Spotlight"), ("guides_tutorials", "Guides & Tutorials"), ("lifestyle", "Lifestyle & Trends"), ("company_updates", "Announcements")]`
+    - `STATUS_CHOICES = [("draft", "Draft"), ("scheduled", "Scheduled"), ("published", "Published"), ("archived", "Archived")]`
+  - **Fields**:
+    - `title`: `CharField(max_length=255, help_text="Article title")`
+    - `slug`: `SlugField(max_length=255, help_text="URL slug")`
+    - `author`: `ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="ecommerce_blog_articles")`
+    - `category`: `CharField(max_length=30, choices=CATEGORY_CHOICES, default="guides_tutorials")`
+    - `excerpt`: `TextField(max_length=500, help_text="Summary for cards and SEO")`
+    - `body_markdown`: `TextField(help_text="Detailed article markdown text")`
+    - `featured_media`: `ForeignKey("ecommerce.MediaAsset", on_delete=models.SET_NULL, null=True, blank=True, related_name="blog_articles")`
+    - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft")`
+    - `tags`: `CharField(max_length=255, blank=True, help_text="Comma-separated keyword tags")`
+    - `reading_time_minutes`: `PositiveSmallIntegerField(default=3, help_text="Estimated read time in minutes")`
+    - `allow_comments`: `BooleanField(default=True)`
+    - `is_featured`: `BooleanField(default=False)`
+    - `published_at`: `DateTimeField(null=True, blank=True)`
+    - `view_count`: `PositiveIntegerField(default=0)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_eblg_tenant_num_uniq")`
+    - `UniqueConstraint(fields=["tenant", "slug"], name="ecommerce_eblg_tenant_slug_uniq")`
+    - `Index(fields=["tenant", "status", "category"], name="idx_eblg_ten_stat_cat")`
+    - `Index(fields=["tenant", "is_featured"], name="idx_eblg_ten_feat")`
+  - **Form Exclusions**: `tenant`, `number`, `view_count`, `published_at`, `created_at`, `updated_at`.
+
+- [ ] **`MediaAsset`** [Prefix: `EMED-`] (`apps/ecommerce/models/ContentManagement/MediaAssets.py`)
+  - **Purpose**: Digital asset management repository for banners, images, promotional graphics, and marketing PDFs.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `MEDIA_TYPE_CHOICES = [("image", "Image / Graphic"), ("video", "Video Embed / Clip"), ("document", "PDF Document"), ("banner", "Promotional Banner"), ("icon", "SVG / Icon")]`
+    - `FOLDER_CHOICES = [("banners", "Store Banners"), ("blog", "Blog Imagery"), ("pages", "Page Assets"), ("marketing", "Marketing Collateral"), ("icons", "UI Icons"), ("uncategorized", "Uncategorized")]`
+  - **Fields**:
+    - `title`: `CharField(max_length=255, help_text="Media asset display name")`
+    - `file_url`: `URLField(max_length=500, help_text="Direct HTTPS asset URL")`
+    - `alt_text`: `CharField(max_length=255, blank=True, help_text="Accessibility & SEO alt text")`
+    - `caption`: `CharField(max_length=255, blank=True, help_text="Optional asset caption")`
+    - `media_type`: `CharField(max_length=20, choices=MEDIA_TYPE_CHOICES, default="image")`
+    - `folder_category`: `CharField(max_length=30, choices=FOLDER_CHOICES, default="uncategorized")`
+    - `file_size_bytes`: `PositiveIntegerField(default=0, help_text="File size in bytes")`
+    - `mime_type`: `CharField(max_length=100, default="image/jpeg")`
+    - `width_px`: `PositiveIntegerField(null=True, blank=True)`
+    - `height_px`: `PositiveIntegerField(null=True, blank=True)`
+    - `uploaded_by`: `ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="uploaded_ecommerce_media")`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_emed_tenant_num_uniq")`
+    - `Index(fields=["tenant", "media_type", "folder_category"], name="idx_emed_ten_type_cat")`
+  - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
+
+- [ ] **`ContentBlock`** [Prefix: `EBLK-`] (`apps/ecommerce/models/ContentManagement/ContentBlocks.py`)
+  - **Purpose**: Reusable modular visual components used in `CmsPage` page builders and standalone store sections.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `BLOCK_TYPE_CHOICES = [("hero_banner", "Hero Banner with CTA"), ("feature_grid", "3-Column Feature Grid"), ("product_carousel", "Catalog Product Carousel"), ("testimonial", "Customer Testimonial Slider"), ("cta_banner", "Call to Action Strip"), ("rich_text", "Formatted Editorial Text"), ("faq_accordion", "FAQ Accordion"), ("newsletter_signup", "Newsletter Signup Strip")]`
+  - **Fields**:
+    - `name`: `CharField(max_length=255, help_text="Internal block identifier")`
+    - `block_type`: `CharField(max_length=30, choices=BLOCK_TYPE_CHOICES, default="hero_banner")`
+    - `headline`: `CharField(max_length=255, blank=True, help_text="Promotional heading")`
+    - `subheadline`: `CharField(max_length=255, blank=True, help_text="Secondary sub-title")`
+    - `body_text`: `TextField(blank=True, help_text="Descriptive body content")`
+    - `media_asset`: `ForeignKey("ecommerce.MediaAsset", on_delete=models.SET_NULL, null=True, blank=True, related_name="content_blocks")`
+    - `cta_label`: `CharField(max_length=100, blank=True, help_text="Button text")`
+    - `cta_url`: `CharField(max_length=255, blank=True, help_text="Target button link")`
+    - `target_category`: `ForeignKey("ecommerce.StoreCategory", on_delete=models.SET_NULL, null=True, blank=True, related_name="content_blocks")`
+    - `target_product`: `ForeignKey("ecommerce.CatalogProduct", on_delete=models.SET_NULL, null=True, blank=True, related_name="content_blocks")`
+    - `bg_color_class`: `CharField(max_length=50, default="bg-slate-50", help_text="Tailwind background class")`
+    - `text_color_class`: `CharField(max_length=50, default="text-slate-900", help_text="Tailwind text class")`
+    - `sort_order`: `PositiveIntegerField(default=0, help_text="Display priority order")`
+    - `is_active`: `BooleanField(default=True)`
+  - **Constraints & Indexes**:
+    - `UniqueConstraint(fields=["tenant", "number"], name="ecommerce_eblk_tenant_num_uniq")`
+    - `Index(fields=["tenant", "block_type", "is_active"], name="idx_eblk_ten_type_act")`
+    - `Index(fields=["tenant", "sort_order"], name="idx_eblk_ten_order")`
+  - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
+
+---
+
+## Backend Packages (apps/ecommerce/{models,forms,views,urls}/ContentManagement/)
+
+- [ ] **Models**:
+  - `apps/ecommerce/models/ContentManagement/__init__.py`
+  - `apps/ecommerce/models/ContentManagement/CmsPages.py`
+  - `apps/ecommerce/models/ContentManagement/BlogArticles.py`
+  - `apps/ecommerce/models/ContentManagement/MediaAssets.py`
+  - `apps/ecommerce/models/ContentManagement/ContentBlocks.py`
+  - `apps/ecommerce/models/__init__.py` re-export block
+- [ ] **Forms**:
+  - `apps/ecommerce/forms/ContentManagement/__init__.py`
+  - `apps/ecommerce/forms/ContentManagement/CmsPages.py` (`CmsPageForm`)
+  - `apps/ecommerce/forms/ContentManagement/BlogArticles.py` (`BlogArticleForm`)
+  - `apps/ecommerce/forms/ContentManagement/MediaAssets.py` (`MediaAssetForm`)
+  - `apps/ecommerce/forms/ContentManagement/ContentBlocks.py` (`ContentBlockForm`)
+  - `apps/ecommerce/forms/__init__.py` re-export block
+- [ ] **Views**:
+  - `apps/ecommerce/views/ContentManagement/__init__.py`
+  - `apps/ecommerce/views/ContentManagement/CmsPages.py` (CRUD + preview action)
+  - `apps/ecommerce/views/ContentManagement/BlogArticles.py` (CRUD)
+  - `apps/ecommerce/views/ContentManagement/MediaAssets.py` (CRUD)
+  - `apps/ecommerce/views/ContentManagement/ContentBlocks.py` (CRUD)
+  - `apps/ecommerce/views/__init__.py` re-export block
+- [ ] **URLs**:
+  - `apps/ecommerce/urls/ContentManagement/__init__.py`
+  - `apps/ecommerce/urls/ContentManagement/CmsPages.py`
+  - `apps/ecommerce/urls/ContentManagement/BlogArticles.py`
+  - `apps/ecommerce/urls/ContentManagement/MediaAssets.py`
+  - `apps/ecommerce/urls/ContentManagement/ContentBlocks.py`
+  - `apps/ecommerce/urls/__init__.py` concatenation block
+- [ ] **Admin Registration**:
+  - `apps/ecommerce/admin.py` register `CmsPage`, `BlogArticle`, `MediaAsset`, `ContentBlock`
+- [ ] **Navigation & Sidebar Wiring**:
+  - `apps/core/navigation.py` add `LIVE_LINKS["9.9"]`:
+    - `"Page Builder & Visual Editor": "ecommerce:cmspage_list"`
+    - `"Blog & Editorial Content": "ecommerce:blogarticle_list"`
+    - `"Landing Page & Campaign Management": "ecommerce:cmspage_list"`
+    - `"Media Library & Asset Management": "ecommerce:mediaasset_list"`
+    - `"Content Localization & Translation": "ecommerce:contentblock_list"`
+- [ ] **Database Migration**:
+  - `makemigrations ecommerce` -> `0026_...`
+  - `migrate`
+- [ ] **Seeder Extension**:
+  - `apps/ecommerce/management/commands/seed_ecommerce.py` extend with realistic demo CMS pages, blog posts, media assets, and content blocks.
+
+---
+
+## Templates (templates/ecommerce/content_management/)
+
+- [ ] **CmsPage** (`templates/ecommerce/content_management/page/`):
+  - `list.html`: Search, page_type filter, status filter, template_layout filter, view count, actions.
+  - `detail.html`: Full page view preview, meta tag audit, A/B variant info, layout badge, action buttons.
+  - `form.html`: Page editor with SEO meta, layout configuration, and A/B testing fields.
+- [ ] **BlogArticle** (`templates/ecommerce/content_management/blog/`):
+  - `list.html`: Category filter, status filter, author filter, reading time, view count, actions.
+  - `detail.html`: Article reading layout, author info, featured image, tags, comments allowed pill.
+  - `form.html`: Article authoring form with markdown body, category, and featured media picker.
+- [ ] **MediaAsset** (`templates/ecommerce/content_management/media/`):
+  - `list.html`: Folder category filter, media type filter, asset preview grid/table, dimensions and file size.
+  - `detail.html`: Asset card with image preview, direct URL copy, dimensions, and metadata.
+  - `form.html`: Media asset metadata registration and URL specification.
+- [ ] **ContentBlock** (`templates/ecommerce/content_management/block/`):
+  - `list.html`: Block type filter, active status toggle, sort order, linked media, actions.
+  - `detail.html`: Block visual rendering preview, target product/category links, theme styling classes.
+  - `form.html`: Content block configuration form with CTA links and styling selectors.
+
+---
+
+## Verification & Quality Gates
+- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 1)
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 2 — must be strictly idempotent)
+- [ ] `venv\Scripts\python.exe manage.py check`
+- [ ] `temp/smoke_content_management.py` smoke test verifying all new URLs return HTTP 200/302, rendered content assertions, and IDOR isolation.
+
+---
+
+## Review & Tests & Close-Out (Phases 4–7)
+- [ ] Phase 4: Six Reviewers in strict serial sequence (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) appending to `.claude/tasks/review-ecommerce-9.9.md`
+- [ ] Phase 5: `code-fixer` agent burns down findings
+- [ ] Phase 6: Tests in serial order (`test_contentmanagement_models.py`, `test_contentmanagement_forms.py`, `test_contentmanagement_views.py`, `test_contentmanagement_security.py`)
+- [ ] Phase 7: Update `.claude/skills/ecommerce/SKILL.md` and `README.md`
+- [ ] Register gaps in `.agents/tasks/gaps-ecommerce-9.9.md`
+
+---
+
+## Later Passes / Deferred
+- Headless GraphQL Content Delivery API (Deferred to 9.19 Integration & API Ecosystem)
+- AI LLM Marketing Copywriter Assistant (Deferred to Module 23 AI & Intelligent Automation)
+- Real-Time WebSocket Multi-Editor Canvas
+- Automated CDN Cache Invalidation Webhooks
+
+---
+
+## Review notes
+(filled in at the end)
+
+---
+
 # Sub-module 9.14: Customer Service & Support (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.14.md` (2026-10-31)
 
 > **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.13.
