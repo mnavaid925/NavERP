@@ -61,8 +61,8 @@ def knowledgebasearticle_list(request):
 def knowledgebasearticle_detail(request, pk):
     article = ecommerce_object(request, KnowledgeBaseArticle, pk, select_related=("author",))
     # Increment view count
-    KnowledgeBaseArticle.objects.filter(pk=article.pk).update(view_count=F("view_count") + 1)
-    article.refresh_from_db()
+    KnowledgeBaseArticle.objects.filter(pk=article.pk, tenant=request.tenant).update(view_count=F("view_count") + 1)
+    article.view_count += 1
     return render(request, "ecommerce/customer_support/article/detail.html", {"article": article})
 
 
