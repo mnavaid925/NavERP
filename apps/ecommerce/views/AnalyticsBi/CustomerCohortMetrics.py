@@ -65,12 +65,11 @@ def customercohortmetric_create(request):
             metric.recalculate_rates()
             metric.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "CREATE",
-                "CustomerCohortMetric",
-                metric.pk,
-                f"Created cohort metric {metric.number} for cohort {metric.cohort_month} offset M{metric.period_offset_months}",
+                metric,
+                "create",
+                {"number": metric.number, "cohort": str(metric.cohort_month)},
+                tenant=request.tenant,
             )
             messages.success(request, f"Cohort metric {metric.number} created successfully.")
             return redirect("ecommerce:customercohortmetric_detail", pk=metric.pk)
@@ -100,12 +99,11 @@ def customercohortmetric_edit(request, pk):
             metric.recalculate_rates()
             metric.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "UPDATE",
-                "CustomerCohortMetric",
-                metric.pk,
-                f"Updated cohort metric {metric.number}",
+                metric,
+                "update",
+                {"number": metric.number},
+                tenant=request.tenant,
             )
             messages.success(request, f"Cohort metric {metric.number} updated successfully.")
             return redirect("ecommerce:customercohortmetric_detail", pk=metric.pk)
@@ -127,12 +125,11 @@ def customercohortmetric_delete(request, pk):
     number = cohort_metric.number
     cohort_metric.delete()
     write_audit_log(
-        request.tenant,
         request.user,
-        "DELETE",
-        "CustomerCohortMetric",
-        pk,
-        f"Deleted cohort metric {number}",
+        cohort_metric,
+        "delete",
+        {"number": number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Cohort metric {number} was deleted.")
     return redirect("ecommerce:customercohortmetric_list")
@@ -150,12 +147,11 @@ def customercohortmetric_recalculate(request):
         count += 1
 
     write_audit_log(
-        request.tenant,
         request.user,
-        "RECALCULATE",
-        "CustomerCohortMetric",
-        0,
-        f"Recalculated retention rates across {count} cohort metrics",
+        None,
+        "recalc",
+        f"Recalculated {count} cohort metrics",
+        tenant=request.tenant,
     )
     messages.success(request, f"Recalculated retention and LTV metrics across {count} cohort entries.")
     return redirect("ecommerce:customercohortmetric_list")
