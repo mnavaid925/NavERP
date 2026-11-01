@@ -70,7 +70,7 @@
                     {% endif %}
                     {% if content_block.cta_label %}
                     <div class="pt-2">
-                        <a href="{{ content_block.cta_url|default:'#' }}" class="btn btn-primary inline-flex items-center gap-1">
+                        <a href="{{ content_block.cta_url|default:'#' }}" class="btn btn-primary inline-flex items-center gap-1"{% if content_block.cta_url|slice:":4" == "http" %} target="_blank" rel="noopener noreferrer"{% endif %}>
                             {{ content_block.cta_label }} <i data-lucide="arrow-right" class="w-4 h-4"></i>
                         </a>
                     </div>
