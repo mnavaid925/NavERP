@@ -8,6 +8,239 @@
 > Do not mass-tick the backlog.
 ---
 
+# Sub-module 9.15: Analytics & Business Intelligence (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.15.md` (2026-11-01)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.14.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0026_mediaasset_contentblock_blogarticle_cmspage_and_more.py`, so **9.15 claims `0027`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.15.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/AnalyticsBi/`
+> Template folder name: `templates/ecommerce/analytics_bi/{daily_sales_snapshot,customer_cohort_metric,product_merchandising_metric,attribution_touchpoint,cockpit}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Catalog, Order, and Cart Integration (L36/L37)**:
+  - Daily sales metrics aggregate from `ecommerce.EcommerceOrder` (`EORD-`, 9.5) and `ecommerce.EcommerceOrderLine` (9.5).
+  - Funnel and cart metrics aggregate from `ecommerce.Cart` (`ECRT-`, 9.4) and `ecommerce.CheckoutSession` (`ECKS-`, 9.4).
+  - Merchandising analytics link directly to `ecommerce.CatalogProduct` (`EPRD-`, 9.1) and optional `ecommerce.ProductVariant` (`PVR-`, 9.1).
+  - Marketing attribution links to `ecommerce.MarketingCampaign` (`EMCP-`, 9.10) and `ecommerce.AffiliatePartner` (`EAFF-`, 9.10).
+  - Financial ledger entries remain anchored in Module 2 `accounting` (`JournalEntry`, `Invoice`, `Bill`). eCommerce analytics displays revenue, discounts, and margins for merchandising intelligence without maintaining duplicate accounting ledgers (L29).
+- **Clear Sibling Boundaries (9.5 vs. 9.8 vs. 9.10 vs. 9.15 vs. Module 10 `bi`)**:
+  - Module 10 (`bi`): Owns cross-department company-wide OLAP and SQL report builder. 9.15 provides native eCommerce storefront analytics, cohorts, merchandising health, and attribution within `apps/ecommerce`.
+  - 9.5 (`OrderManagement`): Owns order state transitions and fulfillment. 9.15 aggregates order data into time-series snapshots and cohort metrics.
+  - 9.8 (`Personalization`): Owns recommendation strategies and raw behavior telemetry. 9.15 consumes event streams for funnel drop-off analytics.
+  - 9.10 (`MarketingCampaign`): Owns campaign creation. 9.15 provides multi-touch attribution and ROAS measurement.
+- **Multi-Tenancy & Data Isolation**: All 4 analytics models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`) with strict `tenant` (`core.Tenant`) isolation. All queries, aggregations, and dashboard views filter strictly on `tenant=request.tenant`.
+- **Base Class & Prefix Discipline**: All 4 models inherit from `TenantNumbered`, implementing thread-safe auto-number generation, audit timestamps, and strictly unique prefixes.
+- **Prefix Collision Sweep**: `EDSS`, `ECCM`, `EPMM`, `EATT` verified 100% free across repo.
+
+---
+
+## 9.15-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO heavy external OLAP/ClickHouse/Snowflake warehouse dependency** — Calculations are performed cleanly via Django ORM aggregations and saved to SQLite/MySQL time-series tables.
+- [ ] **NO client-side JavaScript tracking pixel tag-manager injection** — Telemetry reads existing `Cart`, `CheckoutSession`, `EcommerceOrder`, and `ShopperBehaviorEvent` models.
+- [ ] **NO black-box predictive ML neural-network training in request cycle** — Advanced predictive AI belongs to Module 23 (`apps/ai`).
+- [ ] **NO direct third-party ad network API credentials management** — External ad spend sync is out of scope; touchpoints log UTM parameters and campaign tags.
+
+---
+
+## Models (4 models in `apps/ecommerce/models/AnalyticsBi/`)
+
+- [ ] **`DailySalesSnapshot`** [Prefix: `EDSS-`] (`apps/ecommerce/models/AnalyticsBi/DailySalesSnapshots.py`)
+  - **Purpose**: Pre-aggregated historical daily sales snapshot capturing top-line revenue, order counts, AOV, cart abandonment, and margin components for high-speed reporting and Chart.js trendlines.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Fields**:
+    - `snapshot_date`: `DateField(db_index=True, help_text="Date of sales aggregation")`
+    - `currency`: `CharField(max_length=3, default="USD", help_text="Currency ISO code")`
+    - `gross_sales`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `discounts_total`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `refunds_total`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `net_sales`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `shipping_collected`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `taxes_collected`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `cost_of_goods_sold`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `gross_profit`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `orders_count`: `PositiveIntegerField(default=0)`
+    - `units_sold`: `PositiveIntegerField(default=0)`
+    - `average_order_value`: `DecimalField(max_digits=10, decimal_places=2, default=0.00)`
+    - `carts_created`: `PositiveIntegerField(default=0)`
+    - `carts_abandoned`: `PositiveIntegerField(default=0)`
+    - `conversion_rate_pct`: `DecimalField(max_digits=5, decimal_places=2, default=0.00)`
+    - `is_finalized`: `BooleanField(default=False, help_text="True if closed day snapshot")`
+    - `notes`: `CharField(max_length=255, blank=True, default="")`
+  - **Constraints**: `unique_together = [("tenant", "snapshot_date", "currency")]`
+  - **Ordering**: `["-snapshot_date", "currency"]`
+  - **Excluded from Form**: `tenant`, `number`, `created_at`, `updated_at`
+
+- [ ] **`CustomerCohortMetric`** [Prefix: `ECCM-`] (`apps/ecommerce/models/AnalyticsBi/CustomerCohortMetrics.py`)
+  - **Purpose**: Period-over-period cohort retention and LTV tracking cube by acquisition month and period offset.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Fields**:
+    - `cohort_month`: `DateField(db_index=True, help_text="First day of acquisition month")`
+    - `period_offset_months`: `PositiveSmallIntegerField(default=0, help_text="Months since acquisition (0=acquisition month, 1, 2...)")`
+    - `initial_cohort_size`: `PositiveIntegerField(default=0, help_text="Total distinct customers acquired in cohort month")`
+    - `active_customers`: `PositiveIntegerField(default=0, help_text="Customers from cohort making an order in offset month")`
+    - `retention_rate_pct`: `DecimalField(max_digits=5, decimal_places=2, default=0.00)`
+    - `cohort_orders_count`: `PositiveIntegerField(default=0)`
+    - `cumulative_gross_revenue`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `cumulative_net_revenue`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `cumulative_margin`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `cumulative_ltv_per_customer`: `DecimalField(max_digits=10, decimal_places=2, default=0.00)`
+    - `churn_rate_pct`: `DecimalField(max_digits=5, decimal_places=2, default=0.00)`
+    - `acquisition_channel_tag`: `CharField(max_length=64, blank=True, default="", help_text="Optional segment or channel tag")`
+  - **Constraints**: `unique_together = [("tenant", "cohort_month", "period_offset_months", "acquisition_channel_tag")]`
+  - **Ordering**: `["-cohort_month", "period_offset_months"]`
+  - **Excluded from Form**: `tenant`, `number`, `created_at`, `updated_at`
+
+- [ ] **`ProductMerchandisingMetric`** [Prefix: `EPMM-`] (`apps/ecommerce/models/AnalyticsBi/ProductMerchandisingMetrics.py`)
+  - **Purpose**: Product and variant-level sales velocity, inventory turnover, margin contribution, and catalog health classification.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `VELOCITY_TIER_CHOICES = [("best_seller", "Best Seller (Top Velocity)"), ("core_performer", "Core Performer"), ("slow_mover", "Slow Mover"), ("dead_stock", "Dead Stock / Dormant")]`
+  - **Fields**:
+    - `product`: `ForeignKey('ecommerce.CatalogProduct', on_delete=models.CASCADE, related_name='merchandising_metrics')`
+    - `variant`: `ForeignKey('ecommerce.ProductVariant', null=True, blank=True, on_delete=models.SET_NULL, related_name='merchandising_metrics')`
+    - `period_start`: `DateField()`
+    - `period_end`: `DateField()`
+    - `velocity_tier`: `CharField(max_length=20, choices=VELOCITY_TIER_CHOICES, default="core_performer")`
+    - `units_sold`: `PositiveIntegerField(default=0)`
+    - `gross_revenue`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `cost_of_goods`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `gross_margin_pct`: `DecimalField(max_digits=5, decimal_places=2, default=0.00)`
+    - `refunds_count`: `PositiveIntegerField(default=0)`
+    - `return_rate_pct`: `DecimalField(max_digits=5, decimal_places=2, default=0.00)`
+    - `page_views_count`: `PositiveIntegerField(default=0)`
+    - `add_to_cart_count`: `PositiveIntegerField(default=0)`
+    - `conversion_rate_pct`: `DecimalField(max_digits=5, decimal_places=2, default=0.00)`
+    - `inventory_turnover_ratio`: `DecimalField(max_digits=6, decimal_places=2, default=0.00)`
+  - **Ordering**: `["-period_end", "-gross_revenue"]`
+  - **Excluded from Form**: `tenant`, `number`, `created_at`, `updated_at`
+
+- [ ] **`AttributionTouchpoint`** [Prefix: `EATT-`] (`apps/ecommerce/models/AnalyticsBi/AttributionTouchpoints.py`)
+  - **Purpose**: Marketing attribution event recording customer acquisition touchpoints, channel grouping, UTM parameters, and order attribution weighting.
+  - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
+  - **Choices**:
+    - `CHANNEL_CHOICES = [("organic_search", "Organic Search"), ("paid_search", "Paid Search (SEM)"), ("paid_social", "Paid Social Ads"), ("email", "Email Marketing"), ("affiliate", "Affiliate / Partner"), ("direct", "Direct Storefront Traffic"), ("referral", "Referral Traffic"), ("influencer", "Influencer Campaign"), ("other", "Other")]`
+    - `ATTRIBUTION_MODEL_CHOICES = [("first_touch", "First Touch (100% Acquisition)"), ("last_touch", "Last Touch (100% Conversion)"), ("linear", "Linear Multi-Touch"), ("time_decay", "Time Decay")]`
+  - **Fields**:
+    - `order`: `ForeignKey('ecommerce.EcommerceOrder', null=True, blank=True, on_delete=models.SET_NULL, related_name='attribution_touchpoints')`
+    - `cart`: `ForeignKey('ecommerce.Cart', null=True, blank=True, on_delete=models.SET_NULL, related_name='attribution_touchpoints')`
+    - `channel_type`: `CharField(max_length=32, choices=CHANNEL_CHOICES, default="direct")`
+    - `attribution_model`: `CharField(max_length=20, choices=ATTRIBUTION_MODEL_CHOICES, default="last_touch")`
+    - `campaign`: `ForeignKey('ecommerce.MarketingCampaign', null=True, blank=True, on_delete=models.SET_NULL, related_name='attribution_touchpoints')`
+    - `affiliate`: `ForeignKey('ecommerce.AffiliatePartner', null=True, blank=True, on_delete=models.SET_NULL, related_name='attribution_touchpoints')`
+    - `utm_source`: `CharField(max_length=100, blank=True, default="")`
+    - `utm_medium`: `CharField(max_length=100, blank=True, default="")`
+    - `utm_campaign`: `CharField(max_length=100, blank=True, default="")`
+    - `touchpoint_timestamp`: `DateTimeField()`
+    - `attribution_weight`: `DecimalField(max_digits=5, decimal_places=4, default=1.0000)`
+    - `attributed_revenue`: `DecimalField(max_digits=14, decimal_places=2, default=0.00)`
+    - `estimated_cac`: `DecimalField(max_digits=10, decimal_places=2, default=0.00)`
+    - `landing_page_url`: `CharField(max_length=255, blank=True, default="")`
+    - `referrer_url`: `CharField(max_length=255, blank=True, default="")`
+  - **Ordering**: `["-touchpoint_timestamp"]`
+  - **Excluded from Form**: `tenant`, `number`, `created_at`, `updated_at`
+
+---
+
+## Backend Packages (`apps/ecommerce/`)
+
+### Models (`apps/ecommerce/models/AnalyticsBi/`)
+- [ ] Create `apps/ecommerce/models/AnalyticsBi/__init__.py`
+- [ ] Create `apps/ecommerce/models/AnalyticsBi/DailySalesSnapshots.py`
+- [ ] Create `apps/ecommerce/models/AnalyticsBi/CustomerCohortMetrics.py`
+- [ ] Create `apps/ecommerce/models/AnalyticsBi/ProductMerchandisingMetrics.py`
+- [ ] Create `apps/ecommerce/models/AnalyticsBi/AttributionTouchpoints.py`
+- [ ] Update `apps/ecommerce/models/__init__.py` with 9.15 re-export block.
+
+### Forms (`apps/ecommerce/forms/AnalyticsBi/`)
+- [ ] Create `apps/ecommerce/forms/AnalyticsBi/__init__.py`
+- [ ] Create `apps/ecommerce/forms/AnalyticsBi/DailySalesSnapshots.py` (`DailySalesSnapshotForm`)
+- [ ] Create `apps/ecommerce/forms/AnalyticsBi/CustomerCohortMetrics.py` (`CustomerCohortMetricForm`)
+- [ ] Create `apps/ecommerce/forms/AnalyticsBi/ProductMerchandisingMetrics.py` (`ProductMerchandisingMetricForm`)
+- [ ] Create `apps/ecommerce/forms/AnalyticsBi/AttributionTouchpoints.py` (`AttributionTouchpointForm`)
+- [ ] Update `apps/ecommerce/forms/__init__.py` with 9.15 re-export block.
+
+### Views (`apps/ecommerce/views/AnalyticsBi/`)
+- [ ] Create `apps/ecommerce/views/AnalyticsBi/__init__.py`
+- [ ] Create `apps/ecommerce/views/AnalyticsBi/DailySalesSnapshots.py` (List, Detail, Create, Edit, Delete, Generate Today's Snapshot Action)
+- [ ] Create `apps/ecommerce/views/AnalyticsBi/CustomerCohortMetrics.py` (List, Detail, Create, Edit, Delete, Recalculate Cohorts Action)
+- [ ] Create `apps/ecommerce/views/AnalyticsBi/ProductMerchandisingMetrics.py` (List, Detail, Create, Edit, Delete, Reclassify Velocity Action)
+- [ ] Create `apps/ecommerce/views/AnalyticsBi/AttributionTouchpoints.py` (List, Detail, Create, Edit, Delete)
+- [ ] Create `apps/ecommerce/views/AnalyticsBi/AnalyticsCockpit.py` (`analytics_cockpit` view with live sales cards, funnel drop-off pipeline, and Chart.js trendlines)
+- [ ] Update `apps/ecommerce/views/__init__.py` with 9.15 re-export block.
+
+### URLs (`apps/ecommerce/urls/AnalyticsBi/`)
+- [ ] Create `apps/ecommerce/urls/AnalyticsBi/__init__.py`
+- [ ] Create `apps/ecommerce/urls/AnalyticsBi/DailySalesSnapshots.py` (`dailysalessnapshot_list/detail/create/edit/delete/generate`)
+- [ ] Create `apps/ecommerce/urls/AnalyticsBi/CustomerCohortMetrics.py` (`customercohortmetric_list/detail/create/edit/delete/recalculate`)
+- [ ] Create `apps/ecommerce/urls/AnalyticsBi/ProductMerchandisingMetrics.py` (`productmerchandisingmetric_list/detail/create/edit/delete/reclassify`)
+- [ ] Create `apps/ecommerce/urls/AnalyticsBi/AttributionTouchpoints.py` (`attributiontouchpoint_list/detail/create/edit/delete`)
+- [ ] Create `apps/ecommerce/urls/AnalyticsBi/AnalyticsCockpit.py` (`analytics_cockpit`)
+- [ ] Update `apps/ecommerce/urls/__init__.py` to concatenate 9.15 urlpatterns.
+
+### Admin & Seeder
+- [ ] Register all 4 models in `apps/ecommerce/admin.py`.
+- [ ] Extend `apps/ecommerce/management/commands/seed_ecommerce.py` with idempotent demo snapshots, cohort retention rows, product merchandising metrics, and attribution touchpoints.
+
+---
+
+## Wire-Up
+- [ ] Add `LIVE_LINKS["9.15"]` entry in `apps/core/navigation.py`:
+  - Mapping:
+    - `"Sales Performance Dashboards"` -> `"ecommerce:dailysalessnapshot_list"`
+    - `"Customer Analytics"` -> `"ecommerce:customercohortmetric_list"`
+    - `"Product & Merchandising Analytics"` -> `"ecommerce:productmerchandisingmetric_list"`
+    - `"Marketing Attribution"` -> `"ecommerce:attributiontouchpoint_list"`
+    - `"Real-Time Operational Monitoring"` -> `"ecommerce:analytics_cockpit"`
+
+---
+
+## Templates (`templates/ecommerce/analytics_bi/`)
+- [ ] `daily_sales_snapshot/list.html`
+- [ ] `daily_sales_snapshot/detail.html`
+- [ ] `daily_sales_snapshot/form.html`
+- [ ] `customer_cohort_metric/list.html`
+- [ ] `customer_cohort_metric/detail.html`
+- [ ] `customer_cohort_metric/form.html`
+- [ ] `product_merchandising_metric/list.html`
+- [ ] `product_merchandising_metric/detail.html`
+- [ ] `product_merchandising_metric/form.html`
+- [ ] `attribution_touchpoint/list.html`
+- [ ] `attribution_touchpoint/detail.html`
+- [ ] `attribution_touchpoint/form.html`
+- [ ] `cockpit/cockpit.html` (Executive Analytics & Operational Cockpit with Chart.js charts and live funnel)
+
+---
+
+## Verify
+- [ ] `makemigrations ecommerce` -> verify incremental migration `0027_...` generated.
+- [ ] `migrate`.
+- [ ] `seed_ecommerce` run 1.
+- [ ] `seed_ecommerce` run 2 (idempotent, no duplicates/errors).
+- [ ] `manage.py check` (0 issues).
+- [ ] Smoke test sweep with `admin_acme` / `password` (all URLs 200/302, content checks, IDOR 404).
+- [ ] Verify sidebar 9.15 shows Live.
+
+---
+
+## Close-Out Steps
+- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
+- [ ] Append findings to `.claude/tasks/review-ecommerce-9.15.md`.
+- [ ] Run Phase 5 `code-fixer` agent to resolve all findings in priority order.
+- [ ] Run Phase 6 automated test suite:
+  - Update `conftest.py` with 9.15 fixtures.
+  - Author `test_analyticsbi_models.py`
+  - Author `test_analyticsbi_forms.py`
+  - Author `test_analyticsbi_views.py`
+  - Author `test_analyticsbi_security.py`
+  - Run full unfiltered test suite: `venv\Scripts\pytest apps/ecommerce/tests/` (all green).
+- [ ] Phase 7 documentation:
+  - Update `.claude/skills/ecommerce/SKILL.md` with 9.15 models, views, and routes.
+  - Update `README.md`.
+  - Record any deferred items or gaps in `.agents/tasks/gaps-ecommerce-9.15.md`.
+
+---
+
 # Sub-module 9.9: Content Management System (CMS) (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.9.md` (2026-11-01)
 
 > **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.8 and 9.10 through 9.14.
