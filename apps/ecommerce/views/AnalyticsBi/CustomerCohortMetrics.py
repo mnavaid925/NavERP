@@ -123,7 +123,6 @@ def customercohortmetric_edit(request, pk):
 def customercohortmetric_delete(request, pk):
     cohort_metric = ecommerce_object(request, CustomerCohortMetric, pk)
     number = cohort_metric.number
-    cohort_metric.delete()
     write_audit_log(
         request.user,
         cohort_metric,
@@ -131,6 +130,7 @@ def customercohortmetric_delete(request, pk):
         {"number": number},
         tenant=request.tenant,
     )
+    cohort_metric.delete()
     messages.success(request, f"Cohort metric {number} was deleted.")
     return redirect("ecommerce:customercohortmetric_list")
 
