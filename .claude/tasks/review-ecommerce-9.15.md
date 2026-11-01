@@ -58,4 +58,24 @@ None. All 18 backend files and 13 templates are in place, migration 0027 is clea
 3. **Redundant Chart.js CDN Script Tag in Cockpit Template**:
    - `templates/ecommerce/analytics_bi/cockpit/cockpit.html:245` redundant script tag. (Confirms Code Reviewer Minor #1).
 
+---
+
+## 3. Frontend Reviewer Findings
+
+### Critical
+None. Zero comment leaks, all POST forms have CSRF tokens, all 28 template reverse URLs are valid, and all theme classes adhere to theme.css.
+
+### Important
+1. **Invalid Attribute Access on AffiliatePartner in `attribution_touchpoint/detail.html` (Line 134)**:
+   - `templates/ecommerce/analytics_bi/attribution_touchpoint/detail.html:134` accesses `{{ touchpoint.affiliate.partner_code }} ({{ touchpoint.affiliate.company_name }})`. `AffiliatePartner` defines `referral_code` and `name` (not `partner_code` or `company_name`). Update to `{{ touchpoint.affiliate.referral_code }} ({{ touchpoint.affiliate.name }})`.
+2. **Missing `{% else %}` Display Fallback on Velocity Tier Badges in `product_merchandising_metric`**:
+   - In `templates/ecommerce/analytics_bi/product_merchandising_metric/list.html:108-116` and `detail.html:16-24`, the `{% else %}` clause assumes "Dead Stock" directly without an explicit `{% elif m.velocity_tier == "dead_stock" %}` and an `{% else %}` fallback of `<span class="badge badge-slate">{{ m.get_velocity_tier_display }}</span>`.
+
+### Minor
+1. **Redundant Duplicate Script Tag in `cockpit.html` (Line 245)**:
+   - `templates/ecommerce/analytics_bi/cockpit/cockpit.html:245` includes Chart.js CDN script tag, already loaded by `templates/base.html:28`. (Confirms Code Reviewer Minor #1).
+2. **Long Product Title Truncation on Mobile Cockpit (`cockpit.html` Line 197)**:
+   - In `templates/ecommerce/analytics_bi/cockpit/cockpit.html:197`, product title link `{{ m.product.name }}` in Best Sellers widget could stretch on small screens. Add `class="truncate max-w-xs block"`.
+
+
 
