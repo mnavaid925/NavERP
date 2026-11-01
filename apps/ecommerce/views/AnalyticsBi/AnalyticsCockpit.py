@@ -26,7 +26,7 @@ def analytics_cockpit(request):
     ).exclude(status="cancelled")
 
     order_stats = today_orders.aggregate(
-        rev=Sum("grand_total"),
+        rev=Sum("total_amount"),
         cnt=Count("id"),
     )
     today_revenue = order_stats["rev"] or Decimal("0.00")
