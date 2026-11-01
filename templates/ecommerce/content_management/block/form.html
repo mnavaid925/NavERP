@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}{% if block %}Edit Content Block {{ block.name }}{% else %}Create Content Block{% endif %} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Content Management</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:contentblock_list' %}">Blocks</a>
+            <span>/</span>
+            <span>{% if block %}Edit {{ block.number }}{% else %}New Block{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if block %}Edit Content Block: {{ block.name }}{% else %}Create Content Block{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Block Identity -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Block Identification & Status
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.name.id_for_label }}" class="form-label">Internal Block Name *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                        <div class="form-error">{{ form.name.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.block_type.id_for_label }}" class="form-label">Block Type</label>
+                        {{ form.block_type }}
+                        {% if form.block_type.errors %}
+                        <div class="form-error">{{ form.block_type.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.sort_order.id_for_label }}" class="form-label">Sort Priority</label>
+                        {{ form.sort_order }}
+                        {% if form.sort_order.errors %}
+                        <div class="form-error">{{ form.sort_order.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2 flex items-center gap-2 pt-6">
+                        {{ form.is_active }}
+                        <label for="{{ form.is_active.id_for_label }}" class="form-label mb-0">Active (Visible in storefront layouts)</label>
+                        {% if form.is_active.errors %}
+                        <div class="form-error">{{ form.is_active.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Headline & Copy -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Headline & Editorial Copy
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.headline.id_for_label }}" class="form-label">Promotional Headline</label>
+                        {{ form.headline }}
+                        {% if form.headline.errors %}
+                        <div class="form-error">{{ form.headline.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.subheadline.id_for_label }}" class="form-label">Supporting Subtitle</label>
+                        {{ form.subheadline }}
+                        {% if form.subheadline.errors %}
+                        <div class="form-error">{{ form.subheadline.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.body_text.id_for_label }}" class="form-label">Descriptive Body Text</label>
+                        {{ form.body_text }}
+                        {% if form.body_text.errors %}
+                        <div class="form-error">{{ form.body_text.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Action Buttons & Catalog Links -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Call to Action & Catalog Targeting
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.media_asset.id_for_label }}" class="form-label">Associated Graphic / Media</label>
+                        {{ form.media_asset }}
+                        {% if form.media_asset.errors %}
+                        <div class="form-error">{{ form.media_asset.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.cta_label.id_for_label }}" class="form-label">Button Text</label>
+                        {{ form.cta_label }}
+                        {% if form.cta_label.errors %}
+                        <div class="form-error">{{ form.cta_label.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.cta_url.id_for_label }}" class="form-label">Target Link (URL)</label>
+                        {{ form.cta_url }}
+                        {% if form.cta_url.errors %}
+                        <div class="form-error">{{ form.cta_url.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.target_category.id_for_label }}" class="form-label">Target Category</label>
+                        {{ form.target_category }}
+                        {% if form.target_category.errors %}
+                        <div class="form-error">{{ form.target_category.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.target_product.id_for_label }}" class="form-label">Target Product</label>
+                        {{ form.target_product }}
+                        {% if form.target_product.errors %}
+                        <div class="form-error">{{ form.target_product.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Visual Styling Classes -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Visual Styling Classes
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.bg_color_class.id_for_label }}" class="form-label">Background Class (Tailwind)</label>
+                        {{ form.bg_color_class }}
+                        <p class="text-xs text-slate-500 mt-1">e.g. bg-slate-50, bg-indigo-900, bg-emerald-50</p>
+                        {% if form.bg_color_class.errors %}
+                        <div class="form-error">{{ form.bg_color_class.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.text_color_class.id_for_label }}" class="form-label">Text Color Class (Tailwind)</label>
+                        {{ form.text_color_class }}
+                        <p class="text-xs text-slate-500 mt-1">e.g. text-slate-900, text-white, text-indigo-950</p>
+                        {% if form.text_color_class.errors %}
+                        <div class="form-error">{{ form.text_color_class.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if block %}{% url 'ecommerce:contentblock_detail' block.pk %}{% else %}{% url 'ecommerce:contentblock_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if block %}Update Block{% else %}Save Block{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
