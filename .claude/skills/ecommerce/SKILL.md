@@ -1,11 +1,11 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support: omnichannel help desk tickets, WISMO order resolution, knowledge base articles & self-service documentation, order issue claims & transit damage adjudication, customer satisfaction surveys CSAT & NPS, closed-loop customer follow-up, SLA countdowns & breach tracking, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.10, 9.11, 9.12, 9.13, or 9.14), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support: CMS page builder, editorial blog articles & markdown tutorials, digital asset manager DAM, reusable modular content blocks, A/B testing variants, SEO metadata and layouts, omnichannel help desk tickets, WISMO order resolution, knowledge base articles & self-service documentation, order issue claims & transit damage adjudication, customer satisfaction surveys CSAT & NPS, closed-loop customer follow-up, SLA countdowns & breach tracking, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.10, 9.11, 9.12, 9.13, or 9.14), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support)
 
-The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, and an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising (boosting, burying, pinning, banner announcements, URL redirect forwarding), query performance and zero-result search telemetry analytics, instant search-as-you-type autocomplete, and an interactive Search Workbench Console. It integrates seamlessly with the NavERP core spine and physical supply chain:
+The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising, query telemetry analytics, and a Content Management System (CMS) featuring dynamic page building, editorial blog posts, digital asset management (DAM), reusable content blocks, and live preview. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
 - **Physical Inventory Boundary**: Products, variants, and fulfillment centers link to `scm.Item` and `scm.Location` via string foreign keys. Module 9 does not duplicate inventory ledger balances or physical bin movements; physical warehouse stock and valuation remain anchored in `apps/scm` and `apps/inventory`, while eCommerce manages digital storefront availability, reservations, buffers, and channel broadcasting.
 - **App Path**: `apps/ecommerce/`
@@ -74,6 +74,11 @@ apps/ecommerce/
 │   │   ├── VendorProductListings.py # VendorProductListing model (EVPL-)
 │   │   ├── VendorSubOrders.py       # VendorSubOrder model (EVSO-)
 │   │   └── VendorPayouts.py         # VendorPayout model (EVPO-)
+│   ├── ContentManagement/
+│   │   ├── CmsPages.py              # CmsPage model (EPAG-)
+│   │   ├── BlogArticles.py          # BlogArticle model (EBLG-)
+│   │   ├── MediaAssets.py           # MediaAsset model (EMED-)
+│   │   └── ContentBlocks.py         # ContentBlock model (EBLK-)
 │   └── __init__.py                  # Surgical re-exports of all models
 ├── forms/
 │   ├── _common.py                   # TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -123,6 +128,11 @@ apps/ecommerce/
 │   │   ├── VendorProductListingForms.py # VendorProductListingForm, Moderation
 │   │   ├── VendorSubOrderForms.py   # VendorSubOrderForm, Fulfillment, Dispute
 │   │   └── VendorPayoutForms.py     # VendorPayoutForm, PayoutApproval
+│   ├── ContentManagement/
+│   │   ├── CmsPages.py              # CmsPageForm
+│   │   ├── BlogArticles.py          # BlogArticleForm
+│   │   ├── MediaAssets.py           # MediaAssetForm
+│   │   └── ContentBlocks.py         # ContentBlockForm
 │   └── __init__.py                  # Re-exports of all forms
 ├── views/
 │   ├── _common.py                   # ecommerce_scope, ecommerce_object, csv_safe, write_audit_log
@@ -177,6 +187,11 @@ apps/ecommerce/
 │   │   ├── VendorProductListingViews.py # vendorproductlisting CRUD + moderate
 │   │   ├── VendorSubOrderViews.py   # vendorsuborder CRUD + fulfill, dispute
 │   │   └── VendorPayoutViews.py     # vendorpayout CRUD + execute
+│   ├── ContentManagement/
+│   │   ├── CmsPages.py              # cmspage CRUD + preview action
+│   │   ├── BlogArticles.py          # blogarticle CRUD
+│   │   ├── MediaAssets.py           # mediaasset CRUD
+│   │   └── ContentBlocks.py         # contentblock CRUD
 │   └── __init__.py                  # Re-exports of all views
 ├── urls/
 │   ├── ProductCatalog/
@@ -236,6 +251,11 @@ apps/ecommerce/
 │   │   ├── VendorProductListings.py # marketplace/listings/ paths
 │   │   ├── VendorSubOrders.py       # marketplace/sub-orders/ paths
 │   │   └── VendorPayouts.py         # marketplace/payouts/ paths
+│   ├── ContentManagement/
+│   │   ├── CmsPages.py              # cms/pages/ paths
+│   │   ├── BlogArticles.py          # cms/blog/ paths
+│   │   ├── MediaAssets.py           # cms/media/ paths
+│   │   └── ContentBlocks.py         # cms/blocks/ paths
 │   └── __init__.py                  # Concatenates all urlpatterns with app_name="ecommerce"
 ├── admin.py                         # Django admin registrations
 ├── apps.py                          # EcommerceConfig
@@ -318,6 +338,16 @@ apps/ecommerce/
 | `RecommendationStrategy` | `EREC-` | `name`, `code`, `algorithm`, `placement`, `fallback_strategy`, `max_items`, `min_rating`, `same_brand_only`, `only_in_stock`, `is_active` | `AudienceSegment` (`target_segment`), `StoreCategory` (`target_category`) | Bound validation (max_items 1-50, rating 0-5), multi-tenant FK assertion in `clean()` |
 | `PersonalizedExperience` | `EPEX-` | `name`, `experience_type`, `headline`, `subheadline`, `cta_label`, `cta_url`, `hero_image_url`, `trigger_delay_hours`, `priority`, `start_date`, `end_date`, `is_active`, metrics | `AudienceSegment` (`target_segment`), `StoreCategory` (`target_category`), `CatalogProduct` (`target_product`) | Safe URL scheme validation (rejects `javascript:`, `data:`, `vbscript:`), date boundary enforcement, multi-tenant FK assertion |
 | `ShopperBehaviorEvent` | `ESBE-` | `event_type`, `session_key`, `intent_score_delta`, `referrer_url`, `ip_address`, `user_agent`, `payload_json` | `CustomerAccountProfile` (`customer_profile`), `core.Party` (`party`), `auth.User` (`user`), `CatalogProduct` (`product`), `StoreCategory` (`category`) | Behavioral clickstream telemetry stream for collaborative filtering & intent tracking |
+
+---
+
+### Sub-module 9.9: Content Management System (CMS)
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `CmsPage` | `EPAG-` | `title`, `slug`, `page_type`, `status`, `template_layout`, `meta_title`, `meta_description`, `canonical_url`, `is_indexable`, `content_json`, `raw_html_body`, `published_at`, `view_count`, `is_ab_test_active`, `ab_variant_label`, `ab_traffic_percentage` | None | Unique slug per tenant, HTML script injection protection, A/B variant traffic split (0-100), full layout choices |
+| `BlogArticle` | `EBLG-` | `title`, `slug`, `author`, `category`, `excerpt`, `body_markdown`, `featured_media`, `status`, `published_at`, `view_count`, `reading_time_minutes`, `allow_comments`, `is_featured`, `tags` | `auth.User` (`author`), `MediaAsset` (`featured_media`) | Auto-slug generation, automatic published_at setting, comma-separated `tag_list` property, tenant FK isolation |
+| `MediaAsset` | `EMED-` | `title`, `folder`, `media_type`, `file_url`, `alt_text`, `caption`, `mime_type`, `file_size_bytes`, `width_px`, `height_px`, `uploaded_by` | `auth.User` (`uploaded_by`) | HTTPS URL validation, file size & dimension metadata, central DAM categorization |
+| `ContentBlock` | `EBLK-` | `name`, `block_type`, `headline`, `subheadline`, `body_text`, `media_asset`, `target_category`, `target_product`, `cta_label`, `cta_url`, `bg_color_class`, `text_color_class`, `custom_css_classes`, `sort_order`, `is_active` | `MediaAsset` (`media_asset`), `StoreCategory` (`target_category`), `CatalogProduct` (`target_product`) | Safe CTA link validation, modular hero/carousel/CTA/testimonial components, tenant FK isolation |
 
 ---
 
@@ -580,6 +610,33 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 
 ---
 
+### 9.9 Content Management System Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `cms/pages/` | `cmspage_list` | `cmspage_list` | CMS pages table with type, status, and layout filters |
+| `cms/pages/create/` | `cmspage_create` | `cmspage_create` | Create new CMS page with layout and SEO meta |
+| `cms/pages/<int:pk>/` | `cmspage_detail` | `cmspage_detail` | CMS page detail with HTML preview card, A/B metrics, and SEO score |
+| `cms/pages/<int:pk>/edit/` | `cmspage_edit` | `cmspage_edit` | Edit CMS page content and settings |
+| `cms/pages/<int:pk>/delete/` | `cmspage_delete` | `cmspage_delete` | Delete CMS page (POST only, tenant admin) |
+| `cms/pages/<int:pk>/preview/` | `cmspage_preview` | `cmspage_preview` | Live storefront simulation preview mode |
+| `cms/blog/` | `blogarticle_list` | `blogarticle_list` | Blog articles table with category and status filters |
+| `cms/blog/create/` | `blogarticle_create` | `blogarticle_create` | Create editorial blog article with markdown body |
+| `cms/blog/<int:pk>/` | `blogarticle_detail` | `blogarticle_detail` | Article detail with rendered markdown reader, author card, and tag pills |
+| `cms/blog/<int:pk>/edit/` | `blogarticle_edit` | `blogarticle_edit` | Edit editorial blog post |
+| `cms/blog/<int:pk>/delete/` | `blogarticle_delete` | `blogarticle_delete` | Delete blog article (POST only, tenant admin) |
+| `cms/media/` | `mediaasset_list` | `mediaasset_list` | Media assets gallery grid with folder and media type filters |
+| `cms/media/create/` | `mediaasset_create` | `mediaasset_create` | Register digital asset URL and metadata |
+| `cms/media/<int:pk>/` | `mediaasset_detail` | `mediaasset_detail` | Asset detail with full preview player/lightbox, dimensions, and copyable URL |
+| `cms/media/<int:pk>/edit/` | `mediaasset_edit` | `mediaasset_edit` | Edit media asset details |
+| `cms/media/<int:pk>/delete/` | `mediaasset_delete` | `mediaasset_delete` | Delete media asset (POST only, tenant admin) |
+| `cms/blocks/` | `contentblock_list` | `contentblock_list` | Modular content blocks table with block type filter |
+| `cms/blocks/create/` | `contentblock_create` | `contentblock_create` | Create reusable block (hero, grid, carousel, CTA, etc.) |
+| `cms/blocks/<int:pk>/` | `contentblock_detail` | `contentblock_detail` | Block detail with live rendered component preview |
+| `cms/blocks/<int:pk>/edit/` | `contentblock_edit` | `contentblock_edit` | Edit reusable content block styling and content |
+| `cms/blocks/<int:pk>/delete/` | `contentblock_delete` | `contentblock_delete` | Delete content block (POST only, tenant admin) |
+
+---
+
 ### 9.10 Marketing & Campaign Management Routes
 | URL Pattern | View Function | URL Name | Description |
 |---|---|---|---|
@@ -743,6 +800,12 @@ Templates are stored under `templates/ecommerce/`:
   - `claim/` — `list.html` (with claim type and resolution action badges, financial amounts), `detail.html` (with safe photo evidence preview, claimed vs approved amounts, and back navigation), `form.html`.
   - `survey/` — `list.html` (with sentiment-aligned score colors and follow-up pills), `detail.html` (with CSAT/NPS rating scorecard, verbatim customer quote, and back navigation), `form.html`.
 
+- `content_management/`
+  - `page/` — `list.html` (with type, status, and layout badges, live preview link), `detail.html` (with rendered HTML preview, A/B testing scorecard, SEO meta summary), `form.html` (comprehensive layout, SEO, and A/B test controls).
+  - `blog/` — `list.html` (with category badges, published date, author, reading time), `detail.html` (with markdown article view, author card, tag list), `form.html` (markdown editor, featured media picker).
+  - `media/` — `list.html` (with responsive media grid, dimensions pills, folder filters), `detail.html` (with preview player, dimensions, copyable URL), `form.html` (file URL, alt text, dimensions).
+  - `block/` — `list.html` (with block type pills and active toggles), `detail.html` (with live rendered component preview, styling attributes), `form.html` (block configuration, target catalog linking).
+
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
 - Stat icon classes: `stat-icon blue`, `stat-icon green`, `stat-icon orange`, `stat-icon purple`, `stat-icon slate`.
@@ -809,6 +872,10 @@ The command provisions:
 - 4 Knowledge Base Articles (`EKBA-`): 30-Day Hassle-Free Returns & Exchanges, Domestic & International Shipping Rates, Warranty & Defective Product Replacement, and Order Tracking WISMO Guide.
 - 3 Order Issue Claims (`ECLM-`): Transit carton damage with photo evidence, package lost in transit with carrier investigation, and wrong item received with reshipment resolution.
 - 4 Customer Satisfaction Surveys (`ECSF-`): 5-star post-ticket CSAT (promoter), 5-star post-delivery CSAT (promoter), 10-score storefront NPS (promoter), and 2-star delivery delay CSAT (detractor with closed-loop supervisor review).
+- 4 CMS Pages (`EPAG-`): About Us (published story), Summer Clearance Landing (landing page with 50/50 A/B test active and variant B headline), Return & Refund Policy (legal/policy page), Contact & Store Locator (standard page).
+- 4 Blog Editorial Articles (`EBLG-`): 2026 Sustainable Tech Trends (featured guide with reading time and tags), How to Build the Ultimate Workspace (published tutorial with markdown headings and media), NavERP Summer Product Announcements (news announcement), Customer Spotlight (draft post).
+- 4 Digital Media Assets (`EMED-`): Hero Banner 4K (hero image with dimensions), Workspace Showcase (product photography), Brand Intro Video (mp4 video asset), Product Catalog Summer 2026 PDF (document asset).
+- 4 Reusable Content Blocks (`EBLK-`): Summer Hero Spotlight (hero block with CTA and background styling), Product Categories Showcase Grid (category grid linked to electronics), Customer Testimonial Strip (quote block), Newsletter VIP Signup CTA (lead generation bar).
 - All demo data is scoped to tenant `acme`.
 
 ---
@@ -906,6 +973,13 @@ LIVE_LINKS["9.7"] = {
     "Faceted Search Configuration": "ecommerce:searchfacetconfig_list",
     "Visual Merchandising Rules": "ecommerce:searchmerchandisingrule_list",
     "Search Query Telemetry Logs": "ecommerce:searchquerylog_list",
+}
+LIVE_LINKS["9.9"] = {
+    "CMS Page Builder": "ecommerce:cmspage_list",
+    "Blog & Articles": "ecommerce:blogarticle_list",
+    "Digital Asset Manager": "ecommerce:mediaasset_list",
+    "Reusable Content Blocks": "ecommerce:contentblock_list",
+    "Store Navigation Menus": "ecommerce:cmspage_list",
 }
 LIVE_LINKS["9.10"] = {
     "Marketing Dashboard": "ecommerce:marketing_dashboard",
