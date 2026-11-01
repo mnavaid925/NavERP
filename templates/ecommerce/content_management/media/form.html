@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}{% if asset %}Edit Media Asset {{ asset.title }}{% else %}Add Media Asset{% endif %} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Content Management</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:mediaasset_list' %}">Media</a>
+            <span>/</span>
+            <span>{% if asset %}Edit {{ asset.number }}{% else %}Add Asset{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if asset %}Edit Media: {{ asset.title }}{% else %}Add Media Asset{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Asset Core Info -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Asset Details & Location
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Media Asset Title *</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}
+                        <div class="form-error">{{ form.title.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.file_url.id_for_label }}" class="form-label">Direct HTTPS File URL *</label>
+                        {{ form.file_url }}
+                        <p class="text-xs text-slate-500 mt-1">Direct CDN or cloud storage link (e.g., S3, Cloudinary, CDN URL).</p>
+                        {% if form.file_url.errors %}
+                        <div class="form-error">{{ form.file_url.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.media_type.id_for_label }}" class="form-label">Media Type</label>
+                        {{ form.media_type }}
+                        {% if form.media_type.errors %}
+                        <div class="form-error">{{ form.media_type.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.folder_category.id_for_label }}" class="form-label">Folder / Category</label>
+                        {{ form.folder_category }}
+                        {% if form.folder_category.errors %}
+                        <div class="form-error">{{ form.folder_category.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Metadata & Accessibility -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Accessibility & Presentation
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.alt_text.id_for_label }}" class="form-label">Accessibility Alt Text</label>
+                        {{ form.alt_text }}
+                        <p class="text-xs text-slate-500 mt-1">Screen-reader description used across product grids and editorial articles.</p>
+                        {% if form.alt_text.errors %}
+                        <div class="form-error">{{ form.alt_text.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.caption.id_for_label }}" class="form-label">Display Caption</label>
+                        {{ form.caption }}
+                        {% if form.caption.errors %}
+                        <div class="form-error">{{ form.caption.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Technical Specifications -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Technical Specifications
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.mime_type.id_for_label }}" class="form-label">MIME Type</label>
+                        {{ form.mime_type }}
+                        {% if form.mime_type.errors %}
+                        <div class="form-error">{{ form.mime_type.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.file_size_bytes.id_for_label }}" class="form-label">File Size (Bytes)</label>
+                        {{ form.file_size_bytes }}
+                        {% if form.file_size_bytes.errors %}
+                        <div class="form-error">{{ form.file_size_bytes.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.width_px.id_for_label }}" class="form-label">Width (px)</label>
+                        {{ form.width_px }}
+                        {% if form.width_px.errors %}
+                        <div class="form-error">{{ form.width_px.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.height_px.id_for_label }}" class="form-label">Height (px)</label>
+                        {{ form.height_px }}
+                        {% if form.height_px.errors %}
+                        <div class="form-error">{{ form.height_px.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if asset %}{% url 'ecommerce:mediaasset_detail' asset.pk %}{% else %}{% url 'ecommerce:mediaasset_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if asset %}Update Asset{% else %}Save Asset{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
