@@ -1,13 +1,13 @@
 from django import forms
 
-from apps.ecommerce.forms._common import TenantModelForm, reject_foreign
+from apps.ecommerce.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.ContentManagement.ContentBlocks import ContentBlock
 from apps.ecommerce.models.ContentManagement.MediaAssets import MediaAsset
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
 from apps.ecommerce.models.ProductCatalog.StoreCategories import StoreCategory
 
 
-class ContentBlockForm(TenantModelForm):
+class ContentBlockForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = ContentBlock
         fields = [
