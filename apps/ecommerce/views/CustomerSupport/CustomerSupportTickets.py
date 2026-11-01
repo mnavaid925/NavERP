@@ -147,7 +147,6 @@ def customersupportticket_edit(request, pk):
 def customersupportticket_delete(request, pk):
     ticket = ecommerce_object(request, CustomerSupportTicket, pk)
     number = ticket.number
-    ticket.delete()
     write_audit_log(
         request.user,
         ticket,
@@ -155,5 +154,6 @@ def customersupportticket_delete(request, pk):
         {"number": number},
         tenant=request.tenant,
     )
+    ticket.delete()
     messages.success(request, f"Ticket {number} deleted.")
     return redirect("ecommerce:customersupportticket_list")
