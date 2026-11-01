@@ -141,6 +141,7 @@ def dailysalessnapshot_delete(request, pk):
 
 @require_POST
 @login_required
+@tenant_admin_required
 def dailysalessnapshot_generate(request):
     """Triggers recalculation and aggregation of today's sales snapshot."""
     today = timezone.now().date()
