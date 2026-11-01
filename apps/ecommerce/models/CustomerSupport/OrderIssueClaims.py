@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.conf import settings
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, URLValidator
 from django.db import models
 from django.utils import timezone
 
@@ -86,6 +86,7 @@ class OrderIssueClaim(TenantNumbered):
     photo_evidence_url = models.URLField(
         max_length=500,
         blank=True,
+        validators=[URLValidator(schemes=["http", "https"])],
         help_text="URL of customer photo upload showing damaged box or merchandise",
     )
     customer_notes = models.TextField(help_text="Customer explanation of damage or loss")
