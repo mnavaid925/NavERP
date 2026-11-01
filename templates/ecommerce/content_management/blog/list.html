@@ -122,15 +122,15 @@
                             {{ article_item.view_count }}
                         </td>
                         <td class="table-actions text-right">
-                            <a href="{% url 'ecommerce:blogarticle_detail' article_item.pk %}" class="btn btn-icon" title="View Article">
+                            <a href="{% url 'ecommerce:blogarticle_detail' article_item.pk %}" class="btn btn-icon" title="View Article" aria-label="View Article">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'ecommerce:blogarticle_edit' article_item.pk %}" class="btn btn-icon" title="Edit Article">
+                            <a href="{% url 'ecommerce:blogarticle_edit' article_item.pk %}" class="btn btn-icon" title="Edit Article" aria-label="Edit Article">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form action="{% url 'ecommerce:blogarticle_delete' article_item.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete article {{ article_item.title }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-danger" title="Delete Article">
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Article" aria-label="Delete Article">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
