@@ -31,7 +31,7 @@ class CustomerSatisfactionSurveyForm(TenantUniqueMixin, TenantModelForm):
             "order": forms.Select(attrs={"class": "form-select"}),
             "customer": forms.Select(attrs={"class": "form-select"}),
             "survey_type": forms.Select(attrs={"class": "form-select"}),
-            "rating_score": forms.NumberInput(attrs={"class": "form-input", "min": 1, "max": 10}),
+            "rating_score": forms.NumberInput(attrs={"class": "form-input", "min": 0, "max": 10}),
             "sentiment": forms.Select(attrs={"class": "form-select"}),
             "feedback_comment": forms.Textarea(
                 attrs={"class": "form-textarea", "rows": 4, "placeholder": "Shopper feedback details and customer verbatim quotes..."}
@@ -63,4 +63,12 @@ class CustomerSatisfactionSurveyForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["ticket", "order", "customer"])
+        survey_type = cleaned.get("survey_type")
+        rating = cleaned.get("rating_score")
+        if survey_type in ["ticket_csat", "order_delivery_csat"] and rating is not None:
+            if rating < 1 or rating > 5:
+                self.add_error("rating_score", "CSAT surveys require a rating score between 1 and 5.")
+        elif survey_type == "storefront_nps" and rating is not None:
+            if rating < 0 or rating > 10:
+                self.add_error("rating_score", "NPS surveys require a rating score between 0 and 10.")
         return cleaned
