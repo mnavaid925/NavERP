@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}{% if article %}Edit Article {{ article.title }}{% else %}Create Blog Article{% endif %} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Content Management</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:blogarticle_list' %}">Blog</a>
+            <span>/</span>
+            <span>{% if article %}Edit {{ article.number }}{% else %}New Article{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if article %}Edit Article: {{ article.title }}{% else %}Create New Blog Article{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Article Identity -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Article Overview
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Article Title *</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}
+                        <div class="form-error">{{ form.title.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.slug.id_for_label }}" class="form-label">URL Slug *</label>
+                        {{ form.slug }}
+                        {% if form.slug.errors %}
+                        <div class="form-error">{{ form.slug.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.category.id_for_label }}" class="form-label">Category</label>
+                        {{ form.category }}
+                        {% if form.category.errors %}
+                        <div class="form-error">{{ form.category.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Publishing Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}
+                        <div class="form-error">{{ form.status.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.author.id_for_label }}" class="form-label">Author</label>
+                        {{ form.author }}
+                        {% if form.author.errors %}
+                        <div class="form-error">{{ form.author.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Media & Excerpt -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Header Media & Excerpt
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.featured_media.id_for_label }}" class="form-label">Featured Media Asset</label>
+                        {{ form.featured_media }}
+                        <p class="text-xs text-slate-500 mt-1">Select an uploaded media asset from your digital asset library.</p>
+                        {% if form.featured_media.errors %}
+                        <div class="form-error">{{ form.featured_media.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.excerpt.id_for_label }}" class="form-label">Excerpt / Teaser Summary</label>
+                        {{ form.excerpt }}
+                        <p class="text-xs text-slate-500 mt-1">Displayed on article index cards, RSS feeds, and social share cards.</p>
+                        {% if form.excerpt.errors %}
+                        <div class="form-error">{{ form.excerpt.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Article Body -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Article Body (Markdown) *
+                </h3>
+                <div class="form-group">
+                    {{ form.body_markdown }}
+                    <p class="text-xs text-slate-500 mt-1">Supports Markdown formatting (# Heading, **bold**, *italic*, [link](url), etc.).</p>
+                    {% if form.body_markdown.errors %}
+                    <div class="form-error">{{ form.body_markdown.errors }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Section 4: Publishing Settings -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Publishing Settings & Visibility
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.tags.id_for_label }}" class="form-label">Tags (Comma-separated)</label>
+                        {{ form.tags }}
+                        {% if form.tags.errors %}
+                        <div class="form-error">{{ form.tags.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.reading_time_minutes.id_for_label }}" class="form-label">Estimated Read Time (Minutes)</label>
+                        {{ form.reading_time_minutes }}
+                        {% if form.reading_time_minutes.errors %}
+                        <div class="form-error">{{ form.reading_time_minutes.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group flex items-center gap-2">
+                        {{ form.allow_comments }}
+                        <label for="{{ form.allow_comments.id_for_label }}" class="form-label mb-0">Allow Reader Comments</label>
+                        {% if form.allow_comments.errors %}
+                        <div class="form-error">{{ form.allow_comments.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group flex items-center gap-2">
+                        {{ form.is_featured }}
+                        <label for="{{ form.is_featured.id_for_label }}" class="form-label mb-0">Pin as Featured Article on Blog Home</label>
+                        {% if form.is_featured.errors %}
+                        <div class="form-error">{{ form.is_featured.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if article %}{% url 'ecommerce:blogarticle_detail' article.pk %}{% else %}{% url 'ecommerce:blogarticle_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if article %}Update Article{% else %}Create Article{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
