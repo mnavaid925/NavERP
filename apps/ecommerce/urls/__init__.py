@@ -8,6 +8,7 @@ from apps.ecommerce.urls.Personalization import urlpatterns as _personalization_
 from apps.ecommerce.urls.PricingPromotion import urlpatterns as _pricingpromotion_urls
 from apps.ecommerce.urls.ProductCatalog import urlpatterns as _productcatalog_urls
 from apps.ecommerce.urls.SearchDiscovery import urlpatterns as _searchdiscovery_urls
+from apps.ecommerce.urls.CustomerSupport import urlpatterns as _customersupport_urls
 from apps.ecommerce.urls.ReviewUgc import urlpatterns as _reviewugc_urls
 from apps.ecommerce.urls.SubscriptionCommerce import urlpatterns as _subscriptioncommerce_urls
 
@@ -26,6 +27,7 @@ urlpatterns = (
     + list(_marketplace_urls)
     + list(_subscriptioncommerce_urls)
     + list(_reviewugc_urls)
+    + list(_customersupport_urls)
 )
 
 
