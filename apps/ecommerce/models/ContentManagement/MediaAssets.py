@@ -5,7 +5,7 @@ from apps.ecommerce.models._base import TenantNumbered
 
 
 class MediaAsset(TenantNumbered):
-    prefix = "EMED"
+    NUMBER_PREFIX = "EMED"
 
     MEDIA_TYPE_CHOICES = [
         ("image", "Image / Graphic"),
