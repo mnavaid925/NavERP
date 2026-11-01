@@ -127,7 +127,6 @@ def knowledgebasearticle_edit(request, pk):
 def knowledgebasearticle_delete(request, pk):
     article = ecommerce_object(request, KnowledgeBaseArticle, pk)
     number = article.number
-    article.delete()
     write_audit_log(
         request.user,
         article,
@@ -135,5 +134,6 @@ def knowledgebasearticle_delete(request, pk):
         {"number": number},
         tenant=request.tenant,
     )
+    article.delete()
     messages.success(request, f"Article {number} deleted.")
     return redirect("ecommerce:knowledgebasearticle_list")
