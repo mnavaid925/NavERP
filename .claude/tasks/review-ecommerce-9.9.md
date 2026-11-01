@@ -91,7 +91,7 @@
   - `templates/ecommerce/content_management/block/detail.html`
 - **Problem**: `cta_url` is unvalidated and could accept `javascript:...` URIs rendered directly in `<a href="...">`.
 - **Fix**: Add `clean_cta_url()` in `ContentBlockForm` requiring URLs to start with `/`, `#`, `http://`, or `https://`.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ---
 
