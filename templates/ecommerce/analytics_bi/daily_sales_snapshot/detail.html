@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Snapshot {{ snapshot.number }} - {{ snapshot.snapshot_date }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-3">
+        <a href="{% url 'ecommerce:dailysalessnapshot_list' %}" class="btn btn-icon" title="Back to Snapshots">
+          <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        </a>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span>{{ snapshot.number }}</span>
+          {% if snapshot.is_finalized %}
+          <span class="badge badge-green">Closed Day</span>
+          {% else %}
+          <span class="badge badge-amber">Open Day</span>
+          {% endif %}
+        </h1>
+      </div>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1 ml-10">
+        Aggregated sales performance for <strong class="text-slate-700 dark:text-slate-300">{{ snapshot.snapshot_date }}</strong> ({{ snapshot.currency }})
+      </p>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <a href="{% url 'ecommerce:dailysalessnapshot_edit' snapshot.pk %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:dailysalessnapshot_delete' snapshot.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete snapshot {{ snapshot.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Key Stat KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Net Sales</p>
+          <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">{{ snapshot.currency }} {{ snapshot.net_sales }}</h3>
+        </div>
+        <div class="stat-icon green">
+          <i data-lucide="dollar-sign" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Gross: {{ snapshot.currency }} {{ snapshot.gross_sales }}</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Orders Placed</p>
+          <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">{{ snapshot.orders_count }}</h3>
+        </div>
+        <div class="stat-icon blue">
+          <i data-lucide="shopping-bag" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Units sold: {{ snapshot.units_sold }}</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Average Order Value</p>
+          <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">{{ snapshot.currency }} {{ snapshot.average_order_value }}</h3>
+        </div>
+        <div class="stat-icon purple">
+          <i data-lucide="trending-up" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Per completed order</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Conversion Rate</p>
+          <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">{{ snapshot.conversion_rate_pct }}%</h3>
+        </div>
+        <div class="stat-icon orange">
+          <i data-lucide="activity" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Carts: {{ snapshot.carts_created }} (Abandoned: {{ snapshot.carts_abandoned }})</p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Revenue & Margin Breakdown -->
+    <div class="card p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="receipt" class="w-5 h-5 text-brand"></i>
+        Financial & Margin Breakdown
+      </h2>
+      <div class="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Gross Sales</span>
+          <span class="font-mono font-medium text-slate-800 dark:text-slate-200">{{ snapshot.currency }} {{ snapshot.gross_sales }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Discounts & Coupons</span>
+          <span class="font-mono text-rose-600 dark:text-rose-400">-{{ snapshot.currency }} {{ snapshot.discounts_total }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Refunds & Returns</span>
+          <span class="font-mono text-rose-600 dark:text-rose-400">-{{ snapshot.currency }} {{ snapshot.refunds_total }}</span>
+        </div>
+        <div class="flex justify-between py-2 font-semibold">
+          <span class="text-slate-700 dark:text-slate-300">Net Sales</span>
+          <span class="font-mono text-slate-900 dark:text-white">{{ snapshot.currency }} {{ snapshot.net_sales }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Shipping Collected</span>
+          <span class="font-mono text-slate-800 dark:text-slate-200">+{{ snapshot.currency }} {{ snapshot.shipping_collected }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Taxes Collected</span>
+          <span class="font-mono text-slate-800 dark:text-slate-200">+{{ snapshot.currency }} {{ snapshot.taxes_collected }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Cost of Goods Sold (COGS)</span>
+          <span class="font-mono text-slate-600 dark:text-slate-400">{{ snapshot.currency }} {{ snapshot.cost_of_goods_sold }}</span>
+        </div>
+        <div class="flex justify-between py-2 font-semibold text-emerald-600 dark:text-emerald-400">
+          <span>Gross Profit</span>
+          <span class="font-mono">{{ snapshot.currency }} {{ snapshot.gross_profit }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Operational Conversion & Notes -->
+    <div class="card p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="pie-chart" class="w-5 h-5 text-brand"></i>
+        Conversion & Abandonment
+      </h2>
+      <div class="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Carts Created</span>
+          <span class="font-mono font-medium">{{ snapshot.carts_created }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Carts Abandoned</span>
+          <span class="font-mono text-rose-600 dark:text-rose-400">{{ snapshot.carts_abandoned }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Completed Orders</span>
+          <span class="font-mono font-semibold text-slate-900 dark:text-white">{{ snapshot.orders_count }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Storefront Conversion Rate</span>
+          <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400">{{ snapshot.conversion_rate_pct }}%</span>
+        </div>
+      </div>
+
+      <div class="pt-4 border-t border-slate-100 dark:border-slate-800">
+        <h3 class="text-xs uppercase font-semibold text-slate-400 mb-2">Notes & Summary</h3>
+        <p class="text-sm text-slate-600 dark:text-slate-300 italic">
+          {% if snapshot.notes %}{{ snapshot.notes }}{% else %}No additional operational notes recorded for this date.{% endif %}
+        </p>
+      </div>
+
+      <div class="pt-2 text-xs text-slate-400 flex justify-between">
+        <span>Recorded: {{ snapshot.created_at|date:"Y-m-d H:i" }}</span>
+        <span>Updated: {{ snapshot.updated_at|date:"Y-m-d H:i" }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
