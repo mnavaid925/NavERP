@@ -137,6 +137,7 @@ def customercohortmetric_delete(request, pk):
 
 @require_POST
 @login_required
+@tenant_admin_required
 def customercohortmetric_recalculate(request):
     """Batch recalculates retention percentages, churn rates, and LTV on all cohort rows."""
     metrics = CustomerCohortMetric.objects.filter(tenant=request.tenant)
