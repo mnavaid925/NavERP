@@ -1,4 +1,5 @@
 from django import forms
+from django.core.exceptions import ValidationError
 
 from apps.ecommerce.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.ContentManagement.ContentBlocks import ContentBlock
@@ -76,6 +77,17 @@ class ContentBlockForm(TenantUniqueMixin, TenantModelForm):
             self.fields["media_asset"].queryset = MediaAsset.objects.filter(tenant=self.tenant)
             self.fields["target_category"].queryset = StoreCategory.objects.filter(tenant=self.tenant)
             self.fields["target_product"].queryset = CatalogProduct.objects.filter(tenant=self.tenant)
+
+    def clean_cta_url(self):
+        url = self.cleaned_data.get("cta_url", "").strip()
+        if not url:
+            return url
+        allowed_prefixes = ("/", "#", "http://", "https://")
+        if not any(url.startswith(prefix) for prefix in allowed_prefixes):
+            raise ValidationError("Target CTA URL must begin with '/', '#', 'http://', or 'https://'.")
+        if "javascript:" in url.lower():
+            raise ValidationError("Target CTA URL cannot contain JavaScript URIs.")
+        return url
 
     def clean(self):
         cleaned = super().clean()
