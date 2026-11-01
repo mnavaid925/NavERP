@@ -14,7 +14,7 @@ from apps.ecommerce.views._common import ecommerce_object
 
 @login_required
 def knowledgebasearticle_list(request):
-    qs = KnowledgeBaseArticle.objects.filter(tenant=request.tenant).select_related("author")
+    qs = KnowledgeBaseArticle.objects.filter(tenant=request.tenant).select_related("author").defer("content")
 
     query = request.GET.get("q", "").strip()
     if query:
