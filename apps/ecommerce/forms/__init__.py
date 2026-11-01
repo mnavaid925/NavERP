@@ -89,6 +89,10 @@ from apps.ecommerce.forms.ContentManagement.BlogArticles import BlogArticleForm
 from apps.ecommerce.forms.ContentManagement.CmsPages import CmsPageForm
 from apps.ecommerce.forms.ContentManagement.ContentBlocks import ContentBlockForm
 from apps.ecommerce.forms.ContentManagement.MediaAssets import MediaAssetForm
+from apps.ecommerce.forms.AnalyticsBi.DailySalesSnapshots import DailySalesSnapshotForm
+from apps.ecommerce.forms.AnalyticsBi.CustomerCohortMetrics import CustomerCohortMetricForm
+from apps.ecommerce.forms.AnalyticsBi.ProductMerchandisingMetrics import ProductMerchandisingMetricForm
+from apps.ecommerce.forms.AnalyticsBi.AttributionTouchpoints import AttributionTouchpointForm
 
 __all__ = [
     "TenantUniqueMixin",
@@ -178,4 +182,9 @@ __all__ = [
     "BlogArticleForm",
     "MediaAssetForm",
     "ContentBlockForm",
+    # 9.15 Analytics & Business Intelligence
+    "DailySalesSnapshotForm",
+    "CustomerCohortMetricForm",
+    "ProductMerchandisingMetricForm",
+    "AttributionTouchpointForm",
 ]
