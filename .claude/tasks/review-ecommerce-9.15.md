@@ -77,5 +77,32 @@ None. Zero comment leaks, all POST forms have CSRF tokens, all 28 template rever
 2. **Long Product Title Truncation on Mobile Cockpit (`cockpit.html` Line 197)**:
    - In `templates/ecommerce/analytics_bi/cockpit/cockpit.html:197`, product title link `{{ m.product.name }}` in Best Sellers widget could stretch on small screens. Add `class="truncate max-w-xs block"`.
 
+---
+
+## 4. Performance Reviewer Findings
+
+### Critical
+1. **Chained N+1 in `AttributionTouchpointForm` foreign key dropdowns (`order` & `cart`)**:
+   - `apps/ecommerce/forms/AnalyticsBi/AttributionTouchpoints.py:52-57`: `EcommerceOrder.__str__` evaluates `self.customer.name` and `Cart.__str__` evaluates `self.customer`. Without `.select_related("customer")` on both form dropdown querysets, rendering the form executes $1 + N$ queries per field.
+   - Fix: Add `.select_related("customer")` to `order` and `cart` querysets in `AttributionTouchpointForm.__init__`.
+2. **Missing compound index on high-volume table `ecommerce_attribution_touchpoint` (`tenant`, `-touchpoint_timestamp`)**:
+   - `apps/ecommerce/models/AnalyticsBi/AttributionTouchpoints.py`: `ordering = ["-touchpoint_timestamp"]` and list view queries by tenant ordered by `-touchpoint_timestamp`, but lacks an index on `(tenant, -touchpoint_timestamp)`.
+   - Fix: Add `models.Index(fields=["tenant", "-touchpoint_timestamp"], name="idx_eatt_ten_time")` to `AttributionTouchpoint.Meta.indexes`.
+
+### Important
+1. **Cockpit query multiplication: 12 queries reducible to 7 queries via conditional aggregation**:
+   - `apps/ecommerce/views/AnalyticsBi/AnalyticsCockpit.py:39-61`: 4 separate queries to `Cart` and 3 separate queries to `CheckoutSession`. Collapse into conditional `aggregate()` using `Count("id", filter=Q(...))`.
+2. **Sequential row-by-row UPDATE loop in batch recalculation views**:
+   - `ProductMerchandisingMetrics.py:149-157` and `CustomerCohortMetrics.py:140-148`: Iterate and call `.save()` on each instance. Use `bulk_update(metrics, [...], batch_size=500)` inside `transaction.atomic()`.
+3. **Non-sargable date lookup preventing index range scan on `EcommerceOrder`**:
+   - `AnalyticsCockpit.py:23-27` and `DailySalesSnapshots.py:58`: `created_at__date=today` wraps indexed column in SQL `DATE()`. Use datetime interval `created_at__gte=start_of_day, created_at__lt=start_of_next_day`.
+
+### Minor
+1. **Missing compound index on `ProductMerchandisingMetric` for default sort order**:
+   - Add `models.Index(fields=["tenant", "-period_end", "-gross_revenue"], name="idx_epmm_ten_end_rev")`.
+2. **Consolidate count queries in `DailySalesSnapshot.aggregate_for_tenant_date`**:
+   - Consolidate `carts_created` and `carts_abandoned` into single aggregate.
+
+
 
 
