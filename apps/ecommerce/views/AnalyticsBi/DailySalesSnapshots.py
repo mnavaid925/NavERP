@@ -127,7 +127,6 @@ def dailysalessnapshot_edit(request, pk):
 def dailysalessnapshot_delete(request, pk):
     snapshot = ecommerce_object(request, DailySalesSnapshot, pk)
     number = snapshot.number
-    snapshot.delete()
     write_audit_log(
         request.user,
         snapshot,
@@ -135,6 +134,7 @@ def dailysalessnapshot_delete(request, pk):
         {"number": number},
         tenant=request.tenant,
     )
+    snapshot.delete()
     messages.success(request, f"Daily sales snapshot {number} was deleted.")
     return redirect("ecommerce:dailysalessnapshot_list")
 
