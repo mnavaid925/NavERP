@@ -3459,6 +3459,31 @@ def _contentmanagement_block(tenant, **kwargs):
 
 
 @pytest.fixture
+def user_a(admin_user):
+    return admin_user
+
+
+@pytest.fixture
+def user_b(admin_b):
+    return admin_b
+
+
+@pytest.fixture
+def regular_user_a(member_user):
+    return member_user
+
+
+@pytest.fixture
+def auth_client_a(client_a):
+    return client_a
+
+
+@pytest.fixture
+def auth_client_b(client_b):
+    return client_b
+
+
+@pytest.fixture
 def ecom_mediaasset_a(tenant_a, user_a):
     return _contentmanagement_media(tenant_a, uploaded_by=user_a)
 
