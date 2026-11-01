@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Merchandising Metric {{ metric.number }} - {{ metric.product.name }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-3">
+        <a href="{% url 'ecommerce:productmerchandisingmetric_list' %}" class="btn btn-icon" title="Back to Merchandising">
+          <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        </a>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span>{{ metric.number }}</span>
+          {% if metric.velocity_tier == "best_seller" %}
+          <span class="badge badge-green">Best Seller</span>
+          {% elif metric.velocity_tier == "core_performer" %}
+          <span class="badge badge-info">Core Performer</span>
+          {% elif metric.velocity_tier == "slow_mover" %}
+          <span class="badge badge-amber">Slow Mover</span>
+          {% else %}
+          <span class="badge badge-red">Dead Stock</span>
+          {% endif %}
+        </h1>
+      </div>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1 ml-10">
+        Product: <strong class="text-slate-700 dark:text-slate-300">{{ metric.product.name }}</strong>
+        {% if metric.variant %}&bull; SKU: <span class="font-mono text-xs">{{ metric.variant.sku }}</span>{% endif %}
+        &bull; Period: {{ metric.period_start }} to {{ metric.period_end }}
+      </p>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <a href="{% url 'ecommerce:productmerchandisingmetric_edit' metric.pk %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:productmerchandisingmetric_delete' metric.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete metric {{ metric.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Key Stat KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Gross Revenue</p>
+          <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">${{ metric.gross_revenue }}</h3>
+        </div>
+        <div class="stat-icon green">
+          <i data-lucide="dollar-sign" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">COGS: ${{ metric.cost_of_goods }}</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Gross Margin %</p>
+          <h3 class="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{{ metric.gross_margin_pct }}%</h3>
+        </div>
+        <div class="stat-icon blue">
+          <i data-lucide="percent" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Profit margin contribution</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Units Sold</p>
+          <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">{{ metric.units_sold }}</h3>
+        </div>
+        <div class="stat-icon purple">
+          <i data-lucide="shopping-cart" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Refunds: {{ metric.refunds_count }} ({{ metric.return_rate_pct }}% return rate)</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Conversion Rate</p>
+          <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">{{ metric.conversion_rate_pct }}%</h3>
+        </div>
+        <div class="stat-icon orange">
+          <i data-lucide="activity" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">{{ metric.page_views_count }} views &bull; {{ metric.add_to_cart_count }} cart adds</p>
+    </div>
+  </div>
+
+  <!-- Detail Grids -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Merchandising Velocity & Health -->
+    <div class="card p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="gauge" class="w-5 h-5 text-brand"></i>
+        Merchandising Health & Velocity
+      </h2>
+      <div class="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Product Master</span>
+          <span class="font-medium text-slate-900 dark:text-white">{{ metric.product.name }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">SKU / Variant</span>
+          <span class="font-mono text-slate-700 dark:text-slate-300">{% if metric.variant %}{{ metric.variant.sku }} ({{ metric.variant.name }}){% else %}Entire Catalog Product{% endif %}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Analysis Period</span>
+          <span class="font-mono">{{ metric.period_start }} to {{ metric.period_end }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Velocity Classification</span>
+          <span class="font-semibold">{{ metric.get_velocity_tier_display }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Inventory Turnover Ratio</span>
+          <span class="font-mono font-bold text-slate-900 dark:text-white">{{ metric.inventory_turnover_ratio }}x</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Funnel Engagement & Return Drag -->
+    <div class="card p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="funnel" class="w-5 h-5 text-brand"></i>
+        Funnel Conversion & Returns
+      </h2>
+      <div class="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Page Views</span>
+          <span class="font-mono font-medium">{{ metric.page_views_count }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Add to Cart Events</span>
+          <span class="font-mono font-medium">{{ metric.add_to_cart_count }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Units Purchased</span>
+          <span class="font-mono font-semibold text-slate-900 dark:text-white">{{ metric.units_sold }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Units Refunded / Returned</span>
+          <span class="font-mono text-rose-600 dark:text-rose-400">{{ metric.refunds_count }}</span>
+        </div>
+        <div class="flex justify-between py-2 font-semibold">
+          <span class="text-slate-700 dark:text-slate-300">Return Rate</span>
+          <span class="font-mono {% if metric.return_rate_pct > 15 %}text-rose-600{% else %}text-slate-900 dark:text-white{% endif %}">{{ metric.return_rate_pct }}%</span>
+        </div>
+      </div>
+
+      <div class="pt-4 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400 flex justify-between">
+        <span>Recorded: {{ metric.created_at|date:"Y-m-d H:i" }}</span>
+        <span>Updated: {{ metric.updated_at|date:"Y-m-d H:i" }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
