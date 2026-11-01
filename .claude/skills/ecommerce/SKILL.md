@@ -1,9 +1,9 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content: product reviews, ratings aggregation, customer Q&A, visual UGC, sentiment analysis, scorecards, moderation workflows, rights management, plans, subscriber lifecycle, curated boxes, churn deflection, self-service portal, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.10, 9.11, 9.12, or 9.13), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support: omnichannel help desk tickets, WISMO order resolution, knowledge base articles & self-service documentation, order issue claims & transit damage adjudication, customer satisfaction surveys CSAT & NPS, closed-loop customer follow-up, SLA countdowns & breach tracking, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.10, 9.11, 9.12, 9.13, or 9.14), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support)
 
 The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, and an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising (boosting, burying, pinning, banner announcements, URL redirect forwarding), query performance and zero-result search telemetry analytics, instant search-as-you-type autocomplete, and an interactive Search Workbench Console. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
@@ -341,6 +341,16 @@ apps/ecommerce/
 
 ---
 
+### Sub-module 9.14: Customer Service & Support
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `CustomerSupportTicket` | `ESTK-` | `customer`, `order`, `assigned_agent`, `subject`, `customer_name`, `customer_email`, `customer_phone`, `channel`, `category`, `priority`, `status`, `initial_message`, `resolution_summary`, `internal_notes`, `sla_first_response_due_at`, `sla_resolution_due_at`, `first_responded_at`, `resolved_at`, `is_sla_breached`, `is_bot_handled`, `bot_handoff_reason` | `CustomerAccountProfile`, `EcommerceOrder`, `auth.User` (`assigned_agent`) | Auto-SLA calculation by priority, auto-breach detection, reopen resets `resolved_at`, tenant isolation |
+| `KnowledgeBaseArticle` | `EKBA-` | `title`, `slug`, `category`, `summary`, `content`, `status`, `target_audience`, `is_featured`, `view_count`, `helpful_votes`, `unhelpful_votes`, `keywords`, `author` | `auth.User` (`author`) | `helpfulness_ratio`, auto-slug generation, scoped atomic `view_count` increment, heavy content deferral |
+| `OrderIssueClaim` | `ECLM-` | `order`, `customer`, `ticket`, `claim_type`, `status`, `claimed_amount`, `approved_amount`, `resolution_action`, `carrier_tracking_number`, `photo_evidence_url`, `customer_notes`, `decision_notes`, `reviewed_by`, `resolved_at` | `EcommerceOrder`, `CustomerAccountProfile`, `CustomerSupportTicket`, `auth.User` (`reviewed_by`) | Non-negative financial bounds, URL scheme validation, resolution timestamping, tenant isolation |
+| `CustomerSatisfactionSurvey` | `ECSF-` | `ticket`, `order`, `customer`, `survey_type`, `rating_score`, `sentiment`, `feedback_comment`, `agent_rated`, `follow_up_status`, `follow_up_notes`, `reviewed_by` | `CustomerSupportTicket`, `EcommerceOrder`, `CustomerAccountProfile`, `auth.User` (`agent_rated`, `reviewed_by`) | CSAT (1-5) and NPS (0-10) scoring, auto-sentiment classification (promoter/passive/detractor), negative review closed-loop flagging, manual override protection |
+
+---
+
 ## 3. URLs & Routes
 
 All routes live under `/ecommerce/` with namespace `ecommerce`:
@@ -636,6 +646,32 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 
 ---
 
+### 9.14 Customer Service & Support Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `support/tickets/` | `customersupportticket_list` | `customersupportticket_list` | Omnichannel ticket list with channel, category, priority, status filters & search |
+| `support/tickets/create/` | `customersupportticket_create` | `customersupportticket_create` | Log support ticket from customer inquiry or phone call |
+| `support/tickets/<int:pk>/` | `customersupportticket_detail` | `customersupportticket_detail` | Ticket timeline dossier with shopper profile, linked order total, and internal notes |
+| `support/tickets/<int:pk>/edit/` | `customersupportticket_edit` | `customersupportticket_edit` | Update ticket status, assigned agent, SLA, or resolution notes |
+| `support/tickets/<int:pk>/delete/` | `customersupportticket_delete` | `customersupportticket_delete` | Delete ticket (POST only, tenant admin required) |
+| `support/articles/` | `knowledgebasearticle_list` | `knowledgebasearticle_list` | Knowledge base article repository with category, status, audience filters |
+| `support/articles/create/` | `knowledgebasearticle_create` | `knowledgebasearticle_create` | Author help documentation / FAQ article |
+| `support/articles/<int:pk>/` | `knowledgebasearticle_detail` | `knowledgebasearticle_detail` | Article reader with rendered markdown body and view counter |
+| `support/articles/<int:pk>/edit/` | `knowledgebasearticle_edit` | `knowledgebasearticle_edit` | Edit article content, audience targeting, or publishing state |
+| `support/articles/<int:pk>/delete/` | `knowledgebasearticle_delete` | `knowledgebasearticle_delete` | Delete KB article (POST only, tenant admin required) |
+| `support/claims/` | `orderissueclaim_list` | `orderissueclaim_list` | Order issue & transit claims register with claim type and resolution filters |
+| `support/claims/create/` | `orderissueclaim_create` | `orderissueclaim_create` | Submit damage / lost package dispute claim against an order |
+| `support/claims/<int:pk>/` | `orderissueclaim_detail` | `orderissueclaim_detail` | Claim adjudication dossier with photo evidence preview, claimed amount, and order total |
+| `support/claims/<int:pk>/edit/` | `orderissueclaim_edit` | `orderissueclaim_edit` | Adjudicate claim, approve amount, set resolution action |
+| `support/claims/<int:pk>/delete/` | `orderissueclaim_delete` | `orderissueclaim_delete` | Delete claim record (POST only, tenant admin required) |
+| `support/surveys/` | `customersatisfactionsurvey_list` | `customersatisfactionsurvey_list` | CSAT and NPS feedback list with sentiment badges and follow-up status filters |
+| `support/surveys/create/` | `customersatisfactionsurvey_create` | `customersatisfactionsurvey_create` | Log customer survey response with score and feedback |
+| `support/surveys/<int:pk>/` | `customersatisfactionsurvey_detail` | `customersatisfactionsurvey_detail` | Survey scorecard dossier with sentiment pill, rating display, and supervisor notes |
+| `support/surveys/<int:pk>/edit/` | `customersatisfactionsurvey_edit` | `customersatisfactionsurvey_edit` | Update customer recovery follow-up status and supervisor notes |
+| `support/surveys/<int:pk>/delete/` | `customersatisfactionsurvey_delete` | `customersatisfactionsurvey_delete` | Delete survey entry (POST only, tenant admin required) |
+
+---
+
 ## 4. Templates & Design System
 
 Templates are stored under `templates/ecommerce/`:
@@ -701,6 +737,12 @@ Templates are stored under `templates/ecommerce/`:
   - `visual_ugc/` — `list.html` (responsive media cards grid, media type and rights status filters), `detail.html` (media preview, tagged product/variant pills, rights approval badge, shoppable toggle), `form.html`.
   - `sentiment_summary/` — `list.html` (product scorecards, average rating stars, total reviews, recalculate action), `detail.html` (star distribution progress bars, sentiment breakdown bars, keyword praise/complaints tags, actionable recommendations, recalculate button), `form.html`.
 
+- `customer_support/`
+  - `ticket/` — `list.html` (with status, priority, channel badges, and agent filter), `detail.html` (with customer card, linked order total, SLA status, internal notes, and back navigation), `form.html`.
+  - `article/` — `list.html` (with category and audience badges, helpfulness stats), `detail.html` (with markdown article reader, helpful votes counter, and back navigation), `form.html`.
+  - `claim/` — `list.html` (with claim type and resolution action badges, financial amounts), `detail.html` (with safe photo evidence preview, claimed vs approved amounts, and back navigation), `form.html`.
+  - `survey/` — `list.html` (with sentiment-aligned score colors and follow-up pills), `detail.html` (with CSAT/NPS rating scorecard, verbatim customer quote, and back navigation), `form.html`.
+
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
 - Stat icon classes: `stat-icon blue`, `stat-icon green`, `stat-icon orange`, `stat-icon purple`, `stat-icon slate`.
@@ -763,6 +805,10 @@ The command provisions:
 - 3 Product Question Answers (`EPQA-`): Answered and pinned inquiry, answered staff response inquiry, and pending customer question.
 - 4 Visual UGC Media Assets (`EUGC-`): Customer photos, unboxing videos, Instagram posts, and TikTok reviews with rights management status.
 - 2 Review Sentiment Summaries (`ERVM-`): Recalculated scorecards with star distributions, aggregate averages, keyword analysis, and actionable quality recommendations.
+- 4 Customer Support Tickets (`ESTK-`): WISMO order tracking inquiry, damaged item return request, pre-purchase sizing inquiry, and delivery address correction.
+- 4 Knowledge Base Articles (`EKBA-`): 30-Day Hassle-Free Returns & Exchanges, Domestic & International Shipping Rates, Warranty & Defective Product Replacement, and Order Tracking WISMO Guide.
+- 3 Order Issue Claims (`ECLM-`): Transit carton damage with photo evidence, package lost in transit with carrier investigation, and wrong item received with reshipment resolution.
+- 4 Customer Satisfaction Surveys (`ECSF-`): 5-star post-ticket CSAT (promoter), 5-star post-delivery CSAT (promoter), 10-score storefront NPS (promoter), and 2-star delivery delay CSAT (detractor with closed-loop supervisor review).
 - All demo data is scoped to tenant `acme`.
 
 ---
