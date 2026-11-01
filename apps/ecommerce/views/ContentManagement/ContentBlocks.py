@@ -63,7 +63,7 @@ def contentblock_detail(request, pk):
     return render(
         request,
         "ecommerce/content_management/block/detail.html",
-        {"block": block},
+        {"block": block, "content_block": block},
     )
 
 
@@ -88,7 +88,7 @@ def contentblock_create(request):
     return render(
         request,
         "ecommerce/content_management/block/form.html",
-        {"form": form, "block": None},
+        {"form": form, "block": None, "content_block": None},
     )
 
 
@@ -114,7 +114,7 @@ def contentblock_edit(request, pk):
     return render(
         request,
         "ecommerce/content_management/block/form.html",
-        {"form": form, "block": block},
+        {"form": form, "block": block, "content_block": block},
     )
 
 
