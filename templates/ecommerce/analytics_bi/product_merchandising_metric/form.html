@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if metric %}Edit Merchandising Metric {{ metric.number }}{% else %}New Merchandising Metric{% endif %} | NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <a href="{% if metric %}{% url 'ecommerce:productmerchandisingmetric_detail' metric.pk %}{% else %}{% url 'ecommerce:productmerchandisingmetric_list' %}{% endif %}" class="btn btn-icon" title="Cancel">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+      </a>
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">
+          {% if metric %}Edit Merchandising Metric {{ metric.number }}{% else %}New Merchandising Metric{% endif %}
+        </h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          {% if metric %}Update performance metrics for {{ metric.product.name }}{% else %}Record merchandising performance, velocity tier, and margin health for a product{% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-sm">
+        {{ form.non_field_errors }}
+      </div>
+      {% endif %}
+
+      <!-- Section: Product & Timeframe -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          Product & Analysis Period
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.product.id_for_label }}" class="form-label">Catalog Product *</label>
+            {{ form.product }}
+            {% if form.product.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.product.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.variant.id_for_label }}" class="form-label">Product Variant (Optional)</label>
+            {{ form.variant }}
+            {% if form.variant.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.variant.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.period_start.id_for_label }}" class="form-label">Period Start *</label>
+            {{ form.period_start }}
+            {% if form.period_start.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.period_start.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.period_end.id_for_label }}" class="form-label">Period End *</label>
+            {{ form.period_end }}
+            {% if form.period_end.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.period_end.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Sales Velocity & Margins -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          Sales Volume & Margin Health
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.velocity_tier.id_for_label }}" class="form-label">Velocity Tier</label>
+            {{ form.velocity_tier }}
+            {% if form.velocity_tier.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.velocity_tier.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.units_sold.id_for_label }}" class="form-label">Units Sold</label>
+            {{ form.units_sold }}
+            {% if form.units_sold.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.units_sold.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.gross_revenue.id_for_label }}" class="form-label">Gross Revenue ($)</label>
+            {{ form.gross_revenue }}
+            {% if form.gross_revenue.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.gross_revenue.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.cost_of_goods.id_for_label }}" class="form-label">Cost of Goods ($)</label>
+            {{ form.cost_of_goods }}
+            {% if form.cost_of_goods.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.cost_of_goods.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.gross_margin_pct.id_for_label }}" class="form-label">Gross Margin %</label>
+            {{ form.gross_margin_pct }}
+            {% if form.gross_margin_pct.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.gross_margin_pct.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.inventory_turnover_ratio.id_for_label }}" class="form-label">Inventory Turnover Ratio</label>
+            {{ form.inventory_turnover_ratio }}
+            {% if form.inventory_turnover_ratio.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.inventory_turnover_ratio.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Funnel & Refunds -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          Engagement, Conversion & Returns
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.page_views_count.id_for_label }}" class="form-label">Page Views</label>
+            {{ form.page_views_count }}
+            {% if form.page_views_count.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.page_views_count.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.add_to_cart_count.id_for_label }}" class="form-label">Add to Cart Events</label>
+            {{ form.add_to_cart_count }}
+            {% if form.add_to_cart_count.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.add_to_cart_count.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.conversion_rate_pct.id_for_label }}" class="form-label">Conversion Rate %</label>
+            {{ form.conversion_rate_pct }}
+            {% if form.conversion_rate_pct.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.conversion_rate_pct.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.refunds_count.id_for_label }}" class="form-label">Units Refunded / Returned</label>
+            {{ form.refunds_count }}
+            {% if form.refunds_count.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.refunds_count.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.return_rate_pct.id_for_label }}" class="form-label">Return Rate %</label>
+            {{ form.return_rate_pct }}
+            {% if form.return_rate_pct.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.return_rate_pct.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <a href="{% if metric %}{% url 'ecommerce:productmerchandisingmetric_detail' metric.pk %}{% else %}{% url 'ecommerce:productmerchandisingmetric_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="check" class="w-4 h-4 mr-2"></i>
+          {% if metric %}Save Changes{% else %}Create Metric{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
