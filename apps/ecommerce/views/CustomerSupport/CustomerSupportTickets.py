@@ -19,7 +19,7 @@ User = get_user_model()
 @login_required
 def customersupportticket_list(request):
     qs = CustomerSupportTicket.objects.filter(tenant=request.tenant).select_related(
-        "customer", "order", "assigned_agent"
+        "customer__customer", "order", "assigned_agent"
     )
 
     query = request.GET.get("q", "").strip()
@@ -83,7 +83,7 @@ def customersupportticket_detail(request, pk):
         request,
         CustomerSupportTicket,
         pk,
-        select_related=("customer", "order", "assigned_agent"),
+        select_related=("customer__customer", "order", "assigned_agent"),
     )
     return render(request, "ecommerce/customer_support/ticket/detail.html", {"ticket": ticket})
 
