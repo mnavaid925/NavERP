@@ -1,12 +1,12 @@
 from django import forms
 
-from apps.ecommerce.forms._common import TenantModelForm, reject_foreign
+from apps.ecommerce.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.AnalyticsBi.ProductMerchandisingMetrics import ProductMerchandisingMetric
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
 from apps.ecommerce.models.ProductCatalog.ProductVariants import ProductVariant
 
 
-class ProductMerchandisingMetricForm(TenantModelForm):
+class ProductMerchandisingMetricForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = ProductMerchandisingMetric
         fields = [
