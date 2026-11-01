@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{% if block %}Edit Content Block {{ block.name }}{% else %}Create Content Block{% endif %} | NavERP{% endblock %}
+{% block title %}{% if content_block %}Edit Content Block {{ content_block.name }}{% else %}Create Content Block{% endif %} | NavERP{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -14,9 +14,9 @@
             <span>/</span>
             <a href="{% url 'ecommerce:contentblock_list' %}">Blocks</a>
             <span>/</span>
-            <span>{% if block %}Edit {{ block.number }}{% else %}New Block{% endif %}</span>
+            <span>{% if content_block %}Edit {{ content_block.number }}{% else %}New Block{% endif %}</span>
         </div>
-        <h1 class="page-title">{% if block %}Edit Content Block: {{ block.name }}{% else %}Create Content Block{% endif %}</h1>
+        <h1 class="page-title">{% if content_block %}Edit Content Block: {{ content_block.name }}{% else %}Create Content Block{% endif %}</h1>
     </div>
 </div>
 
@@ -169,11 +169,11 @@
 
             <!-- Action buttons -->
             <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
-                <a href="{% if block %}{% url 'ecommerce:contentblock_detail' block.pk %}{% else %}{% url 'ecommerce:contentblock_list' %}{% endif %}" class="btn btn-outline">
+                <a href="{% if content_block %}{% url 'ecommerce:contentblock_detail' content_block.pk %}{% else %}{% url 'ecommerce:contentblock_list' %}{% endif %}" class="btn btn-outline">
                     Cancel
                 </a>
                 <button type="submit" class="btn btn-primary">
-                    {% if block %}Update Block{% else %}Save Block{% endif %}
+                    {% if content_block %}Update Block{% else %}Save Block{% endif %}
                 </button>
             </div>
         </form>
