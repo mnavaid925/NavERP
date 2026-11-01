@@ -101,6 +101,7 @@ class CustomerSupportTicket(TenantNumbered):
             models.Index(fields=["tenant", "assigned_agent", "status"], name="idx_estk_ten_agent_stat"),
             models.Index(fields=["tenant", "order"], name="idx_estk_ten_order"),
             models.Index(fields=["tenant", "customer_email"], name="idx_estk_ten_cust_email"),
+            models.Index(fields=["tenant", "channel"], name="idx_estk_ten_channel"),
         ]
 
     def __str__(self):
