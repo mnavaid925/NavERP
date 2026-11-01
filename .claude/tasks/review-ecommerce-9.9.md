@@ -42,7 +42,7 @@
   - `templates/ecommerce/content_management/block/detail.html`
 - **Problem**: Templates reference `{{ block_item.target_product.title }}` and `{{ content_block.target_product.title }}`. The `CatalogProduct` model field is `name`, not `title`. In Django templates, accessing a non-existent attribute evaluates to `""` silently (L8 contract drift), rendering blank labels.
 - **Fix**: Change `.title` to `.name` in both templates.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [I2] `BlogArticle.published_at` is never populated upon publishing
 - **Files**:
