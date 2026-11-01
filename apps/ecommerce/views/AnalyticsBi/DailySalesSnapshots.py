@@ -31,11 +31,14 @@ def dailysalessnapshot_list(request):
     if selected_currency:
         qs = qs.filter(currency__iexact=selected_currency)
 
-    selected_finalized = request.GET.get("is_finalized", "").strip().lower()
-    if selected_finalized in ("1", "true", "yes"):
+    raw_finalized = request.GET.get("is_finalized", "").strip().lower()
+    selected_finalized = ""
+    if raw_finalized in ("1", "true", "yes"):
         qs = qs.filter(is_finalized=True)
-    elif selected_finalized in ("0", "false", "no"):
+        selected_finalized = "1"
+    elif raw_finalized in ("0", "false", "no"):
         qs = qs.filter(is_finalized=False)
+        selected_finalized = "0"
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
