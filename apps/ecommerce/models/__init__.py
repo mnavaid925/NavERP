@@ -55,6 +55,10 @@ from apps.ecommerce.models.ContentManagement.BlogArticles import BlogArticle
 from apps.ecommerce.models.ContentManagement.CmsPages import CmsPage
 from apps.ecommerce.models.ContentManagement.ContentBlocks import ContentBlock
 from apps.ecommerce.models.ContentManagement.MediaAssets import MediaAsset
+from apps.ecommerce.models.AnalyticsBi.DailySalesSnapshots import DailySalesSnapshot
+from apps.ecommerce.models.AnalyticsBi.CustomerCohortMetrics import CustomerCohortMetric
+from apps.ecommerce.models.AnalyticsBi.ProductMerchandisingMetrics import ProductMerchandisingMetric
+from apps.ecommerce.models.AnalyticsBi.AttributionTouchpoints import AttributionTouchpoint
 
 __all__ = [
     "TenantOwned",
@@ -132,4 +136,9 @@ __all__ = [
     "BlogArticle",
     "MediaAsset",
     "ContentBlock",
+    # 9.15 Analytics & Business Intelligence
+    "DailySalesSnapshot",
+    "CustomerCohortMetric",
+    "ProductMerchandisingMetric",
+    "AttributionTouchpoint",
 ]
