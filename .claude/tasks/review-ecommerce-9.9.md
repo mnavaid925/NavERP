@@ -56,7 +56,7 @@
 - **File**: `templates/ecommerce/content_management/blog/form.html`
 - **Problem**: Textarea `{{ form.body_markdown }}` lacks an associated `<label for="{{ form.body_markdown.id_for_label }}">` element.
 - **Fix**: Add `<label for="{{ form.body_markdown.id_for_label }}" class="form-label">Article Body (Markdown) *</label>` inside the `form-group`.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [I4] Missing `select_related` on Foreign Keys in Detail Views causing lazy N+1 queries
 - **Files**:
