@@ -39,6 +39,10 @@ from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacet
 from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
 from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
 from apps.ecommerce.models.SearchDiscovery.SearchSynonyms import SearchSynonym
+from apps.ecommerce.models.CustomerSupport.CustomerSatisfactionSurveys import CustomerSatisfactionSurvey
+from apps.ecommerce.models.CustomerSupport.CustomerSupportTickets import CustomerSupportTicket
+from apps.ecommerce.models.CustomerSupport.KnowledgeBaseArticles import KnowledgeBaseArticle
+from apps.ecommerce.models.CustomerSupport.OrderIssueClaims import OrderIssueClaim
 from apps.ecommerce.models.ReviewUgc.ProductQuestionAnswers import ProductQuestionAnswer
 from apps.ecommerce.models.ReviewUgc.ProductReviews import ProductReview
 from apps.ecommerce.models.ReviewUgc.ReviewSentimentSummaries import ReviewSentimentSummary
@@ -114,4 +118,9 @@ __all__ = [
     "ProductQuestionAnswer",
     "VisualUgcMedia",
     "ReviewSentimentSummary",
+    # 9.14 Customer Service & Support
+    "CustomerSupportTicket",
+    "KnowledgeBaseArticle",
+    "OrderIssueClaim",
+    "CustomerSatisfactionSurvey",
 ]
