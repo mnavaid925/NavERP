@@ -3048,7 +3048,10 @@ class Command(BaseCommand):
         )
 
         # 9.9 Content Management System (CMS)
-        author_user = User.objects.filter(is_active=True).first()
+        author_user = (
+            User.objects.filter(tenant=tenant, is_active=True).first()
+            or User.objects.filter(is_active=True).first()
+        )
         sample_prod = CatalogProduct.objects.filter(tenant=tenant).first()
         cat_apparel = (
             StoreCategory.objects.filter(tenant=tenant, slug="apparel-fashion").first()
