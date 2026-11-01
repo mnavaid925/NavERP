@@ -129,7 +129,6 @@ def customersatisfactionsurvey_edit(request, pk):
 def customersatisfactionsurvey_delete(request, pk):
     survey = ecommerce_object(request, CustomerSatisfactionSurvey, pk)
     number = survey.number
-    survey.delete()
     write_audit_log(
         request.user,
         survey,
@@ -137,5 +136,6 @@ def customersatisfactionsurvey_delete(request, pk):
         {"number": number},
         tenant=request.tenant,
     )
+    survey.delete()
     messages.success(request, f"Survey {number} deleted.")
     return redirect("ecommerce:customersatisfactionsurvey_list")
