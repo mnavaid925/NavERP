@@ -78,4 +78,8 @@ class OrderIssueClaimForm(TenantUniqueMixin, TenantModelForm):
         approved = cleaned.get("approved_amount")
         if approved is not None and approved < Decimal("0.00"):
             self.add_error("approved_amount", "Approved amount cannot be negative.")
+        customer = cleaned.get("customer")
+        order = cleaned.get("order")
+        if customer and order and order.customer_id != customer.customer_id:
+            self.add_error("order", "The selected order does not belong to the selected customer profile.")
         return cleaned
