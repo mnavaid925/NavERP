@@ -1,188 +1,150 @@
-# Code Review Findings — Sub-module 9.9: Content Management System (CMS)
+# Review Findings — Sub-module 9.9: Content Management System (CMS)
 
-**Review Range**: `42bddb89b161860bccfdf4fac370b60a2ff20366...HEAD`  
-**Target App**: `apps/ecommerce/` & `apps/core/navigation.py`  
-**Module**: 9 eCommerce Management System (`ecommerce`)
-
----
-
-## Reviewer 1: `code-reviewer`
-
-### Critical Findings
-- **[CR1-01] Cross-tenant user exposure & missing IDOR validation for `author` in `BlogArticleForm`**
-  - **File**: `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
-  - **Problem**: In `BlogArticleForm.__init__`, `self.fields["author"].queryset` is set to `User.objects.filter(is_active=True).order_by("username")` without filtering by `tenant=self.tenant`. In `clean()`, `reject_foreign` only checks `["featured_media"]`, omitting `"author"`.
-  - **Fix**: Filter `author` queryset by `tenant=self.tenant` and add `"author"` to `reject_foreign`.
-
-### Important Findings
-- **[IR1-01] Silent blank rendering of target product name in content block templates (Contract drift / L8)**
-  - **Files**:
-    - `templates/ecommerce/content_management/block/list.html`
-    - `templates/ecommerce/content_management/block/detail.html`
-  - **Problem**: Both templates reference `target_product.title`. `CatalogProduct` field is `name`, not `title`. Evaluates to empty string silently.
-  - **Fix**: Replace `.title` with `.name` in both templates.
-
-- **[IR1-02] `BlogArticle.published_at` is never populated upon publishing**
-  - **Files**:
-    - `apps/ecommerce/models/ContentManagement/BlogArticles.py`
-    - `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
-  - **Problem**: `published_at` is excluded from form and not assigned on save. Published articles retain `published_at = None`.
-  - **Fix**: Auto-populate `self.published_at = timezone.now()` in `BlogArticle.save()` when `status == "published"` and `published_at` is unset.
-
-- **[IR1-03] Unsanitized `raw_html_body` rendered with `|safe` in CMS Page detail view**
-  - **File**: `templates/ecommerce/content_management/page/detail.html`
-  - **Problem**: `{{ page.raw_html_body|safe }}` renders unescaped HTML.
-  - **Fix**: Ensure CMS page edit/create requires `@tenant_admin_required` or document trust boundary.
-
-### Minor Findings
-- **[MR1-01] `CmsPage` omitted `db_table = "ecommerce_cms_page"` in model `Meta`**
-  - **File**: `apps/ecommerce/models/ContentManagement/CmsPages.py`
-  - **Problem**: Defaults to `ecommerce_cmspage`. Document in gap register.
-
-- **[MR1-02] Missing `select_related` in detail views causing N+1 queries**
-  - **Files**:
-    - `apps/ecommerce/views/ContentManagement/BlogArticles.py` (`blogarticle_detail`)
-    - `apps/ecommerce/views/ContentManagement/MediaAssets.py` (`mediaasset_detail`)
-    - `apps/ecommerce/views/ContentManagement/ContentBlocks.py` (`contentblock_detail`)
-  - **Fix**: Pass `select_related` to `ecommerce_object(...)`.
-
-- **[MR1-03] `BlogArticleForm` does not lowercase or strip slug**
-  - **File**: `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
-  - **Fix**: Add `clean_slug()` normalizing `.strip().lower()`.
+- **App:** `apps/ecommerce` (Module 9: eCommerce Management System)
+- **Sub-module:** 9.9 Content Management System (CMS)
+- **Review Range:** `42bddb89b161860bccfdf4fac370b60a2ff20366...HEAD`
+- **Reviewers:** `code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`
+- **Status:** Consolidated, deduplicated, and prioritized for Phase 5 `code-fixer`.
 
 ---
 
-## Reviewer 2: `explorer`
+## Critical Findings (3)
 
-### Critical Findings
-*None.*
+### [C1] Missing `TenantUniqueMixin` on `ContentBlockForm` and `MediaAssetForm`
+- **Files**:
+  - `apps/ecommerce/forms/ContentManagement/ContentBlocks.py`
+  - `apps/ecommerce/forms/ContentManagement/MediaAssets.py`
+- **Problem**: Both forms inherit directly from `TenantModelForm` without `TenantUniqueMixin`. In NavERP, `TenantUniqueMixin` provides automatic assignment of `self.instance.tenant = self.tenant` on creation. Without it, forms may fail with `IntegrityError: Column 'tenant_id' cannot be null` or skip tenant number generation.
+- **Fix**: Inherit `(TenantUniqueMixin, TenantModelForm)` on both form classes.
+- **Status**: [ ] open
 
-### Important Findings
-- **[IR2-01] Silent Blank Product Name Rendering in Content Block Templates (Duplicate of IR1-01)**
-  - **Files**:
-    - `templates/ecommerce/content_management/block/list.html`
-    - `templates/ecommerce/content_management/block/detail.html`
-  - **Problem**: Both templates reference `target_product.title`. `CatalogProduct` has `name`, not `title`.
-  - **Fix**: Change `target_product.title` to `target_product.name`.
+### [C2] Cross-tenant user exposure & missing `author` validation in `BlogArticleForm`
+- **File**: `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
+- **Problem**: `self.fields["author"].queryset` is set to `User.objects.filter(is_active=True).order_by("username")` without filtering by `tenant=self.tenant`. Also, `reject_foreign` only checks `["featured_media"]`, omitting `"author"`. A user can see and assign users from other workspaces.
+- **Fix**: Filter `author` queryset by `tenant=self.tenant, is_active=True`, and add `"author"` to `reject_foreign(self, cleaned, ["featured_media", "author"])`.
+- **Status**: [ ] open
 
-- **[IR2-02] Context Variable Discrepancy for Content Block Templates (`block` vs `content_block`)**
-  - **Files**:
-    - `templates/ecommerce/content_management/block/detail.html`
-    - `templates/ecommerce/content_management/block/form.html`
-    - `apps/ecommerce/views/ContentManagement/ContentBlocks.py`
-  - **Problem**: Contract lists `block`, but Django template keyword `{% block ... %}` shadows `block` variable. View passes both `block` and `content_block`.
-  - **Fix**: Keep both `block` and `content_block` in view context for backward compatibility and document in gap register.
-
-### Minor Findings
-- **[MR2-01] Table Name Defaulting on `CmsPage` (`ecommerce_cmspage` vs `ecommerce_cms_page`) (Duplicate of MR1-01)**
-  - **File**: `apps/ecommerce/models/ContentManagement/CmsPages.py`
-  - **Fix**: Document in gap register.
-
-- **[MR2-02] Missing Foreign Key Eager-Loading in Detail Views (N+1 Query Avoidance) (Duplicate of MR1-02)**
-  - **Files**:
-    - `apps/ecommerce/views/ContentManagement/BlogArticles.py`
-    - `apps/ecommerce/views/ContentManagement/MediaAssets.py`
-    - `apps/ecommerce/views/ContentManagement/ContentBlocks.py`
-  - **Fix**: Pass `select_related` on FKs in detail views.
+### [C3] Stored XSS vulnerability in CMS Page detail / preview via unsanitized `raw_html_body|safe`
+- **Files**:
+  - `templates/ecommerce/content_management/page/detail.html`
+  - `apps/ecommerce/forms/ContentManagement/CmsPages.py`
+- **Problem**: `page.raw_html_body|safe` renders unescaped HTML directly in the browser DOM. Unsanitized user HTML allows script injection or malicious iframes.
+- **Fix**: Restrict raw script/event handler injection or sanitize HTML to safe tags/attributes, and verify only authenticated staff can submit content.
+- **Status**: [ ] open
 
 ---
 
-## Reviewer 3: `frontend-reviewer`
+## Important Findings (7)
 
-### Critical Findings
-*None.*
+### [I1] Silent blank rendering of target product name in Content Block templates (`target_product.title` vs `name`)
+- **Files**:
+  - `templates/ecommerce/content_management/block/list.html`
+  - `templates/ecommerce/content_management/block/detail.html`
+- **Problem**: Templates reference `{{ block_item.target_product.title }}` and `{{ content_block.target_product.title }}`. The `CatalogProduct` model field is `name`, not `title`. In Django templates, accessing a non-existent attribute evaluates to `""` silently (L8 contract drift), rendering blank labels.
+- **Fix**: Change `.title` to `.name` in both templates.
+- **Status**: [ ] open
 
-### Important Findings
-- **[IFR-01] Silent blank rendering of target product name in Content Block templates (Duplicate of IR1-01 / IR2-01)**
-  - **Files**:
-    - `templates/ecommerce/content_management/block/list.html`
-    - `templates/ecommerce/content_management/block/detail.html`
-  - **Problem**: Both templates reference `target_product.title` instead of `target_product.name`.
-  - **Fix**: Replace `.title` with `.name`.
+### [I2] `BlogArticle.published_at` is never populated upon publishing
+- **Files**:
+  - `apps/ecommerce/models/ContentManagement/BlogArticles.py`
+  - `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
+- **Problem**: `published_at` is excluded from the form and not set on save. Articles published through the UI retain `published_at = None`.
+- **Fix**: In `BlogArticle.save()`, auto-set `self.published_at = timezone.now()` when `self.status == "published"` and `self.published_at` is None.
+- **Status**: [ ] open
 
-- **[IFR-02] Accessibility: Missing form `<label>` for `body_markdown` in Blog Article Form**
-  - **File**: `templates/ecommerce/content_management/blog/form.html`
-  - **Problem**: Textarea `{{ form.body_markdown }}` lacks an associated `<label for="...">`.
-  - **Fix**: Add `<label for="{{ form.body_markdown.id_for_label }}" class="form-label">Article Body (Markdown) *</label>`.
+### [I3] Missing form `<label>` for `body_markdown` in Blog Article Form (Accessibility / WCAG 2.1)
+- **File**: `templates/ecommerce/content_management/blog/form.html`
+- **Problem**: Textarea `{{ form.body_markdown }}` lacks an associated `<label for="{{ form.body_markdown.id_for_label }}">` element.
+- **Fix**: Add `<label for="{{ form.body_markdown.id_for_label }}" class="form-label">Article Body (Markdown) *</label>` inside the `form-group`.
+- **Status**: [ ] open
 
-- **[IFR-03] Reverse tabnabbing risk: Missing `rel="noopener noreferrer"` on `target="_blank"` links**
-  - **Files**:
-    - `templates/ecommerce/content_management/media/list.html`
-    - `templates/ecommerce/content_management/media/detail.html`
-    - `templates/ecommerce/content_management/page/list.html`
-    - `templates/ecommerce/content_management/page/detail.html`
-  - **Problem**: Links opening with `target="_blank"` omit `rel="noopener noreferrer"`.
-  - **Fix**: Add `rel="noopener noreferrer"` to all `<a ... target="_blank">` tags.
+### [I4] Missing `select_related` on Foreign Keys in Detail Views causing lazy N+1 queries
+- **Files**:
+  - `apps/ecommerce/views/ContentManagement/BlogArticles.py`
+  - `apps/ecommerce/views/ContentManagement/MediaAssets.py`
+  - `apps/ecommerce/views/ContentManagement/ContentBlocks.py`
+- **Problem**: Detail views call `ecommerce_object(...)` without `select_related`, triggering 1–3 extra SQL queries when rendering templates with FK attributes.
+- **Fix**: Pass `select_related=("author", "featured_media")` for `BlogArticle`, `select_related=("uploaded_by",)` for `MediaAsset`, and `select_related=("media_asset", "target_product", "target_category")` for `ContentBlock`.
+- **Status**: [ ] open
 
-### Minor Findings
-- **[MFR-01] Accessibility: Icon-only table action buttons lack explicit `aria-label` attributes**
-  - **Files**: All 4 list templates (`page/list.html`, `blog/list.html`, `media/list.html`, `block/list.html`)
-  - **Fix**: Add `aria-label` matching `title` on icon-only action links/buttons.
+### [I5] Heavy payload columns (`raw_html_body`, `content_json`, `body_markdown`) fetched in list views without `defer()`
+- **Files**:
+  - `apps/ecommerce/views/ContentManagement/CmsPages.py`
+  - `apps/ecommerce/views/ContentManagement/BlogArticles.py`
+- **Problem**: Full editorial text (potentially 50KB–200KB+) is retrieved for all 20 rows in list queries but not displayed in tables.
+- **Fix**: Add `.defer("raw_html_body", "content_json")` to `CmsPage` list queryset and `.defer("body_markdown")` to `BlogArticle` list queryset.
+- **Status**: [ ] open
 
-- **[MFR-02] Blog Article detail renders comma-separated tags as a single monolithic badge**
-  - **File**: `templates/ecommerce/content_management/blog/detail.html`
-  - **Fix**: Add `tag_list` helper property on `BlogArticle` model or split in template to render individual badge chips.
+### [I6] Reverse Tabnabbing risk on external `target="_blank"` anchors
+- **Files**:
+  - `templates/ecommerce/content_management/page/list.html`
+  - `templates/ecommerce/content_management/page/detail.html`
+  - `templates/ecommerce/content_management/media/list.html`
+  - `templates/ecommerce/content_management/media/detail.html`
+- **Problem**: External asset and preview links opening with `target="_blank"` omit `rel="noopener noreferrer"`.
+- **Fix**: Add `rel="noopener noreferrer"` to all `<a ... target="_blank">` tags.
+- **Status**: [ ] open
 
-- **[MFR-03] CTA URL in Content Block Detail component simulator lacks protocol safeguard**
-  - **File**: `templates/ecommerce/content_management/block/detail.html`
-  - **Fix**: Restrict or validate protocol on CTA preview button.
-
----
-
-## Reviewer 4: `performance-reviewer`
-
-### Critical Findings
-*None.*
-
-### Important Findings
-- **[IPR-01] Missing `select_related` on Foreign Keys in Detail Views (Duplicate of MR1-02 / MR2-02)**
-  - **Files**:
-    - `apps/ecommerce/views/ContentManagement/BlogArticles.py` (`blogarticle_detail`)
-    - `apps/ecommerce/views/ContentManagement/MediaAssets.py` (`mediaasset_detail`)
-    - `apps/ecommerce/views/ContentManagement/ContentBlocks.py` (`contentblock_detail`)
-  - **Problem**: Detail templates reference FK attributes (`featured_media`, `author`, `uploaded_by`, `media_asset`, `target_category`, `target_product`) resulting in 1–3 additional lazy queries per page load.
-  - **Fix**: Supply `select_related` in `ecommerce_object(...)` calls.
-
-- **[IPR-02] Heavy payload columns (`raw_html_body`, `content_json`, `body_markdown`) fetched in list views without `defer()`**
-  - **Files**:
-    - `apps/ecommerce/views/ContentManagement/CmsPages.py` (`cmspage_list`)
-    - `apps/ecommerce/views/ContentManagement/BlogArticles.py` (`blogarticle_list`)
-  - **Problem**: Full text bodies (potentially 50KB–200KB+) are retrieved for all 20 rows in list views, none of which are rendered in table columns.
-  - **Fix**: Add `.defer("raw_html_body", "content_json")` to `CmsPage` queryset and `.defer("body_markdown")` to `BlogArticle` queryset.
-
-- **[IPR-03] Missing `(tenant, -created_at)` and composite sort order indexes on CMS models**
-  - **Files**:
-    - `apps/ecommerce/models/ContentManagement/CmsPages.py`
-    - `apps/ecommerce/models/ContentManagement/BlogArticles.py`
-    - `apps/ecommerce/models/ContentManagement/MediaAssets.py`
-    - `apps/ecommerce/models/ContentManagement/ContentBlocks.py`
-  - **Problem**: Default list queries order by `["-created_at"]` under `tenant_id = ?`, triggering a filesort without a composite index on `(tenant, -created_at)`.
-  - **Fix**: Add composite indexes in next migration or record in gap register.
-
-### Minor Findings
-- **[MPR-01] Superfluous JOIN on `featured_media` in `blogarticle_list`**
-  - **File**: `apps/ecommerce/views/ContentManagement/BlogArticles.py`
-  - **Problem**: List view joins `featured_media` but template does not render it.
-  - **Fix**: Remove `"featured_media"` from `select_related` in `blogarticle_list`.
-
-- **[MPR-02] Unbounded global User queryset in `BlogArticleForm.__init__` (Duplicate of CR1-01)**
-  - **File**: `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
-  - **Fix**: Filter by `tenant=self.tenant`.
+### [I7] Stored DOM XSS via unvalidated `cta_url` in ContentBlock
+- **Files**:
+  - `apps/ecommerce/forms/ContentManagement/ContentBlocks.py`
+  - `templates/ecommerce/content_management/block/detail.html`
+- **Problem**: `cta_url` is unvalidated and could accept `javascript:...` URIs rendered directly in `<a href="...">`.
+- **Fix**: Add `clean_cta_url()` in `ContentBlockForm` requiring URLs to start with `/`, `#`, `http://`, or `https://`.
+- **Status**: [ ] open
 
 ---
 
-## Reviewer 5: `qa-smoke-tester`
+## Minor Findings (7)
 
-### Findings Summary
-- **Critical (C)**: None (0)
-- **Important (I)**: None (0)
-- **Minor (M)**: None (0)
+### [M1] Superfluous JOIN on `featured_media` in `blogarticle_list`
+- **File**: `apps/ecommerce/views/ContentManagement/BlogArticles.py`
+- **Problem**: List view joins `featured_media` but template does not render it.
+- **Fix**: Remove `"featured_media"` from `select_related` in `blogarticle_list`.
+- **Status**: [ ] open
 
-### Verified Areas
-- **21/21 URLs Verified**: All 21 endpoints resolve via `reverse()`, render HTTP 200/302, and contain expected model data with zero template comment leaks.
-- **Junk Query Robustness**: Malformed queries, SQL injection strings, and out-of-range pagination handled safely on all 4 list views without 500s.
-- **Cross-Tenant IDOR**: 13/13 cross-tenant requests from Tenant 2 (Globex) against Tenant 1 (Acme) returned HTTP 404 with zero data disclosure and no deletions.
+### [M2] Accessibility: Icon-only table action buttons lack explicit `aria-label` attributes
+- **Files**:
+  - `templates/ecommerce/content_management/page/list.html`
+  - `templates/ecommerce/content_management/blog/list.html`
+  - `templates/ecommerce/content_management/media/list.html`
+  - `templates/ecommerce/content_management/block/list.html`
+- **Problem**: Icon-only action links/buttons have `title` but lack `aria-label`.
+- **Fix**: Add matching `aria-label` to each action button.
+- **Status**: [ ] open
 
+### [M3] `BlogArticleForm` does not lowercase or strip slug
+- **File**: `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
+- **Problem**: Missing `clean_slug()` normalizing strings via `.strip().lower()`.
+- **Fix**: Add `clean_slug()` method to normalize slug.
+- **Status**: [ ] open
 
+### [M4] Blog Article detail renders comma-separated tags as single monolithic badge
+- **Files**:
+  - `apps/ecommerce/models/ContentManagement/BlogArticles.py`
+  - `templates/ecommerce/content_management/blog/detail.html`
+- **Problem**: Multiple tags like `"news, updates"` appear in one badge.
+- **Fix**: Add `tag_list` helper property on `BlogArticle` model and loop over chips in template.
+- **Status**: [ ] open
 
+### [M5] Seeder cross-tenant user fallback in `seed_ecommerce.py`
+- **File**: `apps/ecommerce/management/commands/seed_ecommerce.py`
+- **Problem**: Seeder uses `User.objects.filter(is_active=True).first()` without tenant filter.
+- **Fix**: Scope by `User.objects.filter(tenant=tenant, is_active=True).first() or User.objects.filter(is_active=True).first()`.
+- **Status**: [ ] open
 
+### [M6] Table Name Defaulting on `CmsPage` (`ecommerce_cmspage` vs `ecommerce_cms_page`)
+- **File**: `apps/ecommerce/models/ContentManagement/CmsPages.py`
+- **Problem**: Contract specified `Table: ecommerce_cms_page`, but model defaulted to `ecommerce_cmspage`.
+- **Fix**: Record in `.agents/tasks/gaps-ecommerce-9.9.md` to avoid disruption of migration 0026.
+- **Status**: [ ] open
+
+### [M7] Composite `(tenant, -created_at)` indexes omitted from CMS models
+- **Files**:
+  - `apps/ecommerce/models/ContentManagement/CmsPages.py`
+  - `apps/ecommerce/models/ContentManagement/BlogArticles.py`
+  - `apps/ecommerce/models/ContentManagement/MediaAssets.py`
+  - `apps/ecommerce/models/ContentManagement/ContentBlocks.py`
+- **Problem**: Default list pagination orders by `-created_at` without a composite index on `(tenant, -created_at)`.
+- **Fix**: Record in `.agents/tasks/gaps-ecommerce-9.9.md`.
+- **Status**: [ ] open
