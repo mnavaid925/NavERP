@@ -15,7 +15,7 @@ from apps.ecommerce.views._common import ecommerce_object
 @login_required
 def customersatisfactionsurvey_list(request):
     qs = CustomerSatisfactionSurvey.objects.filter(tenant=request.tenant).select_related(
-        "ticket", "order", "customer", "agent_rated", "reviewed_by"
+        "ticket", "order", "customer__customer", "agent_rated", "reviewed_by"
     )
 
     query = request.GET.get("q", "").strip()
@@ -65,7 +65,7 @@ def customersatisfactionsurvey_detail(request, pk):
         request,
         CustomerSatisfactionSurvey,
         pk,
-        select_related=("ticket", "order", "customer", "agent_rated", "reviewed_by"),
+        select_related=("ticket", "order", "customer__customer", "agent_rated", "reviewed_by"),
     )
     return render(request, "ecommerce/customer_support/survey/detail.html", {"survey": survey})
 
