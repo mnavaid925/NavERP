@@ -162,7 +162,7 @@ def customercohortmetric_recalculate(request):
         request.user,
         None,
         "recalc",
-        f"Recalculated {count} cohort metrics",
+        {"count": count},
         tenant=request.tenant,
     )
     messages.success(request, f"Recalculated retention and LTV metrics across {count} cohort entries.")
