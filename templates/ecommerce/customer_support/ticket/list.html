@@ -149,8 +149,10 @@
                             <span class="badge badge-green">Resolved</span>
                             {% elif ticket.status == 'closed' %}
                             <span class="badge badge-slate">Closed</span>
-                            {% else %}
+                            {% elif ticket.status == 'cancelled' %}
                             <span class="badge badge-red">Cancelled</span>
+                            {% else %}
+                            <span class="badge badge-slate">{{ ticket.get_status_display }}</span>
                             {% endif %}
                         </td>
                         <td class="text-sm text-slate-600">
