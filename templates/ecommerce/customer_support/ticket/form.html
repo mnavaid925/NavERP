@@ -33,7 +33,7 @@
 
             <!-- Section 1: Shopper Information -->
             <div>
-                <h3 class="text-base font-semibold text-slate-900 border-b border-slate-200 pb-2 mb-4">Customer Details</h3>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">Customer Details</h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div class="form-group">
                         <label for="{{ form.customer_name.id_for_label }}" class="form-label">Customer Name *</label>
@@ -75,7 +75,7 @@
 
             <!-- Section 2: Ticket Parameters & Routing -->
             <div>
-                <h3 class="text-base font-semibold text-slate-900 border-b border-slate-200 pb-2 mb-4">Ticket Classification & Routing</h3>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">Ticket Classification & Routing</h3>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div class="form-group">
                         <label for="{{ form.channel.id_for_label }}" class="form-label">Inbound Channel *</label>
@@ -115,7 +115,7 @@
                     <div class="form-group md:col-span-2 flex items-center pt-6">
                         <label class="flex items-center gap-2 cursor-pointer">
                             {{ form.is_bot_handled }}
-                            <span class="text-sm font-medium text-slate-700">Bot Assisted Inquiry</span>
+                            <span class="text-sm font-medium text-slate-700 dark:text-slate-200">Bot Assisted Inquiry</span>
                         </label>
                     </div>
                     <div class="form-group md:col-span-4">
@@ -130,7 +130,7 @@
 
             <!-- Section 3: Subject & Conversation Body -->
             <div>
-                <h3 class="text-base font-semibold text-slate-900 border-b border-slate-200 pb-2 mb-4">Inquiry Content</h3>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">Inquiry Content</h3>
                 <div class="space-y-4">
                     <div class="form-group">
                         <label for="{{ form.subject.id_for_label }}" class="form-label">Ticket Subject *</label>
