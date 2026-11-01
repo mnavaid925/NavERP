@@ -40,6 +40,10 @@ from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacet
 from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
 from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
 from apps.ecommerce.models.SearchDiscovery.SearchSynonyms import SearchSynonym
+from apps.ecommerce.models.CustomerSupport.CustomerSatisfactionSurveys import CustomerSatisfactionSurvey
+from apps.ecommerce.models.CustomerSupport.CustomerSupportTickets import CustomerSupportTicket
+from apps.ecommerce.models.CustomerSupport.KnowledgeBaseArticles import KnowledgeBaseArticle
+from apps.ecommerce.models.CustomerSupport.OrderIssueClaims import OrderIssueClaim
 from apps.ecommerce.models.ReviewUgc.ProductQuestionAnswers import ProductQuestionAnswer
 from apps.ecommerce.models.ReviewUgc.ProductReviews import ProductReview
 from apps.ecommerce.models.ReviewUgc.ReviewSentimentSummaries import ReviewSentimentSummary
@@ -581,6 +585,87 @@ class ReviewSentimentSummaryAdmin(admin.ModelAdmin):
     readonly_fields = ["number", "last_calculated_at", "created_at", "updated_at"]
     list_select_related = ["product"]
     ordering = ["-total_reviews", "-average_rating"]
+
+
+@admin.register(CustomerSupportTicket)
+class CustomerSupportTicketAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "subject",
+        "customer_name",
+        "channel",
+        "category",
+        "priority",
+        "status",
+        "assigned_agent",
+        "is_sla_breached",
+        "created_at",
+    ]
+    list_filter = ["status", "priority", "channel", "category", "is_sla_breached", "tenant"]
+    search_fields = ["number", "subject", "customer_name", "customer_email", "initial_message"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["customer", "order", "assigned_agent"]
+    ordering = ["-created_at"]
+
+
+@admin.register(KnowledgeBaseArticle)
+class KnowledgeBaseArticleAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "title",
+        "category",
+        "target_audience",
+        "status",
+        "is_featured",
+        "view_count",
+        "helpful_votes",
+        "author",
+    ]
+    list_filter = ["status", "category", "target_audience", "is_featured", "tenant"]
+    search_fields = ["number", "title", "slug", "summary", "keywords"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["author"]
+    ordering = ["-is_featured", "-created_at"]
+
+
+@admin.register(OrderIssueClaim)
+class OrderIssueClaimAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "order",
+        "claim_type",
+        "status",
+        "claimed_amount",
+        "approved_amount",
+        "resolution_action",
+        "reviewed_by",
+        "created_at",
+    ]
+    list_filter = ["status", "claim_type", "resolution_action", "tenant"]
+    search_fields = ["number", "order__number", "carrier_tracking_number", "customer_notes"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["order", "customer", "ticket", "reviewed_by"]
+    ordering = ["-created_at"]
+
+
+@admin.register(CustomerSatisfactionSurvey)
+class CustomerSatisfactionSurveyAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "survey_type",
+        "rating_score",
+        "sentiment",
+        "follow_up_status",
+        "agent_rated",
+        "reviewed_by",
+        "created_at",
+    ]
+    list_filter = ["survey_type", "sentiment", "follow_up_status", "tenant"]
+    search_fields = ["number", "feedback_comment", "follow_up_notes"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["ticket", "order", "customer", "agent_rated", "reviewed_by"]
+    ordering = ["-created_at"]
+
 
 
 
