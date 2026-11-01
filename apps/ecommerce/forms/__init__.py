@@ -85,6 +85,10 @@ from apps.ecommerce.forms.SubscriptionCommerce.CustomerSubscriptions import Cust
 from apps.ecommerce.forms.SubscriptionCommerce.SubscriptionBoxCurations import SubscriptionBoxCurationForm
 from apps.ecommerce.forms.SubscriptionCommerce.SubscriptionPlans import SubscriptionPlanForm
 from apps.ecommerce.forms.SubscriptionCommerce.SubscriptionRetentionActions import SubscriptionRetentionActionForm
+from apps.ecommerce.forms.ContentManagement.BlogArticles import BlogArticleForm
+from apps.ecommerce.forms.ContentManagement.CmsPages import CmsPageForm
+from apps.ecommerce.forms.ContentManagement.ContentBlocks import ContentBlockForm
+from apps.ecommerce.forms.ContentManagement.MediaAssets import MediaAssetForm
 
 __all__ = [
     "TenantUniqueMixin",
@@ -169,4 +173,9 @@ __all__ = [
     "KnowledgeBaseArticleForm",
     "OrderIssueClaimForm",
     "CustomerSatisfactionSurveyForm",
+    # 9.9 Content Management System (CMS)
+    "CmsPageForm",
+    "BlogArticleForm",
+    "MediaAssetForm",
+    "ContentBlockForm",
 ]
