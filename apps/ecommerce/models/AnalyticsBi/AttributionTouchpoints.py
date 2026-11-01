@@ -94,6 +94,7 @@ class AttributionTouchpoint(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_eatt_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-touchpoint_timestamp"], name="idx_eatt_ten_time"),
             models.Index(fields=["tenant", "channel_type"], name="idx_eatt_ten_channel"),
             models.Index(fields=["tenant", "order"], name="idx_eatt_ten_order"),
             models.Index(fields=["tenant", "campaign"], name="idx_eatt_ten_camp"),
