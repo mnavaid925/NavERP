@@ -140,7 +140,6 @@ def attributiontouchpoint_edit(request, pk):
 def attributiontouchpoint_delete(request, pk):
     touchpoint = ecommerce_object(request, AttributionTouchpoint, pk)
     number = touchpoint.number
-    touchpoint.delete()
     write_audit_log(
         request.user,
         touchpoint,
@@ -148,5 +147,6 @@ def attributiontouchpoint_delete(request, pk):
         {"number": number},
         tenant=request.tenant,
     )
+    touchpoint.delete()
     messages.success(request, f"Attribution touchpoint {number} was deleted.")
     return redirect("ecommerce:attributiontouchpoint_list")
