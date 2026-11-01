@@ -82,4 +82,8 @@ class CustomerSupportTicketForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["customer", "order"])
+        customer = cleaned.get("customer")
+        order = cleaned.get("order")
+        if customer and order and order.customer_id != customer.customer_id:
+            self.add_error("order", "The selected order does not belong to the selected customer profile.")
         return cleaned
