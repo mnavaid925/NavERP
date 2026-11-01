@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Blog Articles | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Content Management</span>
+            <span>/</span>
+            <span>Blog</span>
+        </div>
+        <h1 class="page-title">Store Blog & Articles</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:blogarticle_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Article
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label for="q" class="form-label">Search</label>
+                <input type="text" id="q" name="q" value="{{ search_query }}" placeholder="Title, slug, tags, excerpt..." class="form-input">
+            </div>
+            <div class="form-group mb-0">
+                <label for="category" class="form-label">Category</label>
+                <select id="category" name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if selected_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="status" class="form-label">Status</label>
+                <select id="status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+                <a href="{% url 'ecommerce:blogarticle_list' %}" class="btn btn-outline">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Articles Table Card -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Article #</th>
+                        <th>Title & Slug</th>
+                        <th>Category</th>
+                        <th>Author</th>
+                        <th>Status</th>
+                        <th>Read Time</th>
+                        <th>Featured</th>
+                        <th>Views</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for article_item in articles %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'ecommerce:blogarticle_detail' article_item.pk %}" class="font-medium text-primary">
+                                {{ article_item.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-semibold text-slate-800 dark:text-slate-100">{{ article_item.title }}</div>
+                            <div class="text-xs text-slate-400 font-mono">/blog/{{ article_item.slug }}/</div>
+                        </td>
+                        <td>
+                            <span class="badge badge-blue">{{ article_item.get_category_display }}</span>
+                        </td>
+                        <td class="text-sm text-slate-600">
+                            {% if article_item.author %}
+                            {{ article_item.author.get_full_name|default:article_item.author.username }}
+                            {% else %}
+                            <span class="text-slate-400 italic">Editorial Staff</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if article_item.status == 'published' %}
+                            <span class="badge badge-green">Published</span>
+                            {% elif article_item.status == 'scheduled' %}
+                            <span class="badge badge-blue">Scheduled</span>
+                            {% elif article_item.status == 'archived' %}
+                            <span class="badge badge-yellow">Archived</span>
+                            {% else %}
+                            <span class="badge badge-gray">Draft</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm text-slate-600">
+                            {{ article_item.reading_time_minutes }} min
+                        </td>
+                        <td>
+                            {% if article_item.is_featured %}
+                            <span class="badge badge-purple">Featured</span>
+                            {% else %}
+                            <span class="text-xs text-slate-400">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm text-slate-700">
+                            {{ article_item.view_count }}
+                        </td>
+                        <td class="table-actions text-right">
+                            <a href="{% url 'ecommerce:blogarticle_detail' article_item.pk %}" class="btn btn-icon" title="View Article">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:blogarticle_edit' article_item.pk %}" class="btn btn-icon" title="Edit Article">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form action="{% url 'ecommerce:blogarticle_delete' article_item.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete article {{ article_item.title }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Article">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center py-8">
+                            <div class="empty-state">
+                                <i data-lucide="book-open" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
+                                <h3 class="text-base font-semibold text-slate-700 dark:text-slate-200">No blog articles found</h3>
+                                <p class="text-sm text-slate-500 mb-4">No published or draft editorial posts match your current search.</p>
+                                <a href="{% url 'ecommerce:blogarticle_create' %}" class="btn btn-primary btn-sm">Create First Article</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if articles.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing {{ articles.start_index }} to {{ articles.end_index }} of {{ articles.paginator.count }} articles
+            </div>
+            <div class="flex gap-1">
+                <a href="?page={% if articles.has_previous %}{{ articles.previous_page_number }}{% else %}1{% endif %}&q={{ search_query }}&category={{ selected_category }}&status={{ selected_status }}"
+                   class="btn btn-outline btn-sm {% if not articles.has_previous %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Previous
+                </a>
+                <span class="btn btn-sm btn-outline active">{{ articles.number }} / {{ articles.paginator.num_pages }}</span>
+                <a href="?page={% if articles.has_next %}{{ articles.next_page_number }}{% else %}{{ articles.paginator.num_pages }}{% endif %}&q={{ search_query }}&category={{ selected_category }}&status={{ selected_status }}"
+                   class="btn btn-outline btn-sm {% if not articles.has_next %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Next
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
