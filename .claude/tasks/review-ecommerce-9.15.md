@@ -5,125 +5,149 @@ Head: `HEAD`
 
 ---
 
-## 1. Code Reviewer Findings
-
-### Critical
-1. **Audit log forensics broken on deletion (`object_id=None`):**
-   - In all four delete views (`DailySalesSnapshots.py:128-137`, `CustomerCohortMetrics.py:124-133`, `ProductMerchandisingMetrics.py:133-142`, `AttributionTouchpoints.py:141-150`), `instance.delete()` is executed before `write_audit_log(...)`. In Django, executing `.delete()` on an active model instance sets `instance.pk` to `None`. Consequently, `write_audit_log` records `object_id = None`. Invert the execution order so `write_audit_log` runs before `instance.delete()`.
-2. **Forms omit `TenantUniqueMixin`, bypassing tenant unique validation:**
-   - In all 4 forms (`DailySalesSnapshots.py:7`, `CustomerCohortMetrics.py:7`, `ProductMerchandisingMetrics.py:9`, `AttributionTouchpoints.py:11`), forms inherit from `TenantModelForm` without `TenantUniqueMixin`. Because `tenant` is excluded from form fields, Django's default `validate_unique()` excludes `tenant` from the uniqueness check and duplicate composite keys trigger raw database `IntegrityError` (500) instead of form validation errors. Add `TenantUniqueMixin` to all 4 forms.
-3. **Missing package `__init__.py` re-exports in `AnalyticsBi` directories:**
-   - `apps/ecommerce/{models,forms,views}/AnalyticsBi/__init__.py` contain only docstrings and do not re-export their respective entities and views with `__all__`. Add standard symbol re-exports and `__all__` lists in each package `__init__.py`.
-
-### Important
-1. **Batch recalculations lack `transaction.atomic` and pass raw strings to `changes`:**
-   - In `CustomerCohortMetrics.py:140-155` and `ProductMerchandisingMetrics.py:149-164`, batch recalculate/reclassify loops lack `transaction.atomic()` and pass raw strings to `changes` in `write_audit_log` instead of dicts. Wrap in `transaction.atomic()` and pass dict.
-2. **Unhandled `request.tenant is None` in create and action views:**
-   - In `DailySalesSnapshots.py:69, 144`, `CustomerCohortMetrics.py:59, 140`, `ProductMerchandisingMetrics.py:67, 149`, `AttributionTouchpoints.py:75`, tenant-less superuser (`tenant=None`) attempting to create or trigger actions raises raw database IntegrityError. Add guard checking `if request.tenant is None: messages.error(...); return redirect(...)`.
-3. **Potential DecimalField overflow in percentage rate calculations:**
-   - In `DailySalesSnapshots.py:95-98`, `ProductMerchandisingMetrics.py:64-87`, and `CustomerCohortMetrics.py:58-64`, percentage calculations using `DecimalField(max_digits=5, decimal_places=2)` can exceed 999.99 if orders > carts * 10, raising `DataError 1406`. Clamp percentages to `[0.00, 100.00]` (or `[0.00, 999.99]`). Also clamp `churn_rate_pct` to min 0.00.
-4. **Manual velocity tier edits overwritten on save:**
-   - In `ProductMerchandisingMetrics.py:106-109`, editing a metric calls `m.recalculate_metrics()` which overwrites user-selected `velocity_tier`. Only recalculate margin/return rates or preserve submitted tier.
-
-### Minor
-1. **Redundant duplicate Chart.js script tag:**
-   - `templates/ecommerce/analytics_bi/cockpit/cockpit.html:245` includes Chart.js even though `templates/base.html:150` loads Chart.js 4.4.1 globally. Remove line 245.
-2. **`units_sold` not aggregated from order lines:**
-   - `DailySalesSnapshots.py:78-84` leaves `units_sold` defaulting to 0 on auto-generated snapshots. Aggregate `EcommerceOrderLine.quantity`.
-3. **Filter state mismatch for `is_finalized`:**
-   - `DailySalesSnapshots.py:34-38` passes `selected_finalized` as string `"true"`, but template checks `"1"`. Normalize to `"1"` / `"0"`.
-4. **Batch actions lack `@tenant_admin_required`:**
-   - `customercohortmetric_recalculate` and `productmerchandisingmetric_reclassify` lack `@tenant_admin_required`.
-5. **Conversion funnel percentage display unbounded:**
-   - `AnalyticsCockpit.py:72, 78, 84, 90` stage percentage can exceed 100%. Wrap in `min(100.0, ...)`.
+## Executive Summary
+Six specialized reviewers (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) conducted an in-depth review of Sub-module 9.15 across 46 files and 5,479 lines of additions. Runtime smoke testing verified 100% pass across 65+ route permutations with zero 500 crashes and solid multi-tenant isolation. The findings below have been deduplicated, categorized by priority, and assigned deterministic IDs for Phase 5 remediation.
 
 ---
 
-## 2. Explorer Findings
+## Critical Findings
 
-### Critical
-None. All 18 backend files and 13 templates are in place, migration 0027 is clean, routes resolve without collision, and Django check reports zero issues.
+- [ ] **C1** — **Audit log forensics broken on deletion (`object_id=None`)**:
+  - *Location*:
+    - `apps/ecommerce/views/AnalyticsBi/DailySalesSnapshots.py:128-137`
+    - `apps/ecommerce/views/AnalyticsBi/CustomerCohortMetrics.py:124-133`
+    - `apps/ecommerce/views/AnalyticsBi/ProductMerchandisingMetrics.py:133-142`
+    - `apps/ecommerce/views/AnalyticsBi/AttributionTouchpoints.py:141-150`
+  - *Problem*: In all four delete views, `instance.delete()` is executed before `write_audit_log(...)`. In Django, executing `.delete()` on an active model instance sets `instance.pk` to `None`. Consequently, `write_audit_log` records `object_id = None`, corrupting audit forensics.
+  - *Fix*: Invert execution order so `write_audit_log` runs before `instance.delete()`.
 
-### Important
-1. **Sub-Package `__init__.py` Re-exports Omitted in `AnalyticsBi`**:
-   - `apps/ecommerce/models/AnalyticsBi/__init__.py`, `apps/ecommerce/forms/AnalyticsBi/__init__.py`, and `apps/ecommerce/views/AnalyticsBi/__init__.py` lack `__all__` and re-exports. (Confirms Code Reviewer Critical #3).
-2. **Missing `TenantUniqueMixin` on Tenant-Scoped Forms**:
-   - All four forms omit `TenantUniqueMixin`. (Confirms Code Reviewer Critical #2).
+- [ ] **C2** — **Forms omit `TenantUniqueMixin`, bypassing tenant composite uniqueness validation**:
+  - *Location*: All 4 forms in `apps/ecommerce/forms/AnalyticsBi/` (`DailySalesSnapshots.py:7`, `CustomerCohortMetrics.py:7`, `ProductMerchandisingMetrics.py:9`, `AttributionTouchpoints.py:11`).
+  - *Problem*: Forms inherit from `TenantModelForm` without `TenantUniqueMixin`. Because `tenant` is excluded from form fields, Django's default `validate_unique()` excludes `tenant` from the uniqueness check and duplicate composite keys trigger raw database `IntegrityError` (500) instead of form validation errors.
+  - *Fix*: Inherit from `(TenantUniqueMixin, TenantModelForm)` in all 4 forms.
 
-### Minor
-1. **Contract Drift in `channel_attribution_summary` Dictionary Key**:
-   - Contract specifies key `"orders"` while view and template use `"count"` for touchpoint events. View and template are synchronized.
-2. **Filter State Dropdown Mismatch for `is_finalized`**:
-   - `DailySalesSnapshots.py:34-38` passes raw string to context; normalize to `"1"` / `"0"`. (Confirms Code Reviewer Minor #3).
-3. **Redundant Chart.js CDN Script Tag in Cockpit Template**:
-   - `templates/ecommerce/analytics_bi/cockpit/cockpit.html:245` redundant script tag. (Confirms Code Reviewer Minor #1).
+- [ ] **C3** — **Sub-package `__init__.py` re-exports omitted in `AnalyticsBi`**:
+  - *Location*:
+    - `apps/ecommerce/models/AnalyticsBi/__init__.py`
+    - `apps/ecommerce/forms/AnalyticsBi/__init__.py`
+    - `apps/ecommerce/views/AnalyticsBi/__init__.py`
+  - *Problem*: Unlike sibling packages, these `__init__.py` files contain only docstrings and lack symbol re-exports and `__all__` lists.
+  - *Fix*: Add standard re-exports and `__all__` in each package `__init__.py`.
 
----
+- [ ] **C4** — **Chained N+1 in `AttributionTouchpointForm` foreign key dropdowns (`order` & `cart`)**:
+  - *Location*: `apps/ecommerce/forms/AnalyticsBi/AttributionTouchpoints.py:52-57`
+  - *Problem*: `EcommerceOrder.__str__` accesses `self.customer.name` and `Cart.__str__` accesses `self.customer`. Without `.select_related("customer")` on both form dropdown querysets, rendering `form.html` executes $1 + N$ queries per field.
+  - *Fix*: Add `.select_related("customer")` to `order` and `cart` querysets in `AttributionTouchpointForm.__init__`.
 
-## 3. Frontend Reviewer Findings
-
-### Critical
-None. Zero comment leaks, all POST forms have CSRF tokens, all 28 template reverse URLs are valid, and all theme classes adhere to theme.css.
-
-### Important
-1. **Invalid Attribute Access on AffiliatePartner in `attribution_touchpoint/detail.html` (Line 134)**:
-   - `templates/ecommerce/analytics_bi/attribution_touchpoint/detail.html:134` accesses `{{ touchpoint.affiliate.partner_code }} ({{ touchpoint.affiliate.company_name }})`. `AffiliatePartner` defines `referral_code` and `name` (not `partner_code` or `company_name`). Update to `{{ touchpoint.affiliate.referral_code }} ({{ touchpoint.affiliate.name }})`.
-2. **Missing `{% else %}` Display Fallback on Velocity Tier Badges in `product_merchandising_metric`**:
-   - In `templates/ecommerce/analytics_bi/product_merchandising_metric/list.html:108-116` and `detail.html:16-24`, the `{% else %}` clause assumes "Dead Stock" directly without an explicit `{% elif m.velocity_tier == "dead_stock" %}` and an `{% else %}` fallback of `<span class="badge badge-slate">{{ m.get_velocity_tier_display }}</span>`.
-
-### Minor
-1. **Redundant Duplicate Script Tag in `cockpit.html` (Line 245)**:
-   - `templates/ecommerce/analytics_bi/cockpit/cockpit.html:245` includes Chart.js CDN script tag, already loaded by `templates/base.html:28`. (Confirms Code Reviewer Minor #1).
-2. **Long Product Title Truncation on Mobile Cockpit (`cockpit.html` Line 197)**:
-   - In `templates/ecommerce/analytics_bi/cockpit/cockpit.html:197`, product title link `{{ m.product.name }}` in Best Sellers widget could stretch on small screens. Add `class="truncate max-w-xs block"`.
+- [ ] **C5** — **Missing compound index on high-volume table `ecommerce_attribution_touchpoint` (`tenant`, `-touchpoint_timestamp`)**:
+  - *Location*: `apps/ecommerce/models/AnalyticsBi/AttributionTouchpoints.py`
+  - *Problem*: Model defines `ordering = ["-touchpoint_timestamp"]` and list queries filter by tenant ordered by `-touchpoint_timestamp`, but lacks a compound index on `(tenant, -touchpoint_timestamp)`.
+  - *Fix*: Add `models.Index(fields=["tenant", "-touchpoint_timestamp"], name="idx_eatt_ten_time")` and generate incremental migration.
 
 ---
 
-## 4. Performance Reviewer Findings
+## Important Findings
 
-### Critical
-1. **Chained N+1 in `AttributionTouchpointForm` foreign key dropdowns (`order` & `cart`)**:
-   - `apps/ecommerce/forms/AnalyticsBi/AttributionTouchpoints.py:52-57`: `EcommerceOrder.__str__` evaluates `self.customer.name` and `Cart.__str__` evaluates `self.customer`. Without `.select_related("customer")` on both form dropdown querysets, rendering the form executes $1 + N$ queries per field.
-   - Fix: Add `.select_related("customer")` to `order` and `cart` querysets in `AttributionTouchpointForm.__init__`.
-2. **Missing compound index on high-volume table `ecommerce_attribution_touchpoint` (`tenant`, `-touchpoint_timestamp`)**:
-   - `apps/ecommerce/models/AnalyticsBi/AttributionTouchpoints.py`: `ordering = ["-touchpoint_timestamp"]` and list view queries by tenant ordered by `-touchpoint_timestamp`, but lacks an index on `(tenant, -touchpoint_timestamp)`.
-   - Fix: Add `models.Index(fields=["tenant", "-touchpoint_timestamp"], name="idx_eatt_ten_time")` to `AttributionTouchpoint.Meta.indexes`.
+- [ ] **I1** — **Missing `@tenant_admin_required` on batch recalculation views**:
+  - *Location*:
+    - `apps/ecommerce/views/AnalyticsBi/CustomerCohortMetrics.py:138-157` (`customercohortmetric_recalculate`)
+    - `apps/ecommerce/views/AnalyticsBi/ProductMerchandisingMetrics.py:147-166` (`productmerchandisingmetric_reclassify`)
+    - `apps/ecommerce/views/AnalyticsBi/DailySalesSnapshots.py:142-160` (`dailysalessnapshot_generate`)
+  - *Problem*: Endpoints mutate tenant-wide business intelligence data but lack `@tenant_admin_required`, allowing non-admin tenant members to trigger bulk recalculations.
+  - *Fix*: Add `@tenant_admin_required` decorator to all three views.
 
-### Important
-1. **Cockpit query multiplication: 12 queries reducible to 7 queries via conditional aggregation**:
-   - `apps/ecommerce/views/AnalyticsBi/AnalyticsCockpit.py:39-61`: 4 separate queries to `Cart` and 3 separate queries to `CheckoutSession`. Collapse into conditional `aggregate()` using `Count("id", filter=Q(...))`.
-2. **Sequential row-by-row UPDATE loop in batch recalculation views**:
-   - `ProductMerchandisingMetrics.py:149-157` and `CustomerCohortMetrics.py:140-148`: Iterate and call `.save()` on each instance. Use `bulk_update(metrics, [...], batch_size=500)` inside `transaction.atomic()`.
-3. **Non-sargable date lookup preventing index range scan on `EcommerceOrder`**:
-   - `AnalyticsCockpit.py:23-27` and `DailySalesSnapshots.py:58`: `created_at__date=today` wraps indexed column in SQL `DATE()`. Use datetime interval `created_at__gte=start_of_day, created_at__lt=start_of_next_day`.
+- [ ] **I2** — **Batch recalculation loops lack `transaction.atomic()` and `bulk_update`**:
+  - *Location*: `apps/ecommerce/views/AnalyticsBi/CustomerCohortMetrics.py:140-155` and `ProductMerchandisingMetrics.py:149-164`.
+  - *Problem*: Both views iterate over querysets and call `.save()` on every row sequentially without an atomic transaction, risking timeout and partial updates.
+  - *Fix*: Wrap in `with transaction.atomic():` and use `bulk_update(metrics, [...], batch_size=500)`.
 
-### Minor
-1. **Missing compound index on `ProductMerchandisingMetric` for default sort order**:
-   - Add `models.Index(fields=["tenant", "-period_end", "-gross_revenue"], name="idx_epmm_ten_end_rev")`.
-2. **Consolidate count queries in `DailySalesSnapshot.aggregate_for_tenant_date`**:
-   - Consolidate `carts_created` and `carts_abandoned` into single aggregate.
+- [ ] **I3** — **Unhandled `request.tenant is None` in create and action views**:
+  - *Location*:
+    - `apps/ecommerce/views/AnalyticsBi/DailySalesSnapshots.py:69, 144`
+    - `apps/ecommerce/views/AnalyticsBi/CustomerCohortMetrics.py:59, 140`
+    - `apps/ecommerce/views/AnalyticsBi/ProductMerchandisingMetrics.py:67, 149`
+    - `apps/ecommerce/views/AnalyticsBi/AttributionTouchpoints.py:75`
+  - *Problem*: Tenantless superuser (`tenant=None`) attempting to create records or trigger actions crashes with raw database `IntegrityError`.
+  - *Fix*: Guard with `if request.tenant is None: messages.error(request, "Select or switch to a workspace first."); return redirect(...)`.
+
+- [ ] **I4** — **Potential DecimalField overflow crash on skewed rate calculations**:
+  - *Location*:
+    - `DailySalesSnapshots.py:94-98` (`conversion_rate_pct`)
+    - `ProductMerchandisingMetrics.py:81-85` (`conversion_rate_pct`)
+    - `CustomerCohortMetrics.py:58-64` (`retention_rate_pct`, `churn_rate_pct`)
+  - *Problem*: `DecimalField(max_digits=5, decimal_places=2)` caps values at 999.99. If orders/units exceed denominator by 10x, rate exceeds 999.99 causing `DataError 1406`. Furthermore, churn rate can become negative if retention exceeds 100%.
+  - *Fix*: Clamp percentage calculations to `[Decimal("0.00"), Decimal("100.00")]` (or max 999.99) and clamp `churn_rate_pct = max(Decimal("0.00"), ...)`.
+
+- [ ] **I5** — **Invalid attribute access on AffiliatePartner in `attribution_touchpoint/detail.html:134`**:
+  - *Location*: `templates/ecommerce/analytics_bi/attribution_touchpoint/detail.html:134`
+  - *Problem*: Accesses `{{ touchpoint.affiliate.partner_code }} ({{ touchpoint.affiliate.company_name }})`. `AffiliatePartner` defines `referral_code` and `name`.
+  - *Fix*: Update to `{{ touchpoint.affiliate.referral_code }} ({{ touchpoint.affiliate.name }})`.
+
+- [ ] **I6** — **Cockpit query multiplication: 12 queries reducible to 7 queries**:
+  - *Location*: `apps/ecommerce/views/AnalyticsBi/AnalyticsCockpit.py:39-61`
+  - *Problem*: Cockpit executes 4 separate queries to `Cart` and 3 separate queries to `CheckoutSession`.
+  - *Fix*: Collapse into conditional `aggregate()` calls with `Count("id", filter=Q(...))`.
+
+- [ ] **I7** — **Non-sargable date filter on `EcommerceOrder`**:
+  - *Location*: `AnalyticsCockpit.py:23-27` and `DailySalesSnapshots.py:58`
+  - *Problem*: `created_at__date=today` wraps indexed datetime column in SQL `DATE()`, preventing index seek.
+  - *Fix*: Use datetime range `created_at__gte=start_of_day, created_at__lt=start_of_next_day`.
+
+- [ ] **I8** — **Missing intra-tenant relational validation between `variant` and `product`**:
+  - *Location*: `apps/ecommerce/forms/AnalyticsBi/ProductMerchandisingMetrics.py:57-60`
+  - *Problem*: Does not verify that `variant.product == product`.
+  - *Fix*: In `clean()`, validate `if variant and product and variant.product_id != product.id: self.add_error("variant", "Selected variant does not belong to the selected product.")`.
+
+- [ ] **I9** — **Manual velocity tier edits overwritten on save**:
+  - *Location*: `apps/ecommerce/views/AnalyticsBi/ProductMerchandisingMetrics.py:106-109`
+  - *Problem*: Editing a metric calls `m.recalculate_metrics()` which overwrites user-selected `velocity_tier`.
+  - *Fix*: In edit view, preserve the submitted `velocity_tier` or only recalculate margin/return rates.
+
+- [ ] **I10** — **Missing `{% else %}` display fallback on velocity tier badges**:
+  - *Location*: `templates/ecommerce/analytics_bi/product_merchandising_metric/list.html:108-116` and `detail.html:16-24`
+  - *Problem*: `{% else %}` clause assumes "Dead Stock" directly without explicit check or fallback.
+  - *Fix*: Add `{% elif m.velocity_tier == "dead_stock" %}` and fallback `<span class="badge badge-slate">{{ m.get_velocity_tier_display }}</span>`.
 
 ---
 
-## 5. QA Smoke Tester Findings
+## Minor Findings
 
-### Critical
-None. Zero 500 errors, zero crashes, zero IDOR leaks across tenants.
+- [ ] **M1** — **Redundant duplicate Chart.js script tag in `cockpit.html:245`**:
+  - *Location*: `templates/ecommerce/analytics_bi/cockpit/cockpit.html:245`
+  - *Problem*: Redundant `<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>` tag (already loaded in `templates/base.html:28`).
+  - *Fix*: Remove line 245.
 
-### Important
-None. All content checks passed: valid `<title>` tags present on all views, zero template comment leaks (`{#` or `{% comment`), and unique object token numbers properly rendered in detail views.
+- [ ] **M2** — **Audit log `changes` argument passed as string instead of dict**:
+  - *Location*: `CustomerCohortMetrics.py:153` and `ProductMerchandisingMetrics.py:162`.
+  - *Problem*: Passes raw strings to `changes` in `write_audit_log`.
+  - *Fix*: Pass structured dict `{"count": count}`.
 
-### Minor
-None. Form validation gracefully returns HTTP 200 with error annotations when invalid payloads are submitted, and invalid pagination/filter parameters fall back cleanly without unhandled exceptions.
+- [ ] **M3** — **Filter state mismatch for `is_finalized` in `DailySalesSnapshots.py:34-38`**:
+  - *Location*: `apps/ecommerce/views/AnalyticsBi/DailySalesSnapshots.py:34-38`
+  - *Problem*: Passes raw string `"true"` to context while template checks `"1"`.
+  - *Fix*: Normalize `selected_finalized` to `"1"` / `"0"`.
 
-### Runtime Verification Summary
-- **Routes verified**: 65+ permutations across 24 endpoints.
-- **Cockpit**: Live sales KPIs, funnel stages, and charts render cleanly (200).
-- **CRUD Lifecycle**: Create, detail, edit, delete, actions (302/200) verified across all 4 entities.
-- **Pagination & Filters**: Out-of-bounds, negative, invalid page parameters and junk filter values fall back safely (200).
-- **Security & IDOR**: Cross-tenant requests (Acme -> Globex pk) strictly return 404. Delete endpoints reject GET with 405. Anonymous requests redirect to login (302). Non-admin delete requests forbidden (403).
+- [ ] **M4** — **Missing compound index on `ProductMerchandisingMetric` for default sort order**:
+  - *Location*: `apps/ecommerce/models/AnalyticsBi/ProductMerchandisingMetrics.py`
+  - *Problem*: Lacks compound index for `ordering = ["-period_end", "-gross_revenue"]`.
+  - *Fix*: Add `models.Index(fields=["tenant", "-period_end", "-gross_revenue"], name="idx_epmm_ten_end_rev")`.
 
+- [ ] **M5** — **Unbounded funnel percentage in Cockpit**:
+  - *Location*: `apps/ecommerce/views/AnalyticsBi/AnalyticsCockpit.py:72, 78, 84, 90`
+  - *Problem*: Stage percentages can exceed 100% in edge cases.
+  - *Fix*: Wrap stage percentages in `min(100.0, ...)`.
 
+- [ ] **M6** — **`units_sold` not aggregated from order lines in `DailySalesSnapshot.aggregate_for_tenant_date`**:
+  - *Location*: `apps/ecommerce/models/AnalyticsBi/DailySalesSnapshots.py:78-84`
+  - *Problem*: `units_sold` defaults to 0 on auto-generated snapshots.
+  - *Fix*: Aggregate `EcommerceOrderLine.objects.filter(order__in=orders).aggregate(u=Sum("quantity"))["u"] or 0`.
 
+- [ ] **M7** — **Consolidate cart count queries in `DailySalesSnapshot.aggregate_for_tenant_date`**:
+  - *Location*: `apps/ecommerce/models/AnalyticsBi/DailySalesSnapshots.py:86-89`
+  - *Problem*: `carts_created` and `carts_abandoned` issue 2 separate queries.
+  - *Fix*: Consolidate into single `aggregate(created=Count('id'), abandoned=Count('id', filter=Q(status='abandoned')))`.
 
-
+- [ ] **M8** — **Product title truncation on mobile cockpit (`cockpit.html:197`)**:
+  - *Location*: `templates/ecommerce/analytics_bi/cockpit/cockpit.html:197`
+  - *Problem*: Long product title link could cause layout stretching on narrow screens.
+  - *Fix*: Add `class="truncate max-w-xs block"`.
