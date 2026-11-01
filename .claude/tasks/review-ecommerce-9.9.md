@@ -127,4 +127,47 @@
   - **File**: `templates/ecommerce/content_management/block/detail.html`
   - **Fix**: Restrict or validate protocol on CTA preview button.
 
+---
+
+## Reviewer 4: `performance-reviewer`
+
+### Critical Findings
+*None.*
+
+### Important Findings
+- **[IPR-01] Missing `select_related` on Foreign Keys in Detail Views (Duplicate of MR1-02 / MR2-02)**
+  - **Files**:
+    - `apps/ecommerce/views/ContentManagement/BlogArticles.py` (`blogarticle_detail`)
+    - `apps/ecommerce/views/ContentManagement/MediaAssets.py` (`mediaasset_detail`)
+    - `apps/ecommerce/views/ContentManagement/ContentBlocks.py` (`contentblock_detail`)
+  - **Problem**: Detail templates reference FK attributes (`featured_media`, `author`, `uploaded_by`, `media_asset`, `target_category`, `target_product`) resulting in 1–3 additional lazy queries per page load.
+  - **Fix**: Supply `select_related` in `ecommerce_object(...)` calls.
+
+- **[IPR-02] Heavy payload columns (`raw_html_body`, `content_json`, `body_markdown`) fetched in list views without `defer()`**
+  - **Files**:
+    - `apps/ecommerce/views/ContentManagement/CmsPages.py` (`cmspage_list`)
+    - `apps/ecommerce/views/ContentManagement/BlogArticles.py` (`blogarticle_list`)
+  - **Problem**: Full text bodies (potentially 50KB–200KB+) are retrieved for all 20 rows in list views, none of which are rendered in table columns.
+  - **Fix**: Add `.defer("raw_html_body", "content_json")` to `CmsPage` queryset and `.defer("body_markdown")` to `BlogArticle` queryset.
+
+- **[IPR-03] Missing `(tenant, -created_at)` and composite sort order indexes on CMS models**
+  - **Files**:
+    - `apps/ecommerce/models/ContentManagement/CmsPages.py`
+    - `apps/ecommerce/models/ContentManagement/BlogArticles.py`
+    - `apps/ecommerce/models/ContentManagement/MediaAssets.py`
+    - `apps/ecommerce/models/ContentManagement/ContentBlocks.py`
+  - **Problem**: Default list queries order by `["-created_at"]` under `tenant_id = ?`, triggering a filesort without a composite index on `(tenant, -created_at)`.
+  - **Fix**: Add composite indexes in next migration or record in gap register.
+
+### Minor Findings
+- **[MPR-01] Superfluous JOIN on `featured_media` in `blogarticle_list`**
+  - **File**: `apps/ecommerce/views/ContentManagement/BlogArticles.py`
+  - **Problem**: List view joins `featured_media` but template does not render it.
+  - **Fix**: Remove `"featured_media"` from `select_related` in `blogarticle_list`.
+
+- **[MPR-02] Unbounded global User queryset in `BlogArticleForm.__init__` (Duplicate of CR1-01)**
+  - **File**: `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
+  - **Fix**: Filter by `tenant=self.tenant`.
+
+
 
