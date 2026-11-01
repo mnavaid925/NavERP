@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if cohort_metric %}Edit Cohort Metric {{ cohort_metric.number }}{% else %}New Cohort Metric Entry{% endif %} | NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <a href="{% if cohort_metric %}{% url 'ecommerce:customercohortmetric_detail' cohort_metric.pk %}{% else %}{% url 'ecommerce:customercohortmetric_list' %}{% endif %}" class="btn btn-icon" title="Cancel">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+      </a>
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">
+          {% if cohort_metric %}Edit Cohort Metric {{ cohort_metric.number }}{% else %}New Cohort Metric Entry{% endif %}
+        </h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          {% if cohort_metric %}Update retention and LTV values for cohort {{ cohort_metric.cohort_month|date:"Y-m" }}{% else %}Record retention and customer lifetime value metrics for a monthly cohort{% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-sm">
+        {{ form.non_field_errors }}
+      </div>
+      {% endif %}
+
+      <!-- Section: Cohort Period -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          Cohort Timeframe & Offset
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.cohort_month.id_for_label }}" class="form-label">Cohort Month *</label>
+            {{ form.cohort_month }}
+            {% if form.cohort_month.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.cohort_month.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.period_offset_months.id_for_label }}" class="form-label">Period Offset (Months) *</label>
+            {{ form.period_offset_months }}
+            {% if form.period_offset_months.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.period_offset_months.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.acquisition_channel_tag.id_for_label }}" class="form-label">Acquisition Channel Tag</label>
+            {{ form.acquisition_channel_tag }}
+            {% if form.acquisition_channel_tag.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.acquisition_channel_tag.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Customer Volume & Retention -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          Customer Volume & Retention Rates
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="form-group">
+            <label for="{{ form.initial_cohort_size.id_for_label }}" class="form-label">Initial Cohort Size *</label>
+            {{ form.initial_cohort_size }}
+            {% if form.initial_cohort_size.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.initial_cohort_size.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.active_customers.id_for_label }}" class="form-label">Active Customers *</label>
+            {{ form.active_customers }}
+            {% if form.active_customers.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.active_customers.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.retention_rate_pct.id_for_label }}" class="form-label">Retention %</label>
+            {{ form.retention_rate_pct }}
+            {% if form.retention_rate_pct.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.retention_rate_pct.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.churn_rate_pct.id_for_label }}" class="form-label">Churn %</label>
+            {{ form.churn_rate_pct }}
+            {% if form.churn_rate_pct.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.churn_rate_pct.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Cumulative Financials & LTV -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          Cumulative Spend & Lifetime Value
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div class="form-group">
+            <label for="{{ form.cohort_orders_count.id_for_label }}" class="form-label">Orders Count</label>
+            {{ form.cohort_orders_count }}
+            {% if form.cohort_orders_count.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.cohort_orders_count.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.cumulative_gross_revenue.id_for_label }}" class="form-label">Cum. Gross Revenue</label>
+            {{ form.cumulative_gross_revenue }}
+            {% if form.cumulative_gross_revenue.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.cumulative_gross_revenue.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.cumulative_net_revenue.id_for_label }}" class="form-label">Cum. Net Revenue</label>
+            {{ form.cumulative_net_revenue }}
+            {% if form.cumulative_net_revenue.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.cumulative_net_revenue.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.cumulative_margin.id_for_label }}" class="form-label">Cum. Margin</label>
+            {{ form.cumulative_margin }}
+            {% if form.cumulative_margin.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.cumulative_margin.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.cumulative_ltv_per_customer.id_for_label }}" class="form-label">LTV / Customer ($)</label>
+            {{ form.cumulative_ltv_per_customer }}
+            {% if form.cumulative_ltv_per_customer.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.cumulative_ltv_per_customer.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <a href="{% if cohort_metric %}{% url 'ecommerce:customercohortmetric_detail' cohort_metric.pk %}{% else %}{% url 'ecommerce:customercohortmetric_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="check" class="w-4 h-4 mr-2"></i>
+          {% if cohort_metric %}Save Changes{% else %}Create Metric{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
