@@ -132,7 +132,6 @@ def productmerchandisingmetric_edit(request, pk):
 def productmerchandisingmetric_delete(request, pk):
     metric = ecommerce_object(request, ProductMerchandisingMetric, pk)
     number = metric.number
-    metric.delete()
     write_audit_log(
         request.user,
         metric,
@@ -140,6 +139,7 @@ def productmerchandisingmetric_delete(request, pk):
         {"number": number},
         tenant=request.tenant,
     )
+    metric.delete()
     messages.success(request, f"Merchandising metric {number} was deleted.")
     return redirect("ecommerce:productmerchandisingmetric_list")
 
