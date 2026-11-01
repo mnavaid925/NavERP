@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if touchpoint %}Edit Attribution Touchpoint {{ touchpoint.number }}{% else %}New Attribution Touchpoint{% endif %} | NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <a href="{% if touchpoint %}{% url 'ecommerce:attributiontouchpoint_detail' touchpoint.pk %}{% else %}{% url 'ecommerce:attributiontouchpoint_list' %}{% endif %}" class="btn btn-icon" title="Cancel">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+      </a>
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">
+          {% if touchpoint %}Edit Attribution Touchpoint {{ touchpoint.number }}{% else %}New Attribution Touchpoint{% endif %}
+        </h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          {% if touchpoint %}Update marketing attribution details for {{ touchpoint.number }}{% else %}Record an acquisition channel touchpoint, campaign referral, or conversion attribution{% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-sm">
+        {{ form.non_field_errors }}
+      </div>
+      {% endif %}
+
+      <!-- Section: Channel & Model -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          Channel Classification & Attribution Weight
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.channel_type.id_for_label }}" class="form-label">Channel Type *</label>
+            {{ form.channel_type }}
+            {% if form.channel_type.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.channel_type.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.attribution_model.id_for_label }}" class="form-label">Attribution Model *</label>
+            {{ form.attribution_model }}
+            {% if form.attribution_model.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.attribution_model.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.touchpoint_timestamp.id_for_label }}" class="form-label">Timestamp *</label>
+            {{ form.touchpoint_timestamp }}
+            {% if form.touchpoint_timestamp.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.touchpoint_timestamp.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Revenue & Valuation -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          Attributed Revenue & Cost
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.attributed_revenue.id_for_label }}" class="form-label">Attributed Revenue ($)</label>
+            {{ form.attributed_revenue }}
+            {% if form.attributed_revenue.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.attributed_revenue.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.attribution_weight.id_for_label }}" class="form-label">Attribution Weight (0.0 to 1.0)</label>
+            {{ form.attribution_weight }}
+            {% if form.attribution_weight.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.attribution_weight.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.estimated_cac.id_for_label }}" class="form-label">Estimated CAC ($)</label>
+            {{ form.estimated_cac }}
+            {% if form.estimated_cac.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.estimated_cac.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Conversion Target Links -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          Conversion Associations
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="form-group">
+            <label for="{{ form.order.id_for_label }}" class="form-label">Ecommerce Order (Optional)</label>
+            {{ form.order }}
+            {% if form.order.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.order.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.cart.id_for_label }}" class="form-label">Shopping Cart (Optional)</label>
+            {{ form.cart }}
+            {% if form.cart.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.cart.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.campaign.id_for_label }}" class="form-label">Marketing Campaign (Optional)</label>
+            {{ form.campaign }}
+            {% if form.campaign.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.campaign.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.affiliate.id_for_label }}" class="form-label">Affiliate Partner (Optional)</label>
+            {{ form.affiliate }}
+            {% if form.affiliate.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.affiliate.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: UTM Parameters & URLs -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-800">
+          UTM Telemetry & Referrals
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.utm_source.id_for_label }}" class="form-label">UTM Source</label>
+            {{ form.utm_source }}
+            {% if form.utm_source.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.utm_source.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.utm_medium.id_for_label }}" class="form-label">UTM Medium</label>
+            {{ form.utm_medium }}
+            {% if form.utm_medium.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.utm_medium.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.utm_campaign.id_for_label }}" class="form-label">UTM Campaign</label>
+            {{ form.utm_campaign }}
+            {% if form.utm_campaign.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.utm_campaign.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-3">
+            <label for="{{ form.landing_page_url.id_for_label }}" class="form-label">Landing Page URL</label>
+            {{ form.landing_page_url }}
+            {% if form.landing_page_url.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.landing_page_url.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-3">
+            <label for="{{ form.referrer_url.id_for_label }}" class="form-label">Referrer URL</label>
+            {{ form.referrer_url }}
+            {% if form.referrer_url.errors %}
+            <p class="form-error text-xs text-rose-600 mt-1">{{ form.referrer_url.errors.0 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <a href="{% if touchpoint %}{% url 'ecommerce:attributiontouchpoint_detail' touchpoint.pk %}{% else %}{% url 'ecommerce:attributiontouchpoint_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="check" class="w-4 h-4 mr-2"></i>
+          {% if touchpoint %}Save Changes{% else %}Create Touchpoint{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
