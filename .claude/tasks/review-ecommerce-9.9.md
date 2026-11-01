@@ -85,3 +85,46 @@
     - `apps/ecommerce/views/ContentManagement/ContentBlocks.py`
   - **Fix**: Pass `select_related` on FKs in detail views.
 
+---
+
+## Reviewer 3: `frontend-reviewer`
+
+### Critical Findings
+*None.*
+
+### Important Findings
+- **[IFR-01] Silent blank rendering of target product name in Content Block templates (Duplicate of IR1-01 / IR2-01)**
+  - **Files**:
+    - `templates/ecommerce/content_management/block/list.html`
+    - `templates/ecommerce/content_management/block/detail.html`
+  - **Problem**: Both templates reference `target_product.title` instead of `target_product.name`.
+  - **Fix**: Replace `.title` with `.name`.
+
+- **[IFR-02] Accessibility: Missing form `<label>` for `body_markdown` in Blog Article Form**
+  - **File**: `templates/ecommerce/content_management/blog/form.html`
+  - **Problem**: Textarea `{{ form.body_markdown }}` lacks an associated `<label for="...">`.
+  - **Fix**: Add `<label for="{{ form.body_markdown.id_for_label }}" class="form-label">Article Body (Markdown) *</label>`.
+
+- **[IFR-03] Reverse tabnabbing risk: Missing `rel="noopener noreferrer"` on `target="_blank"` links**
+  - **Files**:
+    - `templates/ecommerce/content_management/media/list.html`
+    - `templates/ecommerce/content_management/media/detail.html`
+    - `templates/ecommerce/content_management/page/list.html`
+    - `templates/ecommerce/content_management/page/detail.html`
+  - **Problem**: Links opening with `target="_blank"` omit `rel="noopener noreferrer"`.
+  - **Fix**: Add `rel="noopener noreferrer"` to all `<a ... target="_blank">` tags.
+
+### Minor Findings
+- **[MFR-01] Accessibility: Icon-only table action buttons lack explicit `aria-label` attributes**
+  - **Files**: All 4 list templates (`page/list.html`, `blog/list.html`, `media/list.html`, `block/list.html`)
+  - **Fix**: Add `aria-label` matching `title` on icon-only action links/buttons.
+
+- **[MFR-02] Blog Article detail renders comma-separated tags as a single monolithic badge**
+  - **File**: `templates/ecommerce/content_management/blog/detail.html`
+  - **Fix**: Add `tag_list` helper property on `BlogArticle` model or split in template to render individual badge chips.
+
+- **[MFR-03] CTA URL in Content Block Detail component simulator lacks protocol safeguard**
+  - **File**: `templates/ecommerce/content_management/block/detail.html`
+  - **Fix**: Restrict or validate protocol on CTA preview button.
+
+
