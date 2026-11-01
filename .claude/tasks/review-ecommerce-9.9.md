@@ -65,7 +65,7 @@
   - `apps/ecommerce/views/ContentManagement/ContentBlocks.py`
 - **Problem**: Detail views call `ecommerce_object(...)` without `select_related`, triggering 1–3 extra SQL queries when rendering templates with FK attributes.
 - **Fix**: Pass `select_related=("author", "featured_media")` for `BlogArticle`, `select_related=("uploaded_by",)` for `MediaAsset`, and `select_related=("media_asset", "target_product", "target_category")` for `ContentBlock`.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [I5] Heavy payload columns (`raw_html_body`, `content_json`, `body_markdown`) fetched in list views without `defer()`
 - **Files**:
