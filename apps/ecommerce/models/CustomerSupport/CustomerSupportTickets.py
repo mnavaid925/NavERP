@@ -118,6 +118,8 @@ class CustomerSupportTicket(TenantNumbered):
 
         if self.status in ["resolved", "closed"] and not self.resolved_at:
             self.resolved_at = now
+        elif self.status not in ["resolved", "closed"]:
+            self.resolved_at = None
 
         if self.sla_resolution_due_at and now > self.sla_resolution_due_at and self.status not in ["resolved", "closed", "cancelled"]:
             self.is_sla_breached = True
