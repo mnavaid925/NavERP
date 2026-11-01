@@ -54,7 +54,7 @@ def mediaasset_list(request):
 
 @login_required
 def mediaasset_detail(request, pk):
-    asset = ecommerce_object(request, MediaAsset, pk)
+    asset = ecommerce_object(request, MediaAsset, pk, select_related=("uploaded_by",))
     return render(
         request,
         "ecommerce/content_management/media/detail.html",
