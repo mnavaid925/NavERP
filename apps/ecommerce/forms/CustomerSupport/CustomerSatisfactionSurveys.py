@@ -71,4 +71,8 @@ class CustomerSatisfactionSurveyForm(TenantUniqueMixin, TenantModelForm):
         elif survey_type == "storefront_nps" and rating is not None:
             if rating < 0 or rating > 10:
                 self.add_error("rating_score", "NPS surveys require a rating score between 0 and 10.")
+        customer = cleaned.get("customer")
+        order = cleaned.get("order")
+        if customer and order and order.customer_id != customer.customer_id:
+            self.add_error("order", "The selected order does not belong to the selected customer profile.")
         return cleaned
