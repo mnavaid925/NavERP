@@ -50,6 +50,9 @@
         </div>
     </div>
     <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'ecommerce:customersupportticket_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back
+        </a>
         <a href="{% url 'ecommerce:customersupportticket_edit' ticket.pk %}" class="btn btn-primary">
             <i data-lucide="pencil"></i> Edit Ticket
         </a>
