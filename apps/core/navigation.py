@@ -2783,6 +2783,18 @@ LIVE_LINKS = {
         "Visual UGC": "ecommerce:visualugcmedia_list",
         "Sentiment Analytics": "ecommerce:reviewsentimentsummary_list",
     },
+    "9.14": {
+        "Help Desk & Ticket Management": "ecommerce:customersupportticket_list",
+        "Live Chat & Chatbot": "ecommerce:customersupportticket_list",
+        "Self-Service Knowledge Base": "ecommerce:knowledgebasearticle_list",
+        "Order Inquiry & Issue Resolution": "ecommerce:orderissueclaim_list",
+        "Customer Feedback & NPS": "ecommerce:customersatisfactionsurvey_list",
+        # Extra live leaves
+        "Support Tickets": "ecommerce:customersupportticket_list",
+        "Knowledge Base": "ecommerce:knowledgebasearticle_list",
+        "Issue Claims": "ecommerce:orderissueclaim_list",
+        "Customer Feedback": "ecommerce:customersatisfactionsurvey_list",
+    },
 
 
 
