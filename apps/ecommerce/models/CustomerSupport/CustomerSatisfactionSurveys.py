@@ -93,21 +93,22 @@ class CustomerSatisfactionSurvey(TenantNumbered):
         return f"{self.number} - {self.get_survey_type_display()} ({self.rating_score}/10)"
 
     def save(self, *args, **kwargs):
-        # Auto-compute sentiment if not manually set
-        if self.survey_type in ["ticket_csat", "order_delivery_csat"]:
-            if self.rating_score >= 4:
-                self.sentiment = "positive"
-            elif self.rating_score == 3:
-                self.sentiment = "neutral"
-            else:
-                self.sentiment = "negative"
-        elif self.survey_type == "storefront_nps":
-            if self.rating_score >= 9:
-                self.sentiment = "positive"
-            elif self.rating_score >= 7:
-                self.sentiment = "neutral"
-            else:
-                self.sentiment = "negative"
+        # Auto-compute sentiment if not manually set or left as default neutral
+        if not self.sentiment or self.sentiment == "neutral":
+            if self.survey_type in ["ticket_csat", "order_delivery_csat"]:
+                if self.rating_score >= 4:
+                    self.sentiment = "positive"
+                elif self.rating_score == 3:
+                    self.sentiment = "neutral"
+                else:
+                    self.sentiment = "negative"
+            elif self.survey_type == "storefront_nps":
+                if self.rating_score >= 9:
+                    self.sentiment = "positive"
+                elif self.rating_score >= 7:
+                    self.sentiment = "neutral"
+                else:
+                    self.sentiment = "negative"
 
         # Auto-flag negative feedback for closed-loop review
         if self.sentiment == "negative" and self.follow_up_status == "not_required":
