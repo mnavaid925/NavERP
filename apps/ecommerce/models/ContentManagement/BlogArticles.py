@@ -6,7 +6,7 @@ from apps.ecommerce.models._base import TenantNumbered
 
 
 class BlogArticle(TenantNumbered):
-    prefix = "EBLG"
+    NUMBER_PREFIX = "EBLG"
 
     CATEGORY_CHOICES = [
         ("news", "Company News"),
