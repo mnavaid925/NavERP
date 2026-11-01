@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Cohort Metric {{ cohort_metric.number }} - {{ cohort_metric.cohort_month|date:"Y-m" }} M{{ cohort_metric.period_offset_months }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-3">
+        <a href="{% url 'ecommerce:customercohortmetric_list' %}" class="btn btn-icon" title="Back to Cohorts">
+          <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        </a>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span>{{ cohort_metric.number }}</span>
+          <span class="badge badge-info">Month +{{ cohort_metric.period_offset_months }}</span>
+        </h1>
+      </div>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1 ml-10">
+        Cohort Acquired: <strong class="text-slate-700 dark:text-slate-300">{{ cohort_metric.cohort_month|date:"F Y" }}</strong>
+        {% if cohort_metric.acquisition_channel_tag %}&bull; Channel: <span class="badge badge-slate">{{ cohort_metric.acquisition_channel_tag }}</span>{% endif %}
+      </p>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <a href="{% url 'ecommerce:customercohortmetric_edit' cohort_metric.pk %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:customercohortmetric_delete' cohort_metric.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete cohort metric {{ cohort_metric.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Key Stat KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Retention Rate</p>
+          <h3 class="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{{ cohort_metric.retention_rate_pct }}%</h3>
+        </div>
+        <div class="stat-icon green">
+          <i data-lucide="user-check" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">{{ cohort_metric.active_customers }} / {{ cohort_metric.initial_cohort_size }} customers</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Churn Rate</p>
+          <h3 class="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">{{ cohort_metric.churn_rate_pct }}%</h3>
+        </div>
+        <div class="stat-icon orange">
+          <i data-lucide="user-minus" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Lapsed from original cohort</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Cumulative LTV</p>
+          <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">${{ cohort_metric.cumulative_ltv_per_customer }}</h3>
+        </div>
+        <div class="stat-icon purple">
+          <i data-lucide="award" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Net spend per acquired customer</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Cohort Orders</p>
+          <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">{{ cohort_metric.cohort_orders_count }}</h3>
+        </div>
+        <div class="stat-icon blue">
+          <i data-lucide="shopping-cart" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Cumulative repeat orders</p>
+    </div>
+  </div>
+
+  <!-- Detail Information Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Cohort Retention & Size Breakdown -->
+    <div class="card p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="users-round" class="w-5 h-5 text-brand"></i>
+        Cohort Size & Decay Breakdown
+      </h2>
+      <div class="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Acquisition Month</span>
+          <span class="font-mono font-medium">{{ cohort_metric.cohort_month|date:"Y-m-d" }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Period Offset</span>
+          <span class="font-semibold text-slate-800 dark:text-slate-200">Month {{ cohort_metric.period_offset_months }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Initial Cohort Size</span>
+          <span class="font-mono font-medium text-slate-900 dark:text-white">{{ cohort_metric.initial_cohort_size }} customers</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Active Retained Shoppers</span>
+          <span class="font-mono font-semibold text-emerald-600 dark:text-emerald-400">{{ cohort_metric.active_customers }} customers</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Channel / Segment Tag</span>
+          <span class="font-medium text-slate-700 dark:text-slate-300">{{ cohort_metric.acquisition_channel_tag|default:"All Acquisition Sources" }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Financial Revenue & Margin Progression -->
+    <div class="card p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="trending-up" class="w-5 h-5 text-brand"></i>
+        Cumulative Revenue & Margin Progression
+      </h2>
+      <div class="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Cumulative Gross Revenue</span>
+          <span class="font-mono font-medium text-slate-800 dark:text-slate-200">${{ cohort_metric.cumulative_gross_revenue }}</span>
+        </div>
+        <div class="flex justify-between py-2 font-semibold">
+          <span class="text-slate-700 dark:text-slate-300">Cumulative Net Revenue</span>
+          <span class="font-mono text-slate-900 dark:text-white">${{ cohort_metric.cumulative_net_revenue }}</span>
+        </div>
+        <div class="flex justify-between py-2 text-emerald-600 dark:text-emerald-400 font-semibold">
+          <span>Cumulative Gross Margin</span>
+          <span class="font-mono">${{ cohort_metric.cumulative_margin }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Cumulative LTV Per Customer</span>
+          <span class="font-mono font-bold text-purple-600 dark:text-purple-400">${{ cohort_metric.cumulative_ltv_per_customer }}</span>
+        </div>
+      </div>
+
+      <div class="pt-4 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400 flex justify-between">
+        <span>Recorded: {{ cohort_metric.created_at|date:"Y-m-d H:i" }}</span>
+        <span>Updated: {{ cohort_metric.updated_at|date:"Y-m-d H:i" }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
