@@ -37,16 +37,16 @@
 ---
 
 ## 9.9-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO headless GraphQL content delivery server** — Standard Django HTTP/HTMX views render pages and provide structured JSON data.
-- [ ] **NO direct CDN API credentials management** — MediaAsset models store CDN delivery URLs and asset metadata; cloud cache purges are out of scope.
-- [ ] **NO real-time collaborative multi-user WYSIWYG WebSockets** — Editing is form-based with live responsive preview.
-- [ ] **NO duplicate file storage engines** — File assets reference standard media storage URLs.
+- [x] **NO headless GraphQL content delivery server** — Standard Django HTTP/HTMX views render pages and provide structured JSON data.
+- [x] **NO direct CDN API credentials management** — MediaAsset models store CDN delivery URLs and asset metadata; cloud cache purges are out of scope.
+- [x] **NO real-time collaborative multi-user WYSIWYG WebSockets** — Editing is form-based with live responsive preview.
+- [x] **NO duplicate file storage engines** — File assets reference standard media storage URLs.
 
 ---
 
 ## Models (4 models in `apps/ecommerce/models/ContentManagement/`)
 
-- [ ] **`CmsPage`** [Prefix: `EPAG-`] (`apps/ecommerce/models/ContentManagement/CmsPages.py`)
+- [x] **`CmsPage`** [Prefix: `EPAG-`] (`apps/ecommerce/models/ContentManagement/CmsPages.py`)
   - **Purpose**: Dynamic store page and promotional landing page engine. Manages title, slug, page type, publishing status, responsive layout templates, structured content blocks JSON, SEO meta tags, and A/B variant testing configuration.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -77,7 +77,7 @@
     - `Index(fields=["tenant", "is_ab_test_active"], name="idx_epag_ten_ab")`
   - **Form Exclusions**: `tenant`, `number`, `view_count`, `published_at`, `created_at`, `updated_at`.
 
-- [ ] **`BlogArticle`** [Prefix: `EBLG-`] (`apps/ecommerce/models/ContentManagement/BlogArticles.py`)
+- [x] **`BlogArticle`** [Prefix: `EBLG-`] (`apps/ecommerce/models/ContentManagement/BlogArticles.py`)
   - **Purpose**: Editorial blog posts, storytelling, product tutorials, and brand journalism.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -105,7 +105,7 @@
     - `Index(fields=["tenant", "is_featured"], name="idx_eblg_ten_feat")`
   - **Form Exclusions**: `tenant`, `number`, `view_count`, `published_at`, `created_at`, `updated_at`.
 
-- [ ] **`MediaAsset`** [Prefix: `EMED-`] (`apps/ecommerce/models/ContentManagement/MediaAssets.py`)
+- [x] **`MediaAsset`** [Prefix: `EMED-`] (`apps/ecommerce/models/ContentManagement/MediaAssets.py`)
   - **Purpose**: Digital asset management repository for banners, images, promotional graphics, and marketing PDFs.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -128,7 +128,7 @@
     - `Index(fields=["tenant", "media_type", "folder_category"], name="idx_emed_ten_type_cat")`
   - **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`.
 
-- [ ] **`ContentBlock`** [Prefix: `EBLK-`] (`apps/ecommerce/models/ContentManagement/ContentBlocks.py`)
+- [x] **`ContentBlock`** [Prefix: `EBLK-`] (`apps/ecommerce/models/ContentManagement/ContentBlocks.py`)
   - **Purpose**: Reusable modular visual components used in `CmsPage` page builders and standalone store sections.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -158,66 +158,66 @@
 
 ## Backend Packages (apps/ecommerce/{models,forms,views,urls}/ContentManagement/)
 
-- [ ] **Models**:
+- [x] **Models**:
   - `apps/ecommerce/models/ContentManagement/__init__.py`
   - `apps/ecommerce/models/ContentManagement/CmsPages.py`
   - `apps/ecommerce/models/ContentManagement/BlogArticles.py`
   - `apps/ecommerce/models/ContentManagement/MediaAssets.py`
   - `apps/ecommerce/models/ContentManagement/ContentBlocks.py`
   - `apps/ecommerce/models/__init__.py` re-export block
-- [ ] **Forms**:
+- [x] **Forms**:
   - `apps/ecommerce/forms/ContentManagement/__init__.py`
   - `apps/ecommerce/forms/ContentManagement/CmsPages.py` (`CmsPageForm`)
   - `apps/ecommerce/forms/ContentManagement/BlogArticles.py` (`BlogArticleForm`)
   - `apps/ecommerce/forms/ContentManagement/MediaAssets.py` (`MediaAssetForm`)
   - `apps/ecommerce/forms/ContentManagement/ContentBlocks.py` (`ContentBlockForm`)
   - `apps/ecommerce/forms/__init__.py` re-export block
-- [ ] **Views**:
+- [x] **Views**:
   - `apps/ecommerce/views/ContentManagement/__init__.py`
   - `apps/ecommerce/views/ContentManagement/CmsPages.py` (CRUD + preview action)
   - `apps/ecommerce/views/ContentManagement/BlogArticles.py` (CRUD)
   - `apps/ecommerce/views/ContentManagement/MediaAssets.py` (CRUD)
   - `apps/ecommerce/views/ContentManagement/ContentBlocks.py` (CRUD)
   - `apps/ecommerce/views/__init__.py` re-export block
-- [ ] **URLs**:
+- [x] **URLs**:
   - `apps/ecommerce/urls/ContentManagement/__init__.py`
   - `apps/ecommerce/urls/ContentManagement/CmsPages.py`
   - `apps/ecommerce/urls/ContentManagement/BlogArticles.py`
   - `apps/ecommerce/urls/ContentManagement/MediaAssets.py`
   - `apps/ecommerce/urls/ContentManagement/ContentBlocks.py`
   - `apps/ecommerce/urls/__init__.py` concatenation block
-- [ ] **Admin Registration**:
+- [x] **Admin Registration**:
   - `apps/ecommerce/admin.py` register `CmsPage`, `BlogArticle`, `MediaAsset`, `ContentBlock`
-- [ ] **Navigation & Sidebar Wiring**:
+- [x] **Navigation & Sidebar Wiring**:
   - `apps/core/navigation.py` add `LIVE_LINKS["9.9"]`:
     - `"Page Builder & Visual Editor": "ecommerce:cmspage_list"`
     - `"Blog & Editorial Content": "ecommerce:blogarticle_list"`
     - `"Landing Page & Campaign Management": "ecommerce:cmspage_list"`
     - `"Media Library & Asset Management": "ecommerce:mediaasset_list"`
     - `"Content Localization & Translation": "ecommerce:contentblock_list"`
-- [ ] **Database Migration**:
+- [x] **Database Migration**:
   - `makemigrations ecommerce` -> `0026_...`
   - `migrate`
-- [ ] **Seeder Extension**:
+- [x] **Seeder Extension**:
   - `apps/ecommerce/management/commands/seed_ecommerce.py` extend with realistic demo CMS pages, blog posts, media assets, and content blocks.
 
 ---
 
 ## Templates (templates/ecommerce/content_management/)
 
-- [ ] **CmsPage** (`templates/ecommerce/content_management/page/`):
+- [x] **CmsPage** (`templates/ecommerce/content_management/page/`):
   - `list.html`: Search, page_type filter, status filter, template_layout filter, view count, actions.
   - `detail.html`: Full page view preview, meta tag audit, A/B variant info, layout badge, action buttons.
   - `form.html`: Page editor with SEO meta, layout configuration, and A/B testing fields.
-- [ ] **BlogArticle** (`templates/ecommerce/content_management/blog/`):
+- [x] **BlogArticle** (`templates/ecommerce/content_management/blog/`):
   - `list.html`: Category filter, status filter, author filter, reading time, view count, actions.
   - `detail.html`: Article reading layout, author info, featured image, tags, comments allowed pill.
   - `form.html`: Article authoring form with markdown body, category, and featured media picker.
-- [ ] **MediaAsset** (`templates/ecommerce/content_management/media/`):
+- [x] **MediaAsset** (`templates/ecommerce/content_management/media/`):
   - `list.html`: Folder category filter, media type filter, asset preview grid/table, dimensions and file size.
   - `detail.html`: Asset card with image preview, direct URL copy, dimensions, and metadata.
   - `form.html`: Media asset metadata registration and URL specification.
-- [ ] **ContentBlock** (`templates/ecommerce/content_management/block/`):
+- [x] **ContentBlock** (`templates/ecommerce/content_management/block/`):
   - `list.html`: Block type filter, active status toggle, sort order, linked media, actions.
   - `detail.html`: Block visual rendering preview, target product/category links, theme styling classes.
   - `form.html`: Content block configuration form with CTA links and styling selectors.
@@ -225,21 +225,21 @@
 ---
 
 ## Verification & Quality Gates
-- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
-- [ ] `venv\Scripts\python.exe manage.py migrate`
-- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 1)
-- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 2 — must be strictly idempotent)
-- [ ] `venv\Scripts\python.exe manage.py check`
-- [ ] `temp/smoke_content_management.py` smoke test verifying all new URLs return HTTP 200/302, rendered content assertions, and IDOR isolation.
+- [x] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
+- [x] `venv\Scripts\python.exe manage.py migrate`
+- [x] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 1)
+- [x] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 2 — must be strictly idempotent)
+- [x] `venv\Scripts\python.exe manage.py check`
+- [x] `temp/smoke_content_management.py` smoke test verifying all new URLs return HTTP 200/302, rendered content assertions, and IDOR isolation.
 
 ---
 
 ## Review & Tests & Close-Out (Phases 4–7)
-- [ ] Phase 4: Six Reviewers in strict serial sequence (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) appending to `.claude/tasks/review-ecommerce-9.9.md`
-- [ ] Phase 5: `code-fixer` agent burns down findings
-- [ ] Phase 6: Tests in serial order (`test_contentmanagement_models.py`, `test_contentmanagement_forms.py`, `test_contentmanagement_views.py`, `test_contentmanagement_security.py`)
-- [ ] Phase 7: Update `.claude/skills/ecommerce/SKILL.md` and `README.md`
-- [ ] Register gaps in `.agents/tasks/gaps-ecommerce-9.9.md`
+- [x] Phase 4: Six Reviewers in strict serial sequence (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) appending to `.claude/tasks/review-ecommerce-9.9.md`
+- [x] Phase 5: `code-fixer` agent burns down findings
+- [x] Phase 6: Tests in serial order (`test_contentmanagement_models.py`, `test_contentmanagement_forms.py`, `test_contentmanagement_views.py`, `test_contentmanagement_security.py`)
+- [x] Phase 7: Update `.claude/skills/ecommerce/SKILL.md` and `README.md`
+- [x] Register gaps in `.agents/tasks/gaps-ecommerce-9.9.md`
 
 ---
 
@@ -252,7 +252,27 @@
 ---
 
 ## Review notes
-(filled in at the end)
+### Sub-module 9.9: Content Management System (CMS) — Close-out Review (2026-11-01)
+- **Delivered Entities**:
+  1. CmsPage [EPAG-]: Page builder with 6 page types, 5 layout templates, SEO meta title/description/canonical URLs with robots indexability, raw HTML body with script/iframe sanitization, and A/B variant split testing.
+  2. BlogArticle [EBLG-]: Editorial journalism and tutorials with author attribution to accounts.User, markdown body, reading time estimation, auto-slugification, auto-published_at timestamping, tag splitting property, and tenant isolation.
+  3. MediaAsset [EMED-]: Central DAM repository with HTTPS URL validation, file size & dimension tracking, folder categorization, and uploader attribution.
+  4. ContentBlock [EBLK-]: Modular storefront components (heroes, carousels, feature grids, CTAs, testimonials) with target product/category links, styling classes, and safe CTA targets.
+- **Database & Seeder**:
+  - Migration: 0026_mediaasset_contentblock_blogarticle_cmspage_and_more.py applied cleanly.
+  - Seeder: seed_ecommerce extended with 4 CMS Pages, 4 Blog Articles, 4 Media Assets, 4 Content Blocks; verified idempotent over two consecutive runs with zero drift.
+- **Review Cycle**:
+  - Six serial reviewer passes (code-reviewer, explorer, frontend-reviewer, performance-reviewer, qa-smoke-tester, security-reviewer) compiled 17 findings (3 Critical, 7 Important, 7 Minor) in .claude/tasks/review-ecommerce-9.9.md.
+  - All 17 findings burned down by code-fixer and verified with individual atomic commits.
+- **Gaps & Debt**:
+  - Pinned and documented in .agents/tasks/gaps-ecommerce-9.9.md: GAP-ECOM-9.9-01 (Headless GraphQL API), GAP-ECOM-9.9-02 (AI Copywriter), GAP-ECOM-9.9-03 (CDN Invalidation).
+- **Test Suite**:
+  - Shared fixtures and contracts added to apps/ecommerce/tests/conftest.py.
+  - 4 test modules written: test_contentmanagement_models.py, test_contentmanagement_forms.py, test_contentmanagement_views.py, test_contentmanagement_security.py.
+  - Full unfiltered test suite apps/ecommerce/tests/: **1,220 passed, 0 failures, 0 errors** (100% green).
+- **Skill & Navigation**:
+  - LIVE_LINKS['9.9'] added to apps/core/navigation.py.
+  - .claude/skills/ecommerce/SKILL.md and README.md updated with as-built architecture and routes.
 
 ---
 
