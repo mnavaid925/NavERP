@@ -60,7 +60,7 @@
             </div>
             <div class="card-body">
                 {% if survey.feedback_comment %}
-                <p class="whitespace-pre-line text-slate-800 leading-relaxed text-base italic border-l-4 border-brand-500 pl-4 py-1">
+                <p class="whitespace-pre-line text-slate-800 dark:text-slate-200 leading-relaxed text-base italic border-l-4 border-brand-500 pl-4 py-1">
                     "{{ survey.feedback_comment }}"
                 </p>
                 {% else %}
@@ -76,7 +76,7 @@
             </div>
             <div class="card-body">
                 {% if survey.follow_up_notes %}
-                <p class="whitespace-pre-line text-slate-800 bg-slate-50 p-4 rounded border border-slate-200 text-sm leading-relaxed">
+                <p class="whitespace-pre-line text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 p-4 rounded border border-slate-200 dark:border-slate-700 text-sm leading-relaxed">
                     {{ survey.follow_up_notes }}
                 </p>
                 {% else %}
@@ -94,7 +94,7 @@
                 <h3 class="card-title text-base font-semibold">Satisfaction Scorecard</h3>
             </div>
             <div class="card-body space-y-4">
-                <div class="text-center py-4 bg-slate-50 rounded border border-slate-200">
+                <div class="text-center py-4 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
                     <div class="text-4xl font-extrabold font-mono {% if survey.sentiment == 'positive' %}text-green-700{% elif survey.sentiment == 'neutral' %}text-amber-600{% else %}text-red-700{% endif %}">
                         {{ survey.rating_score }}
                     </div>
@@ -102,13 +102,13 @@
                         {% if survey.survey_type == 'storefront_nps' %}Out of 10 (NPS){% else %}Out of 5 (CSAT){% endif %}
                     </span>
                 </div>
-                <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-100">
+                <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span class="text-slate-500">Sentiment Group</span>
-                    <span class="font-semibold text-slate-800">{{ survey.get_sentiment_display }}</span>
+                    <span class="font-semibold text-slate-800 dark:text-slate-200">{{ survey.get_sentiment_display }}</span>
                 </div>
-                <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-100">
+                <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span class="text-slate-500">Follow-up Disposition</span>
-                    <span class="font-semibold text-slate-800">{{ survey.get_follow_up_status_display }}</span>
+                    <span class="font-semibold text-slate-800 dark:text-slate-200">{{ survey.get_follow_up_status_display }}</span>
                 </div>
             </div>
         </div>
@@ -129,7 +129,7 @@
                 </div>
                 {% endif %}
                 {% if survey.order %}
-                <div class="pt-2 border-t border-slate-100">
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span class="text-slate-500 block text-xs">Evaluated Order</span>
                     <a href="{% url 'ecommerce:ecommerceorder_detail' survey.order.pk %}" class="text-brand hover:underline font-mono font-medium">
                         {{ survey.order.number }}
@@ -137,16 +137,16 @@
                 </div>
                 {% endif %}
                 {% if survey.customer %}
-                <div class="pt-2 border-t border-slate-100">
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span class="text-slate-500 block text-xs">Shopper Account</span>
                     <a href="{% url 'ecommerce:customeraccountprofile_detail' survey.customer.pk %}" class="text-brand hover:underline font-medium">
                         {{ survey.customer.number }} - {{ survey.customer }}
                     </a>
                 </div>
                 {% endif %}
-                <div class="pt-2 border-t border-slate-100">
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span class="text-slate-500 block text-xs">Rated Support Agent</span>
-                    <span class="font-medium text-slate-900">
+                    <span class="font-medium text-slate-900 dark:text-slate-100">
                         {% if survey.agent_rated %}
                         {{ survey.agent_rated.get_full_name|default:survey.agent_rated.username }}
                         {% else %}
@@ -157,14 +157,14 @@
                 {% if survey.reviewed_by %}
                 <div>
                     <span class="text-slate-500 block text-xs">Supervisor Reviewer</span>
-                    <span class="font-medium text-slate-900">
+                    <span class="font-medium text-slate-900 dark:text-slate-100">
                         {{ survey.reviewed_by.get_full_name|default:survey.reviewed_by.username }}
                     </span>
                 </div>
                 {% endif %}
-                <div class="pt-2 border-t border-slate-100">
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span class="text-slate-500 block text-xs">Survey Timestamp</span>
-                    <span class="font-medium text-slate-900">{{ survey.created_at|date:"M d, Y H:i" }}</span>
+                    <span class="font-medium text-slate-900 dark:text-slate-100">{{ survey.created_at|date:"M d, Y H:i" }}</span>
                 </div>
             </div>
         </div>
