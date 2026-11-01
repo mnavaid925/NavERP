@@ -146,6 +146,7 @@ def productmerchandisingmetric_delete(request, pk):
 
 @require_POST
 @login_required
+@tenant_admin_required
 def productmerchandisingmetric_reclassify(request):
     """Reclassifies velocity tiers for all merchandising metrics."""
     metrics = ProductMerchandisingMetric.objects.filter(tenant=request.tenant)
