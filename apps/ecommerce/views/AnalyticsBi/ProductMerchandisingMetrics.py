@@ -174,7 +174,7 @@ def productmerchandisingmetric_reclassify(request):
         request.user,
         None,
         "reclass",
-        f"Reclassified {count} products",
+        {"count": count},
         tenant=request.tenant,
     )
     messages.success(request, f"Reclassified velocity tiers and margins across {count} merchandise records.")
