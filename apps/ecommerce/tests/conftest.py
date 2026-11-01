@@ -60,6 +60,10 @@ from apps.ecommerce.models import (
     KnowledgeBaseArticle,
     OrderIssueClaim,
     CustomerSatisfactionSurvey,
+    CmsPage,
+    BlogArticle,
+    MediaAsset,
+    ContentBlock,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -3329,6 +3333,198 @@ def ecom_customersupport_survey_b(tenant_b, ecom_profile_b, ecom_order_b, ecom_c
         customer=ecom_profile_b,
         order=ecom_order_b,
         ticket=ecom_customersupport_ticket_b,
+    )
+
+
+# ----------------------------------------------------------------------
+# 9.9 Content Management System (CMS) Contract Constants & Fixtures
+# ----------------------------------------------------------------------
+CONTENTMANAGEMENT_PAGE_SIZE = 20
+
+CONTENTMANAGEMENT_MODEL_FIELDS = {
+    "CmsPage": (
+        "id", "tenant", "number", "title", "slug", "page_type", "status",
+        "template_layout", "meta_title", "meta_description", "canonical_url",
+        "is_indexable", "content_json", "raw_html_body", "published_at",
+        "view_count", "is_ab_test_active", "ab_variant_label",
+        "ab_traffic_percentage", "created_at", "updated_at",
+    ),
+    "BlogArticle": (
+        "id", "tenant", "number", "title", "slug", "author", "category",
+        "excerpt", "body_markdown", "featured_media", "status", "tags",
+        "reading_time_minutes", "allow_comments", "is_featured",
+        "published_at", "view_count", "created_at", "updated_at",
+    ),
+    "MediaAsset": (
+        "id", "tenant", "number", "title", "file_url", "alt_text",
+        "caption", "media_type", "folder_category", "file_size_bytes",
+        "mime_type", "width_px", "height_px", "uploaded_by",
+        "created_at", "updated_at",
+    ),
+    "ContentBlock": (
+        "id", "tenant", "number", "name", "block_type", "headline",
+        "subheadline", "body_text", "media_asset", "cta_label", "cta_url",
+        "target_category", "target_product", "bg_color_class",
+        "text_color_class", "sort_order", "is_active", "created_at",
+        "updated_at",
+    ),
+}
+
+CONTENTMANAGEMENT_CHOICES = {
+    "CmsPage": {
+        "page_type": tuple(CmsPage.PAGE_TYPE_CHOICES),
+        "status": tuple(CmsPage.STATUS_CHOICES),
+        "template_layout": tuple(CmsPage.LAYOUT_CHOICES),
+    },
+    "BlogArticle": {
+        "category": tuple(BlogArticle.CATEGORY_CHOICES),
+        "status": tuple(BlogArticle.STATUS_CHOICES),
+    },
+    "MediaAsset": {
+        "media_type": tuple(MediaAsset.MEDIA_TYPE_CHOICES),
+        "folder_category": tuple(MediaAsset.FOLDER_CHOICES),
+    },
+    "ContentBlock": {
+        "block_type": tuple(ContentBlock.BLOCK_TYPE_CHOICES),
+    },
+}
+
+
+def _contentmanagement_media(tenant, **kwargs):
+    defaults = {
+        "title": "Sample Media Banner",
+        "file_url": "https://example.com/assets/banner.jpg",
+        "alt_text": "Sample promotional graphic banner",
+        "caption": "Sample asset caption",
+        "media_type": "banner",
+        "folder_category": "banners",
+        "file_size_bytes": 102400,
+        "mime_type": "image/jpeg",
+        "width_px": 1200,
+        "height_px": 600,
+    }
+    defaults.update(kwargs)
+    return MediaAsset.objects.create(tenant=tenant, **defaults)
+
+
+def _contentmanagement_page(tenant, **kwargs):
+    defaults = {
+        "title": "Welcome Storefront Page",
+        "slug": "welcome-page",
+        "page_type": "standard",
+        "status": "published",
+        "template_layout": "full_width",
+        "meta_title": "Welcome Page Title",
+        "meta_description": "Welcome page meta description",
+        "is_indexable": True,
+        "raw_html_body": "<p>Welcome to our online store.</p>",
+    }
+    defaults.update(kwargs)
+    return CmsPage.objects.create(tenant=tenant, **defaults)
+
+
+def _contentmanagement_blog(tenant, **kwargs):
+    defaults = {
+        "title": "Seasonal Fashion Trends 2026",
+        "slug": "seasonal-fashion-trends-2026",
+        "category": "guides_tutorials",
+        "excerpt": "A brief look at upcoming seasonal fashion trends.",
+        "body_markdown": "# Trends 2026\n\nFull article body text in markdown format.",
+        "status": "published",
+        "tags": "fashion, trends, 2026",
+        "reading_time_minutes": 5,
+        "allow_comments": True,
+        "is_featured": True,
+    }
+    defaults.update(kwargs)
+    return BlogArticle.objects.create(tenant=tenant, **defaults)
+
+
+def _contentmanagement_block(tenant, **kwargs):
+    defaults = {
+        "name": "Summer Promotional Hero",
+        "block_type": "hero_banner",
+        "headline": "Summer Style Collection",
+        "subheadline": "Limited time discounts on summer gear",
+        "body_text": "Enjoy up to 30% off selected styles while supplies last.",
+        "cta_label": "Shop Now",
+        "cta_url": "/category/apparel-fashion/",
+        "bg_color_class": "bg-indigo-900",
+        "text_color_class": "text-white",
+        "sort_order": 1,
+        "is_active": True,
+    }
+    defaults.update(kwargs)
+    return ContentBlock.objects.create(tenant=tenant, **defaults)
+
+
+@pytest.fixture
+def ecom_mediaasset_a(tenant_a, user_a):
+    return _contentmanagement_media(tenant_a, uploaded_by=user_a)
+
+
+@pytest.fixture
+def ecom_mediaasset_b(tenant_b, user_b):
+    return _contentmanagement_media(
+        tenant_b,
+        title="Tenant B Media Asset",
+        file_url="https://example.com/assets/banner_b.jpg",
+        uploaded_by=user_b,
+    )
+
+
+@pytest.fixture
+def ecom_cmspage_a(tenant_a):
+    return _contentmanagement_page(tenant_a)
+
+
+@pytest.fixture
+def ecom_cmspage_b(tenant_b):
+    return _contentmanagement_page(
+        tenant_b,
+        title="Tenant B Storefront Page",
+        slug="tenant-b-welcome-page",
+    )
+
+
+@pytest.fixture
+def ecom_blogarticle_a(tenant_a, user_a, ecom_mediaasset_a):
+    return _contentmanagement_blog(
+        tenant_a,
+        author=user_a,
+        featured_media=ecom_mediaasset_a,
+    )
+
+
+@pytest.fixture
+def ecom_blogarticle_b(tenant_b, user_b, ecom_mediaasset_b):
+    return _contentmanagement_blog(
+        tenant_b,
+        title="Tenant B Blog Post",
+        slug="tenant-b-blog-post",
+        author=user_b,
+        featured_media=ecom_mediaasset_b,
+    )
+
+
+@pytest.fixture
+def ecom_contentblock_a(tenant_a, ecom_mediaasset_a, ecom_category_a, ecom_product_a):
+    return _contentmanagement_block(
+        tenant_a,
+        media_asset=ecom_mediaasset_a,
+        target_category=ecom_category_a,
+        target_product=ecom_product_a,
+    )
+
+
+@pytest.fixture
+def ecom_contentblock_b(tenant_b, ecom_mediaasset_b, ecom_category_b, ecom_product_b):
+    return _contentmanagement_block(
+        tenant_b,
+        name="Tenant B Promotional Hero",
+        media_asset=ecom_mediaasset_b,
+        target_category=ecom_category_b,
+        target_product=ecom_product_b,
     )
 
 
