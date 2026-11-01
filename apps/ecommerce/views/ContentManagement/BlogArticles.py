@@ -14,7 +14,7 @@ from apps.ecommerce.views._common import ecommerce_object
 
 @login_required
 def blogarticle_list(request):
-    qs = BlogArticle.objects.filter(tenant=request.tenant).select_related("author", "featured_media")
+    qs = BlogArticle.objects.filter(tenant=request.tenant).select_related("author", "featured_media").defer("body_markdown")
 
     search_query = request.GET.get("q", "").strip()
     if search_query:
