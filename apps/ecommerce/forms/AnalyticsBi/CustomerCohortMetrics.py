@@ -1,10 +1,10 @@
 from django import forms
 
-from apps.ecommerce.forms._common import TenantModelForm
+from apps.ecommerce.forms._common import TenantModelForm, TenantUniqueMixin
 from apps.ecommerce.models.AnalyticsBi.CustomerCohortMetrics import CustomerCohortMetric
 
 
-class CustomerCohortMetricForm(TenantModelForm):
+class CustomerCohortMetricForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = CustomerCohortMetric
         fields = [
