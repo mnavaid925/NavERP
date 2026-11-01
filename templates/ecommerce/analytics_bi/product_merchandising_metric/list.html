@@ -111,8 +111,10 @@
               <span class="badge badge-info">Core Performer</span>
               {% elif m.velocity_tier == "slow_mover" %}
               <span class="badge badge-amber">Slow Mover</span>
-              {% else %}
+              {% elif m.velocity_tier == "dead_stock" %}
               <span class="badge badge-red">Dead Stock</span>
+              {% else %}
+              <span class="badge badge-slate">{{ m.get_velocity_tier_display }}</span>
               {% endif %}
             </td>
             <td>
