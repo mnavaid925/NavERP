@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Feedback & NPS | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Customer Support</span>
+            <span>/</span>
+            <span>Feedback & NPS</span>
+        </div>
+        <h1 class="page-title">Customer Feedback & NPS</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:customersatisfactionsurvey_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Record Feedback
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label for="q" class="form-label">Search</label>
+                <input type="text" id="q" name="q" value="{{ query }}" placeholder="Survey #, comment, ticket, order..." class="form-input">
+            </div>
+            <div class="form-group mb-0">
+                <label for="survey_type" class="form-label">Survey Type</label>
+                <select id="survey_type" name="survey_type" class="form-select">
+                    <option value="">All Survey Types</option>
+                    {% for val, label in survey_type_choices %}
+                    <option value="{{ val }}" {% if selected_survey_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="sentiment" class="form-label">Sentiment</label>
+                <select id="sentiment" name="sentiment" class="form-select">
+                    <option value="">All Sentiments</option>
+                    {% for val, label in sentiment_choices %}
+                    <option value="{{ val }}" {% if selected_sentiment == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="follow_up" class="form-label">Follow-up Status</label>
+                <select id="follow_up" name="follow_up" class="form-select">
+                    <option value="">All Follow-up Statuses</option>
+                    {% for val, label in follow_up_choices %}
+                    <option value="{{ val }}" {% if selected_follow_up == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-4 flex justify-end gap-2">
+                <a href="{% url 'ecommerce:customersatisfactionsurvey_list' %}" class="btn btn-outline">Clear Filters</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Surveys Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Survey #</th>
+                        <th>Type & Context</th>
+                        <th>Score</th>
+                        <th>Sentiment</th>
+                        <th>Customer Comment</th>
+                        <th>Follow-up Status</th>
+                        <th>Rated Agent</th>
+                        <th>Recorded Date</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for survey in surveys %}
+                    <tr>
+                        <td class="font-mono text-sm">
+                            <a href="{% url 'ecommerce:customersatisfactionsurvey_detail' survey.pk %}" class="text-primary font-semibold hover:underline">
+                                {{ survey.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-semibold text-slate-900">{{ survey.get_survey_type_display }}</div>
+                            <div class="text-xs text-slate-500 font-mono">
+                                {% if survey.ticket %}
+                                Ticket: {{ survey.ticket.number }}
+                                {% endif %}
+                                {% if survey.order %}
+                                &bull; Order: {{ survey.order.number }}
+                                {% endif %}
+                                {% if survey.customer %}
+                                &bull; {{ survey.customer }}
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="flex items-center gap-1.5 font-bold font-mono text-base">
+                                {% if survey.rating_score >= 8 or survey.rating_score >= 4 and survey.survey_type != 'storefront_nps' %}
+                                <span class="text-green-700">{{ survey.rating_score }}</span>
+                                <span class="text-xs text-slate-400">/ {% if survey.survey_type == 'storefront_nps' %}10{% else %}5{% endif %}</span>
+                                {% elif survey.rating_score >= 6 or survey.rating_score == 3 and survey.survey_type != 'storefront_nps' %}
+                                <span class="text-amber-600">{{ survey.rating_score }}</span>
+                                <span class="text-xs text-slate-400">/ {% if survey.survey_type == 'storefront_nps' %}10{% else %}5{% endif %}</span>
+                                {% else %}
+                                <span class="text-red-700">{{ survey.rating_score }}</span>
+                                <span class="text-xs text-slate-400">/ {% if survey.survey_type == 'storefront_nps' %}10{% else %}5{% endif %}</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            {% if survey.sentiment == 'positive' %}
+                            <span class="badge badge-green">Positive</span>
+                            {% elif survey.sentiment == 'neutral' %}
+                            <span class="badge badge-amber">Neutral</span>
+                            {% else %}
+                            <span class="badge badge-red">Negative / Detractor</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm text-slate-700 max-w-xs truncate">
+                            {{ survey.feedback_comment|default:"—" }}
+                        </td>
+                        <td>
+                            {% if survey.follow_up_status == 'pending_review' %}
+                            <span class="badge badge-red">Pending Review</span>
+                            {% elif survey.follow_up_status == 'contacted_customer' %}
+                            <span class="badge badge-amber">Customer Contacted</span>
+                            {% elif survey.follow_up_status == 'resolved_closed_loop' %}
+                            <span class="badge badge-green">Resolved Closed Loop</span>
+                            {% else %}
+                            <span class="badge badge-slate">No Follow-up</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm text-slate-600">
+                            {% if survey.agent_rated %}
+                            {{ survey.agent_rated.get_full_name|default:survey.agent_rated.username }}
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm text-slate-500">
+                            {{ survey.created_at|date:"M d, Y" }}
+                        </td>
+                        <td class="table-actions text-right">
+                            <a href="{% url 'ecommerce:customersatisfactionsurvey_detail' survey.pk %}" class="btn btn-icon" title="View Feedback">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:customersatisfactionsurvey_edit' survey.pk %}" class="btn btn-icon" title="Edit Feedback">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form action="{% url 'ecommerce:customersatisfactionsurvey_delete' survey.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete survey record {{ survey.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Feedback">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center py-8">
+                            <div class="empty-state">
+                                <i data-lucide="smile" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
+                                <h3 class="text-base font-semibold text-slate-700">No feedback surveys found</h3>
+                                <p class="text-sm text-slate-500 mb-4">No satisfaction surveys match the current filters.</p>
+                                <a href="{% url 'ecommerce:customersatisfactionsurvey_create' %}" class="btn btn-primary btn-sm">Record First Survey</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} survey responses
+            </div>
+            <div class="flex gap-1">
+                <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}&q={{ query }}&survey_type={{ selected_survey_type }}&sentiment={{ selected_sentiment }}&follow_up={{ selected_follow_up }}"
+                   class="btn btn-outline btn-sm {% if not page_obj.has_previous %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Previous
+                </a>
+                <span class="btn btn-sm btn-outline active">{{ page_obj.number }} / {{ paginator.num_pages }}</span>
+                <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}&q={{ query }}&survey_type={{ selected_survey_type }}&sentiment={{ selected_sentiment }}&follow_up={{ selected_follow_up }}"
+                   class="btn btn-outline btn-sm {% if not page_obj.has_next %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Next
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
