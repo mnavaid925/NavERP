@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}{% if page %}Edit Page {{ page.title }}{% else %}Create CMS Page{% endif %} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Content Management</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:cmspage_list' %}">Pages</a>
+            <span>/</span>
+            <span>{% if page %}Edit {{ page.number }}{% else %}New Page{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if page %}Edit Page: {{ page.title }}{% else %}Create New CMS Page{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Page Details -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Basic Page Information
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Page Title *</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}
+                        <div class="form-error">{{ form.title.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.slug.id_for_label }}" class="form-label">URL Slug *</label>
+                        {{ form.slug }}
+                        {% if form.slug.errors %}
+                        <div class="form-error">{{ form.slug.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.page_type.id_for_label }}" class="form-label">Page Type</label>
+                        {{ form.page_type }}
+                        {% if form.page_type.errors %}
+                        <div class="form-error">{{ form.page_type.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Publishing Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}
+                        <div class="form-error">{{ form.status.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.template_layout.id_for_label }}" class="form-label">Template Layout</label>
+                        {{ form.template_layout }}
+                        {% if form.template_layout.errors %}
+                        <div class="form-error">{{ form.template_layout.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Body Content -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Page Content (HTML / Rich Text)
+                </h3>
+                <div class="form-group">
+                    <label for="{{ form.raw_html_body.id_for_label }}" class="form-label">HTML Content</label>
+                    {{ form.raw_html_body }}
+                    <p class="text-xs text-slate-500 mt-1">Direct HTML markup, typography, embed code, or promotional layout markup.</p>
+                    {% if form.raw_html_body.errors %}
+                    <div class="form-error">{{ form.raw_html_body.errors }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Section 3: SEO Metadata -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    Search Engine Optimization (SEO)
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.meta_title.id_for_label }}" class="form-label">Meta Title</label>
+                        {{ form.meta_title }}
+                        {% if form.meta_title.errors %}
+                        <div class="form-error">{{ form.meta_title.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.canonical_url.id_for_label }}" class="form-label">Canonical URL</label>
+                        {{ form.canonical_url }}
+                        {% if form.canonical_url.errors %}
+                        <div class="form-error">{{ form.canonical_url.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.meta_description.id_for_label }}" class="form-label">Meta Description</label>
+                        {{ form.meta_description }}
+                        {% if form.meta_description.errors %}
+                        <div class="form-error">{{ form.meta_description.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2 flex items-center gap-2">
+                        {{ form.is_indexable }}
+                        <label for="{{ form.is_indexable.id_for_label }}" class="form-label mb-0">Allow Search Engines to Index this Page</label>
+                        {% if form.is_indexable.errors %}
+                        <div class="form-error">{{ form.is_indexable.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: A/B Testing Configuration -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+                    A/B Variant Testing
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group md:col-span-3 flex items-center gap-2">
+                        {{ form.is_ab_test_active }}
+                        <label for="{{ form.is_ab_test_active.id_for_label }}" class="form-label mb-0">Enable A/B Traffic Split for this Page</label>
+                        {% if form.is_ab_test_active.errors %}
+                        <div class="form-error">{{ form.is_ab_test_active.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.ab_variant_label.id_for_label }}" class="form-label">Variant Name / Description</label>
+                        {{ form.ab_variant_label }}
+                        {% if form.ab_variant_label.errors %}
+                        <div class="form-error">{{ form.ab_variant_label.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.ab_traffic_percentage.id_for_label }}" class="form-label">Traffic Split (%)</label>
+                        {{ form.ab_traffic_percentage }}
+                        {% if form.ab_traffic_percentage.errors %}
+                        <div class="form-error">{{ form.ab_traffic_percentage.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if page %}{% url 'ecommerce:cmspage_detail' page.pk %}{% else %}{% url 'ecommerce:cmspage_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    {% if page %}Update Page{% else %}Create Page{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
