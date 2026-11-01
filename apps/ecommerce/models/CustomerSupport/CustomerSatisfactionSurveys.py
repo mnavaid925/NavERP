@@ -53,7 +53,7 @@ class CustomerSatisfactionSurvey(TenantNumbered):
     )
     survey_type = models.CharField(max_length=25, choices=SURVEY_TYPE_CHOICES, default="ticket_csat")
     rating_score = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(10)],
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
         help_text="Score 1-5 for CSAT, 0-10 for NPS",
     )
     sentiment = models.CharField(max_length=15, choices=SENTIMENT_CHOICES, default="neutral")
