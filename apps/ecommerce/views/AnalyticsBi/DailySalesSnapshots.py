@@ -74,12 +74,11 @@ def dailysalessnapshot_create(request):
             snapshot.tenant = request.tenant
             snapshot.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "CREATE",
-                "DailySalesSnapshot",
-                snapshot.pk,
-                f"Created daily sales snapshot {snapshot.number} for {snapshot.snapshot_date}",
+                snapshot,
+                "create",
+                {"number": snapshot.number, "date": str(snapshot.snapshot_date)},
+                tenant=request.tenant,
             )
             messages.success(request, f"Daily sales snapshot {snapshot.number} created successfully.")
             return redirect("ecommerce:dailysalessnapshot_detail", pk=snapshot.pk)
@@ -104,12 +103,11 @@ def dailysalessnapshot_edit(request, pk):
         if form.is_valid():
             snapshot = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "UPDATE",
-                "DailySalesSnapshot",
-                snapshot.pk,
-                f"Updated daily sales snapshot {snapshot.number}",
+                snapshot,
+                "update",
+                {"number": snapshot.number},
+                tenant=request.tenant,
             )
             messages.success(request, f"Daily sales snapshot {snapshot.number} updated successfully.")
             return redirect("ecommerce:dailysalessnapshot_detail", pk=snapshot.pk)
@@ -131,12 +129,11 @@ def dailysalessnapshot_delete(request, pk):
     number = snapshot.number
     snapshot.delete()
     write_audit_log(
-        request.tenant,
         request.user,
-        "DELETE",
-        "DailySalesSnapshot",
-        pk,
-        f"Deleted daily sales snapshot {number}",
+        snapshot,
+        "delete",
+        {"number": number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Daily sales snapshot {number} was deleted.")
     return redirect("ecommerce:dailysalessnapshot_list")
@@ -149,12 +146,11 @@ def dailysalessnapshot_generate(request):
     today = timezone.now().date()
     snapshot = DailySalesSnapshot.aggregate_for_tenant_date(request.tenant, today)
     write_audit_log(
-        request.tenant,
         request.user,
-        "GENERATE",
-        "DailySalesSnapshot",
-        snapshot.pk,
-        f"Generated sales aggregation snapshot for {today}",
+        snapshot,
+        "generate",
+        {"date": str(today)},
+        tenant=request.tenant,
     )
     messages.success(
         request,
