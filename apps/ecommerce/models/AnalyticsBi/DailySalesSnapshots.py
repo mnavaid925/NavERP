@@ -53,19 +53,26 @@ class DailySalesSnapshot(TenantNumbered):
         from apps.ecommerce.models.CartCheckout.Carts import Cart
         from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder
 
-        orders = EcommerceOrder.objects.filter(
-            tenant=tenant,
-            created_at__date=date,
-            currency=currency,
-        ).exclude(status="cancelled")
+        order_filter = {
+            "tenant": tenant,
+            "created_at__date": date,
+        }
+        if isinstance(currency, str):
+            order_filter["currency__code"] = currency
+            currency_code = currency
+        else:
+            order_filter["currency"] = currency
+            currency_code = getattr(currency, "code", "USD")
+
+        orders = EcommerceOrder.objects.filter(**order_filter).exclude(status="cancelled")
 
         order_stats = orders.aggregate(
             total_orders=Count("id"),
-            sum_subtotal=Sum("subtotal"),
-            sum_discount=Sum("discount_total"),
-            sum_shipping=Sum("shipping_total"),
-            sum_tax=Sum("tax_total"),
-            sum_grand=Sum("grand_total"),
+            sum_subtotal=Sum("subtotal_amount"),
+            sum_discount=Sum("discount_amount"),
+            sum_shipping=Sum("shipping_amount"),
+            sum_tax=Sum("tax_amount"),
+            sum_grand=Sum("total_amount"),
         )
 
         orders_count = order_stats["total_orders"] or 0
@@ -93,7 +100,7 @@ class DailySalesSnapshot(TenantNumbered):
         snapshot, _ = cls.objects.get_or_create(
             tenant=tenant,
             snapshot_date=date,
-            currency=currency,
+            currency=currency_code,
             defaults={
                 "gross_sales": gross_sales,
                 "discounts_total": discounts_total,
