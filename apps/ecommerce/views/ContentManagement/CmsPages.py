@@ -14,7 +14,7 @@ from apps.ecommerce.views._common import ecommerce_object
 
 @login_required
 def cmspage_list(request):
-    qs = CmsPage.objects.filter(tenant=request.tenant)
+    qs = CmsPage.objects.filter(tenant=request.tenant).defer("raw_html_body", "content_json")
 
     search_query = request.GET.get("q", "").strip()
     if search_query:
