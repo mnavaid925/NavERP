@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Touchpoint {{ touchpoint.number }} - {{ touchpoint.get_channel_type_display }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-3">
+        <a href="{% url 'ecommerce:attributiontouchpoint_list' %}" class="btn btn-icon" title="Back to Touchpoints">
+          <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        </a>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span>{{ touchpoint.number }}</span>
+          <span class="badge badge-info">{{ touchpoint.get_channel_type_display }}</span>
+          <span class="badge badge-slate">{{ touchpoint.get_attribution_model_display }}</span>
+        </h1>
+      </div>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1 ml-10">
+        Touchpoint Timestamp: <strong class="text-slate-700 dark:text-slate-300">{{ touchpoint.touchpoint_timestamp|date:"Y-m-d H:i:s" }}</strong>
+        {% if touchpoint.order %}&bull; Order: <span class="font-mono text-xs">{{ touchpoint.order.number }}</span>{% endif %}
+      </p>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <a href="{% url 'ecommerce:attributiontouchpoint_edit' touchpoint.pk %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:attributiontouchpoint_delete' touchpoint.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete touchpoint {{ touchpoint.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Key Stat KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Attributed Revenue</p>
+          <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">${{ touchpoint.attributed_revenue }}</h3>
+        </div>
+        <div class="stat-icon green">
+          <i data-lucide="dollar-sign" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Weight: {{ touchpoint.attribution_weight }}</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Channel Type</p>
+          <h3 class="text-xl font-bold text-slate-900 dark:text-white mt-1">{{ touchpoint.get_channel_type_display }}</h3>
+        </div>
+        <div class="stat-icon blue">
+          <i data-lucide="git-branch" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Model: {{ touchpoint.get_attribution_model_display }}</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Estimated CAC</p>
+          <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">${{ touchpoint.estimated_cac }}</h3>
+        </div>
+        <div class="stat-icon purple">
+          <i data-lucide="tag" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Customer Acquisition Cost</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase font-medium text-slate-500">Associated Conversion</p>
+          <h3 class="text-xl font-bold text-slate-900 dark:text-white mt-1">{% if touchpoint.order %}Order Placed{% elif touchpoint.cart %}Active Cart{% else %}Session Only{% endif %}</h3>
+        </div>
+        <div class="stat-icon orange">
+          <i data-lucide="check-circle" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">{% if touchpoint.order %}{{ touchpoint.order.number }}{% else %}Pre-conversion{% endif %}</p>
+    </div>
+  </div>
+
+  <!-- Detail Information Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Campaign & UTM Attribution -->
+    <div class="card p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="compass" class="w-5 h-5 text-brand"></i>
+        Campaign & UTM Parameters
+      </h2>
+      <div class="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">UTM Source</span>
+          <span class="font-mono font-medium text-slate-900 dark:text-white">{{ touchpoint.utm_source|default:"—" }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">UTM Medium</span>
+          <span class="font-mono text-slate-800 dark:text-slate-200">{{ touchpoint.utm_medium|default:"—" }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">UTM Campaign</span>
+          <span class="font-mono text-slate-800 dark:text-slate-200">{{ touchpoint.utm_campaign|default:"—" }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Marketing Campaign</span>
+          <span class="font-medium">
+            {% if touchpoint.campaign %}
+            <a href="{% url 'ecommerce:marketingcampaign_detail' touchpoint.campaign.pk %}" class="text-brand hover:underline">
+              {{ touchpoint.campaign.name }}
+            </a>
+            {% else %}
+            <span class="text-slate-400 italic">None linked</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Affiliate Partner</span>
+          <span class="font-medium">
+            {% if touchpoint.affiliate %}
+            <a href="{% url 'ecommerce:affiliatepartner_detail' touchpoint.affiliate.pk %}" class="text-brand hover:underline">
+              {{ touchpoint.affiliate.partner_code }} ({{ touchpoint.affiliate.company_name }})
+            </a>
+            {% else %}
+            <span class="text-slate-400 italic">None linked</span>
+            {% endif %}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Referral & Conversion Target -->
+    <div class="card p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="link" class="w-5 h-5 text-brand"></i>
+        URL & Conversion References
+      </h2>
+      <div class="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+        <div class="py-2">
+          <span class="text-slate-500 block mb-1">Landing Page URL</span>
+          <span class="font-mono text-xs break-all text-slate-800 dark:text-slate-200">{{ touchpoint.landing_page_url|default:"Direct storefront entry" }}</span>
+        </div>
+        <div class="py-2">
+          <span class="text-slate-500 block mb-1">Referrer URL</span>
+          <span class="font-mono text-xs break-all text-slate-800 dark:text-slate-200">{{ touchpoint.referrer_url|default:"None / Direct" }}</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Linked Order</span>
+          <span>
+            {% if touchpoint.order %}
+            <a href="{% url 'ecommerce:ecommerceorder_detail' touchpoint.order.pk %}" class="font-mono text-brand hover:underline font-semibold">
+              {{ touchpoint.order.number }}
+            </a>
+            {% else %}
+            <span class="text-slate-400 italic">None</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-slate-500">Linked Cart</span>
+          <span>
+            {% if touchpoint.cart %}
+            <a href="{% url 'ecommerce:cart_detail' touchpoint.cart.pk %}" class="font-mono text-brand hover:underline">
+              {{ touchpoint.cart.number }}
+            </a>
+            {% else %}
+            <span class="text-slate-400 italic">None</span>
+            {% endif %}
+          </span>
+        </div>
+      </div>
+
+      <div class="pt-4 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400 flex justify-between">
+        <span>Recorded: {{ touchpoint.created_at|date:"Y-m-d H:i" }}</span>
+        <span>Updated: {{ touchpoint.updated_at|date:"Y-m-d H:i" }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
