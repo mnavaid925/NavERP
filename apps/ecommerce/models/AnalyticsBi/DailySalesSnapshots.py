@@ -93,9 +93,10 @@ class DailySalesSnapshot(TenantNumbered):
 
         conversion_rate = Decimal("0.00")
         if carts_created > 0:
-            conversion_rate = (
+            rate = (
                 (Decimal(str(orders_count)) / Decimal(str(carts_created))) * Decimal("100.00")
-            ).quantize(Decimal("0.01"))
+            )
+            conversion_rate = min(Decimal("100.00"), max(Decimal("0.00"), rate)).quantize(Decimal("0.01"))
 
         snapshot, _ = cls.objects.get_or_create(
             tenant=tenant,
