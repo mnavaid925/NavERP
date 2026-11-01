@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django import forms
 from django.contrib.auth import get_user_model
 
@@ -70,4 +72,10 @@ class OrderIssueClaimForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["order", "customer", "ticket"])
+        claimed = cleaned.get("claimed_amount")
+        if claimed is not None and claimed < Decimal("0.00"):
+            self.add_error("claimed_amount", "Claimed amount cannot be negative.")
+        approved = cleaned.get("approved_amount")
+        if approved is not None and approved < Decimal("0.00"):
+            self.add_error("approved_amount", "Approved amount cannot be negative.")
         return cleaned
