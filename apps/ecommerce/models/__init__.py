@@ -51,6 +51,10 @@ from apps.ecommerce.models.SubscriptionCommerce.CustomerSubscriptions import Cus
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionBoxCurations import SubscriptionBoxCuration
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionPlans import SubscriptionPlan
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionRetentionActions import SubscriptionRetentionAction
+from apps.ecommerce.models.ContentManagement.BlogArticles import BlogArticle
+from apps.ecommerce.models.ContentManagement.CmsPages import CmsPage
+from apps.ecommerce.models.ContentManagement.ContentBlocks import ContentBlock
+from apps.ecommerce.models.ContentManagement.MediaAssets import MediaAsset
 
 __all__ = [
     "TenantOwned",
@@ -123,4 +127,9 @@ __all__ = [
     "KnowledgeBaseArticle",
     "OrderIssueClaim",
     "CustomerSatisfactionSurvey",
+    # 9.9 Content Management System (CMS)
+    "CmsPage",
+    "BlogArticle",
+    "MediaAsset",
+    "ContentBlock",
 ]
