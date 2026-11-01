@@ -86,6 +86,7 @@ class CustomerSatisfactionSurvey(TenantNumbered):
             models.Index(fields=["tenant", "survey_type", "sentiment"], name="idx_ecsf_ten_type_snt"),
             models.Index(fields=["tenant", "follow_up_status"], name="idx_ecsf_ten_followup"),
             models.Index(fields=["tenant", "agent_rated"], name="idx_ecsf_ten_agent"),
+            models.Index(fields=["tenant", "sentiment"], name="idx_ecsf_ten_sentiment"),
         ]
 
     def __str__(self):
