@@ -117,7 +117,7 @@
 - **File**: `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
 - **Problem**: Missing `clean_slug()` normalizing strings via `.strip().lower()`.
 - **Fix**: Add `clean_slug()` method to normalize slug.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [M4] Blog Article detail renders comma-separated tags as single monolithic badge
 - **Files**:
