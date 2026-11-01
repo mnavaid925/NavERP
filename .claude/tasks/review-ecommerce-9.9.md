@@ -50,7 +50,7 @@
   - `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
 - **Problem**: `published_at` is excluded from the form and not set on save. Articles published through the UI retain `published_at = None`.
 - **Fix**: In `BlogArticle.save()`, auto-set `self.published_at = timezone.now()` when `self.status == "published"` and `self.published_at` is None.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [I3] Missing form `<label>` for `body_markdown` in Blog Article Form (Accessibility / WCAG 2.1)
 - **File**: `templates/ecommerce/content_management/blog/form.html`
