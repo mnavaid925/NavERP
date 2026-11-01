@@ -105,6 +105,7 @@ class OrderIssueClaim(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "order", "status"], name="idx_eclm_ten_ord_stat"),
             models.Index(fields=["tenant", "status", "claim_type"], name="idx_eclm_ten_stat_type"),
+            models.Index(fields=["tenant", "claim_type"], name="idx_eclm_ten_claim_type"),
         ]
 
     def __str__(self):
