@@ -75,7 +75,7 @@
                 <p class="whitespace-pre-line text-slate-800 leading-relaxed">{{ ticket.initial_message }}</p>
                 {% if ticket.is_bot_handled %}
                 <div class="mt-4 p-3 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600 flex items-center gap-2">
-                    <i data-lucide="bot" class="w-4 h-4 text-primary"></i>
+                    <i data-lucide="bot" class="w-4 h-4 text-brand"></i>
                     <span>Bot Assisted Interaction: {{ ticket.bot_handoff_reason|default:"Automated assistance with agent handoff" }}</span>
                 </div>
                 {% endif %}
@@ -128,7 +128,7 @@
                 </div>
                 <div>
                     <span class="text-slate-500 block text-xs">Email Address</span>
-                    <a href="mailto:{{ ticket.customer_email }}" class="text-primary hover:underline">{{ ticket.customer_email }}</a>
+                    <a href="mailto:{{ ticket.customer_email }}" class="text-brand hover:underline">{{ ticket.customer_email }}</a>
                 </div>
                 {% if ticket.customer_phone %}
                 <div>
@@ -139,7 +139,7 @@
                 {% if ticket.customer %}
                 <div class="pt-2 border-t border-slate-100">
                     <span class="text-slate-500 block text-xs">Registered Profile</span>
-                    <a href="{% url 'ecommerce:customeraccountprofile_detail' ticket.customer.pk %}" class="text-primary hover:underline font-medium">
+                    <a href="{% url 'ecommerce:customeraccountprofile_detail' ticket.customer.pk %}" class="text-brand hover:underline font-medium">
                         {{ ticket.customer.number }} - {{ ticket.customer }}
                     </a>
                 </div>
@@ -147,7 +147,7 @@
                 {% if ticket.order %}
                 <div class="pt-2 border-t border-slate-100">
                     <span class="text-slate-500 block text-xs">Associated Order</span>
-                    <a href="{% url 'ecommerce:ecommerceorder_detail' ticket.order.pk %}" class="text-primary hover:underline font-mono font-medium">
+                    <a href="{% url 'ecommerce:ecommerceorder_detail' ticket.order.pk %}" class="text-brand hover:underline font-mono font-medium">
                         {{ ticket.order.number }}
                     </a>
                     <span class="text-xs text-slate-500 block">Total: ${{ ticket.order.total_amount }} &bull; Status: {{ ticket.order.get_status_display }}</span>
