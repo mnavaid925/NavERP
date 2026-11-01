@@ -60,8 +60,8 @@ class CustomerCohortMetric(TenantNumbered):
                 (Decimal(str(self.active_customers)) / Decimal(str(self.initial_cohort_size)))
                 * Decimal("100.00")
             )
-            self.retention_rate_pct = retention.quantize(Decimal("0.01"))
-            self.churn_rate_pct = (Decimal("100.00") - self.retention_rate_pct).quantize(Decimal("0.01"))
+            self.retention_rate_pct = min(Decimal("100.00"), max(Decimal("0.00"), retention)).quantize(Decimal("0.01"))
+            self.churn_rate_pct = max(Decimal("0.00"), (Decimal("100.00") - self.retention_rate_pct)).quantize(Decimal("0.01"))
 
             ltv = (self.cumulative_net_revenue / Decimal(str(self.initial_cohort_size))).quantize(
                 Decimal("0.01")
