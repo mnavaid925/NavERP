@@ -63,6 +63,10 @@ from apps.ecommerce.forms.SearchDiscovery.SearchQueryLogs import (
     SearchQueryLogForm,
 )
 from apps.ecommerce.forms.SearchDiscovery.SearchSynonyms import SearchSynonymForm
+from apps.ecommerce.forms.CustomerSupport.CustomerSatisfactionSurveys import CustomerSatisfactionSurveyForm
+from apps.ecommerce.forms.CustomerSupport.CustomerSupportTickets import CustomerSupportTicketForm
+from apps.ecommerce.forms.CustomerSupport.KnowledgeBaseArticles import KnowledgeBaseArticleForm
+from apps.ecommerce.forms.CustomerSupport.OrderIssueClaims import OrderIssueClaimForm
 from apps.ecommerce.forms.ReviewUgc.ProductQuestionAnswers import (
     ProductQuestionAnswerForm,
     ProductQuestionAnswerResponseForm,
@@ -160,4 +164,9 @@ __all__ = [
     "ProductQuestionAnswerResponseForm",
     "VisualUgcMediaForm",
     "ReviewSentimentSummaryForm",
+    # 9.14 Customer Service & Support
+    "CustomerSupportTicketForm",
+    "KnowledgeBaseArticleForm",
+    "OrderIssueClaimForm",
+    "CustomerSatisfactionSurveyForm",
 ]
