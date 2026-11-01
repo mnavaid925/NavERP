@@ -54,7 +54,7 @@ def blogarticle_list(request):
 
 @login_required
 def blogarticle_detail(request, pk):
-    article = ecommerce_object(request, BlogArticle, pk)
+    article = ecommerce_object(request, BlogArticle, pk, select_related=("author", "featured_media"))
     return render(
         request,
         "ecommerce/content_management/blog/detail.html",
