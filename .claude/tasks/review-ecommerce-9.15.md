@@ -103,6 +103,27 @@ None. Zero comment leaks, all POST forms have CSRF tokens, all 28 template rever
 2. **Consolidate count queries in `DailySalesSnapshot.aggregate_for_tenant_date`**:
    - Consolidate `carts_created` and `carts_abandoned` into single aggregate.
 
+---
+
+## 5. QA Smoke Tester Findings
+
+### Critical
+None. Zero 500 errors, zero crashes, zero IDOR leaks across tenants.
+
+### Important
+None. All content checks passed: valid `<title>` tags present on all views, zero template comment leaks (`{#` or `{% comment`), and unique object token numbers properly rendered in detail views.
+
+### Minor
+None. Form validation gracefully returns HTTP 200 with error annotations when invalid payloads are submitted, and invalid pagination/filter parameters fall back cleanly without unhandled exceptions.
+
+### Runtime Verification Summary
+- **Routes verified**: 65+ permutations across 24 endpoints.
+- **Cockpit**: Live sales KPIs, funnel stages, and charts render cleanly (200).
+- **CRUD Lifecycle**: Create, detail, edit, delete, actions (302/200) verified across all 4 entities.
+- **Pagination & Filters**: Out-of-bounds, negative, invalid page parameters and junk filter values fall back safely (200).
+- **Security & IDOR**: Cross-tenant requests (Acme -> Globex pk) strictly return 404. Delete endpoints reject GET with 405. Anonymous requests redirect to login (302). Non-admin delete requests forbidden (403).
+
+
 
 
 
