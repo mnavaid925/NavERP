@@ -80,7 +80,7 @@
                     <img src="{{ claim.photo_evidence_url }}" alt="Damage Evidence" class="w-full h-auto object-cover max-h-80">
                 </div>
                 <div class="mt-2 text-xs text-slate-500">
-                    Direct Link: <a href="{{ claim.photo_evidence_url }}" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline font-mono">{{ claim.photo_evidence_url }}</a>
+                    Direct Link: <a href="{{ claim.photo_evidence_url }}" target="_blank" rel="noopener noreferrer" class="text-brand hover:underline font-mono">{{ claim.photo_evidence_url }}</a>
                 </div>
             </div>
         </div>
@@ -132,7 +132,7 @@
             <div class="card-body space-y-3 text-sm">
                 <div>
                     <span class="text-slate-500 block text-xs">Target Order</span>
-                    <a href="{% url 'ecommerce:ecommerceorder_detail' claim.order.pk %}" class="text-primary hover:underline font-mono font-bold">
+                    <a href="{% url 'ecommerce:ecommerceorder_detail' claim.order.pk %}" class="text-brand hover:underline font-mono font-bold">
                         {{ claim.order.number }}
                     </a>
                     <span class="text-xs text-slate-500 block">Total: ${{ claim.order.total_amount }} &bull; {{ claim.order.get_status_display }}</span>
@@ -146,7 +146,7 @@
                 {% if claim.customer %}
                 <div class="pt-2 border-t border-slate-100">
                     <span class="text-slate-500 block text-xs">Shopper Profile</span>
-                    <a href="{% url 'ecommerce:customeraccountprofile_detail' claim.customer.pk %}" class="text-primary hover:underline font-medium">
+                    <a href="{% url 'ecommerce:customeraccountprofile_detail' claim.customer.pk %}" class="text-brand hover:underline font-medium">
                         {{ claim.customer.number }} - {{ claim.customer }}
                     </a>
                 </div>
@@ -154,7 +154,7 @@
                 {% if claim.ticket %}
                 <div class="pt-2 border-t border-slate-100">
                     <span class="text-slate-500 block text-xs">Linked Support Ticket</span>
-                    <a href="{% url 'ecommerce:customersupportticket_detail' claim.ticket.pk %}" class="text-primary hover:underline font-mono font-medium">
+                    <a href="{% url 'ecommerce:customersupportticket_detail' claim.ticket.pk %}" class="text-brand hover:underline font-mono font-medium">
                         {{ claim.ticket.number }}
                     </a>
                     <span class="text-xs text-slate-500 block">{{ claim.ticket.subject }}</span>
