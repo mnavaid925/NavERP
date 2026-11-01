@@ -2785,7 +2785,7 @@ LIVE_LINKS = {
     },
     "9.14": {
         "Help Desk & Ticket Management": "ecommerce:customersupportticket_list",
-        "Live Chat & Chatbot": "ecommerce:customersupportticket_list",
+        "Live Chat & Chatbot": "ecommerce:customersupportticket_list?channel=chat",
         "Self-Service Knowledge Base": "ecommerce:knowledgebasearticle_list",
         "Order Inquiry & Issue Resolution": "ecommerce:orderissueclaim_list",
         "Customer Feedback & NPS": "ecommerce:customersatisfactionsurvey_list",
