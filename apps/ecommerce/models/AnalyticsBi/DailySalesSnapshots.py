@@ -1,3 +1,4 @@
+import datetime
 from decimal import Decimal
 
 from django.db import models
@@ -53,9 +54,17 @@ class DailySalesSnapshot(TenantNumbered):
         from apps.ecommerce.models.CartCheckout.Carts import Cart
         from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder
 
+        start_of_day = (
+            timezone.make_aware(datetime.datetime.combine(date, datetime.time.min))
+            if timezone.is_aware(timezone.now())
+            else datetime.datetime.combine(date, datetime.time.min)
+        )
+        start_of_next_day = start_of_day + datetime.timedelta(days=1)
+
         order_filter = {
             "tenant": tenant,
-            "created_at__date": date,
+            "created_at__gte": start_of_day,
+            "created_at__lt": start_of_next_day,
         }
         if isinstance(currency, str):
             order_filter["currency__code"] = currency
