@@ -56,7 +56,7 @@ def customersupportticket_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    agents = User.objects.filter(is_active=True).order_by("username")
+    agents = User.objects.filter(is_active=True).only("id", "username", "first_name", "last_name").order_by("username")
 
     context = {
         "tickets": page_obj.object_list,
