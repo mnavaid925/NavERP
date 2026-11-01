@@ -221,7 +221,7 @@ __marimo__/
 temp/
 
 # NavERP — uploaded media & collected static
-media/
+/media/
 staticfiles/
 
 # NavERP — per-checkout session/build state written by .claude/hooks/build_state.py.
