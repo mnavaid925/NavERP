@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Cohort Metrics - eCommerce Analytics | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="users" class="w-7 h-7 text-brand"></i>
+        Customer Cohort Metrics
+      </h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        Period-over-period cohort retention matrices, customer lifetime value (LTV), and churn progression
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <form method="post" action="{% url 'ecommerce:customercohortmetric_recalculate' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline flex items-center gap-2">
+          <i data-lucide="calculator" class="w-4 h-4"></i>
+          <span>Recalculate Rates</span>
+        </button>
+      </form>
+      <a href="{% url 'ecommerce:customercohortmetric_create' %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Cohort Entry</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <label for="filter-q" class="form-label text-xs uppercase text-slate-500">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ query }}"
+            placeholder="Metric #, channel tag..."
+            class="form-input pl-9 w-full"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        </div>
+      </div>
+
+      <div>
+        <label for="filter-channel" class="form-label text-xs uppercase text-slate-500">Acquisition Channel Tag</label>
+        <input
+          type="text"
+          id="filter-channel"
+          name="channel"
+          value="{{ selected_channel }}"
+          placeholder="e.g. organic, paid_social"
+          class="form-input w-full"
+        >
+      </div>
+
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary w-full flex items-center justify-center gap-2">
+          <i data-lucide="filter" class="w-4 h-4"></i>
+          <span>Filter</span>
+        </button>
+        <a href="{% url 'ecommerce:customercohortmetric_list' %}" class="btn btn-outline" title="Reset Filters">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Table Card -->
+  <div class="card overflow-hidden">
+    {% if cohort_metrics %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Entry</th>
+            <th>Cohort Month</th>
+            <th>Offset</th>
+            <th>Initial Size</th>
+            <th>Active Shoppers</th>
+            <th>Retention %</th>
+            <th>Churn %</th>
+            <th>Cumulative LTV</th>
+            <th>Channel Tag</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for metric in cohort_metrics %}
+          <tr>
+            <td class="font-medium text-slate-900 dark:text-white">
+              <a href="{% url 'ecommerce:customercohortmetric_detail' metric.pk %}" class="hover:text-brand font-semibold">
+                {{ metric.number }}
+              </a>
+            </td>
+            <td>
+              <span class="font-mono text-sm font-semibold">{{ metric.cohort_month|date:"Y-m" }}</span>
+            </td>
+            <td>
+              <span class="badge badge-info">Month {{ metric.period_offset_months }}</span>
+            </td>
+            <td>
+              <span class="font-medium">{{ metric.initial_cohort_size }}</span>
+            </td>
+            <td>
+              <span class="font-semibold text-slate-900 dark:text-white">{{ metric.active_customers }}</span>
+            </td>
+            <td>
+              <span class="font-semibold text-emerald-600 dark:text-emerald-400">{{ metric.retention_rate_pct }}%</span>
+            </td>
+            <td>
+              <span class="font-semibold text-rose-600 dark:text-rose-400">{{ metric.churn_rate_pct }}%</span>
+            </td>
+            <td>
+              <span class="font-mono text-sm font-semibold text-slate-900 dark:text-white">${{ metric.cumulative_ltv_per_customer }}</span>
+            </td>
+            <td>
+              {% if metric.acquisition_channel_tag %}
+              <span class="badge badge-slate">{{ metric.acquisition_channel_tag }}</span>
+              {% else %}
+              <span class="text-slate-400 italic">All Channels</span>
+              {% endif %}
+            </td>
+            <td class="text-right">
+              <div class="table-actions justify-end">
+                <a href="{% url 'ecommerce:customercohortmetric_detail' metric.pk %}" class="btn btn-icon" title="View Detail">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </a>
+                <a href="{% url 'ecommerce:customercohortmetric_edit' metric.pk %}" class="btn btn-icon" title="Edit Metric">
+                  <i data-lucide="pencil" class="w-4 h-4"></i>
+                </a>
+                <form method="post" action="{% url 'ecommerce:customercohortmetric_delete' metric.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete cohort metric {{ metric.number }}?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30" title="Delete Metric">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-sm">
+      <span class="text-slate-500">
+        Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} cohort entries
+      </span>
+      <div class="pagination flex items-center gap-1">
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_channel %}&channel={{ selected_channel }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+          Previous
+        </a>
+        {% endif %}
+
+        <span class="px-3 py-1 font-semibold text-slate-700 dark:text-slate-300 text-xs">
+          Page {{ page_obj.number }} of {{ paginator.num_pages }}
+        </span>
+
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_channel %}&channel={{ selected_channel }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+          Next
+        </a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state p-12 text-center">
+      <div class="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400 mb-3">
+        <i data-lucide="users" class="w-6 h-6"></i>
+      </div>
+      <h3 class="text-base font-semibold text-slate-800 dark:text-slate-200">No Cohort Metrics Found</h3>
+      <p class="text-sm text-slate-500 max-w-sm mx-auto mt-1">
+        Track your customer retention curves and cumulative LTV progression across monthly cohorts.
+      </p>
+      <div class="mt-4">
+        <a href="{% url 'ecommerce:customercohortmetric_create' %}" class="btn btn-primary">
+          <i data-lucide="plus" class="w-4 h-4 mr-2"></i>
+          Record First Cohort Entry
+        </a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
