@@ -59,6 +59,7 @@ class KnowledgeBaseArticle(TenantNumbered):
             models.Index(fields=["tenant", "category", "status"], name="idx_ekba_ten_cat_stat"),
             models.Index(fields=["tenant", "is_featured", "status"], name="idx_ekba_ten_feat_stat"),
             models.Index(fields=["tenant", "slug"], name="idx_ekba_ten_slug"),
+            models.Index(fields=["tenant", "target_audience"], name="idx_ekba_ten_audience"),
         ]
 
     def __str__(self):
