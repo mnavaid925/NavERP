@@ -109,7 +109,10 @@ def productmerchandisingmetric_edit(request, pk):
         )
         if form.is_valid():
             m = form.save(commit=False)
+            submitted_tier = form.cleaned_data.get("velocity_tier")
             m.recalculate_metrics()
+            if submitted_tier:
+                m.velocity_tier = submitted_tier
             m.save()
             write_audit_log(
                 request.user,
