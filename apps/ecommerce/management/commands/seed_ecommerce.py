@@ -50,6 +50,10 @@ from apps.ecommerce.models.SearchDiscovery.SearchFacetConfigs import SearchFacet
 from apps.ecommerce.models.SearchDiscovery.SearchMerchandisingRules import SearchMerchandisingRule
 from apps.ecommerce.models.SearchDiscovery.SearchQueryLogs import SearchQueryLog
 from apps.ecommerce.models.SearchDiscovery.SearchSynonyms import SearchSynonym
+from apps.ecommerce.models.CustomerSupport.CustomerSatisfactionSurveys import CustomerSatisfactionSurvey
+from apps.ecommerce.models.CustomerSupport.CustomerSupportTickets import CustomerSupportTicket
+from apps.ecommerce.models.CustomerSupport.KnowledgeBaseArticles import KnowledgeBaseArticle
+from apps.ecommerce.models.CustomerSupport.OrderIssueClaims import OrderIssueClaim
 from apps.ecommerce.models.ReviewUgc.ProductQuestionAnswers import ProductQuestionAnswer
 from apps.ecommerce.models.ReviewUgc.ProductReviews import ProductReview
 from apps.ecommerce.models.ReviewUgc.ReviewSentimentSummaries import ReviewSentimentSummary
@@ -2803,6 +2807,242 @@ class Command(BaseCommand):
                     },
                 )
                 summary_2.recalculate()
+
+        # ------------------------------------------------------------------
+        # 9.14 Customer Service & Support
+        # ------------------------------------------------------------------
+        order_support = EcommerceOrder.objects.filter(tenant=tenant).order_by("pk").first()
+        customer_support = CustomerAccountProfile.objects.filter(tenant=tenant).order_by("pk").first()
+        agent_user = User.objects.filter(is_active=True).first()
+
+        # 1. Customer Support Tickets
+        ticket_wismo, _ = CustomerSupportTicket.objects.get_or_create(
+            tenant=tenant,
+            customer_email="customer.jane@example.com",
+            subject="Where is my delivery tracking update?",
+            defaults={
+                "customer": customer_support,
+                "order": order_support,
+                "assigned_agent": agent_user,
+                "customer_name": "Jane Robertson",
+                "customer_phone": "+1 (555) 234-5678",
+                "channel": "web_form",
+                "category": "order_tracking_wismo",
+                "priority": "medium",
+                "status": "open",
+                "initial_message": "Hello, I placed order ORD-00001 three days ago and haven't received tracking information yet. Could you check shipment progress?",
+                "resolution_summary": "",
+                "internal_notes": "Carrier label generated; package awaiting pickup at main distribution fulfillment center.",
+                "is_bot_handled": False,
+            },
+        )
+
+        ticket_damaged, _ = CustomerSupportTicket.objects.get_or_create(
+            tenant=tenant,
+            customer_email="marcus.kane@example.com",
+            subject="Outer packaging crushed during transit",
+            defaults={
+                "customer": customer_support,
+                "order": order_support,
+                "assigned_agent": agent_user,
+                "customer_name": "Marcus Kane",
+                "customer_phone": "+1 (555) 876-5432",
+                "channel": "email",
+                "category": "damaged_defective",
+                "priority": "high",
+                "status": "resolved",
+                "initial_message": "The outer shipping carton arrived severely damaged by the courier. The zipper on the garment was bent.",
+                "resolution_summary": "Full refund of $45.00 authorized to original payment method. Courtesy replacement item dispatched.",
+                "internal_notes": "Claim authorized under carrier insurance policy. Damage photos verified.",
+                "resolved_at": timezone.now() - timedelta(days=1),
+                "is_bot_handled": False,
+            },
+        )
+
+        ticket_chat, _ = CustomerSupportTicket.objects.get_or_create(
+            tenant=tenant,
+            customer_email="visitor.alex@example.com",
+            subject="Pre-purchase inquiry regarding sizing chart",
+            defaults={
+                "assigned_agent": agent_user,
+                "customer_name": "Alex Taylor",
+                "channel": "chat",
+                "category": "product_inquiry",
+                "priority": "low",
+                "status": "closed",
+                "initial_message": "Does the premium wool coat run true to size or should I size up?",
+                "resolution_summary": "Provided link to sizing guide article. Customer confirmed ordering Size Large.",
+                "resolved_at": timezone.now() - timedelta(days=2),
+                "is_bot_handled": True,
+                "bot_handoff_reason": "Customer requested human confirmation on shoulder seam width",
+            },
+        )
+
+        # 2. Knowledge Base Articles
+        KnowledgeBaseArticle.objects.get_or_create(
+            tenant=tenant,
+            slug="shipping-and-delivery-timeframes",
+            defaults={
+                "title": "Standard & Expedited Shipping Timeframes and Tracking",
+                "category": "shipping_delivery",
+                "summary": "Everything you need to know about domestic and international shipping options, carrier partners, and delivery schedules.",
+                "content": (
+                    "### Shipping Overview\n\n"
+                    "We offer Standard (3-5 business days), Express (2 business days), and Overnight delivery.\n\n"
+                    "#### Tracking Your Shipment\n"
+                    "Once your package departs our fulfillment center, you will receive an automated email containing your tracking link.\n\n"
+                    "#### International Orders\n"
+                    "International shipments typically take 7-14 business days depending on customs clearance in your region."
+                ),
+                "status": "published",
+                "target_audience": "all_visitors",
+                "is_featured": True,
+                "view_count": 1420,
+                "helpful_votes": 312,
+                "unhelpful_votes": 14,
+                "keywords": "shipping, delivery, tracking, carrier, fedex, ups, arrival time",
+                "author": agent_user,
+            },
+        )
+
+        KnowledgeBaseArticle.objects.get_or_create(
+            tenant=tenant,
+            slug="returns-exchanges-and-refund-policy",
+            defaults={
+                "title": "Hassle-Free 30-Day Returns, Exchanges & Refunds",
+                "category": "returns_refunds",
+                "summary": "Step-by-step instructions for initiating a return, prepaid shipping labels, and refund processing periods.",
+                "content": (
+                    "### 30-Day Return Guarantee\n\n"
+                    "If you are not 100% satisfied with your merchandise, return it in original unworn condition with tags attached within 30 days.\n\n"
+                    "#### How to Initiate a Return\n"
+                    "1. Log into your Customer Account.\n"
+                    "2. Navigate to Order History and click 'Request Return'.\n"
+                    "3. Print your prepaid shipping return label and drop off the package.\n\n"
+                    "#### Refund Timing\n"
+                    "Refunds post to your original payment method within 3-5 business days after warehouse inspection."
+                ),
+                "status": "published",
+                "target_audience": "all_visitors",
+                "is_featured": True,
+                "view_count": 2180,
+                "helpful_votes": 580,
+                "unhelpful_votes": 22,
+                "keywords": "return, refund, exchange, prepaid label, RMA, store credit",
+                "author": agent_user,
+            },
+        )
+
+        KnowledgeBaseArticle.objects.get_or_create(
+            tenant=tenant,
+            slug="garment-care-and-sizing-troubleshooting",
+            defaults={
+                "title": "Fabric Care, Washing Recommendations & Sizing Charts",
+                "category": "troubleshooting",
+                "summary": "Care instructions to preserve luxury garment longevity, wool washing guide, and comprehensive sizing measurements.",
+                "content": (
+                    "### Fabric Care Guidelines\n\n"
+                    "- Dry clean or gentle hand wash in cold water with pH-neutral detergent.\n"
+                    "- Lay flat to dry; do not tumble dry.\n"
+                    "- Low steam ironing only.\n\n"
+                    "### Sizing Conversion\n"
+                    "Our items follow standard North American tailoring. If between sizes, we recommend selecting the larger size for a relaxed drape."
+                ),
+                "status": "published",
+                "target_audience": "all_visitors",
+                "is_featured": False,
+                "view_count": 890,
+                "helpful_votes": 178,
+                "unhelpful_votes": 8,
+                "keywords": "sizing, fit, measurements, washing, fabric care, dry clean",
+                "author": agent_user,
+            },
+        )
+
+        # 3. Order Issue Claims
+        if order_support:
+            OrderIssueClaim.objects.get_or_create(
+                tenant=tenant,
+                order=order_support,
+                claim_type="damaged_item",
+                defaults={
+                    "customer": customer_support,
+                    "ticket": ticket_damaged,
+                    "status": "approved",
+                    "claimed_amount": Decimal("45.00"),
+                    "approved_amount": Decimal("45.00"),
+                    "resolution_action": "full_refund",
+                    "carrier_tracking_number": "1Z9999999999999999",
+                    "photo_evidence_url": "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=800",
+                    "customer_notes": "Package was crushed by carrier; internal item zipper broken upon opening.",
+                    "decision_notes": "Carrier damage confirmed via photo upload. Full reimbursement authorized.",
+                    "reviewed_by": agent_user,
+                    "resolved_at": timezone.now() - timedelta(days=1),
+                },
+            )
+
+            OrderIssueClaim.objects.get_or_create(
+                tenant=tenant,
+                order=order_support,
+                claim_type="missing_parts",
+                defaults={
+                    "customer": customer_support,
+                    "ticket": ticket_wismo,
+                    "status": "under_review",
+                    "claimed_amount": Decimal("20.00"),
+                    "approved_amount": Decimal("0.00"),
+                    "resolution_action": "replacement_reship",
+                    "carrier_tracking_number": "1Z8888888888888888",
+                    "customer_notes": "The accessory belt advertised with the trousers was missing from the carton.",
+                    "decision_notes": "Checking with warehouse packing station scale log.",
+                    "reviewed_by": agent_user,
+                },
+            )
+
+        # 4. Customer Satisfaction Surveys
+        CustomerSatisfactionSurvey.objects.get_or_create(
+            tenant=tenant,
+            ticket=ticket_damaged,
+            survey_type="ticket_csat",
+            defaults={
+                "order": order_support,
+                "customer": customer_support,
+                "rating_score": 5,
+                "sentiment": "positive",
+                "feedback_comment": "Agent handled my damage claim swiftly and authorized my refund within hours. Superb support!",
+                "agent_rated": agent_user,
+                "follow_up_status": "not_required",
+            },
+        )
+
+        CustomerSatisfactionSurvey.objects.get_or_create(
+            tenant=tenant,
+            customer=customer_support,
+            survey_type="storefront_nps",
+            defaults={
+                "order": order_support,
+                "rating_score": 9,
+                "sentiment": "positive",
+                "feedback_comment": "Love the brand's quality, intuitive site navigation, and prompt dispatch.",
+                "follow_up_status": "not_required",
+            },
+        )
+
+        CustomerSatisfactionSurvey.objects.get_or_create(
+            tenant=tenant,
+            order=order_support,
+            survey_type="order_delivery_csat",
+            defaults={
+                "customer": customer_support,
+                "rating_score": 2,
+                "sentiment": "negative",
+                "feedback_comment": "Courier left the package out in the heavy rain without bagging it.",
+                "follow_up_status": "pending_review",
+                "follow_up_notes": "Supervisor notified to file complaint with regional carrier account manager.",
+                "reviewed_by": agent_user,
+            },
+        )
+
 
 
 
