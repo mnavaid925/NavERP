@@ -2731,6 +2731,18 @@ LIVE_LINKS = {
         "Personalized Experiences": "ecommerce:personalizedexperience_list",
         "Behavioral Telemetry": "ecommerce:shopperbehaviorevent_list",
     },
+    "9.9": {
+        "Page Builder & Visual Editor": "ecommerce:cmspage_list",
+        "Blog & Editorial Content": "ecommerce:blogarticle_list",
+        "Landing Page & Campaign Management": "ecommerce:cmspage_list?page_type=landing",
+        "Media Library & Asset Management": "ecommerce:mediaasset_list",
+        "Content Localization & Translation": "ecommerce:cmspage_list",
+        # Extra live leaves
+        "CMS Pages": "ecommerce:cmspage_list",
+        "Blog Articles": "ecommerce:blogarticle_list",
+        "Media Library": "ecommerce:mediaasset_list",
+        "Content Blocks": "ecommerce:contentblock_list",
+    },
     "9.10": {
         "Email Marketing Automation": "ecommerce:marketingcampaign_list?channel=email",
         "SMS & Push Notification": "ecommerce:marketingcampaign_list?channel=sms",
