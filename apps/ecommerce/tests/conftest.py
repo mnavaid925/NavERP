@@ -56,6 +56,10 @@ from apps.ecommerce.models import (
     ProductQuestionAnswer,
     VisualUgcMedia,
     ReviewSentimentSummary,
+    CustomerSupportTicket,
+    KnowledgeBaseArticle,
+    OrderIssueClaim,
+    CustomerSatisfactionSurvey,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -2999,6 +3003,334 @@ def ecom_reviewugc_summary_a(tenant_a, ecom_product_a):
 @pytest.fixture
 def ecom_reviewugc_summary_b(tenant_b, ecom_product_b):
     return _reviewugc_sentiment_summary(tenant_b, ecom_product_b)
+
+
+# ==============================================================================
+# 9.14 Customer Service & Support Test Contract & Fixtures
+# ==============================================================================
+
+CUSTOMERSUPPORT_PAGE_SIZE = 20
+
+CUSTOMERSUPPORT_MODEL_FIELDS = {
+    "CustomerSupportTicket": (
+        "id", "tenant", "number", "customer", "order", "assigned_agent",
+        "subject", "customer_name", "customer_email", "customer_phone",
+        "channel", "category", "priority", "status", "initial_message",
+        "resolution_summary", "internal_notes", "sla_first_response_due_at",
+        "sla_resolution_due_at", "first_responded_at", "resolved_at",
+        "is_sla_breached", "is_bot_handled", "bot_handoff_reason",
+        "created_at", "updated_at",
+    ),
+    "KnowledgeBaseArticle": (
+        "id", "tenant", "number", "title", "slug", "category", "summary",
+        "content", "status", "target_audience", "is_featured", "view_count",
+        "helpful_votes", "unhelpful_votes", "keywords", "author",
+        "created_at", "updated_at",
+    ),
+    "OrderIssueClaim": (
+        "id", "tenant", "number", "order", "customer", "ticket", "claim_type",
+        "status", "claimed_amount", "approved_amount", "resolution_action",
+        "carrier_tracking_number", "photo_evidence_url", "customer_notes",
+        "decision_notes", "reviewed_by", "resolved_at", "created_at", "updated_at",
+    ),
+    "CustomerSatisfactionSurvey": (
+        "id", "tenant", "number", "ticket", "order", "customer", "survey_type",
+        "rating_score", "sentiment", "feedback_comment", "agent_rated",
+        "follow_up_status", "follow_up_notes", "reviewed_by", "created_at", "updated_at",
+    ),
+}
+
+CUSTOMERSUPPORT_CHOICES = {
+    "CustomerSupportTicket": {
+        "channel": (
+            ("email", "Email"),
+            ("chat", "Live Chat"),
+            ("web_form", "Web Contact Form"),
+            ("portal", "Customer Portal"),
+            ("marketplace", "Marketplace Message"),
+            ("phone", "Phone / Voice"),
+        ),
+        "category": (
+            ("order_tracking_wismo", "Order Tracking (WISMO)"),
+            ("return_refund", "Returns & Refunds"),
+            ("damaged_defective", "Damaged or Defective Item"),
+            ("shipping_delivery", "Shipping & Delivery Issue"),
+            ("product_inquiry", "Pre-Purchase Product Inquiry"),
+            ("payment_billing", "Payment & Billing"),
+            ("account_access", "Customer Account Access"),
+            ("general", "General Inquiries"),
+        ),
+        "priority": (
+            ("low", "Low"),
+            ("medium", "Medium"),
+            ("high", "High"),
+            ("urgent", "Urgent"),
+        ),
+        "status": (
+            ("new", "New / Unassigned"),
+            ("open", "Open / In Progress"),
+            ("pending_customer", "Pending Customer Reply"),
+            ("waiting_carrier", "Waiting on Carrier / Warehouse"),
+            ("resolved", "Resolved"),
+            ("closed", "Closed"),
+            ("cancelled", "Cancelled"),
+        ),
+    },
+    "KnowledgeBaseArticle": {
+        "category": (
+            ("shipping_delivery", "Shipping & Delivery"),
+            ("returns_refunds", "Returns & Refunds"),
+            ("ordering_payment", "Ordering & Payment"),
+            ("product_sizing", "Product Specs & Sizing"),
+            ("account_security", "Account & Security"),
+            ("troubleshooting", "Troubleshooting & Care"),
+            ("promotions", "Promotions & Loyalty"),
+        ),
+        "status": (
+            ("draft", "Draft"),
+            ("published", "Published"),
+            ("archived", "Archived"),
+        ),
+        "target_audience": (
+            ("all_visitors", "All Visitors"),
+            ("registered_customers", "Registered Customers Only"),
+            ("b2b_wholesale", "B2B Wholesale Accounts Only"),
+        ),
+    },
+    "OrderIssueClaim": {
+        "claim_type": (
+            ("damaged_item", "Damaged Item in Transit"),
+            ("lost_in_transit", "Lost in Transit / Package Not Received"),
+            ("wrong_item", "Wrong Item Received"),
+            ("missing_parts", "Missing Item / Partial Shipment"),
+            ("defective_product", "Defective / Malfunctioning Product"),
+            ("late_delivery", "Late Delivery SLA Breach"),
+        ),
+        "status": (
+            ("submitted", "Submitted by Customer"),
+            ("under_review", "Under Staff Review"),
+            ("carrier_investigation", "Carrier Investigation Pending"),
+            ("approved", "Claim Approved"),
+            ("rejected", "Claim Rejected"),
+            ("completed", "Resolution Completed"),
+        ),
+        "resolution_action": (
+            ("pending", "Pending Review"),
+            ("replacement_reship", "Reship Replacement Item"),
+            ("full_refund", "Full Refund to Original Payment"),
+            ("partial_refund", "Partial Refund Adjustment"),
+            ("store_credit", "Store Credit / Gift Voucher"),
+            ("repair", "Product Repair / Service"),
+            ("rejected", "No Action / Claim Denied"),
+        ),
+    },
+    "CustomerSatisfactionSurvey": {
+        "survey_type": (
+            ("ticket_csat", "Post-Ticket CSAT (1-5 Stars)"),
+            ("order_delivery_csat", "Post-Delivery Order CSAT (1-5 Stars)"),
+            ("storefront_nps", "Storefront NPS (0-10 Score)"),
+        ),
+        "sentiment": (
+            ("positive", "Positive (Promoter / Satisfied)"),
+            ("neutral", "Neutral (Passive)"),
+            ("negative", "Negative (Detractor / Dissatisfied)"),
+        ),
+        "follow_up_status": (
+            ("not_required", "No Follow-up Required"),
+            ("pending_review", "Pending Supervisor Review"),
+            ("contacted_customer", "Customer Contacted"),
+            ("resolved_closed_loop", "Issue Resolved (Closed Loop)"),
+        ),
+    },
+}
+
+CUSTOMERSUPPORT_FORM_FIELDS = {
+    "CustomerSupportTicketForm": (
+        "customer", "order", "assigned_agent", "subject", "customer_name",
+        "customer_email", "customer_phone", "channel", "category",
+        "priority", "status", "initial_message", "resolution_summary",
+        "internal_notes", "is_bot_handled", "bot_handoff_reason",
+    ),
+    "KnowledgeBaseArticleForm": (
+        "title", "slug", "category", "summary", "content", "status",
+        "target_audience", "is_featured", "keywords", "author",
+    ),
+    "OrderIssueClaimForm": (
+        "order", "customer", "ticket", "claim_type", "status", "claimed_amount",
+        "approved_amount", "resolution_action", "carrier_tracking_number",
+        "photo_evidence_url", "customer_notes", "decision_notes", "reviewed_by",
+    ),
+    "CustomerSatisfactionSurveyForm": (
+        "ticket", "order", "customer", "survey_type", "rating_score",
+        "sentiment", "feedback_comment", "agent_rated", "follow_up_status",
+        "follow_up_notes", "reviewed_by",
+    ),
+}
+
+CUSTOMERSUPPORT_URLS = {
+    "customersupportticket_list": "support/tickets/",
+    "customersupportticket_create": "support/tickets/create/",
+    "customersupportticket_detail": "support/tickets/<int:pk>/",
+    "customersupportticket_edit": "support/tickets/<int:pk>/edit/",
+    "customersupportticket_delete": "support/tickets/<int:pk>/delete/",
+    "knowledgebasearticle_list": "support/articles/",
+    "knowledgebasearticle_create": "support/articles/create/",
+    "knowledgebasearticle_detail": "support/articles/<int:pk>/",
+    "knowledgebasearticle_edit": "support/articles/<int:pk>/edit/",
+    "knowledgebasearticle_delete": "support/articles/<int:pk>/delete/",
+    "orderissueclaim_list": "support/claims/",
+    "orderissueclaim_create": "support/claims/create/",
+    "orderissueclaim_detail": "support/claims/<int:pk>/",
+    "orderissueclaim_edit": "support/claims/<int:pk>/edit/",
+    "orderissueclaim_delete": "support/claims/<int:pk>/delete/",
+    "customersatisfactionsurvey_list": "support/surveys/",
+    "customersatisfactionsurvey_create": "support/surveys/create/",
+    "customersatisfactionsurvey_detail": "support/surveys/<int:pk>/",
+    "customersatisfactionsurvey_edit": "support/surveys/<int:pk>/edit/",
+    "customersatisfactionsurvey_delete": "support/surveys/<int:pk>/delete/",
+}
+
+
+def _customersupport_ticket(tenant, customer=None, order=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "customer": customer,
+        "order": order,
+        "subject": "Where is my order package?",
+        "customer_name": "Valued Shopper",
+        "customer_email": "shopper@example.com",
+        "customer_phone": "+1 (555) 019-2834",
+        "channel": "email",
+        "category": "order_tracking_wismo",
+        "priority": "medium",
+        "status": "new",
+        "initial_message": "Hello, I placed an order three days ago and haven't received tracking information yet.",
+        "resolution_summary": "",
+        "internal_notes": "Checked carrier portal. Label generated this morning.",
+        "is_sla_breached": False,
+        "is_bot_handled": False,
+    }
+    defaults.update(overrides)
+    return CustomerSupportTicket.objects.create(**defaults)
+
+
+def _customersupport_article(tenant, author=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "title": "Hassle-Free 30-Day Returns Policy",
+        "slug": f"returns-policy-{tenant.slug}",
+        "category": "returns_refunds",
+        "summary": "Everything you need to know about initiating a return, prepaid labels, and refund timelines.",
+        "content": "## Standard 30-Day Return Window\n\nItems in original condition with tags intact can be returned within 30 days of delivery.",
+        "status": "published",
+        "target_audience": "all_visitors",
+        "is_featured": True,
+        "view_count": 42,
+        "helpful_votes": 38,
+        "unhelpful_votes": 2,
+        "keywords": "return, refund, exchange, label, carrier, warranty",
+        "author": author,
+    }
+    defaults.update(overrides)
+    return KnowledgeBaseArticle.objects.create(**defaults)
+
+
+def _customersupport_claim(tenant, order, customer=None, ticket=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "order": order,
+        "customer": customer,
+        "ticket": ticket,
+        "claim_type": "damaged_item",
+        "status": "submitted",
+        "claimed_amount": Decimal("49.99"),
+        "approved_amount": Decimal("0.00"),
+        "resolution_action": "pending",
+        "carrier_tracking_number": "1Z9999999999999999",
+        "photo_evidence_url": "https://example.com/photos/damage_proof.jpg",
+        "customer_notes": "The outer carton was crushed and the product chassis inside arrived cracked.",
+        "decision_notes": "",
+    }
+    defaults.update(overrides)
+    return OrderIssueClaim.objects.create(**defaults)
+
+
+def _customersupport_survey(tenant, customer=None, order=None, ticket=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "customer": customer,
+        "order": order,
+        "ticket": ticket,
+        "survey_type": "ticket_csat",
+        "rating_score": 5,
+        "sentiment": "positive",
+        "feedback_comment": "Support representative resolved my inquiry within minutes. Excellent service!",
+        "follow_up_status": "not_required",
+        "follow_up_notes": "",
+    }
+    defaults.update(overrides)
+    return CustomerSatisfactionSurvey.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_customersupport_ticket_a(tenant_a, ecom_profile_a, ecom_order_a):
+    return _customersupport_ticket(tenant_a, customer=ecom_profile_a, order=ecom_order_a)
+
+
+@pytest.fixture
+def ecom_customersupport_ticket_b(tenant_b, ecom_profile_b, ecom_order_b):
+    return _customersupport_ticket(tenant_b, customer=ecom_profile_b, order=ecom_order_b)
+
+
+@pytest.fixture
+def ecom_customersupport_article_a(tenant_a, admin_user):
+    return _customersupport_article(tenant_a, author=admin_user)
+
+
+@pytest.fixture
+def ecom_customersupport_article_b(tenant_b, admin_b):
+    return _customersupport_article(tenant_b, author=admin_b)
+
+
+@pytest.fixture
+def ecom_customersupport_claim_a(tenant_a, ecom_order_a, ecom_profile_a, ecom_customersupport_ticket_a):
+    return _customersupport_claim(
+        tenant_a,
+        order=ecom_order_a,
+        customer=ecom_profile_a,
+        ticket=ecom_customersupport_ticket_a,
+    )
+
+
+@pytest.fixture
+def ecom_customersupport_claim_b(tenant_b, ecom_order_b, ecom_profile_b, ecom_customersupport_ticket_b):
+    return _customersupport_claim(
+        tenant_b,
+        order=ecom_order_b,
+        customer=ecom_profile_b,
+        ticket=ecom_customersupport_ticket_b,
+    )
+
+
+@pytest.fixture
+def ecom_customersupport_survey_a(tenant_a, ecom_profile_a, ecom_order_a, ecom_customersupport_ticket_a):
+    return _customersupport_survey(
+        tenant_a,
+        customer=ecom_profile_a,
+        order=ecom_order_a,
+        ticket=ecom_customersupport_ticket_a,
+    )
+
+
+@pytest.fixture
+def ecom_customersupport_survey_b(tenant_b, ecom_profile_b, ecom_order_b, ecom_customersupport_ticket_b):
+    return _customersupport_survey(
+        tenant_b,
+        customer=ecom_profile_b,
+        order=ecom_order_b,
+        ticket=ecom_customersupport_ticket_b,
+    )
+
 
 
 
