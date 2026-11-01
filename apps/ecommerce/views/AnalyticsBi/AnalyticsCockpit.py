@@ -1,3 +1,4 @@
+import datetime
 import json
 from decimal import Decimal
 
@@ -18,11 +19,18 @@ from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder
 def analytics_cockpit(request):
     tenant = request.tenant
     today = timezone.now().date()
+    start_of_day = (
+        timezone.make_aware(datetime.datetime.combine(today, datetime.time.min))
+        if timezone.is_aware(timezone.now())
+        else datetime.datetime.combine(today, datetime.time.min)
+    )
+    start_of_next_day = start_of_day + datetime.timedelta(days=1)
 
     # 1. Today's live sales KPIs
     today_orders = EcommerceOrder.objects.filter(
         tenant=tenant,
-        created_at__date=today,
+        created_at__gte=start_of_day,
+        created_at__lt=start_of_next_day,
     ).exclude(status="cancelled")
 
     order_stats = today_orders.aggregate(
