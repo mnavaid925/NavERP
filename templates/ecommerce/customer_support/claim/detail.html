@@ -65,7 +65,7 @@
                 <h3 class="card-title text-base font-semibold">Customer Claim Statement</h3>
             </div>
             <div class="card-body">
-                <p class="whitespace-pre-line text-slate-800 leading-relaxed">{{ claim.customer_notes }}</p>
+                <p class="whitespace-pre-line text-slate-800 dark:text-slate-200 leading-relaxed">{{ claim.customer_notes }}</p>
             </div>
         </div>
 
@@ -93,7 +93,7 @@
             </div>
             <div class="card-body">
                 {% if claim.decision_notes %}
-                <p class="whitespace-pre-line text-slate-800 bg-slate-50 p-4 rounded border border-slate-200 text-sm leading-relaxed">{{ claim.decision_notes }}</p>
+                <p class="whitespace-pre-line text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 p-4 rounded border border-slate-200 dark:border-slate-700 text-sm leading-relaxed">{{ claim.decision_notes }}</p>
                 {% else %}
                 <p class="text-sm text-slate-400 italic">No staff decision notes logged yet.</p>
                 {% endif %}
@@ -111,15 +111,15 @@
             <div class="card-body space-y-4">
                 <div class="flex justify-between items-center text-sm">
                     <span class="text-slate-500">Claimed Amount</span>
-                    <span class="font-bold text-slate-900 font-mono text-base">${{ claim.claimed_amount }}</span>
+                    <span class="font-bold text-slate-900 dark:text-slate-100 font-mono text-base">${{ claim.claimed_amount }}</span>
                 </div>
-                <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-100">
+                <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span class="text-slate-500">Authorized / Approved</span>
                     <span class="font-bold text-green-700 font-mono text-base">${{ claim.approved_amount }}</span>
                 </div>
-                <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-100">
+                <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span class="text-slate-500">Resolution Action</span>
-                    <span class="font-semibold text-slate-800">{{ claim.get_resolution_action_display }}</span>
+                    <span class="font-semibold text-slate-800 dark:text-slate-200">{{ claim.get_resolution_action_display }}</span>
                 </div>
             </div>
         </div>
@@ -140,11 +140,11 @@
                 {% if claim.carrier_tracking_number %}
                 <div>
                     <span class="text-slate-500 block text-xs">Carrier Tracking Number</span>
-                    <span class="font-mono font-medium text-slate-900">{{ claim.carrier_tracking_number }}</span>
+                    <span class="font-mono font-medium text-slate-900 dark:text-slate-100">{{ claim.carrier_tracking_number }}</span>
                 </div>
                 {% endif %}
                 {% if claim.customer %}
-                <div class="pt-2 border-t border-slate-100">
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span class="text-slate-500 block text-xs">Shopper Profile</span>
                     <a href="{% url 'ecommerce:customeraccountprofile_detail' claim.customer.pk %}" class="text-brand hover:underline font-medium">
                         {{ claim.customer.number }} - {{ claim.customer }}
@@ -152,7 +152,7 @@
                 </div>
                 {% endif %}
                 {% if claim.ticket %}
-                <div class="pt-2 border-t border-slate-100">
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span class="text-slate-500 block text-xs">Linked Support Ticket</span>
                     <a href="{% url 'ecommerce:customersupportticket_detail' claim.ticket.pk %}" class="text-brand hover:underline font-mono font-medium">
                         {{ claim.ticket.number }}
@@ -160,9 +160,9 @@
                     <span class="text-xs text-slate-500 block">{{ claim.ticket.subject }}</span>
                 </div>
                 {% endif %}
-                <div class="pt-2 border-t border-slate-100">
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span class="text-slate-500 block text-xs">Reviewing Staff Member</span>
-                    <span class="font-medium text-slate-900">
+                    <span class="font-medium text-slate-900 dark:text-slate-100">
                         {% if claim.reviewed_by %}
                         {{ claim.reviewed_by.get_full_name|default:claim.reviewed_by.username }}
                         {% else %}
@@ -173,7 +173,7 @@
                 {% if claim.resolved_at %}
                 <div>
                     <span class="text-slate-500 block text-xs">Resolved At</span>
-                    <span class="font-medium text-slate-900">{{ claim.resolved_at|date:"M d, Y H:i" }}</span>
+                    <span class="font-medium text-slate-900 dark:text-slate-100">{{ claim.resolved_at|date:"M d, Y H:i" }}</span>
                 </div>
                 {% endif %}
             </div>
