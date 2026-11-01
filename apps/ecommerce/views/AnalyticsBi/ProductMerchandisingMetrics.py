@@ -73,12 +73,11 @@ def productmerchandisingmetric_create(request):
             metric.recalculate_metrics()
             metric.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "CREATE",
-                "ProductMerchandisingMetric",
-                metric.pk,
-                f"Created merchandising metric {metric.number} for product {metric.product.name}",
+                metric,
+                "create",
+                {"number": metric.number, "product": metric.product.name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Merchandising metric {metric.number} created successfully.")
             return redirect("ecommerce:productmerchandisingmetric_detail", pk=metric.pk)
@@ -109,12 +108,11 @@ def productmerchandisingmetric_edit(request, pk):
             m.recalculate_metrics()
             m.save()
             write_audit_log(
-                request.tenant,
                 request.user,
-                "UPDATE",
-                "ProductMerchandisingMetric",
-                metric.pk,
-                f"Updated merchandising metric {metric.number}",
+                metric,
+                "update",
+                {"number": metric.number},
+                tenant=request.tenant,
             )
             messages.success(request, f"Merchandising metric {metric.number} updated successfully.")
             return redirect("ecommerce:productmerchandisingmetric_detail", pk=metric.pk)
@@ -136,12 +134,11 @@ def productmerchandisingmetric_delete(request, pk):
     number = metric.number
     metric.delete()
     write_audit_log(
-        request.tenant,
         request.user,
-        "DELETE",
-        "ProductMerchandisingMetric",
-        pk,
-        f"Deleted merchandising metric {number}",
+        metric,
+        "delete",
+        {"number": number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Merchandising metric {number} was deleted.")
     return redirect("ecommerce:productmerchandisingmetric_list")
@@ -159,12 +156,11 @@ def productmerchandisingmetric_reclassify(request):
         count += 1
 
     write_audit_log(
-        request.tenant,
         request.user,
-        "RECLASSIFY",
-        "ProductMerchandisingMetric",
-        0,
-        f"Reclassified velocity tiers across {count} products",
+        None,
+        "reclass",
+        f"Reclassified {count} products",
+        tenant=request.tenant,
     )
     messages.success(request, f"Reclassified velocity tiers and margins across {count} merchandise records.")
     return redirect("ecommerce:productmerchandisingmetric_list")
