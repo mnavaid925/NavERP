@@ -8,6 +8,8 @@ from apps.ecommerce.models._base import TenantNumbered
 class CmsPage(TenantNumbered):
     """Dynamic store page and promotional landing page engine with SEO and A/B test tracking."""
 
+    NUMBER_PREFIX = "EPAG"
+
     PAGE_TYPE_CHOICES = [
         ("standard", "Standard Store Page"),
         ("landing", "Promotional Landing Page"),
