@@ -108,16 +108,8 @@
                         </td>
                         <td>
                             <div class="flex items-center gap-1.5 font-bold font-mono text-base">
-                                {% if survey.rating_score >= 8 or survey.rating_score >= 4 and survey.survey_type != 'storefront_nps' %}
-                                <span class="text-green-700">{{ survey.rating_score }}</span>
+                                <span class="{% if survey.sentiment == 'positive' %}text-green-700{% elif survey.sentiment == 'neutral' %}text-amber-600{% else %}text-red-700{% endif %}">{{ survey.rating_score }}</span>
                                 <span class="text-xs text-slate-400">/ {% if survey.survey_type == 'storefront_nps' %}10{% else %}5{% endif %}</span>
-                                {% elif survey.rating_score >= 6 or survey.rating_score == 3 and survey.survey_type != 'storefront_nps' %}
-                                <span class="text-amber-600">{{ survey.rating_score }}</span>
-                                <span class="text-xs text-slate-400">/ {% if survey.survey_type == 'storefront_nps' %}10{% else %}5{% endif %}</span>
-                                {% else %}
-                                <span class="text-red-700">{{ survey.rating_score }}</span>
-                                <span class="text-xs text-slate-400">/ {% if survey.survey_type == 'storefront_nps' %}10{% else %}5{% endif %}</span>
-                                {% endif %}
                             </div>
                         </td>
                         <td>
