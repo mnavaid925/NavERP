@@ -83,7 +83,7 @@
   - `templates/ecommerce/content_management/media/detail.html`
 - **Problem**: External asset and preview links opening with `target="_blank"` omit `rel="noopener noreferrer"`.
 - **Fix**: Add `rel="noopener noreferrer"` to all `<a ... target="_blank">` tags.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [I7] Stored DOM XSS via unvalidated `cta_url` in ContentBlock
 - **Files**:
