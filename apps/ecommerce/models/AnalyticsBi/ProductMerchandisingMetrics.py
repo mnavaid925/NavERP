@@ -52,6 +52,7 @@ class ProductMerchandisingMetric(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="ecommerce_epmm_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-period_end", "-gross_revenue"], name="idx_epmm_ten_end_rev"),
             models.Index(fields=["tenant", "velocity_tier"], name="idx_epmm_ten_tier"),
             models.Index(fields=["tenant", "product", "period_end"], name="idx_epmm_ten_prd_end"),
         ]
