@@ -54,7 +54,12 @@ class BlogArticleForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["author"].queryset = User.objects.filter(is_active=True).order_by("username")
+        if self.tenant:
+            self.fields["author"].queryset = User.objects.filter(
+                tenant=self.tenant, is_active=True
+            ).order_by("username")
+        else:
+            self.fields["author"].queryset = User.objects.none()
         self.fields["author"].required = False
         self.fields["featured_media"].required = False
         self.fields["tags"].required = False
@@ -70,5 +75,5 @@ class BlogArticleForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["featured_media"])
+        reject_foreign(self, cleaned, ["featured_media", "author"])
         return cleaned
