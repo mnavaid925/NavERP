@@ -62,6 +62,10 @@ from apps.ecommerce.models.SubscriptionCommerce.CustomerSubscriptions import Cus
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionBoxCurations import SubscriptionBoxCuration
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionPlans import SubscriptionPlan
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionRetentionActions import SubscriptionRetentionAction
+from apps.ecommerce.models.ContentManagement.BlogArticles import BlogArticle
+from apps.ecommerce.models.ContentManagement.CmsPages import CmsPage
+from apps.ecommerce.models.ContentManagement.ContentBlocks import ContentBlock
+from apps.ecommerce.models.ContentManagement.MediaAssets import MediaAsset
 from apps.scm.models.InventoryManagement.Items import Item
 from apps.scm.models.InventoryManagement.Locations import Location
 
@@ -3040,6 +3044,215 @@ class Command(BaseCommand):
                 "follow_up_status": "pending_review",
                 "follow_up_notes": "Supervisor notified to file complaint with regional carrier account manager.",
                 "reviewed_by": agent_user,
+            },
+        )
+
+        # 9.9 Content Management System (CMS)
+        author_user = User.objects.filter(is_active=True).first()
+        sample_prod = CatalogProduct.objects.filter(tenant=tenant).first()
+
+        # Media Assets
+        hero_media, _ = MediaAsset.objects.get_or_create(
+            tenant=tenant,
+            title="Summer Solstice Campaign Banner",
+            defaults={
+                "file_url": "https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=1600&q=80",
+                "alt_text": "Model wearing modern summer apparel in scenic sunshine",
+                "caption": "Summer 2026 Collection Hero Visual",
+                "media_type": "banner",
+                "folder_category": "banners",
+                "file_size_bytes": 245000,
+                "mime_type": "image/jpeg",
+                "width_px": 1920,
+                "height_px": 800,
+                "uploaded_by": author_user,
+            },
+        )
+
+        blog_media, _ = MediaAsset.objects.get_or_create(
+            tenant=tenant,
+            title="Sustainable Fashion Guide Header",
+            defaults={
+                "file_url": "https://images.unsplash.com/photo-1523381294911-8d3cead13475?w=1200&q=80",
+                "alt_text": "Folded organic cotton garments on neutral wooden bench",
+                "caption": "Sustainable wardrobe capsule essentials",
+                "media_type": "image",
+                "folder_category": "blog",
+                "file_size_bytes": 182000,
+                "mime_type": "image/jpeg",
+                "width_px": 1200,
+                "height_px": 630,
+                "uploaded_by": author_user,
+            },
+        )
+
+        icon_media, _ = MediaAsset.objects.get_or_create(
+            tenant=tenant,
+            title="Storefront Eco Badge SVG",
+            defaults={
+                "file_url": "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=300&q=80",
+                "alt_text": "Green sustainability guarantee seal",
+                "caption": "Eco badge icon",
+                "media_type": "icon",
+                "folder_category": "icons",
+                "file_size_bytes": 15400,
+                "mime_type": "image/svg+xml",
+                "width_px": 128,
+                "height_px": 128,
+                "uploaded_by": author_user,
+            },
+        )
+
+        # CMS Pages
+        CmsPage.objects.get_or_create(
+            tenant=tenant,
+            slug="about-us",
+            defaults={
+                "title": "Our Story & Sustainable Mission",
+                "page_type": "about",
+                "status": "published",
+                "template_layout": "boxed",
+                "meta_title": "About Us | Ethical & Sustainable Storefront",
+                "meta_description": "Learn about our commitment to eco-friendly manufacturing, zero-waste packaging, and fair labor.",
+                "is_indexable": True,
+                "raw_html_body": "<h2>Crafted with Integrity</h2><p>Since our founding, we have championed durable everyday goods made under certified fair trade practices.</p>",
+                "published_at": timezone.now() - timedelta(days=90),
+                "view_count": 1420,
+            },
+        )
+
+        CmsPage.objects.get_or_create(
+            tenant=tenant,
+            slug="returns-and-warranty",
+            defaults={
+                "title": "30-Day Hassle-Free Returns & Warranty",
+                "page_type": "policy",
+                "status": "published",
+                "template_layout": "full_width",
+                "meta_title": "Returns & Warranty Policy",
+                "meta_description": "Review our prepaid return labels, exchange policies, and lifetime workmanship warranty.",
+                "is_indexable": True,
+                "raw_html_body": "<h2>Our Guarantee</h2><p>If your purchase doesn't fit or perform as expected, return it within 30 days for an instant exchange or full refund.</p>",
+                "published_at": timezone.now() - timedelta(days=60),
+                "view_count": 860,
+            },
+        )
+
+        CmsPage.objects.get_or_create(
+            tenant=tenant,
+            slug="summer-flash-sale",
+            defaults={
+                "title": "Summer Flash Sale: Up to 40% Off",
+                "page_type": "landing",
+                "status": "published",
+                "template_layout": "minimal_landing",
+                "meta_title": "Summer Flash Sale Landing Page",
+                "meta_description": "Limited-time deals on best-selling summer apparel and everyday gear.",
+                "is_indexable": True,
+                "raw_html_body": "<h2>Limited-Time Summer Deals</h2><p>Shop top trending items with fast free shipping on orders over $50.</p>",
+                "published_at": timezone.now() - timedelta(days=5),
+                "view_count": 3540,
+                "is_ab_test_active": True,
+                "ab_variant_label": "Countdown Timer Hero (Variant B)",
+                "ab_traffic_percentage": 50,
+            },
+        )
+
+        # Blog Articles
+        BlogArticle.objects.get_or_create(
+            tenant=tenant,
+            slug="sustainable-wardrobe-staples-2026",
+            defaults={
+                "title": "Top 5 Sustainable Wardrobe Staples for 2026",
+                "author": author_user,
+                "category": "guides_tutorials",
+                "excerpt": "Discover timeless apparel pieces designed for versatility, longevity, and minimal environmental footprint.",
+                "body_markdown": "# The Minimalist Wardrobe\n\nBuilding a timeless wardrobe begins with quality essentials that outlast seasonal fashion cycles.\n\n### 1. Organic Cotton Basics\nBreathable, chemical-free cotton tees that get softer with every laundry cycle.\n\n### 2. Tailored Linen Trousers\nEffortless style suited for both remote work and weekend adventures.\n\n### 3. Recycled Wool Outerwear\nMaximum warmth with zero virgin polyester.",
+                "featured_media": blog_media,
+                "status": "published",
+                "tags": "sustainability, wardrobe, essentials, slow-fashion",
+                "reading_time_minutes": 4,
+                "allow_comments": True,
+                "is_featured": True,
+                "published_at": timezone.now() - timedelta(days=14),
+                "view_count": 920,
+            },
+        )
+
+        BlogArticle.objects.get_or_create(
+            tenant=tenant,
+            slug="behind-the-seams-organic-cotton",
+            defaults={
+                "title": "Behind the Seams: How We Source Our Organic Cotton",
+                "author": author_user,
+                "category": "lifestyle",
+                "excerpt": "A deep dive into our regenerative farming partnerships and fair wage cooperative mills.",
+                "body_markdown": "# Soil to Stitch\n\nEvery fabric tells a story. We partnered directly with smallholder farmers practicing regenerative agriculture to restore soil biodiversity.",
+                "featured_media": blog_media,
+                "status": "published",
+                "tags": "fair-trade, organic, supply-chain, transparency",
+                "reading_time_minutes": 5,
+                "allow_comments": True,
+                "is_featured": False,
+                "published_at": timezone.now() - timedelta(days=7),
+                "view_count": 480,
+            },
+        )
+
+        # Content Blocks
+        ContentBlock.objects.get_or_create(
+            tenant=tenant,
+            name="Homepage Summer Hero Banner",
+            defaults={
+                "block_type": "hero_banner",
+                "headline": "Elevate Your Everyday Style",
+                "subheadline": "Crafted with premium organic materials engineered for all-day comfort.",
+                "body_text": "Explore our newly arrived seasonal essentials with expedited delivery and complimentary returns.",
+                "media_asset": hero_media,
+                "cta_label": "Shop Summer Collection",
+                "cta_url": "/category/apparel-fashion/",
+                "target_category": apparel,
+                "bg_color_class": "bg-indigo-900",
+                "text_color_class": "text-white",
+                "sort_order": 1,
+                "is_active": True,
+            },
+        )
+
+        ContentBlock.objects.get_or_create(
+            tenant=tenant,
+            name="Store Value Props 3-Col Grid",
+            defaults={
+                "block_type": "feature_grid",
+                "headline": "The NavERP Storefront Guarantee",
+                "subheadline": "Why over 50,000 satisfied shoppers choose our curated catalog.",
+                "body_text": "Free express shipping over $50 · 30-day risk-free home trial · Carbon-neutral logistics",
+                "media_asset": icon_media,
+                "cta_label": "Learn More",
+                "cta_url": "/about-us/",
+                "bg_color_class": "bg-slate-50",
+                "text_color_class": "text-slate-900",
+                "sort_order": 2,
+                "is_active": True,
+            },
+        )
+
+        ContentBlock.objects.get_or_create(
+            tenant=tenant,
+            name="Trending Products Carousel",
+            defaults={
+                "block_type": "product_carousel",
+                "headline": "Most Loved This Week",
+                "subheadline": "Shopper favorites backed by 5-star customer ratings.",
+                "body_text": "Browse the top-selling garments and essentials our community is wearing right now.",
+                "cta_label": "View All Products",
+                "cta_url": "/products/",
+                "target_product": sample_prod,
+                "target_category": apparel,
+                "bg_color_class": "bg-white",
+                "text_color_class": "text-slate-900",
+                "sort_order": 3,
+                "is_active": True,
             },
         )
 
