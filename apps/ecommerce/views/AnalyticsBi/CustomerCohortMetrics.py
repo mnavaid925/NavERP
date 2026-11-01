@@ -58,6 +58,9 @@ def customercohortmetric_detail(request, pk):
 
 @login_required
 def customercohortmetric_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select or switch to a workspace first.")
+        return redirect("ecommerce:customercohortmetric_list")
     if request.method == "POST":
         form = CustomerCohortMetricForm(request.POST, tenant=request.tenant)
         if form.is_valid():
@@ -141,6 +144,9 @@ def customercohortmetric_delete(request, pk):
 @tenant_admin_required
 def customercohortmetric_recalculate(request):
     """Batch recalculates retention percentages, churn rates, and LTV on all cohort rows."""
+    if request.tenant is None:
+        messages.error(request, "Select or switch to a workspace first.")
+        return redirect("ecommerce:customercohortmetric_list")
     metrics = list(CustomerCohortMetric.objects.filter(tenant=request.tenant))
     with transaction.atomic():
         for m in metrics:
