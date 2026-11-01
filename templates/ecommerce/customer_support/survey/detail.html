@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Survey {{ survey.number }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Customer Support</span>
+            <span>/</span>
+            <a href="{% url 'ecommerce:customersatisfactionsurvey_list' %}">Feedback & NPS</a>
+            <span>/</span>
+            <span>{{ survey.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ survey.number }}: {{ survey.get_survey_type_display }}</h1>
+            {% if survey.sentiment == 'positive' %}
+            <span class="badge badge-green">Positive</span>
+            {% elif survey.sentiment == 'neutral' %}
+            <span class="badge badge-amber">Neutral</span>
+            {% else %}
+            <span class="badge badge-red">Negative / Detractor</span>
+            {% endif %}
+
+            {% if survey.follow_up_status == 'pending_review' %}
+            <span class="badge badge-red">Pending Review</span>
+            {% elif survey.follow_up_status == 'contacted_customer' %}
+            <span class="badge badge-amber">Customer Contacted</span>
+            {% elif survey.follow_up_status == 'resolved_closed_loop' %}
+            <span class="badge badge-green">Resolved Closed Loop</span>
+            {% else %}
+            <span class="badge badge-slate">No Follow-up</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'ecommerce:customersatisfactionsurvey_edit' survey.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Feedback
+        </a>
+        <form action="{% url 'ecommerce:customersatisfactionsurvey_delete' survey.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete survey {{ survey.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Verbatim Feedback & Follow-up Actions -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Customer Verbatim Comment -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Customer Written Feedback</h3>
+            </div>
+            <div class="card-body">
+                {% if survey.feedback_comment %}
+                <p class="whitespace-pre-line text-slate-800 leading-relaxed text-base italic border-l-4 border-primary pl-4 py-1">
+                    "{{ survey.feedback_comment }}"
+                </p>
+                {% else %}
+                <p class="text-sm text-slate-400 italic">No written comment provided by the shopper.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Closed-Loop Follow-up Notes -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Closed-Loop Recovery & Follow-up</h3>
+            </div>
+            <div class="card-body">
+                {% if survey.follow_up_notes %}
+                <p class="whitespace-pre-line text-slate-800 bg-slate-50 p-4 rounded border border-slate-200 text-sm leading-relaxed">
+                    {{ survey.follow_up_notes }}
+                </p>
+                {% else %}
+                <p class="text-sm text-slate-400 italic">No supervisor recovery notes recorded.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Scorecard, Staff Context & References -->
+    <div class="space-y-6">
+        <!-- Scorecard Metric Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Satisfaction Scorecard</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="text-center py-4 bg-slate-50 rounded border border-slate-200">
+                    <div class="text-4xl font-extrabold font-mono {% if survey.sentiment == 'positive' %}text-green-700{% elif survey.sentiment == 'neutral' %}text-amber-600{% else %}text-red-700{% endif %}">
+                        {{ survey.rating_score }}
+                    </div>
+                    <span class="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                        {% if survey.survey_type == 'storefront_nps' %}Out of 10 (NPS){% else %}Out of 5 (CSAT){% endif %}
+                    </span>
+                </div>
+                <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-100">
+                    <span class="text-slate-500">Sentiment Group</span>
+                    <span class="font-semibold text-slate-800">{{ survey.get_sentiment_display }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-100">
+                    <span class="text-slate-500">Follow-up Disposition</span>
+                    <span class="font-semibold text-slate-800">{{ survey.get_follow_up_status_display }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reference Context -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-base font-semibold">Survey Context & Attribution</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                {% if survey.ticket %}
+                <div>
+                    <span class="text-slate-500 block text-xs">Evaluated Ticket</span>
+                    <a href="{% url 'ecommerce:customersupportticket_detail' survey.ticket.pk %}" class="text-primary hover:underline font-mono font-medium">
+                        {{ survey.ticket.number }}
+                    </a>
+                    <span class="text-xs text-slate-500 block">{{ survey.ticket.subject }}</span>
+                </div>
+                {% endif %}
+                {% if survey.order %}
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-slate-500 block text-xs">Evaluated Order</span>
+                    <a href="{% url 'ecommerce:ecommerceorder_detail' survey.order.pk %}" class="text-primary hover:underline font-mono font-medium">
+                        {{ survey.order.number }}
+                    </a>
+                </div>
+                {% endif %}
+                {% if survey.customer %}
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-slate-500 block text-xs">Shopper Account</span>
+                    <a href="{% url 'ecommerce:customeraccountprofile_detail' survey.customer.pk %}" class="text-primary hover:underline font-medium">
+                        {{ survey.customer.number }} - {{ survey.customer }}
+                    </a>
+                </div>
+                {% endif %}
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-slate-500 block text-xs">Rated Support Agent</span>
+                    <span class="font-medium text-slate-900">
+                        {% if survey.agent_rated %}
+                        {{ survey.agent_rated.get_full_name|default:survey.agent_rated.username }}
+                        {% else %}
+                        <span class="text-slate-400 italic">General Experience</span>
+                        {% endif %}
+                    </span>
+                </div>
+                {% if survey.reviewed_by %}
+                <div>
+                    <span class="text-slate-500 block text-xs">Supervisor Reviewer</span>
+                    <span class="font-medium text-slate-900">
+                        {{ survey.reviewed_by.get_full_name|default:survey.reviewed_by.username }}
+                    </span>
+                </div>
+                {% endif %}
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-slate-500 block text-xs">Survey Timestamp</span>
+                    <span class="font-medium text-slate-900">{{ survey.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
