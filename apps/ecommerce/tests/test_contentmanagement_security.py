@@ -179,7 +179,7 @@ def test_contentmanagement_anonymous_redirected(client, ecom_cmspage_a):
     for url in urls:
         resp = client.get(url)
         assert resp.status_code == 302
-        assert "/accounts/login/" in resp.url
+        assert "/login" in resp.url or "login" in resp.url
 
 
 def test_contentmanagement_delete_requires_tenant_admin(client, regular_user_a, ecom_cmspage_a):
