@@ -16,7 +16,7 @@
   - `apps/ecommerce/forms/ContentManagement/MediaAssets.py`
 - **Problem**: Both forms inherit directly from `TenantModelForm` without `TenantUniqueMixin`. In NavERP, `TenantUniqueMixin` provides automatic assignment of `self.instance.tenant = self.tenant` on creation. Without it, forms may fail with `IntegrityError: Column 'tenant_id' cannot be null` or skip tenant number generation.
 - **Fix**: Inherit `(TenantUniqueMixin, TenantModelForm)` on both form classes.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [C2] Cross-tenant user exposure & missing `author` validation in `BlogArticleForm`
 - **File**: `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
