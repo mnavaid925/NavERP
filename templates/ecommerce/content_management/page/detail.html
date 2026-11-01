@@ -34,7 +34,7 @@
         <p class="text-sm text-slate-500 font-mono mt-1">/{{ page.slug }}/ · {{ page.number }}</p>
     </div>
     <div class="page-actions flex items-center gap-2">
-        <a href="{% url 'ecommerce:cmspage_preview' page.pk %}" class="btn btn-outline" target="_blank">
+        <a href="{% url 'ecommerce:cmspage_preview' page.pk %}" class="btn btn-outline" target="_blank" rel="noopener noreferrer">
             <i data-lucide="external-link"></i> Preview
         </a>
         <a href="{% url 'ecommerce:cmspage_edit' page.pk %}" class="btn btn-primary">
