@@ -121,18 +121,18 @@
                             {{ asset_item.created_at|date:"M d, Y" }}
                         </td>
                         <td class="table-actions text-right">
-                            <a href="{{ asset_item.file_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-icon" title="Open Asset Link">
+                            <a href="{{ asset_item.file_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-icon" title="Open Asset Link" aria-label="Open Asset Link">
                                 <i data-lucide="external-link"></i>
                             </a>
-                            <a href="{% url 'ecommerce:mediaasset_detail' asset_item.pk %}" class="btn btn-icon" title="View Detail">
+                            <a href="{% url 'ecommerce:mediaasset_detail' asset_item.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'ecommerce:mediaasset_edit' asset_item.pk %}" class="btn btn-icon" title="Edit Asset">
+                            <a href="{% url 'ecommerce:mediaasset_edit' asset_item.pk %}" class="btn btn-icon" title="Edit Asset" aria-label="Edit Asset">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form action="{% url 'ecommerce:mediaasset_delete' asset_item.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete media asset {{ asset_item.title }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-danger" title="Delete Asset">
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Asset" aria-label="Delete Asset">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
